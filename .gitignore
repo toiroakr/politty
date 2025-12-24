@@ -1,0 +1,11 @@
+.vscode/*
+.claude/*
+.kiro/*
+node_modules/
+bin/
+dist/
+*.log
+.DS_Store
+*.db
+*.sqlite
+.pnpm-store
