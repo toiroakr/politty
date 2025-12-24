@@ -184,6 +184,11 @@ export function renderOptions(
     return renderUnionOptions(extracted, command, lines);
   }
 
+  // Handle xor (exclusive union) the same as union
+  if (extracted.schemaType === "xor" && extracted.unionOptions) {
+    return renderUnionOptions(extracted, command, lines);
+  }
+
   // Regular options
   const options = extracted.fields.filter((a) => !a.positional);
   for (const opt of options) {

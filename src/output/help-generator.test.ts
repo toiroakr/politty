@@ -387,5 +387,32 @@ describe("Help Generator", () => {
       expect(result).toContain("--url");
       expect(result).toContain("--mode");
     });
+
+    it("should render xor (exclusive union) options same as union", () => {
+      const cmd = defineCommand({
+        name: "xor-cmd",
+        args: z.xor([
+          z
+            .object({
+              token: arg(z.string(), { description: "API Token" }),
+            })
+            .describe("Token Auth"),
+          z
+            .object({
+              username: arg(z.string(), { description: "Username" }),
+              password: arg(z.string(), { description: "Password" }),
+            })
+            .describe("Credentials Auth"),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("Token Auth:");
+      expect(result).toContain("--token");
+      expect(result).toContain("Credentials Auth:");
+      expect(result).toContain("--username");
+      expect(result).toContain("--password");
+    });
   });
 });

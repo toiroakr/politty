@@ -64,7 +64,7 @@ export interface ExtractedFields {
   /** Original schema for validation */
   schema: ArgsSchema;
   /** Schema type */
-  schemaType: "object" | "discriminatedUnion" | "union" | "intersection";
+  schemaType: "object" | "discriminatedUnion" | "union" | "xor" | "intersection";
   /** Discriminator key (for discriminatedUnion) */
   discriminator?: string;
   /** Variants (for discriminatedUnion) */
@@ -366,6 +366,42 @@ function extractFromUnion(schema: z.ZodType): ExtractedFields {
 }
 
 /**
+ * Extract fields from an xor (exclusive union)
+ */
+function extractFromXor(schema: z.ZodType): ExtractedFields {
+  const s = schema as ZodSchemaWithDef;
+  const def = s.def ?? s._def;
+  const options = def?.options ?? [];
+
+  // Collect all unique fields across all options
+  const allFieldsMap = new Map<string, ResolvedFieldMeta>();
+  const unionOptions: ExtractedFields[] = [];
+
+  for (const option of options) {
+    // Extract fields for this option recursively
+    // We cast to ArgsSchema because we expect options to be objects or other supported types
+    const extracted = extractFields(option as ArgsSchema);
+    unionOptions.push(extracted);
+
+    // Add to combined fields map
+    for (const field of extracted.fields) {
+      if (!allFieldsMap.has(field.name)) {
+        allFieldsMap.set(field.name, field);
+      }
+    }
+  }
+
+  const description = extractDescription(schema);
+  return {
+    fields: Array.from(allFieldsMap.values()),
+    schema: schema as ArgsSchema,
+    schemaType: "xor",
+    unionOptions,
+    ...(description ? { description } : {}),
+  };
+}
+
+/**
  * Extract fields from an intersection
  */
 function extractFromIntersection(schema: z.ZodType): ExtractedFields {
@@ -428,6 +464,9 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
         return extractFromDiscriminatedUnion(schema);
       }
       return extractFromUnion(schema);
+
+    case "xor":
+      return extractFromXor(schema);
 
     case "intersection":
       return extractFromIntersection(schema);
