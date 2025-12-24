@@ -40,6 +40,43 @@ export async function runCommand<TResult = unknown>(
     rawArgs,
   };
 
+  const cleanupContext: CleanupContext<unknown> = {
+    args,
+    rawArgs,
+    error,
+  };
+
+  // Signal handler
+  let signalHandler: ((signal: NodeJS.Signals) => Promise<void>) | undefined;
+
+  if (_options.handleSignals) {
+    signalHandler = async (_signal: NodeJS.Signals) => {
+      // Remove listeners to prevent multiple calls
+      if (signalHandler) {
+        process.off("SIGINT", signalHandler);
+        process.off("SIGTERM", signalHandler);
+      }
+
+      // Run cleanup
+      if (command.cleanup) {
+        try {
+          // Update error in context if needed, though usually signal is the cause
+          // We don't set 'error' here because it might overwrite a real error if we were in a catch block?
+          // But here we are interrupting.
+          await command.cleanup(cleanupContext);
+        } catch (e) {
+          console.error("Error during signal cleanup:", e);
+        }
+      }
+
+      // Exit
+      process.exit(1);
+    };
+
+    process.on("SIGINT", signalHandler);
+    process.on("SIGTERM", signalHandler);
+  }
+
   try {
     // Execute setup
     if (command.setup) {
@@ -52,15 +89,18 @@ export async function runCommand<TResult = unknown>(
     }
   } catch (e) {
     error = e instanceof Error ? e : new Error(String(e));
+  } finally {
+    // Remove signal listeners
+    if (signalHandler) {
+      process.off("SIGINT", signalHandler);
+      process.off("SIGTERM", signalHandler);
+    }
   }
 
   // Always execute cleanup
   if (command.cleanup) {
-    const cleanupContext: CleanupContext<unknown> = {
-      args,
-      rawArgs,
-      error,
-    };
+    // Update error in context
+    cleanupContext.error = error;
 
     try {
       await command.cleanup(cleanupContext);
