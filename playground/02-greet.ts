@@ -15,7 +15,7 @@ const command = defineCommand({
   version: "1.0.0",
   description: "挨拶を表示するCLIツール",
   args: z.object({
-    name: arg(z.string(), {
+    name: arg(z.string().meta({}), {
       positional: true,
       description: "挨拶する相手の名前",
     }),

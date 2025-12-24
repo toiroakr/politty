@@ -10,10 +10,21 @@ function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
   // First check custom registry
   const fromRegistry = getArgMetaFromRegistry(schema);
   if (fromRegistry) return fromRegistry;
+  // Check Zod native meta
+  // Some Zod versions or extensions use a global registry accessed via .meta()
+  if (typeof (schema as any).meta === "function") {
+    const meta = (schema as any).meta();
+    if (meta && typeof meta === "object") {
+      return meta as ArgMeta;
+    }
+  }
 
   // Then check _def.argMeta (for augmented Zod types)
   const def = (schema as any)._def;
   if (def?.argMeta) return def.argMeta;
+
+  // Also check _def.meta just in case
+  if (def?.meta) return def.meta as ArgMeta;
 
   return undefined;
 }
@@ -60,7 +71,12 @@ export interface ExtractedFields {
   variants?: Array<{
     discriminatorValue: string;
     fields: ResolvedFieldMeta[];
+    description?: string;
   }>;
+  /** Options (for union) */
+  unionOptions?: ExtractedFields[];
+  /** Schema description */
+  description?: string;
 }
 
 // Internal type for accessing zod v4 internals
@@ -292,18 +308,24 @@ function extractFromDiscriminatedUnion(schema: z.ZodType): ExtractedFields {
       }
     }
 
+    // Extract description from the variant option
+    const variantDescription = extractDescription(option as z.ZodType);
+
     variants.push({
       discriminatorValue,
       fields: variantFields,
+      ...(variantDescription ? { description: variantDescription } : {}),
     });
   }
 
+  const description = extractDescription(schema);
   return {
     fields: Array.from(allFieldsMap.values()),
     schema: schema as ArgsSchema,
     schemaType: "discriminatedUnion",
     discriminator,
     variants,
+    ...(description ? { description } : {}),
   };
 }
 
@@ -317,23 +339,29 @@ function extractFromUnion(schema: z.ZodType): ExtractedFields {
 
   // Collect all unique fields across all options
   const allFieldsMap = new Map<string, ResolvedFieldMeta>();
+  const unionOptions: ExtractedFields[] = [];
 
   for (const option of options) {
-    const typeName = getTypeName(option);
-    if (typeName === "object") {
-      const fields = extractFromObject(option);
-      for (const field of fields) {
-        if (!allFieldsMap.has(field.name)) {
-          allFieldsMap.set(field.name, field);
-        }
+    // Extract fields for this option recursively
+    // We cast to ArgsSchema because we expect options to be objects or other supported types
+    const extracted = extractFields(option as ArgsSchema);
+    unionOptions.push(extracted);
+
+    // Add to combined fields map
+    for (const field of extracted.fields) {
+      if (!allFieldsMap.has(field.name)) {
+        allFieldsMap.set(field.name, field);
       }
     }
   }
 
+  const description = extractDescription(schema);
   return {
     fields: Array.from(allFieldsMap.values()),
     schema: schema as ArgsSchema,
     schemaType: "union",
+    unionOptions,
+    ...(description ? { description } : {}),
   };
 }
 
@@ -363,10 +391,12 @@ function extractFromIntersection(schema: z.ZodType): ExtractedFields {
   extractSubFields(left);
   extractSubFields(right);
 
+  const description = extractDescription(schema);
   return {
     fields: Array.from(allFieldsMap.values()),
     schema: schema as ArgsSchema,
     schemaType: "intersection",
+    ...(description ? { description } : {}),
   };
 }
 
@@ -382,12 +412,15 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
   const def = s.def ?? s._def;
 
   switch (typeName) {
-    case "object":
+    case "object": {
+      const description = extractDescription(schema);
       return {
         fields: extractFromObject(schema),
         schema,
         schemaType: "object",
+        ...(description ? { description } : {}),
       };
+    }
 
     case "union":
       // In Zod v4, discriminatedUnion has type "union" with a discriminator property
@@ -399,13 +432,16 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
     case "intersection":
       return extractFromIntersection(schema);
 
-    default:
+    default: {
+      const description = extractDescription(schema);
       // Fallback: try to treat as object
       return {
         fields: [],
         schema,
         schemaType: "object",
+        ...(description ? { description } : {}),
       };
+    }
   }
 }
 

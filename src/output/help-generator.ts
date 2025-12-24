@@ -179,6 +179,11 @@ export function renderOptions(
     return renderDiscriminatedUnionOptions(extracted, command, lines);
   }
 
+  // Handle union specially
+  if (extracted.schemaType === "union" && extracted.unionOptions) {
+    return renderUnionOptions(extracted, command, lines);
+  }
+
   // Regular options
   const options = extracted.fields.filter((a) => !a.positional);
   for (const opt of options) {
@@ -217,7 +222,10 @@ function renderDiscriminatedUnionOptions(
   if (discriminatorField) {
     const variantValues = variants.map((v) => v.discriminatorValue).join("|");
     const flags = `${styles.option(`--${discriminator}`)} ${styles.placeholder(`<${variantValues}>`)}`;
-    lines.push(formatOption(flags, discriminatorField.description ?? "Action to perform"));
+    // Use discriminatedUnion's description for the discriminator field
+    const description =
+      extracted.description ?? discriminatorField.description ?? "Action to perform";
+    lines.push(formatOption(flags, description));
   }
 
   // Add common fields (fields that appear in all variants)
@@ -260,11 +268,83 @@ function renderDiscriminatedUnionOptions(
 
     if (variantFields.length > 0) {
       lines.push("");
-      lines.push(
-        `  ${styles.dim("When")} ${styles.option(discriminator)}=${styles.bold(variant.discriminatorValue)}:`,
-      );
+      // Format: "When action=create: description" if description exists, otherwise "When action=create:"
+      const variantLabel = variant.description
+        ? `${styles.dim("When")} ${styles.option(discriminator)}=${styles.bold(variant.discriminatorValue)}: ${variant.description}`
+        : `${styles.dim("When")} ${styles.option(discriminator)}=${styles.bold(variant.discriminatorValue)}:`;
+      lines.push(variantLabel);
 
       for (const field of variantFields) {
+        const flags = formatFlags(field);
+        let desc = field.description ?? "";
+        if (field.defaultValue !== undefined) {
+          desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(field.defaultValue)})`)}`;
+        }
+        if (field.required) {
+          desc += ` ${styles.required("(required)")}`;
+        }
+        lines.push(formatOption(`  ${flags}`, desc));
+      }
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render options for union with multiple options
+ */
+function renderUnionOptions(
+  extracted: ExtractedFields,
+  _command: AnyCommand,
+  lines: string[],
+): string {
+  const unionOptions = extracted.unionOptions ?? [];
+
+  // Add common fields (fields that appear in all options)
+  const commonFields = new Set<string>();
+  const allFieldNames = new Set<string>();
+
+  for (const option of unionOptions) {
+    for (const field of option.fields) {
+      allFieldNames.add(field.name);
+    }
+  }
+
+  for (const fieldName of allFieldNames) {
+    const inAllOptions = unionOptions.every((o) => o.fields.some((f) => f.name === fieldName));
+    if (inAllOptions) {
+      commonFields.add(fieldName);
+    }
+  }
+
+  // Render common fields
+  for (const fieldName of commonFields) {
+    const field = extracted.fields.find((f) => f.name === fieldName);
+    if (field && !field.positional) {
+      const flags = formatFlags(field);
+      let desc = field.description ?? "";
+      if (field.defaultValue !== undefined) {
+        desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(field.defaultValue)})`)}`;
+      }
+      lines.push(formatOption(flags, desc));
+    }
+  }
+
+  // Render option-specific fields
+  for (let i = 0; i < unionOptions.length; i++) {
+    const option = unionOptions[i];
+    if (!option) continue;
+
+    const uniqueFields = option.fields.filter((f) => !commonFields.has(f.name) && !f.positional);
+
+    if (uniqueFields.length > 0) {
+      lines.push("");
+
+      const label = option.description ?? `Variant ${i + 1}`;
+      lines.push(`  ${styles.bold(`${label}:`)}`);
+
+      for (const field of uniqueFields) {
         const flags = formatFlags(field);
         let desc = field.description ?? "";
         if (field.defaultValue !== undefined) {

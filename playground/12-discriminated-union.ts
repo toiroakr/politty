@@ -17,35 +17,41 @@ import { defineCommand, runMain, arg } from "../src/index.js";
 const command = defineCommand({
   name: "resource",
   description: "リソースを管理（discriminatedUnionの例）",
-  args: z.discriminatedUnion("action", [
-    // create アクション
-    z.object({
-      action: z.literal("create"),
-      name: arg(z.string(), { description: "リソース名" }),
-      template: arg(z.string().optional(), { description: "テンプレート" }),
-    }),
-    // delete アクション
-    z.object({
-      action: z.literal("delete"),
-      id: arg(z.coerce.number(), { description: "リソースID" }),
-      force: arg(z.boolean().default(false), {
-        alias: "f",
-        description: "確認なしで削除",
+  args: z
+    .discriminatedUnion("action", [
+      // create アクション
+      z
+        .object({
+          action: z.literal("create"),
+          name: arg(z.string(), { description: "リソース名" }),
+          template: arg(z.string().optional(), { description: "テンプレート" }),
+        })
+        .describe("新しいリソースを作成"),
+      // delete アクション
+      z
+        .object({
+          action: z.literal("delete"),
+          id: arg(z.coerce.number(), { description: "リソースID" }),
+          force: arg(z.boolean().default(false), {
+            alias: "f",
+            description: "確認なしで削除",
+          }),
+        })
+        .describe("既存のリソースを削除"),
+      // list アクション
+      z.object({
+        action: z.literal("list"),
+        format: arg(z.enum(["json", "table"]).default("table"), {
+          alias: "f",
+          description: "出力形式",
+        }),
+        limit: arg(z.coerce.number().default(10), {
+          alias: "n",
+          description: "表示件数",
+        }),
       }),
-    }),
-    // list アクション
-    z.object({
-      action: z.literal("list"),
-      format: arg(z.enum(["json", "table"]).default("table"), {
-        alias: "f",
-        description: "出力形式",
-      }),
-      limit: arg(z.coerce.number().default(10), {
-        alias: "n",
-        description: "表示件数",
-      }),
-    }),
-  ]),
+    ])
+    .describe("操作"),
   run: ({ args }) => {
     switch (args.action) {
       case "create":

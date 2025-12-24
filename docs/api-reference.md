@@ -391,6 +391,7 @@ interface ExtractedFields {
   variants?: Array<{
     discriminatorValue: string;
     fields: ResolvedFieldMeta[];
+    description?: string;
   }>;
 }
 ```

@@ -18,6 +18,16 @@ declare module "zod" {
   interface ZodTypeDef {
     argMeta?: ArgMeta;
   }
+
+  interface GlobalMeta {
+    description?: string;
+    positional?: boolean;
+    placeholder?: string;
+    alias?: string;
+    overrideBuiltinAlias?: boolean;
+    // We can't strictly enforce the union type here (e.g. built-in alias rules)
+    // because GlobalMeta must be an interface, but this provides basic type safety.
+  }
 }
 
 // This file has no runtime code, it only provides type augmentation

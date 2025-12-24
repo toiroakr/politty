@@ -362,5 +362,30 @@ describe("Help Generator", () => {
       expect(result).toContain("Get config value");
       expect(result).toContain("Set config value");
     });
+    it("should render union options separately with correct labels", () => {
+      const cmd = defineCommand({
+        name: "union-cmd",
+        args: z.union([
+          z
+            .object({
+              mode: z.literal("file"),
+              path: arg(z.string(), { description: "Path to file" }),
+            })
+            .describe("File Mode"),
+          z.object({
+            mode: z.literal("url"),
+            url: arg(z.string(), { description: "URL to fetch" }),
+          }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("File Mode:");
+      expect(result).toContain("--path");
+      expect(result).toContain("Variant 2:");
+      expect(result).toContain("--url");
+      expect(result).toContain("--mode");
+    });
   });
 });
