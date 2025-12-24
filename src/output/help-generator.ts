@@ -403,6 +403,7 @@ function padEndVisual(str: string, width: number): string {
 
 /**
  * Format a single option line
+ * If flags exceed the column width, description is moved to the next line
  */
 function formatOption(
   flags: string,
@@ -410,9 +411,18 @@ function formatOption(
   indent = 0,
   extraDescPadding = 0,
 ): string {
-  const flagWidth = 28;
+  const flagWidth = 32;
   const indentStr = "  ".repeat(indent);
-  const paddedFlags = padEndVisual(flags, flagWidth - indent * 2 + extraDescPadding);
+  const visualFlagLength = stripAnsi(flags).length;
+  const effectiveFlagWidth = flagWidth - indent * 2 + extraDescPadding;
+
+  // If flags are too long, put description on next line
+  if (visualFlagLength >= effectiveFlagWidth) {
+    const descIndent = " ".repeat(effectiveFlagWidth + 2 + indent * 2);
+    return `${indentStr}  ${flags}\n${descIndent}${description}`;
+  }
+
+  const paddedFlags = padEndVisual(flags, effectiveFlagWidth);
   return `${indentStr}  ${paddedFlags}${description}`;
 }
 
