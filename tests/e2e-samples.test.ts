@@ -43,7 +43,7 @@ describe("E2E Sample Commands", () => {
             description: "Create a bare repository",
           }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           state.initialized = true;
           console.log(`Initialized ${args.bare ? "bare " : ""}repository`);
           return { initialized: true, bare: args.bare };
@@ -57,7 +57,7 @@ describe("E2E Sample Commands", () => {
           files: arg(z.string(), { positional: true, description: "Files to add" }),
           all: arg(z.boolean().default(false), { alias: "A", description: "Add all files" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           if (args.all) {
             state.staged.push("*");
             console.log("Added all files");
@@ -75,7 +75,7 @@ describe("E2E Sample Commands", () => {
           message: arg(z.string(), { alias: "m", description: "Commit message" }),
           amend: arg(z.boolean().default(false), { description: "Amend previous commit" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           if (args.amend && state.commits.length > 0) {
             state.commits[state.commits.length - 1] = args.message;
             console.log(`Amended: ${args.message}`);
@@ -100,7 +100,7 @@ describe("E2E Sample Commands", () => {
             description: "Show one line per commit",
           }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           const commits = state.commits.slice(-args.count).reverse();
           for (const commit of commits) {
             if (args.oneline) {
@@ -202,7 +202,7 @@ describe("E2E Sample Commands", () => {
           }),
           global: arg(z.boolean().default(false), { alias: "g", description: "Install globally" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           if (args.package) {
             const prefix = args.dev ? "(dev) " : args.global ? "(global) " : "";
             installed.push(`${prefix}${args.package}`);
@@ -220,7 +220,7 @@ describe("E2E Sample Commands", () => {
         args: z.object({
           script: arg(z.string(), { positional: true, description: "Script name" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           const script = scripts[args.script];
           if (script) {
             console.log(`> ${script}`);
@@ -242,7 +242,7 @@ describe("E2E Sample Commands", () => {
             description: "Collect coverage",
           }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           let cmd = "vitest";
           if (args.watch) cmd += " --watch";
           if (args.coverage) cmd += " --coverage";
@@ -340,7 +340,7 @@ describe("E2E Sample Commands", () => {
             }),
             verbose: arg(z.boolean().default(false), { alias: "v", description: "Verbose output" }),
           }),
-          run: ({ args }) => {
+          run: (args) => {
             processed.push({
               input: args.input,
               output: args.output,
@@ -451,7 +451,7 @@ describe("E2E Sample Commands", () => {
             throw new Error("SSL requires both --cert and --key");
           }
         },
-        run: ({ args }) => {
+        run: (args) => {
           serverConfig = args;
           const protocol = args.ssl ? "https" : "http";
           console.log(`Server starting on ${protocol}://${args.host}:${args.port}`);
@@ -470,7 +470,7 @@ describe("E2E Sample Commands", () => {
             description: "Shutdown timeout in seconds",
           }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           if (args.force) {
             console.log("Force stopping server...");
           } else {
@@ -594,7 +594,7 @@ describe("E2E Sample Commands", () => {
             description: "Show migrations without running",
           }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           const toApply = args.steps ? migrations.pending.slice(0, args.steps) : migrations.pending;
 
           if (args.dryRun) {
@@ -622,7 +622,7 @@ describe("E2E Sample Commands", () => {
             description: "Number of migrations to rollback",
           }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           const toRollback = migrations.applied.slice(-args.steps).reverse();
 
           toRollback.forEach((m) => {

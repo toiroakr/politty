@@ -32,7 +32,7 @@ const configGetCommand = defineCommand({
       description: "設定キー",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Getting config: ${args.key}`);
     console.log(`  Value: (simulated value for ${args.key})`);
   },
@@ -52,7 +52,7 @@ const configSetCommand = defineCommand({
       description: "設定値",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Setting config: ${args.key} = ${args.value}`);
   },
 });
@@ -71,7 +71,7 @@ const configListCommand = defineCommand({
       description: "グローバル設定を表示",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Listing all config (format: ${args.format}, global: ${args.global}):`);
     const config = {
       "user.name": "John",
@@ -107,7 +107,7 @@ const remoteAddCommand = defineCommand({
     name: arg(z.string(), { positional: true, description: "リモート名" }),
     url: arg(z.string(), { positional: true, description: "リモートURL" }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Adding remote: ${args.name} -> ${args.url}`);
   },
 });
@@ -119,7 +119,7 @@ const remoteRemoveCommand = defineCommand({
     name: arg(z.string(), { positional: true, description: "リモート名" }),
     force: arg(z.boolean().default(false), { alias: "f", description: "強制削除" }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Removing remote: ${args.name} (force: ${args.force})`);
   },
 });

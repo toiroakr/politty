@@ -23,7 +23,7 @@ const command = defineCommand({
       description: "詳細出力",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Processing ${args.files.length} files:`);
     for (const file of args.files) {
       if (args.verbose) {

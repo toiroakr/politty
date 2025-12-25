@@ -27,7 +27,7 @@ const initCommand = defineCommand({
       description: "既存ファイルを上書き",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log("Initializing project:");
     console.log(`  Template: ${args.template}`);
     if (args.force) {
@@ -54,7 +54,7 @@ const buildCommand = defineCommand({
       description: "ファイル変更を監視",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log("Building project:");
     console.log(`  Output: ${args.output}`);
     console.log(`  Minify: ${args.minify}`);

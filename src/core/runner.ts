@@ -140,7 +140,7 @@ export async function runMain<TResult = unknown>(
     // Validate arguments
     if (!command.argsSchema) {
       // No schema, run with empty args
-      const result = await runCommand(command, {} as Record<string, never>, argv, {
+      const result = await runCommand(command, {} as Record<string, never>, {
         debug: options.debug,
         handleSignals: options.handleSignals,
       });
@@ -155,7 +155,7 @@ export async function runMain<TResult = unknown>(
     }
 
     // Run the command
-    const result = await runCommand(command, validationResult.data, argv, {
+    const result = await runCommand(command, validationResult.data, {
       debug: options.debug,
       handleSignals: options.handleSignals,
     });

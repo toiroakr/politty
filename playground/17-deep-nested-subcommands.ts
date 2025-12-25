@@ -33,7 +33,7 @@ const configUserGetCommand = defineCommand({
       description: "設定キー (name, email など)",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     const values: Record<string, string> = {
       name: "John Doe",
       email: "john@example.com",
@@ -60,7 +60,7 @@ const configUserSetCommand = defineCommand({
       description: "グローバル設定として保存",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     const scope = args.global ? "global" : "local";
     console.log(`Setting user.${args.key} = ${args.value} (${scope})`);
   },
@@ -86,7 +86,7 @@ const configCoreGetCommand = defineCommand({
       description: "設定キー (editor, pager など)",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     const values: Record<string, string> = {
       editor: "vim",
       pager: "less",
@@ -109,7 +109,7 @@ const configCoreSetCommand = defineCommand({
       description: "設定値",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Setting core.${args.key} = ${args.value}`);
   },
 });

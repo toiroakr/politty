@@ -25,11 +25,7 @@ describe("runMain", () => {
 
       await runMain(cmd, { argv: ["--name", "John"] });
 
-      expect(runFn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          args: { name: "John" },
-        }),
-      );
+      expect(runFn).toHaveBeenCalledWith({ name: "John" });
     });
 
     it("should handle positional arguments", async () => {
@@ -45,11 +41,7 @@ describe("runMain", () => {
 
       await runMain(cmd, { argv: ["input.txt"] });
 
-      expect(runFn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          args: { file: "input.txt" },
-        }),
-      );
+      expect(runFn).toHaveBeenCalledWith({ file: "input.txt" });
     });
 
     it("should apply default values", async () => {
@@ -64,11 +56,7 @@ describe("runMain", () => {
 
       await runMain(cmd, { argv: [] });
 
-      expect(runFn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          args: { verbose: false },
-        }),
-      );
+      expect(runFn).toHaveBeenCalledWith({ verbose: false });
     });
 
     it("should return result from run function", async () => {
@@ -261,11 +249,7 @@ describe("runMain", () => {
 
       await runMain(cmd, { argv: ["build", "--watch"] });
 
-      expect(buildFn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          args: { watch: true },
-        }),
-      );
+      expect(buildFn).toHaveBeenCalledWith({ watch: true });
     });
 
     it("should show help when subcommand not specified", async () => {

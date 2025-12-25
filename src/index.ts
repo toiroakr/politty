@@ -31,11 +31,13 @@ export {
 export type {
   // Command types
   Command,
+  CommandBase,
+  RunnableCommand,
+  NonRunnableCommand,
   AnyCommand,
   CommandConfig,
   ArgsSchema,
   // Context types
-  RunContext,
   SetupContext,
   CleanupContext,
   // Options and result types

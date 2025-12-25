@@ -51,8 +51,9 @@ describe("defineCommand", () => {
           name: z.string(),
           count: z.number().default(1),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           // Type assertions (compile-time)
+          expectTypeOf(args).not.toBeAny();
           expectTypeOf(args.name).toEqualTypeOf<string>();
           expectTypeOf(args.count).toEqualTypeOf<number>();
           return `${args.name}: ${args.count}`;
@@ -228,7 +229,7 @@ describe("defineCommand", () => {
             id: arg(z.coerce.number(), { description: "Resource ID" }),
           }),
         ]),
-        run: ({ args }) => {
+        run: (args) => {
           if (args.action === "create") {
             expectTypeOf(args.name).toEqualTypeOf<string>();
           } else {
@@ -238,6 +239,84 @@ describe("defineCommand", () => {
       });
 
       expect(cmd.argsSchema).toBeDefined();
+    });
+  });
+
+  describe("Run function type inference", () => {
+    it("should have run as required property when defined", () => {
+      const cmd = defineCommand({
+        run: () => 42,
+      });
+
+      // cmd.run is not optional - can be called directly
+      const result = cmd.run({});
+      expectTypeOf(result).toEqualTypeOf<number>();
+    });
+
+    it("should have run as undefined when not defined", () => {
+      const cmd = defineCommand({
+        name: "no-run",
+      });
+
+      // cmd.run is undefined
+      expectTypeOf(cmd.run).toEqualTypeOf<undefined>();
+      expect(cmd.run).toBeUndefined();
+    });
+
+    it("should correctly infer result type for async run", () => {
+      const cmd = defineCommand({
+        run: async () => ({ success: true }),
+      });
+
+      const result = cmd.run({});
+      expectTypeOf(result).toEqualTypeOf<Promise<{ success: boolean }>>();
+    });
+
+    it("should work with args schema and run", () => {
+      const cmd = defineCommand({
+        args: z.object({
+          name: z.string(),
+        }),
+        run: (args) => {
+          return `Hello, ${args.name}!`;
+        },
+      });
+
+      // No context argument needed since original function doesn't use it
+      const result = cmd.run({ name: "World" });
+      expectTypeOf(result).toEqualTypeOf<string>();
+    });
+
+    it("should work with args schema but no run", () => {
+      const cmd = defineCommand({
+        args: z.object({
+          name: z.string(),
+        }),
+        subCommands: {},
+      });
+
+      expectTypeOf(cmd.run).toEqualTypeOf<undefined>();
+    });
+
+    it("should infer args correctly when using arg() helper", () => {
+      const cmd = defineCommand({
+        args: z.object({
+          name: arg(z.string(), { positional: true, description: "Name" }),
+          count: arg(z.number().default(1), { alias: "c", description: "Count" }),
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+        }),
+        run: (args) => {
+          // Verify args is properly typed inside the callback (not any)
+          expectTypeOf(args).not.toBeAny();
+          expectTypeOf(args.name).toEqualTypeOf<string>();
+          expectTypeOf(args.count).toEqualTypeOf<number>();
+          expectTypeOf(args.verbose).toEqualTypeOf<boolean>();
+          return `${args.name}: ${args.count}`;
+        },
+      });
+
+      const result = cmd.run({ name: "test", count: 5, verbose: true });
+      expect(result).toBe("test: 5");
     });
   });
 });

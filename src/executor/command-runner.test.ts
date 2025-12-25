@@ -17,18 +17,15 @@ describe("CommandRunner", () => {
 
       const cmd = defineCommand({
         name: "test",
-        args: {
-          name: { schema: z.string() },
-        },
+        args: z.object({
+          name: z.string(),
+        }),
         run: runFn,
       });
 
-      const result = await runCommand(cmd, { name: "John" }, []);
+      const result = await runCommand(cmd, { name: "John" });
 
-      expect(runFn).toHaveBeenCalledWith({
-        args: { name: "John" },
-        rawArgs: [],
-      });
+      expect(runFn).toHaveBeenCalledWith({ name: "John" });
       expect(result.exitCode).toBe(0);
       expect(result.result).toBe("done");
     });
@@ -45,7 +42,7 @@ describe("CommandRunner", () => {
         },
       });
 
-      await runCommand(cmd, {}, []);
+      await runCommand(cmd, {});
 
       expect(order).toEqual(["setup", "run"]);
     });
@@ -62,7 +59,7 @@ describe("CommandRunner", () => {
         },
       });
 
-      await runCommand(cmd, {}, []);
+      await runCommand(cmd, {});
 
       expect(order).toEqual(["run", "cleanup"]);
     });
@@ -95,7 +92,7 @@ describe("CommandRunner", () => {
         },
       });
 
-      await runCommand(cmd, {}, []);
+      await runCommand(cmd, {});
 
       expect(capturedError).toBeInstanceOf(Error);
       expect(capturedError?.message).toBe("Test error");
@@ -132,7 +129,7 @@ describe("CommandRunner", () => {
         },
       });
 
-      await runCommand(cmd, {}, []);
+      await runCommand(cmd, {});
 
       expect(order).toEqual(["setup", "run", "cleanup"]);
     });

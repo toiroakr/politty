@@ -26,9 +26,10 @@ const command = defineCommand({
     host: arg(z.string().default("localhost"), {
       alias: "h",
       description: "ホスト名",
+      overrideBuiltinAlias: true,
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log("Server Configuration:");
     console.log(`  Host: ${args.host}`);
     console.log(`  Port: ${args.port} (type: ${typeof args.port})`);

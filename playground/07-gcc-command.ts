@@ -28,7 +28,7 @@ const command = defineCommand({
       description: "ソースファイル",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log("Compiling:");
     console.log(`  Sources: ${args.sources.join(", ")}`);
     console.log(`  Output: ${args.output}`);

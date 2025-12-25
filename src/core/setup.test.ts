@@ -22,22 +22,16 @@ describe("Project Setup", () => {
   describe("Type Safety", () => {
     it("should work with zod schemas", async () => {
       const { z } = await import("zod");
-      const { defineCommand } = await import("../index.js");
+      const { defineCommand, arg } = await import("../index.js");
 
       // Type inference test: define a command with zod schema
       const command = defineCommand({
         name: "test",
-        args: {
-          name: {
-            schema: z.string(),
-            description: "User name",
-          },
-          verbose: {
-            schema: z.boolean().default(false),
-            alias: "v",
-          },
-        },
-        run: ({ args }) => {
+        args: z.object({
+          name: arg(z.string(), { description: "User name" }),
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+        }),
+        run: (args) => {
           // args should be inferred as { name: string; verbose: boolean }
           expect(typeof args.name).toBe("string");
           expect(typeof args.verbose).toBe("boolean");

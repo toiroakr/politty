@@ -12,18 +12,6 @@ export type ArgsSchema = z.ZodType<Record<string, any>>;
 export interface SetupContext<TArgs = unknown> {
   /** Parsed and validated arguments */
   args: TArgs;
-  /** Raw CLI arguments */
-  rawArgs: string[];
-}
-
-/**
- * Context provided to run function
- */
-export interface RunContext<TArgs = unknown> {
-  /** Parsed and validated arguments */
-  args: TArgs;
-  /** Raw CLI arguments */
-  rawArgs: string[];
 }
 
 /**
@@ -32,8 +20,6 @@ export interface RunContext<TArgs = unknown> {
 export interface CleanupContext<TArgs = unknown> {
   /** Parsed and validated arguments */
   args: TArgs;
-  /** Raw CLI arguments */
-  rawArgs: string[];
   /** Error if command execution failed */
   error?: Error | undefined;
 }
@@ -64,10 +50,8 @@ export interface CommandConfig<
   ) => void | Promise<void>;
   /** Main run function */
   run?: (
-    context: RunContext<
-      TArgsSchema extends z.ZodType ? z.infer<TArgsSchema> : Record<string, never>
-    >,
-  ) => TResult | Promise<TResult>;
+    args: TArgsSchema extends z.ZodType ? z.infer<TArgsSchema> : Record<string, never>,
+  ) => TResult;
   /** Cleanup hook called after run */
   cleanup?: (
     context: CleanupContext<
@@ -77,9 +61,9 @@ export interface CommandConfig<
 }
 
 /**
- * A defined command
+ * Base command interface (shared properties)
  */
-export interface Command<TArgs = unknown, TResult = unknown> {
+export interface CommandBase<TArgs = unknown> {
   /** Command name */
   name?: string | undefined;
   /** Command version */
@@ -93,11 +77,32 @@ export interface Command<TArgs = unknown, TResult = unknown> {
   subCommands?: Record<string, Command<any, any> | (() => Promise<Command<any, any>>)> | undefined;
   /** Setup hook */
   setup?: ((context: SetupContext<TArgs>) => void | Promise<void>) | undefined;
-  /** Main run function */
-  run?: ((context: RunContext<TArgs>) => TResult | Promise<TResult>) | undefined;
   /** Cleanup hook */
   cleanup?: ((context: CleanupContext<TArgs>) => void | Promise<void>) | undefined;
 }
+
+/**
+ * A command with a run function
+ */
+export interface RunnableCommand<TArgs = unknown, TResult = unknown> extends CommandBase<TArgs> {
+  /** Main run function */
+  run: (args: TArgs) => TResult;
+}
+
+/**
+ * A command without a run function (e.g., subcommand-only parent)
+ */
+export interface NonRunnableCommand<TArgs = unknown> extends CommandBase<TArgs> {
+  /** No run function */
+  run?: undefined;
+}
+
+/**
+ * A defined command (union of runnable and non-runnable)
+ */
+export type Command<TArgs = unknown, TResult = unknown> =
+  | RunnableCommand<TArgs, TResult>
+  | NonRunnableCommand<TArgs>;
 
 /**
  * Command type that accepts any args/result types

@@ -28,7 +28,7 @@ const command = defineCommand({
       description: "大文字で出力",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     let message = `${args.greeting}, ${args.name}!`;
     if (args.loud) {
       message = message.toUpperCase();

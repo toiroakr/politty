@@ -28,7 +28,7 @@ const command = defineCommand({
       description: "行末に$を表示",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Displaying ${args.files.length} file(s):`);
     for (const file of args.files) {
       console.log(`\n=== ${file} ===`);

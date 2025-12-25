@@ -32,7 +32,7 @@ const command = defineCommand({
       description: "上書き確認をスキップ",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Copying: ${args.source} -> ${args.destination}`);
     if (args.recursive) {
       console.log("  (recursive mode)");

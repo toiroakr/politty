@@ -52,7 +52,7 @@ const command = defineCommand({
       }),
     ])
     .describe("操作"),
-  run: ({ args }) => {
+  run: (args) => {
     switch (args.action) {
       case "create":
         console.log("Creating resource:");

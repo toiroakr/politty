@@ -27,7 +27,7 @@ const initCommand = defineCommand({
       description: "プロジェクト名",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     const projectName = args.name ?? "my-project";
     console.log(`Initializing project "${projectName}" with template "${args.template}"...`);
     console.log("Done!");
@@ -65,7 +65,7 @@ const cli = defineCommand({
       console.log("[setup] Initializing...");
     }
   },
-  run: async ({ args }) => {
+  run: async (args) => {
     if (args.verbose) {
       console.log("[run] Processing...");
     }

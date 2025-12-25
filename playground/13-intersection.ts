@@ -44,7 +44,7 @@ const command = defineCommand({
   name: "process",
   description: "ファイルを処理（intersectionの例）",
   args: baseOptions.and(processOptions),
-  run: ({ args }) => {
+  run: (args) => {
     if (!args.quiet) {
       console.log("Processing file:");
       console.log(`  Input: ${args.input}`);

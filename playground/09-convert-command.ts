@@ -29,7 +29,7 @@ const command = defineCommand({
       description: "出力形式",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     const destination = args.output ?? "stdout";
     console.log("Converting:");
     console.log(`  Input: ${args.input}`);

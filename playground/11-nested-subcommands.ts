@@ -23,7 +23,7 @@ const configGetCommand = defineCommand({
       description: "設定キー",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Getting config: ${args.key}`);
     // 実際にはここで設定を読み込む
     console.log(`  Value: (simulated value for ${args.key})`);
@@ -44,7 +44,7 @@ const configSetCommand = defineCommand({
       description: "設定値",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Setting config: ${args.key} = ${args.value}`);
   },
 });
@@ -59,7 +59,7 @@ const configListCommand = defineCommand({
       description: "出力形式",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Listing all config (format: ${args.format}):`);
     const config = {
       "user.name": "John",

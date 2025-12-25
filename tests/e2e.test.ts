@@ -19,7 +19,7 @@ describe("E2E Tests", () => {
         args: z.object({
           name: arg(z.string(), { description: "Name to greet" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           output.push(`Hello, ${args.name}!`);
         },
       });
@@ -40,7 +40,7 @@ describe("E2E Tests", () => {
           verbose: arg(z.boolean().default(false), { alias: "v", description: "Verbose output" }),
           force: arg(z.boolean().default(false), { alias: "f", description: "Force overwrite" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           Object.assign(result, args);
         },
       });
@@ -65,7 +65,7 @@ describe("E2E Tests", () => {
           port: z.number().default(3000),
           host: z.string().default("localhost"),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           Object.assign(result, args);
         },
       });
@@ -88,7 +88,7 @@ describe("E2E Tests", () => {
         args: z.object({
           watch: arg(z.boolean().default(false), { alias: "w" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           executed.push(`build:watch=${args.watch}`);
         },
       });
@@ -98,7 +98,7 @@ describe("E2E Tests", () => {
         args: z.object({
           coverage: arg(z.boolean().default(false), { alias: "c" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           executed.push(`test:coverage=${args.coverage}`);
         },
       });
@@ -167,7 +167,7 @@ describe("E2E Tests", () => {
         args: z.object({
           port: z.coerce.number().transform((n) => n * 2),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           transformed = args.port;
         },
       });
@@ -253,7 +253,7 @@ describe("E2E Tests", () => {
         setup: ({ args }) => {
           order.push(`setup:${args.name}`);
         },
-        run: ({ args }) => {
+        run: (args) => {
           order.push(`run:${args.name}`);
           return "done";
         },
@@ -327,7 +327,7 @@ describe("E2E Tests", () => {
           command: arg(z.string(), { positional: true }),
           target: arg(z.string(), { positional: true }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           Object.assign(result, args);
         },
       });
@@ -365,7 +365,7 @@ describe("E2E Tests", () => {
           input: arg(z.string(), { positional: true }),
           output: arg(z.string().default("out.txt"), { positional: true }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           Object.assign(result, args);
         },
       });
@@ -389,7 +389,7 @@ describe("E2E Tests", () => {
             { positional: true },
           ),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           result.id = args.id;
           result.name = args.name;
         },
@@ -414,7 +414,7 @@ describe("E2E Tests", () => {
           recursive: arg(z.boolean().default(false), { alias: "r" }),
           force: arg(z.boolean().default(false), { alias: "f" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           const flags = [args.recursive ? "-r" : "", args.force ? "-f" : ""]
             .filter(Boolean)
             .join(" ");
@@ -439,7 +439,7 @@ describe("E2E Tests", () => {
             description: "Files to concatenate",
           }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           result.files = args.files;
         },
       });
@@ -458,7 +458,7 @@ describe("E2E Tests", () => {
           output: arg(z.string(), { alias: "o", description: "Output file" }),
           sources: arg(z.array(z.string()), { positional: true, description: "Source files" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           result = { output: args.output, sources: args.sources };
         },
       });
@@ -522,7 +522,7 @@ describe("E2E Tests", () => {
           input: arg(z.string(), { positional: true }),
           output: arg(z.string().optional(), { positional: true }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           captured = { input: args.input, output: args.output };
         },
       });
@@ -545,7 +545,7 @@ describe("E2E Tests", () => {
           input: arg(z.string(), { positional: true }),
           output: arg(z.string().default("default.txt"), { positional: true }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           captured = { input: args.input, output: args.output };
         },
       });
@@ -591,7 +591,7 @@ describe("E2E Tests", () => {
         args: z.object({
           files: arg(z.array(z.string()), { alias: "f", description: "Input files" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           result.files = args.files;
         },
       });
@@ -623,7 +623,7 @@ describe("E2E Tests", () => {
         args: z.object({
           numbers: arg(z.array(z.coerce.number()), { alias: "n" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           result = args.numbers;
         },
       });
@@ -640,7 +640,7 @@ describe("E2E Tests", () => {
         args: z.object({
           tags: arg(z.array(z.string()).default([]), { alias: "t" }),
         }),
-        run: ({ args }) => {
+        run: (args) => {
           result = args.tags;
         },
       });
@@ -675,7 +675,7 @@ describe("E2E Tests", () => {
             run: () => console.log("Initialized!"),
           }),
         },
-        run: ({ args }) => {
+        run: (args) => {
           console.log(`Processing ${args.input} → ${args.output}`);
           return { processed: true };
         },

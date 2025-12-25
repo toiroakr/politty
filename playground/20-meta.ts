@@ -24,7 +24,7 @@ const command = defineCommand({
       description: "Greeting phrase (via meta)",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`${args.greeting}, ${args.name}!`);
   },
 });

@@ -33,7 +33,7 @@ const transformCommand = defineCommand({
       },
     ),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log("Transform example:");
     console.log(`  Name: ${args.name} (uppercased)`);
     console.log(`  Tags: ${JSON.stringify(args.tags)} (split from comma-separated)`);
@@ -58,7 +58,7 @@ const refineCommand = defineCommand({
     .refine((data) => data.input !== data.output, {
       message: "入力と出力は異なるファイルを指定してください",
     }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log("Refine example:");
     console.log(`  Input: ${args.input}`);
     console.log(`  Output: ${args.output}`);

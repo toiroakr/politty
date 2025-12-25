@@ -58,7 +58,7 @@ export const argRegistry = z.registry<ArgMeta>();
  *     name: arg(z.string(), { description: "User name", positional: true }),
  *     verbose: arg(z.boolean().default(false), { alias: "v" }),
  *   }),
- *   run: ({ args }) => {
+ *   run: (args) => {
  *     console.log(args.name, args.verbose);
  *   },
  * });

@@ -1,4 +1,4 @@
-import type { AnyCommand, RunResult, RunContext, SetupContext, CleanupContext } from "../types.js";
+import type { AnyCommand, RunResult, SetupContext, CleanupContext } from "../types.js";
 
 /**
  * Options for command execution
@@ -17,14 +17,12 @@ export interface RunOptions {
  *
  * @param command - The command to run
  * @param args - Validated arguments
- * @param rawArgs - Raw CLI arguments
  * @param options - Run options
  * @returns The result of command execution
  */
 export async function runCommand<TResult = unknown>(
   command: AnyCommand,
   args: unknown,
-  rawArgs: string[],
   _options: RunOptions = {},
 ): Promise<RunResult<TResult>> {
   let error: Error | undefined;
@@ -32,17 +30,10 @@ export async function runCommand<TResult = unknown>(
 
   const setupContext: SetupContext<unknown> = {
     args,
-    rawArgs,
-  };
-
-  const runContext: RunContext<unknown> = {
-    args,
-    rawArgs,
   };
 
   const cleanupContext: CleanupContext<unknown> = {
     args,
-    rawArgs,
     error,
   };
 
@@ -85,7 +76,7 @@ export async function runCommand<TResult = unknown>(
 
     // Execute run
     if (command.run) {
-      result = await command.run(runContext);
+      result = await command.run(args);
     }
   } catch (e) {
     error = e instanceof Error ? e : new Error(String(e));
