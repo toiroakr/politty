@@ -90,11 +90,10 @@ const configCommand = defineCommand({
 // メインコマンド
 const cli = defineCommand({
   name: "git-like",
-  version: "1.0.0",
   description: "Git風のネストしたサブコマンドの例",
   subCommands: {
     config: configCommand,
   },
 });
 
-runMain(cli);
+runMain(cli, { version: "1.0.0" });

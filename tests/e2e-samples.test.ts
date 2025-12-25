@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { z } from "zod";
-import { defineCommand, runMain, arg } from "../src/index.js";
+import { defineCommand, runCommand, arg } from "../src/index.js";
 
 /**
  * E2E tests with concrete sample CLI commands
@@ -116,7 +116,6 @@ describe("E2E Sample Commands", () => {
       return {
         cli: defineCommand({
           name: "git",
-          version: "1.0.0",
           description: "A simple git-like CLI",
           subCommands: {
             init: initCmd,
@@ -131,7 +130,7 @@ describe("E2E Sample Commands", () => {
 
     it("should initialize repository", async () => {
       const { cli } = createGitCli();
-      const result = await runMain(cli, { argv: ["init"] });
+      const result = await runCommand(cli, ["init"]);
 
       expect(result.exitCode).toBe(0);
       expect(result.result).toEqual({ initialized: true, bare: false });
@@ -140,7 +139,7 @@ describe("E2E Sample Commands", () => {
 
     it("should initialize bare repository", async () => {
       const { cli } = createGitCli();
-      const result = await runMain(cli, { argv: ["init", "--bare"] });
+      const result = await runCommand(cli, ["init", "--bare"]);
 
       expect(result.exitCode).toBe(0);
       expect(result.result).toEqual({ initialized: true, bare: true });
@@ -150,11 +149,11 @@ describe("E2E Sample Commands", () => {
     it("should add and commit files", async () => {
       const { cli, state } = createGitCli();
 
-      await runMain(cli, { argv: ["add", "file.txt"] });
+      await runCommand(cli, ["add", "file.txt"]);
       expect(logs).toContain("Added file.txt");
       expect(state.staged).toContain("file.txt");
 
-      const result = await runMain(cli, { argv: ["commit", "-m", "Initial commit"] });
+      const result = await runCommand(cli, ["commit", "-m", "Initial commit"]);
       expect(result.exitCode).toBe(0);
       expect(logs).toContain("Committed: Initial commit");
       expect(state.commits).toContain("Initial commit");
@@ -163,7 +162,7 @@ describe("E2E Sample Commands", () => {
     it("should add all files with -A flag", async () => {
       const { cli, state } = createGitCli();
 
-      await runMain(cli, { argv: ["add", ".", "-A"] });
+      await runCommand(cli, ["add", ".", "-A"]);
       expect(logs).toContain("Added all files");
       expect(state.staged).toContain("*");
     });
@@ -172,7 +171,7 @@ describe("E2E Sample Commands", () => {
       const { cli, state } = createGitCli();
       state.commits = ["First", "Second", "Third"];
 
-      await runMain(cli, { argv: ["log", "-n", "2", "--oneline"] });
+      await runCommand(cli, ["log", "-n", "2", "--oneline"]);
       expect(logs).toContain("Third");
       expect(logs).toContain("Second");
       expect(logs).not.toContain("First");
@@ -254,7 +253,6 @@ describe("E2E Sample Commands", () => {
       return {
         cli: defineCommand({
           name: "npm",
-          version: "1.0.0",
           description: "A simple npm-like CLI",
           subCommands: {
             install: installCmd,
@@ -271,7 +269,7 @@ describe("E2E Sample Commands", () => {
     it("should install a package", async () => {
       const { cli, installed } = createNpmCli();
 
-      await runMain(cli, { argv: ["install", "lodash"] });
+      await runCommand(cli, ["install", "lodash"]);
       expect(logs).toContain("Installing lodash...");
       expect(installed).toContain("lodash");
     });
@@ -279,7 +277,7 @@ describe("E2E Sample Commands", () => {
     it("should install dev dependency", async () => {
       const { cli, installed } = createNpmCli();
 
-      await runMain(cli, { argv: ["install", "vitest", "-D"] });
+      await runCommand(cli, ["install", "vitest", "-D"]);
       expect(logs).toContain("Installing (dev) vitest...");
       expect(installed).toContain("(dev) vitest");
     });
@@ -287,7 +285,7 @@ describe("E2E Sample Commands", () => {
     it("should install globally", async () => {
       const { cli, installed } = createNpmCli();
 
-      await runMain(cli, { argv: ["i", "typescript", "-g"] });
+      await runCommand(cli, ["i", "typescript", "-g"]);
       expect(logs).toContain("Installing (global) typescript...");
       expect(installed).toContain("(global) typescript");
     });
@@ -295,7 +293,7 @@ describe("E2E Sample Commands", () => {
     it("should run scripts", async () => {
       const { cli } = createNpmCli();
 
-      const result = await runMain(cli, { argv: ["run", "build"] });
+      const result = await runCommand(cli, ["run", "build"]);
       expect(logs).toContain("> tsc");
       expect(result.result).toEqual({ script: "build", command: "tsc" });
     });
@@ -303,7 +301,7 @@ describe("E2E Sample Commands", () => {
     it("should run tests with options", async () => {
       const { cli } = createNpmCli();
 
-      const result = await runMain(cli, { argv: ["test", "-w", "-c"] });
+      const result = await runCommand(cli, ["test", "-w", "-c"]);
       expect(logs).toContain("> vitest --watch --coverage");
       expect(result.result).toEqual({ command: "vitest --watch --coverage" });
     });
@@ -316,7 +314,6 @@ describe("E2E Sample Commands", () => {
       return {
         cli: defineCommand({
           name: "process",
-          version: "2.0.0",
           description: "Process files with various transformations",
           args: z.object({
             input: arg(z.string(), {
@@ -369,9 +366,7 @@ describe("E2E Sample Commands", () => {
     it("should process file with default options", async () => {
       const { cli, processed } = createProcessorCli();
 
-      const result = await runMain(cli, {
-        argv: ["data.csv", "-o", "data.json"],
-      });
+      const result = await runCommand(cli, ["data.csv", "-o", "data.json"]);
 
       expect(result.exitCode).toBe(0);
       expect(logs).toContain("Processed data.csv → data.json");
@@ -385,9 +380,7 @@ describe("E2E Sample Commands", () => {
     it("should process with custom format and minify", async () => {
       const { cli, processed } = createProcessorCli();
 
-      await runMain(cli, {
-        argv: ["data.json", "-o", "data.yaml", "-f", "yaml", "-m"],
-      });
+      await runCommand(cli, ["data.json", "-o", "data.yaml", "-f", "yaml", "-m"]);
 
       expect(processed[0]?.options).toEqual({
         format: "yaml",
@@ -399,9 +392,7 @@ describe("E2E Sample Commands", () => {
     it("should show verbose output", async () => {
       const { cli } = createProcessorCli();
 
-      await runMain(cli, {
-        argv: ["input.xml", "-o", "output.json", "-v", "-i", "4"],
-      });
+      await runCommand(cli, ["input.xml", "-o", "output.json", "-v", "-i", "4"]);
 
       expect(logs).toContain("Reading input.xml...");
       expect(logs).toContain("Format: json");
@@ -411,9 +402,7 @@ describe("E2E Sample Commands", () => {
     it("should reject invalid format", async () => {
       const { cli } = createProcessorCli();
 
-      const result = await runMain(cli, {
-        argv: ["data.csv", "-o", "out.txt", "-f", "invalid"],
-      });
+      const result = await runCommand(cli, ["data.csv", "-o", "out.txt", "-f", "invalid"]);
 
       expect(result.exitCode).toBe(1);
     });
@@ -498,7 +487,6 @@ describe("E2E Sample Commands", () => {
       return {
         cli: defineCommand({
           name: "server",
-          version: "3.0.0",
           description: "Server management CLI",
           subCommands: {
             start: startCmd,
@@ -513,7 +501,7 @@ describe("E2E Sample Commands", () => {
     it("should start server with required port", async () => {
       const { cli } = createServerCli();
 
-      const result = await runMain(cli, { argv: ["start", "-p", "8080"] });
+      const result = await runCommand(cli, ["start", "-p", "8080"]);
 
       expect(result.exitCode).toBe(0);
       expect(logs).toContain("Server starting on http://localhost:8080");
@@ -523,9 +511,7 @@ describe("E2E Sample Commands", () => {
     it("should start server with custom host and workers", async () => {
       const { cli } = createServerCli();
 
-      await runMain(cli, {
-        argv: ["start", "-p", "3000", "-H", "0.0.0.0", "-w", "4"],
-      });
+      await runCommand(cli, ["start", "-p", "3000", "-H", "0.0.0.0", "-w", "4"]);
 
       expect(logs).toContain("Server starting on http://0.0.0.0:3000");
       expect(logs).toContain("Workers: 4");
@@ -534,16 +520,14 @@ describe("E2E Sample Commands", () => {
     it("should reject invalid port", async () => {
       const { cli } = createServerCli();
 
-      const result = await runMain(cli, { argv: ["start", "-p", "99999"] });
+      const result = await runCommand(cli, ["start", "-p", "99999"]);
       expect(result.exitCode).toBe(1);
     });
 
     it("should require cert and key for SSL", async () => {
       const { cli } = createServerCli();
 
-      const result = await runMain(cli, {
-        argv: ["start", "-p", "443", "--ssl"],
-      });
+      const result = await runCommand(cli, ["start", "-p", "443", "--ssl"]);
 
       expect(result.exitCode).toBe(1);
     });
@@ -551,9 +535,16 @@ describe("E2E Sample Commands", () => {
     it("should start with SSL when cert and key provided", async () => {
       const { cli } = createServerCli();
 
-      const result = await runMain(cli, {
-        argv: ["start", "-p", "443", "--ssl", "--cert", "/path/cert.pem", "--key", "/path/key.pem"],
-      });
+      const result = await runCommand(cli, [
+        "start",
+        "-p",
+        "443",
+        "--ssl",
+        "--cert",
+        "/path/cert.pem",
+        "--key",
+        "/path/key.pem",
+      ]);
 
       expect(result.exitCode).toBe(0);
       expect(logs).toContain("Server starting on https://localhost:443");
@@ -562,14 +553,14 @@ describe("E2E Sample Commands", () => {
     it("should stop server gracefully", async () => {
       const { cli } = createServerCli();
 
-      await runMain(cli, { argv: ["stop", "-t", "60"] });
+      await runCommand(cli, ["stop", "-t", "60"]);
       expect(logs).toContain("Graceful shutdown (timeout: 60s)...");
     });
 
     it("should force stop server", async () => {
       const { cli } = createServerCli();
 
-      await runMain(cli, { argv: ["stop", "-f"] });
+      await runCommand(cli, ["stop", "-f"]);
       expect(logs).toContain("Force stopping server...");
     });
   });
@@ -650,7 +641,6 @@ describe("E2E Sample Commands", () => {
       return {
         cli: defineCommand({
           name: "migrate",
-          version: "1.0.0",
           description: "Database migration tool",
           subCommands: {
             up: upCmd,
@@ -665,7 +655,7 @@ describe("E2E Sample Commands", () => {
     it("should run all pending migrations", async () => {
       const { cli, migrations } = createMigrationCli();
 
-      const result = await runMain(cli, { argv: ["up"] });
+      const result = await runCommand(cli, ["up"]);
 
       expect(result.exitCode).toBe(0);
       expect(migrations.applied).toHaveLength(3);
@@ -676,7 +666,7 @@ describe("E2E Sample Commands", () => {
     it("should run specific number of migrations", async () => {
       const { cli, migrations } = createMigrationCli();
 
-      await runMain(cli, { argv: ["up", "-n", "2"] });
+      await runCommand(cli, ["up", "-n", "2"]);
 
       expect(migrations.applied).toHaveLength(2);
       expect(migrations.pending).toHaveLength(1);
@@ -685,7 +675,7 @@ describe("E2E Sample Commands", () => {
     it("should dry run migrations", async () => {
       const { cli, migrations } = createMigrationCli();
 
-      const result = await runMain(cli, { argv: ["up", "-d"] });
+      const result = await runCommand(cli, ["up", "-d"]);
 
       expect(migrations.applied).toHaveLength(0);
       expect(logs).toContain("Dry run - would apply:");
@@ -700,7 +690,7 @@ describe("E2E Sample Commands", () => {
       migrations.applied = ["001_create_users", "002_add_email"];
       migrations.pending = ["003_create_posts"];
 
-      await runMain(cli, { argv: ["down", "-n", "1"] });
+      await runCommand(cli, ["down", "-n", "1"]);
 
       expect(migrations.applied).toHaveLength(1);
       expect(migrations.pending).toHaveLength(2);
@@ -712,7 +702,7 @@ describe("E2E Sample Commands", () => {
       migrations.applied = ["001_create_users"];
       migrations.pending = ["002_add_email", "003_create_posts"];
 
-      const result = await runMain(cli, { argv: ["status"] });
+      const result = await runCommand(cli, ["status"]);
 
       expect(logs).toContain("Applied: 1");
       expect(logs).toContain("Pending: 2");

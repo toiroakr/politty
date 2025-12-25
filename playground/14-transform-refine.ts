@@ -69,7 +69,6 @@ const refineCommand = defineCommand({
 // コマンド選択
 const cli = defineCommand({
   name: "validation-demo",
-  version: "1.0.0",
   description: "transform/refineのデモ",
   subCommands: {
     transform: transformCommand,
@@ -77,4 +76,4 @@ const cli = defineCommand({
   },
 });
 
-runMain(cli);
+runMain(cli, { version: "1.0.0" });

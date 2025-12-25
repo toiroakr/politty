@@ -12,7 +12,6 @@ import { defineCommand, runMain } from "../src/index.js";
 
 const command = defineCommand({
   name: "greet-meta",
-  version: "1.0.0",
   description: "Test for Zod .meta() support",
   args: z.object({
     name: z.string().meta({
@@ -46,4 +45,4 @@ if (typeof (s as any).meta === "function") {
   console.log("s.meta does NOT exist (runtime error should have happened??)");
 }
 
-runMain(command);
+runMain(command, { version: "1.0.0" });

@@ -6,7 +6,7 @@
 
 // Core exports
 export { defineCommand } from "./core/command.js";
-export { runMain } from "./core/runner.js";
+export { runMain, runCommand } from "./core/runner.js";
 export { arg, type ArgMeta } from "./core/arg-registry.js";
 
 // Utility exports
@@ -42,6 +42,7 @@ export type {
   CleanupContext,
   // Options and result types
   MainOptions,
+  RunCommandOptions,
   RunResult,
 } from "./types.js";
 

@@ -18,8 +18,7 @@ type InferArgs<TArgsSchema> = TArgsSchema extends z.ZodType
  * Config for runnable command (with run function)
  */
 interface RunnableConfig<TArgsSchema extends ArgsSchema | undefined, TResult> {
-  name?: string;
-  version?: string;
+  name: string;
   description?: string;
   args?: TArgsSchema;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -98,7 +97,6 @@ export function defineCommand<TArgsSchema extends ArgsSchema | undefined, TResul
 ): any {
   return {
     name: config.name,
-    version: config.version,
     description: config.description,
     argsSchema: config.args as ArgsSchema | undefined,
     subCommands: config.subCommands,

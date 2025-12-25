@@ -31,10 +31,8 @@ export interface CommandConfig<
   TArgsSchema extends ArgsSchema | undefined = undefined,
   TResult = void,
 > {
-  /** Command name */
-  name?: string;
-  /** Command version */
-  version?: string;
+  /** Command name (required) */
+  name: string;
   /** Command description */
   description?: string;
   /** Argument schema (ZodObject, ZodDiscriminatedUnion, etc.) */
@@ -64,10 +62,8 @@ export interface CommandConfig<
  * Base command interface (shared properties)
  */
 export interface CommandBase<TArgs = unknown> {
-  /** Command name */
-  name?: string | undefined;
-  /** Command version */
-  version?: string | undefined;
+  /** Command name (required) */
+  name: string;
   /** Command description */
   description?: string | undefined;
   /** Argument schema */
@@ -112,21 +108,38 @@ export type Command<TArgs = unknown, TResult = unknown> =
 export type AnyCommand = Command<any, any>;
 
 /**
- * Options for runMain
+ * Options for runMain (CLI entry point)
  */
 export interface MainOptions {
-  /** Show subcommands in help */
-  showSubcommands?: boolean;
-  /** Show subcommand options in help */
-  showSubcommandOptions?: boolean;
-  /** Enable debug mode */
+  /** Command version */
+  version?: string;
+  /** Enable debug mode (show stack traces on errors) */
   debug?: boolean;
+}
+
+/**
+ * Options for runCommand (programmatic/test usage)
+ */
+export interface RunCommandOptions {
+  /** Enable debug mode (show stack traces on errors) */
+  debug?: boolean;
+}
+
+/**
+ * Internal options for command execution (not exported)
+ * @internal
+ */
+export interface InternalRunOptions {
+  /** Custom argv */
+  argv?: string[] | undefined;
+  /** Show subcommands in help */
+  showSubcommands?: boolean | undefined;
+  /** Show subcommand options in help */
+  showSubcommandOptions?: boolean | undefined;
   /** Handle signals (SIGINT, SIGTERM) */
-  handleSignals?: boolean;
-  /** Custom argv (defaults to process.argv.slice(2)) */
-  argv?: string[];
-  /** Automatically call process.exit with exit code (defaults to true) */
-  exit?: boolean;
+  handleSignals?: boolean | undefined;
+  /** Enable debug mode */
+  debug?: boolean | undefined;
 }
 
 /**

@@ -10,11 +10,10 @@ import { defineCommand, runMain } from "../src/index.js";
 
 const command = defineCommand({
   name: "hello",
-  version: "1.0.0",
   description: "Hello Worldを表示するシンプルなコマンド",
   run: () => {
     console.log("Hello, World!");
   },
 });
 
-runMain(command);
+runMain(command, { version: "1.0.0" });

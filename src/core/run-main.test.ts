@@ -1,16 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
-import { runMain } from "./runner.js";
+import { runCommand } from "./runner.js";
 import { defineCommand } from "./command.js";
 import { arg } from "./arg-registry.js";
 
 /**
- * Task 8.1: runMain function tests
+ * Task 8.1: runCommand function tests
  * - Integrate parse → validation → execution flow
  * - Configure default help display behavior
- * - Debug mode and signal handling options
+ * - Debug mode options
  */
-describe("runMain", () => {
+describe("runCommand", () => {
   describe("Full execution flow", () => {
     it("should parse, validate, and run command", async () => {
       const runFn = vi.fn();
@@ -23,7 +23,7 @@ describe("runMain", () => {
         run: runFn,
       });
 
-      await runMain(cmd, { argv: ["--name", "John"] });
+      await runCommand(cmd, ["--name", "John"]);
 
       expect(runFn).toHaveBeenCalledWith({ name: "John" });
     });
@@ -39,7 +39,7 @@ describe("runMain", () => {
         run: runFn,
       });
 
-      await runMain(cmd, { argv: ["input.txt"] });
+      await runCommand(cmd, ["input.txt"]);
 
       expect(runFn).toHaveBeenCalledWith({ file: "input.txt" });
     });
@@ -48,23 +48,25 @@ describe("runMain", () => {
       const runFn = vi.fn();
 
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           verbose: arg(z.boolean().default(false), { alias: "v" }),
         }),
         run: runFn,
       });
 
-      await runMain(cmd, { argv: [] });
+      await runCommand(cmd, []);
 
       expect(runFn).toHaveBeenCalledWith({ verbose: false });
     });
 
     it("should return result from run function", async () => {
       const cmd = defineCommand({
+        name: "test",
         run: () => ({ success: true }),
       });
 
-      const result = await runMain(cmd, { argv: [] });
+      const result = await runCommand(cmd, []);
 
       expect(result.result).toEqual({ success: true });
       expect(result.exitCode).toBe(0);
@@ -86,7 +88,7 @@ describe("runMain", () => {
         }),
       });
 
-      const result = await runMain(cmd, { argv: ["--help"] });
+      const result = await runCommand(cmd, ["--help"]);
 
       expect(consoleSpy).toHaveBeenCalled();
       const output = consoleSpy.mock.calls[0]?.[0] as string;
@@ -102,7 +104,7 @@ describe("runMain", () => {
 
       const cmd = defineCommand({ name: "cli" });
 
-      await runMain(cmd, { argv: ["-h"] });
+      await runCommand(cmd, ["-h"]);
 
       expect(consoleSpy).toHaveBeenCalled();
       consoleSpy.mockRestore();
@@ -118,7 +120,7 @@ describe("runMain", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["--help"] });
+      await runCommand(cmd, ["--help"]);
 
       const output = consoleSpy.mock.calls[0]?.[0] as string;
       expect(output).toContain("--help-all");
@@ -143,7 +145,7 @@ describe("runMain", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["--help-all"] });
+      await runCommand(cmd, ["--help-all"]);
 
       const output = consoleSpy.mock.calls[0]?.[0] as string;
       expect(output).toContain("build");
@@ -168,7 +170,7 @@ describe("runMain", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["build", "--help"] });
+      await runCommand(cmd, ["build", "--help"]);
 
       const output = consoleSpy.mock.calls[0]?.[0] as string;
       expect(output).toContain("build");
@@ -178,35 +180,18 @@ describe("runMain", () => {
     });
   });
 
-  describe("Version handling", () => {
-    it("should show version on --version flag", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-
-      const cmd = defineCommand({
-        name: "my-cli",
-        version: "1.2.3",
-      });
-
-      const result = await runMain(cmd, { argv: ["--version"] });
-
-      expect(consoleSpy).toHaveBeenCalledWith("1.2.3");
-      expect(result.exitCode).toBe(0);
-
-      consoleSpy.mockRestore();
-    });
-  });
-
   describe("Validation errors", () => {
     it("should show error for invalid arguments", async () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           port: z.coerce.number(),
         }),
       });
 
-      const result = await runMain(cmd, { argv: ["--port", "not-a-number"] });
+      const result = await runCommand(cmd, ["--port", "not-a-number"]);
 
       expect(result.exitCode).toBe(1);
 
@@ -217,12 +202,13 @@ describe("runMain", () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           name: z.string(),
         }),
       });
 
-      const result = await runMain(cmd, { argv: [] });
+      const result = await runCommand(cmd, []);
 
       expect(result.exitCode).toBe(1);
 
@@ -247,7 +233,7 @@ describe("runMain", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["build", "--watch"] });
+      await runCommand(cmd, ["build", "--watch"]);
 
       expect(buildFn).toHaveBeenCalledWith({ watch: true });
     });
@@ -262,7 +248,7 @@ describe("runMain", () => {
         },
       });
 
-      await runMain(cmd, { argv: [], showSubcommands: true });
+      await runCommand(cmd, []);
 
       expect(consoleSpy).toHaveBeenCalled();
       consoleSpy.mockRestore();
@@ -274,12 +260,13 @@ describe("runMain", () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           verbose: z.boolean().default(false),
         }),
       });
 
-      await runMain(cmd, { argv: ["--unknown-flag"] });
+      await runCommand(cmd, ["--unknown-flag"]);
 
       expect(consoleSpy).toHaveBeenCalled();
       consoleSpy.mockRestore();

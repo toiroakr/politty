@@ -28,13 +28,12 @@ import { defineCommand, arg } from "politty";
 
 const command = defineCommand({
   name: "my-cli",
-  version: "1.0.0",
   description: "CLIツールの説明",
   args: z.object({
     input: arg(z.string(), { positional: true }),
   }),
   setup: ({ args }) => { /* 初期化処理 */ },
-  run: ({ args }) => { /* メイン処理 */ },
+  run: (args) => { /* メイン処理 */ },
   cleanup: ({ args, error }) => { /* 終了処理 */ },
 });
 ```
@@ -43,13 +42,13 @@ const command = defineCommand({
 
 ### `runMain`
 
-コマンドをエントリポイントとして実行します。
+コマンドをCLIエントリポイントとして実行します。シグナルハンドリング（SIGINT, SIGTERM）が自動的に有効になり、終了時に `process.exit` を呼び出します。
 
 ```typescript
-async function runMain<TResult>(
+async function runMain(
   command: Command,
   options?: MainOptions
-): Promise<RunResult<TResult>>
+): Promise<never>
 ```
 
 #### パラメータ
@@ -61,26 +60,66 @@ async function runMain<TResult>(
 
 #### 戻り値
 
-`Promise<RunResult<TResult>>` - 実行結果
+`Promise<never>` - この関数は `process.exit` を呼び出すため、戻りません。
 
 #### 使用例
 
 ```typescript
 import { defineCommand, runMain } from "politty";
 
-const command = defineCommand({ /* ... */ });
+const command = defineCommand({
+  name: "my-cli",
+  run: () => console.log("Hello!")
+});
 
 // 基本的な使用
 runMain(command);
 
-// オプション付き
-runMain(command, {
-  argv: ["--verbose", "input.txt"],
-  debug: true,
+// バージョン付き
+runMain(command, { version: "1.0.0" });
+
+// デバッグモード
+runMain(command, { version: "1.0.0", debug: true });
+```
+
+---
+
+### `runCommand`
+
+コマンドをプログラマティックに実行します。テスト用途に最適です。`process.exit` を呼び出さず、シグナルハンドリングも行いません。
+
+```typescript
+async function runCommand<TResult>(
+  command: Command,
+  argv: string[],
+  options?: RunCommandOptions
+): Promise<RunResult<TResult>>
+```
+
+#### パラメータ
+
+| 名前      | 型                  | 説明                     |
+| --------- | ------------------- | ------------------------ |
+| `command` | `Command`           | 実行するコマンド         |
+| `argv`    | `string[]`          | コマンドライン引数       |
+| `options` | `RunCommandOptions` | 実行オプション（省略可） |
+
+#### 戻り値
+
+`Promise<RunResult<TResult>>` - 実行結果
+
+#### 使用例
+
+```typescript
+import { defineCommand, runCommand } from "politty";
+
+const command = defineCommand({
+  name: "my-cli",
+  run: () => ({ success: true })
 });
 
-// 結果を使用
-const result = await runMain(command);
+// テストでの使用
+const result = await runCommand(command, ["--verbose", "input.txt"]);
 console.log(result.exitCode);
 console.log(result.result);
 ```
@@ -216,10 +255,8 @@ function formatValidationErrors(errors: ValidationError[]): string
 
 ```typescript
 interface CommandConfig<TArgsSchema, TResult> {
-  /** コマンド名 */
-  name?: string;
-  /** バージョン */
-  version?: string;
+  /** コマンド名（必須） */
+  name: string;
   /** 説明 */
   description?: string;
   /** 引数スキーマ */
@@ -229,7 +266,7 @@ interface CommandConfig<TArgsSchema, TResult> {
   /** 初期化フック */
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
   /** メイン処理 */
-  run?: (context: RunContext<TArgs>) => TResult | Promise<TResult>;
+  run?: (args: TArgs) => TResult | Promise<TResult>;
   /** 終了フック */
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
 }
@@ -243,13 +280,13 @@ interface CommandConfig<TArgsSchema, TResult> {
 
 ```typescript
 interface Command<TArgs, TResult> {
-  name?: string;
-  version?: string;
+  /** コマンド名（必須） */
+  name: string;
   description?: string;
   argsSchema?: ArgsSchema;
   subCommands?: Record<string, Command | (() => Promise<Command>)>;
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
-  run?: (context: RunContext<TArgs>) => TResult | Promise<TResult>;
+  run?: (args: TArgs) => TResult | Promise<TResult>;
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
 }
 ```
@@ -281,16 +318,23 @@ interface ArgMeta {
 
 ```typescript
 interface MainOptions {
-  /** ヘルプにサブコマンドを表示 */
-  showSubcommands?: boolean;
-  /** ヘルプにサブコマンドのオプションを表示 */
-  showSubcommandOptions?: boolean;
+  /** コマンドのバージョン */
+  version?: string;
   /** デバッグモードを有効化 */
   debug?: boolean;
-  /** シグナル（SIGINT, SIGTERM）を処理 */
-  handleSignals?: boolean;
-  /** カスタムargv（デフォルト: process.argv.slice(2)） */
-  argv?: string[];
+}
+```
+
+---
+
+### `RunCommandOptions`
+
+`runCommand` に渡すオプションの型です。
+
+```typescript
+interface RunCommandOptions {
+  /** デバッグモードを有効化 */
+  debug?: boolean;
 }
 ```
 
@@ -319,23 +363,6 @@ interface RunResult<T> {
 interface SetupContext<TArgs> {
   /** パース・バリデーション済みの引数 */
   args: TArgs;
-  /** 生のCLI引数 */
-  rawArgs: string[];
-}
-```
-
----
-
-### `RunContext`
-
-`run` フックに渡されるコンテキストの型です。
-
-```typescript
-interface RunContext<TArgs> {
-  /** パース・バリデーション済みの引数 */
-  args: TArgs;
-  /** 生のCLI引数 */
-  rawArgs: string[];
 }
 ```
 
@@ -349,12 +376,12 @@ interface RunContext<TArgs> {
 interface CleanupContext<TArgs> {
   /** パース・バリデーション済みの引数 */
   args: TArgs;
-  /** 生のCLI引数 */
-  rawArgs: string[];
   /** 実行中に発生したエラー（あれば） */
   error?: Error;
 }
 ```
+
+> **Note:** `run` 関数はコンテキストオブジェクトではなく、パース済みの引数 `args` を直接受け取ります。
 
 ---
 
@@ -471,7 +498,7 @@ class PositionalConfigError extends Error {
 ```typescript
 // Core
 export { defineCommand } from "./core/command.js";
-export { runMain } from "./core/runner.js";
+export { runMain, runCommand } from "./core/runner.js";
 export { arg, type ArgMeta } from "./core/arg-registry.js";
 
 // Utilities
@@ -490,10 +517,10 @@ export type {
   AnyCommand,
   CommandConfig,
   ArgsSchema,
-  RunContext,
   SetupContext,
   CleanupContext,
   MainOptions,
+  RunCommandOptions,
   RunResult,
 } from "./types.js";
 

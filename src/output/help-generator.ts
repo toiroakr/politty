@@ -133,6 +133,7 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
 export function renderOptions(
   command: AnyCommand,
   descriptions: BuiltinOptionDescriptions = {},
+  context?: CommandContext,
 ): string {
   const lines: string[] = [];
   const desc: Required<BuiltinOptionDescriptions> = {
@@ -166,7 +167,8 @@ export function renderOptions(
     );
   }
 
-  if (command.version) {
+  // Show --version only if version is provided in context
+  if (context?.rootVersion) {
     lines.push(formatOption(styles.option("--version"), desc.version));
   }
 
@@ -504,7 +506,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   const displayName = buildFullCommandName(command, context);
   if (displayName) {
     let header = styles.commandName(displayName);
-    // Show root name and version for subcommands, or command's own version for root
+    // Show root name and version for subcommands, or version for root
     if (context?.rootName && context.commandPath && context.commandPath.length > 0) {
       // Subcommand: show (rootName vX.X.X)
       if (context.rootVersion) {
@@ -512,9 +514,9 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
       } else {
         header += ` ${styles.version(`(${context.rootName})`)}`;
       }
-    } else if (command.version) {
+    } else if (context?.rootVersion) {
       // Root command: show vX.X.X
-      header += ` ${styles.version(`v${command.version}`)}`;
+      header += ` ${styles.version(`v${context.rootVersion}`)}`;
     }
     headerLines.push(header);
   }
@@ -532,7 +534,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   sections.push(`${styles.sectionHeader("Usage:")} ${renderUsageLine(command, context)}`);
 
   // Options
-  const optionsText = renderOptions(command, options.descriptions);
+  const optionsText = renderOptions(command, options.descriptions, context);
   if (optionsText) {
     sections.push(`${styles.sectionHeader("Options:")}\n${optionsText}`);
   }

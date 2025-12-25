@@ -1,169 +1,175 @@
 import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
-import { runCommand } from "./command-runner.js";
+import { executeLifecycle } from "./command-runner.js";
 import { defineCommand } from "../core/command.js";
 
 /**
- * Task 7.2: コマンドランナーのテスト
- * - setup → run → cleanup のライフサイクルを順次実行
- * - 非同期のrun関数をサポート
- * - エラー時に適切な終了コードを設定
- * - SIGINT/SIGTERM時のクリーンアップ
+ * Task 7.2: Command lifecycle tests
+ * - Execute setup → run → cleanup in sequence
+ * - Support async run function
+ * - Set appropriate exit code on error
+ * - SIGINT/SIGTERM cleanup
  */
-describe("CommandRunner", () => {
-  describe("runCommand", () => {
-    it("should execute run function with validated args", async () => {
-      const runFn = vi.fn().mockReturnValue("done");
+describe("executeLifecycle", () => {
+  it("should execute run function with validated args", async () => {
+    const runFn = vi.fn().mockReturnValue("done");
 
-      const cmd = defineCommand({
-        name: "test",
-        args: z.object({
-          name: z.string(),
-        }),
-        run: runFn,
-      });
-
-      const result = await runCommand(cmd, { name: "John" });
-
-      expect(runFn).toHaveBeenCalledWith({ name: "John" });
-      expect(result.exitCode).toBe(0);
-      expect(result.result).toBe("done");
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({
+        name: z.string(),
+      }),
+      run: runFn,
     });
 
-    it("should execute setup before run", async () => {
-      const order: string[] = [];
+    const result = await executeLifecycle(cmd, { name: "John" });
 
-      const cmd = defineCommand({
-        setup: () => {
-          order.push("setup");
-        },
-        run: () => {
-          order.push("run");
-        },
-      });
+    expect(runFn).toHaveBeenCalledWith({ name: "John" });
+    expect(result.exitCode).toBe(0);
+    expect(result.result).toBe("done");
+  });
 
-      await runCommand(cmd, {});
+  it("should execute setup before run", async () => {
+    const order: string[] = [];
 
-      expect(order).toEqual(["setup", "run"]);
+    const cmd = defineCommand({
+      name: "test",
+      setup: () => {
+        order.push("setup");
+      },
+      run: () => {
+        order.push("run");
+      },
     });
 
-    it("should execute cleanup after run", async () => {
-      const order: string[] = [];
+    await executeLifecycle(cmd, {});
 
-      const cmd = defineCommand({
-        run: () => {
-          order.push("run");
-        },
-        cleanup: () => {
-          order.push("cleanup");
-        },
-      });
+    expect(order).toEqual(["setup", "run"]);
+  });
 
-      await runCommand(cmd, {});
+  it("should execute cleanup after run", async () => {
+    const order: string[] = [];
 
-      expect(order).toEqual(["run", "cleanup"]);
+    const cmd = defineCommand({
+      name: "test",
+      run: () => {
+        order.push("run");
+      },
+      cleanup: () => {
+        order.push("cleanup");
+      },
     });
 
-    it("should execute cleanup even if run throws", async () => {
-      const cleanupFn = vi.fn();
+    await executeLifecycle(cmd, {});
 
-      const cmd = defineCommand({
-        run: () => {
-          throw new Error("Run error");
-        },
-        cleanup: cleanupFn,
-      });
+    expect(order).toEqual(["run", "cleanup"]);
+  });
 
-      const result = await runCommand(cmd, {}, []);
+  it("should execute cleanup even if run throws", async () => {
+    const cleanupFn = vi.fn();
 
-      expect(cleanupFn).toHaveBeenCalled();
-      expect(result.exitCode).toBe(1);
+    const cmd = defineCommand({
+      name: "test",
+      run: () => {
+        throw new Error("Run error");
+      },
+      cleanup: cleanupFn,
     });
 
-    it("should pass error to cleanup context", async () => {
-      let capturedError: Error | undefined;
+    const result = await executeLifecycle(cmd, {});
 
-      const cmd = defineCommand({
-        run: () => {
-          throw new Error("Test error");
-        },
-        cleanup: ({ error }) => {
-          capturedError = error;
-        },
-      });
+    expect(cleanupFn).toHaveBeenCalled();
+    expect(result.exitCode).toBe(1);
+  });
 
-      await runCommand(cmd, {});
+  it("should pass error to cleanup context", async () => {
+    let capturedError: Error | undefined;
 
-      expect(capturedError).toBeInstanceOf(Error);
-      expect(capturedError?.message).toBe("Test error");
+    const cmd = defineCommand({
+      name: "test",
+      run: () => {
+        throw new Error("Test error");
+      },
+      cleanup: ({ error }) => {
+        capturedError = error;
+      },
     });
 
-    it("should support async run function", async () => {
-      const cmd = defineCommand({
-        run: async () => {
-          await new Promise((resolve) => setTimeout(resolve, 10));
-          return "async result";
-        },
-      });
+    await executeLifecycle(cmd, {});
 
-      const result = await runCommand(cmd, {}, []);
+    expect(capturedError).toBeInstanceOf(Error);
+    expect(capturedError?.message).toBe("Test error");
+  });
 
-      expect(result.result).toBe("async result");
-      expect(result.exitCode).toBe(0);
+  it("should support async run function", async () => {
+    const cmd = defineCommand({
+      name: "test",
+      run: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return "async result";
+      },
     });
 
-    it("should support async setup and cleanup", async () => {
-      const order: string[] = [];
+    const result = await executeLifecycle(cmd, {});
 
-      const cmd = defineCommand({
-        setup: async () => {
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          order.push("setup");
-        },
-        run: () => {
-          order.push("run");
-        },
-        cleanup: async () => {
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          order.push("cleanup");
-        },
-      });
+    expect(result.result).toBe("async result");
+    expect(result.exitCode).toBe(0);
+  });
 
-      await runCommand(cmd, {});
+  it("should support async setup and cleanup", async () => {
+    const order: string[] = [];
 
-      expect(order).toEqual(["setup", "run", "cleanup"]);
+    const cmd = defineCommand({
+      name: "test",
+      setup: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        order.push("setup");
+      },
+      run: () => {
+        order.push("run");
+      },
+      cleanup: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        order.push("cleanup");
+      },
     });
 
-    it("should return exit code 1 on error", async () => {
-      const cmd = defineCommand({
-        run: () => {
-          throw new Error("Failure");
-        },
-      });
+    await executeLifecycle(cmd, {});
 
-      const result = await runCommand(cmd, {}, []);
+    expect(order).toEqual(["setup", "run", "cleanup"]);
+  });
 
-      expect(result.exitCode).toBe(1);
+  it("should return exit code 1 on error", async () => {
+    const cmd = defineCommand({
+      name: "test",
+      run: () => {
+        throw new Error("Failure");
+      },
     });
 
-    it("should return exit code 0 on success", async () => {
-      const cmd = defineCommand({
-        run: () => "success",
-      });
+    const result = await executeLifecycle(cmd, {});
 
-      const result = await runCommand(cmd, {}, []);
+    expect(result.exitCode).toBe(1);
+  });
 
-      expect(result.exitCode).toBe(0);
+  it("should return exit code 0 on success", async () => {
+    const cmd = defineCommand({
+      name: "test",
+      run: () => "success",
     });
 
-    it("should work with no run function", async () => {
-      const cmd = defineCommand({
-        name: "empty",
-      });
+    const result = await executeLifecycle(cmd, {});
 
-      const result = await runCommand(cmd, {}, []);
+    expect(result.exitCode).toBe(0);
+  });
 
-      expect(result.exitCode).toBe(0);
+  it("should work with no run function", async () => {
+    const cmd = defineCommand({
+      name: "empty",
     });
+
+    const result = await executeLifecycle(cmd, {});
+
+    expect(result.exitCode).toBe(0);
   });
 });

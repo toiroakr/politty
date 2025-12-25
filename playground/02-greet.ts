@@ -12,7 +12,6 @@ import { defineCommand, runMain, arg } from "../src/index.js";
 
 const command = defineCommand({
   name: "greet",
-  version: "1.0.0",
   description: "挨拶を表示するCLIツール",
   args: z.object({
     name: arg(z.string().meta({}), {
@@ -34,7 +33,8 @@ const command = defineCommand({
       message = message.toUpperCase();
     }
     console.log(message);
+    return message;
   },
 });
 
-runMain(command);
+runMain(command, { version: "1.0.0" });

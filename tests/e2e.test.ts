@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
-import { defineCommand, runMain, arg } from "../src/index.js";
+import { defineCommand, runCommand, arg } from "../src/index.js";
 
 /**
  * Task 9.2: E2E tests
@@ -24,7 +24,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["--name", "World"] });
+      await runCommand(cmd, ["--name", "World"]);
 
       expect(output).toEqual(["Hello, World!"]);
     });
@@ -45,9 +45,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, {
-        argv: ["input.txt", "output.txt", "-v", "--force"],
-      });
+      await runCommand(cmd, ["input.txt", "output.txt", "-v", "--force"]);
 
       expect(result).toEqual({
         src: "input.txt",
@@ -70,7 +68,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: [] });
+      await runCommand(cmd, []);
 
       expect(result).toEqual({
         port: 3000,
@@ -111,8 +109,8 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["build", "--watch"] });
-      await runMain(cmd, { argv: ["test", "-c"] });
+      await runCommand(cmd, ["build", "--watch"]);
+      await runCommand(cmd, ["test", "-c"]);
 
       expect(executed).toEqual(["build:watch=true", "test:coverage=true"]);
     });
@@ -135,7 +133,7 @@ describe("E2E Tests", () => {
 
       expect(lazyLoaded).toBe(false);
 
-      const result = await runMain(cmd, { argv: ["lazy"] });
+      const result = await runCommand(cmd, ["lazy"]);
 
       expect(lazyLoaded).toBe(true);
       expect(result.exitCode).toBe(0);
@@ -154,7 +152,7 @@ describe("E2E Tests", () => {
         }),
       });
 
-      const result = await runMain(cmd, { argv: ["--port", "80"] });
+      const result = await runCommand(cmd, ["--port", "80"]);
 
       expect(result.exitCode).toBe(1);
       consoleSpy.mockRestore();
@@ -172,7 +170,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["--port", "4000"] });
+      await runCommand(cmd, ["--port", "4000"]);
 
       expect(transformed).toBe(8000);
     });
@@ -184,7 +182,6 @@ describe("E2E Tests", () => {
 
       const cmd = defineCommand({
         name: "my-cli",
-        version: "1.0.0",
         description: "A sample CLI application",
         args: z.object({
           config: arg(z.string(), {
@@ -213,13 +210,12 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["--help"] });
+      await runCommand(cmd, ["--help"]);
 
       const output = consoleSpy.mock.calls[0]?.[0] as string;
 
       // Check header
       expect(output).toContain("my-cli");
-      expect(output).toContain("1.0.0");
       expect(output).toContain("A sample CLI application");
 
       // Check options
@@ -262,7 +258,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: [] });
+      await runCommand(cmd, []);
 
       expect(order).toEqual(["setup:test", "run:test", "cleanup:test:error=false"]);
     });
@@ -280,7 +276,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      const result = await runMain(cmd, { argv: [] });
+      const result = await runCommand(cmd, []);
 
       expect(cleanupRan.value).toBe(true);
       expect(result.exitCode).toBe(1);
@@ -296,7 +292,7 @@ describe("E2E Tests", () => {
         }),
       });
 
-      const result = await runMain(cmd, { argv: [] });
+      const result = await runCommand(cmd, []);
 
       expect(result.result).toEqual({
         status: "success",
@@ -312,7 +308,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      const result = await runMain(cmd, { argv: [] });
+      const result = await runCommand(cmd, []);
 
       expect(result.result).toBe("async-result");
     });
@@ -332,7 +328,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["build", "src/index.ts"] });
+      await runCommand(cmd, ["build", "src/index.ts"]);
 
       expect(result).toEqual({
         command: "build",
@@ -351,7 +347,7 @@ describe("E2E Tests", () => {
       });
 
       // Missing second required positional
-      const result = await runMain(cmd, { argv: ["input.txt"] });
+      const result = await runCommand(cmd, ["input.txt"]);
 
       expect(result.exitCode).toBe(1);
       consoleSpy.mockRestore();
@@ -370,7 +366,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["input.txt"] });
+      await runCommand(cmd, ["input.txt"]);
 
       expect(result).toEqual({
         input: "input.txt",
@@ -395,7 +391,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["42", "hello"] });
+      await runCommand(cmd, ["42", "hello"]);
 
       expect(result).toEqual({
         id: 42,
@@ -422,8 +418,8 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["-r", "dir1", "dir2"] });
-      await runMain(cmd, { argv: ["file.txt", "backup.txt", "-f"] });
+      await runCommand(cmd, ["-r", "dir1", "dir2"]);
+      await runCommand(cmd, ["file.txt", "backup.txt", "-f"]);
 
       expect(operations).toEqual(["cp -r dir1 dir2", "cp -f file.txt backup.txt"]);
     });
@@ -444,7 +440,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["file1.txt", "file2.txt", "file3.txt"] });
+      await runCommand(cmd, ["file1.txt", "file2.txt", "file3.txt"]);
 
       expect(result.files).toEqual(["file1.txt", "file2.txt", "file3.txt"]);
     });
@@ -463,7 +459,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["-o", "app", "main.c", "util.c", "lib.c"] });
+      await runCommand(cmd, ["-o", "app", "main.c", "util.c", "lib.c"]);
 
       expect(result).toEqual({
         output: "app",
@@ -481,7 +477,7 @@ describe("E2E Tests", () => {
         }),
       });
 
-      const result = await runMain(cmd, { argv: ["a.txt", "b.txt"] });
+      const result = await runCommand(cmd, ["a.txt", "b.txt"]);
 
       expect(result.exitCode).toBe(1);
       // Verify the error message was logged
@@ -503,7 +499,7 @@ describe("E2E Tests", () => {
         }),
       });
 
-      const result = await runMain(cmd, { argv: ["a", "b"] });
+      const result = await runCommand(cmd, ["a", "b"]);
 
       expect(result.exitCode).toBe(1);
       expect(consoleSpy).toHaveBeenCalled();
@@ -528,12 +524,12 @@ describe("E2E Tests", () => {
       });
 
       // With both positionals
-      await runMain(cmd, { argv: ["in.txt", "out.txt"] });
+      await runCommand(cmd, ["in.txt", "out.txt"]);
       expect(captured).toEqual({ input: "in.txt", output: "out.txt" });
 
       // With only required
       captured = {};
-      await runMain(cmd, { argv: ["in.txt"] });
+      await runCommand(cmd, ["in.txt"]);
       expect(captured).toEqual({ input: "in.txt", output: undefined });
     });
 
@@ -551,12 +547,12 @@ describe("E2E Tests", () => {
       });
 
       // With only required - default is applied via Zod validation
-      await runMain(cmd, { argv: ["in.txt"] });
+      await runCommand(cmd, ["in.txt"]);
       expect(captured).toEqual({ input: "in.txt", output: "default.txt" });
 
       // With both
       captured = {};
-      await runMain(cmd, { argv: ["in.txt", "custom.txt"] });
+      await runCommand(cmd, ["in.txt", "custom.txt"]);
       expect(captured).toEqual({ input: "in.txt", output: "custom.txt" });
     });
 
@@ -570,7 +566,7 @@ describe("E2E Tests", () => {
         }),
       });
 
-      const result = await runMain(cmd, { argv: ["a.txt"] });
+      const result = await runCommand(cmd, ["a.txt"]);
 
       expect(result.exitCode).toBe(1);
       expect(consoleSpy).toHaveBeenCalled();
@@ -596,7 +592,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["--files", "a.txt", "--files", "b.txt", "-f", "c.txt"] });
+      await runCommand(cmd, ["--files", "a.txt", "--files", "b.txt", "-f", "c.txt"]);
 
       expect(result.files).toEqual(["a.txt", "b.txt", "c.txt"]);
     });
@@ -610,7 +606,7 @@ describe("E2E Tests", () => {
         }),
       });
 
-      const result = await runMain(cmd, { argv: ["--ports", "8080", "--ports", "99999"] });
+      const result = await runCommand(cmd, ["--ports", "8080", "--ports", "99999"]);
 
       expect(result.exitCode).toBe(1);
       consoleSpy.mockRestore();
@@ -628,7 +624,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: ["-n", "1", "-n", "2", "-n", "3"] });
+      await runCommand(cmd, ["-n", "1", "-n", "2", "-n", "3"]);
 
       expect(result).toEqual([1, 2, 3]);
     });
@@ -645,7 +641,7 @@ describe("E2E Tests", () => {
         },
       });
 
-      await runMain(cmd, { argv: [] });
+      await runCommand(cmd, []);
 
       expect(result).toEqual([]);
     });
@@ -661,7 +657,6 @@ describe("E2E Tests", () => {
 
       const cli = defineCommand({
         name: "my-tool",
-        version: "2.0.0",
         description: "A complete CLI tool",
         args: z.object({
           input: arg(z.string(), { positional: true }),
@@ -682,9 +677,7 @@ describe("E2E Tests", () => {
       });
 
       // Test main command
-      const result = await runMain(cli, {
-        argv: ["file.txt", "-o", "out.txt"],
-      });
+      const result = await runCommand(cli, ["file.txt", "-o", "out.txt"]);
 
       expect(result.exitCode).toBe(0);
       expect(result.result).toEqual({ processed: true });

@@ -136,7 +136,6 @@ const remoteCommand = defineCommand({
 // メインコマンド
 const cli = defineCommand({
   name: "git-like",
-  version: "1.0.0",
   description: "サブコマンドのオプションをまとめて表示する例",
   subCommands: {
     config: configCommand,
@@ -145,5 +144,4 @@ const cli = defineCommand({
 });
 
 // --help-all フラグでサブコマンドのオプションを表示できる
-// ランタイムオプションとして showSubcommandOptions: true を指定することも可能
-runMain(cli);
+runMain(cli, { version: "1.0.0" });

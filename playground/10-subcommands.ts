@@ -67,7 +67,6 @@ const buildCommand = defineCommand({
 // メインコマンド
 const cli = defineCommand({
   name: "my-cli",
-  version: "1.0.0",
   description: "サブコマンドを持つCLIの例",
   subCommands: {
     init: initCommand,
@@ -75,4 +74,4 @@ const cli = defineCommand({
   },
 });
 
-runMain(cli);
+runMain(cli, { version: "1.0.0" });

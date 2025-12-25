@@ -12,23 +12,22 @@ import { arg } from "./arg-registry.js";
  */
 describe("defineCommand", () => {
   describe("Basic command definition", () => {
-    it("should create a command with name, version, description", () => {
+    it("should create a command with name and description", () => {
       const cmd = defineCommand({
         name: "my-cli",
-        version: "1.0.0",
         description: "A test CLI",
       });
 
       expect(cmd.name).toBe("my-cli");
-      expect(cmd.version).toBe("1.0.0");
       expect(cmd.description).toBe("A test CLI");
     });
 
     it("should create a command without optional fields", () => {
-      const cmd = defineCommand({});
+      const cmd = defineCommand({
+        name: "minimal",
+      });
 
-      expect(cmd.name).toBeUndefined();
-      expect(cmd.version).toBeUndefined();
+      expect(cmd.name).toBe("minimal");
       expect(cmd.argsSchema).toBeUndefined();
     });
   });
@@ -36,6 +35,7 @@ describe("defineCommand", () => {
   describe("Args with zod schema", () => {
     it("should define args with zod schemas using arg() helper", () => {
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           name: arg(z.string(), { description: "User name" }),
           verbose: arg(z.boolean().default(false), { alias: "v" }),
@@ -47,6 +47,7 @@ describe("defineCommand", () => {
 
     it("should infer args type in run function", () => {
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           name: z.string(),
           count: z.number().default(1),
@@ -65,6 +66,7 @@ describe("defineCommand", () => {
 
     it("should support positional arguments via arg() helper", () => {
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           file: arg(z.string(), { positional: true, description: "Input file" }),
         }),
@@ -75,6 +77,7 @@ describe("defineCommand", () => {
 
     it("should support placeholders for help via arg() helper", () => {
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           port: arg(z.number(), { placeholder: "PORT" }),
         }),
@@ -87,6 +90,7 @@ describe("defineCommand", () => {
   describe("Lifecycle hooks", () => {
     it("should support setup hook", () => {
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           name: z.string(),
         }),
@@ -100,6 +104,7 @@ describe("defineCommand", () => {
 
     it("should support cleanup hook", () => {
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           name: z.string(),
         }),
@@ -114,6 +119,7 @@ describe("defineCommand", () => {
 
     it("should support async hooks", () => {
       const cmd = defineCommand({
+        name: "test",
         setup: async () => {
           await Promise.resolve();
         },
@@ -185,6 +191,7 @@ describe("defineCommand", () => {
   describe("Return type inference", () => {
     it("should infer void return type by default", () => {
       const cmd = defineCommand({
+        name: "test",
         run: () => {
           console.log("hello");
         },
@@ -196,6 +203,7 @@ describe("defineCommand", () => {
 
     it("should infer custom return type", () => {
       const cmd = defineCommand({
+        name: "test",
         run: () => {
           return { success: true, count: 42 };
         },
@@ -207,6 +215,7 @@ describe("defineCommand", () => {
 
     it("should infer async return type", () => {
       const cmd = defineCommand({
+        name: "test",
         run: async () => {
           return await Promise.resolve("async result");
         },
@@ -219,6 +228,7 @@ describe("defineCommand", () => {
   describe("Discriminated union support", () => {
     it("should support discriminated union for args", () => {
       const cmd = defineCommand({
+        name: "test",
         args: z.discriminatedUnion("action", [
           z.object({
             action: z.literal("create"),
@@ -245,6 +255,7 @@ describe("defineCommand", () => {
   describe("Run function type inference", () => {
     it("should have run as required property when defined", () => {
       const cmd = defineCommand({
+        name: "test",
         run: () => 42,
       });
 
@@ -265,6 +276,7 @@ describe("defineCommand", () => {
 
     it("should correctly infer result type for async run", () => {
       const cmd = defineCommand({
+        name: "test",
         run: async () => ({ success: true }),
       });
 
@@ -274,6 +286,7 @@ describe("defineCommand", () => {
 
     it("should work with args schema and run", () => {
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           name: z.string(),
         }),
@@ -289,6 +302,7 @@ describe("defineCommand", () => {
 
     it("should work with args schema but no run", () => {
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           name: z.string(),
         }),
@@ -300,6 +314,7 @@ describe("defineCommand", () => {
 
     it("should infer args correctly when using arg() helper", () => {
       const cmd = defineCommand({
+        name: "test",
         args: z.object({
           name: arg(z.string(), { positional: true, description: "Name" }),
           count: arg(z.number().default(1), { alias: "c", description: "Count" }),

@@ -142,17 +142,20 @@ describe("Help Generator", () => {
     it("should allow custom descriptions for built-in options", () => {
       const cmd = defineCommand({
         name: "cli",
-        version: "1.0.0",
         subCommands: {
           sub: defineCommand({ name: "sub" }),
         },
       });
 
-      const result = renderOptions(cmd, {
-        help: "ヘルプを表示",
-        helpAll: "すべてのサブコマンドオプションを含むヘルプを表示",
-        version: "バージョンを表示",
-      });
+      const result = renderOptions(
+        cmd,
+        {
+          help: "ヘルプを表示",
+          helpAll: "すべてのサブコマンドオプションを含むヘルプを表示",
+          version: "バージョンを表示",
+        },
+        { rootVersion: "1.0.0" },
+      );
 
       expect(result).toContain("ヘルプを表示");
       expect(result).toContain("すべてのサブコマンドオプションを含むヘルプを表示");
@@ -162,10 +165,9 @@ describe("Help Generator", () => {
     it("should use default descriptions when not provided", () => {
       const cmd = defineCommand({
         name: "cli",
-        version: "1.0.0",
       });
 
-      const result = renderOptions(cmd);
+      const result = renderOptions(cmd, {}, { rootVersion: "1.0.0" });
 
       expect(result).toContain("Show help");
       expect(result).toContain("Show version");
@@ -187,10 +189,9 @@ describe("Help Generator", () => {
     it("should include version", () => {
       const cmd = defineCommand({
         name: "my-cli",
-        version: "1.0.0",
       });
 
-      const result = generateHelp(cmd, {});
+      const result = generateHelp(cmd, { context: { rootVersion: "1.0.0" } });
 
       expect(result).toContain("1.0.0");
     });

@@ -1,4 +1,10 @@
-import type { AnyCommand, MainOptions, RunResult } from "../types.js";
+import type {
+  AnyCommand,
+  MainOptions,
+  RunCommandOptions,
+  InternalRunOptions,
+  RunResult,
+} from "../types.js";
 import { parseArgs } from "../parser/arg-parser.js";
 import { validateArgs } from "../validator/zod-validator.js";
 import {
@@ -8,23 +14,64 @@ import {
   formatRuntimeError,
 } from "../validator/error-formatter.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
-import { runCommand } from "../executor/command-runner.js";
+import { executeLifecycle } from "../executor/command-runner.js";
 import { resolveSubcommand, listSubCommands } from "../executor/subcommand-router.js";
 
 /**
- * Internal options for runMain (includes context tracking)
+ * Internal options for runCommand (includes context tracking)
  */
-interface InternalMainOptions extends MainOptions {
+interface InternalCommandOptions extends InternalRunOptions {
   /** Command hierarchy context (internal use) */
   _context?: CommandContext;
 }
 
 /**
- * Run a CLI command as the main entry point
+ * Run a command with the given arguments (programmatic/test usage)
+ *
+ * This function parses arguments, validates them, routes to subcommands,
+ * and executes the command. It does NOT call process.exit.
  *
  * @param command - The command to run
- * @param options - Main options
+ * @param argv - Command line arguments to parse
+ * @param options - Run options
  * @returns The result of command execution
+ *
+ * @example
+ * ```ts
+ * import { defineCommand, runCommand } from "politty";
+ *
+ * const command = defineCommand({
+ *   name: "my-cli",
+ *   args: z.object({ name: z.string() }),
+ *   run: ({ name }) => console.log(`Hello, ${name}!`),
+ * });
+ *
+ * // In tests
+ * const result = await runCommand(command, ["--name", "World"]);
+ * expect(result.exitCode).toBe(0);
+ * ```
+ */
+export async function runCommand<TResult = unknown>(
+  command: AnyCommand,
+  argv: string[],
+  options: RunCommandOptions = {},
+): Promise<RunResult<TResult>> {
+  return runCommandInternal(command, argv, {
+    ...options,
+    handleSignals: false,
+  });
+}
+
+/**
+ * Run a CLI command as the main entry point
+ *
+ * This function:
+ * - Uses process.argv for arguments
+ * - Handles SIGINT/SIGTERM signals
+ * - Calls process.exit with the appropriate exit code
+ *
+ * @param command - The command to run
+ * @param options - Main options (version, debug)
  *
  * @example
  * ```ts
@@ -35,28 +82,35 @@ interface InternalMainOptions extends MainOptions {
  *   run: () => console.log("Hello!"),
  * });
  *
- * runMain(command);
+ * runMain(command, { version: "1.0.0" });
  * ```
  */
-export async function runMain<TResult = unknown>(
+export async function runMain(command: AnyCommand, options: MainOptions = {}): Promise<never> {
+  const result = await runCommandInternal(command, process.argv.slice(2), {
+    debug: options.debug,
+    handleSignals: true,
+    _context: {
+      commandPath: [],
+      rootName: command.name,
+      rootVersion: options.version,
+    },
+  });
+
+  process.exit(result.exitCode);
+}
+
+/**
+ * Internal implementation of command running
+ */
+async function runCommandInternal<TResult = unknown>(
   command: AnyCommand,
-  options: MainOptions = {},
+  argv: string[],
+  options: InternalCommandOptions = {},
 ): Promise<RunResult<TResult>> {
-  const internalOptions = options as InternalMainOptions;
-  const argv = options.argv ?? process.argv.slice(2);
-
-  // Check if this is the top-level call (not a recursive subcommand call)
-  const isTopLevel = !internalOptions._context;
-
-  // Check if we should auto-exit
-  // Default: true when using process.argv (CLI mode), false when argv is provided (programmatic mode)
-  const shouldAutoExit = isTopLevel && (options.exit ?? !options.argv);
-
   // Initialize or get existing context
-  const context: CommandContext = internalOptions._context ?? {
+  const context: CommandContext = options._context ?? {
     commandPath: [],
     rootName: command.name,
-    rootVersion: command.version,
   };
 
   try {
@@ -84,17 +138,17 @@ export async function runMain<TResult = unknown>(
         context,
       });
       console.log(help);
-      return exitWithCode({ exitCode: hasUnknownSubcommand ? 1 : 0 }, shouldAutoExit);
+      return { exitCode: hasUnknownSubcommand ? 1 : 0 };
     }
 
     // Handle --version
     if (parseResult.versionRequested) {
       // For subcommands, show root version
-      const version = context.rootVersion ?? command.version;
+      const version = context.rootVersion;
       if (version) {
         console.log(version);
       }
-      return exitWithCode({ exitCode: 0 }, shouldAutoExit);
+      return { exitCode: 0 };
     }
 
     // Handle subcommand
@@ -107,13 +161,10 @@ export async function runMain<TResult = unknown>(
           rootName: context.rootName,
           rootVersion: context.rootVersion,
         };
-        const subResult = await runMain<TResult>(subCmd, {
+        return runCommandInternal<TResult>(subCmd, parseResult.remainingArgs, {
           ...options,
-          argv: parseResult.remainingArgs,
           _context: subContext,
-        } as InternalMainOptions);
-        // Exit with subcommand's exit code if at top level
-        return exitWithCode(subResult, shouldAutoExit);
+        });
       }
     }
 
@@ -125,7 +176,7 @@ export async function runMain<TResult = unknown>(
         context,
       });
       console.log(help);
-      return exitWithCode({ exitCode: 0 }, shouldAutoExit);
+      return { exitCode: 0 };
     }
 
     // Warn about unknown flags
@@ -134,49 +185,34 @@ export async function runMain<TResult = unknown>(
       for (const flag of parseResult.unknownFlags) {
         console.error(formatUnknownFlag(flag, knownFlags));
       }
-      return exitWithCode({ exitCode: 1 }, shouldAutoExit);
+      return { exitCode: 1 };
     }
 
     // Validate arguments
     if (!command.argsSchema) {
       // No schema, run with empty args
-      const result = await runCommand(command, {} as Record<string, never>, {
-        debug: options.debug,
+      const result = await executeLifecycle(command, {} as Record<string, never>, {
         handleSignals: options.handleSignals,
       });
-      return exitWithCode(result as RunResult<TResult>, shouldAutoExit);
+      return result as RunResult<TResult>;
     }
 
     const validationResult = validateArgs(parseResult.rawArgs, command.argsSchema);
 
     if (!validationResult.success) {
       console.error(formatValidationErrors(validationResult.errors));
-      return exitWithCode({ exitCode: 1 }, shouldAutoExit);
+      return { exitCode: 1 };
     }
 
     // Run the command
-    const result = await runCommand(command, validationResult.data, {
-      debug: options.debug,
+    const result = await executeLifecycle(command, validationResult.data, {
       handleSignals: options.handleSignals,
     });
 
-    return exitWithCode(result as RunResult<TResult>, shouldAutoExit);
+    return result as RunResult<TResult>;
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     console.error(formatRuntimeError(err, options.debug ?? false));
-    return exitWithCode({ exitCode: 1 }, shouldAutoExit);
+    return { exitCode: 1 };
   }
-}
-
-/**
- * Exit with the given result code if at top level
- */
-function exitWithCode<TResult>(
-  result: RunResult<TResult>,
-  isTopLevel: boolean,
-): RunResult<TResult> {
-  if (isTopLevel && result.exitCode !== undefined) {
-    process.exit(result.exitCode);
-  }
-  return result;
 }

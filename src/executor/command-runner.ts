@@ -1,29 +1,29 @@
 import type { AnyCommand, RunResult, SetupContext, CleanupContext } from "../types.js";
 
 /**
- * Options for command execution
+ * Options for lifecycle execution
  */
-export interface RunOptions {
-  /** Enable debug mode */
-  debug?: boolean | undefined;
+export interface ExecuteLifecycleOptions {
   /** Handle signals (SIGINT, SIGTERM) */
   handleSignals?: boolean | undefined;
 }
 
 /**
- * Run a command with the given arguments
+ * Execute a command lifecycle: setup → run → cleanup
  *
- * Executes the lifecycle: setup → run → cleanup
+ * This is an internal function that executes the command's lifecycle hooks.
+ * For running commands with argument parsing, use `runCommand` instead.
  *
- * @param command - The command to run
- * @param args - Validated arguments
- * @param options - Run options
+ * @param command - The command to execute
+ * @param args - Already validated arguments
+ * @param options - Lifecycle options
  * @returns The result of command execution
+ * @internal
  */
-export async function runCommand<TResult = unknown>(
+export async function executeLifecycle<TResult = unknown>(
   command: AnyCommand,
   args: unknown,
-  _options: RunOptions = {},
+  _options: ExecuteLifecycleOptions = {},
 ): Promise<RunResult<TResult>> {
   let error: Error | undefined;
   let result: TResult | undefined;

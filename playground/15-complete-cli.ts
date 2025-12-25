@@ -37,7 +37,6 @@ const initCommand = defineCommand({
 // メインCLI
 const cli = defineCommand({
   name: "my-tool",
-  version: "2.0.0",
   description: "完全なCLIツールの例",
   args: z.object({
     input: arg(z.string(), {
@@ -90,4 +89,4 @@ const cli = defineCommand({
   },
 });
 
-runMain(cli);
+runMain(cli, { version: "2.0.0" });

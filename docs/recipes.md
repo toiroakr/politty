@@ -2,13 +2,13 @@
 
 ## テスト
 
-politty はテストのしやすさを考慮して設計されています。`runMain` に `argv` 配列を直接渡すことで、コマンドライン実行をシミュレートできます。
+politty はテストのしやすさを考慮して設計されています。`runCommand` に `argv` 配列を直接渡すことで、コマンドライン実行をシミュレートできます。
 
 テストランナーには **Vitest** を推奨しますが、何でも構いません。
 
 ```typescript
 import { describe, it, expect, vi } from "vitest";
-import { defineCommand, runMain, arg } from "politty";
+import { defineCommand, runCommand, arg } from "politty";
 import { z } from "zod";
 
 describe("my-cli", () => {
@@ -17,14 +17,15 @@ describe("my-cli", () => {
     vi.spyOn(console, "log").mockImplementation((msg) => logs.push(msg));
 
     const command = defineCommand({
+      name: "greet",
       args: z.object({
         name: arg(z.string(), { positional: true })
       }),
-      run: ({ args }) => console.log(`Hello ${args.name}`)
+      run: (args) => console.log(`Hello ${args.name}`)
     });
 
     // 引数を直接渡す
-    const result = await runMain(command, { argv: ["World"] });
+    const result = await runCommand(command, ["World"]);
 
     expect(result.exitCode).toBe(0);
     expect(logs).toContain("Hello World");
@@ -42,12 +43,31 @@ it("バリデーションに失敗すること", async () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 
   const command = defineCommand({
+    name: "test",
     args: z.object({ age: arg(z.number()) })
   });
 
-  const result = await runMain(command, { argv: ["--age", "not-a-number"] });
+  const result = await runCommand(command, ["--age", "not-a-number"]);
 
   expect(result.exitCode).toBe(1);
+});
+```
+
+### setup/cleanup のモック
+
+既存のコマンド定義に対して `setup` や `cleanup` をモックしたい場合は、`vi.spyOn` を使用します。
+
+```typescript
+import { myCommand } from "./my-command";
+
+it("setup をモックする", async () => {
+  // setup をモック（何もしないようにする）
+  vi.spyOn(myCommand, "setup").mockImplementation(() => {});
+  vi.spyOn(myCommand, "cleanup").mockImplementation(() => {});
+
+  const result = await runCommand(myCommand, ["--flag", "value"]);
+
+  expect(result.exitCode).toBe(0);
 });
 ```
 
@@ -55,15 +75,9 @@ it("バリデーションに失敗すること", async () => {
 
 ### シグナルハンドリング (Ctrl+C)
 
-終了シグナル（SIGINT, SIGTERM）を適切に処理して `cleanup` フックを実行させるには、`handleSignals` を有効にします。
+`runMain` を使用すると、終了シグナル（SIGINT, SIGTERM）が自動的に処理され、`cleanup` フックが実行されます。これにより、ユーザーがプロセスを中断した場合でも `cleanup` が確実に呼ばれます。
 
-```typescript
-runMain(command, {
-  handleSignals: true
-});
-```
-
-これにより、ユーザーがプロセスを中断した場合でも `cleanup` が確実に呼ばれます。
+> **Note:** `runCommand` はテスト用途を想定しており、シグナルハンドリングは行いません。本番環境では `runMain` を使用してください。
 
 ### デバッグモード
 
