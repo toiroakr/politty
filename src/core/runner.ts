@@ -1,21 +1,21 @@
-import type {
-  AnyCommand,
-  MainOptions,
-  RunCommandOptions,
-  InternalRunOptions,
-  RunResult,
-} from "../types.js";
-import { parseArgs } from "../parser/arg-parser.js";
-import { validateArgs } from "../validator/zod-validator.js";
-import {
-  formatValidationErrors,
-  formatUnknownFlag,
-  formatUnknownSubcommand,
-  formatRuntimeError,
-} from "../validator/error-formatter.js";
-import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { executeLifecycle } from "../executor/command-runner.js";
-import { resolveSubcommand, listSubCommands } from "../executor/subcommand-router.js";
+import { listSubCommands, resolveSubcommand } from "../executor/subcommand-router.js";
+import { generateHelp, type CommandContext } from "../output/help-generator.js";
+import { parseArgs } from "../parser/arg-parser.js";
+import type {
+    AnyCommand,
+    InternalRunOptions,
+    MainOptions,
+    RunCommandOptions,
+    RunResult
+} from "../types.js";
+import {
+    formatRuntimeError,
+    formatUnknownFlag,
+    formatUnknownSubcommand,
+    formatValidationErrors
+} from "../validator/error-formatter.js";
+import { validateArgs } from "../validator/zod-validator.js";
 
 /**
  * Internal options for runCommand (includes context tracking)

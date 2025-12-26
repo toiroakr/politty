@@ -1,24 +1,25 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runCommand } from "../src/index.js";
+import { spyOnConsoleLog, type ConsoleSpy } from "../tests/utils/console.js";
 import { command } from "./03-array-args.js";
 
 describe("03-array-args", () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let console: ConsoleSpy;
 
   beforeEach(() => {
-    consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    console = spyOnConsoleLog();
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    console.mockRestore();
   });
 
   it("processes single file with --files", async () => {
     const result = await runCommand(command, ["--files", "a.txt"]);
 
     expect(result.exitCode).toBe(0);
-    expect(consoleSpy).toHaveBeenCalledWith("Processing 1 files:");
-    expect(consoleSpy).toHaveBeenCalledWith("  - a.txt");
+    expect(console).toHaveBeenCalledWith("Processing 1 files:");
+    expect(console).toHaveBeenCalledWith("  - a.txt");
   });
 
   it("processes multiple files with repeated --files", async () => {
@@ -32,28 +33,28 @@ describe("03-array-args", () => {
     ]);
 
     expect(result.exitCode).toBe(0);
-    expect(consoleSpy).toHaveBeenCalledWith("Processing 3 files:");
-    expect(consoleSpy).toHaveBeenCalledWith("  - a.txt");
-    expect(consoleSpy).toHaveBeenCalledWith("  - b.txt");
-    expect(consoleSpy).toHaveBeenCalledWith("  - c.txt");
+    expect(console).toHaveBeenCalledWith("Processing 3 files:");
+    expect(console).toHaveBeenCalledWith("  - a.txt");
+    expect(console).toHaveBeenCalledWith("  - b.txt");
+    expect(console).toHaveBeenCalledWith("  - c.txt");
   });
 
   it("processes files with -f alias", async () => {
     const result = await runCommand(command, ["-f", "one.txt", "-f", "two.txt"]);
 
     expect(result.exitCode).toBe(0);
-    expect(consoleSpy).toHaveBeenCalledWith("Processing 2 files:");
+    expect(console).toHaveBeenCalledWith("Processing 2 files:");
   });
 
   it("shows verbose output with -v", async () => {
     const result = await runCommand(command, ["-f", "test.txt", "-v"]);
 
     expect(result.exitCode).toBe(0);
-    expect(consoleSpy).toHaveBeenCalledWith("  - Processing: test.txt");
+    expect(console).toHaveBeenCalledWith("  - Processing: test.txt");
   });
 
   it("fails when no files provided", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
     expect(result.exitCode).toBe(1);

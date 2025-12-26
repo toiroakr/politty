@@ -1,10 +1,10 @@
 import { z } from "zod";
 import type {
-  ArgsSchema,
-  Command,
-  CommandConfig,
-  NonRunnableCommand,
-  RunnableCommand,
+    ArgsSchema,
+    Command,
+    CommandConfig,
+    NonRunnableCommand,
+    RunnableCommand
 } from "../types.js";
 
 /**

@@ -1,11 +1,11 @@
-import type { AnyCommand } from "../types.js";
 import {
-  extractFields,
-  validatePositionalConfig,
-  validateReservedAliases,
-  type ExtractedFields,
+    extractFields,
+    validatePositionalConfig,
+    validateReservedAliases,
+    type ExtractedFields
 } from "../core/schema-extractor.js";
-import { parseArgv, buildParserOptions, mergeWithPositionals } from "./argv-parser.js";
+import type { AnyCommand } from "../types.js";
+import { buildParserOptions, mergeWithPositionals, parseArgv } from "./argv-parser.js";
 
 /**
  * Result of parsing CLI arguments

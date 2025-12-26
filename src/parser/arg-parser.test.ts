@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { parseArgs } from "./arg-parser.js";
-import { defineCommand } from "../core/command.js";
 import { arg } from "../core/arg-registry.js";
+import { defineCommand } from "../core/command.js";
 import { PositionalConfigError } from "../core/schema-extractor.js";
+import { parseArgs } from "./arg-parser.js";
 
 /**
  * Task 4.2: Argument parser tests

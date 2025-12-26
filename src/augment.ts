@@ -31,4 +31,4 @@ declare module "zod" {
 }
 
 // This file has no runtime code, it only provides type augmentation
-export {};
+export { };

@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { renderUsageLine, renderOptions, generateHelp } from "./help-generator.js";
-import { defineCommand } from "../core/command.js";
 import { arg } from "../core/arg-registry.js";
+import { defineCommand } from "../core/command.js";
+import { generateHelp, renderOptions, renderUsageLine } from "./help-generator.js";
 
 /**
  * Task 6.1 & 6.2: Help generation system tests

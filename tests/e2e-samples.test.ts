@@ -1,29 +1,28 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { defineCommand, runCommand, arg } from "../src/index.js";
+import { arg, defineCommand, runCommand } from "../src/index.js";
+import { spyOnConsoleLog, type ConsoleSpy } from "./utils/console.js";
 
 /**
  * E2E tests with concrete sample CLI commands
  */
 describe("E2E Sample Commands", () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let console: ConsoleSpy;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   let logs: string[];
   let errors: string[];
 
   beforeEach(() => {
-    logs = [];
     errors = [];
-    consoleSpy = vi.spyOn(console, "log").mockImplementation((msg) => {
-      logs.push(String(msg));
-    });
-    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((msg) => {
+    console = spyOnConsoleLog();
+    logs = console.getLogs();
+    consoleErrorSpy = vi.spyOn(globalThis.console, "error").mockImplementation((msg) => {
       errors.push(String(msg));
     });
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    console.mockRestore();
     consoleErrorSpy.mockRestore();
   });
 

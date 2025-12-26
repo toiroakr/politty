@@ -1,22 +1,23 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCommand } from "../src/index.js";
+import { spyOnConsoleLog, type ConsoleSpy } from "../tests/utils/console.js";
 import {
-  cli,
-  configGetCommand,
-  configListCommand,
-  remoteAddCommand,
-  remoteRemoveCommand,
+    cli,
+    configGetCommand,
+    configListCommand,
+    remoteAddCommand,
+    remoteRemoveCommand
 } from "./16-show-subcommand-options.js";
 
 describe("16-show-subcommand-options", () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let console: ConsoleSpy;
 
   beforeEach(() => {
-    consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    console = spyOnConsoleLog();
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    console.mockRestore();
   });
 
   describe("config get subcommand", () => {
@@ -24,14 +25,14 @@ describe("16-show-subcommand-options", () => {
       const result = await runCommand(cli, ["config", "get", "user.name"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Getting config: user.name");
+      expect(console).toHaveBeenCalledWith("Getting config: user.name");
     });
 
     it("can run configGetCommand directly", async () => {
       const result = await runCommand(configGetCommand, ["core.editor"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Getting config: core.editor");
+      expect(console).toHaveBeenCalledWith("Getting config: core.editor");
     });
   });
 
@@ -40,7 +41,7 @@ describe("16-show-subcommand-options", () => {
       const result = await runCommand(cli, ["config", "set", "user.name", "John"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Setting config: user.name = John");
+      expect(console).toHaveBeenCalledWith("Setting config: user.name = John");
     });
   });
 
@@ -49,28 +50,28 @@ describe("16-show-subcommand-options", () => {
       const result = await runCommand(cli, ["config", "list"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Listing all config (format: table, global: false):");
+      expect(console).toHaveBeenCalledWith("Listing all config (format: table, global: false):");
     });
 
     it("lists config in json format", async () => {
       const result = await runCommand(cli, ["config", "list", "-f", "json"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Listing all config (format: json, global: false):");
+      expect(console).toHaveBeenCalledWith("Listing all config (format: json, global: false):");
     });
 
     it("lists global config", async () => {
       const result = await runCommand(cli, ["config", "list", "-g"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Listing all config (format: table, global: true):");
+      expect(console).toHaveBeenCalledWith("Listing all config (format: table, global: true):");
     });
 
     it("can run configListCommand directly", async () => {
       const result = await runCommand(configListCommand, ["-f", "yaml"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Listing all config (format: yaml, global: false):");
+      expect(console).toHaveBeenCalledWith("Listing all config (format: yaml, global: false):");
     });
   });
 
@@ -84,16 +85,14 @@ describe("16-show-subcommand-options", () => {
       ]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith(
-        "Adding remote: origin -> https://github.com/user/repo",
-      );
+      expect(console).toHaveBeenCalledWith("Adding remote: origin -> https://github.com/user/repo");
     });
 
     it("can run remoteAddCommand directly", async () => {
       const result = await runCommand(remoteAddCommand, ["upstream", "git@github.com:org/repo"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Adding remote: upstream -> git@github.com:org/repo");
+      expect(console).toHaveBeenCalledWith("Adding remote: upstream -> git@github.com:org/repo");
     });
   });
 
@@ -102,21 +101,21 @@ describe("16-show-subcommand-options", () => {
       const result = await runCommand(cli, ["remote", "remove", "origin"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Removing remote: origin (force: false)");
+      expect(console).toHaveBeenCalledWith("Removing remote: origin (force: false)");
     });
 
     it("removes remote with force", async () => {
       const result = await runCommand(cli, ["remote", "remove", "origin", "-f"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Removing remote: origin (force: true)");
+      expect(console).toHaveBeenCalledWith("Removing remote: origin (force: true)");
     });
 
     it("can run remoteRemoveCommand directly", async () => {
       const result = await runCommand(remoteRemoveCommand, ["upstream", "-f"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Removing remote: upstream (force: true)");
+      expect(console).toHaveBeenCalledWith("Removing remote: upstream (force: true)");
     });
   });
 
@@ -125,7 +124,7 @@ describe("16-show-subcommand-options", () => {
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);
-      const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+      const output = console.getLogs().join("\n");
       expect(output).toContain("git-like");
       expect(output).toContain("config");
       expect(output).toContain("remote");
@@ -135,7 +134,7 @@ describe("16-show-subcommand-options", () => {
       const result = await runCommand(cli, ["config", "list", "--help"]);
 
       expect(result.exitCode).toBe(0);
-      const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+      const output = console.getLogs().join("\n");
       expect(output).toContain("list");
       expect(output).toContain("--format");
     });

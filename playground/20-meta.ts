@@ -6,8 +6,8 @@
  *   pnpx tsx playground/repro-meta.ts --help
  */
 
-import "../src/augment.js"; // Import augmentation
 import { z } from "zod";
+import "../src/augment.js"; // Import augmentation
 import { defineCommand, runMain } from "../src/index.js";
 
 export const command = defineCommand({

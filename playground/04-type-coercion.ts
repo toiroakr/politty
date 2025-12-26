@@ -9,7 +9,7 @@
  */
 
 import { z } from "zod";
-import { defineCommand, runMain, arg } from "../src/index.js";
+import { arg, defineCommand, runMain } from "../src/index.js";
 
 export const command = defineCommand({
   name: "server",

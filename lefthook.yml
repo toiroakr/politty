@@ -1,10 +1,16 @@
 pre-commit:
   parallel: true
   commands:
+    organize-imports:
+      glob: "*.{ts,tsx,cts,mts}"
+      run: npx organize-imports-cli {staged_files}
+      stage_fixed: true
+      priority: 1
     oxlint:
       glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
       run: pnpm fix:oxlint {staged_files}
       stage_fixed: true
+      priority: 2
     oxfmt:
       glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
       run: pnpm fix:oxfmt {staged_files}

@@ -1,18 +1,19 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runCommand } from "../src/index.js";
+import { spyOnConsoleLog, type ConsoleSpy } from "../tests/utils/console.js";
 import { command } from "./05-lifecycle-hooks.js";
 
 describe("05-lifecycle-hooks", () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let console: ConsoleSpy;
   let errorSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    console = spyOnConsoleLog();
+    errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    console.mockRestore();
     errorSpy.mockRestore();
   });
 
@@ -26,7 +27,7 @@ describe("05-lifecycle-hooks", () => {
 
     expect(result.exitCode).toBe(0);
 
-    const calls = consoleSpy.mock.calls.map((c: unknown[]) => c[0]);
+    const calls = console.getLogs();
     expect(calls).toContain("[setup] Connecting to database...");
     expect(calls).toContain("[setup] Connected!");
     expect(calls).toContain("[run] Executing query...");

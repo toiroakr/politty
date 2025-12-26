@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { runCommand } from "./runner.js";
-import { defineCommand } from "./command.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { arg } from "./arg-registry.js";
+import { defineCommand } from "./command.js";
+import { runCommand } from "./runner.js";
 
 /**
  * Task 8.1: runCommand function tests
@@ -75,7 +76,7 @@ describe("runCommand", () => {
 
   describe("Help handling", () => {
     it("should show help on --help flag", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "my-cli",
@@ -90,28 +91,28 @@ describe("runCommand", () => {
 
       const result = await runCommand(cmd, ["--help"]);
 
-      expect(consoleSpy).toHaveBeenCalled();
-      const output = consoleSpy.mock.calls[0]?.[0] as string;
+      expect(console).toHaveBeenCalled();
+      const output = console.getLogs()[0] ?? "";
       expect(output).toContain("my-cli");
       expect(output).toContain("Test CLI");
       expect(result.exitCode).toBe(0);
 
-      consoleSpy.mockRestore();
+      console.mockRestore();
     });
 
     it("should show help on -h flag", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const console = spyOnConsoleLog();
 
       const cmd = defineCommand({ name: "cli" });
 
       await runCommand(cmd, ["-h"]);
 
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      expect(console).toHaveBeenCalled();
+      console.mockRestore();
     });
 
     it("should show --help-all option when subcommands exist", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "cli",
@@ -122,13 +123,13 @@ describe("runCommand", () => {
 
       await runCommand(cmd, ["--help"]);
 
-      const output = consoleSpy.mock.calls[0]?.[0] as string;
+      const output = console.getLogs()[0] ?? "";
       expect(output).toContain("--help-all");
-      consoleSpy.mockRestore();
+      console.mockRestore();
     });
 
     it("should show subcommand options on --help-all", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "cli",
@@ -147,15 +148,15 @@ describe("runCommand", () => {
 
       await runCommand(cmd, ["--help-all"]);
 
-      const output = consoleSpy.mock.calls[0]?.[0] as string;
+      const output = console.getLogs()[0] ?? "";
       expect(output).toContain("build");
       expect(output).toContain("--output");
       expect(output).toContain("Output directory");
-      consoleSpy.mockRestore();
+      console.mockRestore();
     });
 
     it("should show subcommand help on subcmd --help", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "cli",
@@ -172,11 +173,11 @@ describe("runCommand", () => {
 
       await runCommand(cmd, ["build", "--help"]);
 
-      const output = consoleSpy.mock.calls[0]?.[0] as string;
+      const output = console.getLogs()[0] ?? "";
       expect(output).toContain("build");
       expect(output).toContain("Build the project");
       expect(output).toContain("--output");
-      consoleSpy.mockRestore();
+      console.mockRestore();
     });
   });
 
@@ -239,7 +240,7 @@ describe("runCommand", () => {
     });
 
     it("should show help when subcommand not specified", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "cli",
@@ -250,8 +251,8 @@ describe("runCommand", () => {
 
       await runCommand(cmd, []);
 
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      expect(console).toHaveBeenCalled();
+      console.mockRestore();
     });
   });
 

@@ -1,16 +1,17 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runCommand } from "../src/index.js";
+import { spyOnConsoleLog, type ConsoleSpy } from "../tests/utils/console.js";
 import { main } from "./19-xor-types.js";
 
 describe("19-xor-types", () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let console: ConsoleSpy;
 
   beforeEach(() => {
-    consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    console = spyOnConsoleLog();
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    console.mockRestore();
   });
 
   describe("token auth (first xor option)", () => {
@@ -18,7 +19,7 @@ describe("19-xor-types", () => {
       const result = await runCommand(main, ["--token", "abc123"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Authenticated with token:", "abc123");
+      expect(console).toHaveBeenCalledWith("Authenticated with token:", "abc123");
     });
   });
 
@@ -27,9 +28,9 @@ describe("19-xor-types", () => {
       const result = await runCommand(main, ["--username", "admin", "--password", "secret"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Authenticated with credentials:");
-      expect(consoleSpy).toHaveBeenCalledWith("  Username:", "admin");
-      expect(consoleSpy).toHaveBeenCalledWith("  Password:", "secret");
+      expect(console).toHaveBeenCalledWith("Authenticated with credentials:");
+      expect(console).toHaveBeenCalledWith("  Username:", "admin");
+      expect(console).toHaveBeenCalledWith("  Password:", "secret");
     });
   });
 
@@ -38,7 +39,7 @@ describe("19-xor-types", () => {
       const result = await runCommand(main, ["--help"]);
 
       expect(result.exitCode).toBe(0);
-      const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+      const output = console.getLogs().join("\n");
       expect(output).toContain("auth-demo");
       expect(output).toContain("--token");
       expect(output).toContain("--username");
@@ -47,7 +48,7 @@ describe("19-xor-types", () => {
   });
 
   it("fails when no auth option is provided", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(main, []);
 
     expect(result.exitCode).toBe(1);

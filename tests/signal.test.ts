@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
 import { spawn } from "child_process";
+import { unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
-import { writeFileSync, unlinkSync } from "fs";
+import { describe, expect, it } from "vitest";
 
 const TEMP_APP_PATH = join(__dirname, "temp-signal-app.ts");
 

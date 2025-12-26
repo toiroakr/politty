@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { defineCommand, runCommand, arg } from "../src/index.js";
+import { arg, defineCommand, runCommand } from "../src/index.js";
+import { spyOnConsoleError, spyOnConsoleLog } from "./utils/console.js";
 
 /**
  * Task 9.2: E2E tests
@@ -181,7 +182,7 @@ describe("E2E Tests", () => {
 
   describe("Help generation", () => {
     it("should generate help with all metadata", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "my-cli",
@@ -215,7 +216,7 @@ describe("E2E Tests", () => {
 
       await runCommand(cmd, ["--help"]);
 
-      const output = consoleSpy.mock.calls[0]?.[0] as string;
+      const output = console.getLogs()[0] ?? "";
 
       // Check header
       expect(output).toContain("my-cli");
@@ -237,7 +238,7 @@ describe("E2E Tests", () => {
       expect(output).toContain("build");
       expect(output).toContain("test");
 
-      consoleSpy.mockRestore();
+      console.mockRestore();
     });
   });
 
@@ -479,7 +480,7 @@ describe("E2E Tests", () => {
     });
 
     it("should error when positional follows array positional", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleSpy = spyOnConsoleError();
 
       const cmd = defineCommand({
         name: "test-cmd",
@@ -494,7 +495,7 @@ describe("E2E Tests", () => {
       expect(result.exitCode).toBe(1);
       // Verify the error message was logged
       expect(consoleSpy).toHaveBeenCalled();
-      const errorMessage = consoleSpy.mock.calls[0]?.[0] as string;
+      const errorMessage = consoleSpy.getLogs()[0] ?? "";
       expect(errorMessage).toContain("output");
       expect(errorMessage).toContain("files");
 
@@ -502,7 +503,7 @@ describe("E2E Tests", () => {
     });
 
     it("should error when required positional follows optional positional", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleSpy = spyOnConsoleError();
 
       const cmd = defineCommand({
         name: "test-cmd",
@@ -516,7 +517,7 @@ describe("E2E Tests", () => {
 
       expect(result.exitCode).toBe(1);
       expect(consoleSpy).toHaveBeenCalled();
-      const errorMessage = consoleSpy.mock.calls[0]?.[0] as string;
+      const errorMessage = consoleSpy.getLogs()[0] ?? "";
       expect(errorMessage).toContain("required");
       expect(errorMessage).toContain("optional");
 
@@ -572,7 +573,7 @@ describe("E2E Tests", () => {
     });
 
     it("should error when array positional is used with optional positional", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const consoleSpy = spyOnConsoleError();
 
       const cmd = defineCommand({
         name: "test-cmd",
@@ -586,7 +587,7 @@ describe("E2E Tests", () => {
 
       expect(result.exitCode).toBe(1);
       expect(consoleSpy).toHaveBeenCalled();
-      const errorMessage = consoleSpy.mock.calls[0]?.[0] as string;
+      const errorMessage = consoleSpy.getLogs()[0] ?? "";
       expect(errorMessage).toContain("files");
       expect(errorMessage).toContain("mode");
       expect(errorMessage).toContain("ambiguous");
@@ -670,10 +671,8 @@ describe("E2E Tests", () => {
   describe("Single file completion", () => {
     it("should work as a complete CLI in one definition", async () => {
       // This test verifies Requirement 9.1: single file completion
-      const output: string[] = [];
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation((msg) => {
-        output.push(String(msg));
-      });
+      const console = spyOnConsoleLog();
+      const output = console.getLogs();
 
       const cli = defineCommand({
         name: "my-tool",
@@ -703,7 +702,7 @@ describe("E2E Tests", () => {
       expect(result.result).toEqual({ processed: true });
       expect(output).toContain("Processing file.txt → out.txt");
 
-      consoleSpy.mockRestore();
+      console.mockRestore();
     });
   });
 });

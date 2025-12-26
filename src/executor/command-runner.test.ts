@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { executeLifecycle } from "./command-runner.js";
 import { defineCommand } from "../core/command.js";
+import { executeLifecycle } from "./command-runner.js";
 
 /**
  * Task 7.2: Command lifecycle tests

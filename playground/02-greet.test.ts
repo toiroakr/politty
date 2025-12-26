@@ -1,16 +1,17 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runCommand } from "../src/index.js";
+import { spyOnConsoleLog, type ConsoleSpy } from "../tests/utils/console.js";
 import { command } from "./02-greet.js";
 
 describe("02-greet", () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let console: ConsoleSpy;
 
   beforeEach(() => {
-    consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    console = spyOnConsoleLog();
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    console.mockRestore();
   });
 
   it("greets with default greeting", async () => {
@@ -18,7 +19,7 @@ describe("02-greet", () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.result).toBe("Hello, World!");
-    expect(consoleSpy).toHaveBeenCalledWith("Hello, World!");
+    expect(console).toHaveBeenCalledWith("Hello, World!");
   });
 
   it("greets with custom greeting using --greeting", async () => {
@@ -57,7 +58,7 @@ describe("02-greet", () => {
   });
 
   it("fails when name is not provided", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
     expect(result.exitCode).toBe(1);

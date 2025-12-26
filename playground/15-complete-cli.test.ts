@@ -1,16 +1,17 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCommand } from "../src/index.js";
+import { spyOnConsoleLog, type ConsoleSpy } from "../tests/utils/console.js";
 import { cli, initCommand } from "./15-complete-cli.js";
 
 describe("15-complete-cli", () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let console: ConsoleSpy;
 
   beforeEach(() => {
-    consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    console = spyOnConsoleLog();
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    console.mockRestore();
   });
 
   describe("main command", () => {
@@ -18,10 +19,10 @@ describe("15-complete-cli", () => {
       const result = await runCommand(cli, ["file.txt", "-o", "out.txt"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Processing:");
-      expect(consoleSpy).toHaveBeenCalledWith("  Input: file.txt");
-      expect(consoleSpy).toHaveBeenCalledWith("  Output: out.txt");
-      expect(consoleSpy).toHaveBeenCalledWith("  Format: json");
+      expect(console).toHaveBeenCalledWith("Processing:");
+      expect(console).toHaveBeenCalledWith("  Input: file.txt");
+      expect(console).toHaveBeenCalledWith("  Output: out.txt");
+      expect(console).toHaveBeenCalledWith("  Format: json");
     });
 
     it("returns result from run function", async () => {
@@ -35,16 +36,16 @@ describe("15-complete-cli", () => {
       const result = await runCommand(cli, ["file.txt", "-o", "out.txt", "-v"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("[setup] Initializing...");
-      expect(consoleSpy).toHaveBeenCalledWith("[run] Processing...");
-      expect(consoleSpy).toHaveBeenCalledWith("[cleanup] Cleaning up...");
+      expect(console).toHaveBeenCalledWith("[setup] Initializing...");
+      expect(console).toHaveBeenCalledWith("[run] Processing...");
+      expect(console).toHaveBeenCalledWith("[cleanup] Cleaning up...");
     });
 
     it("uses custom format with -f", async () => {
       const result = await runCommand(cli, ["file.txt", "-o", "out.txt", "-f", "yaml"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("  Format: yaml");
+      expect(console).toHaveBeenCalledWith("  Format: yaml");
       expect(result.result).toEqual({ processed: true, format: "yaml" });
     });
   });
@@ -54,17 +55,17 @@ describe("15-complete-cli", () => {
       const result = await runCommand(cli, ["init"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(console).toHaveBeenCalledWith(
         'Initializing project "my-project" with template "default"...',
       );
-      expect(consoleSpy).toHaveBeenCalledWith("Done!");
+      expect(console).toHaveBeenCalledWith("Done!");
     });
 
     it("initializes with custom template using -t", async () => {
       const result = await runCommand(cli, ["init", "-t", "react"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(console).toHaveBeenCalledWith(
         'Initializing project "my-project" with template "react"...',
       );
     });
@@ -73,7 +74,7 @@ describe("15-complete-cli", () => {
       const result = await runCommand(cli, ["init", "-n", "my-app"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(console).toHaveBeenCalledWith(
         'Initializing project "my-app" with template "default"...',
       );
     });
@@ -82,9 +83,7 @@ describe("15-complete-cli", () => {
       const result = await runCommand(initCommand, ["-t", "vue", "-n", "vue-app"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith(
-        'Initializing project "vue-app" with template "vue"...',
-      );
+      expect(console).toHaveBeenCalledWith('Initializing project "vue-app" with template "vue"...');
     });
   });
 
@@ -93,7 +92,7 @@ describe("15-complete-cli", () => {
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);
-      const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+      const output = console.getLogs().join("\n");
       expect(output).toContain("my-tool");
       expect(output).toContain("init");
     });

@@ -9,7 +9,7 @@
  */
 
 import { z } from "zod";
-import { defineCommand, runMain, arg } from "../src/index.js";
+import { arg, defineCommand, runMain } from "../src/index.js";
 
 // 共通オプション（複数コマンドで再利用可能）
 const baseOptions = z.object({

@@ -1,31 +1,32 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCommand } from "../src/index.js";
+import { spyOnConsoleLog, type ConsoleSpy } from "../tests/utils/console.js";
 import { command } from "./01-hello-world.js";
 
 describe("01-hello-world", () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let console: ConsoleSpy;
 
   beforeEach(() => {
-    consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    console = spyOnConsoleLog();
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    console.mockRestore();
   });
 
   it("outputs 'Hello, World!'", async () => {
     const result = await runCommand(command, []);
 
     expect(result.exitCode).toBe(0);
-    expect(consoleSpy).toHaveBeenCalledWith("Hello, World!");
+    expect(console).toHaveBeenCalledWith("Hello, World!");
   });
 
   it("shows help with --help", async () => {
     const result = await runCommand(command, ["--help"]);
 
     expect(result.exitCode).toBe(0);
-    expect(consoleSpy).toHaveBeenCalled();
-    const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+    expect(console).toHaveBeenCalled();
+    const output = console.getLogs().join("\n");
     expect(output).toContain("hello");
     expect(output).toContain("Hello Worldを表示するシンプルなコマンド");
   });

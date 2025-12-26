@@ -1,7 +1,7 @@
-import { describe, it, expect, expectTypeOf } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
-import { defineCommand } from "./command.js";
 import { arg } from "./arg-registry.js";
+import { defineCommand } from "./command.js";
 
 /**
  * Task 2.2: Command definition API tests

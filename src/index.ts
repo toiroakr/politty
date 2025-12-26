@@ -5,47 +5,44 @@
  */
 
 // Core exports
-export { defineCommand } from "./core/command.js";
-export { runMain, runCommand } from "./core/runner.js";
 export { arg, type ArgMeta } from "./core/arg-registry.js";
-
+export { defineCommand } from "./core/command.js";
+export { runCommand, runMain } from "./core/runner.js";
+export {
+    extractFields,
+    PositionalConfigError,
+    ReservedAliasError,
+    validatePositionalConfig,
+    validateReservedAliases,
+    type ExtractedFields,
+    type ResolvedFieldMeta
+} from "./core/schema-extractor.js";
 // Utility exports
 export {
-  generateHelp,
-  type HelpOptions,
-  type BuiltinOptionDescriptions,
-  type CommandContext,
+    generateHelp,
+    type BuiltinOptionDescriptions,
+    type CommandContext,
+    type HelpOptions
 } from "./output/help-generator.js";
-export { logger, styles, symbols, setColorEnabled, isColorEnabled } from "./output/logger.js";
-export {
-  extractFields,
-  validatePositionalConfig,
-  validateReservedAliases,
-  PositionalConfigError,
-  ReservedAliasError,
-  type ExtractedFields,
-  type ResolvedFieldMeta,
-} from "./core/schema-extractor.js";
-
+export { isColorEnabled, logger, setColorEnabled, styles, symbols } from "./output/logger.js";
 // Type exports
 export type {
-  // Command types
-  Command,
-  CommandBase,
-  RunnableCommand,
-  NonRunnableCommand,
-  AnyCommand,
-  CommandConfig,
-  ArgsSchema,
-  // Context types
-  SetupContext,
-  CleanupContext,
-  // Options and result types
-  MainOptions,
-  RunCommandOptions,
-  RunResult,
+    AnyCommand,
+    ArgsSchema,
+    CleanupContext,
+    // Command types
+    Command,
+    CommandBase,
+    CommandConfig,
+    // Options and result types
+    MainOptions,
+    NonRunnableCommand,
+    RunCommandOptions,
+    RunnableCommand,
+    RunResult,
+    // Context types
+    SetupContext
 } from "./types.js";
-
+export { formatValidationErrors } from "./validator/zod-validator.js";
 // Validation types
 export type { ValidationError, ValidationResult } from "./validator/zod-validator.js";
-export { formatValidationErrors } from "./validator/zod-validator.js";

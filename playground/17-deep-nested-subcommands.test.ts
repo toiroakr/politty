@@ -1,22 +1,23 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCommand } from "../src/index.js";
+import { spyOnConsoleLog, type ConsoleSpy } from "../tests/utils/console.js";
 import {
-  cli,
-  configUserGetCommand,
-  configUserSetCommand,
-  configCoreGetCommand,
-  configCoreSetCommand,
+    cli,
+    configCoreGetCommand,
+    configCoreSetCommand,
+    configUserGetCommand,
+    configUserSetCommand
 } from "./17-deep-nested-subcommands.js";
 
 describe("17-deep-nested-subcommands", () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let console: ConsoleSpy;
 
   beforeEach(() => {
-    consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    console = spyOnConsoleLog();
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    console.mockRestore();
   });
 
   describe("config user get subcommand", () => {
@@ -24,21 +25,21 @@ describe("17-deep-nested-subcommands", () => {
       const result = await runCommand(cli, ["config", "user", "get", "name"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("user.name = John Doe");
+      expect(console).toHaveBeenCalledWith("user.name = John Doe");
     });
 
     it("handles unknown key", async () => {
       const result = await runCommand(cli, ["config", "user", "get", "unknown"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("user.unknown = (not set)");
+      expect(console).toHaveBeenCalledWith("user.unknown = (not set)");
     });
 
     it("can run configUserGetCommand directly", async () => {
       const result = await runCommand(configUserGetCommand, ["email"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("user.email = john@example.com");
+      expect(console).toHaveBeenCalledWith("user.email = john@example.com");
     });
   });
 
@@ -47,14 +48,14 @@ describe("17-deep-nested-subcommands", () => {
       const result = await runCommand(cli, ["config", "user", "set", "name", "John Doe"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Setting user.name = John Doe (local)");
+      expect(console).toHaveBeenCalledWith("Setting user.name = John Doe (local)");
     });
 
     it("sets user config value (global)", async () => {
       const result = await runCommand(cli, ["config", "user", "set", "name", "Jane Doe", "-g"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Setting user.name = Jane Doe (global)");
+      expect(console).toHaveBeenCalledWith("Setting user.name = Jane Doe (global)");
     });
 
     it("can run configUserSetCommand directly", async () => {
@@ -65,7 +66,7 @@ describe("17-deep-nested-subcommands", () => {
       ]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Setting user.email = test@example.com (global)");
+      expect(console).toHaveBeenCalledWith("Setting user.email = test@example.com (global)");
     });
   });
 
@@ -74,21 +75,21 @@ describe("17-deep-nested-subcommands", () => {
       const result = await runCommand(cli, ["config", "core", "get", "editor"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("core.editor = vim");
+      expect(console).toHaveBeenCalledWith("core.editor = vim");
     });
 
     it("handles unknown key", async () => {
       const result = await runCommand(cli, ["config", "core", "get", "unknown"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("core.unknown = (not set)");
+      expect(console).toHaveBeenCalledWith("core.unknown = (not set)");
     });
 
     it("can run configCoreGetCommand directly", async () => {
       const result = await runCommand(configCoreGetCommand, ["pager"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("core.pager = less");
+      expect(console).toHaveBeenCalledWith("core.pager = less");
     });
   });
 
@@ -97,14 +98,14 @@ describe("17-deep-nested-subcommands", () => {
       const result = await runCommand(cli, ["config", "core", "set", "editor", "nano"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Setting core.editor = nano");
+      expect(console).toHaveBeenCalledWith("Setting core.editor = nano");
     });
 
     it("can run configCoreSetCommand directly", async () => {
       const result = await runCommand(configCoreSetCommand, ["pager", "more"]);
 
       expect(result.exitCode).toBe(0);
-      expect(consoleSpy).toHaveBeenCalledWith("Setting core.pager = more");
+      expect(console).toHaveBeenCalledWith("Setting core.pager = more");
     });
   });
 
@@ -113,7 +114,7 @@ describe("17-deep-nested-subcommands", () => {
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);
-      const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+      const output = console.getLogs().join("\n");
       expect(output).toContain("git-like");
       expect(output).toContain("config");
     });
@@ -122,7 +123,7 @@ describe("17-deep-nested-subcommands", () => {
       const result = await runCommand(cli, ["config", "--help"]);
 
       expect(result.exitCode).toBe(0);
-      const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+      const output = console.getLogs().join("\n");
       expect(output).toContain("config");
       expect(output).toContain("user");
       expect(output).toContain("core");
@@ -132,7 +133,7 @@ describe("17-deep-nested-subcommands", () => {
       const result = await runCommand(cli, ["config", "user", "--help"]);
 
       expect(result.exitCode).toBe(0);
-      const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+      const output = console.getLogs().join("\n");
       expect(output).toContain("user");
       expect(output).toContain("get");
       expect(output).toContain("set");
@@ -142,7 +143,7 @@ describe("17-deep-nested-subcommands", () => {
       const result = await runCommand(cli, ["config", "user", "get", "--help"]);
 
       expect(result.exitCode).toBe(0);
-      const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join("\n");
+      const output = console.getLogs().join("\n");
       expect(output).toContain("get");
     });
   });

@@ -1,4 +1,4 @@
-import type { AnyCommand, RunResult, SetupContext, CleanupContext } from "../types.js";
+import type { AnyCommand, CleanupContext, RunResult, SetupContext } from "../types.js";
 
 /**
  * Options for lifecycle execution

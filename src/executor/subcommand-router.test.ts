@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { resolveSubcommand, listSubCommands } from "./subcommand-router.js";
+import { describe, expect, it } from "vitest";
 import { defineCommand } from "../core/command.js";
+import { listSubCommands, resolveSubcommand } from "./subcommand-router.js";
 
 /**
  * Task 7.1: サブコマンドルーターのテスト
