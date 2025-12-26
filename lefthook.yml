@@ -1,4 +1,5 @@
 pre-commit:
+  parallel: true
   commands:
     oxlint:
       glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
@@ -8,3 +9,6 @@ pre-commit:
       glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
       run: pnpm fix:oxfmt {staged_files}
       stage_fixed: true
+    typecheck:
+      glob: "*.{ts,tsx,cts,mts}"
+      run: pnpm typecheck
