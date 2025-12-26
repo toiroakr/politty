@@ -14,7 +14,7 @@
 import { z } from "zod";
 import { defineCommand, runMain, arg } from "../src/index.js";
 
-const command = defineCommand({
+export const command = defineCommand({
   name: "resource",
   description: "リソースを管理（discriminatedUnionの例）",
   args: z
@@ -81,4 +81,6 @@ const command = defineCommand({
   },
 });
 
-runMain(command);
+if (process.argv[1]?.includes("12-discriminated-union")) {
+  runMain(command);
+}

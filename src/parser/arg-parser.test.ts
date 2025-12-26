@@ -16,6 +16,7 @@ describe("ArgParser", () => {
   describe("parseArgs", () => {
     it("should detect help flag (--help)", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           name: z.string(),
         }),
@@ -28,6 +29,7 @@ describe("ArgParser", () => {
 
     it("should detect help flag (-h)", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           name: z.string(),
         }),
@@ -40,6 +42,7 @@ describe("ArgParser", () => {
 
     it("should detect --help-all flag", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           name: z.string(),
         }),
@@ -80,7 +83,9 @@ describe("ArgParser", () => {
 
     it("should throw error when -h alias is used without override flag", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
+          // @ts-expect-error - testing error case for missing overrideBuiltinAlias
           header: arg(z.string(), { alias: "h" }),
         }),
       });
@@ -105,6 +110,7 @@ describe("ArgParser", () => {
 
     it("should map positional arguments to defined names", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           input: arg(z.string(), { positional: true }),
           output: arg(z.string(), { positional: true }),
@@ -150,6 +156,7 @@ describe("ArgParser", () => {
 
     it("should detect unknown flags", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           verbose: arg(z.boolean().default(false), { alias: "v" }),
         }),
@@ -163,6 +170,7 @@ describe("ArgParser", () => {
 
     it("should parse named options", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           output: arg(z.string(), { alias: "o" }),
           verbose: arg(z.boolean().default(false), { alias: "v" }),
@@ -177,6 +185,7 @@ describe("ArgParser", () => {
 
     it("should handle mixed positional and named args", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           file: arg(z.string(), { positional: true }),
           verbose: arg(z.boolean().default(false), { alias: "v" }),
@@ -193,7 +202,7 @@ describe("ArgParser", () => {
 
     it("should handle version flag (--version)", () => {
       const cmd = defineCommand({
-        version: "1.0.0",
+        name: "test-cmd",
       });
 
       const result = parseArgs(["--version"], cmd);
@@ -203,6 +212,7 @@ describe("ArgParser", () => {
 
     it("should return empty subCommand when no subcommands defined", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           verbose: z.boolean().default(false),
         }),
@@ -217,6 +227,7 @@ describe("ArgParser", () => {
   describe("Multiple positional arguments", () => {
     it("should map multiple positionals in definition order", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           src: arg(z.string(), { positional: true }),
           dest: arg(z.string(), { positional: true }),
@@ -232,6 +243,7 @@ describe("ArgParser", () => {
 
     it("should handle optional positional at the end", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           input: arg(z.string(), { positional: true }),
           output: arg(z.string().optional(), { positional: true }),
@@ -251,6 +263,7 @@ describe("ArgParser", () => {
 
     it("should handle three or more positionals", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           action: arg(z.string(), { positional: true }),
           source: arg(z.string(), { positional: true }),
@@ -267,6 +280,7 @@ describe("ArgParser", () => {
 
     it("should handle mixed positionals and named options", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           input: arg(z.string(), { positional: true }),
           output: arg(z.string(), { positional: true }),
@@ -285,6 +299,7 @@ describe("ArgParser", () => {
 
     it("should handle fewer positionals than defined", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           first: arg(z.string(), { positional: true }),
           second: arg(z.string(), { positional: true }),
@@ -301,6 +316,7 @@ describe("ArgParser", () => {
 
     it("should throw error when positional follows array positional", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           files: arg(z.array(z.string()), { positional: true }),
           output: arg(z.string(), { positional: true }),
@@ -315,6 +331,7 @@ describe("ArgParser", () => {
 
     it("should throw error when multiple positionals follow array positional", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           items: arg(z.array(z.string()), { positional: true }),
           target: arg(z.string(), { positional: true }),
@@ -328,6 +345,7 @@ describe("ArgParser", () => {
 
     it("should allow array positional as the last positional", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           command: arg(z.string(), { positional: true }),
           files: arg(z.array(z.string()), { positional: true }),
@@ -343,6 +361,7 @@ describe("ArgParser", () => {
 
     it("should allow single array positional", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           files: arg(z.array(z.string()), { positional: true }),
         }),
@@ -356,6 +375,7 @@ describe("ArgParser", () => {
 
     it("should throw error when required positional follows optional positional", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           optional: arg(z.string().optional(), { positional: true }),
           required: arg(z.string(), { positional: true }),
@@ -370,6 +390,7 @@ describe("ArgParser", () => {
 
     it("should throw error when multiple required follow optional", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           first: arg(z.string().optional(), { positional: true }),
           second: arg(z.string(), { positional: true }),
@@ -383,6 +404,7 @@ describe("ArgParser", () => {
 
     it("should allow optional positional at the end", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           required1: arg(z.string(), { positional: true }),
           required2: arg(z.string(), { positional: true }),
@@ -400,6 +422,7 @@ describe("ArgParser", () => {
 
     it("should allow multiple optional positionals at the end", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           required: arg(z.string(), { positional: true }),
           optional1: arg(z.string().optional(), { positional: true }),
@@ -417,6 +440,7 @@ describe("ArgParser", () => {
 
     it("should allow all optional positionals", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           first: arg(z.string().optional(), { positional: true }),
           second: arg(z.string().optional(), { positional: true }),
@@ -432,6 +456,7 @@ describe("ArgParser", () => {
 
     it("should handle default values as optional positionals", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           input: arg(z.string(), { positional: true }),
           output: arg(z.string().default("out.txt"), { positional: true }),
@@ -447,6 +472,7 @@ describe("ArgParser", () => {
 
     it("should throw error when array positional follows optional positional", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           optional: arg(z.string().optional(), { positional: true }),
           files: arg(z.array(z.string()), { positional: true }),
@@ -459,6 +485,7 @@ describe("ArgParser", () => {
 
     it("should throw error when array positional follows default positional", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           mode: arg(z.string().default("default"), { positional: true }),
           files: arg(z.array(z.string()), { positional: true }),
@@ -471,6 +498,7 @@ describe("ArgParser", () => {
 
     it("should allow required positionals before array positional", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           command: arg(z.string(), { positional: true }),
           target: arg(z.string(), { positional: true }),
@@ -490,6 +518,7 @@ describe("ArgParser", () => {
   describe("Array arguments", () => {
     it("should accumulate multiple values for array flag", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           files: arg(z.array(z.string()), { description: "Input files" }),
         }),
@@ -502,6 +531,7 @@ describe("ArgParser", () => {
 
     it("should accumulate array values with alias", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           include: arg(z.array(z.string()), { alias: "I", description: "Include paths" }),
         }),
@@ -514,6 +544,7 @@ describe("ArgParser", () => {
 
     it("should handle single value for array flag", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           tags: arg(z.array(z.string()).default([]), { alias: "t" }),
         }),
@@ -526,6 +557,7 @@ describe("ArgParser", () => {
 
     it("should handle array flag with = syntax", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           exclude: arg(z.array(z.string()), { description: "Exclude patterns" }),
         }),

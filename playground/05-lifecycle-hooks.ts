@@ -10,7 +10,7 @@
 import { z } from "zod";
 import { defineCommand, runMain, arg } from "../src/index.js";
 
-const command = defineCommand({
+export const command = defineCommand({
   name: "db-query",
   description: "データベースクエリの実行（ライフサイクルフックのデモ）",
   args: z.object({
@@ -34,7 +34,7 @@ const command = defineCommand({
     await new Promise((resolve) => setTimeout(resolve, 100));
     console.log("[setup] Connected!");
   },
-  run: async ({ args }) => {
+  run: async (args) => {
     console.log("[run] Executing query...");
     console.log(`[run] Query: ${args.query}`);
 
@@ -47,7 +47,7 @@ const command = defineCommand({
     console.log("[run] Query completed!");
     return { rowCount: 42, success: true };
   },
-  cleanup: async ({ args, error }) => {
+  cleanup: async ({ error }) => {
     console.log("[cleanup] Closing database connection...");
     if (error) {
       console.error(`[cleanup] Error occurred: ${error.message}`);
@@ -57,4 +57,6 @@ const command = defineCommand({
   },
 });
 
-runMain(command);
+if (process.argv[1]?.includes("05-lifecycle-hooks")) {
+  runMain(command);
+}

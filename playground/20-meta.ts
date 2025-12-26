@@ -10,7 +10,7 @@ import "../src/augment.js"; // Import augmentation
 import { z } from "zod";
 import { defineCommand, runMain } from "../src/index.js";
 
-const command = defineCommand({
+export const command = defineCommand({
   name: "greet-meta",
   description: "Test for Zod .meta() support",
   args: z.object({
@@ -28,21 +28,23 @@ const command = defineCommand({
   },
 });
 
-const s = z.string().meta({ description: "test" });
-console.log("Schema def keys:", Object.keys((s as any)._def));
-// console.log("Schema def:", (s as any)._def);
-if ("meta" in (s as any)._def) {
-  console.log("Meta in _def:", (s as any)._def.meta);
-} else {
-  console.log("Meta NOT in _def");
-}
+if (process.argv[1]?.includes("20-meta")) {
+  const s = z.string().meta({ description: "test" });
+  console.log("Schema def keys:", Object.keys((s as any)._def));
+  // console.log("Schema def:", (s as any)._def);
+  if ("meta" in (s as any)._def) {
+    console.log("Meta in _def:", (s as any)._def.meta);
+  } else {
+    console.log("Meta NOT in _def");
+  }
 
-console.log("Schema keys:", Object.keys(s));
-if (typeof (s as any).meta === "function") {
-  console.log("s.meta() returns:", (s as any).meta());
-  console.log("s.meta source:", (s as any).meta.toString());
-} else {
-  console.log("s.meta does NOT exist (runtime error should have happened??)");
-}
+  console.log("Schema keys:", Object.keys(s));
+  if (typeof (s as any).meta === "function") {
+    console.log("s.meta() returns:", (s as any).meta());
+    console.log("s.meta source:", (s as any).meta.toString());
+  } else {
+    console.log("s.meta does NOT exist (runtime error should have happened??)");
+  }
 
-runMain(command, { version: "1.0.0" });
+  runMain(command, { version: "1.0.0" });
+}

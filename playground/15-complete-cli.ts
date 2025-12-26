@@ -14,7 +14,7 @@ import { z } from "zod";
 import { defineCommand, runMain, arg } from "../src/index.js";
 
 // init サブコマンド
-const initCommand = defineCommand({
+export const initCommand = defineCommand({
   name: "init",
   description: "新しいプロジェクトを初期化",
   args: z.object({
@@ -35,7 +35,7 @@ const initCommand = defineCommand({
 });
 
 // メインCLI
-const cli = defineCommand({
+export const cli = defineCommand({
   name: "my-tool",
   description: "完全なCLIツールの例",
   args: z.object({
@@ -89,4 +89,6 @@ const cli = defineCommand({
   },
 });
 
-runMain(cli, { version: "2.0.0" });
+if (process.argv[1]?.includes("15-complete-cli")) {
+  runMain(cli, { version: "2.0.0" });
+}

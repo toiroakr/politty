@@ -12,7 +12,7 @@
 import { z } from "zod";
 import { defineCommand, runMain, arg } from "../src/index.js";
 
-const command = defineCommand({
+export const command = defineCommand({
   name: "convert",
   description: "ファイル形式を変換する（オプションpositionalの例）",
   args: z.object({
@@ -38,4 +38,6 @@ const command = defineCommand({
   },
 });
 
-runMain(command);
+if (process.argv[1]?.includes("09-convert-command")) {
+  runMain(command);
+}

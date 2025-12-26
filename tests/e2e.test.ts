@@ -59,6 +59,7 @@ describe("E2E Tests", () => {
       const result: Record<string, unknown> = {};
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           port: z.number().default(3000),
           host: z.string().default("localhost"),
@@ -145,6 +146,7 @@ describe("E2E Tests", () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           port: z.coerce
             .number()
@@ -162,6 +164,7 @@ describe("E2E Tests", () => {
       let transformed: number | undefined;
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           port: z.coerce.number().transform((n) => n * 2),
         }),
@@ -243,6 +246,7 @@ describe("E2E Tests", () => {
       const order: string[] = [];
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           name: z.string().default("test"),
         }),
@@ -267,6 +271,7 @@ describe("E2E Tests", () => {
       const cleanupRan = { value: false };
 
       const cmd = defineCommand({
+        name: "test-cmd",
         run: () => {
           throw new Error("Test error");
         },
@@ -286,6 +291,7 @@ describe("E2E Tests", () => {
   describe("Return values", () => {
     it("should return result from run function", async () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         run: () => ({
           status: "success",
           count: 42,
@@ -302,6 +308,7 @@ describe("E2E Tests", () => {
 
     it("should return async result", async () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         run: async () => {
           await new Promise((r) => setTimeout(r, 10));
           return "async-result";
@@ -319,6 +326,7 @@ describe("E2E Tests", () => {
       const result: Record<string, unknown> = {};
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           command: arg(z.string(), { positional: true }),
           target: arg(z.string(), { positional: true }),
@@ -340,6 +348,7 @@ describe("E2E Tests", () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           src: arg(z.string(), { positional: true }),
           dest: arg(z.string(), { positional: true }),
@@ -357,6 +366,7 @@ describe("E2E Tests", () => {
       const result: Record<string, unknown> = {};
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           input: arg(z.string(), { positional: true }),
           output: arg(z.string().default("out.txt"), { positional: true }),
@@ -378,6 +388,7 @@ describe("E2E Tests", () => {
       const result: { id?: number; name?: string } = {};
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           id: arg(z.coerce.number(), { positional: true }),
           name: arg(
@@ -471,6 +482,7 @@ describe("E2E Tests", () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           files: arg(z.array(z.string()), { positional: true }),
           output: arg(z.string(), { positional: true }),
@@ -493,6 +505,7 @@ describe("E2E Tests", () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           optional: arg(z.string().optional(), { positional: true }),
           required: arg(z.string(), { positional: true }),
@@ -511,9 +524,10 @@ describe("E2E Tests", () => {
     });
 
     it("should work with required then optional positionals", async () => {
-      let captured: { input?: string; output?: string } = {};
+      let captured: { input?: string; output?: string | undefined } = {};
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           input: arg(z.string(), { positional: true }),
           output: arg(z.string().optional(), { positional: true }),
@@ -537,6 +551,7 @@ describe("E2E Tests", () => {
       let captured: { input?: string; output?: string } = {};
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           input: arg(z.string(), { positional: true }),
           output: arg(z.string().default("default.txt"), { positional: true }),
@@ -560,6 +575,7 @@ describe("E2E Tests", () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           mode: arg(z.string().optional(), { positional: true }),
           files: arg(z.array(z.string()), { positional: true }),
@@ -584,6 +600,7 @@ describe("E2E Tests", () => {
       const result: { files?: string[] } = {};
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           files: arg(z.array(z.string()), { alias: "f", description: "Input files" }),
         }),
@@ -601,6 +618,7 @@ describe("E2E Tests", () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           ports: arg(z.array(z.coerce.number().min(1).max(65535)), { description: "Ports" }),
         }),
@@ -616,6 +634,7 @@ describe("E2E Tests", () => {
       let result: number[] | undefined;
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           numbers: arg(z.array(z.coerce.number()), { alias: "n" }),
         }),
@@ -633,6 +652,7 @@ describe("E2E Tests", () => {
       let result: string[] | undefined;
 
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           tags: arg(z.array(z.string()).default([]), { alias: "t" }),
         }),

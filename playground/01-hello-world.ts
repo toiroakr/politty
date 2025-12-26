@@ -8,7 +8,7 @@
 
 import { defineCommand, runMain } from "../src/index.js";
 
-const command = defineCommand({
+export const command = defineCommand({
   name: "hello",
   description: "Hello Worldを表示するシンプルなコマンド",
   run: () => {
@@ -16,4 +16,6 @@ const command = defineCommand({
   },
 });
 
-runMain(command, { version: "1.0.0" });
+if (process.argv[1]?.includes("01-hello-world")) {
+  runMain(command, { version: "1.0.0" });
+}

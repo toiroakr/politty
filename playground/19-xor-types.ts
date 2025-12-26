@@ -24,19 +24,21 @@ const args = z.xor([
     .describe("Credentials Auth"),
 ]);
 
-const main = defineCommand({
+export const main = defineCommand({
   name: "auth-demo",
   description: "Demo of xor (exclusive union) help with auth methods",
   args,
-  run(context) {
-    if ("token" in context.args) {
-      console.log("Authenticated with token:", context.args.token);
+  run(args) {
+    if ("token" in args) {
+      console.log("Authenticated with token:", args.token);
     } else {
       console.log("Authenticated with credentials:");
-      console.log("  Username:", context.args.username);
-      console.log("  Password:", context.args.password);
+      console.log("  Username:", args.username);
+      console.log("  Password:", args.password);
     }
   },
 });
 
-runMain(main);
+if (process.argv[1]?.includes("19-xor-types")) {
+  runMain(main);
+}

@@ -14,7 +14,7 @@ import { z } from "zod";
 import { defineCommand, runMain, arg } from "../src/index.js";
 
 // config get コマンド
-const configGetCommand = defineCommand({
+export const configGetCommand = defineCommand({
   name: "get",
   description: "設定値を取得",
   args: z.object({
@@ -31,7 +31,7 @@ const configGetCommand = defineCommand({
 });
 
 // config set コマンド
-const configSetCommand = defineCommand({
+export const configSetCommand = defineCommand({
   name: "set",
   description: "設定値を設定",
   args: z.object({
@@ -50,7 +50,7 @@ const configSetCommand = defineCommand({
 });
 
 // config list コマンド
-const configListCommand = defineCommand({
+export const configListCommand = defineCommand({
   name: "list",
   description: "全ての設定を一覧表示",
   args: z.object({
@@ -77,7 +77,7 @@ const configListCommand = defineCommand({
 });
 
 // config コマンド（サブコマンドを持つ）
-const configCommand = defineCommand({
+export const configCommand = defineCommand({
   name: "config",
   description: "設定を管理",
   subCommands: {
@@ -88,7 +88,7 @@ const configCommand = defineCommand({
 });
 
 // メインコマンド
-const cli = defineCommand({
+export const cli = defineCommand({
   name: "git-like",
   description: "Git風のネストしたサブコマンドの例",
   subCommands: {
@@ -96,4 +96,6 @@ const cli = defineCommand({
   },
 });
 
-runMain(cli, { version: "1.0.0" });
+if (process.argv[1]?.includes("11-nested-subcommands")) {
+  runMain(cli, { version: "1.0.0" });
+}

@@ -79,6 +79,7 @@ describe("Help Generator", () => {
   describe("renderOptions", () => {
     it("should render options with alias", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           verbose: arg(z.boolean().default(false), {
             alias: "v",
@@ -96,6 +97,7 @@ describe("Help Generator", () => {
 
     it("should show default values", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           port: arg(z.number().default(8080), {
             description: "Port number",
@@ -111,6 +113,7 @@ describe("Help Generator", () => {
 
     it("should mark required options", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           config: arg(z.string(), {
             description: "Config file path",
@@ -125,6 +128,7 @@ describe("Help Generator", () => {
 
     it("should use placeholder in option display", () => {
       const cmd = defineCommand({
+        name: "test-cmd",
         args: z.object({
           output: arg(z.string(), {
             alias: "o",

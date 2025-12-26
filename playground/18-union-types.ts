@@ -15,13 +15,15 @@ const args = z.union([
     .describe("Credentials Auth"),
 ]);
 
-const main = defineCommand({
+export const main = defineCommand({
   name: "auth-demo",
   description: "Demo of union help with auth methods",
   args,
-  run(context) {
-    console.log(context.args);
+  run(args) {
+    console.log(args);
   },
 });
 
-runMain(main);
+if (process.argv[1]?.includes("18-union-types")) {
+  runMain(main);
+}

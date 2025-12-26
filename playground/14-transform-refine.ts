@@ -12,7 +12,7 @@ import { z } from "zod";
 import { defineCommand, runMain, arg } from "../src/index.js";
 
 // transformの例
-const transformCommand = defineCommand({
+export const transformCommand = defineCommand({
   name: "transform-example",
   description: "transformを使った変換の例",
   args: z.object({
@@ -41,7 +41,7 @@ const transformCommand = defineCommand({
 });
 
 // refineの例
-const refineCommand = defineCommand({
+export const refineCommand = defineCommand({
   name: "refine-example",
   description: "refineを使ったカスタムバリデーションの例",
   args: z
@@ -67,7 +67,7 @@ const refineCommand = defineCommand({
 });
 
 // コマンド選択
-const cli = defineCommand({
+export const cli = defineCommand({
   name: "validation-demo",
   description: "transform/refineのデモ",
   subCommands: {
@@ -76,4 +76,6 @@ const cli = defineCommand({
   },
 });
 
-runMain(cli, { version: "1.0.0" });
+if (process.argv[1]?.includes("14-transform-refine")) {
+  runMain(cli, { version: "1.0.0" });
+}

@@ -10,7 +10,7 @@
 import { z } from "zod";
 import { defineCommand, runMain, arg } from "../src/index.js";
 
-const command = defineCommand({
+export const command = defineCommand({
   name: "greet",
   description: "挨拶を表示するCLIツール",
   args: z.object({
@@ -37,4 +37,6 @@ const command = defineCommand({
   },
 });
 
-runMain(command, { version: "1.0.0" });
+if (process.argv[1]?.includes("02-greet")) {
+  runMain(command, { version: "1.0.0" });
+}

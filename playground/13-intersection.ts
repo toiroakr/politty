@@ -40,7 +40,7 @@ const processOptions = z.object({
 });
 
 // intersectionで結合
-const command = defineCommand({
+export const command = defineCommand({
   name: "process",
   description: "ファイルを処理（intersectionの例）",
   args: baseOptions.and(processOptions),
@@ -66,4 +66,6 @@ const command = defineCommand({
   },
 });
 
-runMain(command);
+if (process.argv[1]?.includes("13-intersection")) {
+  runMain(command);
+}

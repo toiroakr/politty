@@ -14,7 +14,7 @@ import { z } from "zod";
 import { defineCommand, runMain, arg } from "../src/index.js";
 
 // サブコマンド: init
-const initCommand = defineCommand({
+export const initCommand = defineCommand({
   name: "init",
   description: "プロジェクトを初期化",
   args: z.object({
@@ -37,7 +37,7 @@ const initCommand = defineCommand({
 });
 
 // サブコマンド: build
-const buildCommand = defineCommand({
+export const buildCommand = defineCommand({
   name: "build",
   description: "プロジェクトをビルド",
   args: z.object({
@@ -65,7 +65,7 @@ const buildCommand = defineCommand({
 });
 
 // メインコマンド
-const cli = defineCommand({
+export const cli = defineCommand({
   name: "my-cli",
   description: "サブコマンドを持つCLIの例",
   subCommands: {
@@ -74,4 +74,6 @@ const cli = defineCommand({
   },
 });
 
-runMain(cli, { version: "1.0.0" });
+if (process.argv[1]?.includes("10-subcommands")) {
+  runMain(cli, { version: "1.0.0" });
+}

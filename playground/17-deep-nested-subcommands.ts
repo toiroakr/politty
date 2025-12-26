@@ -24,7 +24,7 @@ import { z } from "zod";
 import { defineCommand, runMain, arg } from "../src/index.js";
 
 // config user get コマンド
-const configUserGetCommand = defineCommand({
+export const configUserGetCommand = defineCommand({
   name: "get",
   description: "ユーザー設定値を取得",
   args: z.object({
@@ -43,7 +43,7 @@ const configUserGetCommand = defineCommand({
 });
 
 // config user set コマンド
-const configUserSetCommand = defineCommand({
+export const configUserSetCommand = defineCommand({
   name: "set",
   description: "ユーザー設定値を設定",
   args: z.object({
@@ -67,7 +67,7 @@ const configUserSetCommand = defineCommand({
 });
 
 // config user コマンド
-const configUserCommand = defineCommand({
+export const configUserCommand = defineCommand({
   name: "user",
   description: "ユーザー設定を管理",
   subCommands: {
@@ -77,7 +77,7 @@ const configUserCommand = defineCommand({
 });
 
 // config core get コマンド
-const configCoreGetCommand = defineCommand({
+export const configCoreGetCommand = defineCommand({
   name: "get",
   description: "コア設定値を取得",
   args: z.object({
@@ -96,7 +96,7 @@ const configCoreGetCommand = defineCommand({
 });
 
 // config core set コマンド
-const configCoreSetCommand = defineCommand({
+export const configCoreSetCommand = defineCommand({
   name: "set",
   description: "コア設定値を設定",
   args: z.object({
@@ -115,7 +115,7 @@ const configCoreSetCommand = defineCommand({
 });
 
 // config core コマンド
-const configCoreCommand = defineCommand({
+export const configCoreCommand = defineCommand({
   name: "core",
   description: "コア設定を管理",
   subCommands: {
@@ -125,7 +125,7 @@ const configCoreCommand = defineCommand({
 });
 
 // config コマンド
-const configCommand = defineCommand({
+export const configCommand = defineCommand({
   name: "config",
   description: "設定を管理",
   subCommands: {
@@ -135,7 +135,7 @@ const configCommand = defineCommand({
 });
 
 // メインコマンド
-const cli = defineCommand({
+export const cli = defineCommand({
   name: "git-like",
   description: "3階層ネストしたサブコマンドの例",
   subCommands: {
@@ -143,4 +143,6 @@ const cli = defineCommand({
   },
 });
 
-runMain(cli, { version: "1.0.0" });
+if (process.argv[1]?.includes("17-deep-nested-subcommands")) {
+  runMain(cli, { version: "1.0.0" });
+}

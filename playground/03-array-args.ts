@@ -10,7 +10,7 @@
 import { z } from "zod";
 import { defineCommand, runMain, arg } from "../src/index.js";
 
-const command = defineCommand({
+export const command = defineCommand({
   name: "process-files",
   description: "複数ファイルを処理する",
   args: z.object({
@@ -35,4 +35,6 @@ const command = defineCommand({
   },
 });
 
-runMain(command);
+if (process.argv[1]?.includes("03-array-args")) {
+  runMain(command);
+}
