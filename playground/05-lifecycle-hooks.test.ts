@@ -44,8 +44,10 @@ describe("05-lifecycle-hooks", () => {
       "SELECT 1",
     ]);
 
-    expect(result.exitCode).toBe(0);
-    expect(result.result).toEqual({ rowCount: 42, success: true });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toEqual({ rowCount: 42, success: true });
+    }
   });
 
   it("calls cleanup with error when run fails", async () => {

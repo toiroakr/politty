@@ -103,8 +103,17 @@ export async function executeLifecycle<TResult = unknown>(
     }
   }
 
+  if (error) {
+    return {
+      success: false,
+      error,
+      exitCode: 1,
+    };
+  }
+
   return {
+    success: true,
     result,
-    exitCode: error ? 1 : 0,
+    exitCode: 0,
   };
 }

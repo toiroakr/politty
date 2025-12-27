@@ -25,8 +25,10 @@ describe("executeLifecycle", () => {
     const result = await executeLifecycle(cmd, { name: "John" });
 
     expect(runFn).toHaveBeenCalledWith({ name: "John" });
-    expect(result.exitCode).toBe(0);
-    expect(result.result).toBe("done");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toBe("done");
+    }
   });
 
   it("should execute setup before run", async () => {
@@ -112,8 +114,10 @@ describe("executeLifecycle", () => {
 
     const result = await executeLifecycle(cmd, {});
 
-    expect(result.result).toBe("async result");
-    expect(result.exitCode).toBe(0);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toBe("async result");
+    }
   });
 
   it("should support async setup and cleanup", async () => {

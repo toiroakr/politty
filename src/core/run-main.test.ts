@@ -69,8 +69,10 @@ describe("runCommand", () => {
 
       const result = await runCommand(cmd, []);
 
-      expect(result.result).toEqual({ success: true });
-      expect(result.exitCode).toBe(0);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result).toEqual({ success: true });
+      }
     });
   });
 

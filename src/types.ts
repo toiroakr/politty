@@ -143,11 +143,34 @@ export interface InternalRunOptions {
 }
 
 /**
- * Result of command execution
+ * Successful command execution result
  */
-export interface RunResult<T = unknown> {
+export interface RunResultSuccess<T = unknown> {
+  /** Indicates successful execution */
+  success: true;
   /** Command return value */
-  result?: T | undefined;
-  /** Exit code */
+  result: T | undefined;
+  /** Error that occurred during execution */
+  error?: never;
+  /** Exit code (always 0 for success) */
+  exitCode: 0;
+}
+
+/**
+ * Failed command execution result
+ */
+export interface RunResultFailure {
+  /** Indicates failed execution */
+  success: false;
+  /** Command return value */
+  result?: never;
+  /** Error that occurred during execution */
+  error: Error;
+  /** Exit code (non-zero for failure) */
   exitCode: number;
 }
+
+/**
+ * Result of command execution (discriminated union)
+ */
+export type RunResult<T = unknown> = RunResultSuccess<T> | RunResultFailure;

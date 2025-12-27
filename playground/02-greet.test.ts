@@ -17,44 +17,56 @@ describe("02-greet", () => {
   it("greets with default greeting", async () => {
     const result = await runCommand(command, ["World"]);
 
-    expect(result.exitCode).toBe(0);
-    expect(result.result).toBe("Hello, World!");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toBe("Hello, World!");
+    }
     expect(console).toHaveBeenCalledWith("Hello, World!");
   });
 
   it("greets with custom greeting using --greeting", async () => {
     const result = await runCommand(command, ["World", "--greeting", "Hi"]);
 
-    expect(result.exitCode).toBe(0);
-    expect(result.result).toBe("Hi, World!");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toBe("Hi, World!");
+    }
   });
 
   it("greets with custom greeting using -g alias", async () => {
     const result = await runCommand(command, ["World", "-g", "Howdy"]);
 
-    expect(result.exitCode).toBe(0);
-    expect(result.result).toBe("Howdy, World!");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toBe("Howdy, World!");
+    }
   });
 
   it("outputs in uppercase with --loud", async () => {
     const result = await runCommand(command, ["World", "--loud"]);
 
-    expect(result.exitCode).toBe(0);
-    expect(result.result).toBe("HELLO, WORLD!");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toBe("HELLO, WORLD!");
+    }
   });
 
   it("outputs in uppercase with -l alias", async () => {
     const result = await runCommand(command, ["World", "-l"]);
 
-    expect(result.exitCode).toBe(0);
-    expect(result.result).toBe("HELLO, WORLD!");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toBe("HELLO, WORLD!");
+    }
   });
 
   it("combines custom greeting and loud mode", async () => {
     const result = await runCommand(command, ["World", "-g", "Hi", "-l"]);
 
-    expect(result.exitCode).toBe(0);
-    expect(result.result).toBe("HI, WORLD!");
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toBe("HI, WORLD!");
+    }
   });
 
   it("fails when name is not provided", async () => {

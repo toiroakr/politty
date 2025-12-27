@@ -28,8 +28,10 @@ describe("15-complete-cli", () => {
     it("returns result from run function", async () => {
       const result = await runCommand(cli, ["file.txt", "-o", "out.txt"]);
 
-      expect(result.exitCode).toBe(0);
-      expect(result.result).toEqual({ processed: true, format: "json" });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result).toEqual({ processed: true, format: "json" });
+      }
     });
 
     it("enables verbose mode with -v", async () => {
@@ -44,9 +46,11 @@ describe("15-complete-cli", () => {
     it("uses custom format with -f", async () => {
       const result = await runCommand(cli, ["file.txt", "-o", "out.txt", "-f", "yaml"]);
 
-      expect(result.exitCode).toBe(0);
+      expect(result.success).toBe(true);
       expect(console).toHaveBeenCalledWith("  Format: yaml");
-      expect(result.result).toEqual({ processed: true, format: "yaml" });
+      if (result.success) {
+        expect(result.result).toEqual({ processed: true, format: "yaml" });
+      }
     });
   });
 

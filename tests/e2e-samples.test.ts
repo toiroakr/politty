@@ -131,8 +131,10 @@ describe("E2E Sample Commands", () => {
       const { cli } = createGitCli();
       const result = await runCommand(cli, ["init"]);
 
-      expect(result.exitCode).toBe(0);
-      expect(result.result).toEqual({ initialized: true, bare: false });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result).toEqual({ initialized: true, bare: false });
+      }
       expect(logs).toContain("Initialized repository");
     });
 
@@ -140,8 +142,10 @@ describe("E2E Sample Commands", () => {
       const { cli } = createGitCli();
       const result = await runCommand(cli, ["init", "--bare"]);
 
-      expect(result.exitCode).toBe(0);
-      expect(result.result).toEqual({ initialized: true, bare: true });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result).toEqual({ initialized: true, bare: true });
+      }
       expect(logs).toContain("Initialized bare repository");
     });
 
@@ -294,7 +298,10 @@ describe("E2E Sample Commands", () => {
 
       const result = await runCommand(cli, ["run", "build"]);
       expect(logs).toContain("> tsc");
-      expect(result.result).toEqual({ script: "build", command: "tsc" });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result).toEqual({ script: "build", command: "tsc" });
+      }
     });
 
     it("should run tests with options", async () => {
@@ -302,7 +309,10 @@ describe("E2E Sample Commands", () => {
 
       const result = await runCommand(cli, ["test", "-w", "-c"]);
       expect(logs).toContain("> vitest --watch --coverage");
-      expect(result.result).toEqual({ command: "vitest --watch --coverage" });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result).toEqual({ command: "vitest --watch --coverage" });
+      }
     });
   });
 
@@ -502,9 +512,11 @@ describe("E2E Sample Commands", () => {
 
       const result = await runCommand(cli, ["start", "-p", "8080"]);
 
-      expect(result.exitCode).toBe(0);
+      expect(result.success).toBe(true);
       expect(logs).toContain("Server starting on http://localhost:8080");
-      expect(result.result).toEqual({ url: "http://localhost:8080" });
+      if (result.success) {
+        expect(result.result).toEqual({ url: "http://localhost:8080" });
+      }
     });
 
     it("should start server with custom host and workers", async () => {
@@ -678,10 +690,13 @@ describe("E2E Sample Commands", () => {
 
       expect(migrations.applied).toHaveLength(0);
       expect(logs).toContain("Dry run - would apply:");
-      expect(result.result).toEqual({
-        dryRun: true,
-        migrations: ["001_create_users", "002_add_email", "003_create_posts"],
-      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result).toEqual({
+          dryRun: true,
+          migrations: ["001_create_users", "002_add_email", "003_create_posts"],
+        });
+      }
     });
 
     it("should rollback migrations", async () => {
@@ -705,10 +720,13 @@ describe("E2E Sample Commands", () => {
 
       expect(logs).toContain("Applied: 1");
       expect(logs).toContain("Pending: 2");
-      expect(result.result).toEqual({
-        applied: ["001_create_users"],
-        pending: ["002_add_email", "003_create_posts"],
-      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result).toEqual({
+          applied: ["001_create_users"],
+          pending: ["002_add_email", "003_create_posts"],
+        });
+      }
     });
   });
 });

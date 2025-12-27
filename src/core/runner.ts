@@ -3,17 +3,17 @@ import { listSubCommands, resolveSubcommand } from "../executor/subcommand-route
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
 import type {
-    AnyCommand,
-    InternalRunOptions,
-    MainOptions,
-    RunCommandOptions,
-    RunResult
+  AnyCommand,
+  InternalRunOptions,
+  MainOptions,
+  RunCommandOptions,
+  RunResult,
 } from "../types.js";
 import {
-    formatRuntimeError,
-    formatUnknownFlag,
-    formatUnknownSubcommand,
-    formatValidationErrors
+  formatRuntimeError,
+  formatUnknownFlag,
+  formatUnknownSubcommand,
+  formatValidationErrors,
 } from "../validator/error-formatter.js";
 import { validateArgs } from "../validator/zod-validator.js";
 
@@ -138,7 +138,14 @@ async function runCommandInternal<TResult = unknown>(
         context,
       });
       console.log(help);
-      return { exitCode: hasUnknownSubcommand ? 1 : 0 };
+      if (hasUnknownSubcommand) {
+        return {
+          success: false,
+          error: new Error(`Unknown subcommand: ${argv.find((arg) => !arg.startsWith("-"))}`),
+          exitCode: 1,
+        };
+      }
+      return { success: true, result: undefined, exitCode: 0 };
     }
 
     // Handle --version
@@ -148,7 +155,7 @@ async function runCommandInternal<TResult = unknown>(
       if (version) {
         console.log(version);
       }
-      return { exitCode: 0 };
+      return { success: true, result: undefined, exitCode: 0 };
     }
 
     // Handle subcommand
@@ -176,7 +183,7 @@ async function runCommandInternal<TResult = unknown>(
         context,
       });
       console.log(help);
-      return { exitCode: 0 };
+      return { success: true, result: undefined, exitCode: 0 };
     }
 
     // Warn about unknown flags
@@ -185,7 +192,11 @@ async function runCommandInternal<TResult = unknown>(
       for (const flag of parseResult.unknownFlags) {
         console.error(formatUnknownFlag(flag, knownFlags));
       }
-      return { exitCode: 1 };
+      return {
+        success: false,
+        error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
+        exitCode: 1,
+      };
     }
 
     // Validate arguments
@@ -201,7 +212,11 @@ async function runCommandInternal<TResult = unknown>(
 
     if (!validationResult.success) {
       console.error(formatValidationErrors(validationResult.errors));
-      return { exitCode: 1 };
+      return {
+        success: false,
+        error: new Error(formatValidationErrors(validationResult.errors)),
+        exitCode: 1,
+      };
     }
 
     // Run the command
@@ -213,6 +228,10 @@ async function runCommandInternal<TResult = unknown>(
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     console.error(formatRuntimeError(err, options.debug ?? false));
-    return { exitCode: 1 };
+    return {
+      success: false,
+      error: err,
+      exitCode: 1,
+    };
   }
 }

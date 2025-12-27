@@ -301,10 +301,13 @@ describe("E2E Tests", () => {
 
       const result = await runCommand(cmd, []);
 
-      expect(result.result).toEqual({
-        status: "success",
-        count: 42,
-      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result).toEqual({
+          status: "success",
+          count: 42,
+        });
+      }
     });
 
     it("should return async result", async () => {
@@ -318,7 +321,10 @@ describe("E2E Tests", () => {
 
       const result = await runCommand(cmd, []);
 
-      expect(result.result).toBe("async-result");
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result).toBe("async-result");
+      }
     });
   });
 
@@ -698,8 +704,10 @@ describe("E2E Tests", () => {
       // Test main command
       const result = await runCommand(cli, ["file.txt", "-o", "out.txt"]);
 
-      expect(result.exitCode).toBe(0);
-      expect(result.result).toEqual({ processed: true });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.result).toEqual({ processed: true });
+      }
       expect(output).toContain("Processing file.txt → out.txt");
 
       console.mockRestore();
