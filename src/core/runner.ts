@@ -1,19 +1,21 @@
 import { executeLifecycle } from "../executor/command-runner.js";
+import { createLogCollector, emptyLogs } from "../executor/log-collector.js";
 import { listSubCommands, resolveSubcommand } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
 import type {
-  AnyCommand,
-  InternalRunOptions,
-  MainOptions,
-  RunCommandOptions,
-  RunResult,
+    AnyCommand,
+    CollectedLogs,
+    InternalRunOptions,
+    MainOptions,
+    RunCommandOptions,
+    RunResult
 } from "../types.js";
 import {
-  formatRuntimeError,
-  formatUnknownFlag,
-  formatUnknownSubcommand,
-  formatValidationErrors,
+    formatRuntimeError,
+    formatUnknownFlag,
+    formatUnknownSubcommand,
+    formatValidationErrors
 } from "../validator/error-formatter.js";
 import { validateArgs } from "../validator/zod-validator.js";
 
@@ -23,6 +25,8 @@ import { validateArgs } from "../validator/zod-validator.js";
 interface InternalCommandOptions extends InternalRunOptions {
   /** Command hierarchy context (internal use) */
   _context?: CommandContext;
+  /** Existing logs to include (for subcommand routing) */
+  _existingLogs?: CollectedLogs;
 }
 
 /**
@@ -88,6 +92,7 @@ export async function runCommand<TResult = unknown>(
 export async function runMain(command: AnyCommand, options: MainOptions = {}): Promise<never> {
   const result = await runCommandInternal(command, process.argv.slice(2), {
     debug: options.debug,
+    captureErrorLogs: options.captureErrorLogs,
     handleSignals: true,
     _context: {
       commandPath: [],
@@ -111,6 +116,21 @@ async function runCommandInternal<TResult = unknown>(
   const context: CommandContext = options._context ?? {
     commandPath: [],
     rootName: command.name,
+  };
+
+  // Start log collection if enabled
+  const shouldCaptureLogs = options.captureErrorLogs ?? false;
+  const collector = shouldCaptureLogs ? createLogCollector() : null;
+  collector?.start();
+
+  // Helper to get current logs merged with existing
+  const getCurrentLogs = (): CollectedLogs => {
+    const existingLogs = options._existingLogs ?? emptyLogs();
+    const collectedLogs = collector?.getLogs() ?? emptyLogs();
+    return {
+      errors: [...existingLogs.errors, ...collectedLogs.errors],
+      warnings: [...existingLogs.warnings, ...collectedLogs.warnings],
+    };
   };
 
   try {
@@ -138,14 +158,16 @@ async function runCommandInternal<TResult = unknown>(
         context,
       });
       console.log(help);
+      collector?.stop();
       if (hasUnknownSubcommand) {
         return {
           success: false,
           error: new Error(`Unknown subcommand: ${argv.find((arg) => !arg.startsWith("-"))}`),
           exitCode: 1,
+          logs: getCurrentLogs(),
         };
       }
-      return { success: true, result: undefined, exitCode: 0 };
+      return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
     }
 
     // Handle --version
@@ -155,7 +177,8 @@ async function runCommandInternal<TResult = unknown>(
       if (version) {
         console.log(version);
       }
-      return { success: true, result: undefined, exitCode: 0 };
+      collector?.stop();
+      return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
     }
 
     // Handle subcommand
@@ -168,9 +191,12 @@ async function runCommandInternal<TResult = unknown>(
           rootName: context.rootName,
           rootVersion: context.rootVersion,
         };
+        // Stop this collector and pass logs to subcommand
+        collector?.stop();
         return runCommandInternal<TResult>(subCmd, parseResult.remainingArgs, {
           ...options,
           _context: subContext,
+          _existingLogs: getCurrentLogs(),
         });
       }
     }
@@ -183,7 +209,8 @@ async function runCommandInternal<TResult = unknown>(
         context,
       });
       console.log(help);
-      return { success: true, result: undefined, exitCode: 0 };
+      collector?.stop();
+      return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
     }
 
     // Warn about unknown flags
@@ -192,18 +219,24 @@ async function runCommandInternal<TResult = unknown>(
       for (const flag of parseResult.unknownFlags) {
         console.error(formatUnknownFlag(flag, knownFlags));
       }
+      collector?.stop();
       return {
         success: false,
         error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
         exitCode: 1,
+        logs: getCurrentLogs(),
       };
     }
 
     // Validate arguments
     if (!command.argsSchema) {
       // No schema, run with empty args
+      // Stop this collector and pass logs to executeLifecycle
+      collector?.stop();
       const result = await executeLifecycle(command, {} as Record<string, never>, {
         handleSignals: options.handleSignals,
+        captureErrorLogs: options.captureErrorLogs,
+        existingLogs: getCurrentLogs(),
       });
       return result as RunResult<TResult>;
     }
@@ -212,26 +245,34 @@ async function runCommandInternal<TResult = unknown>(
 
     if (!validationResult.success) {
       console.error(formatValidationErrors(validationResult.errors));
+      collector?.stop();
       return {
         success: false,
         error: new Error(formatValidationErrors(validationResult.errors)),
         exitCode: 1,
+        logs: getCurrentLogs(),
       };
     }
 
     // Run the command
+    // Stop this collector and pass logs to executeLifecycle
+    collector?.stop();
     const result = await executeLifecycle(command, validationResult.data, {
       handleSignals: options.handleSignals,
+      captureErrorLogs: options.captureErrorLogs,
+      existingLogs: getCurrentLogs(),
     });
 
     return result as RunResult<TResult>;
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
     console.error(formatRuntimeError(err, options.debug ?? false));
+    collector?.stop();
     return {
       success: false,
       error: err,
       exitCode: 1,
+      logs: getCurrentLogs(),
     };
   }
 }

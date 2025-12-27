@@ -1,4 +1,11 @@
-import type { AnyCommand, CleanupContext, RunResult, SetupContext } from "../types.js";
+import type {
+    AnyCommand,
+    CleanupContext,
+    CollectedLogs,
+    RunResult,
+    SetupContext
+} from "../types.js";
+import { createLogCollector, emptyLogs } from "./log-collector.js";
 
 /**
  * Options for lifecycle execution
@@ -6,6 +13,10 @@ import type { AnyCommand, CleanupContext, RunResult, SetupContext } from "../typ
 export interface ExecuteLifecycleOptions {
   /** Handle signals (SIGINT, SIGTERM) */
   handleSignals?: boolean | undefined;
+  /** Capture console.error and console.warn output */
+  captureErrorLogs?: boolean | undefined;
+  /** Existing logs to include in result (from runCommandInternal) */
+  existingLogs?: CollectedLogs | undefined;
 }
 
 /**
@@ -27,6 +38,10 @@ export async function executeLifecycle<TResult = unknown>(
 ): Promise<RunResult<TResult>> {
   let error: Error | undefined;
   let result: TResult | undefined;
+
+  const shouldCollectLogs = _options.captureErrorLogs ?? false;
+  const collector = shouldCollectLogs ? createLogCollector() : null;
+  collector?.start();
 
   const setupContext: SetupContext<unknown> = {
     args,
@@ -59,6 +74,9 @@ export async function executeLifecycle<TResult = unknown>(
           console.error("Error during signal cleanup:", e);
         }
       }
+
+      // Stop log collection before exit
+      collector?.stop();
 
       // Exit
       process.exit(1);
@@ -103,11 +121,23 @@ export async function executeLifecycle<TResult = unknown>(
     }
   }
 
+  // Stop log collection
+  collector?.stop();
+
+  // Merge existing logs with collected logs
+  const existingLogs = _options.existingLogs ?? emptyLogs();
+  const collectedLogs = collector?.getLogs() ?? emptyLogs();
+  const logs: CollectedLogs = {
+    errors: [...existingLogs.errors, ...collectedLogs.errors],
+    warnings: [...existingLogs.warnings, ...collectedLogs.warnings],
+  };
+
   if (error) {
     return {
       success: false,
       error,
       exitCode: 1,
+      logs,
     };
   }
 
@@ -115,5 +145,6 @@ export async function executeLifecycle<TResult = unknown>(
     success: true,
     result,
     exitCode: 0,
+    logs,
   };
 }

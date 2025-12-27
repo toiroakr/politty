@@ -115,6 +115,8 @@ export interface MainOptions {
   version?: string;
   /** Enable debug mode (show stack traces on errors) */
   debug?: boolean;
+  /** Capture console.error and console.warn output during execution (default: false) */
+  captureErrorLogs?: boolean;
 }
 
 /**
@@ -123,6 +125,8 @@ export interface MainOptions {
 export interface RunCommandOptions {
   /** Enable debug mode (show stack traces on errors) */
   debug?: boolean;
+  /** Capture console.error and console.warn output during execution (default: false) */
+  captureErrorLogs?: boolean;
 }
 
 /**
@@ -140,6 +144,28 @@ export interface InternalRunOptions {
   handleSignals?: boolean | undefined;
   /** Enable debug mode */
   debug?: boolean | undefined;
+  /** Capture console.error and console.warn output */
+  captureErrorLogs?: boolean | undefined;
+}
+
+/**
+ * A single log entry collected during command execution
+ */
+export interface LogEntry {
+  /** Log message */
+  message: string;
+  /** Timestamp when the log was recorded */
+  timestamp: Date;
+}
+
+/**
+ * Collected logs during command execution
+ */
+export interface CollectedLogs {
+  /** Error logs (console.error) */
+  errors: LogEntry[];
+  /** Warning logs (console.warn) */
+  warnings: LogEntry[];
 }
 
 /**
@@ -154,6 +180,8 @@ export interface RunResultSuccess<T = unknown> {
   error?: never;
   /** Exit code (always 0 for success) */
   exitCode: 0;
+  /** Collected logs during execution */
+  logs: CollectedLogs;
 }
 
 /**
@@ -168,6 +196,8 @@ export interface RunResultFailure {
   error: Error;
   /** Exit code (non-zero for failure) */
   exitCode: number;
+  /** Collected logs during execution */
+  logs: CollectedLogs;
 }
 
 /**
