@@ -30,12 +30,27 @@ const cli = defineCommand({
 
 ### 遅延ロード
 
-大規模な CLI の場合、起動時間を短縮するためにサブコマンドを遅延ロードできます。コマンドを直接インポートする代わりに、インポートして返す非同期関数を提供します。
+大規模な CLI の場合、起動時間を短縮するためにサブコマンドを遅延ロードできます。コマンドを直接インポートする代わりに、動的インポート (`import()`) を使って返す非同期関数を提供します。
+
+> **注意**: 遅延ロードの効果を得るには、必ず動的インポート (`import()`) を使用してください。
+> ファイル先頭の静的インポート (`import { ... } from "..."`) は、ファイル読み込み時に即座にモジュールを解決するため、遅延ロードにはなりません。
 
 ```typescript
+// ❌ 静的インポート - ファイル読み込み時に即座に解決される
+import { heavyCommand } from "./commands/heavy.js";
+
 const cli = defineCommand({
   subCommands: {
-    // 動的インポート
+    // heavyCommand は既に読み込み済み
+    heavy: async () => heavyCommand,
+  }
+});
+```
+
+```typescript
+// ✅ 動的インポート - サブコマンド実行時に初めて読み込まれる
+const cli = defineCommand({
+  subCommands: {
     heavy: async () => {
       const { heavyCommand } = await import("./commands/heavy.js");
       return heavyCommand;
@@ -43,6 +58,8 @@ const cli = defineCommand({
   }
 });
 ```
+
+完全な例は `playground/21-lazy-subcommands.ts` を参照してください。
 
 ### ネストされたサブコマンド
 
@@ -123,7 +140,6 @@ When mode=url: URLから入力
     --method <METHOD>         (default: "GET")
 ```
 
-
 ### Intersection（スキーマの合成）
 
 `.and()` や `z.intersection()` を使ってスキーマを結合し、共通のオプションを再利用できます。
@@ -189,4 +205,3 @@ const command = defineCommand({
 ```
 
 この機能は Zod の `GlobalMeta` インターフェースを拡張することで実現されています。
-
