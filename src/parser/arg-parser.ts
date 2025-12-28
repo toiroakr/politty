@@ -1,8 +1,6 @@
 import {
-    extractFields,
-    validatePositionalConfig,
-    validateReservedAliases,
-    type ExtractedFields
+    extractFields, validateDuplicateAliases, validateDuplicateFields, validatePositionalConfig,
+    validateReservedAliases, type ExtractedFields
 } from "../core/schema-extractor.js";
 import type { AnyCommand } from "../types.js";
 import { buildParserOptions, mergeWithPositionals, parseArgv } from "./argv-parser.js";
@@ -66,6 +64,8 @@ export function parseArgs(argv: string[], command: AnyCommand): ParseResult {
   let extracted: ExtractedFields | undefined;
   if (command.argsSchema) {
     extracted = extractFields(command.argsSchema);
+    validateDuplicateFields(extracted);
+    validateDuplicateAliases(extracted);
     validatePositionalConfig(extracted);
     validateReservedAliases(extracted, hasSubCommands);
   }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
-import { PositionalConfigError } from "../core/schema-extractor.js";
+import { DuplicateAliasError, PositionalConfigError } from "../core/schema-extractor.js";
 import { parseArgs } from "./arg-parser.js";
 
 /**
@@ -566,6 +566,72 @@ describe("ArgParser", () => {
       const result = parseArgs(["--exclude=node_modules", "--exclude=dist"], cmd);
 
       expect(result.rawArgs.exclude).toEqual(["node_modules", "dist"]);
+    });
+  });
+
+  describe("Duplicate alias validation", () => {
+    it("should throw error when two fields use the same alias", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+          version: arg(z.string(), { alias: "v" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateAliasError);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Duplicate alias "v" detected.*"verbose".*"version"/,
+      );
+    });
+
+    it("should throw error when alias conflicts with field name", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), { alias: "output" }),
+          output: arg(z.string(), { description: "Output file" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateAliasError);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Alias "output" for field "verbose" conflicts with existing field name "output"/,
+      );
+    });
+
+    it("should allow different aliases on different fields", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+          output: arg(z.string(), { alias: "o" }),
+          force: arg(z.boolean().default(false), { alias: "f" }),
+        }),
+      });
+
+      // Should not throw
+      const result = parseArgs(["-v", "-o", "out.txt", "-f"], cmd);
+
+      expect(result.rawArgs.verbose).toBe(true);
+      expect(result.rawArgs.output).toBe("out.txt");
+      expect(result.rawArgs.force).toBe(true);
+    });
+
+    it("should allow fields without aliases", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), { description: "Verbose mode" }),
+          output: arg(z.string(), { description: "Output file" }),
+        }),
+      });
+
+      // Should not throw
+      const result = parseArgs(["--verbose", "--output", "out.txt"], cmd);
+
+      expect(result.rawArgs.verbose).toBe(true);
+      expect(result.rawArgs.output).toBe("out.txt");
     });
   });
 });

@@ -66,7 +66,7 @@ describe("12-discriminated-union", () => {
     });
 
     it("lists resources in json format", async () => {
-      const result = await runCommand(command, ["--action", "list", "-f", "json"]);
+      const result = await runCommand(command, ["--action", "list", "-F", "json"]);
 
       expect(result.exitCode).toBe(0);
       expect(console).toHaveBeenCalledWith("  Format: json");

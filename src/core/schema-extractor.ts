@@ -532,6 +532,26 @@ export class ReservedAliasError extends Error {
 }
 
 /**
+ * Error thrown when duplicate field names are detected
+ */
+export class DuplicateFieldError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DuplicateFieldError";
+  }
+}
+
+/**
+ * Error thrown when duplicate aliases are detected
+ */
+export class DuplicateAliasError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DuplicateAliasError";
+  }
+}
+
+/**
  * Validate positional argument configuration
  *
  * Rules:
@@ -612,5 +632,59 @@ export function validateReservedAliases(
         );
       }
     }
+  }
+}
+
+/**
+ * Validate that no duplicate field names exist
+ *
+ * @param extracted - Extracted fields from schema
+ * @throws {DuplicateFieldError} If duplicate field names are found
+ */
+export function validateDuplicateFields(extracted: ExtractedFields): void {
+  const seenNames = new Map<string, string>();
+
+  for (const field of extracted.fields) {
+    const existingField = seenNames.get(field.name);
+    if (existingField !== undefined) {
+      throw new DuplicateFieldError(
+        `Duplicate field name "${field.name}" detected. Each field must have a unique name.`,
+      );
+    }
+    seenNames.set(field.name, field.name);
+  }
+}
+
+/**
+ * Validate that no duplicate aliases exist
+ *
+ * Also checks for conflicts between aliases and field names
+ *
+ * @param extracted - Extracted fields from schema
+ * @throws {DuplicateAliasError} If duplicate aliases are found or alias conflicts with field name
+ */
+export function validateDuplicateAliases(extracted: ExtractedFields): void {
+  const seenAliases = new Map<string, string>();
+  const fieldNames = new Set(extracted.fields.map((f) => f.name));
+
+  for (const field of extracted.fields) {
+    if (!field.alias) continue;
+
+    // Check if alias conflicts with an existing field name
+    if (fieldNames.has(field.alias)) {
+      throw new DuplicateAliasError(
+        `Alias "${field.alias}" for field "${field.name}" conflicts with existing field name "${field.alias}".`,
+      );
+    }
+
+    // Check if alias is already used by another field
+    const existingField = seenAliases.get(field.alias);
+    if (existingField !== undefined) {
+      throw new DuplicateAliasError(
+        `Duplicate alias "${field.alias}" detected. ` +
+          `Both "${existingField}" and "${field.name}" are using the same alias.`,
+      );
+    }
+    seenAliases.set(field.alias, field.name);
   }
 }

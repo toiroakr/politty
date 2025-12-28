@@ -42,7 +42,7 @@ export const command = defineCommand({
       z.object({
         action: z.literal("list"),
         format: arg(z.enum(["json", "table"]).default("table"), {
-          alias: "f",
+          alias: "F",
           description: "出力形式",
         }),
         limit: arg(z.coerce.number().default(10), {

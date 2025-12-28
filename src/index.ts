@@ -9,9 +9,13 @@ export { arg, type ArgMeta } from "./core/arg-registry.js";
 export { defineCommand } from "./core/command.js";
 export { runCommand, runMain } from "./core/runner.js";
 export {
+    DuplicateAliasError,
+    DuplicateFieldError,
     extractFields,
     PositionalConfigError,
     ReservedAliasError,
+    validateDuplicateAliases,
+    validateDuplicateFields,
     validatePositionalConfig,
     validateReservedAliases,
     type ExtractedFields,
