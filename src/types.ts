@@ -7,6 +7,11 @@ import type { z } from "zod";
 export type ArgsSchema = z.ZodType<Record<string, any>>;
 
 /**
+ * Default empty args schema type (used when args is not provided)
+ */
+export type EmptyArgsSchema = z.ZodObject<Record<string, never>>;
+
+/**
  * Context provided to setup function
  */
 export interface SetupContext<TArgs = unknown> {
@@ -60,17 +65,24 @@ export interface CommandConfig<
 
 /**
  * Base command interface (shared properties)
+ * @template TArgsSchema - The Zod schema type for arguments
+ * @template TArgs - The inferred args type from the schema
  */
-export interface CommandBase<TArgs = unknown> {
+export interface CommandBase<
+  TArgsSchema extends ArgsSchema | undefined = undefined,
+  TArgs = unknown,
+> {
   /** Command name (required) */
   name: string;
   /** Command description */
   description?: string | undefined;
-  /** Argument schema */
-  argsSchema?: ArgsSchema | undefined;
+  /** Argument schema (preserves the original Zod schema type) */
+  argsSchema: TArgsSchema;
   /** Subcommands */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  subCommands?: Record<string, Command<any, any> | (() => Promise<Command<any, any>>)> | undefined;
+  subCommands?:
+    | Record<string, Command<any, any, any> | (() => Promise<Command<any, any, any>>)>
+    | undefined;
   /** Setup hook */
   setup?: ((context: SetupContext<TArgs>) => void | Promise<void>) | undefined;
   /** Cleanup hook */
@@ -79,16 +91,28 @@ export interface CommandBase<TArgs = unknown> {
 
 /**
  * A command with a run function
+ * @template TArgsSchema - The Zod schema type for arguments
+ * @template TArgs - The inferred args type from the schema
+ * @template TResult - The return type of the run function
  */
-export interface RunnableCommand<TArgs = unknown, TResult = unknown> extends CommandBase<TArgs> {
+export interface RunnableCommand<
+  TArgsSchema extends ArgsSchema | undefined = undefined,
+  TArgs = unknown,
+  TResult = unknown,
+> extends CommandBase<TArgsSchema, TArgs> {
   /** Main run function */
   run: (args: TArgs) => TResult;
 }
 
 /**
  * A command without a run function (e.g., subcommand-only parent)
+ * @template TArgsSchema - The Zod schema type for arguments
+ * @template TArgs - The inferred args type from the schema
  */
-export interface NonRunnableCommand<TArgs = unknown> extends CommandBase<TArgs> {
+export interface NonRunnableCommand<
+  TArgsSchema extends ArgsSchema | undefined = undefined,
+  TArgs = unknown,
+> extends CommandBase<TArgsSchema, TArgs> {
   /** No run function */
   run?: undefined;
 }
@@ -96,16 +120,18 @@ export interface NonRunnableCommand<TArgs = unknown> extends CommandBase<TArgs> 
 /**
  * A defined command (union of runnable and non-runnable)
  */
-export type Command<TArgs = unknown, TResult = unknown> =
-  | RunnableCommand<TArgs, TResult>
-  | NonRunnableCommand<TArgs>;
+export type Command<
+  TArgsSchema extends ArgsSchema | undefined = undefined,
+  TArgs = unknown,
+  TResult = unknown,
+> = RunnableCommand<TArgsSchema, TArgs, TResult> | NonRunnableCommand<TArgsSchema, TArgs>;
 
 /**
  * Command type that accepts any args/result types
  * Used in internal functions that don't need specific type information
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyCommand = Command<any, any>;
+export type AnyCommand = Command<any, any, any>;
 
 /**
  * Options for runMain (CLI entry point)
