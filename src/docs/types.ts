@@ -11,10 +11,6 @@ export interface CommandInfo {
   description?: string | undefined;
   /** Full command path (e.g., "my-cli config get") */
   fullCommandPath: string;
-  /** Command path array */
-  commandPath: string[];
-  /** Root command name */
-  rootName: string;
   /** Positional arguments */
   positionalArgs: ResolvedFieldMeta[];
   /** Options (non-positional arguments) */
@@ -39,8 +35,6 @@ export interface SubCommandInfo {
   name: string;
   /** Subcommand description */
   description?: string | undefined;
-  /** Relative path from parent */
-  relativePath: string[];
   /** Full command path */
   fullPath: string[];
 }
@@ -120,8 +114,6 @@ export interface GenerateDocConfig {
   ignores?: string[];
   /** Default renderer options (used when render is not specified per file) */
   format?: DefaultRendererOptions;
-  /** Version string to include in documentation */
-  version?: string;
 }
 
 /**

@@ -35,7 +35,6 @@ export async function buildCommandInfo(
       subCommands.push({
         name,
         description: resolved.description,
-        relativePath: [name],
         fullPath,
       });
     }
@@ -45,8 +44,6 @@ export async function buildCommandInfo(
     name: command.name ?? "",
     description: command.description,
     fullCommandPath: commandPath.length > 0 ? `${rootName} ${commandPath.join(" ")}` : rootName,
-    commandPath,
-    rootName,
     positionalArgs,
     options,
     subCommands,
