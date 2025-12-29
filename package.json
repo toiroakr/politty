@@ -39,6 +39,16 @@
         "types": "./dist/augment.d.cts",
         "default": "./dist/augment.cjs"
       }
+    },
+    "./docs": {
+      "import": {
+        "types": "./dist/docs/index.d.ts",
+        "default": "./dist/docs/index.js"
+      },
+      "require": {
+        "types": "./dist/docs/index.d.cts",
+        "default": "./dist/docs/index.cjs"
+      }
     }
   },
   "scripts": {
