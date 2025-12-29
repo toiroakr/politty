@@ -34,6 +34,8 @@ export type {
     CommandBase,
     CommandConfig,
     LogEntry,
+    // Logger type
+    Logger,
     // Options and result types
     MainOptions,
     NonRunnableCommand,

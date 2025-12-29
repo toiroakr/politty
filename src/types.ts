@@ -1,6 +1,17 @@
 import type { z } from "zod";
 
 /**
+ * Logger interface for CLI output
+ * Can be overridden by passing a custom logger to runMain or runCommand
+ */
+export interface Logger {
+  /** Log informational message to stdout */
+  log(message: string): void;
+  /** Log error message to stderr */
+  error(message: string): void;
+}
+
+/**
  * Supported schema types for args
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -145,6 +156,8 @@ export interface MainOptions {
   captureErrorLogs?: boolean;
   /** Skip command definition validation (useful in production where tests already verified) */
   skipValidation?: boolean;
+  /** Custom logger for output (default: console) */
+  logger?: Logger;
 }
 
 /**
@@ -157,6 +170,8 @@ export interface RunCommandOptions {
   captureErrorLogs?: boolean;
   /** Skip command definition validation (useful in production where tests already verified) */
   skipValidation?: boolean;
+  /** Custom logger for output (default: console) */
+  logger?: Logger;
 }
 
 /**
@@ -178,6 +193,8 @@ export interface InternalRunOptions {
   captureErrorLogs?: boolean | undefined;
   /** Skip command definition validation */
   skipValidation?: boolean | undefined;
+  /** Custom logger for output */
+  logger?: Logger | undefined;
 }
 
 /**

@@ -7,6 +7,7 @@ import type {
     AnyCommand,
     CollectedLogs,
     InternalRunOptions,
+    Logger,
     MainOptions,
     RunCommandOptions,
     RunResult
@@ -18,6 +19,14 @@ import {
     formatValidationErrors
 } from "../validator/error-formatter.js";
 import { validateArgs } from "../validator/zod-validator.js";
+
+/**
+ * Default logger using console
+ */
+const defaultLogger: Logger = {
+  log: (message: string) => console.log(message),
+  error: (message: string) => console.error(message),
+};
 
 /**
  * Internal options for runCommand (includes context tracking)
@@ -64,6 +73,7 @@ export async function runCommand<TResult = unknown>(
     ...options,
     handleSignals: false,
     skipValidation: options.skipValidation,
+    logger: options.logger,
   });
 }
 
@@ -96,6 +106,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     captureErrorLogs: options.captureErrorLogs,
     skipValidation: options.skipValidation,
     handleSignals: true,
+    logger: options.logger,
     _context: {
       commandPath: [],
       rootName: command.name,
@@ -114,6 +125,9 @@ async function runCommandInternal<TResult = unknown>(
   argv: string[],
   options: InternalCommandOptions = {},
 ): Promise<RunResult<TResult>> {
+  // Get logger (use default if not provided)
+  const logger = options.logger ?? defaultLogger;
+
   // Initialize or get existing context
   const context: CommandContext = options._context ?? {
     commandPath: [],
@@ -148,8 +162,8 @@ async function runCommandInternal<TResult = unknown>(
         // Find first positional argument (potential subcommand)
         const potentialSubCmd = argv.find((arg) => !arg.startsWith("-"));
         if (potentialSubCmd && !subCmdNames.includes(potentialSubCmd)) {
-          console.error(formatUnknownSubcommand(potentialSubCmd, subCmdNames));
-          console.error("");
+          logger.error(formatUnknownSubcommand(potentialSubCmd, subCmdNames));
+          logger.error("");
           hasUnknownSubcommand = true;
         }
       }
@@ -159,7 +173,7 @@ async function runCommandInternal<TResult = unknown>(
         showSubcommandOptions: parseResult.helpAllRequested || options.showSubcommandOptions,
         context,
       });
-      console.log(help);
+      logger.log(help);
       collector?.stop();
       if (hasUnknownSubcommand) {
         return {
@@ -177,7 +191,7 @@ async function runCommandInternal<TResult = unknown>(
       // For subcommands, show root version
       const version = context.rootVersion;
       if (version) {
-        console.log(version);
+        logger.log(version);
       }
       collector?.stop();
       return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
@@ -210,7 +224,7 @@ async function runCommandInternal<TResult = unknown>(
         showSubcommands: options.showSubcommands ?? true,
         context,
       });
-      console.log(help);
+      logger.log(help);
       collector?.stop();
       return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
     }
@@ -219,7 +233,7 @@ async function runCommandInternal<TResult = unknown>(
     if (parseResult.unknownFlags.length > 0) {
       const knownFlags = parseResult.extractedFields?.fields.map((f) => f.name) ?? [];
       for (const flag of parseResult.unknownFlags) {
-        console.error(formatUnknownFlag(flag, knownFlags));
+        logger.error(formatUnknownFlag(flag, knownFlags));
       }
       collector?.stop();
       return {
@@ -246,7 +260,7 @@ async function runCommandInternal<TResult = unknown>(
     const validationResult = validateArgs(parseResult.rawArgs, command.argsSchema);
 
     if (!validationResult.success) {
-      console.error(formatValidationErrors(validationResult.errors));
+      logger.error(formatValidationErrors(validationResult.errors));
       collector?.stop();
       return {
         success: false,
@@ -268,7 +282,7 @@ async function runCommandInternal<TResult = unknown>(
     return result as RunResult<TResult>;
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    console.error(formatRuntimeError(err, options.debug ?? false));
+    logger.error(formatRuntimeError(err, options.debug ?? false));
     collector?.stop();
     return {
       success: false,
