@@ -88,15 +88,24 @@ export function renderArgumentsList(info: CommandInfo): string {
 }
 
 /**
- * Format option flags
+ * Format environment variable info for display
+ */
+function formatEnvInfo(env: string | string[] | undefined): string {
+  if (!env) return "";
+  const envNames = Array.isArray(env) ? env : [env];
+  return ` [env: ${envNames.join(", ")}]`;
+}
+
+/**
+ * Format option flags (uses kebab-case cliName)
  */
 function formatOptionFlags(opt: ResolvedFieldMeta): string {
   const parts: string[] = [];
 
+  // Use cliName (kebab-case) for CLI display
+  const placeholder = opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
   const longFlag =
-    opt.type === "boolean"
-      ? `--${opt.name}`
-      : `--${opt.name} <${opt.placeholder ?? opt.name.toUpperCase()}>`;
+    opt.type === "boolean" ? `--${opt.cliName}` : `--${opt.cliName} <${placeholder}>`;
 
   if (opt.alias) {
     parts.push(`\`-${opt.alias}\`, \`${longFlag}\``);
@@ -108,33 +117,70 @@ function formatOptionFlags(opt: ResolvedFieldMeta): string {
 }
 
 /**
- * Render options as table
+ * Render options as markdown table
+ *
+ * Features:
+ * - Uses kebab-case (cliName) for option names (e.g., `--dry-run` instead of `--dryRun`)
+ * - Automatically adds Env column when any option has env configured
+ * - Displays multiple env vars as comma-separated list
+ *
+ * @example
+ * | Option | Alias | Description | Default | Env |
+ * |--------|-------|-------------|---------|-----|
+ * | `--dry-run` | `-d` | Dry run mode | `false` | - |
+ * | `--port <PORT>` | - | Server port | - | `PORT`, `SERVER_PORT` |
  */
 export function renderOptionsTable(info: CommandInfo): string {
   if (info.options.length === 0) {
     return "";
   }
 
+  // Check if any option has env configured
+  const hasEnv = info.options.some((opt) => opt.env);
+
   const lines: string[] = [];
-  lines.push("| Option | Alias | Description | Default |");
-  lines.push("|--------|-------|-------------|---------|");
+  if (hasEnv) {
+    lines.push("| Option | Alias | Description | Default | Env |");
+    lines.push("|--------|-------|-------------|---------|-----|");
+  } else {
+    lines.push("| Option | Alias | Description | Default |");
+    lines.push("|--------|-------|-------------|---------|");
+  }
 
   for (const opt of info.options) {
+    // Use cliName (kebab-case) for CLI display
+    const placeholder = opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
     const optionName =
-      opt.type === "boolean"
-        ? `\`--${opt.name}\``
-        : `\`--${opt.name} <${opt.placeholder ?? opt.name.toUpperCase()}>\``;
+      opt.type === "boolean" ? `\`--${opt.cliName}\`` : `\`--${opt.cliName} <${placeholder}>\``;
     const alias = opt.alias ? `\`-${opt.alias}\`` : "-";
     const desc = escapeTableCell(opt.description ?? "");
     const defaultVal = formatDefaultValue(opt.defaultValue);
-    lines.push(`| ${optionName} | ${alias} | ${desc} | ${defaultVal} |`);
+
+    if (hasEnv) {
+      const envNames = opt.env
+        ? Array.isArray(opt.env)
+          ? opt.env.map((e) => `\`${e}\``).join(", ")
+          : `\`${opt.env}\``
+        : "-";
+      lines.push(`| ${optionName} | ${alias} | ${desc} | ${defaultVal} | ${envNames} |`);
+    } else {
+      lines.push(`| ${optionName} | ${alias} | ${desc} | ${defaultVal} |`);
+    }
   }
 
   return lines.join("\n");
 }
 
 /**
- * Render options as list
+ * Render options as markdown list
+ *
+ * Features:
+ * - Uses kebab-case (cliName) for option names (e.g., `--dry-run` instead of `--dryRun`)
+ * - Appends env info at the end of each option (e.g., `[env: PORT, SERVER_PORT]`)
+ *
+ * @example
+ * - `-d`, `--dry-run` - Dry run mode (default: false)
+ * - `--port <PORT>` - Server port [env: PORT, SERVER_PORT]
  */
 export function renderOptionsList(info: CommandInfo): string {
   if (info.options.length === 0) {
@@ -147,7 +193,8 @@ export function renderOptionsList(info: CommandInfo): string {
     const desc = opt.description ? ` - ${opt.description}` : "";
     const defaultVal =
       opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
-    lines.push(`- ${flags}${desc}${defaultVal}`);
+    const envInfo = formatEnvInfo(opt.env);
+    lines.push(`- ${flags}${desc}${defaultVal}${envInfo}`);
   }
 
   return lines.join("\n");

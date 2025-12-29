@@ -9,15 +9,8 @@ export { arg, type ArgMeta } from "./core/arg-registry.js";
 export { defineCommand } from "./core/command.js";
 export { runCommand, runMain } from "./core/runner.js";
 export {
-    DuplicateAliasError,
-    DuplicateFieldError,
     extractFields,
-    PositionalConfigError,
-    ReservedAliasError,
-    validateDuplicateAliases,
-    validateDuplicateFields,
-    validatePositionalConfig,
-    validateReservedAliases,
+    toKebabCase,
     type ExtractedFields,
     type ResolvedFieldMeta
 } from "./core/schema-extractor.js";
@@ -52,6 +45,21 @@ export type {
     // Context types
     SetupContext
 } from "./types.js";
+// Command definition validation
+export {
+    DuplicateAliasError,
+    DuplicateFieldError,
+    formatCommandValidationErrors,
+    PositionalConfigError,
+    ReservedAliasError,
+    validateCommand,
+    validateDuplicateAliases,
+    validateDuplicateFields,
+    validatePositionalConfig,
+    validateReservedAliases,
+    type CommandValidationError,
+    type CommandValidationResult
+} from "./validator/command-validator.js";
 export { formatValidationErrors } from "./validator/zod-validator.js";
 // Validation types
 export type { ValidationError, ValidationResult } from "./validator/zod-validator.js";

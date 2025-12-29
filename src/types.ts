@@ -143,6 +143,8 @@ export interface MainOptions {
   debug?: boolean;
   /** Capture console.error and console.warn output during execution (default: false) */
   captureErrorLogs?: boolean;
+  /** Skip command definition validation (useful in production where tests already verified) */
+  skipValidation?: boolean;
 }
 
 /**
@@ -153,6 +155,8 @@ export interface RunCommandOptions {
   debug?: boolean;
   /** Capture console.error and console.warn output during execution (default: false) */
   captureErrorLogs?: boolean;
+  /** Skip command definition validation (useful in production where tests already verified) */
+  skipValidation?: boolean;
 }
 
 /**
@@ -172,6 +176,8 @@ export interface InternalRunOptions {
   debug?: boolean | undefined;
   /** Capture console.error and console.warn output */
   captureErrorLogs?: boolean | undefined;
+  /** Skip command definition validation */
+  skipValidation?: boolean | undefined;
 }
 
 /**

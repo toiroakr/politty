@@ -17,5 +17,5 @@ resource [options]
 | `--template <TEMPLATE>` | - | テンプレート | - |
 | `--id <ID>` | - | リソースID | - |
 | `--force` | `-f` | 確認なしで削除 | `false` |
-| `--format <FORMAT>` | `-f` | 出力形式 | `"table"` |
+| `--format <FORMAT>` | `-F` | 出力形式 | `"table"` |
 | `--limit <LIMIT>` | `-n` | 表示件数 | `10` |

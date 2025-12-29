@@ -63,6 +63,7 @@ export async function runCommand<TResult = unknown>(
   return runCommandInternal(command, argv, {
     ...options,
     handleSignals: false,
+    skipValidation: options.skipValidation,
   });
 }
 
@@ -93,6 +94,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
   const result = await runCommandInternal(command, process.argv.slice(2), {
     debug: options.debug,
     captureErrorLogs: options.captureErrorLogs,
+    skipValidation: options.skipValidation,
     handleSignals: true,
     _context: {
       commandPath: [],
@@ -135,7 +137,7 @@ async function runCommandInternal<TResult = unknown>(
 
   try {
     // Parse arguments
-    const parseResult = parseArgs(argv, command);
+    const parseResult = parseArgs(argv, command, { skipValidation: options.skipValidation });
 
     // Handle --help or --help-all
     if (parseResult.helpRequested || parseResult.helpAllRequested) {

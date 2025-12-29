@@ -10,6 +10,21 @@ export interface BaseArgMeta {
   positional?: boolean;
   /** Placeholder for help display */
   placeholder?: string;
+  /**
+   * Environment variable name(s) to read value from.
+   * If an array is provided, earlier entries take priority.
+   * CLI arguments always take precedence over environment variables.
+   *
+   * @example
+   * ```ts
+   * // Single env var
+   * port: arg(z.coerce.number(), { env: "PORT" })
+   *
+   * // Multiple env vars (PORT takes priority over SERVER_PORT)
+   * port: arg(z.coerce.number(), { env: ["PORT", "SERVER_PORT"] })
+   * ```
+   */
+  env?: string | string[];
 }
 
 /**
@@ -78,11 +93,15 @@ type ValidateArgMeta<M> = M extends { alias: "h" | "H" }
       }
   : M;
 
+export function arg<T extends z.ZodType>(schema: T): T;
+export function arg<T extends z.ZodType, M extends ArgMeta>(schema: T, meta: ValidateArgMeta<M>): T;
 export function arg<T extends z.ZodType, M extends ArgMeta>(
   schema: T,
-  meta: ValidateArgMeta<M>,
+  meta?: ValidateArgMeta<M>,
 ): T {
-  argRegistry.add(schema, meta as ArgMeta);
+  if (meta) {
+    argRegistry.add(schema, meta as ArgMeta);
+  }
   return schema;
 }
 

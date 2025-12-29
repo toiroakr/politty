@@ -19,4 +19,4 @@ cat [options] <files>
 | Option | Alias | Description | Default |
 |--------|-------|-------------|---------|
 | `--number` | `-n` | 行番号を表示 | `false` |
-| `--showEnds` | `-E` | 行末に$を表示 | `false` |
+| `--show-ends` | `-E` | 行末に$を表示 | `false` |

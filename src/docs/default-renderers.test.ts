@@ -156,6 +156,65 @@ describe("default-renderers", () => {
 
       expect(table).toContain("| `--config <CONFIG>` | - | Config file | - |");
     });
+
+    it("should display camelCase options in kebab-case", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          dryRun: arg(z.boolean().default(false), { description: "Dry run mode" }),
+          outputDir: arg(z.string(), { description: "Output directory" }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const table = renderOptionsTable(info);
+
+      expect(table).toContain("--dry-run");
+      expect(table).toContain("--output-dir");
+      expect(table).not.toContain("--dryRun");
+      expect(table).not.toContain("--outputDir");
+      // Placeholder should use underscores instead of hyphens
+      expect(table).toContain("<OUTPUT_DIR>");
+    });
+
+    it("should display env column when options have env configured", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          port: arg(z.coerce.number(), { env: "PORT", description: "Server port" }),
+          host: arg(z.string().default("localhost"), { description: "Server host" }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const table = renderOptionsTable(info);
+
+      expect(table).toContain("| Option | Alias | Description | Default | Env |");
+      expect(table).toContain("`PORT`");
+      // Options without env should show "-"
+      expect(table).toMatch(/host.*\| - \|$/m);
+    });
+
+    it("should display multiple env vars", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          port: arg(z.coerce.number(), {
+            env: ["PORT", "SERVER_PORT"],
+            description: "Server port",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const table = renderOptionsTable(info);
+
+      expect(table).toContain("`PORT`");
+      expect(table).toContain("`SERVER_PORT`");
+    });
   });
 
   describe("renderSubcommandsTable", () => {
@@ -272,6 +331,58 @@ describe("default-renderers", () => {
 
       expect(markdown).toContain("- `-v`, `--verbose` - Verbose (default: false)");
       expect(markdown).not.toContain("| Option |");
+    });
+
+    it("should display kebab-case options in list style", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          dryRun: arg(z.boolean().default(false), { description: "Dry run mode" }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const renderer = createCommandRenderer({ optionStyle: "list" });
+      const markdown = renderer(info);
+
+      expect(markdown).toContain("--dry-run");
+      expect(markdown).not.toContain("--dryRun");
+    });
+
+    it("should display env info in list style", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          port: arg(z.coerce.number(), { env: "PORT", description: "Server port" }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const renderer = createCommandRenderer({ optionStyle: "list" });
+      const markdown = renderer(info);
+
+      expect(markdown).toContain("[env: PORT]");
+    });
+
+    it("should display multiple env vars in list style", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          port: arg(z.coerce.number(), {
+            env: ["PORT", "SERVER_PORT"],
+            description: "Server port",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const renderer = createCommandRenderer({ optionStyle: "list" });
+      const markdown = renderer(info);
+
+      expect(markdown).toContain("[env: PORT, SERVER_PORT]");
     });
 
     it("should support renderOptions to add custom content after options", async () => {

@@ -33,8 +33,10 @@ function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
  * Resolved metadata for an argument field
  */
 export interface ResolvedFieldMeta {
-  /** Field name */
+  /** Field name (camelCase, as defined in schema) */
   name: string;
+  /** CLI option name (kebab-case, for command line usage) */
+  cliName: string;
   /** Short alias (e.g., 'v' for --verbose) */
   alias?: string | undefined;
   /** Argument description */
@@ -43,6 +45,11 @@ export interface ResolvedFieldMeta {
   positional: boolean;
   /** Placeholder for help display */
   placeholder?: string | undefined;
+  /**
+   * Environment variable name(s) to read value from.
+   * If an array, earlier entries take priority.
+   */
+  env?: string | string[] | undefined;
   /** Whether this argument is required */
   required: boolean;
   /** Default value if any */
@@ -156,6 +163,19 @@ function detectType(schema: z.ZodType): "string" | "number" | "boolean" | "array
 }
 
 /**
+ * Convert camelCase to kebab-case
+ * @example toKebabCase("dryRun") => "dry-run"
+ * @example toKebabCase("outputDir") => "output-dir"
+ * @example toKebabCase("XMLParser") => "xml-parser"
+ */
+export function toKebabCase(str: string): string {
+  return str
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
+    .toLowerCase();
+}
+
+/**
  * Check if a schema is required (not optional or has default)
  *
  * Note: We only check isOptional(), not isNullable(), because CLI arguments
@@ -228,12 +248,17 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   // Priority: argRegistry > schema.describe()
   const description = argMeta?.description ?? extractDescription(schema);
 
+  // Convert camelCase field name to kebab-case for CLI usage
+  const cliName = toKebabCase(name);
+
   const meta: ResolvedFieldMeta = {
     name,
+    cliName,
     alias: argMeta?.alias,
     description,
     positional: argMeta?.positional ?? false,
     placeholder: argMeta?.placeholder,
+    env: argMeta?.env,
     required: isRequired(schema),
     defaultValue: extractDefaultValue(schema),
     type: detectType(schema),
@@ -509,182 +534,4 @@ export function buildAliasMap(extracted: ExtractedFields): Map<string, string> {
     }
   }
   return map;
-}
-
-/**
- * Error thrown when positional argument configuration is invalid
- */
-export class PositionalConfigError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PositionalConfigError";
-  }
-}
-
-/**
- * Error thrown when a reserved alias is used
- */
-export class ReservedAliasError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ReservedAliasError";
-  }
-}
-
-/**
- * Error thrown when duplicate field names are detected
- */
-export class DuplicateFieldError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DuplicateFieldError";
-  }
-}
-
-/**
- * Error thrown when duplicate aliases are detected
- */
-export class DuplicateAliasError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DuplicateAliasError";
-  }
-}
-
-/**
- * Validate positional argument configuration
- *
- * Rules:
- * - Array positional arguments must be the last positional
- * - No positional arguments can follow an array positional
- * - Required positional arguments cannot follow optional positional arguments
- * - Array positional and optional positional cannot be used together (ambiguous parsing)
- *
- * @param extracted - Extracted fields from schema
- * @throws {PositionalConfigError} If configuration is invalid
- */
-export function validatePositionalConfig(extracted: ExtractedFields): void {
-  const positionalFields = extracted.fields.filter((f) => f.positional);
-
-  let foundArrayPositional: string | null = null;
-  let foundOptionalPositional: string | null = null;
-
-  for (const field of positionalFields) {
-    // Check: no positional can follow array positional
-    if (foundArrayPositional !== null) {
-      throw new PositionalConfigError(
-        `Positional argument "${field.name}" cannot follow array positional argument "${foundArrayPositional}". ` +
-          `Array positional arguments must be the last positional.`,
-      );
-    }
-
-    // Check: array positional cannot coexist with optional positional
-    // (This check must come before "required after optional" because arrays are required)
-    if (field.type === "array" && foundOptionalPositional !== null) {
-      throw new PositionalConfigError(
-        `Array positional argument "${field.name}" cannot be used with optional positional argument "${foundOptionalPositional}". ` +
-          `This combination creates ambiguous parsing.`,
-      );
-    }
-
-    // Check: required positional cannot follow optional positional
-    if (foundOptionalPositional !== null && field.required) {
-      throw new PositionalConfigError(
-        `Required positional argument "${field.name}" cannot follow optional positional argument "${foundOptionalPositional}". ` +
-          `Optional positional arguments must come after all required positionals.`,
-      );
-    }
-
-    if (field.type === "array") {
-      foundArrayPositional = field.name;
-    }
-
-    if (!field.required) {
-      foundOptionalPositional = field.name;
-    }
-  }
-}
-
-/**
- * Validate that no reserved aliases are used without explicit override
- *
- * Reserved aliases:
- * - 'h' is reserved for --help
- * - 'H' is reserved for --help-all
- *
- * Users can override these by setting overrideBuiltinAlias: true
- *
- * @param extracted - Extracted fields from schema
- * @param hasSubCommands - Whether the command has subcommands
- * @throws {ReservedAliasError} If a reserved alias is used without override flag
- */
-export function validateReservedAliases(
-  extracted: ExtractedFields,
-  _hasSubCommands: boolean,
-): void {
-  for (const field of extracted.fields) {
-    // Check if field is trying to use reserved aliases without override flag
-    if (field.alias === "h" || field.alias === "H") {
-      if (field.overrideBuiltinAlias !== true) {
-        throw new ReservedAliasError(
-          `Alias "${field.alias}" is reserved for --${field.alias === "h" ? "help" : "help-all"}. ` +
-            `To override this, set { alias: "${field.alias}", overrideBuiltinAlias: true } for "${field.name}".`,
-        );
-      }
-    }
-  }
-}
-
-/**
- * Validate that no duplicate field names exist
- *
- * @param extracted - Extracted fields from schema
- * @throws {DuplicateFieldError} If duplicate field names are found
- */
-export function validateDuplicateFields(extracted: ExtractedFields): void {
-  const seenNames = new Map<string, string>();
-
-  for (const field of extracted.fields) {
-    const existingField = seenNames.get(field.name);
-    if (existingField !== undefined) {
-      throw new DuplicateFieldError(
-        `Duplicate field name "${field.name}" detected. Each field must have a unique name.`,
-      );
-    }
-    seenNames.set(field.name, field.name);
-  }
-}
-
-/**
- * Validate that no duplicate aliases exist
- *
- * Also checks for conflicts between aliases and field names
- *
- * @param extracted - Extracted fields from schema
- * @throws {DuplicateAliasError} If duplicate aliases are found or alias conflicts with field name
- */
-export function validateDuplicateAliases(extracted: ExtractedFields): void {
-  const seenAliases = new Map<string, string>();
-  const fieldNames = new Set(extracted.fields.map((f) => f.name));
-
-  for (const field of extracted.fields) {
-    if (!field.alias) continue;
-
-    // Check if alias conflicts with an existing field name
-    if (fieldNames.has(field.alias)) {
-      throw new DuplicateAliasError(
-        `Alias "${field.alias}" for field "${field.name}" conflicts with existing field name "${field.alias}".`,
-      );
-    }
-
-    // Check if alias is already used by another field
-    const existingField = seenAliases.get(field.alias);
-    if (existingField !== undefined) {
-      throw new DuplicateAliasError(
-        `Duplicate alias "${field.alias}" detected. ` +
-          `Both "${existingField}" and "${field.name}" are using the same alias.`,
-      );
-    }
-    seenAliases.set(field.alias, field.name);
-  }
 }

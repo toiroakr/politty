@@ -420,4 +420,82 @@ describe("Help Generator", () => {
       expect(result).toContain("--password");
     });
   });
+
+  describe("Kebab-case display", () => {
+    it("should display camelCase options in kebab-case", () => {
+      const cmd = defineCommand({
+        name: "kebab-cmd",
+        args: z.object({
+          dryRun: arg(z.boolean().default(false), { description: "Dry run mode" }),
+          outputDir: arg(z.string(), { description: "Output directory" }),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("--dry-run");
+      expect(result).toContain("--output-dir");
+      // Should not contain camelCase in flags
+      expect(result).not.toContain("--dryRun");
+      expect(result).not.toContain("--outputDir");
+    });
+
+    it("should display placeholder in kebab-case", () => {
+      const cmd = defineCommand({
+        name: "kebab-cmd",
+        args: z.object({
+          outputDir: arg(z.string(), { description: "Output directory" }),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("<OUTPUT-DIR>");
+    });
+  });
+
+  describe("Environment variable display", () => {
+    it("should display single env var in help", () => {
+      const cmd = defineCommand({
+        name: "env-cmd",
+        args: z.object({
+          port: arg(z.coerce.number(), { env: "PORT", description: "Server port" }),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("[env: PORT]");
+    });
+
+    it("should display multiple env vars in help", () => {
+      const cmd = defineCommand({
+        name: "env-cmd",
+        args: z.object({
+          port: arg(z.coerce.number(), {
+            env: ["PORT", "SERVER_PORT"],
+            description: "Server port",
+          }),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("[env: PORT, SERVER_PORT]");
+    });
+
+    it("should display env var with kebab-case option", () => {
+      const cmd = defineCommand({
+        name: "env-cmd",
+        args: z.object({
+          outputDir: arg(z.string(), { env: "OUTPUT_DIR", description: "Output directory" }),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("--output-dir");
+      expect(result).toContain("[env: OUTPUT_DIR]");
+    });
+  });
 });

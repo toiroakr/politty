@@ -1,8 +1,11 @@
-import {
-    extractFields, validateDuplicateAliases, validateDuplicateFields, validatePositionalConfig,
-    validateReservedAliases, type ExtractedFields
-} from "../core/schema-extractor.js";
+import { extractFields, type ExtractedFields } from "../core/schema-extractor.js";
 import type { AnyCommand } from "../types.js";
+import {
+    validateDuplicateAliases,
+    validateDuplicateFields,
+    validatePositionalConfig,
+    validateReservedAliases
+} from "../validator/command-validator.js";
 import { buildParserOptions, mergeWithPositionals, parseArgv } from "./argv-parser.js";
 
 /**
@@ -30,13 +33,26 @@ export interface ParseResult {
 }
 
 /**
+ * Options for parseArgs
+ */
+export interface ParseArgsOptions {
+  /** Skip command definition validation (useful in production where tests already verified) */
+  skipValidation?: boolean | undefined;
+}
+
+/**
  * Parse CLI arguments for a command
  *
  * @param argv - Command line arguments
  * @param command - The command to parse for
+ * @param options - Parse options
  * @returns Parse result
  */
-export function parseArgs(argv: string[], command: AnyCommand): ParseResult {
+export function parseArgs(
+  argv: string[],
+  command: AnyCommand,
+  options: ParseArgsOptions = {},
+): ParseResult {
   // Check for subcommand FIRST (before help/version)
   // This ensures `cmd subcmd --help` shows subcmd's help, not cmd's help
   const subCommandNames = command.subCommands ? Object.keys(command.subCommands) : [];
@@ -64,10 +80,13 @@ export function parseArgs(argv: string[], command: AnyCommand): ParseResult {
   let extracted: ExtractedFields | undefined;
   if (command.argsSchema) {
     extracted = extractFields(command.argsSchema);
-    validateDuplicateFields(extracted);
-    validateDuplicateAliases(extracted);
-    validatePositionalConfig(extracted);
-    validateReservedAliases(extracted, hasSubCommands);
+    // Only validate if not skipped (tests can pre-validate, production can skip)
+    if (!options.skipValidation) {
+      validateDuplicateFields(extracted);
+      validateDuplicateAliases(extracted);
+      validatePositionalConfig(extracted);
+      validateReservedAliases(extracted, hasSubCommands);
+    }
   }
 
   // Check for help/version flags only when no subcommand is detected
@@ -117,13 +136,31 @@ export function parseArgs(argv: string[], command: AnyCommand): ParseResult {
   // Merge with positionals
   const rawArgs = mergeWithPositionals(parsed, extracted);
 
+  // Apply environment variable fallbacks
+  for (const field of extracted.fields) {
+    if (field.env && rawArgs[field.name] === undefined) {
+      // Normalize to array
+      const envNames = Array.isArray(field.env) ? field.env : [field.env];
+
+      // First defined env var wins
+      for (const envName of envNames) {
+        const envValue = process.env[envName];
+        if (envValue !== undefined) {
+          rawArgs[field.name] = envValue;
+          break;
+        }
+      }
+    }
+  }
+
   // Detect unknown flags
   const knownFlags = new Set(extracted.fields.map((f) => f.name));
+  const knownCliNames = new Set(extracted.fields.map((f) => f.cliName));
   const knownAliases = new Set(extracted.fields.filter((f) => f.alias).map((f) => f.alias!));
   const unknownFlags: string[] = [];
 
   for (const key of Object.keys(parsed.options)) {
-    if (!knownFlags.has(key) && !knownAliases.has(key)) {
+    if (!knownFlags.has(key) && !knownCliNames.has(key) && !knownAliases.has(key)) {
       unknownFlags.push(key);
     }
   }

@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
-import { DuplicateAliasError, PositionalConfigError } from "../core/schema-extractor.js";
+import { DuplicateAliasError, PositionalConfigError } from "../validator/command-validator.js";
 import { parseArgs } from "./arg-parser.js";
 
 /**
@@ -632,6 +632,200 @@ describe("ArgParser", () => {
 
       expect(result.rawArgs.verbose).toBe(true);
       expect(result.rawArgs.output).toBe("out.txt");
+    });
+  });
+
+  describe("Kebab-case to camelCase conversion", () => {
+    it("should convert --dry-run to dryRun", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          dryRun: arg(z.boolean().default(false), { description: "Dry run mode" }),
+        }),
+      });
+
+      const result = parseArgs(["--dry-run"], cmd);
+
+      expect(result.rawArgs.dryRun).toBe(true);
+    });
+
+    it("should convert --output-dir to outputDir", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          outputDir: arg(z.string(), { description: "Output directory" }),
+        }),
+      });
+
+      const result = parseArgs(["--output-dir", "./dist"], cmd);
+
+      expect(result.rawArgs.outputDir).toBe("./dist");
+    });
+
+    it("should convert multiple kebab-case options", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          dryRun: arg(z.boolean().default(false)),
+          outputDir: arg(z.string().default("./out")),
+          skipTests: arg(z.boolean().default(false)),
+        }),
+      });
+
+      const result = parseArgs(["--dry-run", "--output-dir", "./build", "--skip-tests"], cmd);
+
+      expect(result.rawArgs.dryRun).toBe(true);
+      expect(result.rawArgs.outputDir).toBe("./build");
+      expect(result.rawArgs.skipTests).toBe(true);
+    });
+
+    it("should work with alias and kebab-case together", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          dryRun: arg(z.boolean().default(false), { alias: "d" }),
+          outputDir: arg(z.string().default("./out"), { alias: "o" }),
+        }),
+      });
+
+      // Use alias for dryRun, kebab-case for outputDir
+      const result = parseArgs(["-d", "--output-dir", "./build"], cmd);
+
+      expect(result.rawArgs.dryRun).toBe(true);
+      expect(result.rawArgs.outputDir).toBe("./build");
+    });
+
+    it("should support --no-kebab-case for boolean negation", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          dryRun: arg(z.boolean().default(true)),
+        }),
+      });
+
+      const result = parseArgs(["--no-dry-run"], cmd);
+
+      expect(result.rawArgs.dryRun).toBe(false);
+    });
+  });
+
+  describe("Environment variable fallback", () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it("should use environment variable when CLI arg not provided", () => {
+      process.env.MY_PORT = "8080";
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          port: arg(z.string(), { env: "MY_PORT" }),
+        }),
+      });
+
+      const result = parseArgs([], cmd);
+
+      expect(result.rawArgs.port).toBe("8080");
+    });
+
+    it("should prioritize CLI arg over environment variable", () => {
+      process.env.MY_PORT = "8080";
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          port: arg(z.string(), { env: "MY_PORT" }),
+        }),
+      });
+
+      const result = parseArgs(["--port", "3000"], cmd);
+
+      expect(result.rawArgs.port).toBe("3000");
+    });
+
+    it("should use first defined env var from array", () => {
+      process.env.PORT = "8080";
+      process.env.SERVER_PORT = "9090";
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          port: arg(z.string(), { env: ["PORT", "SERVER_PORT"] }),
+        }),
+      });
+
+      const result = parseArgs([], cmd);
+
+      expect(result.rawArgs.port).toBe("8080");
+    });
+
+    it("should fallback to second env var if first is not set", () => {
+      delete process.env.PORT;
+      process.env.SERVER_PORT = "9090";
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          port: arg(z.string(), { env: ["PORT", "SERVER_PORT"] }),
+        }),
+      });
+
+      const result = parseArgs([], cmd);
+
+      expect(result.rawArgs.port).toBe("9090");
+    });
+
+    it("should not set value if no env vars are defined", () => {
+      delete process.env.PORT;
+      delete process.env.SERVER_PORT;
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          port: arg(z.string().optional(), { env: ["PORT", "SERVER_PORT"] }),
+        }),
+      });
+
+      const result = parseArgs([], cmd);
+
+      expect(result.rawArgs.port).toBeUndefined();
+    });
+
+    it("should work with kebab-case options and env vars", () => {
+      process.env.OUTPUT_DIR = "/tmp/build";
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          outputDir: arg(z.string(), { env: "OUTPUT_DIR" }),
+        }),
+      });
+
+      const result = parseArgs([], cmd);
+
+      expect(result.rawArgs.outputDir).toBe("/tmp/build");
+    });
+
+    it("should allow CLI kebab-case to override env var", () => {
+      process.env.OUTPUT_DIR = "/tmp/build";
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          outputDir: arg(z.string(), { env: "OUTPUT_DIR" }),
+        }),
+      });
+
+      const result = parseArgs(["--output-dir", "./local"], cmd);
+
+      expect(result.rawArgs.outputDir).toBe("./local");
     });
   });
 });

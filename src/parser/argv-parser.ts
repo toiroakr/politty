@@ -191,6 +191,12 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
   const arrayFlags = new Set<string>();
 
   for (const field of extracted.fields) {
+    // Map kebab-case CLI name to camelCase field name
+    // e.g., "dry-run" → "dryRun"
+    if (field.cliName !== field.name) {
+      aliasMap.set(field.cliName, field.name);
+    }
+
     if (field.alias) {
       aliasMap.set(field.alias, field.name);
     }

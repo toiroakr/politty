@@ -207,6 +207,12 @@ export function renderOptions(
       desc += ` ${styles.required("(required)")}`;
     }
 
+    // Add environment variable info
+    const envInfo = formatEnvInfo(opt.env);
+    if (envInfo) {
+      desc += ` ${envInfo}`;
+    }
+
     lines.push(formatOption(flags, desc));
   }
 
@@ -263,6 +269,10 @@ function renderDiscriminatedUnionOptions(
       if (field.defaultValue !== undefined) {
         desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(field.defaultValue)})`)}`;
       }
+      const envInfo = formatEnvInfo(field.env);
+      if (envInfo) {
+        desc += ` ${envInfo}`;
+      }
       lines.push(formatOption(flags, desc));
     }
   }
@@ -289,6 +299,10 @@ function renderDiscriminatedUnionOptions(
         }
         if (field.required) {
           desc += ` ${styles.required("(required)")}`;
+        }
+        const envInfo = formatEnvInfo(field.env);
+        if (envInfo) {
+          desc += ` ${envInfo}`;
         }
         lines.push(formatOption(`  ${flags}`, desc));
       }
@@ -334,6 +348,10 @@ function renderUnionOptions(
       if (field.defaultValue !== undefined) {
         desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(field.defaultValue)})`)}`;
       }
+      const envInfo = formatEnvInfo(field.env);
+      if (envInfo) {
+        desc += ` ${envInfo}`;
+      }
       lines.push(formatOption(flags, desc));
     }
   }
@@ -360,6 +378,10 @@ function renderUnionOptions(
         if (field.required) {
           desc += ` ${styles.required("(required)")}`;
         }
+        const envInfo = formatEnvInfo(field.env);
+        if (envInfo) {
+          desc += ` ${envInfo}`;
+        }
         lines.push(formatOption(`  ${flags}`, desc));
       }
     }
@@ -370,6 +392,7 @@ function renderUnionOptions(
 
 /**
  * Format option flags (-v, --verbose <VALUE>)
+ * Uses cliName (kebab-case) for display
  */
 function formatFlags(opt: ResolvedFieldMeta): string {
   const parts: string[] = [];
@@ -378,17 +401,28 @@ function formatFlags(opt: ResolvedFieldMeta): string {
     parts.push(styles.option(`-${opt.alias}`));
   }
 
-  let longFlag = styles.option(`--${opt.name}`);
+  // Use cliName (kebab-case) for display
+  let longFlag = styles.option(`--${opt.cliName}`);
 
   // Add placeholder for non-boolean options
   if (opt.type !== "boolean") {
-    const placeholder = opt.placeholder ?? opt.name.toUpperCase();
+    const placeholder = opt.placeholder ?? opt.cliName.toUpperCase();
     longFlag += ` ${styles.placeholder(`<${placeholder}>`)}`;
   }
 
   parts.push(longFlag);
 
   return parts.join(", ");
+}
+
+/**
+ * Format environment variable info for help display
+ */
+function formatEnvInfo(env: string | string[] | undefined): string {
+  if (!env) return "";
+
+  const envNames = Array.isArray(env) ? env : [env];
+  return styles.dim(`[env: ${envNames.join(", ")}]`);
 }
 
 /**
@@ -447,6 +481,10 @@ function renderSubcommandOptionsCompact(command: AnyCommand, indent: number): st
       let desc = opt.description ?? "";
       if (opt.defaultValue !== undefined) {
         desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(opt.defaultValue)})`)}`;
+      }
+      const envInfo = formatEnvInfo(opt.env);
+      if (envInfo) {
+        desc += ` ${envInfo}`;
       }
       lines.push(formatOption(flags, desc, indent, 2));
     }
