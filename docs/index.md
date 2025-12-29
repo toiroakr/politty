@@ -6,19 +6,20 @@
 
 ## 特徴
 
--   **Zod ネイティブ**: 引数の定義とバリデーションに Zod スキーマをそのまま使用可能
--   **型安全性**: TypeScript を完全サポートし、パースされた引数の型を自動推論
--   **柔軟な引数定義**: Positional 引数、フラグ、エイリアス、配列をサポート
--   **ネストされたコマンド**: Git スタイルのサブコマンド構築が可能
--   **ライフサイクル管理**: `setup` → `run` → `cleanup` の実行順序を保証
+- **Zod ネイティブ**: 引数の定義とバリデーションに Zod スキーマをそのまま使用可能
+- **型安全性**: TypeScript を完全サポートし、パースされた引数の型を自動推論
+- **柔軟な引数定義**: Positional 引数、フラグ、エイリアス、配列をサポート
+- **ネストされたコマンド**: Git スタイルのサブコマンド構築が可能
+- **ライフサイクル管理**: `setup` → `run` → `cleanup` の実行順序を保証
 
 ## ドキュメント体系
 
--   **[Getting Started](./getting-started.md)**: インストールと最初のコマンド作成
--   **[Essentials](./essentials.md)**: コアコンセプト（引数、バリデーション、ライフサイクル）の解説
--   **[Advanced Features](./advanced-features.md)**: サブコマンド、Discriminated Union、高度な機能
--   **[Recipes](./recipes.md)**: テスト、設定、エラーハンドリングなどの実践例
--   **[API Reference](./api-reference.md)**: 詳細な API リファレンス
+- **[Getting Started](./getting-started.md)**: インストールと最初のコマンド作成
+- **[Essentials](./essentials.md)**: コアコンセプト（引数、バリデーション、ライフサイクル）の解説
+- **[Advanced Features](./advanced-features.md)**: サブコマンド、Discriminated Union、高度な機能
+- **[Recipes](./recipes.md)**: テスト、設定、エラーハンドリングなどの実践例
+- **[API Reference](./api-reference.md)**: 詳細な API リファレンス
+- **[Doc Generation](./doc-generation.md)**: ゴールデンテストによるドキュメント自動生成
 
 ## クイックサンプル
 
