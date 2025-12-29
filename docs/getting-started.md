@@ -59,7 +59,7 @@ const command = defineCommand({
       description: "大声で挨拶する"
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     const message = `Hello, ${args.name}!`;
     console.log(args.loud ? message.toUpperCase() : message);
   },
@@ -80,6 +80,6 @@ HELLO, WORLD!
 
 基本を理解したら、以下のガイドで詳細を確認してください：
 
--   **[Essentials](./essentials.md)**: 引数、バリデーション、ライフサイクルフックの詳細
--   **[Advanced Features](./advanced-features.md)**: サブコマンド、ネスト構造、複雑なスキーマ
--   **[Recipes](./recipes.md)**: テスト手法、エラーハンドリング、設定など
+- **[Essentials](./essentials.md)**: 引数、バリデーション、ライフサイクルフックの詳細
+- **[Advanced Features](./advanced-features.md)**: サブコマンド、ネスト構造、複雑なスキーマ
+- **[Recipes](./recipes.md)**: テスト手法、エラーハンドリング、設定など

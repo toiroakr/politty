@@ -109,7 +109,7 @@ const args = z.discriminatedUnion("mode", [
 
 const command = defineCommand({
   args,
-  run: ({ args }) => {
+  run: (args) => {
     if (args.mode === "file") {
       // ここでは args.path が有効
       console.log("Reading file:", args.path);
@@ -154,7 +154,7 @@ const command = defineCommand({
   args: sharedOptions.and(z.object({
     input: arg(z.string(), { positional: true })
   })),
-  run: ({ args }) => {
+  run: (args) => {
     // args は verbose, json, そして input を持ちます
   }
 });
@@ -198,7 +198,7 @@ const command = defineCommand({
       description: "Verbose mode"
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     // ...
   }
 });

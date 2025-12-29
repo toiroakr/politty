@@ -295,18 +295,60 @@ interface Command<TArgs, TResult> {
 
 ### `ArgMeta`
 
-引数のメタデータの型です。
+引数のメタデータの型です（union型）。
 
 ```typescript
-interface ArgMeta {
-  /** 短いエイリアス（例: 'v' で --verbose を -v として使用可能） */
-  alias?: string;
+type ArgMeta = RegularArgMeta | BuiltinOverrideArgMeta;
+```
+
+---
+
+### `BaseArgMeta`
+
+すべての引数タイプで共通のベースメタデータです。
+
+```typescript
+interface BaseArgMeta {
   /** 引数の説明 */
   description?: string;
   /** positional引数として扱う */
   positional?: boolean;
   /** ヘルプ表示用のプレースホルダー */
   placeholder?: string;
+  /**
+   * 環境変数名（単一または配列）。
+   * 配列の場合、先頭の要素が優先されます。
+   * CLI引数は常に環境変数より優先されます。
+   */
+  env?: string | string[];
+}
+```
+
+---
+
+### `RegularArgMeta`
+
+通常の引数用メタデータです。
+
+```typescript
+interface RegularArgMeta extends BaseArgMeta {
+  /** 短いエイリアス（例: 'v' で --verbose を -v として使用可能） */
+  alias?: string;
+}
+```
+
+---
+
+### `BuiltinOverrideArgMeta`
+
+組み込みエイリアス (-h, -H) をオーバーライドする場合のメタデータです。
+
+```typescript
+interface BuiltinOverrideArgMeta extends BaseArgMeta {
+  /** オーバーライドする組み込みエイリアス ('h' または 'H') */
+  alias: "h" | "H";
+  /** 組み込みエイリアスをオーバーライドするには true が必須 */
+  overrideBuiltinAlias: true;
 }
 ```
 
@@ -320,8 +362,12 @@ interface ArgMeta {
 interface MainOptions {
   /** コマンドのバージョン */
   version?: string;
-  /** デバッグモードを有効化 */
+  /** デバッグモードを有効化（エラー時にスタックトレースを表示） */
   debug?: boolean;
+  /** 実行中の console.error と console.warn の出力をキャプチャ（デフォルト: false） */
+  captureErrorLogs?: boolean;
+  /** コマンド定義のバリデーションをスキップ（本番環境でテスト済みの場合に有用） */
+  skipValidation?: boolean;
 }
 ```
 
@@ -333,8 +379,12 @@ interface MainOptions {
 
 ```typescript
 interface RunCommandOptions {
-  /** デバッグモードを有効化 */
+  /** デバッグモードを有効化（エラー時にスタックトレースを表示） */
   debug?: boolean;
+  /** 実行中の console.error と console.warn の出力をキャプチャ（デフォルト: false） */
+  captureErrorLogs?: boolean;
+  /** コマンド定義のバリデーションをスキップ（本番環境でテスト済みの場合に有用） */
+  skipValidation?: boolean;
 }
 ```
 
@@ -342,14 +392,81 @@ interface RunCommandOptions {
 
 ### `RunResult`
 
-コマンド実行結果の型です。
+コマンド実行結果の型です（discriminated union）。
 
 ```typescript
-interface RunResult<T> {
+type RunResult<T> = RunResultSuccess<T> | RunResultFailure;
+```
+
+---
+
+### `RunResultSuccess`
+
+成功時の実行結果です。
+
+```typescript
+interface RunResultSuccess<T = unknown> {
+  /** 成功を示す */
+  success: true;
   /** run関数の戻り値 */
-  result?: T;
-  /** 終了コード */
+  result: T | undefined;
+  /** エラー（成功時は存在しない） */
+  error?: never;
+  /** 終了コード（成功時は常に 0） */
+  exitCode: 0;
+  /** 実行中に収集されたログ */
+  logs: CollectedLogs;
+}
+```
+
+---
+
+### `RunResultFailure`
+
+失敗時の実行結果です。
+
+```typescript
+interface RunResultFailure {
+  /** 失敗を示す */
+  success: false;
+  /** run関数の戻り値（失敗時は存在しない） */
+  result?: never;
+  /** 発生したエラー */
+  error: Error;
+  /** 終了コード（0以外） */
   exitCode: number;
+  /** 実行中に収集されたログ */
+  logs: CollectedLogs;
+}
+```
+
+---
+
+### `CollectedLogs`
+
+実行中に収集されたログです。
+
+```typescript
+interface CollectedLogs {
+  /** エラーログ (console.error) */
+  errors: LogEntry[];
+  /** 警告ログ (console.warn) */
+  warnings: LogEntry[];
+}
+```
+
+---
+
+### `LogEntry`
+
+単一のログエントリです。
+
+```typescript
+interface LogEntry {
+  /** ログメッセージ */
+  message: string;
+  /** 記録された時刻 */
+  timestamp: Date;
 }
 ```
 
@@ -395,6 +512,44 @@ interface HelpOptions {
   showSubcommands?: boolean;
   /** サブコマンドのオプションを表示 */
   showSubcommandOptions?: boolean;
+  /** 組み込みオプションのカスタム説明 */
+  descriptions?: BuiltinOptionDescriptions;
+  /** コマンド階層のコンテキスト */
+  context?: CommandContext;
+}
+```
+
+---
+
+### `BuiltinOptionDescriptions`
+
+組み込みオプションの説明をカスタマイズするための型です。
+
+```typescript
+interface BuiltinOptionDescriptions {
+  /** --help オプションの説明 */
+  help?: string;
+  /** --help-all オプションの説明 */
+  helpAll?: string;
+  /** --version オプションの説明 */
+  version?: string;
+}
+```
+
+---
+
+### `CommandContext`
+
+コマンド階層のコンテキストです。
+
+```typescript
+interface CommandContext {
+  /** フルコマンドパス（例: ["config", "get"]） */
+  commandPath?: string[];
+  /** ルートコマンド名 */
+  rootName?: string;
+  /** ルートコマンドのバージョン */
+  rootVersion?: string;
 }
 ```
 
@@ -411,7 +566,7 @@ interface ExtractedFields {
   /** 元のスキーマ */
   schema: ArgsSchema;
   /** スキーマの種類 */
-  schemaType: "object" | "discriminatedUnion" | "union" | "intersection";
+  schemaType: "object" | "discriminatedUnion" | "union" | "xor" | "intersection";
   /** discriminatorキー（discriminatedUnionの場合） */
   discriminator?: string;
   /** バリアント（discriminatedUnionの場合） */
@@ -420,6 +575,10 @@ interface ExtractedFields {
     fields: ResolvedFieldMeta[];
     description?: string;
   }>;
+  /** オプション（unionの場合） */
+  unionOptions?: ExtractedFields[];
+  /** スキーマの説明 */
+  description?: string;
 }
 ```
 
@@ -431,8 +590,10 @@ interface ExtractedFields {
 
 ```typescript
 interface ResolvedFieldMeta {
-  /** フィールド名 */
+  /** フィールド名（camelCase、スキーマ定義時の名前） */
   name: string;
+  /** CLIオプション名（kebab-case、コマンドラインで使用） */
+  cliName: string;
   /** 短いエイリアス */
   alias?: string;
   /** 説明 */
@@ -441,6 +602,8 @@ interface ResolvedFieldMeta {
   positional: boolean;
   /** プレースホルダー */
   placeholder?: string;
+  /** 環境変数名（単一または配列） */
+  env?: string | string[];
   /** 必須かどうか */
   required: boolean;
   /** デフォルト値 */
@@ -449,6 +612,8 @@ interface ResolvedFieldMeta {
   type: "string" | "number" | "boolean" | "array" | "unknown";
   /** 元のZodスキーマ */
   schema: z.ZodType;
+  /** 組み込みエイリアス (-h, -H) をオーバーライドする場合 true */
+  overrideBuiltinAlias?: true;
 }
 ```
 
@@ -493,6 +658,69 @@ class PositionalConfigError extends Error {
 
 ---
 
+### `DuplicateAliasError`
+
+重複したエイリアスのエラーを表すエラークラスです。
+
+```typescript
+class DuplicateAliasError extends Error {
+  name: "DuplicateAliasError";
+}
+```
+
+---
+
+### `DuplicateFieldError`
+
+重複したフィールド名のエラーを表すエラークラスです。
+
+```typescript
+class DuplicateFieldError extends Error {
+  name: "DuplicateFieldError";
+}
+```
+
+---
+
+### `ReservedAliasError`
+
+予約済みエイリアス使用時のエラーを表すエラークラスです。
+
+```typescript
+class ReservedAliasError extends Error {
+  name: "ReservedAliasError";
+}
+```
+
+---
+
+### `CommandValidationError`
+
+コマンド定義のバリデーションエラーの型です。
+
+```typescript
+interface CommandValidationError {
+  /** エラーの種類 */
+  type: "positional" | "duplicateAlias" | "duplicateField" | "reservedAlias";
+  /** エラーメッセージ */
+  message: string;
+}
+```
+
+---
+
+### `CommandValidationResult`
+
+コマンド定義のバリデーション結果の型です。
+
+```typescript
+type CommandValidationResult =
+  | { success: true }
+  | { success: false; errors: CommandValidationError[] };
+```
+
+---
+
 ## エクスポート一覧
 
 ```typescript
@@ -500,31 +728,65 @@ class PositionalConfigError extends Error {
 export { defineCommand } from "./core/command.js";
 export { runMain, runCommand } from "./core/runner.js";
 export { arg, type ArgMeta } from "./core/arg-registry.js";
-
-// Utilities
-export { generateHelp, type HelpOptions } from "./output/help-generator.js";
 export {
   extractFields,
-  validatePositionalConfig,
-  PositionalConfigError,
+  toKebabCase,
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "./core/schema-extractor.js";
 
+// Utilities
+export {
+  generateHelp,
+  type BuiltinOptionDescriptions,
+  type CommandContext,
+  type HelpOptions,
+} from "./output/help-generator.js";
+export {
+  isColorEnabled,
+  logger,
+  setColorEnabled,
+  styles,
+  symbols,
+} from "./output/logger.js";
+
 // Types
 export type {
-  Command,
   AnyCommand,
-  CommandConfig,
   ArgsSchema,
-  SetupContext,
   CleanupContext,
+  CollectedLogs,
+  Command,
+  CommandBase,
+  CommandConfig,
+  LogEntry,
   MainOptions,
+  NonRunnableCommand,
   RunCommandOptions,
+  RunnableCommand,
   RunResult,
+  RunResultFailure,
+  RunResultSuccess,
+  SetupContext,
 } from "./types.js";
 
-// Validation
-export type { ValidationError, ValidationResult } from "./validator/zod-validator.js";
+// Command definition validation
+export {
+  DuplicateAliasError,
+  DuplicateFieldError,
+  formatCommandValidationErrors,
+  PositionalConfigError,
+  ReservedAliasError,
+  validateCommand,
+  validateDuplicateAliases,
+  validateDuplicateFields,
+  validatePositionalConfig,
+  validateReservedAliases,
+  type CommandValidationError,
+  type CommandValidationResult,
+} from "./validator/command-validator.js";
+
+// Zod validation
 export { formatValidationErrors } from "./validator/zod-validator.js";
+export type { ValidationError, ValidationResult } from "./validator/zod-validator.js";
 ```

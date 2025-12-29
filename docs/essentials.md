@@ -45,7 +45,6 @@ const command = defineCommand({
 
 以下では主に `arg()` を使った例を示しますが、`.meta()` でも同様に記述可能です。
 
-
 ```bash
 $ my-cli src.txt dest.txt
 ```
@@ -53,8 +52,8 @@ $ my-cli src.txt dest.txt
 #### Positional 引数のルール
 
 1.  **必須はオプションより前に**: オプション（任意）の Positional 引数の後に、必須の Positional 引数を定義することはできません。
-    -   ✅ `必須` → `任意`
-    -   ❌ `任意` → `必須`
+    - ✅ `必須` → `任意`
+    - ❌ `任意` → `必須`
 2.  **配列は最後のみ**: 配列の Positional 引数（例: `z.array(z.string())`）は定義できますが、**必ず最後**にする必要があります。残りの引数をすべて受け取ります。
 3.  **配列と任意の併用禁止**: 配列 Positional 引数を使用する場合、他のオプション（任意）Positional 引数と組み合わせることはできません（曖昧さを避けるため）。
 
@@ -75,9 +74,9 @@ args: z.object({
 })
 ```
 
--   **真偽値フラグ**: 存在するだけで `true` として扱われます（例: `--verbose`）。
--   **エイリアス**: `alias` を使って `-v` のような短縮形を定義できます。
--   **デフォルト値**: Zod の `.default()` を使用してフォールバック値を設定できます。
+- **真偽値フラグ**: 存在するだけで `true` として扱われます（例: `--verbose`）。
+- **エイリアス**: `alias` を使って `-v` のような短縮形を定義できます。
+- **デフォルト値**: Zod の `.default()` を使用してフォールバック値を設定できます。
 
 ### 配列オプション
 
@@ -93,7 +92,7 @@ args: z.object({
 ```
 
 ```bash
-$ my-cli --include file1.tx -i file2.txt
+$ my-cli --include file1.txt -i file2.txt
 # args.include = ["file1.txt", "file2.txt"]
 ```
 
@@ -144,7 +143,7 @@ const command = defineCommand({
   setup: async ({ args }) => {
     console.log("Setting up...");
   },
-  run: async ({ args }) => {
+  run: async (args) => {
     console.log("Running...");
     // throw new Error("Oops"); // ここでエラーになっても cleanup は実行される
   },
