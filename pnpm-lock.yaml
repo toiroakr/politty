@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      '@quansync/fs':
+        specifier: ^1.0.0
+        version: 1.0.0
       '@types/node':
         specifier: ^25.0.3
         version: 25.0.3
@@ -26,6 +29,9 @@ importers:
       oxlint:
         specifier: ^1.34.0
         version: 1.34.0
+      quansync:
+        specifier: ^1.0.0
+        version: 1.0.0
       tsdown:
         specifier: ^0.18.3
         version: 0.18.3(@typescript/native-preview@7.0.0-dev.20251225.1)(typescript@5.9.3)
