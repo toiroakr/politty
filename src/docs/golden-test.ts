@@ -91,6 +91,65 @@ function validateNoConflicts(filesCommands: string[], ignores: string[]): void {
 }
 
 /**
+ * Sort command paths in depth-first order while preserving the specified command order
+ * Parent commands are immediately followed by their subcommands
+ */
+function sortDepthFirst(commandPaths: string[], specifiedOrder: string[]): string[] {
+  // Build a set of all paths for quick lookup
+  const pathSet = new Set(commandPaths);
+
+  // Find top-level commands (those that match specified order or have no parent in the set)
+  const topLevelPaths = specifiedOrder.filter((cmd) => pathSet.has(cmd));
+
+  // Also include any commands not in specifiedOrder (for safety)
+  for (const path of commandPaths) {
+    const depth = path === "" ? 0 : path.split(" ").length;
+    if (depth === 1 && !topLevelPaths.includes(path)) {
+      topLevelPaths.push(path);
+    }
+  }
+
+  const result: string[] = [];
+  const visited = new Set<string>();
+
+  function addWithChildren(cmdPath: string): void {
+    if (visited.has(cmdPath) || !pathSet.has(cmdPath)) return;
+    visited.add(cmdPath);
+    result.push(cmdPath);
+
+    // Find and add direct children in alphabetical order
+    const children = commandPaths
+      .filter((p) => {
+        if (p === cmdPath || visited.has(p)) return false;
+        // Check if p is a direct child of cmdPath
+        if (cmdPath === "") {
+          return p.split(" ").length === 1;
+        }
+        return p.startsWith(cmdPath + " ") && p.split(" ").length === cmdPath.split(" ").length + 1;
+      })
+      .sort((a, b) => a.localeCompare(b));
+
+    for (const child of children) {
+      addWithChildren(child);
+    }
+  }
+
+  // Start with top-level commands in specified order
+  for (const topLevel of topLevelPaths) {
+    addWithChildren(topLevel);
+  }
+
+  // Add any remaining paths (shouldn't happen normally)
+  for (const path of commandPaths) {
+    if (!visited.has(path)) {
+      result.push(path);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Generate markdown for a file containing multiple commands
  */
 function generateFileMarkdown(
@@ -99,16 +158,12 @@ function generateFileMarkdown(
   render: RenderFunction,
   filePath?: string,
   fileMap?: Record<string, string>,
+  specifiedOrder?: string[],
 ): string {
   const sections: string[] = [];
 
-  // Sort commands by path (root first, then by depth, then alphabetically)
-  const sortedPaths = [...commandPaths].sort((a, b) => {
-    const aDepth = a === "" ? 0 : a.split(" ").length;
-    const bDepth = b === "" ? 0 : b.split(" ").length;
-    if (aDepth !== bDepth) return aDepth - bDepth;
-    return a.localeCompare(b);
-  });
+  // Sort commands depth-first while preserving specified order
+  const sortedPaths = sortDepthFirst(commandPaths, specifiedOrder ?? []);
 
   for (const cmdPath of sortedPaths) {
     const info = allCommands.get(cmdPath);
@@ -207,8 +262,15 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     // Use custom renderer if provided, otherwise default
     const render = fileConfig.render ?? defaultRenderer;
 
-    // Generate markdown with file context
-    const markdown = generateFileMarkdown(commandPaths, allCommands, render, filePath, fileMap);
+    // Generate markdown with file context (pass specifiedCommands as order hint)
+    const markdown = generateFileMarkdown(
+      commandPaths,
+      allCommands,
+      render,
+      filePath,
+      fileMap,
+      specifiedCommands,
+    );
 
     // Compare with existing file
     const comparison = compareWithExisting(markdown, filePath);
