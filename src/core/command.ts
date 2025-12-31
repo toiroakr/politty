@@ -25,6 +25,7 @@ interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResul
     args: InferArgs<TArgsSchema>;
     error?: Error | undefined;
   }) => void | Promise<void>;
+  notes?: string;
 }
 
 /**
@@ -128,5 +129,6 @@ export function defineCommand<
     setup: config.setup,
     run: config.run,
     cleanup: config.cleanup,
+    notes: config.notes,
   };
 }

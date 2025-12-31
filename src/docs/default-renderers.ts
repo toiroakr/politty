@@ -1,9 +1,15 @@
 import type { ResolvedFieldMeta } from "../core/schema-extractor.js";
 import type {
+    ArgumentsRenderContext,
     CommandInfo,
     DefaultRendererOptions,
+    OptionsRenderContext,
+    RenderContentOptions,
     RenderFunction,
-    SectionRenderFunction
+    SimpleRenderContext,
+    SubCommandInfo,
+    SubcommandsRenderContext,
+    SubcommandsRenderOptions
 } from "./types.js";
 
 /**
@@ -272,9 +278,151 @@ export function renderSubcommandsTable(info: CommandInfo, generateAnchors = true
 }
 
 /**
- * Identity function for section rendering (returns default content as-is)
+ * Render options from array as table
  */
-const identityRender: SectionRenderFunction = (content) => content;
+export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): string {
+  if (options.length === 0) {
+    return "";
+  }
+
+  // Check if any option has env configured
+  const hasEnv = options.some((opt) => opt.env);
+
+  const lines: string[] = [];
+  if (hasEnv) {
+    lines.push("| Option | Alias | Description | Default | Env |");
+    lines.push("|--------|-------|-------------|---------|-----|");
+  } else {
+    lines.push("| Option | Alias | Description | Default |");
+    lines.push("|--------|-------|-------------|---------|");
+  }
+
+  for (const opt of options) {
+    const placeholder = opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
+    const optionName =
+      opt.type === "boolean" ? `\`--${opt.cliName}\`` : `\`--${opt.cliName} <${placeholder}>\``;
+    const alias = opt.alias ? `\`-${opt.alias}\`` : "-";
+    const desc = escapeTableCell(opt.description ?? "");
+    const defaultVal = formatDefaultValue(opt.defaultValue);
+
+    if (hasEnv) {
+      const envNames = opt.env
+        ? Array.isArray(opt.env)
+          ? opt.env.map((e) => `\`${e}\``).join(", ")
+          : `\`${opt.env}\``
+        : "-";
+      lines.push(`| ${optionName} | ${alias} | ${desc} | ${defaultVal} | ${envNames} |`);
+    } else {
+      lines.push(`| ${optionName} | ${alias} | ${desc} | ${defaultVal} |`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render options from array as list
+ */
+export function renderOptionsListFromArray(options: ResolvedFieldMeta[]): string {
+  if (options.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  for (const opt of options) {
+    const flags = formatOptionFlags(opt);
+    const desc = opt.description ? ` - ${opt.description}` : "";
+    const defaultVal =
+      opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
+    const envInfo = formatEnvInfo(opt.env);
+    lines.push(`- ${flags}${desc}${defaultVal}${envInfo}`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render arguments from array as table
+ */
+export function renderArgumentsTableFromArray(args: ResolvedFieldMeta[]): string {
+  if (args.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  lines.push("| Argument | Description | Required |");
+  lines.push("|----------|-------------|----------|");
+
+  for (const arg of args) {
+    const desc = escapeTableCell(arg.description ?? "");
+    const required = arg.required ? "Yes" : "No";
+    lines.push(`| \`${arg.name}\` | ${desc} | ${required} |`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render arguments from array as list
+ */
+export function renderArgumentsListFromArray(args: ResolvedFieldMeta[]): string {
+  if (args.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  for (const arg of args) {
+    const required = arg.required ? "(required)" : "(optional)";
+    const desc = arg.description ? ` - ${arg.description}` : "";
+    lines.push(`- \`${arg.name}\`${desc} ${required}`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render subcommands from array as table
+ */
+export function renderSubcommandsTableFromArray(
+  subcommands: SubCommandInfo[],
+  info: CommandInfo,
+  generateAnchors = true,
+): string {
+  if (subcommands.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  lines.push("| Command | Description |");
+  lines.push("|---------|-------------|");
+
+  const currentFile = info.filePath;
+  const fileMap = info.fileMap;
+
+  for (const sub of subcommands) {
+    const fullName = sub.fullPath.join(" ");
+    const desc = escapeTableCell(sub.description ?? "");
+    const subCommandPath = sub.fullPath.join(" ");
+
+    if (generateAnchors) {
+      const anchor = generateAnchor(sub.fullPath);
+      const subFile = fileMap?.[subCommandPath];
+
+      if (currentFile && subFile && currentFile !== subFile) {
+        // Cross-file link
+        const relativePath = getRelativePath(currentFile, subFile);
+        lines.push(`| [\`${fullName}\`](${relativePath}#${anchor}) | ${desc} |`);
+      } else {
+        // Same-file anchor
+        lines.push(`| [\`${fullName}\`](#${anchor}) | ${desc} |`);
+      }
+    } else {
+      lines.push(`| \`${fullName}\` | ${desc} |`);
+    }
+  }
+
+  return lines.join("\n");
+}
 
 /**
  * Create command renderer with options
@@ -290,16 +438,9 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     renderArguments: customRenderArguments,
     renderOptions: customRenderOptions,
     renderSubcommands: customRenderSubcommands,
+    renderNotes: customRenderNotes,
     renderFooter: customRenderFooter,
   } = options;
-
-  // Use custom render functions or identity
-  const renderDescriptionFn = customRenderDescription ?? identityRender;
-  const renderUsageFn = customRenderUsage ?? identityRender;
-  const renderArgumentsFn = customRenderArguments ?? identityRender;
-  const renderOptionsFn = customRenderOptions ?? identityRender;
-  const renderSubcommandsFn = customRenderSubcommands ?? identityRender;
-  const renderFooterFn = customRenderFooter ?? identityRender;
 
   return (info: CommandInfo): string => {
     const lines: string[] = [];
@@ -312,8 +453,12 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
 
     // Description
     if (info.description) {
-      const defaultDescription = info.description;
-      const content = renderDescriptionFn(defaultDescription, info);
+      const context: SimpleRenderContext = {
+        content: info.description,
+        heading: h2,
+        info,
+      };
+      const content = customRenderDescription ? customRenderDescription(context) : context.content;
       if (content) {
         lines.push(content);
         lines.push("");
@@ -323,7 +468,12 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     // Usage
     {
       const defaultUsage = `${h2} Usage\n\n\`\`\`\n${renderUsage(info)}\n\`\`\``;
-      const content = renderUsageFn(defaultUsage, info);
+      const context: SimpleRenderContext = {
+        content: defaultUsage,
+        heading: h2,
+        info,
+      };
+      const content = customRenderUsage ? customRenderUsage(context) : context.content;
       if (content) {
         lines.push(content);
         lines.push("");
@@ -332,10 +482,26 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
 
     // Arguments
     if (info.positionalArgs.length > 0) {
-      const argsContent =
-        optionStyle === "table" ? renderArgumentsTable(info) : renderArgumentsList(info);
-      const defaultArguments = `${h2} Arguments\n\n${argsContent}`;
-      const content = renderArgumentsFn(defaultArguments, info);
+      const renderArgs = (args: ResolvedFieldMeta[], opts?: RenderContentOptions): string => {
+        const style = opts?.style ?? optionStyle;
+        const withHeading = opts?.withHeading ?? true;
+        const content =
+          style === "table"
+            ? renderArgumentsTableFromArray(args)
+            : renderArgumentsListFromArray(args);
+        return withHeading ? `${h2} Arguments\n\n${content}` : content;
+      };
+
+      const context: ArgumentsRenderContext = {
+        args: info.positionalArgs,
+        render: renderArgs,
+        heading: h2,
+        info,
+      };
+
+      const content = customRenderArguments
+        ? customRenderArguments(context)
+        : renderArgs(context.args);
       if (content) {
         lines.push(content);
         lines.push("");
@@ -344,10 +510,24 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
 
     // Options
     if (info.options.length > 0) {
-      const optionsContent =
-        optionStyle === "table" ? renderOptionsTable(info) : renderOptionsList(info);
-      const defaultOptions = `${h2} Options\n\n${optionsContent}`;
-      const content = renderOptionsFn(defaultOptions, info);
+      const renderOpts = (opts: ResolvedFieldMeta[], renderOpts?: RenderContentOptions): string => {
+        const style = renderOpts?.style ?? optionStyle;
+        const withHeading = renderOpts?.withHeading ?? true;
+        const content =
+          style === "table" ? renderOptionsTableFromArray(opts) : renderOptionsListFromArray(opts);
+        return withHeading ? `${h2} Options\n\n${content}` : content;
+      };
+
+      const context: OptionsRenderContext = {
+        options: info.options,
+        render: renderOpts,
+        heading: h2,
+        info,
+      };
+
+      const content = customRenderOptions
+        ? customRenderOptions(context)
+        : renderOpts(context.options);
       if (content) {
         lines.push(content);
         lines.push("");
@@ -356,12 +536,39 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
 
     // Subcommands
     if (info.subCommands.length > 0) {
-      const subcommandsContent = renderSubcommandsTable(
+      const effectiveAnchors = generateAnchors && includeSubcommandDetails;
+
+      const renderSubs = (subs: SubCommandInfo[], opts?: SubcommandsRenderOptions): string => {
+        const anchors = opts?.generateAnchors ?? effectiveAnchors;
+        const withHeading = opts?.withHeading ?? true;
+        const content = renderSubcommandsTableFromArray(subs, info, anchors);
+        return withHeading ? `${h2} Commands\n\n${content}` : content;
+      };
+
+      const context: SubcommandsRenderContext = {
+        subcommands: info.subCommands,
+        render: renderSubs,
+        heading: h2,
         info,
-        generateAnchors && includeSubcommandDetails,
-      );
-      const defaultSubcommands = `${h2} Commands\n\n${subcommandsContent}`;
-      const content = renderSubcommandsFn(defaultSubcommands, info);
+      };
+
+      const content = customRenderSubcommands
+        ? customRenderSubcommands(context)
+        : renderSubs(context.subcommands);
+      if (content) {
+        lines.push(content);
+        lines.push("");
+      }
+    }
+
+    // Notes
+    if (info.notes) {
+      const context: SimpleRenderContext = {
+        content: `${h2} Notes\n\n${info.notes}`,
+        heading: h2,
+        info,
+      };
+      const content = customRenderNotes ? customRenderNotes(context) : context.content;
       if (content) {
         lines.push(content);
         lines.push("");
@@ -370,7 +577,12 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
 
     // Footer (default is empty)
     {
-      const content = renderFooterFn("", info);
+      const context: SimpleRenderContext = {
+        content: "",
+        heading: h2,
+        info,
+      };
+      const content = customRenderFooter ? customRenderFooter(context) : context.content;
       if (content) {
         lines.push(content);
         lines.push("");

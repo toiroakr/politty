@@ -11,6 +11,8 @@ export interface CommandInfo {
   description?: string | undefined;
   /** Full command path (e.g., "my-cli config get") */
   fullCommandPath: string;
+  /** Command path relative to root (e.g., "" for root, "config" for subcommand) */
+  commandPath: string;
   /** Positional arguments */
   positionalArgs: ResolvedFieldMeta[];
   /** Options (non-positional arguments) */
@@ -21,6 +23,8 @@ export interface CommandInfo {
   extracted: ExtractedFields | null;
   /** Original command object */
   command: AnyCommand;
+  /** Additional notes (markdown) */
+  notes?: string | undefined;
   /** File path where this command is rendered (for cross-file links) */
   filePath?: string | undefined;
   /** Map of command path to file path (for cross-file links) */
@@ -45,12 +49,91 @@ export interface SubCommandInfo {
 export type RenderFunction = (info: CommandInfo) => string;
 
 /**
- * Section render function type
+ * Section render function type (legacy)
  * @param defaultContent - The default rendered content for this section
  * @param info - Command information
  * @returns The final content to render (return empty string to hide section)
+ * @deprecated Use context-based render functions instead
  */
 export type SectionRenderFunction = (defaultContent: string, info: CommandInfo) => string;
+
+/**
+ * Render options for options/arguments
+ */
+export interface RenderContentOptions {
+  /** Style for rendering */
+  style?: "table" | "list";
+  /** Include heading (default: true) */
+  withHeading?: boolean;
+}
+
+/**
+ * Options render context
+ */
+export interface OptionsRenderContext {
+  /** Options to render */
+  options: ResolvedFieldMeta[];
+  /** Render function that accepts options and optional rendering options */
+  render: (options: ResolvedFieldMeta[], opts?: RenderContentOptions) => string;
+  /** Heading prefix (e.g., "###") */
+  heading: string;
+  /** Command information */
+  info: CommandInfo;
+}
+export type OptionsRenderFunction = (context: OptionsRenderContext) => string;
+
+/**
+ * Arguments render context
+ */
+export interface ArgumentsRenderContext {
+  /** Arguments to render */
+  args: ResolvedFieldMeta[];
+  /** Render function that accepts arguments and optional rendering options */
+  render: (args: ResolvedFieldMeta[], opts?: RenderContentOptions) => string;
+  /** Heading prefix (e.g., "###") */
+  heading: string;
+  /** Command information */
+  info: CommandInfo;
+}
+export type ArgumentsRenderFunction = (context: ArgumentsRenderContext) => string;
+
+/**
+ * Subcommands render options
+ */
+export interface SubcommandsRenderOptions {
+  /** Generate anchor links */
+  generateAnchors?: boolean;
+  /** Include heading (default: true) */
+  withHeading?: boolean;
+}
+
+/**
+ * Subcommands render context
+ */
+export interface SubcommandsRenderContext {
+  /** Subcommands to render */
+  subcommands: SubCommandInfo[];
+  /** Render function that accepts subcommands and optional rendering options */
+  render: (subcommands: SubCommandInfo[], opts?: SubcommandsRenderOptions) => string;
+  /** Heading prefix (e.g., "###") */
+  heading: string;
+  /** Command information */
+  info: CommandInfo;
+}
+export type SubcommandsRenderFunction = (context: SubcommandsRenderContext) => string;
+
+/**
+ * Simple section render context (for description, usage, notes, footer)
+ */
+export interface SimpleRenderContext {
+  /** Default content */
+  content: string;
+  /** Heading prefix (e.g., "###") */
+  heading: string;
+  /** Command information */
+  info: CommandInfo;
+}
+export type SimpleRenderFunction = (context: SimpleRenderContext) => string;
 
 /**
  * Default renderer customization options
@@ -65,17 +148,19 @@ export interface DefaultRendererOptions {
   /** Include subcommand details */
   includeSubcommandDetails?: boolean;
   /** Custom renderer for description section */
-  renderDescription?: SectionRenderFunction;
+  renderDescription?: SimpleRenderFunction;
   /** Custom renderer for usage section */
-  renderUsage?: SectionRenderFunction;
+  renderUsage?: SimpleRenderFunction;
   /** Custom renderer for arguments section */
-  renderArguments?: SectionRenderFunction;
+  renderArguments?: ArgumentsRenderFunction;
   /** Custom renderer for options section */
-  renderOptions?: SectionRenderFunction;
+  renderOptions?: OptionsRenderFunction;
   /** Custom renderer for subcommands section */
-  renderSubcommands?: SectionRenderFunction;
+  renderSubcommands?: SubcommandsRenderFunction;
+  /** Custom renderer for notes section */
+  renderNotes?: SimpleRenderFunction;
   /** Custom renderer for footer (default content is empty) */
-  renderFooter?: SectionRenderFunction;
+  renderFooter?: SimpleRenderFunction;
 }
 
 /**
@@ -86,6 +171,10 @@ export interface FileConfig {
   commands: string[];
   /** Custom renderer for this file (optional) */
   render?: RenderFunction;
+  /** File title (prepended to the file content) */
+  title?: string;
+  /** File description (added after title) */
+  description?: string;
 }
 
 /**

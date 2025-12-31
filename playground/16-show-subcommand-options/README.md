@@ -37,25 +37,6 @@ git-like config [command]
 
 ---
 
-# remote
-
-リモートを管理
-
-## Usage
-
-```
-git-like remote [command]
-```
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| [`remote add`](#remote-add) | リモートを追加 |
-| [`remote remove`](#remote-remove) | リモートを削除 |
-
----
-
 # get
 
 設定値を取得
@@ -109,6 +90,25 @@ git-like config set <key> <value>
 |----------|-------------|----------|
 | `key` | 設定キー | Yes |
 | `value` | 設定値 | Yes |
+
+---
+
+# remote
+
+リモートを管理
+
+## Usage
+
+```
+git-like remote [command]
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| [`remote add`](#remote-add) | リモートを追加 |
+| [`remote remove`](#remote-remove) | リモートを削除 |
 
 ---
 

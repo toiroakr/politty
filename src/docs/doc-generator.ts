@@ -44,11 +44,13 @@ export async function buildCommandInfo(
     name: command.name ?? "",
     description: command.description,
     fullCommandPath: commandPath.length > 0 ? `${rootName} ${commandPath.join(" ")}` : rootName,
+    commandPath: commandPath.join(" "),
     positionalArgs,
     options,
     subCommands,
     extracted,
     command,
+    notes: command.notes,
   };
 }
 

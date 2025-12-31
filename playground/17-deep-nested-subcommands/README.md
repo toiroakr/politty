@@ -54,25 +54,6 @@ git-like config core [command]
 
 ---
 
-# user
-
-ユーザー設定を管理
-
-## Usage
-
-```
-git-like config user [command]
-```
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| [`config user get`](#config-user-get) | ユーザー設定値を取得 |
-| [`config user set`](#config-user-set) | ユーザー設定値を設定 |
-
----
-
 # get
 
 コア設定値を取得
@@ -107,6 +88,25 @@ git-like config core set <key> <value>
 |----------|-------------|----------|
 | `key` | 設定キー | Yes |
 | `value` | 設定値 | Yes |
+
+---
+
+# user
+
+ユーザー設定を管理
+
+## Usage
+
+```
+git-like config user [command]
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| [`config user get`](#config-user-get) | ユーザー設定値を取得 |
+| [`config user set`](#config-user-set) | ユーザー設定値を設定 |
 
 ---
 

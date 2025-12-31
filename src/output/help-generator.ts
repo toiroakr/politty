@@ -605,5 +605,10 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
     }
   }
 
+  // Notes
+  if (command.notes) {
+    sections.push(`${styles.sectionHeader("Notes:")}\n${command.notes}`);
+  }
+
   return sections.join("\n\n");
 }

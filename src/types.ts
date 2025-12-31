@@ -72,6 +72,8 @@ export interface CommandConfig<
       TArgsSchema extends z.ZodType ? z.infer<TArgsSchema> : Record<string, never>
     >,
   ) => void | Promise<void>;
+  /** Additional notes (markdown) displayed after description in help and docs */
+  notes?: string;
 }
 
 /**
@@ -98,6 +100,8 @@ export interface CommandBase<
   setup?: ((context: SetupContext<TArgs>) => void | Promise<void>) | undefined;
   /** Cleanup hook */
   cleanup?: ((context: CleanupContext<TArgs>) => void | Promise<void>) | undefined;
+  /** Additional notes (markdown) */
+  notes?: string | undefined;
 }
 
 /**

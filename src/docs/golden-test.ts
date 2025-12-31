@@ -150,6 +150,27 @@ function sortDepthFirst(commandPaths: string[], specifiedOrder: string[]): strin
 }
 
 /**
+ * Generate file header from FileConfig
+ */
+function generateFileHeader(fileConfig: FileConfig): string | null {
+  if (!fileConfig.title && !fileConfig.description) {
+    return null;
+  }
+
+  const parts: string[] = [];
+  if (fileConfig.title) {
+    parts.push(`# ${fileConfig.title}`);
+  }
+  if (fileConfig.description) {
+    parts.push("");
+    parts.push(fileConfig.description);
+  }
+  parts.push("");
+
+  return parts.join("\n");
+}
+
+/**
  * Generate markdown for a file containing multiple commands
  */
 function generateFileMarkdown(
@@ -159,8 +180,15 @@ function generateFileMarkdown(
   filePath?: string,
   fileMap?: Record<string, string>,
   specifiedOrder?: string[],
+  fileConfig?: FileConfig,
 ): string {
   const sections: string[] = [];
+
+  // Add file header if title or description is provided
+  const header = fileConfig ? generateFileHeader(fileConfig) : null;
+  if (header) {
+    sections.push(header);
+  }
 
   // Sort commands depth-first while preserving specified order
   const sortedPaths = sortDepthFirst(commandPaths, specifiedOrder ?? []);
@@ -270,6 +298,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       filePath,
       fileMap,
       specifiedCommands,
+      fileConfig,
     );
 
     // Compare with existing file

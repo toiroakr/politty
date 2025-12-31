@@ -396,8 +396,8 @@ describe("default-renderers", () => {
 
       const info = await buildCommandInfo(cmd, "test");
       const renderer = createCommandRenderer({
-        renderOptions: (defaultContent) =>
-          `${defaultContent}\n\n**Custom Section:**\n\nSome custom content.`,
+        renderOptions: ({ options, render }) =>
+          `${render(options)}\n\n**Custom Section:**\n\nSome custom content.`,
       });
       const markdown = renderer(info);
 
@@ -423,6 +423,26 @@ describe("default-renderers", () => {
 
       expect(markdown).not.toContain("## Options");
       expect(markdown).not.toContain("--flag");
+    });
+
+    it("should support renderOptions with custom style", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v", description: "Verbose mode" }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const renderer = createCommandRenderer({
+        optionStyle: "table",
+        renderOptions: ({ options, render }) => render(options, { style: "list" }),
+      });
+      const markdown = renderer(info);
+
+      expect(markdown).toContain("- `-v`");
+      expect(markdown).not.toContain("| Option |");
     });
 
     it("should support renderFooter to add custom footer", async () => {
