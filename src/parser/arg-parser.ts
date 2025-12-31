@@ -78,8 +78,8 @@ export function parseArgs(
   // Extract fields from schema and validate BEFORE checking help flags
   // This ensures validation errors are thrown even when --help is used
   let extracted: ExtractedFields | undefined;
-  if (command.argsSchema) {
-    extracted = extractFields(command.argsSchema);
+  if (command.args) {
+    extracted = extractFields(command.args);
     // Only validate if not skipped (tests can pre-validate, production can skip)
     if (!options.skipValidation) {
       validateDuplicateFields(extracted);

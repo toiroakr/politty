@@ -28,7 +28,7 @@ describe("defineCommand", () => {
       });
 
       expect(cmd.name).toBe("minimal");
-      expect(cmd.argsSchema).toBeUndefined();
+      expect(cmd.args).toBeUndefined();
     });
   });
 
@@ -42,7 +42,7 @@ describe("defineCommand", () => {
         }),
       });
 
-      expect(cmd.argsSchema).toBeDefined();
+      expect(cmd.args).toBeDefined();
     });
 
     it("should infer args type in run function", () => {
@@ -72,7 +72,7 @@ describe("defineCommand", () => {
         }),
       });
 
-      expect(cmd.argsSchema).toBeDefined();
+      expect(cmd.args).toBeDefined();
     });
 
     it("should support placeholders for help via arg() helper", () => {
@@ -83,7 +83,7 @@ describe("defineCommand", () => {
         }),
       });
 
-      expect(cmd.argsSchema).toBeDefined();
+      expect(cmd.args).toBeDefined();
     });
   });
 
@@ -248,7 +248,7 @@ describe("defineCommand", () => {
         },
       });
 
-      expect(cmd.argsSchema).toBeDefined();
+      expect(cmd.args).toBeDefined();
     });
   });
 

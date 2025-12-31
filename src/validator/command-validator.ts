@@ -306,8 +306,8 @@ export async function validateCommand(
   const hasSubCommands = command.subCommands ? Object.keys(command.subCommands).length > 0 : false;
 
   // Validate current command's schema
-  if (command.argsSchema) {
-    const extracted = extractFields(command.argsSchema);
+  if (command.args) {
+    const extracted = extractFields(command.args);
     errors.push(...collectSchemaErrors(extracted, hasSubCommands, commandPath));
   }
 

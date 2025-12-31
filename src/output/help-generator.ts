@@ -57,10 +57,10 @@ export interface HelpOptions {
  * Get extracted fields from command
  */
 function getExtractedFields(command: AnyCommand): ExtractedFields | null {
-  if (!command.argsSchema) {
+  if (!command.args) {
     return null;
   }
-  return extractFields(command.argsSchema);
+  return extractFields(command.args);
 }
 
 /**

@@ -208,8 +208,8 @@ const realCommand1 = defineCommand({
 // Verify type inference for real command
 const _rc1Name: string = realCommand1.name;
 const _rc1Result: string = realCommand1.run({ name: "test", count: 5 });
-// argsSchema preserves the original schema type
-type RC1Schema = typeof realCommand1.argsSchema;
+// args preserves the original schema type
+type RC1Schema = typeof realCommand1.args;
 type RC1Inferred = z.infer<NonNullable<RC1Schema>>;
 const _rc1Args: RC1Inferred = { name: "hello", count: 10 };
 console.log(_rc1Name, _rc1Result, _rc1Args);
@@ -224,8 +224,8 @@ const realCommand2 = defineCommand({
 
 const _rc2Name: string = realCommand2.name;
 const _rc2Result: number = realCommand2.run({});
-// argsSchema is undefined when args is not provided
-const _rc2Schema: undefined = realCommand2.argsSchema;
+// args is undefined when not provided in config
+const _rc2Schema: undefined = realCommand2.args;
 console.log(_rc2Name, _rc2Result, _rc2Schema);
 
 // Test 9: defineCommand without run (non-runnable)
@@ -239,8 +239,8 @@ const realCommand3 = defineCommand({
 const _rc3Name: string = realCommand3.name;
 // run is undefined
 const _rc3Run: undefined = realCommand3.run;
-// argsSchema is preserved
-type RC3Schema = typeof realCommand3.argsSchema;
+// args is preserved
+type RC3Schema = typeof realCommand3.args;
 type RC3Inferred = z.infer<NonNullable<RC3Schema>>;
 const _rc3Args: RC3Inferred = { verbose: true };
 console.log(_rc3Name, _rc3Run, _rc3Args);

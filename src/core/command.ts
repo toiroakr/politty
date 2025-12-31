@@ -124,7 +124,7 @@ export function defineCommand<
   return {
     name: config.name,
     description: config.description,
-    argsSchema: config.args as TArgsSchema,
+    args: config.args as TArgsSchema,
     subCommands: config.subCommands,
     setup: config.setup,
     run: config.run,

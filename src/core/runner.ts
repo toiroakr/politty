@@ -245,7 +245,7 @@ async function runCommandInternal<TResult = unknown>(
     }
 
     // Validate arguments
-    if (!command.argsSchema) {
+    if (!command.args) {
       // No schema, run with empty args
       // Stop this collector and pass logs to executeLifecycle
       collector?.stop();
@@ -257,7 +257,7 @@ async function runCommandInternal<TResult = unknown>(
       return result as RunResult<TResult>;
     }
 
-    const validationResult = validateArgs(parseResult.rawArgs, command.argsSchema);
+    const validationResult = validateArgs(parseResult.rawArgs, command.args);
 
     if (!validationResult.success) {
       logger.error(formatValidationErrors(validationResult.errors));

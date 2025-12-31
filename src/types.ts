@@ -90,7 +90,7 @@ export interface CommandBase<
   /** Command description */
   description?: string | undefined;
   /** Argument schema (preserves the original Zod schema type) */
-  argsSchema: TArgsSchema;
+  args: TArgsSchema;
   /** Subcommands */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   subCommands?:

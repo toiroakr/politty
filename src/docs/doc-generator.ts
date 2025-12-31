@@ -22,7 +22,7 @@ export async function buildCommandInfo(
   rootName: string,
   commandPath: string[] = [],
 ): Promise<CommandInfo> {
-  const extracted = command.argsSchema ? extractFields(command.argsSchema) : null;
+  const extracted = command.args ? extractFields(command.args) : null;
 
   const positionalArgs = extracted?.fields.filter((f) => f.positional) ?? [];
   const options = extracted?.fields.filter((f) => !f.positional) ?? [];
@@ -86,8 +86,8 @@ export async function collectAllCommands(
  * Get extracted fields from command
  */
 export function getExtractedFields(command: AnyCommand): ExtractedFields | null {
-  if (!command.argsSchema) {
+  if (!command.args) {
     return null;
   }
-  return extractFields(command.argsSchema);
+  return extractFields(command.args);
 }
