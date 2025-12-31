@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ArgsSchema } from "../types.js";
+import type { AnyCommand, ArgsSchema } from "../types.js";
 import { getArgMeta as getArgMetaFromRegistry, type ArgMeta } from "./arg-registry.js";
 
 /**
@@ -355,9 +355,9 @@ function extractFromDiscriminatedUnion(schema: z.ZodType): ExtractedFields {
 }
 
 /**
- * Extract fields from a union
+ * Extract fields from a union-like schema (union or xor)
  */
-function extractFromUnion(schema: z.ZodType): ExtractedFields {
+function extractFromUnionLike(schema: z.ZodType, schemaType: "union" | "xor"): ExtractedFields {
   const s = schema as ZodSchemaWithDef;
   const def = s.def ?? s._def;
   const options = def?.options ?? [];
@@ -384,43 +384,7 @@ function extractFromUnion(schema: z.ZodType): ExtractedFields {
   return {
     fields: Array.from(allFieldsMap.values()),
     schema: schema as ArgsSchema,
-    schemaType: "union",
-    unionOptions,
-    ...(description ? { description } : {}),
-  };
-}
-
-/**
- * Extract fields from an xor (exclusive union)
- */
-function extractFromXor(schema: z.ZodType): ExtractedFields {
-  const s = schema as ZodSchemaWithDef;
-  const def = s.def ?? s._def;
-  const options = def?.options ?? [];
-
-  // Collect all unique fields across all options
-  const allFieldsMap = new Map<string, ResolvedFieldMeta>();
-  const unionOptions: ExtractedFields[] = [];
-
-  for (const option of options) {
-    // Extract fields for this option recursively
-    // We cast to ArgsSchema because we expect options to be objects or other supported types
-    const extracted = extractFields(option as ArgsSchema);
-    unionOptions.push(extracted);
-
-    // Add to combined fields map
-    for (const field of extracted.fields) {
-      if (!allFieldsMap.has(field.name)) {
-        allFieldsMap.set(field.name, field);
-      }
-    }
-  }
-
-  const description = extractDescription(schema);
-  return {
-    fields: Array.from(allFieldsMap.values()),
-    schema: schema as ArgsSchema,
-    schemaType: "xor",
+    schemaType,
     unionOptions,
     ...(description ? { description } : {}),
   };
@@ -488,10 +452,10 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
       if (def?.discriminator) {
         return extractFromDiscriminatedUnion(schema);
       }
-      return extractFromUnion(schema);
+      return extractFromUnionLike(schema, "union");
 
     case "xor":
-      return extractFromXor(schema);
+      return extractFromUnionLike(schema, "xor");
 
     case "intersection":
       return extractFromIntersection(schema);
@@ -510,28 +474,14 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
 }
 
 /**
- * Get all positional fields (sorted by order of definition)
+ * Get extracted fields from a command
+ *
+ * @param command - The command to extract fields from
+ * @returns Extracted field information, or null if command has no args schema
  */
-export function getPositionalFields(extracted: ExtractedFields): ResolvedFieldMeta[] {
-  return extracted.fields.filter((f) => f.positional);
-}
-
-/**
- * Get all option fields (non-positional)
- */
-export function getOptionFields(extracted: ExtractedFields): ResolvedFieldMeta[] {
-  return extracted.fields.filter((f) => !f.positional);
-}
-
-/**
- * Build alias map from extracted fields
- */
-export function buildAliasMap(extracted: ExtractedFields): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const field of extracted.fields) {
-    if (field.alias) {
-      map.set(field.alias, field.name);
-    }
+export function getExtractedFields(command: AnyCommand): ExtractedFields | null {
+  if (!command.args) {
+    return null;
   }
-  return map;
+  return extractFields(command.args);
 }

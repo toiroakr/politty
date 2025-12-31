@@ -1,18 +1,7 @@
-import { extractFields, type ExtractedFields } from "../core/schema-extractor.js";
+import { getExtractedFields } from "../core/schema-extractor.js";
+import { resolveLazyCommand } from "../executor/subcommand-router.js";
 import type { AnyCommand } from "../types.js";
 import type { CommandInfo, SubCommandInfo } from "./types.js";
-
-/**
- * Resolve lazy-loaded subcommand
- */
-export async function resolveSubcommand(
-  subCmd: AnyCommand | (() => Promise<AnyCommand>),
-): Promise<AnyCommand> {
-  if (typeof subCmd === "function") {
-    return await subCmd();
-  }
-  return subCmd;
-}
 
 /**
  * Build CommandInfo from a command
@@ -22,7 +11,7 @@ export async function buildCommandInfo(
   rootName: string,
   commandPath: string[] = [],
 ): Promise<CommandInfo> {
-  const extracted = command.args ? extractFields(command.args) : null;
+  const extracted = getExtractedFields(command);
 
   const positionalArgs = extracted?.fields.filter((f) => f.positional) ?? [];
   const options = extracted?.fields.filter((f) => !f.positional) ?? [];
@@ -30,7 +19,7 @@ export async function buildCommandInfo(
   const subCommands: SubCommandInfo[] = [];
   if (command.subCommands) {
     for (const [name, subCmd] of Object.entries(command.subCommands)) {
-      const resolved = await resolveSubcommand(subCmd);
+      const resolved = await resolveLazyCommand(subCmd);
       const fullPath = [...commandPath, name];
       subCommands.push({
         name,
@@ -72,7 +61,7 @@ export async function collectAllCommands(
 
     if (cmd.subCommands) {
       for (const [name, subCmd] of Object.entries(cmd.subCommands)) {
-        const resolved = await resolveSubcommand(subCmd);
+        const resolved = await resolveLazyCommand(subCmd);
         await traverse(resolved, [...path, name]);
       }
     }
@@ -80,14 +69,4 @@ export async function collectAllCommands(
 
   await traverse(command, []);
   return result;
-}
-
-/**
- * Get extracted fields from command
- */
-export function getExtractedFields(command: AnyCommand): ExtractedFields | null {
-  if (!command.args) {
-    return null;
-  }
-  return extractFields(command.args);
 }

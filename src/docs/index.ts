@@ -1,5 +1,7 @@
 // Main API
 // Default renderers
+// Re-export from subcommand-router for convenience
+export { resolveLazyCommand } from "../executor/subcommand-router.js";
 export {
     createCommandRenderer,
     defaultRenderers,
@@ -18,7 +20,7 @@ export {
 // Comparator utilities
 export { compareWithExisting, formatDiff, writeFile } from "./doc-comparator.js";
 // Document generator utilities
-export { buildCommandInfo, collectAllCommands, resolveSubcommand } from "./doc-generator.js";
+export { buildCommandInfo, collectAllCommands } from "./doc-generator.js";
 export { assertDocMatch, generateDoc } from "./golden-test.js";
 export { UPDATE_GOLDEN_ENV } from "./types.js";
 // Types

@@ -1,5 +1,5 @@
 import { executeLifecycle } from "../executor/command-runner.js";
-import { createLogCollector, emptyLogs } from "../executor/log-collector.js";
+import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collector.js";
 import { listSubCommands, resolveSubcommand } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
@@ -143,10 +143,7 @@ async function runCommandInternal<TResult = unknown>(
   const getCurrentLogs = (): CollectedLogs => {
     const existingLogs = options._existingLogs ?? emptyLogs();
     const collectedLogs = collector?.getLogs() ?? emptyLogs();
-    return {
-      errors: [...existingLogs.errors, ...collectedLogs.errors],
-      warnings: [...existingLogs.warnings, ...collectedLogs.warnings],
-    };
+    return mergeLogs(existingLogs, collectedLogs);
   };
 
   try {

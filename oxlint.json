@@ -2,13 +2,19 @@
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "ignorePatterns": ["dist", "node_modules", "coverage"],
   "rules": {
-    "no-restricted-imports": ["error", { "patterns": ["**/tests/utils/**"] }]
+    "no-restricted-imports": ["error", { "patterns": ["**/tests/utils/**", "**/docs/**"] }]
   },
   "overrides": [
     {
       "files": ["**/*.test.ts", "**/*.test.tsx"],
       "rules": {
         "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": ["src/docs/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": ["**/tests/utils/**"] }]
       }
     }
   ]

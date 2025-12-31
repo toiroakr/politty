@@ -32,7 +32,6 @@ export type {
     // Command types
     Command,
     CommandBase,
-    CommandConfig,
     LogEntry,
     // Logger type
     Logger,

@@ -18,11 +18,6 @@ export interface Logger {
 export type ArgsSchema = z.ZodType<Record<string, any>>;
 
 /**
- * Default empty args schema type (used when args is not provided)
- */
-export type EmptyArgsSchema = z.ZodObject<Record<string, never>>;
-
-/**
  * Context provided to setup function
  */
 export interface SetupContext<TArgs = unknown> {
@@ -38,42 +33,6 @@ export interface CleanupContext<TArgs = unknown> {
   args: TArgs;
   /** Error if command execution failed */
   error?: Error | undefined;
-}
-
-/**
- * Command configuration options
- */
-export interface CommandConfig<
-  TArgsSchema extends ArgsSchema | undefined = undefined,
-  TResult = void,
-> {
-  /** Command name (required) */
-  name: string;
-  /** Command description */
-  description?: string;
-  /** Argument schema (ZodObject, ZodDiscriminatedUnion, etc.) */
-  args?: TArgsSchema;
-  /** Subcommands (supports lazy loading) */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  subCommands?: Record<string, Command<any, any> | (() => Promise<Command<any, any>>)>;
-  /** Setup hook called before run */
-  setup?: (
-    context: SetupContext<
-      TArgsSchema extends z.ZodType ? z.infer<TArgsSchema> : Record<string, never>
-    >,
-  ) => void | Promise<void>;
-  /** Main run function */
-  run?: (
-    args: TArgsSchema extends z.ZodType ? z.infer<TArgsSchema> : Record<string, never>,
-  ) => TResult;
-  /** Cleanup hook called after run */
-  cleanup?: (
-    context: CleanupContext<
-      TArgsSchema extends z.ZodType ? z.infer<TArgsSchema> : Record<string, never>
-    >,
-  ) => void | Promise<void>;
-  /** Additional notes displayed in help and documentation */
-  notes?: string;
 }
 
 /**

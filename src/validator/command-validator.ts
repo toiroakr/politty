@@ -1,4 +1,5 @@
 import { extractFields, type ExtractedFields } from "../core/schema-extractor.js";
+import { resolveLazyCommand } from "../executor/subcommand-router.js";
 import type { AnyCommand } from "../types.js";
 import {
     DuplicateAliasError,
@@ -39,6 +40,153 @@ export interface ValidateCommandOptions {
   commandPath?: string[];
 }
 
+// ============================================================================
+// Private check functions (single source of truth for validation logic)
+// ============================================================================
+
+/**
+ * Check for duplicate field names
+ */
+function checkDuplicateFields(
+  extracted: ExtractedFields,
+  commandPath: string[],
+): CommandValidationError[] {
+  const errors: CommandValidationError[] = [];
+  const seenNames = new Map<string, string>();
+
+  for (const field of extracted.fields) {
+    if (seenNames.has(field.name)) {
+      errors.push({
+        commandPath,
+        type: "duplicate_field",
+        message: `Duplicate field name "${field.name}" detected.`,
+        field: field.name,
+      });
+    }
+    seenNames.set(field.name, field.name);
+  }
+  return errors;
+}
+
+/**
+ * Check for duplicate aliases and alias-field name conflicts
+ */
+function checkDuplicateAliases(
+  extracted: ExtractedFields,
+  commandPath: string[],
+): CommandValidationError[] {
+  const errors: CommandValidationError[] = [];
+  const seenAliases = new Map<string, string>();
+  const fieldNames = new Set(extracted.fields.map((f) => f.name));
+
+  for (const field of extracted.fields) {
+    if (!field.alias) continue;
+
+    // Check if alias conflicts with an existing field name
+    if (fieldNames.has(field.alias)) {
+      errors.push({
+        commandPath,
+        type: "duplicate_alias",
+        message: `Alias "${field.alias}" for field "${field.name}" conflicts with existing field name "${field.alias}".`,
+        field: field.name,
+      });
+    }
+
+    // Check if alias is already used by another field
+    const existingField = seenAliases.get(field.alias);
+    if (existingField) {
+      errors.push({
+        commandPath,
+        type: "duplicate_alias",
+        message: `Duplicate alias "${field.alias}" detected. Both "${existingField}" and "${field.name}" use the same alias.`,
+        field: field.name,
+      });
+    }
+    seenAliases.set(field.alias, field.name);
+  }
+  return errors;
+}
+
+/**
+ * Check positional argument configuration
+ */
+function checkPositionalConfig(
+  extracted: ExtractedFields,
+  commandPath: string[],
+): CommandValidationError[] {
+  const errors: CommandValidationError[] = [];
+  const positionalFields = extracted.fields.filter((f) => f.positional);
+
+  let foundArrayPositional: string | null = null;
+  let foundOptionalPositional: string | null = null;
+
+  for (const field of positionalFields) {
+    // Check: no positional can follow array positional
+    if (foundArrayPositional !== null) {
+      errors.push({
+        commandPath,
+        type: "positional_config",
+        message: `Positional argument "${field.name}" cannot follow array positional argument "${foundArrayPositional}".`,
+        field: field.name,
+      });
+    }
+
+    // Check: array positional cannot coexist with optional positional
+    if (field.type === "array" && foundOptionalPositional !== null) {
+      errors.push({
+        commandPath,
+        type: "positional_config",
+        message: `Array positional "${field.name}" cannot be used with optional positional "${foundOptionalPositional}" (ambiguous parsing).`,
+        field: field.name,
+      });
+    }
+
+    // Check: required positional cannot follow optional positional
+    if (foundOptionalPositional !== null && field.required) {
+      errors.push({
+        commandPath,
+        type: "positional_config",
+        message: `Required positional "${field.name}" cannot follow optional positional "${foundOptionalPositional}".`,
+        field: field.name,
+      });
+    }
+
+    if (field.type === "array") {
+      foundArrayPositional = field.name;
+    }
+    if (!field.required) {
+      foundOptionalPositional = field.name;
+    }
+  }
+  return errors;
+}
+
+/**
+ * Check for reserved aliases used without override flag
+ */
+function checkReservedAliases(
+  extracted: ExtractedFields,
+  commandPath: string[],
+): CommandValidationError[] {
+  const errors: CommandValidationError[] = [];
+
+  for (const field of extracted.fields) {
+    if ((field.alias === "h" || field.alias === "H") && field.overrideBuiltinAlias !== true) {
+      errors.push({
+        commandPath,
+        type: "reserved_alias",
+        message: `Alias "${field.alias}" is reserved for --${field.alias === "h" ? "help" : "help-all"}.`,
+        field: field.name,
+      });
+    }
+  }
+  return errors;
+}
+
+// ============================================================================
+// Public throwing validators (for runtime validation)
+// ============================================================================
+
 /**
  * Validate that no duplicate field names exist
  *
@@ -46,16 +194,12 @@ export interface ValidateCommandOptions {
  * @throws {DuplicateFieldError} If duplicate field names are found
  */
 export function validateDuplicateFields(extracted: ExtractedFields): void {
-  const seenNames = new Map<string, string>();
-
-  for (const field of extracted.fields) {
-    const existingField = seenNames.get(field.name);
-    if (existingField !== undefined) {
-      throw new DuplicateFieldError(
-        `Duplicate field name "${field.name}" detected. Each field must have a unique name.`,
-      );
-    }
-    seenNames.set(field.name, field.name);
+  const errors = checkDuplicateFields(extracted, []);
+  if (errors.length > 0) {
+    const field = errors[0]?.field ?? "unknown";
+    throw new DuplicateFieldError(
+      `Duplicate field name "${field}" detected. Each field must have a unique name.`,
+    );
   }
 }
 
@@ -68,28 +212,10 @@ export function validateDuplicateFields(extracted: ExtractedFields): void {
  * @throws {DuplicateAliasError} If duplicate aliases are found or alias conflicts with field name
  */
 export function validateDuplicateAliases(extracted: ExtractedFields): void {
-  const seenAliases = new Map<string, string>();
-  const fieldNames = new Set(extracted.fields.map((f) => f.name));
-
-  for (const field of extracted.fields) {
-    if (!field.alias) continue;
-
-    // Check if alias conflicts with an existing field name
-    if (fieldNames.has(field.alias)) {
-      throw new DuplicateAliasError(
-        `Alias "${field.alias}" for field "${field.name}" conflicts with existing field name "${field.alias}".`,
-      );
-    }
-
-    // Check if alias is already used by another field
-    const existingField = seenAliases.get(field.alias);
-    if (existingField !== undefined) {
-      throw new DuplicateAliasError(
-        `Duplicate alias "${field.alias}" detected. ` +
-          `Both "${existingField}" and "${field.name}" are using the same alias.`,
-      );
-    }
-    seenAliases.set(field.alias, field.name);
+  const errors = checkDuplicateAliases(extracted, []);
+  if (errors.length > 0) {
+    const err = errors[0]!;
+    throw new DuplicateAliasError(err.message);
   }
 }
 
@@ -106,44 +232,10 @@ export function validateDuplicateAliases(extracted: ExtractedFields): void {
  * @throws {PositionalConfigError} If configuration is invalid
  */
 export function validatePositionalConfig(extracted: ExtractedFields): void {
-  const positionalFields = extracted.fields.filter((f) => f.positional);
-
-  let foundArrayPositional: string | null = null;
-  let foundOptionalPositional: string | null = null;
-
-  for (const field of positionalFields) {
-    // Check: no positional can follow array positional
-    if (foundArrayPositional !== null) {
-      throw new PositionalConfigError(
-        `Positional argument "${field.name}" cannot follow array positional argument "${foundArrayPositional}". ` +
-          `Array positional arguments must be the last positional.`,
-      );
-    }
-
-    // Check: array positional cannot coexist with optional positional
-    // (This check must come before "required after optional" because arrays are required)
-    if (field.type === "array" && foundOptionalPositional !== null) {
-      throw new PositionalConfigError(
-        `Array positional argument "${field.name}" cannot be used with optional positional argument "${foundOptionalPositional}". ` +
-          `This combination creates ambiguous parsing.`,
-      );
-    }
-
-    // Check: required positional cannot follow optional positional
-    if (foundOptionalPositional !== null && field.required) {
-      throw new PositionalConfigError(
-        `Required positional argument "${field.name}" cannot follow optional positional argument "${foundOptionalPositional}". ` +
-          `Optional positional arguments must come after all required positionals.`,
-      );
-    }
-
-    if (field.type === "array") {
-      foundArrayPositional = field.name;
-    }
-
-    if (!field.required) {
-      foundOptionalPositional = field.name;
-    }
+  const errors = checkPositionalConfig(extracted, []);
+  if (errors.length > 0) {
+    const err = errors[0]!;
+    throw new PositionalConfigError(err.message);
   }
 }
 
@@ -164,18 +256,21 @@ export function validateReservedAliases(
   extracted: ExtractedFields,
   _hasSubCommands: boolean,
 ): void {
-  for (const field of extracted.fields) {
-    // Check if field is trying to use reserved aliases without override flag
-    if (field.alias === "h" || field.alias === "H") {
-      if (field.overrideBuiltinAlias !== true) {
-        throw new ReservedAliasError(
-          `Alias "${field.alias}" is reserved for --${field.alias === "h" ? "help" : "help-all"}. ` +
-            `To override this, set { alias: "${field.alias}", overrideBuiltinAlias: true } for "${field.name}".`,
-        );
-      }
-    }
+  const errors = checkReservedAliases(extracted, []);
+  if (errors.length > 0) {
+    const err = errors[0]!;
+    const field = err.field ?? "unknown";
+    const alias = extracted.fields.find((f) => f.name === field)?.alias ?? "h";
+    throw new ReservedAliasError(
+      `Alias "${alias}" is reserved for --${alias === "h" ? "help" : "help-all"}. ` +
+        `To override this, set { alias: "${alias}", overrideBuiltinAlias: true } for "${field}".`,
+    );
   }
 }
+
+// ============================================================================
+// Non-throwing validators (for collecting all errors)
+// ============================================================================
 
 /**
  * Collect validation errors for a single command's schema (non-throwing)
@@ -185,98 +280,12 @@ function collectSchemaErrors(
   _hasSubCommands: boolean,
   commandPath: string[],
 ): CommandValidationError[] {
-  const errors: CommandValidationError[] = [];
-
-  // Check duplicate fields
-  const seenNames = new Map<string, string>();
-  for (const field of extracted.fields) {
-    if (seenNames.has(field.name)) {
-      errors.push({
-        commandPath,
-        type: "duplicate_field",
-        message: `Duplicate field name "${field.name}" detected.`,
-        field: field.name,
-      });
-    }
-    seenNames.set(field.name, field.name);
-  }
-
-  // Check duplicate aliases
-  const seenAliases = new Map<string, string>();
-  const fieldNames = new Set(extracted.fields.map((f) => f.name));
-  for (const field of extracted.fields) {
-    if (!field.alias) continue;
-    if (fieldNames.has(field.alias)) {
-      errors.push({
-        commandPath,
-        type: "duplicate_alias",
-        message: `Alias "${field.alias}" for field "${field.name}" conflicts with existing field name.`,
-        field: field.name,
-      });
-    }
-    const existingField = seenAliases.get(field.alias);
-    if (existingField) {
-      errors.push({
-        commandPath,
-        type: "duplicate_alias",
-        message: `Duplicate alias "${field.alias}" detected. Both "${existingField}" and "${field.name}" use the same alias.`,
-        field: field.name,
-      });
-    }
-    seenAliases.set(field.alias, field.name);
-  }
-
-  // Check positional config
-  const positionalFields = extracted.fields.filter((f) => f.positional);
-  let foundArrayPositional: string | null = null;
-  let foundOptionalPositional: string | null = null;
-
-  for (const field of positionalFields) {
-    if (foundArrayPositional !== null) {
-      errors.push({
-        commandPath,
-        type: "positional_config",
-        message: `Positional argument "${field.name}" cannot follow array positional argument "${foundArrayPositional}".`,
-        field: field.name,
-      });
-    }
-    if (field.type === "array" && foundOptionalPositional !== null) {
-      errors.push({
-        commandPath,
-        type: "positional_config",
-        message: `Array positional "${field.name}" cannot be used with optional positional "${foundOptionalPositional}".`,
-        field: field.name,
-      });
-    }
-    if (foundOptionalPositional !== null && field.required) {
-      errors.push({
-        commandPath,
-        type: "positional_config",
-        message: `Required positional "${field.name}" cannot follow optional positional "${foundOptionalPositional}".`,
-        field: field.name,
-      });
-    }
-    if (field.type === "array") {
-      foundArrayPositional = field.name;
-    }
-    if (!field.required) {
-      foundOptionalPositional = field.name;
-    }
-  }
-
-  // Check reserved aliases
-  for (const field of extracted.fields) {
-    if ((field.alias === "h" || field.alias === "H") && field.overrideBuiltinAlias !== true) {
-      errors.push({
-        commandPath,
-        type: "reserved_alias",
-        message: `Alias "${field.alias}" is reserved for --${field.alias === "h" ? "help" : "help-all"}.`,
-        field: field.name,
-      });
-    }
-  }
-
-  return errors;
+  return [
+    ...checkDuplicateFields(extracted, commandPath),
+    ...checkDuplicateAliases(extracted, commandPath),
+    ...checkPositionalConfig(extracted, commandPath),
+    ...checkReservedAliases(extracted, commandPath),
+  ];
 }
 
 /**
@@ -314,7 +323,7 @@ export async function validateCommand(
   // Recursively validate subcommands
   if (command.subCommands) {
     for (const [name, subCmd] of Object.entries(command.subCommands)) {
-      const resolvedSubCmd = typeof subCmd === "function" ? await subCmd() : subCmd;
+      const resolvedSubCmd = await resolveLazyCommand(subCmd);
       const subResult = await validateCommand(resolvedSubCmd, {
         commandPath: [...commandPath, name],
       });

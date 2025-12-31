@@ -1,5 +1,5 @@
 import {
-    extractFields,
+    getExtractedFields,
     type ExtractedFields,
     type ResolvedFieldMeta
 } from "../core/schema-extractor.js";
@@ -51,16 +51,6 @@ export interface HelpOptions {
   descriptions?: BuiltinOptionDescriptions | undefined;
   /** Command hierarchy context */
   context?: CommandContext | undefined;
-}
-
-/**
- * Get extracted fields from command
- */
-function getExtractedFields(command: AnyCommand): ExtractedFields | null {
-  if (!command.args) {
-    return null;
-  }
-  return extractFields(command.args);
 }
 
 /**

@@ -114,13 +114,3 @@ export function arg<T extends z.ZodType, M extends ArgMeta>(
 export function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
   return argRegistry.get(schema);
 }
-
-/**
- * Check if a schema has metadata registered
- *
- * @param schema - The Zod schema
- * @returns true if metadata is registered
- */
-export function hasArgMeta(schema: z.ZodType): boolean {
-  return argRegistry.has(schema);
-}

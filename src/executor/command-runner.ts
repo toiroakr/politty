@@ -5,7 +5,7 @@ import type {
     RunResult,
     SetupContext
 } from "../types.js";
-import { createLogCollector, emptyLogs } from "./log-collector.js";
+import { createLogCollector, emptyLogs, mergeLogs } from "./log-collector.js";
 
 /**
  * Options for lifecycle execution
@@ -127,10 +127,7 @@ export async function executeLifecycle<TResult = unknown>(
   // Merge existing logs with collected logs
   const existingLogs = _options.existingLogs ?? emptyLogs();
   const collectedLogs = collector?.getLogs() ?? emptyLogs();
-  const logs: CollectedLogs = {
-    errors: [...existingLogs.errors, ...collectedLogs.errors],
-    warnings: [...existingLogs.warnings, ...collectedLogs.warnings],
-  };
+  const logs = mergeLogs(existingLogs, collectedLogs);
 
   if (error) {
     return {

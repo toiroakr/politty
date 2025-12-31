@@ -18,3 +18,6 @@ pre-commit:
     typecheck:
       glob: "*.{ts,tsx,cts,mts}"
       run: pnpm typecheck
+    knip:
+      glob: "*.{ts,tsx,cts,mts}"
+      run: pnpm knip

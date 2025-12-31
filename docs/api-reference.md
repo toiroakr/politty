@@ -9,16 +9,36 @@ politty が提供する関数と型の詳細なリファレンスです。
 コマンドを定義します。
 
 ```typescript
-function defineCommand<TArgsSchema, TResult>(
-  config: CommandConfig<TArgsSchema, TResult>
-): Command<TArgs, TResult>
+function defineCommand<TArgsSchema, TResult>(config: {
+  name: string;
+  description?: string;
+  args?: TArgsSchema;
+  subCommands?: Record<string, Command | (() => Promise<Command>)>;
+  setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
+  run?: (args: TArgs) => TResult | Promise<TResult>;
+  cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
+  notes?: string;
+}): Command<TArgs, TResult>
 ```
 
 #### パラメータ
 
-| 名前     | 型              | 説明           |
-| -------- | --------------- | -------------- |
-| `config` | `CommandConfig` | コマンドの設定 |
+| 名前     | 型       | 説明           |
+| -------- | -------- | -------------- |
+| `config` | `object` | コマンドの設定 |
+
+**config のプロパティ:**
+
+| プロパティ    | 型                                                          | 説明                                     |
+| ------------- | ----------------------------------------------------------- | ---------------------------------------- |
+| `name`        | `string`                                                    | コマンド名（必須）                       |
+| `description` | `string`                                                    | コマンドの説明                           |
+| `args`        | `TArgsSchema`                                               | 引数スキーマ（Zodスキーマ）              |
+| `subCommands` | `Record<string, Command \| (() => Promise<Command>)>`       | サブコマンド（遅延読み込み対応）         |
+| `setup`       | `(context: SetupContext<TArgs>) => void \| Promise<void>`   | 初期化フック                             |
+| `run`         | `(args: TArgs) => TResult \| Promise<TResult>`              | メイン処理                               |
+| `cleanup`     | `(context: CleanupContext<TArgs>) => void \| Promise<void>` | 終了フック                               |
+| `notes`       | `string`                                                    | 追加の注釈（ヘルプとドキュメントに表示） |
 
 #### 使用例
 
@@ -248,33 +268,6 @@ function formatValidationErrors(errors: ValidationError[]): string
 ---
 
 ## 型
-
-### `CommandConfig`
-
-`defineCommand` に渡す設定オブジェクトの型です。
-
-```typescript
-interface CommandConfig<TArgsSchema, TResult> {
-  /** コマンド名（必須） */
-  name: string;
-  /** 説明 */
-  description?: string;
-  /** 引数スキーマ */
-  args?: TArgsSchema;
-  /** サブコマンド */
-  subCommands?: Record<string, Command | (() => Promise<Command>)>;
-  /** 初期化フック */
-  setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
-  /** メイン処理 */
-  run?: (args: TArgs) => TResult | Promise<TResult>;
-  /** 終了フック */
-  cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
-  /** 追加の注釈（ヘルプとドキュメントに表示） */
-  notes?: string;
-}
-```
-
----
 
 ### `Command`
 
@@ -781,7 +774,6 @@ export type {
   CollectedLogs,
   Command,
   CommandBase,
-  CommandConfig,
   LogEntry,
   Logger,
   MainOptions,
