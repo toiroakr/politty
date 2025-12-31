@@ -269,6 +269,8 @@ interface CommandConfig<TArgsSchema, TResult> {
   run?: (args: TArgs) => TResult | Promise<TResult>;
   /** 終了フック */
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
+  /** 追加の注釈（ヘルプとドキュメントに表示） */
+  notes?: string;
 }
 ```
 
@@ -288,6 +290,8 @@ interface Command<TArgs, TResult> {
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
   run?: (args: TArgs) => TResult | Promise<TResult>;
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
+  /** 追加の注釈 */
+  notes?: string;
 }
 ```
 
@@ -354,6 +358,21 @@ interface BuiltinOverrideArgMeta extends BaseArgMeta {
 
 ---
 
+### `Logger`
+
+CLI出力用のロガーインターフェースです。
+
+```typescript
+interface Logger {
+  /** 標準出力にメッセージを出力 */
+  log(message: string): void;
+  /** 標準エラー出力にメッセージを出力 */
+  error(message: string): void;
+}
+```
+
+---
+
 ### `MainOptions`
 
 `runMain` に渡すオプションの型です。
@@ -368,6 +387,8 @@ interface MainOptions {
   captureErrorLogs?: boolean;
   /** コマンド定義のバリデーションをスキップ（本番環境でテスト済みの場合に有用） */
   skipValidation?: boolean;
+  /** カスタムロガー（デフォルト: console） */
+  logger?: Logger;
 }
 ```
 
@@ -385,6 +406,8 @@ interface RunCommandOptions {
   captureErrorLogs?: boolean;
   /** コマンド定義のバリデーションをスキップ（本番環境でテスト済みの場合に有用） */
   skipValidation?: boolean;
+  /** カスタムロガー（デフォルト: console） */
+  logger?: Logger;
 }
 ```
 
@@ -760,6 +783,7 @@ export type {
   CommandBase,
   CommandConfig,
   LogEntry,
+  Logger,
   MainOptions,
   NonRunnableCommand,
   RunCommandOptions,

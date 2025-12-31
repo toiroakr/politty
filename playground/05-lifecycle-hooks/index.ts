@@ -13,6 +13,8 @@ import { arg, defineCommand, runMain } from "../../src/index.js";
 export const command = defineCommand({
   name: "db-query",
   description: "データベースクエリの実行（ライフサイクルフックのデモ）",
+  notes: `このコマンドは setup → run → cleanup の実行順序を示します。
+--simulate-error フラグを使用すると、エラー発生時でも cleanup が呼ばれることを確認できます。`,
   args: z.object({
     database: arg(z.string(), {
       alias: "d",

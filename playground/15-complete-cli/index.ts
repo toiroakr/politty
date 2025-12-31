@@ -38,6 +38,7 @@ export const initCommand = defineCommand({
 export const cli = defineCommand({
   name: "my-tool",
   description: "完全なCLIツールの例",
+  notes: "サブコマンド、ライフサイクルフック、複数の出力形式をサポートしています。",
   args: z.object({
     input: arg(z.string(), {
       positional: true,

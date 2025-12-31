@@ -17,6 +17,8 @@ import { arg, defineCommand, runMain } from "../../src/index.js";
 export const command = defineCommand({
   name: "resource",
   description: "リソースを管理（discriminatedUnionの例）",
+  notes: `--action の値によって使用可能なオプションが変わります。
+create: --name, --template / delete: --id, --force / list: --format, --limit`,
   args: z
     .discriminatedUnion("action", [
       // create アクション

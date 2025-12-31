@@ -23,7 +23,7 @@ export interface CommandInfo {
   extracted: ExtractedFields | null;
   /** Original command object */
   command: AnyCommand;
-  /** Additional notes (markdown) */
+  /** Additional notes */
   notes?: string | undefined;
   /** File path where this command is rendered (for cross-file links) */
   filePath?: string | undefined;

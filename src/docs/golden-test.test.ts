@@ -114,6 +114,9 @@ describe("golden-test", () => {
     });
 
     it("should report diff when content does not match", async () => {
+      // Ensure update mode is disabled for this test
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
       const filePath = path.join(testDir, "cli.md");
       fs.writeFileSync(filePath, "# Old content\n", "utf-8");
 
@@ -374,6 +377,9 @@ describe("golden-test", () => {
     });
 
     it("should throw when documentation does not match", async () => {
+      // Ensure update mode is disabled for this test
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
       const filePath = path.join(testDir, "cli.md");
       fs.writeFileSync(filePath, "# Wrong content\n", "utf-8");
 
