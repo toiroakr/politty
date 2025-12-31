@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -350,6 +351,136 @@ describe("golden-test", () => {
       // Main file should have relative link to nested config.md
       const mainContent = fs.readFileSync(mainPath, "utf-8");
       expect(mainContent).toContain("[`config`](commands/config.md#config)");
+    });
+
+    it("should apply sync formatter before comparison", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "formatted.md");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: [""] },
+        formatter: (content) => content + "\n<!-- formatted -->\n",
+      });
+
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("# test-cli");
+      expect(content).toContain("<!-- formatted -->");
+    });
+
+    it("should apply async formatter before comparison", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "formatted-async.md");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: [""] },
+        formatter: async (content) => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          return content.toUpperCase();
+        },
+      });
+
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("# TEST-CLI");
+    });
+
+    it("should work without formatter (undefined)", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "no-formatter.md");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: [""] },
+      });
+
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("# test-cli");
+    });
+
+    it("should compare formatted content correctly", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "formatted-compare.md");
+      const formatter = (content: string) => content + "\n<!-- formatted -->\n";
+
+      // Create formatted file
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: [""] },
+        formatter,
+      });
+
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      // Compare with same formatter - should match
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: [""] },
+        formatter,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("match");
+    });
+
+    it("should propagate formatter errors", async () => {
+      const filePath = path.join(testDir, "error.md");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          files: { [filePath]: [""] },
+          formatter: () => {
+            throw new Error("Formatter error");
+          },
+        }),
+      ).rejects.toThrow("Formatter error");
+    });
+
+    it("should format with oxfmt", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "oxfmt-formatted.md");
+
+      const oxfmtFormatter = (content: string) => {
+        return execSync("pnpm oxfmt --stdin-filepath=file.md", {
+          input: content,
+          encoding: "utf-8",
+        });
+      };
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: [""] },
+        formatter: oxfmtFormatter,
+      });
+
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("# test-cli");
+
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      // Compare with same formatter - should match
+      const matchResult = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: [""] },
+        formatter: oxfmtFormatter,
+      });
+
+      expect(matchResult.success).toBe(true);
+      expect(matchResult.files[0]?.status).toBe("match");
     });
   });
 

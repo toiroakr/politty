@@ -19,7 +19,7 @@ export {
 export { compareWithExisting, formatDiff, writeFile } from "./doc-comparator.js";
 // Document generator utilities
 export { buildCommandInfo, collectAllCommands, resolveSubcommand } from "./doc-generator.js";
-export { assertDocMatch } from "./golden-test.js";
+export { assertDocMatch, generateDoc } from "./golden-test.js";
 export { UPDATE_GOLDEN_ENV } from "./types.js";
 // Types
 export type {
@@ -29,6 +29,7 @@ export type {
     DefaultRendererOptions,
     FileConfig,
     FileMapping,
+    FormatterFunction,
     GenerateDocConfig,
     GenerateDocResult,
     OptionsRenderContext,

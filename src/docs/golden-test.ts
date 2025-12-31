@@ -4,11 +4,26 @@ import { collectAllCommands } from "./doc-generator.js";
 import type {
     CommandInfo,
     FileConfig,
+    FormatterFunction,
     GenerateDocConfig,
     GenerateDocResult,
     RenderFunction
 } from "./types.js";
 import { UPDATE_GOLDEN_ENV } from "./types.js";
+
+/**
+ * Apply formatter to content if provided
+ * Supports both sync and async formatters
+ */
+async function applyFormatter(
+  content: string,
+  formatter: FormatterFunction | undefined,
+): Promise<string> {
+  if (!formatter) {
+    return content;
+  }
+  return await formatter(content);
+}
 
 /**
  * Check if update mode is enabled via environment variable
@@ -243,7 +258,7 @@ function buildFileMap(
  * Generate documentation from command definition
  */
 export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDocResult> {
-  const { command, files, ignores = [], format = {} } = config;
+  const { command, files, ignores = [], format = {}, formatter } = config;
   const updateMode = isUpdateMode();
 
   // Collect all commands
@@ -291,7 +306,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     const render = fileConfig.render ?? defaultRenderer;
 
     // Generate markdown with file context (pass specifiedCommands as order hint)
-    const markdown = generateFileMarkdown(
+    const rawMarkdown = generateFileMarkdown(
       commandPaths,
       allCommands,
       render,
@@ -300,6 +315,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       specifiedCommands,
       fileConfig,
     );
+
+    // Apply formatter if provided
+    const markdown = await applyFormatter(rawMarkdown, formatter);
 
     // Compare with existing file
     const comparison = compareWithExisting(markdown, filePath);

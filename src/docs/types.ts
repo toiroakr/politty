@@ -203,6 +203,8 @@ export interface GenerateDocConfig {
   ignores?: string[];
   /** Default renderer options (used when render is not specified per file) */
   format?: DefaultRendererOptions;
+  /** Formatter function to apply to generated content before comparison */
+  formatter?: FormatterFunction;
 }
 
 /**
@@ -223,6 +225,12 @@ export interface GenerateDocResult {
   /** Error message (when success is false) */
   error?: string | undefined;
 }
+
+/**
+ * Formatter function type
+ * Formats generated content before comparison
+ */
+export type FormatterFunction = (content: string) => string | Promise<string>;
 
 /**
  * Environment variable name for update mode
