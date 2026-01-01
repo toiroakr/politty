@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { oxfmtFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("05-lifecycle-hooks", () => {
@@ -82,6 +83,7 @@ describe("05-lifecycle-hooks", () => {
     await assertDocMatch({
       command,
       files: { "playground/05-lifecycle-hooks/README.md": [""] },
+      formatter: oxfmtFormatter,
     });
   });
 });

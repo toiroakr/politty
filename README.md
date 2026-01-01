@@ -240,15 +240,15 @@ const command = defineCommand({
 
 コマンドを定義します。
 
-| オプション | 型 | 説明 |
-|-----------|------|------|
-| `name` | `string` | コマンド名 |
-| `description` | `string?` | コマンドの説明 |
-| `args` | `ZodSchema` | 引数のスキーマ |
-| `subCommands` | `Record<string, Command>?` | サブコマンド |
-| `setup` | `(context) => Promise<void>?` | セットアップフック |
-| `run` | `(context) => Promise<T>?` | 実行関数 |
-| `cleanup` | `(context) => Promise<void>?` | クリーンアップフック |
+| オプション    | 型                            | 説明                 |
+| ------------- | ----------------------------- | -------------------- |
+| `name`        | `string`                      | コマンド名           |
+| `description` | `string?`                     | コマンドの説明       |
+| `args`        | `ZodSchema`                   | 引数のスキーマ       |
+| `subCommands` | `Record<string, Command>?`    | サブコマンド         |
+| `setup`       | `(context) => Promise<void>?` | セットアップフック   |
+| `run`         | `(context) => Promise<T>?`    | 実行関数             |
+| `cleanup`     | `(context) => Promise<void>?` | クリーンアップフック |
 
 ### `runMain(command, options?)`
 
@@ -278,13 +278,13 @@ if (result.success) {
 
 引数にメタデータを付与します。
 
-| メタデータ | 型 | 説明 |
-|-----------|------|------|
-| `positional` | `boolean?` | Positional 引数として扱う |
-| `alias` | `string?` | 短いエイリアス（例: `-v`） |
-| `description` | `string?` | 引数の説明 |
-| `placeholder` | `string?` | ヘルプに表示するプレースホルダー |
-| `env` | `string?` | 環境変数名（フォールバック用） |
+| メタデータ    | 型         | 説明                             |
+| ------------- | ---------- | -------------------------------- |
+| `positional`  | `boolean?` | Positional 引数として扱う        |
+| `alias`       | `string?`  | 短いエイリアス（例: `-v`）       |
+| `description` | `string?`  | 引数の説明                       |
+| `placeholder` | `string?`  | ヘルプに表示するプレースホルダー |
+| `env`         | `string?`  | 環境変数名（フォールバック用）   |
 
 ## ドキュメント
 

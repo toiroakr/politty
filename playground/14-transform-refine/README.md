@@ -10,10 +10,10 @@ validation-demo [command]
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| [`transform`](#transform) | transformを使った変換の例 |
-| [`refine`](#refine) | refineを使ったカスタムバリデーションの例 |
+| Command                   | Description                              |
+| ------------------------- | ---------------------------------------- |
+| [`transform`](#transform) | transformを使った変換の例                |
+| [`refine`](#refine)       | refineを使ったカスタムバリデーションの例 |
 
 ---
 
@@ -29,10 +29,10 @@ validation-demo refine <input> <output>
 
 ## Arguments
 
-| Argument | Description | Required |
-|----------|-------------|----------|
-| `input` | 入力ファイル | Yes |
-| `output` | 出力ファイル | Yes |
+| Argument | Description  | Required |
+| -------- | ------------ | -------- |
+| `input`  | 入力ファイル | Yes      |
+| `output` | 出力ファイル | Yes      |
 
 ---
 
@@ -48,12 +48,12 @@ validation-demo transform [options] <name>
 
 ## Arguments
 
-| Argument | Description | Required |
-|----------|-------------|----------|
-| `name` | 名前（大文字に変換される） | Yes |
+| Argument | Description                | Required |
+| -------- | -------------------------- | -------- |
+| `name`   | 名前（大文字に変換される） | Yes      |
 
 ## Options
 
-| Option | Alias | Description | Default |
-|--------|-------|-------------|---------|
-| `--tags <TAGS>` | `-t` | カンマ区切りのタグ | - |
+| Option          | Alias | Description        | Default |
+| --------------- | ----- | ------------------ | ------- |
+| `--tags <TAGS>` | `-t`  | カンマ区切りのタグ | -       |

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { oxfmtFormatter } from "../../tests/utils/formatter.js";
 import { main } from "./index.js";
 
 describe("19-xor-types", () => {
@@ -59,6 +60,7 @@ describe("19-xor-types", () => {
     await assertDocMatch({
       command: main,
       files: { "playground/19-xor-types/README.md": [""] },
+      formatter: oxfmtFormatter,
     });
   });
 });

@@ -10,7 +10,7 @@ process-files [options]
 
 ## Options
 
-| Option | Alias | Description | Default |
-|--------|-------|-------------|---------|
-| `--files <FILES>` | `-f` | 処理するファイル（複数指定可） | - |
-| `--verbose` | `-v` | 詳細出力 | `false` |
+| Option            | Alias | Description                    | Default |
+| ----------------- | ----- | ------------------------------ | ------- |
+| `--files <FILES>` | `-f`  | 処理するファイル（複数指定可） | -       |
+| `--verbose`       | `-v`  | 詳細出力                       | `false` |

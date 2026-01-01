@@ -12,7 +12,7 @@ pre-commit:
       stage_fixed: true
       priority: 2
     oxfmt:
-      glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
+      glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc,md}"
       run: pnpm fix:oxfmt {staged_files}
       stage_fixed: true
     typecheck:

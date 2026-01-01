@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { oxfmtFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("06-cp-command", () => {
@@ -62,6 +63,7 @@ describe("06-cp-command", () => {
     await assertDocMatch({
       command,
       files: { "playground/06-cp-command/README.md": [""] },
+      formatter: oxfmtFormatter,
     });
   });
 });

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { oxfmtFormatter } from "../../tests/utils/formatter.js";
 import { cli, configGetCommand, configListCommand, configSetCommand } from "./index.js";
 
 describe("11-nested-subcommands", () => {
@@ -105,6 +106,7 @@ describe("11-nested-subcommands", () => {
     await assertDocMatch({
       command: cli,
       files: { "playground/11-nested-subcommands/README.md": [""] },
+      formatter: oxfmtFormatter,
     });
   });
 });

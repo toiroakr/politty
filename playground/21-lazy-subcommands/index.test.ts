@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { oxfmtFormatter } from "../../tests/utils/formatter.js";
 import { cli, statusCommand } from "./index.js";
 
 describe("21-lazy-subcommands", () => {
@@ -122,6 +123,7 @@ describe("21-lazy-subcommands", () => {
     await assertDocMatch({
       command: cli,
       files: { "playground/21-lazy-subcommands/README.md": [""] },
+      formatter: oxfmtFormatter,
     });
   });
 });
