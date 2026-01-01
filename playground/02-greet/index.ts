@@ -27,6 +27,11 @@ export const command = defineCommand({
       description: "大文字で出力",
     }),
   }),
+  examples: [
+    { args: ["World"], description: "Basic greeting" },
+    { args: ["World", "-g", "Hi"], description: "Custom greeting" },
+    { args: ["World", "-l"], description: "Loud greeting" },
+  ],
   run: (args) => {
     let message = `${args.greeting}, ${args.name}!`;
     if (args.loud) {

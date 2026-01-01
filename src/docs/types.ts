@@ -1,5 +1,5 @@
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
-import type { AnyCommand } from "../types.js";
+import type { AnyCommand, CommandExample } from "../types.js";
 
 /**
  * Command information for rendering
@@ -25,6 +25,8 @@ export interface CommandInfo {
   command: AnyCommand;
   /** Additional notes */
   notes?: string | undefined;
+  /** Usage examples */
+  examples?: CommandExample[] | undefined;
   /** File path where this command is rendered (for cross-file links) */
   filePath?: string | undefined;
   /** Map of command path to file path (for cross-file links) */
@@ -136,6 +138,21 @@ export interface SimpleRenderContext {
 export type SimpleRenderFunction = (context: SimpleRenderContext) => string;
 
 /**
+ * Examples render context
+ */
+export interface ExamplesRenderContext {
+  /** Examples to render */
+  examples: CommandExample[];
+  /** Render function that accepts examples and optional rendering options */
+  render: (examples: CommandExample[], opts?: RenderContentOptions) => string;
+  /** Heading prefix (e.g., "###") */
+  heading: string;
+  /** Command information */
+  info: CommandInfo;
+}
+export type ExamplesRenderFunction = (context: ExamplesRenderContext) => string;
+
+/**
  * Default renderer customization options
  */
 export interface DefaultRendererOptions {
@@ -155,6 +172,8 @@ export interface DefaultRendererOptions {
   renderArguments?: ArgumentsRenderFunction;
   /** Custom renderer for options section */
   renderOptions?: OptionsRenderFunction;
+  /** Custom renderer for examples section */
+  renderExamples?: ExamplesRenderFunction;
   /** Custom renderer for subcommands section */
   renderSubcommands?: SubcommandsRenderFunction;
   /** Custom renderer for notes section */
@@ -205,6 +224,8 @@ export interface GenerateDocConfig {
   format?: DefaultRendererOptions;
   /** Formatter function to apply to generated content before comparison */
   formatter?: FormatterFunction;
+  /** Custom example runner function. When provided, examples will be run and output captured. */
+  exampleRunner?: ExampleRunnerFunction;
 }
 
 /**
@@ -231,6 +252,25 @@ export interface GenerateDocResult {
  * Formats generated content before comparison
  */
 export type FormatterFunction = (content: string) => string | Promise<string>;
+
+/**
+ * Example runner result
+ */
+export interface ExampleRunResult {
+  /** Captured stdout output */
+  output: string;
+  /** Whether the command succeeded */
+  success: boolean;
+}
+
+/**
+ * Example runner function type
+ * Runs a command with args and returns captured output
+ */
+export type ExampleRunnerFunction = (
+  command: AnyCommand,
+  args: string[],
+) => Promise<ExampleRunResult>;
 
 /**
  * Environment variable name for update mode

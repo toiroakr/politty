@@ -258,11 +258,11 @@ function buildFileMap(
  * Generate documentation from command definition
  */
 export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDocResult> {
-  const { command, files, ignores = [], format = {}, formatter } = config;
+  const { command, files, ignores = [], format = {}, formatter, exampleRunner } = config;
   const updateMode = isUpdateMode();
 
-  // Collect all commands
-  const allCommands = await collectAllCommands(command);
+  // Collect all commands (with example runner if provided)
+  const allCommands = await collectAllCommands(command, undefined, exampleRunner);
 
   // Collect all explicitly specified commands from files
   const allFilesCommands: string[] = [];

@@ -9,6 +9,8 @@ export {
     renderArgumentsListFromArray,
     renderArgumentsTable,
     renderArgumentsTableFromArray,
+    renderExamplesBlocks,
+    renderExamplesList,
     renderOptionsList,
     renderOptionsListFromArray,
     renderOptionsTable,
@@ -21,6 +23,8 @@ export {
 export { compareWithExisting, formatDiff, writeFile } from "./doc-comparator.js";
 // Document generator utilities
 export { buildCommandInfo, collectAllCommands } from "./doc-generator.js";
+// Example runner
+export { createExampleRunner } from "./example-runner.js";
 export { assertDocMatch, generateDoc } from "./golden-test.js";
 export { UPDATE_GOLDEN_ENV } from "./types.js";
 // Types
@@ -29,6 +33,10 @@ export type {
     ArgumentsRenderFunction,
     CommandInfo,
     DefaultRendererOptions,
+    ExampleRunnerFunction,
+    ExampleRunResult,
+    ExamplesRenderContext,
+    ExamplesRenderFunction,
     FileConfig,
     FileMapping,
     FormatterFunction,

@@ -3,7 +3,7 @@ import {
     type ExtractedFields,
     type ResolvedFieldMeta
 } from "../core/schema-extractor.js";
-import type { AnyCommand } from "../types.js";
+import type { AnyCommand, CommandExample } from "../types.js";
 import { styles } from "./logger.js";
 
 /**
@@ -458,6 +458,27 @@ function formatOption(
 }
 
 /**
+ * Render examples section
+ */
+export function renderExamples(examples: CommandExample[], commandName: string): string {
+  const lines: string[] = [];
+
+  for (const example of examples) {
+    const argsStr = example.args.join(" ");
+    const commandLine = `${styles.dim("$")} ${styles.commandName(commandName)} ${argsStr}`;
+
+    if (example.description) {
+      lines.push(`  ${commandLine}`);
+      lines.push(`      ${styles.dim(example.description)}`);
+    } else {
+      lines.push(`  ${commandLine}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * Render options for a subcommand (used by showSubcommandOptions)
  */
 function renderSubcommandOptionsCompact(command: AnyCommand, indent: number): string[] {
@@ -565,6 +586,13 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   const optionsText = renderOptions(command, options.descriptions, context);
   if (optionsText) {
     sections.push(`${styles.sectionHeader("Options:")}\n${optionsText}`);
+  }
+
+  // Examples
+  if (command.examples && command.examples.length > 0) {
+    const usageCommandName = buildUsageCommandName(command, context);
+    const examplesText = renderExamples(command.examples, usageCommandName);
+    sections.push(`${styles.sectionHeader("Examples:")}\n${examplesText}`);
   }
 
   // Subcommands

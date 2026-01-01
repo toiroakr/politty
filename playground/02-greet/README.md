@@ -20,3 +20,26 @@ greet [options] <name>
 |--------|-------|-------------|---------|
 | `--greeting <GREETING>` | `-g` | 挨拶のフレーズ | `"Hello"` |
 | `--loud` | `-l` | 大文字で出力 | `false` |
+
+## Examples
+
+Basic greeting
+
+```bash
+$ greet World
+Hello, World!
+```
+
+Custom greeting
+
+```bash
+$ greet World -g Hi
+Hi, World!
+```
+
+Loud greeting
+
+```bash
+$ greet World -l
+HELLO, WORLD!
+```

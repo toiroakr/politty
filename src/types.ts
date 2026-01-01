@@ -36,6 +36,18 @@ export interface CleanupContext<TArgs = unknown> {
 }
 
 /**
+ * Example definition for command documentation
+ */
+export interface CommandExample {
+  /** Command line arguments for this example */
+  args: string[];
+  /** Description of what this example demonstrates */
+  description?: string;
+  /** Captured output from running this example (populated by example runner) */
+  output?: string;
+}
+
+/**
  * Base command interface (shared properties)
  * @template TArgsSchema - The Zod schema type for arguments
  * @template TArgs - The inferred args type from the schema
@@ -61,6 +73,8 @@ export interface CommandBase<
   cleanup?: ((context: CleanupContext<TArgs>) => void | Promise<void>) | undefined;
   /** Additional notes */
   notes?: string | undefined;
+  /** Usage examples */
+  examples?: CommandExample[] | undefined;
 }
 
 /**

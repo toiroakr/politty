@@ -1,8 +1,10 @@
 import type { ResolvedFieldMeta } from "../core/schema-extractor.js";
+import type { CommandExample } from "../types.js";
 import type {
     ArgumentsRenderContext,
     CommandInfo,
     DefaultRendererOptions,
+    ExamplesRenderContext,
     OptionsRenderContext,
     RenderContentOptions,
     RenderFunction,
@@ -425,6 +427,62 @@ export function renderSubcommandsTableFromArray(
 }
 
 /**
+ * Render examples as code blocks with optional output
+ */
+export function renderExamplesBlocks(examples: CommandExample[], info: CommandInfo): string {
+  if (examples.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  const commandName = info.fullCommandPath;
+
+  for (const example of examples) {
+    if (example.description) {
+      lines.push(example.description);
+      lines.push("");
+    }
+
+    const argsStr = example.args.join(" ");
+    lines.push("```bash");
+    lines.push(`$ ${commandName} ${argsStr}`);
+    // Include captured output if available
+    if (example.output) {
+      lines.push(example.output);
+    }
+    lines.push("```");
+    lines.push("");
+  }
+
+  // Remove trailing empty line
+  if (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render examples as a simple list
+ */
+export function renderExamplesList(examples: CommandExample[], info: CommandInfo): string {
+  if (examples.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  const commandName = info.fullCommandPath;
+
+  for (const example of examples) {
+    const argsStr = example.args.join(" ");
+    const desc = example.description ? ` - ${example.description}` : "";
+    lines.push(`- \`${commandName} ${argsStr}\`${desc}`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * Create command renderer with options
  */
 export function createCommandRenderer(options: DefaultRendererOptions = {}): RenderFunction {
@@ -437,6 +495,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     renderUsage: customRenderUsage,
     renderArguments: customRenderArguments,
     renderOptions: customRenderOptions,
+    renderExamples: customRenderExamples,
     renderSubcommands: customRenderSubcommands,
     renderNotes: customRenderNotes,
     renderFooter: customRenderFooter,
@@ -528,6 +587,34 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       const content = customRenderOptions
         ? customRenderOptions(context)
         : renderOpts(context.options);
+      if (content) {
+        lines.push(content);
+        lines.push("");
+      }
+    }
+
+    // Examples
+    if (info.examples && info.examples.length > 0) {
+      const renderExamples = (examples: CommandExample[], opts?: RenderContentOptions): string => {
+        const style = opts?.style ?? optionStyle;
+        const withHeading = opts?.withHeading ?? true;
+        const content =
+          style === "table"
+            ? renderExamplesBlocks(examples, info)
+            : renderExamplesList(examples, info);
+        return withHeading ? `${h2} Examples\n\n${content}` : content;
+      };
+
+      const context: ExamplesRenderContext = {
+        examples: info.examples,
+        render: renderExamples,
+        heading: h2,
+        info,
+      };
+
+      const content = customRenderExamples
+        ? customRenderExamples(context)
+        : renderExamples(context.examples);
       if (content) {
         lines.push(content);
         lines.push("");

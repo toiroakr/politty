@@ -34,6 +34,8 @@ export type {
     // Command types
     Command,
     CommandBase,
+    // Example type
+    CommandExample,
     LogEntry,
     // Logger type
     Logger,

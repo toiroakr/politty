@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { assertDocMatch } from "../../src/docs/index.js";
+import { assertDocMatch, createExampleRunner } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
 import { command } from "./index.js";
@@ -81,6 +81,7 @@ describe("02-greet", () => {
     await assertDocMatch({
       command,
       files: { "playground/02-greet/README.md": [""] },
+      exampleRunner: createExampleRunner(),
     });
   });
 });
