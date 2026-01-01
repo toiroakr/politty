@@ -9,3 +9,5 @@ dist/
 *.db
 *.sqlite
 .pnpm-store
+coverage/
+tests/temp-*.ts
