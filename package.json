@@ -49,6 +49,16 @@
         "types": "./dist/docs/index.d.cts",
         "default": "./dist/docs/index.cjs"
       }
+    },
+    "./completion": {
+      "import": {
+        "types": "./dist/completion/index.d.ts",
+        "default": "./dist/completion/index.js"
+      },
+      "require": {
+        "types": "./dist/completion/index.d.cts",
+        "default": "./dist/completion/index.cjs"
+      }
     }
   },
   "scripts": {
