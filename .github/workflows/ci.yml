@@ -45,4 +45,3 @@ jobs:
         run: pnpm test:coverage
       - name: Run octocov
         uses: k1LoW/octocov-action@1c3d114bbab240164f44bcf0799b3a743a1d2d39 # v1.5.0
-        if: github.event_name == 'pull_request'
