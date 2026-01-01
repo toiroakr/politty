@@ -2,12 +2,12 @@ import { createCommandRenderer } from "./default-renderers.js";
 import { compareWithExisting, writeFile } from "./doc-comparator.js";
 import { collectAllCommands } from "./doc-generator.js";
 import type {
-    CommandInfo,
-    FileConfig,
-    FormatterFunction,
-    GenerateDocConfig,
-    GenerateDocResult,
-    RenderFunction
+  CommandInfo,
+  FileConfig,
+  FormatterFunction,
+  GenerateDocConfig,
+  GenerateDocResult,
+  RenderFunction,
 } from "./types.js";
 import { UPDATE_GOLDEN_ENV } from "./types.js";
 

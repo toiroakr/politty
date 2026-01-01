@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { arg, defineCommand } from "../index.js";
 import {
-    createCommandRenderer,
-    defaultRenderers,
-    renderArgumentsTable,
-    renderOptionsTable,
-    renderSubcommandsTable,
-    renderUsage
+  createCommandRenderer,
+  defaultRenderers,
+  renderArgumentsTable,
+  renderOptionsTable,
+  renderSubcommandsTable,
+  renderUsage,
 } from "./default-renderers.js";
 import { buildCommandInfo } from "./doc-generator.js";
 
