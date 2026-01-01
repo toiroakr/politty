@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -39,5 +41,13 @@ jobs:
         run: pnpm format:check
       - name: Knip
         run: pnpm knip
-      - name: Test
-        run: pnpm test
+      - name: Test with coverage
+        run: pnpm test:coverage
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage
+          path: coverage/
+      - name: Run octocov
+        uses: k1LoW/octocov-action@1c3d114bbab240164f44bcf0799b3a743a1d2d39 # v1.5.0
+        if: github.event_name == 'pull_request'
