@@ -44,4 +44,4 @@ jobs:
       - name: Test with coverage
         run: pnpm test:coverage
       - name: Run octocov
-        uses: k1LoW/octocov-action@1c3d114bbab240164f44bcf0799b3a743a1d2d39 # v1.5.0
+        uses: k1LoW/octocov-action@73d561f65d59e66899ed5c87e4621a913b5d5c20 # v1.5.0
