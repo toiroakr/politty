@@ -84,7 +84,22 @@ export interface ExtractedFields {
   unionOptions?: ExtractedFields[];
   /** Schema description */
   description?: string;
+  /**
+   * Unknown keys handling mode
+   * - "strict": Unknown keys cause validation errors (z.strictObject or z.object().strict())
+   * - "strip": Unknown keys trigger warnings (default, z.object())
+   * - "passthrough": Unknown keys are silently ignored (z.looseObject or z.object().passthrough())
+   */
+  unknownKeysMode: UnknownKeysMode;
 }
+
+/**
+ * Unknown keys handling mode for object schemas
+ * - "strict": Unknown keys cause validation errors
+ * - "strip": Unknown keys are silently ignored (default)
+ * - "passthrough": Unknown keys are passed through
+ */
+export type UnknownKeysMode = "strict" | "strip" | "passthrough";
 
 // Internal type for accessing zod v4 internals
 interface ZodV4Def {
@@ -101,6 +116,8 @@ interface ZodV4Def {
   left?: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   right?: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  catchall?: any;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -112,6 +129,40 @@ type ZodSchemaWithDef = z.ZodType & { def?: ZodV4Def; _def?: ZodV4Def; type?: st
 function getTypeName(schema: z.ZodType): string | undefined {
   const s = schema as ZodSchemaWithDef;
   return s.def?.type ?? s._def?.type ?? s.type;
+}
+
+/**
+ * Detect unknown keys handling mode from a Zod object schema
+ *
+ * In Zod v4:
+ * - Default (strip): _def.catchall is undefined
+ * - strict: _def.catchall is ZodNever (type = "never")
+ * - passthrough: _def.catchall is ZodUnknown (type = "unknown")
+ */
+export function getUnknownKeysMode(schema: z.ZodType): UnknownKeysMode {
+  const s = schema as ZodSchemaWithDef;
+  const def = s.def ?? s._def;
+  const catchall = def?.catchall;
+
+  if (!catchall) {
+    // Default behavior: strip unknown keys (but we want to warn)
+    return "strip";
+  }
+
+  const catchallType = getTypeName(catchall);
+
+  if (catchallType === "never") {
+    // z.strictObject() or z.object().strict() - reject unknown keys
+    return "strict";
+  }
+
+  if (catchallType === "unknown" || catchallType === "any") {
+    // z.looseObject() or z.object().passthrough() - allow unknown keys
+    return "passthrough";
+  }
+
+  // Unknown catchall type, default to strip behavior
+  return "strip";
 }
 
 /**
@@ -348,6 +399,7 @@ function extractFromDiscriminatedUnion(schema: z.ZodType): ExtractedFields {
     fields: Array.from(allFieldsMap.values()),
     schema: schema as ArgsSchema,
     schemaType: "discriminatedUnion",
+    unknownKeysMode: getUnknownKeysMode(schema),
     discriminator,
     variants,
     ...(description ? { description } : {}),
@@ -385,6 +437,7 @@ function extractFromUnionLike(schema: z.ZodType, schemaType: "union" | "xor"): E
     fields: Array.from(allFieldsMap.values()),
     schema: schema as ArgsSchema,
     schemaType,
+    unknownKeysMode: getUnknownKeysMode(schema),
     unionOptions,
     ...(description ? { description } : {}),
   };
@@ -421,6 +474,7 @@ function extractFromIntersection(schema: z.ZodType): ExtractedFields {
     fields: Array.from(allFieldsMap.values()),
     schema: schema as ArgsSchema,
     schemaType: "intersection",
+    unknownKeysMode: getUnknownKeysMode(schema),
     ...(description ? { description } : {}),
   };
 }
@@ -443,6 +497,7 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
         fields: extractFromObject(schema),
         schema,
         schemaType: "object",
+        unknownKeysMode: getUnknownKeysMode(schema),
         ...(description ? { description } : {}),
       };
     }
@@ -467,6 +522,7 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
         fields: [],
         schema,
         schemaType: "object",
+        unknownKeysMode: getUnknownKeysMode(schema),
         ...(description ? { description } : {}),
       };
     }

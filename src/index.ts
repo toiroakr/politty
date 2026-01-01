@@ -10,9 +10,11 @@ export { defineCommand } from "./core/command.js";
 export { runCommand, runMain } from "./core/runner.js";
 export {
     extractFields,
+    getUnknownKeysMode,
     toKebabCase,
     type ExtractedFields,
-    type ResolvedFieldMeta
+    type ResolvedFieldMeta,
+    type UnknownKeysMode
 } from "./core/schema-extractor.js";
 // Utility exports
 export {

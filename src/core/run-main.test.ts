@@ -259,19 +259,187 @@ describe("runCommand", () => {
   });
 
   describe("Unknown flags", () => {
-    it("should warn about unknown flags", async () => {
+    it("should warn about unknown flags with default z.object (strip mode)", async () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const runFn = vi.fn();
 
       const cmd = defineCommand({
         name: "test",
         args: z.object({
           verbose: z.boolean().default(false),
         }),
+        run: runFn,
       });
 
-      await runCommand(cmd, ["--unknown-flag"]);
+      const result = await runCommand(cmd, ["--unknown-flag"]);
 
+      // Strip mode: should warn but continue execution
       expect(consoleSpy).toHaveBeenCalled();
+      const output = consoleSpy.mock.calls[0]?.[0] ?? "";
+      expect(output).toContain("Warning");
+      expect(output).toContain("unknown-flag");
+      expect(runFn).toHaveBeenCalled(); // Command should still run
+      expect(result.success).toBe(true);
+      consoleSpy.mockRestore();
+    });
+
+    it("should error on unknown flags with z.strictObject (strict mode)", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.strictObject({
+          verbose: z.boolean().default(false),
+        }),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--unknown-flag"]);
+
+      // Strict mode: should error and not continue execution
+      expect(consoleSpy).toHaveBeenCalled();
+      const output = consoleSpy.mock.calls[0]?.[0] ?? "";
+      expect(output).toContain("Unknown option");
+      expect(output).not.toContain("Warning");
+      expect(runFn).not.toHaveBeenCalled(); // Command should not run
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      consoleSpy.mockRestore();
+    });
+
+    it("should error on unknown flags with z.object().strict()", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z
+          .object({
+            verbose: z.boolean().default(false),
+          })
+          .strict(),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--unknown-flag"]);
+
+      // Strict mode: should error and not continue execution
+      expect(consoleSpy).toHaveBeenCalled();
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      consoleSpy.mockRestore();
+    });
+
+    it("should silently ignore unknown flags with z.looseObject (passthrough mode)", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.looseObject({
+          verbose: z.boolean().default(false),
+        }),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--unknown-flag"]);
+
+      // Passthrough mode: should silently ignore and continue execution
+      expect(consoleSpy).not.toHaveBeenCalled(); // No warning
+      expect(runFn).toHaveBeenCalled(); // Command should run
+      expect(result.success).toBe(true);
+      consoleSpy.mockRestore();
+    });
+
+    it("should silently ignore unknown flags with z.object().passthrough()", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z
+          .object({
+            verbose: z.boolean().default(false),
+          })
+          .passthrough(),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--unknown-flag"]);
+
+      // Passthrough mode: should silently ignore and continue execution
+      expect(consoleSpy).not.toHaveBeenCalled(); // No warning
+      expect(runFn).toHaveBeenCalled(); // Command should run
+      expect(result.success).toBe(true);
+      consoleSpy.mockRestore();
+    });
+
+    // Short option (alias) tests
+    it("should warn about unknown short flags with default z.object (strip mode)", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+        }),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["-x"]); // Unknown short flag
+
+      // Strip mode: should warn but continue execution
+      expect(consoleSpy).toHaveBeenCalled();
+      const output = consoleSpy.mock.calls[0]?.[0] ?? "";
+      expect(output).toContain("Warning");
+      expect(runFn).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      consoleSpy.mockRestore();
+    });
+
+    it("should error on unknown short flags with z.strictObject (strict mode)", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.strictObject({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+        }),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["-x"]); // Unknown short flag
+
+      // Strict mode: should error and not continue execution
+      expect(consoleSpy).toHaveBeenCalled();
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      consoleSpy.mockRestore();
+    });
+
+    it("should silently ignore unknown short flags with z.looseObject (passthrough mode)", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.looseObject({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+        }),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["-x"]); // Unknown short flag
+
+      // Passthrough mode: should silently ignore and continue execution
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(runFn).toHaveBeenCalled();
+      expect(result.success).toBe(true);
       consoleSpy.mockRestore();
     });
   });
