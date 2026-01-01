@@ -46,7 +46,6 @@ export type {
     ShellType
 } from "./types.js";
 
-
 /**
  * Generate completion script for the specified shell
  */
