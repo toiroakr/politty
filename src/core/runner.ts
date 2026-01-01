@@ -15,6 +15,7 @@ import type {
 import {
     formatRuntimeError,
     formatUnknownFlag,
+    formatUnknownFlagWarning,
     formatUnknownSubcommand,
     formatValidationErrors
 } from "../validator/error-formatter.js";
@@ -226,19 +227,31 @@ async function runCommandInternal<TResult = unknown>(
       return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
     }
 
-    // Warn about unknown flags
+    // Handle unknown flags based on schema's unknownKeysMode
     if (parseResult.unknownFlags.length > 0) {
+      const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
       const knownFlags = parseResult.extractedFields?.fields.map((f) => f.name) ?? [];
-      for (const flag of parseResult.unknownFlags) {
-        logger.error(formatUnknownFlag(flag, knownFlags));
+
+      if (unknownKeysMode === "strict") {
+        // strict mode: treat unknown flags as errors
+        for (const flag of parseResult.unknownFlags) {
+          logger.error(formatUnknownFlag(flag, knownFlags));
+        }
+        collector?.stop();
+        return {
+          success: false,
+          error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
+          exitCode: 1,
+          logs: getCurrentLogs(),
+        };
+      } else if (unknownKeysMode === "strip") {
+        // strip mode (default): warn about unknown flags but continue
+        for (const flag of parseResult.unknownFlags) {
+          logger.error(formatUnknownFlagWarning(flag, knownFlags));
+        }
+        // Continue execution - don't return error
       }
-      collector?.stop();
-      return {
-        success: false,
-        error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
-        exitCode: 1,
-        logs: getCurrentLogs(),
-      };
+      // passthrough mode: silently ignore unknown flags
     }
 
     // Validate arguments

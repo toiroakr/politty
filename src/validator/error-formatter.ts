@@ -94,6 +94,29 @@ export function formatUnknownFlag(flag: string, knownFlags: string[]): string {
 }
 
 /**
+ * Format unknown flag warning with suggestions (for strip mode)
+ *
+ * @param flag - The unknown flag (e.g., "--verbos")
+ * @param knownFlags - List of known flag names
+ * @returns Formatted warning message with suggestions
+ */
+export function formatUnknownFlagWarning(flag: string, knownFlags: string[]): string {
+  const flagName = flag.replace(/^-{1,2}/, "");
+  const similar = findSimilar(flagName, knownFlags);
+
+  let message = `${styles.warning("Warning: Unknown option:")} ${styles.bold(flag)}`;
+
+  if (similar.length > 0) {
+    message += `\n\n${styles.info("Did you mean?")}`;
+    for (const suggestion of similar) {
+      message += `\n  ${symbols.arrow} ${styles.option(`--${suggestion}`)}`;
+    }
+  }
+
+  return message;
+}
+
+/**
  * Format runtime error
  *
  * @param error - The error that occurred
