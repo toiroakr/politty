@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
-    arg,
     createCompletionCommand,
-    defineCommand,
     extractCompletionData,
     generateCompletion,
     getSupportedShells
-} from "../src/index.js";
+} from "../src/completion/index.js";
+import { arg, defineCommand } from "../src/index.js";
 
 describe("Completion", () => {
   describe("extractCompletionData", () => {

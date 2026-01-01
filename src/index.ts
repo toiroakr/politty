@@ -5,23 +5,6 @@
  */
 
 // Core exports
-// Completion exports
-export {
-    createCompletionCommand,
-    detectShell,
-    extractCompletionData,
-    extractPositionals,
-    generateCompletion,
-    getSupportedShells,
-    withCompletionCommand,
-    type CompletableOption,
-    type CompletableSubcommand,
-    type CompletionData,
-    type CompletionGenerator,
-    type CompletionOptions,
-    type CompletionResult,
-    type ShellType
-} from "./completion/index.js";
 export { arg, type ArgMeta } from "./core/arg-registry.js";
 export { defineCommand } from "./core/command.js";
 export { runCommand, runMain } from "./core/runner.js";
@@ -81,4 +64,3 @@ export {
 export { formatValidationErrors } from "./validator/zod-validator.js";
 // Validation types
 export type { ValidationError, ValidationResult } from "./validator/zod-validator.js";
-
