@@ -1,4 +1,29 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:best-practices"]
+  "extends": [
+    "config:best-practices",
+    ":automergeMinor",
+    "schedule:weekends"
+  ],
+  "labels": ["dependencies"],
+  "minimumReleaseAge": "7 days",
+  "prConcurrentLimit": 5,
+  "packageRules": [
+    {
+      "matchDepTypes": ["devDependencies"],
+      "automerge": true
+    },
+    {
+      "groupName": "testing",
+      "matchPackageNames": ["vitest", "@vitest/*"]
+    },
+    {
+      "groupName": "linting and formatting",
+      "matchPackageNames": ["oxlint", "oxfmt", "knip"]
+    },
+    {
+      "groupName": "typescript",
+      "matchPackageNames": ["typescript", "@types/*", "@typescript/*"]
+    }
+  ]
 }
