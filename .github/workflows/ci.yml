@@ -32,7 +32,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Typecheck
-        run: pnpm typecheck:tsc
+        run: pnpm tsc
       - name: Lint
         run: pnpm lint
       - name: Format

@@ -1,5 +1,11 @@
 import { z } from "zod";
-import type { ArgsSchema, Command, NonRunnableCommand, RunnableCommand } from "../types.js";
+import type {
+    ArgsSchema,
+    Command,
+    Example,
+    NonRunnableCommand,
+    RunnableCommand
+} from "../types.js";
 
 /**
  * Infer args type from schema, defaults to empty object if undefined
@@ -26,6 +32,7 @@ interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResul
     error?: Error | undefined;
   }) => void | Promise<void>;
   notes?: string;
+  examples?: Example[];
 }
 
 /**
@@ -130,5 +137,6 @@ export function defineCommand<
     run: config.run,
     cleanup: config.cleanup,
     notes: config.notes,
+    examples: config.examples,
   };
 }

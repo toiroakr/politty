@@ -1,5 +1,5 @@
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
-import type { AnyCommand } from "../types.js";
+import type { AnyCommand, Example } from "../types.js";
 
 /**
  * Command information for rendering
@@ -29,6 +29,10 @@ export interface CommandInfo {
   filePath?: string | undefined;
   /** Map of command path to file path (for cross-file links) */
   fileMap?: Record<string, string> | undefined;
+  /** Example definitions from command */
+  examples?: Example[] | undefined;
+  /** Example execution results (populated when examples are executed) */
+  exampleResults?: ExampleExecutionResult[] | undefined;
 }
 
 /**
@@ -42,6 +46,49 @@ export interface SubCommandInfo {
   /** Full command path */
   fullPath: string[];
 }
+
+/**
+ * Example execution result
+ */
+export interface ExampleExecutionResult {
+  /** Command arguments that were executed */
+  cmd: string;
+  /** Description of the example */
+  desc: string;
+  /** Expected output (if defined in example) */
+  expectedOutput?: string | undefined;
+  /** Captured stdout */
+  stdout: string;
+  /** Captured stderr */
+  stderr: string;
+  /** Whether execution was successful */
+  success: boolean;
+}
+
+/**
+ * Example execution config for a specific command path
+ * If a command path is specified in ExampleConfig, its examples will be executed
+ */
+export interface ExampleCommandConfig {
+  /** Mock setup before running examples */
+  mock?: () => void | Promise<void>;
+  /** Mock cleanup after running examples */
+  cleanup?: () => void | Promise<void>;
+}
+
+/**
+ * Example execution configuration
+ * Key is command path (e.g., "", "config", "config get")
+ * All specified command paths will have their examples executed
+ *
+ * @example
+ * // With mock setup
+ * { "": { mock: () => mockFs(), cleanup: () => restoreFs() } }
+ *
+ * // Without mock (just execute)
+ * { "user": true }
+ */
+export type ExampleConfig = Record<string, ExampleCommandConfig | true>;
 
 /**
  * Render function type for custom markdown generation
@@ -123,6 +170,37 @@ export interface SubcommandsRenderContext {
 export type SubcommandsRenderFunction = (context: SubcommandsRenderContext) => string;
 
 /**
+ * Examples render options
+ */
+export interface ExamplesRenderOptions {
+  /** Include heading (default: true) */
+  withHeading?: boolean;
+  /** Show execution output (default: true when results available) */
+  showOutput?: boolean;
+}
+
+/**
+ * Examples render context
+ */
+export interface ExamplesRenderContext {
+  /** Examples to render */
+  examples: Example[];
+  /** Execution results (if examples were executed) */
+  results?: ExampleExecutionResult[] | undefined;
+  /** Render function that accepts examples, results, and optional rendering options */
+  render: (
+    examples: Example[],
+    results?: ExampleExecutionResult[],
+    opts?: ExamplesRenderOptions,
+  ) => string;
+  /** Heading prefix (e.g., "###") */
+  heading: string;
+  /** Command information */
+  info: CommandInfo;
+}
+export type ExamplesRenderFunction = (context: ExamplesRenderContext) => string;
+
+/**
  * Simple section render context (for description, usage, notes, footer)
  */
 export interface SimpleRenderContext {
@@ -161,6 +239,8 @@ export interface DefaultRendererOptions {
   renderNotes?: SimpleRenderFunction;
   /** Custom renderer for footer (default content is empty) */
   renderFooter?: SimpleRenderFunction;
+  /** Custom renderer for examples section */
+  renderExamples?: ExamplesRenderFunction;
 }
 
 /**
@@ -205,6 +285,8 @@ export interface GenerateDocConfig {
   format?: DefaultRendererOptions;
   /** Formatter function to apply to generated content before comparison */
   formatter?: FormatterFunction;
+  /** Example execution configuration (per command path) */
+  examples?: ExampleConfig;
 }
 
 /**

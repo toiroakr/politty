@@ -1,15 +1,19 @@
 import type { ResolvedFieldMeta } from "../core/schema-extractor.js";
+import type { Example } from "../types.js";
 import type {
-  ArgumentsRenderContext,
-  CommandInfo,
-  DefaultRendererOptions,
-  OptionsRenderContext,
-  RenderContentOptions,
-  RenderFunction,
-  SimpleRenderContext,
-  SubCommandInfo,
-  SubcommandsRenderContext,
-  SubcommandsRenderOptions,
+    ArgumentsRenderContext,
+    CommandInfo,
+    DefaultRendererOptions,
+    ExampleExecutionResult,
+    ExamplesRenderContext,
+    ExamplesRenderOptions,
+    OptionsRenderContext,
+    RenderContentOptions,
+    RenderFunction,
+    SimpleRenderContext,
+    SubCommandInfo,
+    SubcommandsRenderContext,
+    SubcommandsRenderOptions
 } from "./types.js";
 
 /**
@@ -425,6 +429,75 @@ export function renderSubcommandsTableFromArray(
 }
 
 /**
+ * Render examples as markdown
+ *
+ * @example
+ * **Basic usage**
+ *
+ * ```bash
+ * $ greet World
+ * ```
+ *
+ * Output:
+ * ```
+ * Hello, World!
+ * ```
+ */
+export function renderExamplesDefault(
+  examples: Example[],
+  results?: ExampleExecutionResult[],
+  opts?: ExamplesRenderOptions,
+): string {
+  if (examples.length === 0) {
+    return "";
+  }
+
+  const showOutput = opts?.showOutput ?? true;
+  const lines: string[] = [];
+
+  for (let i = 0; i < examples.length; i++) {
+    const example = examples[i];
+    if (!example) continue;
+
+    const result = results?.[i];
+
+    // Description as bold text
+    lines.push(`**${example.desc}**`);
+    lines.push("");
+
+    // Command and output in a single code block
+    lines.push("```bash");
+    lines.push(`$ ${example.cmd}`);
+
+    // Output
+    if (showOutput) {
+      if (result) {
+        // Use captured output from execution
+        if (result.stdout) {
+          lines.push(result.stdout);
+        }
+        if (result.stderr) {
+          lines.push(`[stderr] ${result.stderr}`);
+        }
+      } else if (example.output) {
+        // Use expected output from definition
+        lines.push(example.output);
+      }
+    }
+
+    lines.push("```");
+    lines.push("");
+  }
+
+  // Remove trailing empty lines
+  while (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * Create command renderer with options
  */
 export function createCommandRenderer(options: DefaultRendererOptions = {}): RenderFunction {
@@ -440,6 +513,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     renderSubcommands: customRenderSubcommands,
     renderNotes: customRenderNotes,
     renderFooter: customRenderFooter,
+    renderExamples: customRenderExamples,
   } = options;
 
   return (info: CommandInfo): string => {
@@ -555,6 +629,35 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       const content = customRenderSubcommands
         ? customRenderSubcommands(context)
         : renderSubs(context.subcommands);
+      if (content) {
+        lines.push(content);
+        lines.push("");
+      }
+    }
+
+    // Examples
+    if (info.examples && info.examples.length > 0) {
+      const renderEx = (
+        examples: Example[],
+        results?: ExampleExecutionResult[],
+        opts?: ExamplesRenderOptions,
+      ): string => {
+        const withHeading = opts?.withHeading ?? true;
+        const content = renderExamplesDefault(examples, results, opts);
+        return withHeading ? `${h2} Examples\n\n${content}` : content;
+      };
+
+      const context: ExamplesRenderContext = {
+        examples: info.examples,
+        results: info.exampleResults,
+        render: renderEx,
+        heading: h2,
+        info,
+      };
+
+      const content = customRenderExamples
+        ? customRenderExamples(context)
+        : renderEx(context.examples, context.results);
       if (content) {
         lines.push(content);
         lines.push("");

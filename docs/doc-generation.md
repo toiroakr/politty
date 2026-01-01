@@ -64,13 +64,14 @@ console.log(result.files); // 各ファイルのステータス
 
 ### `GenerateDocConfig`
 
-| Property  | Type                     | Description                                |
-| --------- | ------------------------ | ------------------------------------------ |
-| `command` | `AnyCommand`             | ドキュメント生成対象のコマンド             |
-| `files`   | `FileMapping`            | ファイルパスとコマンドのマッピング         |
-| `ignores` | `string[]`               | 除外するコマンドパス（サブコマンドも除外） |
-| `format`  | `DefaultRendererOptions` | デフォルトレンダラーのオプション           |
-| `version` | `string`                 | ドキュメントに含めるバージョン文字列       |
+| Property    | Type                     | Description                                |
+| ----------- | ------------------------ | ------------------------------------------ |
+| `command`   | `AnyCommand`             | ドキュメント生成対象のコマンド             |
+| `files`     | `FileMapping`            | ファイルパスとコマンドのマッピング         |
+| `ignores`   | `string[]`               | 除外するコマンドパス（サブコマンドも除外） |
+| `format`    | `DefaultRendererOptions` | デフォルトレンダラーのオプション           |
+| `formatter` | `FormatterFunction`      | 生成内容のフォーマッター                   |
+| `examples`  | `ExampleConfig`          | コマンドごとのexample実行設定              |
 
 ### `FileMapping`
 
@@ -133,6 +134,97 @@ await assertDocMatch({
   ignores: ["config"], // Error!
 });
 ```
+
+### `examples`
+
+`defineCommand`で定義した`examples`を実際に実行し、出力をドキュメントに含めます。コマンドごとにモックを設定できます：
+
+```typescript
+import * as fs from "node:fs";
+import { vi } from "vitest";
+
+vi.mock("node:fs");
+
+await assertDocMatch({
+  command: cli,
+  files: { "docs/cli.md": ["", "read", "write"] },
+  examples: {
+    // read コマンド: ファイル読み込みをモック
+    read: {
+      mock: () => {
+        vi.mocked(fs.readFileSync).mockImplementation((path) => {
+          if (path === "config.json") return '{"name": "app"}';
+          throw new Error(`File not found: ${path}`);
+        });
+      },
+      cleanup: () => {
+        vi.mocked(fs.readFileSync).mockReset();
+      },
+    },
+    // write コマンド: ファイル書き込みをモック
+    write: {
+      mock: () => {
+        vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      },
+      cleanup: () => {
+        vi.mocked(fs.writeFileSync).mockReset();
+      },
+    },
+  },
+});
+```
+
+### `ExampleConfig`
+
+| Property  | Type                          | Description                               |
+| --------- | ----------------------------- | ----------------------------------------- |
+| `mock`    | `() => void \| Promise<void>` | example実行前に呼ばれるモック設定関数     |
+| `cleanup` | `() => void \| Promise<void>` | example実行後に呼ばれるクリーンアップ関数 |
+
+- `examples`に指定したコマンドパスのexamplesが実行される
+- 各コマンドの`mock`→examples実行→`cleanup`の順で処理される
+- モックは各コマンド間で干渉しない（`cleanup`でリセット）
+
+### `defineCommand`の`examples`フィールド
+
+コマンド定義時に使用例を追加できます：
+
+```typescript
+const readCommand = defineCommand({
+  name: "read",
+  args: z.object({
+    file: arg(z.string(), { positional: true }),
+  }),
+  examples: [
+    { cmd: "config.json", desc: "Read a JSON config file" },
+    { cmd: "data.txt -f text", desc: "Read a text file" },
+  ],
+  run: (args) => {
+    const content = fs.readFileSync(args.file, "utf-8");
+    console.log(content);
+  },
+});
+```
+
+生成されるMarkdown：
+
+````markdown
+## Examples
+
+**Read a JSON config file**
+
+```bash
+$ config.json
+{"name": "app"}
+```
+
+**Read a text file**
+
+```bash
+$ data.txt -f text
+Hello from data.txt
+```
+````
 
 ## Customization
 
@@ -352,6 +444,10 @@ describe("01-hello-world", () => {
 - `formatDiff` - 差分フォーマット
 - `writeFile` - ファイル書き込み
 
+### Renderers (Examples)
+
+- `renderExamplesDefault` - Examplesセクションのデフォルトレンダラー
+
 ### Types
 
 - `CommandInfo` - コマンド情報
@@ -363,3 +459,7 @@ describe("01-hello-world", () => {
 - `FileMapping` - ファイルマッピング
 - `GenerateDocConfig` - 設定
 - `GenerateDocResult` - 結果
+- `ExampleConfig` - example実行設定
+- `ExampleCommandConfig` - コマンドごとのexample設定
+- `ExampleExecutionResult` - example実行結果
+- `FormatterFunction` - フォーマッター関数型

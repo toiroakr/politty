@@ -68,7 +68,6 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsgo --incremental",
-    "typecheck:tsc": "tsc --incremental --tsBuildInfoFile dist/tsc.tsbuildinfo",
     "lint": "oxlint -c oxlint.json src tests",
     "lint:fix": "oxlint -c oxlint.json --fix src tests",
     "knip": "knip",

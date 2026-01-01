@@ -40,6 +40,7 @@ export async function buildCommandInfo(
     extracted,
     command,
     notes: command.notes,
+    examples: command.examples,
   };
 }
 

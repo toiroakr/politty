@@ -1,13 +1,15 @@
 import { createCommandRenderer } from "./default-renderers.js";
 import { compareWithExisting, writeFile } from "./doc-comparator.js";
 import { collectAllCommands } from "./doc-generator.js";
+import { executeExamples } from "./example-executor.js";
 import type {
-  CommandInfo,
-  FileConfig,
-  FormatterFunction,
-  GenerateDocConfig,
-  GenerateDocResult,
-  RenderFunction,
+    CommandInfo,
+    ExampleConfig,
+    FileConfig,
+    FormatterFunction,
+    GenerateDocConfig,
+    GenerateDocResult,
+    RenderFunction
 } from "./types.js";
 import { UPDATE_GOLDEN_ENV } from "./types.js";
 
@@ -255,14 +257,47 @@ function buildFileMap(
 }
 
 /**
+ * Execute examples for commands based on configuration
+ */
+async function executeConfiguredExamples(
+  allCommands: Map<string, CommandInfo>,
+  examplesConfig: ExampleConfig,
+  rootCommand: import("../types.js").AnyCommand,
+): Promise<void> {
+  for (const [cmdPath, cmdConfig] of Object.entries(examplesConfig)) {
+    const commandInfo = allCommands.get(cmdPath);
+    if (!commandInfo?.examples?.length) {
+      continue;
+    }
+
+    // Normalize config: true means no mock setup
+    const config = cmdConfig === true ? {} : cmdConfig;
+
+    // Parse command path into array
+    const commandPath = cmdPath ? cmdPath.split(" ") : [];
+
+    // Execute examples and store results
+    const results = await executeExamples(commandInfo.examples, config, rootCommand, commandPath);
+
+    // Update CommandInfo with execution results
+    commandInfo.exampleResults = results;
+  }
+}
+
+/**
  * Generate documentation from command definition
  */
 export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDocResult> {
-  const { command, files, ignores = [], format = {}, formatter } = config;
+  const { command, files, ignores = [], format = {}, formatter, examples: examplesConfig } = config;
   const updateMode = isUpdateMode();
 
   // Collect all commands
   const allCommands = await collectAllCommands(command);
+
+  // Execute examples for all commands specified in examplesConfig
+  if (examplesConfig) {
+    await executeConfiguredExamples(allCommands, examplesConfig, command);
+  }
 
   // Collect all explicitly specified commands from files
   const allFilesCommands: string[] = [];

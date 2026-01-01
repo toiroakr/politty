@@ -39,6 +39,7 @@ function defineCommand<TArgsSchema, TResult>(config: {
 | `run`         | `(args: TArgs) => TResult \| Promise<TResult>`              | メイン処理                               |
 | `cleanup`     | `(context: CleanupContext<TArgs>) => void \| Promise<void>` | 終了フック                               |
 | `notes`       | `string`                                                    | 追加の注釈（ヘルプとドキュメントに表示） |
+| `examples`    | `Example[]`                                                 | 使用例（ヘルプとドキュメントに表示）     |
 
 #### 使用例
 
@@ -285,6 +286,25 @@ interface Command<TArgs, TResult> {
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
   /** 追加の注釈 */
   notes?: string;
+  /** 使用例 */
+  examples?: Example[];
+}
+```
+
+---
+
+### `Example`
+
+コマンドの使用例を定義する型です。
+
+```typescript
+interface Example {
+  /** コマンド引数（例: "config.json" や "--loud Alice"） */
+  cmd: string;
+  /** 使用例の説明 */
+  desc: string;
+  /** 期待される出力（ドキュメント用、省略可） */
+  output?: string;
 }
 ```
 
@@ -774,6 +794,7 @@ export type {
   CollectedLogs,
   Command,
   CommandBase,
+  Example,
   LogEntry,
   Logger,
   MainOptions,

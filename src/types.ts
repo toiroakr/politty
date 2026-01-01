@@ -1,6 +1,18 @@
 import type { z } from "zod";
 
 /**
+ * Example definition for a command
+ */
+export interface Example {
+  /** Command arguments to execute (e.g., "World" or "--loud Alice") */
+  cmd: string;
+  /** Description of the example */
+  desc: string;
+  /** Expected output (optional, for documentation) */
+  output?: string;
+}
+
+/**
  * Logger interface for CLI output
  * Can be overridden by passing a custom logger to runMain or runCommand
  */
@@ -61,6 +73,8 @@ export interface CommandBase<
   cleanup?: ((context: CleanupContext<TArgs>) => void | Promise<void>) | undefined;
   /** Additional notes */
   notes?: string | undefined;
+  /** Example usages for this command */
+  examples?: Example[] | undefined;
 }
 
 /**

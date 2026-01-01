@@ -1,9 +1,9 @@
 import {
-  getExtractedFields,
-  type ExtractedFields,
-  type ResolvedFieldMeta,
+    getExtractedFields,
+    type ExtractedFields,
+    type ResolvedFieldMeta
 } from "../core/schema-extractor.js";
-import type { AnyCommand } from "../types.js";
+import type { AnyCommand, Example } from "../types.js";
 import { styles } from "./logger.js";
 
 /**
@@ -595,10 +595,47 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
     }
   }
 
+  // Examples
+  if (command.examples && command.examples.length > 0) {
+    const exampleLines = renderExamplesForHelp(command.examples, context);
+    sections.push(`${styles.sectionHeader("Examples:")}\n${exampleLines}`);
+  }
+
   // Notes
   if (command.notes) {
     sections.push(`${styles.sectionHeader("Notes:")}\n${command.notes}`);
   }
 
   return sections.join("\n\n");
+}
+
+/**
+ * Render examples for CLI help output
+ */
+function renderExamplesForHelp(examples: Example[], context?: CommandContext): string {
+  const lines: string[] = [];
+  const cmdPrefix = context?.rootName ? `${context.rootName} ` : "";
+  const cmdPath = context?.commandPath?.join(" ") ?? "";
+  const fullPrefix = cmdPath ? `${cmdPrefix}${cmdPath} ` : cmdPrefix;
+
+  for (const example of examples) {
+    // Description
+    lines.push(`  ${styles.dim(example.desc)}`);
+    // Command
+    lines.push(`    ${styles.dim("$")} ${fullPrefix}${example.cmd}`);
+    // Output (if provided)
+    if (example.output) {
+      for (const line of example.output.split("\n")) {
+        lines.push(`    ${line}`);
+      }
+    }
+    lines.push(""); // Empty line between examples
+  }
+
+  // Remove trailing empty line
+  if (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+
+  return lines.join("\n");
 }
