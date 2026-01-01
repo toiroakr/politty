@@ -54,14 +54,22 @@ describe("Signal Handling", () => {
           errorOutput += data.toString();
         });
 
-        child.on("close", (code) => {
+        child.on("close", (code, signal) => {
           try {
             expect(output).toContain("CLEANUP_CALLED");
-            expect(code).toBe(1); // Should exit with 1 as per implementation
+            // Exit code can be 1 (normal cleanup), null (killed by signal in containers),
+            // or 130 (128 + SIGINT) depending on environment
+            if (code !== null) {
+              expect([1, 130]).toContain(code);
+            } else {
+              // In container environments, code can be null when killed by signal
+              expect(signal).toBe("SIGINT");
+            }
             resolve();
           } catch (e) {
             console.error("STDOUT:", output);
             console.error("STDERR:", errorOutput);
+            console.error("EXIT CODE:", code, "SIGNAL:", signal);
             reject(e);
           }
         });

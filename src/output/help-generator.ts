@@ -1,7 +1,7 @@
 import {
-    getExtractedFields,
-    type ExtractedFields,
-    type ResolvedFieldMeta
+  getExtractedFields,
+  type ExtractedFields,
+  type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
 import type { AnyCommand } from "../types.js";
 import { styles } from "./logger.js";

@@ -4,20 +4,20 @@ import { listSubCommands, resolveSubcommand } from "../executor/subcommand-route
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
 import type {
-    AnyCommand,
-    CollectedLogs,
-    InternalRunOptions,
-    Logger,
-    MainOptions,
-    RunCommandOptions,
-    RunResult
+  AnyCommand,
+  CollectedLogs,
+  InternalRunOptions,
+  Logger,
+  MainOptions,
+  RunCommandOptions,
+  RunResult,
 } from "../types.js";
 import {
-    formatRuntimeError,
-    formatUnknownFlag,
-    formatUnknownFlagWarning,
-    formatUnknownSubcommand,
-    formatValidationErrors
+  formatRuntimeError,
+  formatUnknownFlag,
+  formatUnknownFlagWarning,
+  formatUnknownSubcommand,
+  formatValidationErrors,
 } from "../validator/error-formatter.js";
 import { validateArgs } from "../validator/zod-validator.js";
 

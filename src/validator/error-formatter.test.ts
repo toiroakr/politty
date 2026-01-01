@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-    formatRuntimeError,
-    formatUnknownFlag,
-    formatValidationErrors
+  formatRuntimeError,
+  formatUnknownFlag,
+  formatValidationErrors,
 } from "./error-formatter.js";
 import type { ValidationError } from "./zod-validator.js";
 

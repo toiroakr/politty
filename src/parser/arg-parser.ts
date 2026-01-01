@@ -1,10 +1,10 @@
 import { extractFields, type ExtractedFields } from "../core/schema-extractor.js";
 import type { AnyCommand } from "../types.js";
 import {
-    validateDuplicateAliases,
-    validateDuplicateFields,
-    validatePositionalConfig,
-    validateReservedAliases
+  validateDuplicateAliases,
+  validateDuplicateFields,
+  validatePositionalConfig,
+  validateReservedAliases,
 } from "../validator/command-validator.js";
 import { buildParserOptions, mergeWithPositionals, parseArgv } from "./argv-parser.js";
 

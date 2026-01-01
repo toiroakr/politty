@@ -1,9 +1,9 @@
 import type {
-    AnyCommand,
-    CleanupContext,
-    CollectedLogs,
-    RunResult,
-    SetupContext
+  AnyCommand,
+  CleanupContext,
+  CollectedLogs,
+  RunResult,
+  SetupContext,
 } from "../types.js";
 import { createLogCollector, emptyLogs, mergeLogs } from "./log-collector.js";
 

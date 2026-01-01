@@ -2,10 +2,10 @@ import { extractFields, type ExtractedFields } from "../core/schema-extractor.js
 import { resolveLazyCommand } from "../executor/subcommand-router.js";
 import type { AnyCommand } from "../types.js";
 import {
-    DuplicateAliasError,
-    DuplicateFieldError,
-    PositionalConfigError,
-    ReservedAliasError
+  DuplicateAliasError,
+  DuplicateFieldError,
+  PositionalConfigError,
+  ReservedAliasError,
 } from "./validation-errors.js";
 
 // Re-export error classes for convenience

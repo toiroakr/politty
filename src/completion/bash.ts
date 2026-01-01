@@ -5,10 +5,10 @@
 import type { AnyCommand } from "../types.js";
 import { extractCompletionData } from "./extractor.js";
 import type {
-    CompletableOption,
-    CompletableSubcommand,
-    CompletionOptions,
-    CompletionResult
+  CompletableOption,
+  CompletableSubcommand,
+  CompletionOptions,
+  CompletionResult,
 } from "./types.js";
 
 /**

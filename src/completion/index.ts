@@ -37,15 +37,14 @@ import { generateZshCompletion } from "./zsh.js";
 // Re-export extractor
 export { extractCompletionData, extractPositionals } from "./extractor.js";
 export type {
-    CompletableOption,
-    CompletableSubcommand,
-    CompletionData,
-    CompletionGenerator,
-    CompletionOptions,
-    CompletionResult,
-    ShellType
+  CompletableOption,
+  CompletableSubcommand,
+  CompletionData,
+  CompletionGenerator,
+  CompletionOptions,
+  CompletionResult,
+  ShellType,
 } from "./types.js";
-
 
 /**
  * Generate completion script for the specified shell
