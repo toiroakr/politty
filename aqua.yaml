@@ -1,0 +1,9 @@
+---
+# aqua - Declarative CLI Version Manager
+# https://aquaproj.github.io/
+registries:
+  - type: standard
+    ref: v4.451.0 # renovate: depName=aquaproj/aqua-registry
+packages:
+  - name: suzuki-shunsuke/ghalint@v1.5.4
+  - name: suzuki-shunsuke/pinact@v3.8.0
