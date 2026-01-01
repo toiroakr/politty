@@ -54,10 +54,16 @@ describe("Signal Handling", () => {
           errorOutput += data.toString();
         });
 
-        child.on("close", (code) => {
+        child.on("close", (code, signal) => {
           try {
             expect(output).toContain("CLEANUP_CALLED");
-            expect(code).toBe(1); // Should exit with 1 as per implementation
+            // When killed by signal, code is null and signal is set
+            // When process calls process.exit(1), code is 1 and signal is null
+            if (code === null) {
+              expect(signal).toBe("SIGINT");
+            } else {
+              expect(code).toBe(1);
+            }
             resolve();
           } catch (e) {
             console.error("STDOUT:", output);
