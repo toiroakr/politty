@@ -1,0 +1,7 @@
+---
+registries:
+  - type: standard
+    ref: v4.311.0
+
+packages:
+  - name: suzuki-shunsuke/ghalint@v1.0.3

@@ -1,0 +1,6 @@
+---
+ignore_actions:
+  - name: actions/checkout
+  - name: actions/setup-node
+  - name: aquaproj/aqua-installer
+  - name: suzuki-shunsuke/pinact-action

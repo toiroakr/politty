@@ -19,9 +19,7 @@ jobs:
           aqua_version: v2.43.1
 
       - name: Run ghalint
-        run: |
-          aqua install -t ghalint
-          ghalint run
+        run: ghalint run
 
   pinact:
     runs-on: ubuntu-latest
