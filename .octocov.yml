@@ -7,7 +7,6 @@ coverage:
 
 body:
   enable: true
-  hideFooterLink: true
 
 diff:
   datastores:
