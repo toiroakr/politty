@@ -1,5 +1,5 @@
 pre-commit:
-  parallel: true
+  parallel: false
   commands:
     organize-imports:
       glob: "*.{ts,tsx,cts,mts}"
@@ -15,6 +15,7 @@ pre-commit:
       glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc,md}"
       run: pnpm fix:oxfmt {staged_files}
       stage_fixed: true
+      priority: 3
     typecheck:
       glob: "*.{ts,tsx,cts,mts}"
       run: pnpm typecheck

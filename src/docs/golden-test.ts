@@ -3,13 +3,13 @@ import { compareWithExisting, writeFile } from "./doc-comparator.js";
 import { collectAllCommands } from "./doc-generator.js";
 import { executeExamples } from "./example-executor.js";
 import type {
-    CommandInfo,
-    ExampleConfig,
-    FileConfig,
-    FormatterFunction,
-    GenerateDocConfig,
-    GenerateDocResult,
-    RenderFunction
+  CommandInfo,
+  ExampleConfig,
+  FileConfig,
+  FormatterFunction,
+  GenerateDocConfig,
+  GenerateDocResult,
+  RenderFunction,
 } from "./types.js";
 import { UPDATE_GOLDEN_ENV } from "./types.js";
 

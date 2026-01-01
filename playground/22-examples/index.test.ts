@@ -6,7 +6,33 @@ import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
 import { oxfmtFormatter } from "../../tests/utils/formatter.js";
 import { checkCommand, command, readCommand, writeCommand } from "./index.js";
 
-vi.mock("node:fs");
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...actual,
+    readFileSync: vi.fn((path: fs.PathOrFileDescriptor, options?: unknown) => {
+      // Allow golden test to read actual README files
+      if (String(path).includes("README") || String(path).includes("playground/22-examples")) {
+        return actual.readFileSync(path, options as fs.ObjectEncodingOptions);
+      }
+      throw new Error(`readFileSync not mocked for: ${path}`);
+    }),
+    writeFileSync: vi.fn((path: fs.PathOrFileDescriptor, data: unknown, options?: unknown) => {
+      // Allow golden test to write actual README files
+      if (String(path).includes("README") || String(path).includes("playground/22-examples")) {
+        return actual.writeFileSync(path, data as string, options as fs.WriteFileOptions);
+      }
+      throw new Error(`writeFileSync not mocked for: ${path}`);
+    }),
+    existsSync: vi.fn((path: fs.PathLike) => {
+      // Allow golden test to check actual files
+      if (String(path).includes("README") || String(path).includes("playground/22-examples")) {
+        return actual.existsSync(path);
+      }
+      return false;
+    }),
+  };
+});
 
 describe("22-examples", () => {
   let consoleSpy: ConsoleSpy;

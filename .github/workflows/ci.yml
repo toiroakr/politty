@@ -17,6 +17,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -39,5 +41,7 @@ jobs:
         run: pnpm format:check
       - name: Knip
         run: pnpm knip
-      - name: Test
-        run: pnpm test
+      - name: Test with coverage
+        run: pnpm test:coverage
+      - name: Run octocov
+        uses: k1LoW/octocov-action@73d561f65d59e66899ed5c87e4621a913b5d5c20 # v1.5.0

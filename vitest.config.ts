@@ -19,5 +19,12 @@ export default defineConfig({
         "playground/**/index.test.ts",
       ],
     },
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov"],
+      reportsDirectory: "./coverage",
+      include: ["src/**/*.ts"],
+      exclude: ["src/**/*.test.ts", "src/**/*.d.ts"],
+    },
   },
 });

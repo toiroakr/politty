@@ -1,0 +1,13 @@
+# octocov configuration
+# https://github.com/k1LoW/octocov
+
+coverage:
+  paths:
+    - coverage/lcov.info
+
+body:
+  enable: true
+
+diff:
+  datastores:
+    - artifact://${GITHUB_REPOSITORY}

@@ -1,19 +1,19 @@
 import type { ResolvedFieldMeta } from "../core/schema-extractor.js";
 import type { Example } from "../types.js";
 import type {
-    ArgumentsRenderContext,
-    CommandInfo,
-    DefaultRendererOptions,
-    ExampleExecutionResult,
-    ExamplesRenderContext,
-    ExamplesRenderOptions,
-    OptionsRenderContext,
-    RenderContentOptions,
-    RenderFunction,
-    SimpleRenderContext,
-    SubCommandInfo,
-    SubcommandsRenderContext,
-    SubcommandsRenderOptions
+  ArgumentsRenderContext,
+  CommandInfo,
+  DefaultRendererOptions,
+  ExampleExecutionResult,
+  ExamplesRenderContext,
+  ExamplesRenderOptions,
+  OptionsRenderContext,
+  RenderContentOptions,
+  RenderFunction,
+  SimpleRenderContext,
+  SubCommandInfo,
+  SubcommandsRenderContext,
+  SubcommandsRenderOptions,
 } from "./types.js";
 
 /**
