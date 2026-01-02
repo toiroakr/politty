@@ -5,6 +5,7 @@ import type {
   Example,
   NonRunnableCommand,
   RunnableCommand,
+  SubCommandsRecord,
 } from "../types.js";
 
 /**
@@ -23,8 +24,7 @@ interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResul
   name: string;
   description?: string;
   args?: TArgsSchema;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  subCommands?: Record<string, Command<any, any, any> | (() => Promise<Command<any, any, any>>)>;
+  subCommands?: SubCommandsRecord;
   setup?: (context: { args: InferArgs<TArgsSchema> }) => void | Promise<void>;
   run?: (args: InferArgs<TArgsSchema>) => TResult;
   cleanup?: (context: {
@@ -126,8 +126,7 @@ export function defineCommand<
   TResult = void,
 >(
   config: RunnableConfig<TArgsSchema, TResult> | NonRunnableConfig<TArgsSchema>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): any {
+): Command<TArgsSchema, InferArgs<TArgsSchema>, TResult> {
   return {
     name: config.name,
     description: config.description,
@@ -138,5 +137,5 @@ export function defineCommand<
     cleanup: config.cleanup,
     notes: config.notes,
     examples: config.examples,
-  };
+  } as Command<TArgsSchema, InferArgs<TArgsSchema>, TResult>;
 }

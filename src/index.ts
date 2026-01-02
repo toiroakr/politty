@@ -49,6 +49,9 @@ export type {
   RunResultSuccess,
   // Context types
   SetupContext,
+  // Subcommand types
+  SubCommandsRecord,
+  SubCommandValue,
 } from "./types.js";
 // Command definition validation
 export {

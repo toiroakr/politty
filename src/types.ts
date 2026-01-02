@@ -63,10 +63,7 @@ export interface CommandBase<
   /** Argument schema (preserves the original Zod schema type) */
   args: TArgsSchema;
   /** Subcommands */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  subCommands?:
-    | Record<string, Command<any, any, any> | (() => Promise<Command<any, any, any>>)>
-    | undefined;
+  subCommands?: SubCommandsRecord | undefined;
   /** Setup hook */
   setup?: ((context: SetupContext<TArgs>) => void | Promise<void>) | undefined;
   /** Cleanup hook */
@@ -115,11 +112,36 @@ export type Command<
 > = RunnableCommand<TArgsSchema, TArgs, TResult> | NonRunnableCommand<TArgsSchema, TArgs>;
 
 /**
+ * Type alias for any args type.
+ * Note: `any` is required here due to TypeScript's function parameter contravariance.
+ * Using `unknown` would make it impossible to assign concrete command types to AnyCommand.
+ * @internal
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyArgs = any;
+
+/**
+ * Type alias for any result type.
+ * @internal
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyResult = any;
+
+/**
  * Command type that accepts any args/result types
  * Used in internal functions that don't need specific type information
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyCommand = Command<any, any, any>;
+export type AnyCommand = Command<ArgsSchema | undefined, AnyArgs, AnyResult>;
+
+/**
+ * Subcommand value type (either a command or a lazy-loaded command)
+ */
+export type SubCommandValue = AnyCommand | (() => Promise<AnyCommand>);
+
+/**
+ * Record of subcommands indexed by name
+ */
+export type SubCommandsRecord = Record<string, SubCommandValue>;
 
 /**
  * Options for runMain (CLI entry point)
