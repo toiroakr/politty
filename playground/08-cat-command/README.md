@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # cat
 
 ファイルの内容を表示する（catコマンド風）
@@ -20,3 +22,5 @@ cat [options] <files>
 | ------------- | ----- | ------------- | ------- |
 | `--number`    | `-n`  | 行番号を表示  | `false` |
 | `--show-ends` | `-E`  | 行末に$を表示 | `false` |
+
+<!-- politty:command::end -->

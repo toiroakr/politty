@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # process
 
 ファイルを処理（intersectionの例）
@@ -22,3 +24,5 @@ process [options] <input>
 | `--config <CONFIG>` | `-c`  | 設定ファイル | -       |
 | `--quiet`           | `-q`  | 出力を抑制   | `false` |
 | `--output <OUTPUT>` | `-o`  | 出力ファイル | -       |
+
+<!-- politty:command::end -->

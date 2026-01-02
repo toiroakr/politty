@@ -89,6 +89,10 @@ describe("golden-test", () => {
       const content = fs.readFileSync(filePath, "utf-8");
       expect(content).toContain("# test-cli");
       expect(content).toContain("A test CLI for documentation generation");
+
+      // Verify markers are included
+      expect(content).toContain("<!-- politty:command::start -->");
+      expect(content).toContain("<!-- politty:command::end -->");
     });
 
     it("should report match when content is identical", async () => {
@@ -481,6 +485,79 @@ describe("golden-test", () => {
 
       expect(matchResult.success).toBe(true);
       expect(matchResult.files[0]?.status).toBe("match");
+    });
+  });
+
+  describe("targetCommand", () => {
+    it("should validate only the target command section", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "cli.md");
+
+      // Create file with all commands
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      // Validate only greet command - should match
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommand: "greet",
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("match");
+    });
+
+    it("should update only the target command section", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "cli.md");
+
+      // Create initial file
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      // Read original content
+      const originalContent = fs.readFileSync(filePath, "utf-8");
+      expect(originalContent).toContain("<!-- politty:command:greet:start -->");
+
+      // Manually modify the greet section in the file
+      const modifiedContent = originalContent.replace(
+        /<!-- politty:command:greet:start -->\n# greet/,
+        "<!-- politty:command:greet:start -->\n# MODIFIED greet",
+      );
+      fs.writeFileSync(filePath, modifiedContent, "utf-8");
+
+      // Update only greet command
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommand: "greet",
+      });
+
+      // Verify greet section was restored but other sections remain
+      const updatedContent = fs.readFileSync(filePath, "utf-8");
+      expect(updatedContent).toContain("<!-- politty:command:greet:start -->\n# greet");
+      expect(updatedContent).not.toContain("# MODIFIED greet");
+    });
+
+    it("should throw error for invalid target command", async () => {
+      const filePath = path.join(testDir, "cli.md");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          files: { [filePath]: [""] },
+          targetCommand: "nonexistent",
+        }),
+      ).rejects.toThrow('Target command "nonexistent" not found');
     });
   });
 

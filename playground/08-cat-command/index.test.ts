@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
-import { oxfmtFormatter } from "../../tests/utils/formatter.js";
+import { mdFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("08-cat-command", () => {
@@ -67,7 +67,7 @@ describe("08-cat-command", () => {
     await assertDocMatch({
       command,
       files: { "playground/08-cat-command/README.md": [""] },
-      formatter: oxfmtFormatter,
+      formatter: mdFormatter,
     });
   });
 });

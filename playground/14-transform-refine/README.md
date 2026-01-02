@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # validation-demo
 
 transform/refineのデモ
@@ -15,7 +17,8 @@ validation-demo [command]
 | [`transform`](#transform) | transformを使った変換の例                |
 | [`refine`](#refine)       | refineを使ったカスタムバリデーションの例 |
 
----
+<!-- politty:command::end -->
+<!-- politty:command:refine:start -->
 
 # refine-example
 
@@ -34,7 +37,8 @@ validation-demo refine <input> <output>
 | `input`  | 入力ファイル | Yes      |
 | `output` | 出力ファイル | Yes      |
 
----
+<!-- politty:command:refine:end -->
+<!-- politty:command:transform:start -->
 
 # transform-example
 
@@ -57,3 +61,5 @@ validation-demo transform [options] <name>
 | Option          | Alias | Description        | Default |
 | --------------- | ----- | ------------------ | ------- |
 | `--tags <TAGS>` | `-t`  | カンマ区切りのタグ | -       |
+
+<!-- politty:command:transform:end -->

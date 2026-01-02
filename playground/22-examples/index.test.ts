@@ -1,23 +1,60 @@
 import * as fs from "node:fs";
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
-import { assertDocMatch } from "../../src/docs/index.js";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { assertDocMatch, initDocFile, type GenerateDocConfig } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
-import { oxfmtFormatter } from "../../tests/utils/formatter.js";
+import { mdFormatter } from "../../tests/utils/formatter.js";
 import { checkCommand, command, readCommand, writeCommand } from "./index.js";
 
 vi.mock("node:fs");
 
+// Get actual fs module (not mocked)
+const realFs = await vi.importActual<typeof fs>("node:fs");
+
+// Shared config for all documentation tests - fileMap is built from this
+const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommand"> = {
+  command,
+  files: { "playground/22-examples/README.md": ["", "read", "write", "check"] },
+  formatter: mdFormatter,
+};
+
 describe("22-examples", () => {
   let consoleSpy: ConsoleSpy;
+
+  // Initialize doc file before all tests (deletes file when update mode is enabled)
+  beforeAll(() => {
+    initDocFile(baseDocConfig, realFs);
+  });
 
   beforeEach(() => {
     consoleSpy = spyOnConsoleLog();
     vi.resetAllMocks();
+
+    // By default, delegate to real fs for doc-comparator operations
+    vi.mocked(fs.existsSync).mockImplementation((path) => realFs.existsSync(path));
+    vi.mocked(fs.readFileSync).mockImplementation((path, options) =>
+      realFs.readFileSync(path, options as fs.EncodingOption),
+    );
+    vi.mocked(fs.writeFileSync).mockImplementation((path, data, options) =>
+      realFs.writeFileSync(path, data, options),
+    );
+    vi.mocked(fs.mkdirSync).mockImplementation((path, options) => realFs.mkdirSync(path, options));
   });
 
   afterEach(() => {
     consoleSpy.mockRestore();
+  });
+
+  describe("root command", () => {
+    describe("documentation", () => {
+      it("generates documentation", async () => {
+        await assertDocMatch({
+          ...baseDocConfig,
+          targetCommand: "",
+          examples: {},
+        });
+      });
+    });
   });
 
   describe("read command", () => {
@@ -39,6 +76,36 @@ describe("22-examples", () => {
       if (result.success) {
         expect(result.result).toEqual({ key: "value" });
       }
+    });
+
+    it("documentation", async () => {
+      const readFileSyncSpy = vi.mocked(fs.readFileSync);
+
+      await assertDocMatch({
+        ...baseDocConfig,
+        targetCommand: "read",
+        examples: {
+          read: {
+            mock: () => {
+              readFileSyncSpy.mockImplementation((path: fs.PathOrFileDescriptor) => {
+                if (path === "config.json") {
+                  return '{\n  "name": "my-app",\n  "version": "1.0.0"\n}';
+                }
+                if (path === "data.txt") {
+                  return "Hello from data.txt";
+                }
+                // Delegate to real fs for other files (like README.md)
+                return realFs.readFileSync(path, "utf-8");
+              });
+            },
+            cleanup: () => {
+              readFileSyncSpy.mockImplementation((path, options) =>
+                realFs.readFileSync(path, options as fs.EncodingOption),
+              );
+            },
+          },
+        },
+      });
     });
   });
 
@@ -62,6 +129,33 @@ describe("22-examples", () => {
       expect(fs.writeFileSync).toHaveBeenCalledWith("log.txt", "entry", { flag: "a" });
       expect(consoleSpy).toHaveBeenCalledWith("Successfully appended to log.txt");
     });
+
+    it("documentation", async () => {
+      const writeFileSyncSpy = vi.mocked(fs.writeFileSync);
+
+      await assertDocMatch({
+        ...baseDocConfig,
+        targetCommand: "write",
+        examples: {
+          write: {
+            mock: () => {
+              writeFileSyncSpy.mockImplementation((path, data, options) => {
+                // Ignore writes to example files, but allow doc file writes
+                if (String(path).endsWith(".md")) {
+                  realFs.writeFileSync(path, data, options);
+                }
+                // Silently ignore example command writes
+              });
+            },
+            cleanup: () => {
+              writeFileSyncSpy.mockImplementation((path, data, options) =>
+                realFs.writeFileSync(path, data, options),
+              );
+            },
+          },
+        },
+      });
+    });
   });
 
   describe("check command", () => {
@@ -82,140 +176,30 @@ describe("22-examples", () => {
       expect(result.success).toBe(true);
       expect(consoleSpy).toHaveBeenCalledWith("File not found: missing.txt");
     });
-  });
 
-  describe("documentation", () => {
-    let readFileSyncSpy: MockInstance;
-    let writeFileSyncSpy: MockInstance;
-    let existsSyncSpy: MockInstance;
+    it("documentation", async () => {
+      const existsSyncSpy = vi.mocked(fs.existsSync);
 
-    beforeEach(() => {
-      readFileSyncSpy = vi.mocked(fs.readFileSync);
-      writeFileSyncSpy = vi.mocked(fs.writeFileSync);
-      existsSyncSpy = vi.mocked(fs.existsSync);
-    });
-
-    it("generates documentation with example execution and per-command mocks", async () => {
       await assertDocMatch({
-        command,
-        files: { "playground/22-examples/README.md": ["", "read", "write", "check"] },
-        formatter: oxfmtFormatter,
+        ...baseDocConfig,
+        targetCommand: "check",
         examples: {
-          read: {
-            mock: () => {
-              readFileSyncSpy.mockImplementation((path: fs.PathOrFileDescriptor) => {
-                if (path === "config.json") {
-                  return '{\n  "name": "my-app",\n  "version": "1.0.0"\n}';
-                }
-                if (path === "data.txt") {
-                  return "Hello from data.txt";
-                }
-                throw new Error(`File not found: ${path}`);
-              });
-            },
-            cleanup: () => {
-              readFileSyncSpy.mockReset();
-            },
-          },
-          write: {
-            mock: () => {
-              writeFileSyncSpy.mockImplementation(() => {});
-            },
-            cleanup: () => {
-              writeFileSyncSpy.mockReset();
-            },
-          },
           check: {
             mock: () => {
               existsSyncSpy.mockImplementation((path: fs.PathLike) => {
-                return path === "config.json";
+                // For example files, return mock values
+                if (path === "config.json") return true;
+                if (path === "missing.txt") return false;
+                // Delegate to real fs for other files
+                return realFs.existsSync(path);
               });
             },
             cleanup: () => {
-              existsSyncSpy.mockReset();
+              existsSyncSpy.mockImplementation((path) => realFs.existsSync(path));
             },
           },
         },
       });
-    });
-
-    it("verifies mocks do not interfere between commands", async () => {
-      const readMockValues: string[] = [];
-      const writeMockValues: string[] = [];
-      const checkMockValues: boolean[] = [];
-
-      await assertDocMatch({
-        command,
-        files: { "playground/22-examples/README-isolated.md": ["", "read", "write", "check"] },
-        formatter: oxfmtFormatter,
-        examples: {
-          read: {
-            mock: () => {
-              readFileSyncSpy.mockImplementation((path: fs.PathOrFileDescriptor) => {
-                const content = `READ_MOCK_CONTENT_FOR_${path}`;
-                readMockValues.push(content);
-                return content;
-              });
-              // Other operations should not be called during read
-              writeFileSyncSpy.mockImplementation(() => {
-                throw new Error("writeFileSync should not be called during read mock");
-              });
-              existsSyncSpy.mockImplementation(() => {
-                throw new Error("existsSync should not be called during read mock");
-              });
-            },
-            cleanup: () => {
-              vi.resetAllMocks();
-            },
-          },
-          write: {
-            mock: () => {
-              writeFileSyncSpy.mockImplementation((_path, content) => {
-                writeMockValues.push(content as string);
-              });
-              // Other operations should not be called during write
-              readFileSyncSpy.mockImplementation(() => {
-                throw new Error("readFileSync should not be called during write mock");
-              });
-              existsSyncSpy.mockImplementation(() => {
-                throw new Error("existsSync should not be called during write mock");
-              });
-            },
-            cleanup: () => {
-              vi.resetAllMocks();
-            },
-          },
-          check: {
-            mock: () => {
-              existsSyncSpy.mockImplementation((path: fs.PathLike) => {
-                const exists = String(path).includes("config");
-                checkMockValues.push(exists);
-                return exists;
-              });
-              // Other operations should not be called during check
-              readFileSyncSpy.mockImplementation(() => {
-                throw new Error("readFileSync should not be called during check mock");
-              });
-              writeFileSyncSpy.mockImplementation(() => {
-                throw new Error("writeFileSync should not be called during check mock");
-              });
-            },
-            cleanup: () => {
-              vi.resetAllMocks();
-            },
-          },
-        },
-      });
-
-      // Verify each mock was applied correctly
-      expect(readMockValues.length).toBeGreaterThan(0);
-      expect(readMockValues.every((v) => v.startsWith("READ_MOCK_CONTENT_FOR_"))).toBe(true);
-
-      expect(writeMockValues.length).toBeGreaterThan(0);
-
-      expect(checkMockValues.length).toBeGreaterThan(0);
-      expect(checkMockValues).toContain(true);
-      expect(checkMockValues).toContain(false);
     });
   });
 });

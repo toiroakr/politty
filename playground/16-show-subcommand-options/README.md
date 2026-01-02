@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # git-like
 
 サブコマンドのオプションをまとめて表示する例
@@ -15,7 +17,8 @@ git-like [command]
 | [`config`](#config) | 設定を管理     |
 | [`remote`](#remote) | リモートを管理 |
 
----
+<!-- politty:command::end -->
+<!-- politty:command:config:start -->
 
 # config
 
@@ -35,7 +38,8 @@ git-like config [command]
 | [`config set`](#config-set)   | 設定値を設定         |
 | [`config list`](#config-list) | 全ての設定を一覧表示 |
 
----
+<!-- politty:command:config:end -->
+<!-- politty:command:config get:start -->
 
 # get
 
@@ -53,7 +57,8 @@ git-like config get <key>
 | -------- | ----------- | -------- |
 | `key`    | 設定キー    | Yes      |
 
----
+<!-- politty:command:config get:end -->
+<!-- politty:command:config list:start -->
 
 # list
 
@@ -72,7 +77,8 @@ git-like config list [options]
 | `--format <FORMAT>` | `-f`  | 出力形式             | `"table"` |
 | `--global`          | `-g`  | グローバル設定を表示 | `false`   |
 
----
+<!-- politty:command:config list:end -->
+<!-- politty:command:config set:start -->
 
 # set
 
@@ -91,7 +97,8 @@ git-like config set <key> <value>
 | `key`    | 設定キー    | Yes      |
 | `value`  | 設定値      | Yes      |
 
----
+<!-- politty:command:config set:end -->
+<!-- politty:command:remote:start -->
 
 # remote
 
@@ -110,7 +117,8 @@ git-like remote [command]
 | [`remote add`](#remote-add)       | リモートを追加 |
 | [`remote remove`](#remote-remove) | リモートを削除 |
 
----
+<!-- politty:command:remote:end -->
+<!-- politty:command:remote add:start -->
 
 # add
 
@@ -129,7 +137,8 @@ git-like remote add <name> <url>
 | `name`   | リモート名  | Yes      |
 | `url`    | リモートURL | Yes      |
 
----
+<!-- politty:command:remote add:end -->
+<!-- politty:command:remote remove:start -->
 
 # remove
 
@@ -152,3 +161,5 @@ git-like remote remove [options] <name>
 | Option    | Alias | Description | Default |
 | --------- | ----- | ----------- | ------- |
 | `--force` | `-f`  | 強制削除    | `false` |
+
+<!-- politty:command:remote remove:end -->

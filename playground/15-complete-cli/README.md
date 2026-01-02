@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # my-tool
 
 完全なCLIツールの例
@@ -32,7 +34,8 @@ my-tool [options] [command] <input>
 
 サブコマンド、ライフサイクルフック、複数の出力形式をサポートしています。
 
----
+<!-- politty:command::end -->
+<!-- politty:command:init:start -->
 
 # init
 
@@ -50,3 +53,5 @@ my-tool init [options]
 | ----------------------- | ----- | -------------------- | ----------- |
 | `--template <TEMPLATE>` | `-t`  | 使用するテンプレート | `"default"` |
 | `--name <NAME>`         | `-n`  | プロジェクト名       | -           |
+
+<!-- politty:command:init:end -->

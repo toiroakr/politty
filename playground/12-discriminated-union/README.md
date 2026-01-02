@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # resource
 
 リソースを管理（discriminatedUnionの例）
@@ -24,3 +26,5 @@ resource [options]
 
 --action の値によって使用可能なオプションが変わります。
 create: --name, --template / delete: --id, --force / list: --format, --limit
+
+<!-- politty:command::end -->

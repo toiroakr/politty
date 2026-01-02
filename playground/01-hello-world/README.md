@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # hello
 
 Hello Worldを表示するシンプルなコマンド
@@ -7,3 +9,5 @@ Hello Worldを表示するシンプルなコマンド
 ```
 hello
 ```
+
+<!-- politty:command::end -->

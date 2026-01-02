@@ -64,14 +64,15 @@ console.log(result.files); // 各ファイルのステータス
 
 ### `GenerateDocConfig`
 
-| Property    | Type                     | Description                                |
-| ----------- | ------------------------ | ------------------------------------------ |
-| `command`   | `AnyCommand`             | ドキュメント生成対象のコマンド             |
-| `files`     | `FileMapping`            | ファイルパスとコマンドのマッピング         |
-| `ignores`   | `string[]`               | 除外するコマンドパス（サブコマンドも除外） |
-| `format`    | `DefaultRendererOptions` | デフォルトレンダラーのオプション           |
-| `formatter` | `FormatterFunction`      | 生成内容のフォーマッター                   |
-| `examples`  | `ExampleConfig`          | コマンドごとのexample実行設定              |
+| Property        | Type                     | Description                                |
+| --------------- | ------------------------ | ------------------------------------------ |
+| `command`       | `AnyCommand`             | ドキュメント生成対象のコマンド             |
+| `files`         | `FileMapping`            | ファイルパスとコマンドのマッピング         |
+| `ignores`       | `string[]`               | 除外するコマンドパス（サブコマンドも除外） |
+| `format`        | `DefaultRendererOptions` | デフォルトレンダラーのオプション           |
+| `formatter`     | `FormatterFunction`      | 生成内容のフォーマッター                   |
+| `examples`      | `ExampleConfig`          | コマンドごとのexample実行設定              |
+| `targetCommand` | `string`                 | 特定コマンドのみを検証・生成（部分更新用） |
 
 ### `FileMapping`
 
@@ -184,6 +185,61 @@ await assertDocMatch({
 - `examples`に指定したコマンドパスのexamplesが実行される
 - 各コマンドの`mock`→examples実行→`cleanup`の順で処理される
 - モックは各コマンド間で干渉しない（`cleanup`でリセット）
+
+### `targetCommand`
+
+特定のコマンドのセクションのみを検証・生成します。コマンドごとにテストを分離する際に使用します：
+
+```typescript
+// read コマンドのセクションのみを検証・生成
+await assertDocMatch({
+  command: cli,
+  files: { "docs/cli.md": ["", "read", "write"] },
+  targetCommand: "read",
+  examples: {
+    read: { mock: () => { /* ... */ }, cleanup: () => { /* ... */ } },
+  },
+});
+```
+
+- `targetCommand`を指定すると、そのコマンドのセクションのみが生成・検証される
+- 他のコマンドのセクションは既存ファイルにあればそのまま維持
+- セクションが存在しない場合は`files`で指定された順序の正しい位置に挿入
+- ルートコマンドを指定する場合は空文字列`""`を使用
+
+### `initDocFile(config, fileSystem?)`
+
+テスト開始時にドキュメントファイルを初期化（削除）します。`beforeAll`で呼び出すことで、skipしたテストのセクションが残らないようにできます：
+
+```typescript
+import { initDocFile } from "politty/docs";
+
+const docConfig = {
+  command,
+  files: { "docs/cli.md": ["", "sub1", "sub2"] },
+};
+
+describe("my-cli", () => {
+  beforeAll(() => {
+    initDocFile(docConfig);  // files内の全ファイルを初期化
+  });
+
+  // 各コマンドのテスト...
+});
+```
+
+- 第1引数は `{ files: ... }` を含むオブジェクト、または単一のファイルパス文字列
+- `POLITTY_DOCS_UPDATE=true`の時のみファイルを削除
+- 通常のテスト実行時は何もしない（既存ファイルを検証）
+- fsをモックしている場合は、第2引数に`realFs`を渡す：
+
+```typescript
+const realFs = await vi.importActual<typeof fs>("node:fs");
+
+beforeAll(() => {
+  initDocFile(docConfig, realFs);
+});
+```
 
 ### `defineCommand`の`examples`フィールド
 
@@ -396,6 +452,8 @@ command-name [options] <arg>
 
 ## Example: Playground Tests
 
+### シンプルな例
+
 各 playground コマンドでドキュメントテストを実装している例：
 
 ```typescript
@@ -416,12 +474,102 @@ describe("01-hello-world", () => {
 });
 ```
 
+### コマンドごとにテストを分離する例
+
+複数のサブコマンドがあり、各コマンドで異なるモックが必要な場合、`targetCommand`と`initDocFile`を使ってテストを分離できます：
+
+```typescript
+// playground/22-examples/index.test.ts
+import * as fs from "node:fs";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { assertDocMatch, initDocFile, type GenerateDocConfig } from "politty/docs";
+import { command, readCommand, writeCommand, checkCommand } from "./index.js";
+
+vi.mock("node:fs");
+const realFs = await vi.importActual<typeof fs>("node:fs");
+
+const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommand"> = {
+  command,
+  files: { "playground/22-examples/README.md": ["", "read", "write", "check"] },
+};
+
+describe("22-examples", () => {
+  // テスト開始時にドキュメントファイルを初期化（fsをモックしている場合はrealFsを渡す）
+  beforeAll(() => {
+    initDocFile(baseDocConfig, realFs);
+  });
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    // realFsに委譲
+    vi.mocked(fs.existsSync).mockImplementation((path) => realFs.existsSync(path));
+    vi.mocked(fs.readFileSync).mockImplementation((path, opts) =>
+      realFs.readFileSync(path, opts as fs.EncodingOption),
+    );
+    vi.mocked(fs.writeFileSync).mockImplementation((path, data, opts) =>
+      realFs.writeFileSync(path, data, opts),
+    );
+  });
+
+  describe("root command", () => {
+    it("documentation", async () => {
+      await assertDocMatch({
+        ...baseDocConfig,
+        targetCommand: "",  // ルートコマンド
+        examples: {},
+      });
+    });
+  });
+
+  describe("read command", () => {
+    it("reads file content", async () => {
+      vi.mocked(fs.readFileSync).mockReturnValue("file content");
+      // ... テスト
+    });
+
+    it("documentation", async () => {
+      await assertDocMatch({
+        ...baseDocConfig,
+        targetCommand: "read",
+        examples: {
+          read: {
+            mock: () => {
+              vi.mocked(fs.readFileSync).mockImplementation((path) => {
+                if (path === "config.json") return '{"name": "app"}';
+                return realFs.readFileSync(path, "utf-8");
+              });
+            },
+            cleanup: () => {
+              vi.mocked(fs.readFileSync).mockImplementation((path, opts) =>
+                realFs.readFileSync(path, opts as fs.EncodingOption),
+              );
+            },
+          },
+        },
+      });
+    });
+  });
+
+  describe("write command", () => {
+    // ... 同様のパターン
+  });
+});
+```
+
+このパターンの利点：
+
+- 各コマンドのモックが独立：`read`コマンドと`write`コマンドで異なるモック設定が可能
+- テストのskipが反映：テストをskipすると、そのコマンドのセクションは生成されない
+- 順序が保持：`files`で指定した順序でセクションが配置される
+- 冪等性：何度実行しても同じ結果が得られる
+
 ## Exports
 
 ### Main API
 
 - `assertDocMatch` - ゴールデンテストアサーション
 - `generateDoc` - ドキュメント生成
+- `initDocFile` - ドキュメントファイル初期化（更新モード時にファイルを削除）
 
 ### Utilities
 

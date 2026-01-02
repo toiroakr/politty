@@ -20,12 +20,16 @@ export {
 } from "./default-renderers.js";
 // Comparator utilities
 export { compareWithExisting, formatDiff, writeFile } from "./doc-comparator.js";
+export type { DeleteFileFs } from "./doc-comparator.js";
 // Document generator utilities
 export { buildCommandInfo, collectAllCommands } from "./doc-generator.js";
 // Example executor
 export { executeExamples } from "./example-executor.js";
-export { assertDocMatch, generateDoc } from "./golden-test.js";
-export { UPDATE_GOLDEN_ENV } from "./types.js";
+export { assertDocMatch, generateDoc, initDocFile } from "./golden-test.js";
+export {
+    commandEndMarker,
+    commandStartMarker, COMMAND_MARKER_PREFIX, UPDATE_GOLDEN_ENV
+} from "./types.js";
 // Types
 export type {
     ArgumentsRenderContext,
