@@ -48,6 +48,16 @@ export interface SubCommandInfo {
 }
 
 /**
+ * Output entry with stream type for preserving output order
+ */
+export interface OutputEntry {
+  /** Stream type */
+  stream: "stdout" | "stderr";
+  /** Output text */
+  text: string;
+}
+
+/**
  * Example execution result
  */
 export interface ExampleExecutionResult {
@@ -61,6 +71,8 @@ export interface ExampleExecutionResult {
   stdout: string;
   /** Captured stderr */
   stderr: string;
+  /** Ordered output entries preserving stdout/stderr interleaving */
+  output: OutputEntry[];
   /** Whether execution was successful */
   success: boolean;
 }
@@ -177,6 +189,8 @@ export interface ExamplesRenderOptions {
   withHeading?: boolean;
   /** Show execution output (default: true when results available) */
   showOutput?: boolean;
+  /** Preserve stdout/stderr interleaved order (default: false for backward compatibility) */
+  preserveOrder?: boolean;
 }
 
 /**

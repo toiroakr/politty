@@ -1,5 +1,5 @@
 import type { AnyCommand, Example } from "../types.js";
-import type { ExampleCommandConfig, ExampleExecutionResult } from "./types.js";
+import type { ExampleCommandConfig, ExampleExecutionResult, OutputEntry } from "./types.js";
 
 /**
  * Execute examples for a command and capture output
@@ -55,19 +55,26 @@ async function executeSingleExample(
   // Capture stdout and stderr
   const stdoutCapture: string[] = [];
   const stderrCapture: string[] = [];
+  const outputCapture: OutputEntry[] = [];
 
   const originalLog = console.log;
   const originalError = console.error;
   const originalWarn = console.warn;
 
   console.log = (...args: unknown[]) => {
-    stdoutCapture.push(formatArgs(args));
+    const text = formatArgs(args);
+    stdoutCapture.push(text);
+    outputCapture.push({ stream: "stdout", text });
   };
   console.error = (...args: unknown[]) => {
-    stderrCapture.push(formatArgs(args));
+    const text = formatArgs(args);
+    stderrCapture.push(text);
+    outputCapture.push({ stream: "stderr", text });
   };
   console.warn = (...args: unknown[]) => {
-    stderrCapture.push(formatArgs(args));
+    const text = formatArgs(args);
+    stderrCapture.push(text);
+    outputCapture.push({ stream: "stderr", text });
   };
 
   let success = true;
@@ -79,11 +86,15 @@ async function executeSingleExample(
 
     // Also capture any errors from the result
     if (!result.success && result.error) {
-      stderrCapture.push(result.error.message);
+      const errorText = result.error.message;
+      stderrCapture.push(errorText);
+      outputCapture.push({ stream: "stderr", text: errorText });
     }
   } catch (error) {
     success = false;
-    stderrCapture.push(error instanceof Error ? error.message : String(error));
+    const errorText = error instanceof Error ? error.message : String(error);
+    stderrCapture.push(errorText);
+    outputCapture.push({ stream: "stderr", text: errorText });
   } finally {
     console.log = originalLog;
     console.error = originalError;
@@ -96,6 +107,7 @@ async function executeSingleExample(
     expectedOutput: example.output,
     stdout: stdoutCapture.join("\n"),
     stderr: stderrCapture.join("\n"),
+    output: outputCapture,
     success,
   };
 }

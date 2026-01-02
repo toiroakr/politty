@@ -453,6 +453,7 @@ export function renderExamplesDefault(
   }
 
   const showOutput = opts?.showOutput ?? true;
+  const preserveOrder = opts?.preserveOrder ?? false;
   const lines: string[] = [];
 
   for (let i = 0; i < examples.length; i++) {
@@ -472,12 +473,23 @@ export function renderExamplesDefault(
     // Output
     if (showOutput) {
       if (result) {
-        // Use captured output from execution
-        if (result.stdout) {
-          lines.push(result.stdout);
-        }
-        if (result.stderr) {
-          lines.push(`[stderr] ${result.stderr}`);
+        if (preserveOrder && result.output.length > 0) {
+          // Use ordered output entries
+          for (const entry of result.output) {
+            if (entry.stream === "stderr") {
+              lines.push(`[stderr] ${entry.text}`);
+            } else {
+              lines.push(entry.text);
+            }
+          }
+        } else {
+          // Use captured output from execution (backward compatible)
+          if (result.stdout) {
+            lines.push(result.stdout);
+          }
+          if (result.stderr) {
+            lines.push(`[stderr] ${result.stderr}`);
+          }
         }
       } else if (example.output) {
         // Use expected output from definition
