@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # process-files
 
 複数ファイルを処理する
@@ -14,3 +16,5 @@ process-files [options]
 | ----------------- | ----- | ------------------------------ | ------- |
 | `--files <FILES>` | `-f`  | 処理するファイル（複数指定可） | -       |
 | `--verbose`       | `-v`  | 詳細出力                       | `false` |
+
+<!-- politty:command::end -->

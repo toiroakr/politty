@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # auth-demo
 
 Demo of xor (exclusive union) help with auth methods
@@ -15,3 +17,5 @@ auth-demo [options]
 | `--token <TOKEN>`       | -     | API Token   | -       |
 | `--username <USERNAME>` | -     | Username    | -       |
 | `--password <PASSWORD>` | -     | Password    | -       |
+
+<!-- politty:command::end -->

@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # gcc
 
 Cコンパイラ（gccコマンド風）
@@ -20,3 +22,5 @@ gcc [options] <sources>
 | ------------------- | ----- | ------------------ | ------- |
 | `--output <OUTPUT>` | `-o`  | 出力ファイル名     | -       |
 | `--optimize`        | `-O`  | 最適化を有効にする | `false` |
+
+<!-- politty:command::end -->

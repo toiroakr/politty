@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # convert
 
 ファイル形式を変換する（オプションpositionalの例）
@@ -20,3 +22,5 @@ convert [options] <input> [output]
 | Option              | Alias | Description | Default  |
 | ------------------- | ----- | ----------- | -------- |
 | `--format <FORMAT>` | `-f`  | 出力形式    | `"json"` |
+
+<!-- politty:command::end -->

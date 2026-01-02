@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # greet
 
 挨拶を表示するCLIツール
@@ -20,3 +22,5 @@ greet [options] <name>
 | ----------------------- | ----- | -------------- | --------- |
 | `--greeting <GREETING>` | `-g`  | 挨拶のフレーズ | `"Hello"` |
 | `--loud`                | `-l`  | 大文字で出力   | `false`   |
+
+<!-- politty:command::end -->

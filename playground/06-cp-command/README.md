@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # cp
 
 ファイルをコピーする（cpコマンド風）
@@ -21,3 +23,5 @@ cp [options] <source> <destination>
 | ------------- | ----- | ---------------------------- | ------- |
 | `--recursive` | `-r`  | ディレクトリを再帰的にコピー | `false` |
 | `--force`     | `-f`  | 上書き確認をスキップ         | `false` |
+
+<!-- politty:command::end -->

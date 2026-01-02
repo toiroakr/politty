@@ -125,3 +125,38 @@ export function writeFile(filePath: string, content: string): void {
 
   fs.writeFileSync(absolutePath, content, "utf-8");
 }
+
+/**
+ * Read file content if it exists
+ * Returns null if file does not exist
+ */
+export function readFile(filePath: string): string | null {
+  const absolutePath = path.resolve(filePath);
+
+  if (!fs.existsSync(absolutePath)) {
+    return null;
+  }
+
+  return fs.readFileSync(absolutePath, "utf-8");
+}
+
+/**
+ * Minimal fs interface for deleteFile
+ */
+export interface DeleteFileFs {
+  existsSync: typeof fs.existsSync;
+  unlinkSync: typeof fs.unlinkSync;
+}
+
+/**
+ * Delete file if it exists
+ * @param filePath - Path to the file to delete
+ * @param fileSystem - Optional fs implementation (useful when fs is mocked)
+ */
+export function deleteFile(filePath: string, fileSystem: DeleteFileFs = fs): void {
+  const absolutePath = path.resolve(filePath);
+
+  if (fileSystem.existsSync(absolutePath)) {
+    fileSystem.unlinkSync(absolutePath);
+  }
+}

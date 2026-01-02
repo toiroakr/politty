@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # file-cli
 
 File operations CLI with examples
@@ -16,41 +18,8 @@ file-cli [command]
 | [`write`](#write) | Write content to file |
 | [`check`](#check) | Check if file exists  |
 
----
-
-# check
-
-Check if file exists
-
-## Usage
-
-```
-file-cli check <file>
-```
-
-## Arguments
-
-| Argument | Description        | Required |
-| -------- | ------------------ | -------- |
-| `file`   | File path to check | Yes      |
-
-## Examples
-
-**Check if config file exists**
-
-```bash
-$ config.json
-File exists: config.json
-```
-
-**Check non-existent file**
-
-```bash
-$ missing.txt
-File not found: missing.txt
-```
-
----
+<!-- politty:command::end -->
+<!-- politty:command:read:start -->
 
 # read
 
@@ -93,7 +62,8 @@ $ data.txt -f text
 Hello from data.txt
 ```
 
----
+<!-- politty:command:read:end -->
+<!-- politty:command:write:start -->
 
 # write
 
@@ -133,3 +103,40 @@ Successfully written to output.txt
 $ log.txt "New entry" --append
 Successfully appended to log.txt
 ```
+
+<!-- politty:command:write:end -->
+<!-- politty:command:check:start -->
+
+# check
+
+Check if file exists
+
+## Usage
+
+```
+file-cli check <file>
+```
+
+## Arguments
+
+| Argument | Description        | Required |
+| -------- | ------------------ | -------- |
+| `file`   | File path to check | Yes      |
+
+## Examples
+
+**Check if config file exists**
+
+```bash
+$ config.json
+File exists: config.json
+```
+
+**Check non-existent file**
+
+```bash
+$ missing.txt
+File not found: missing.txt
+```
+
+<!-- politty:command:check:end -->

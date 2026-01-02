@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
-import { oxfmtFormatter } from "../../tests/utils/formatter.js";
+import { mdFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("01-hello-world", () => {
@@ -37,7 +37,7 @@ describe("01-hello-world", () => {
     await assertDocMatch({
       command,
       files: { "playground/01-hello-world/README.md": [""] },
-      formatter: oxfmtFormatter,
+      formatter: mdFormatter,
     });
   });
 });

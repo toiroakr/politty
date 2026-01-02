@@ -1,5 +1,10 @@
 import { createCommandRenderer } from "./default-renderers.js";
-import { compareWithExisting, writeFile } from "./doc-comparator.js";
+import {
+    compareWithExisting,
+    deleteFile, formatDiff,
+    readFile,
+    writeFile, type DeleteFileFs
+} from "./doc-comparator.js";
 import { collectAllCommands } from "./doc-generator.js";
 import { executeExamples } from "./example-executor.js";
 import type {
@@ -11,7 +16,7 @@ import type {
   GenerateDocResult,
   RenderFunction,
 } from "./types.js";
-import { UPDATE_GOLDEN_ENV } from "./types.js";
+import { commandEndMarker, commandStartMarker, UPDATE_GOLDEN_ENV } from "./types.js";
 
 /**
  * Apply formatter to content if provided
@@ -188,7 +193,162 @@ function generateFileHeader(fileConfig: FileConfig): string | null {
 }
 
 /**
+ * Extract a command section from content using markers
+ * Returns the content between start and end markers (including markers)
+ */
+function extractCommandSection(content: string, commandPath: string): string | null {
+  const startMarker = commandStartMarker(commandPath);
+  const endMarker = commandEndMarker(commandPath);
+
+  const startIndex = content.indexOf(startMarker);
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const endIndex = content.indexOf(endMarker, startIndex);
+  if (endIndex === -1) {
+    return null;
+  }
+
+  return content.slice(startIndex, endIndex + endMarker.length);
+}
+
+/**
+ * Replace a command section in content using markers
+ * Returns the updated content with the new section
+ */
+function replaceCommandSection(
+  content: string,
+  commandPath: string,
+  newSection: string,
+): string | null {
+  const startMarker = commandStartMarker(commandPath);
+  const endMarker = commandEndMarker(commandPath);
+
+  const startIndex = content.indexOf(startMarker);
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const endIndex = content.indexOf(endMarker, startIndex);
+  if (endIndex === -1) {
+    return null;
+  }
+
+  return content.slice(0, startIndex) + newSection + content.slice(endIndex + endMarker.length);
+}
+
+/**
+ * Insert a command section at the correct position based on specified order
+ * Returns the updated content with the section inserted at the right position
+ */
+function insertCommandSection(
+  content: string,
+  commandPath: string,
+  newSection: string,
+  specifiedOrder: string[],
+): string {
+  // Find the index of the target command in the specified order
+  const targetIndex = specifiedOrder.indexOf(commandPath);
+  if (targetIndex === -1) {
+    // If not in order, append to end
+    return content.trimEnd() + "\n\n" + newSection + "\n";
+  }
+
+  // Find the next command in the order that exists in the content
+  for (let i = targetIndex + 1; i < specifiedOrder.length; i++) {
+    const nextCmd = specifiedOrder[i];
+    if (nextCmd === undefined) continue;
+    const nextMarker = commandStartMarker(nextCmd);
+    const nextIndex = content.indexOf(nextMarker);
+    if (nextIndex !== -1) {
+      // Insert before the next section
+      // Find the start of the line (after previous section's newlines)
+      let insertPos = nextIndex;
+      // Go back to find proper insertion point (skip leading newlines)
+      while (insertPos > 0 && content[insertPos - 1] === "\n") {
+        insertPos--;
+      }
+      // Keep one newline as separator
+      if (insertPos < nextIndex) {
+        insertPos++;
+      }
+      return content.slice(0, insertPos) + newSection + "\n" + content.slice(nextIndex);
+    }
+  }
+
+  // Find the previous command in the order that exists in the content
+  for (let i = targetIndex - 1; i >= 0; i--) {
+    const prevCmd = specifiedOrder[i];
+    if (prevCmd === undefined) continue;
+    const prevEndMarker = commandEndMarker(prevCmd);
+    const prevEndIndex = content.indexOf(prevEndMarker);
+    if (prevEndIndex !== -1) {
+      // Insert after the previous section
+      const insertPos = prevEndIndex + prevEndMarker.length;
+      return content.slice(0, insertPos) + "\n" + newSection + content.slice(insertPos);
+    }
+  }
+
+  // No reference point found, append to end
+  return content.trimEnd() + "\n" + newSection + "\n";
+}
+
+/**
+ * Find which file contains a specific command
+ */
+function findFileForCommand(
+  commandPath: string,
+  files: GenerateDocConfig["files"],
+  allCommands: Map<string, CommandInfo>,
+  ignores: string[],
+): string | null {
+  for (const [filePath, fileConfigRaw] of Object.entries(files)) {
+    const fileConfig = normalizeFileConfig(fileConfigRaw);
+    const specifiedCommands = fileConfig.commands;
+
+    // Expand to include subcommands
+    const expandedCommands = expandCommandPaths(specifiedCommands, allCommands);
+
+    // Filter out ignored commands
+    const commandPaths = filterIgnoredCommands(expandedCommands, ignores);
+
+    if (commandPaths.includes(commandPath)) {
+      return filePath;
+    }
+  }
+  return null;
+}
+
+/**
+ * Generate a single command section with markers
+ */
+function generateCommandSection(
+  cmdPath: string,
+  allCommands: Map<string, CommandInfo>,
+  render: RenderFunction,
+  filePath?: string,
+  fileMap?: Record<string, string>,
+): string | null {
+  const info = allCommands.get(cmdPath);
+  if (!info) return null;
+
+  // Add file context to CommandInfo for cross-file link generation
+  const infoWithFileContext: CommandInfo = {
+    ...info,
+    filePath,
+    fileMap,
+  };
+
+  const renderedSection = render(infoWithFileContext);
+
+  // Wrap section with markers for partial validation
+  return [commandStartMarker(cmdPath), renderedSection, commandEndMarker(cmdPath)].join("\n");
+}
+
+/**
  * Generate markdown for a file containing multiple commands
+ * Each command section is wrapped with markers for partial validation
  */
 function generateFileMarkdown(
   commandPaths: string[],
@@ -211,21 +371,13 @@ function generateFileMarkdown(
   const sortedPaths = sortDepthFirst(commandPaths, specifiedOrder ?? []);
 
   for (const cmdPath of sortedPaths) {
-    const info = allCommands.get(cmdPath);
-    if (!info) continue;
-
-    // Add file context to CommandInfo for cross-file link generation
-    const infoWithFileContext: CommandInfo = {
-      ...info,
-      filePath,
-      fileMap,
-    };
-
-    const renderedSection = render(infoWithFileContext);
-    sections.push(renderedSection);
+    const section = generateCommandSection(cmdPath, allCommands, render, filePath, fileMap);
+    if (section) {
+      sections.push(section);
+    }
   }
 
-  return sections.join("\n---\n\n");
+  return sections.join("\n");
 }
 
 /**
@@ -288,7 +440,15 @@ async function executeConfiguredExamples(
  * Generate documentation from command definition
  */
 export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDocResult> {
-  const { command, files, ignores = [], format = {}, formatter, examples: examplesConfig } = config;
+  const {
+    command,
+    files,
+    ignores = [],
+    format = {},
+    formatter,
+    examples: examplesConfig,
+    targetCommand,
+  } = config;
   const updateMode = isUpdateMode();
 
   // Collect all commands
@@ -318,8 +478,22 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   const results: GenerateDocResult["files"] = [];
   let hasError = false;
 
+  // If targetCommand is specified, only process the file containing that command
+  const targetFilePath = targetCommand
+    ? findFileForCommand(targetCommand, files, allCommands, ignores)
+    : null;
+
+  if (targetCommand && !targetFilePath) {
+    throw new Error(`Target command "${targetCommand}" not found in any file configuration`);
+  }
+
   // Process each file
   for (const [filePath, fileConfigRaw] of Object.entries(files)) {
+    // Skip files that don't contain the target command (if specified)
+    if (targetFilePath && filePath !== targetFilePath) {
+      continue;
+    }
+
     const fileConfig = normalizeFileConfig(fileConfigRaw);
     const specifiedCommands = fileConfig.commands;
 
@@ -340,41 +514,153 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     // Use custom renderer if provided, otherwise default
     const render = fileConfig.render ?? defaultRenderer;
 
-    // Generate markdown with file context (pass specifiedCommands as order hint)
-    const rawMarkdown = generateFileMarkdown(
-      commandPaths,
-      allCommands,
-      render,
-      filePath,
-      fileMap,
-      specifiedCommands,
-      fileConfig,
-    );
+    // Handle partial validation when targetCommand is specified
+    if (targetCommand !== undefined) {
+      // Generate only the target command's section
+      const rawSection = generateCommandSection(
+        targetCommand,
+        allCommands,
+        render,
+        filePath,
+        fileMap,
+      );
 
-    // Apply formatter if provided
-    const markdown = await applyFormatter(rawMarkdown, formatter);
+      if (!rawSection) {
+        throw new Error(`Target command "${targetCommand}" not found in commands`);
+      }
 
-    // Compare with existing file
-    const comparison = compareWithExisting(markdown, filePath);
+      // For root command, include file header if configured
+      const isRootCommand = targetCommand === "";
+      const header = isRootCommand && fileConfig ? generateFileHeader(fileConfig) : null;
+      const rawContent = header ? `${header}\n${rawSection}` : rawSection;
 
-    if (comparison.match) {
-      results.push({
-        path: filePath,
-        status: "match",
-      });
-    } else if (updateMode) {
-      writeFile(filePath, markdown);
-      results.push({
-        path: filePath,
-        status: comparison.fileExists ? "updated" : "created",
-      });
+      // Apply formatter to the section
+      const generatedSection = await applyFormatter(rawContent, formatter);
+
+      const existingContent = readFile(filePath);
+
+      if (!existingContent) {
+        // File doesn't exist yet, create it with the section only
+        if (updateMode) {
+          writeFile(filePath, generatedSection);
+          results.push({
+            path: filePath,
+            status: "created",
+          });
+        } else {
+          hasError = true;
+          results.push({
+            path: filePath,
+            status: "diff",
+            diff: `File does not exist. Target command "${targetCommand}" section cannot be validated.`,
+          });
+        }
+        continue;
+      }
+
+      // Extract existing section for comparison
+      const existingSection = extractCommandSection(existingContent, targetCommand);
+
+      // For comparison, extract just the section from generated content (without header)
+      const generatedSectionOnly = extractCommandSection(generatedSection, targetCommand);
+
+      if (!generatedSectionOnly) {
+        throw new Error(
+          `Generated content does not contain section for command "${targetCommand}"`,
+        );
+      }
+
+      if (!existingSection) {
+        // Section doesn't exist in existing file - insert at correct position
+        if (updateMode) {
+          const updatedContent = insertCommandSection(
+            existingContent,
+            targetCommand,
+            generatedSectionOnly,
+            specifiedCommands,
+          );
+          writeFile(filePath, updatedContent);
+          results.push({
+            path: filePath,
+            status: "updated",
+          });
+        } else {
+          hasError = true;
+          results.push({
+            path: filePath,
+            status: "diff",
+            diff: `Existing file does not contain section for command "${targetCommand}"`,
+          });
+        }
+        continue;
+      }
+
+      // Compare sections
+      if (existingSection === generatedSectionOnly) {
+        results.push({
+          path: filePath,
+          status: "match",
+        });
+      } else if (updateMode) {
+        // Replace only the target command section in the existing file
+        const updatedContent = replaceCommandSection(
+          existingContent,
+          targetCommand,
+          generatedSectionOnly,
+        );
+        if (updatedContent) {
+          writeFile(filePath, updatedContent);
+          results.push({
+            path: filePath,
+            status: "updated",
+          });
+        } else {
+          throw new Error(`Failed to replace section for command "${targetCommand}"`);
+        }
+      } else {
+        hasError = true;
+        results.push({
+          path: filePath,
+          status: "diff",
+          diff: formatDiff(existingSection, generatedSectionOnly),
+        });
+      }
     } else {
-      hasError = true;
-      results.push({
-        path: filePath,
-        status: "diff",
-        diff: comparison.diff,
-      });
+      // Generate markdown with file context (pass specifiedCommands as order hint)
+      const rawMarkdown = generateFileMarkdown(
+        commandPaths,
+        allCommands,
+        render,
+        filePath,
+        fileMap,
+        specifiedCommands,
+        fileConfig,
+      );
+
+      // Apply formatter if provided
+      const generatedMarkdown = await applyFormatter(rawMarkdown, formatter);
+      // Full file comparison (original behavior)
+      const comparison = compareWithExisting(generatedMarkdown, filePath);
+
+      if (comparison.match) {
+        results.push({
+          path: filePath,
+          status: "match",
+        });
+      } else if (updateMode) {
+        writeFile(filePath, generatedMarkdown);
+        results.push({
+          path: filePath,
+          status: comparison.fileExists ? "updated" : "created",
+        });
+      } else {
+        hasError = true;
+        results.push({
+          path: filePath,
+          status: "diff",
+          diff: comparison.diff,
+        });
+      }
     }
   }
 
@@ -410,5 +696,29 @@ export async function assertDocMatch(config: GenerateDocConfig): Promise<void> {
       `Documentation does not match golden files.\n\n${diffMessages}\n\n` +
         `Run with ${UPDATE_GOLDEN_ENV}=true to update the documentation.`,
     );
+  }
+}
+
+/**
+ * Initialize documentation files by deleting them
+ * Only deletes when update mode is enabled (POLITTY_DOCS_UPDATE=true)
+ * Use this in beforeAll to ensure skipped tests don't leave stale sections
+ * @param config - Config containing files to initialize, or a single file path
+ * @param fileSystem - Optional fs implementation (useful when fs is mocked)
+ */
+export function initDocFile(
+  config: Pick<GenerateDocConfig, "files"> | string,
+  fileSystem?: DeleteFileFs,
+): void {
+  if (!isUpdateMode()) {
+    return;
+  }
+
+  if (typeof config === "string") {
+    deleteFile(config, fileSystem);
+  } else {
+    for (const filePath of Object.keys(config.files)) {
+      deleteFile(filePath, fileSystem);
+    }
   }
 }

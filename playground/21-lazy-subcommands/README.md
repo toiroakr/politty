@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # my-app
 
 CLI demonstrating lazy loading subcommands with dynamic imports
@@ -16,7 +18,8 @@ my-app [command]
 | [`heavy`](#heavy)         | A heavy command that is lazily loaded   |
 | [`analytics`](#analytics) | Analyze project metrics (lazily loaded) |
 
----
+<!-- politty:command::end -->
+<!-- politty:command:analytics:start -->
 
 # analytics
 
@@ -35,7 +38,8 @@ my-app analytics [options]
 | `--metric <METRIC>` | `-m`  | Metric to analyze | `"lines"` |
 | `--format <FORMAT>` | `-f`  | Output format     | `"text"`  |
 
----
+<!-- politty:command:analytics:end -->
+<!-- politty:command:heavy:start -->
 
 # heavy
 
@@ -54,7 +58,8 @@ my-app heavy [options]
 | `--iterations <ITERATIONS>` | `-n`  | Number of iterations | `1000`  |
 | `--verbose`                 | `-v`  | Verbose output       | `false` |
 
----
+<!-- politty:command:heavy:end -->
+<!-- politty:command:status:start -->
 
 # status
 
@@ -71,3 +76,5 @@ my-app status [options]
 | Option      | Alias | Description          | Default |
 | ----------- | ----- | -------------------- | ------- |
 | `--verbose` | `-v`  | Show detailed status | `false` |
+
+<!-- politty:command:status:end -->

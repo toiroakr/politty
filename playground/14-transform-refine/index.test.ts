@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
-import { oxfmtFormatter } from "../../tests/utils/formatter.js";
+import { mdFormatter } from "../../tests/utils/formatter.js";
 import { cli, refineCommand, transformCommand } from "./index.js";
 
 describe("14-transform-refine", () => {
@@ -96,7 +96,7 @@ describe("14-transform-refine", () => {
     await assertDocMatch({
       command: cli,
       files: { "playground/14-transform-refine/README.md": [""] },
-      formatter: oxfmtFormatter,
+      formatter: mdFormatter,
     });
   });
 });

@@ -287,6 +287,12 @@ export interface GenerateDocConfig {
   formatter?: FormatterFunction;
   /** Example execution configuration (per command path) */
   examples?: ExampleConfig;
+  /**
+   * Target command path to validate (e.g., "read", "config get")
+   * When specified, only this command's section is validated.
+   * The full document structure is used to maintain cross-file links.
+   */
+  targetCommand?: string;
 }
 
 /**
@@ -318,3 +324,23 @@ export type FormatterFunction = (content: string) => string | Promise<string>;
  * Environment variable name for update mode
  */
 export const UPDATE_GOLDEN_ENV = "POLITTY_DOCS_UPDATE";
+
+/**
+ * Marker prefix for command sections in generated documentation
+ * Format: <!-- politty:command:<path>:start --> ... <!-- politty:command:<path>:end -->
+ */
+export const COMMAND_MARKER_PREFIX = "politty:command";
+
+/**
+ * Generate start marker for a command section
+ */
+export function commandStartMarker(commandPath: string): string {
+  return `<!-- ${COMMAND_MARKER_PREFIX}:${commandPath}:start -->`;
+}
+
+/**
+ * Generate end marker for a command section
+ */
+export function commandEndMarker(commandPath: string): string {
+  return `<!-- ${COMMAND_MARKER_PREFIX}:${commandPath}:end -->`;
+}

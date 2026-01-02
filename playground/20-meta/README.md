@@ -1,3 +1,5 @@
+<!-- politty:command::start -->
+
 # greet-meta
 
 Test for Zod .meta() support
@@ -19,3 +21,5 @@ greet-meta [options] <name>
 | Option                  | Alias | Description                | Default   |
 | ----------------------- | ----- | -------------------------- | --------- |
 | `--greeting <GREETING>` | `-g`  | Greeting phrase (via meta) | `"Hello"` |
+
+<!-- politty:command::end -->
