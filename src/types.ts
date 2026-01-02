@@ -1,6 +1,28 @@
 import type { z } from "zod";
 
 /**
+ * Supported argument object types for CLI commands.
+ * These are schema types that can represent key-value pairs suitable for CLI arguments.
+ *
+ * Supported types:
+ * - ZodObject: Basic object schema (e.g., z.object({ name: z.string() }))
+ * - ZodDiscriminatedUnion: Union with a discriminator key (e.g., z.discriminatedUnion("type", [...]))
+ * - ZodUnion: Union of object schemas (e.g., z.union([schemaA, schemaB]))
+ * - ZodXor: Exclusive union (e.g., z.xor([schemaA, schemaB]))
+ * - ZodIntersection: Intersection of schemas (e.g., schemaA.and(schemaB))
+ */
+export type SupportedArgsObject =
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  | z.ZodObject<z.ZodRawShape, any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  | z.ZodDiscriminatedUnion<readonly z.ZodTypeAny[], string>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  | z.ZodUnion<readonly z.ZodTypeAny[]>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  | z.ZodXor<readonly z.ZodTypeAny[]>
+  | z.ZodIntersection<z.ZodTypeAny, z.ZodTypeAny>;
+
+/**
  * Example definition for a command
  */
 export interface Example {
@@ -24,10 +46,12 @@ export interface Logger {
 }
 
 /**
- * Supported schema types for args
+ * Supported schema types for args.
+ * Only accepts schema types that represent key-value pairs suitable for CLI parsing.
+ *
+ * @see SupportedArgsObject for the list of supported schema types
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ArgsSchema = z.ZodType<Record<string, any>>;
+export type ArgsSchema = SupportedArgsObject;
 
 /**
  * Context provided to setup function
