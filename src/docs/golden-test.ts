@@ -55,7 +55,86 @@ function isSubcommandOf(childPath: string, parentPath: string): boolean {
 }
 
 /**
- * Expand command paths to include all subcommands
+ * Check if a pattern contains wildcards
+ */
+function containsWildcard(pattern: string): boolean {
+  return pattern.includes("*");
+}
+
+/**
+ * Check if a command path matches a wildcard pattern
+ * - `*` matches any single command segment
+ * - Pattern segments are space-separated
+ *
+ * @example
+ * matchesWildcard("config get", "* *") // true
+ * matchesWildcard("config", "* *") // false
+ * matchesWildcard("config get", "config *") // true
+ * matchesWildcard("greet", "*") // true
+ */
+function matchesWildcard(path: string, pattern: string): boolean {
+  const pathSegments = path === "" ? [] : path.split(" ");
+  const patternSegments = pattern === "" ? [] : pattern.split(" ");
+
+  if (pathSegments.length !== patternSegments.length) {
+    return false;
+  }
+
+  for (let i = 0; i < patternSegments.length; i++) {
+    const patternSeg = patternSegments[i]!;
+    const pathSeg = pathSegments[i]!;
+
+    if (patternSeg !== "*" && patternSeg !== pathSeg) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Expand a wildcard pattern to matching command paths
+ */
+function expandWildcardPattern(pattern: string, allCommands: Map<string, CommandInfo>): string[] {
+  const matches: string[] = [];
+
+  for (const cmdPath of allCommands.keys()) {
+    if (matchesWildcard(cmdPath, pattern)) {
+      matches.push(cmdPath);
+    }
+  }
+
+  return matches;
+}
+
+/**
+ * Check if a path matches any ignore pattern (with wildcard support)
+ * For wildcard patterns, also ignores subcommands of matched commands
+ */
+function matchesIgnorePattern(path: string, ignorePattern: string): boolean {
+  if (containsWildcard(ignorePattern)) {
+    // Check if path matches the wildcard pattern exactly
+    if (matchesWildcard(path, ignorePattern)) {
+      return true;
+    }
+    // Check if path is a subcommand of any command matching the pattern
+    // e.g., "config get" is a subcommand of "config" which matches "*"
+    const pathSegments = path === "" ? [] : path.split(" ");
+    const patternSegments = ignorePattern === "" ? [] : ignorePattern.split(" ");
+
+    // If path is deeper than pattern, check if prefix matches
+    if (pathSegments.length > patternSegments.length) {
+      const prefixPath = pathSegments.slice(0, patternSegments.length).join(" ");
+      return matchesWildcard(prefixPath, ignorePattern);
+    }
+    return false;
+  }
+  // For non-wildcards, use original subcommand logic
+  return isSubcommandOf(path, ignorePattern);
+}
+
+/**
+ * Expand command paths to include all subcommands (with wildcard support)
  */
 function expandCommandPaths(
   commandPaths: string[],
@@ -64,14 +143,28 @@ function expandCommandPaths(
   const expanded = new Set<string>();
 
   for (const cmdPath of commandPaths) {
-    // Add the command itself
-    if (allCommands.has(cmdPath)) {
-      expanded.add(cmdPath);
-    }
-    // Add all subcommands
-    for (const path of allCommands.keys()) {
-      if (isSubcommandOf(path, cmdPath)) {
-        expanded.add(path);
+    if (containsWildcard(cmdPath)) {
+      // Expand wildcard pattern to matching commands
+      const matches = expandWildcardPattern(cmdPath, allCommands);
+      for (const match of matches) {
+        expanded.add(match);
+        // Also add subcommands of matched commands
+        for (const path of allCommands.keys()) {
+          if (isSubcommandOf(path, match)) {
+            expanded.add(path);
+          }
+        }
+      }
+    } else {
+      // Add the command itself
+      if (allCommands.has(cmdPath)) {
+        expanded.add(cmdPath);
+      }
+      // Add all subcommands
+      for (const path of allCommands.keys()) {
+        if (isSubcommandOf(path, cmdPath)) {
+          expanded.add(path);
+        }
       }
     }
   }
@@ -80,24 +173,43 @@ function expandCommandPaths(
 }
 
 /**
- * Filter out ignored commands and their subcommands
+ * Filter out ignored commands (with wildcard support)
  */
 function filterIgnoredCommands(commandPaths: string[], ignores: string[]): string[] {
   return commandPaths.filter((path) => {
-    return !ignores.some((ignorePath) => isSubcommandOf(path, ignorePath));
+    return !ignores.some((ignorePattern) => matchesIgnorePattern(path, ignorePattern));
   });
 }
 
 /**
- * Validate that there are no conflicts between files and ignores
+ * Validate that there are no conflicts between files and ignores (with wildcard support)
  */
-function validateNoConflicts(filesCommands: string[], ignores: string[]): void {
+function validateNoConflicts(
+  filesCommands: string[],
+  ignores: string[],
+  allCommands: Map<string, CommandInfo>,
+): void {
   const conflicts: string[] = [];
 
-  for (const filePath of filesCommands) {
-    for (const ignorePath of ignores) {
-      if (filePath === ignorePath || isSubcommandOf(filePath, ignorePath)) {
-        conflicts.push(`"${filePath}" is both in files and ignored by "${ignorePath}"`);
+  for (const filePattern of filesCommands) {
+    // Expand file pattern if it's a wildcard
+    const filePaths = containsWildcard(filePattern)
+      ? expandWildcardPattern(filePattern, allCommands)
+      : [filePattern];
+
+    for (const filePath of filePaths) {
+      for (const ignorePattern of ignores) {
+        if (containsWildcard(ignorePattern)) {
+          // For wildcard ignores, check if file path matches the pattern
+          if (matchesWildcard(filePath, ignorePattern)) {
+            conflicts.push(`"${filePath}" is both in files and ignored by "${ignorePattern}"`);
+          }
+        } else {
+          // For non-wildcard ignores, use original logic
+          if (filePath === ignorePattern || isSubcommandOf(filePath, ignorePattern)) {
+            conflicts.push(`"${filePath}" is both in files and ignored by "${ignorePattern}"`);
+          }
+        }
       }
     }
   }
@@ -108,14 +220,23 @@ function validateNoConflicts(filesCommands: string[], ignores: string[]): void {
 }
 
 /**
- * Validate that all ignored paths exist in the command tree
+ * Validate that all ignored paths exist in the command tree (with wildcard support)
  */
 function validateIgnoresExist(ignores: string[], allCommands: Map<string, CommandInfo>): void {
   const nonExistent: string[] = [];
 
-  for (const ignorePath of ignores) {
-    if (!allCommands.has(ignorePath)) {
-      nonExistent.push(`"${ignorePath}"`);
+  for (const ignorePattern of ignores) {
+    if (containsWildcard(ignorePattern)) {
+      // For wildcard patterns, check if at least one command matches
+      const matches = expandWildcardPattern(ignorePattern, allCommands);
+      if (matches.length === 0) {
+        nonExistent.push(`"${ignorePattern}"`);
+      }
+    } else {
+      // For non-wildcard paths, check exact existence
+      if (!allCommands.has(ignorePattern)) {
+        nonExistent.push(`"${ignorePattern}"`);
+      }
     }
   }
 
@@ -327,7 +448,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   validateIgnoresExist(ignores, allCommands);
 
   // Validate no conflicts between files and ignores
-  validateNoConflicts(allFilesCommands, ignores);
+  validateNoConflicts(allFilesCommands, ignores, allCommands);
 
   // Build file map for cross-file links
   const fileMap = buildFileMap(files, allCommands, ignores);

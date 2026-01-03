@@ -745,6 +745,208 @@ describe("golden-test", () => {
       ).rejects.toThrow('Ignored command paths do not exist: "foo", "bar"');
     });
 
+    // Wildcard: ignore all top-level subcommands with "*"
+    it("should ignore all top-level subcommands with wildcard *", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "wildcard-top.md");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: [""],
+        },
+        ignores: ["*"], // Ignore all top-level subcommands (greet, config)
+      });
+
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("# test-cli");
+      // All subcommands should be excluded
+      expect(content).not.toContain("# greet");
+      expect(content).not.toContain("# config");
+      expect(content).not.toContain("# get");
+      expect(content).not.toContain("# set");
+    });
+
+    // Wildcard: ignore nested subcommands with "* *"
+    it("should ignore nested subcommands with wildcard * *", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "wildcard-nested.md");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: [""],
+        },
+        ignores: ["* *"], // Ignore all 2-level deep subcommands (config get, config set)
+      });
+
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("# test-cli");
+      expect(content).toContain("# greet");
+      expect(content).toContain("# config");
+      // Only nested subcommands should be excluded
+      expect(content).not.toContain("# get");
+      expect(content).not.toContain("# set");
+    });
+
+    // Wildcard: ignore specific parent's subcommands with "config *"
+    it("should ignore specific parent subcommands with wildcard config *", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "wildcard-parent.md");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: [""],
+        },
+        ignores: ["config *"], // Ignore only config's subcommands
+      });
+
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("# test-cli");
+      expect(content).toContain("# greet");
+      expect(content).toContain("# config");
+      // Only config's subcommands should be excluded
+      expect(content).not.toContain("# get");
+      expect(content).not.toContain("# set");
+    });
+
+    // Wildcard: error when wildcard pattern matches no commands
+    it("should throw error when wildcard pattern matches no commands", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "wildcard-no-match.md");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          files: {
+            [filePath]: [""],
+          },
+          ignores: ["* * *"], // No 3-level deep subcommands exist
+        }),
+      ).rejects.toThrow('Ignored command paths do not exist: "* * *"');
+    });
+
+    // Wildcard: files with wildcard pattern
+    it("should expand wildcard in files to include matching commands", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "wildcard-files.md");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: ["config *"], // Include only config's subcommands
+        },
+      });
+
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      // Should contain config's subcommands
+      expect(content).toContain("# get");
+      expect(content).toContain("# set");
+      // Should not contain root or greet
+      expect(content).not.toContain("# test-cli");
+      expect(content).not.toContain("# greet");
+      expect(content).not.toContain("# config\n"); // config itself should not be included
+    });
+
+    // Wildcard: conflict between files wildcard and ignores
+    it("should detect conflict between files wildcard and ignores", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "wildcard-conflict.md");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          files: {
+            [filePath]: ["config *"], // Include config's subcommands
+          },
+          ignores: ["config get"], // But ignore config get
+        }),
+      ).rejects.toThrow("Conflict between files and ignores");
+    });
+
+    // Wildcard: combining wildcard files and wildcard ignores
+    it("should handle both wildcard files and wildcard ignores", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "wildcard-both.md");
+
+      // Create a deeper command structure for this test
+      const deepCommand = defineCommand({
+        name: "deep-cli",
+        description: "CLI with deep nesting",
+        subCommands: {
+          alpha: defineCommand({
+            name: "alpha",
+            description: "Alpha command",
+            subCommands: {
+              one: defineCommand({
+                name: "one",
+                description: "One",
+                args: z.object({}),
+                run: () => {},
+              }),
+              two: defineCommand({
+                name: "two",
+                description: "Two",
+                args: z.object({}),
+                run: () => {},
+              }),
+            },
+          }),
+          beta: defineCommand({
+            name: "beta",
+            description: "Beta command",
+            subCommands: {
+              one: defineCommand({
+                name: "one",
+                description: "One",
+                args: z.object({}),
+                run: () => {},
+              }),
+              two: defineCommand({
+                name: "two",
+                description: "Two",
+                args: z.object({}),
+                run: () => {},
+              }),
+            },
+          }),
+        },
+      });
+
+      const result = await generateDoc({
+        command: deepCommand,
+        files: {
+          [filePath]: ["*"], // Include all top-level: alpha, beta
+        },
+        ignores: ["* two"], // Ignore all "two" subcommands
+      });
+
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("# alpha");
+      expect(content).toContain("# beta");
+      expect(content).toContain("# one");
+      // "two" subcommands should be excluded
+      expect(content).not.toContain("# two");
+    });
+
     // Combined: ignores parent command while files specifies different commands
     it("should ignore parent while including other commands", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
