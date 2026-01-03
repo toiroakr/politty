@@ -86,12 +86,16 @@ const files: FileMapping = {
   // 複数ファイルに分割する場合
   "docs/cli.md": ["", "user"],
   "docs/cli/config.md": ["config"], // config get, config set も自動的に含まれる
+
+  // ワイルドカードを使用
+  "docs/config-commands.md": ["config *"], // config の直接の子コマンドのみ
 };
 ```
 
 - キーはファイルパス
 - 値はコマンドパスの配列（`""`はルートコマンド、`"config get"`はスペース区切りのサブコマンドパス）
 - **サブコマンドは自動的に含まれる**（`"config"` を指定すれば `"config get"`, `"config set"` も含まれる）
+- **ワイルドカード `*`**: 任意の1つのコマンドセグメントにマッチ（下記参照）
 - 値として `FileConfig` オブジェクトを渡すとカスタムレンダラーを指定可能
 - **別ファイルへのリンク**: サブコマンドが別ファイルに出力される場合、自動的に相対パスでリンクが生成される
 
@@ -125,7 +129,9 @@ await assertDocMatch({
 ```
 
 - `ignores` に指定したコマンドとそのサブコマンドは自動的に除外される
+- **ワイルドカード `*`**: 任意の1つのコマンドセグメントにマッチ（下記参照）
 - `files` で指定したコマンドと `ignores` で指定したコマンドが重複するとエラー
+- 存在しないコマンドパスを指定するとエラー
 
 ```typescript
 // エラー: "config" が files と ignores の両方に指定されている
@@ -135,6 +141,47 @@ await assertDocMatch({
   ignores: ["config"], // Error!
 });
 ```
+
+### ワイルドカードパターン
+
+`files` と `ignores` でワイルドカード `*` を使用できます。`*` は任意の1つのコマンドセグメント（名前）にマッチします。
+
+| パターン   | マッチ対象                 | 説明                                      |
+| ---------- | -------------------------- | ----------------------------------------- |
+| `*`        | `greet`, `config`          | 全トップレベルコマンド                    |
+| `* *`      | `config get`, `config set` | 深さ2のコマンド（ネストしたサブコマンド） |
+| `config *` | `config get`, `config set` | config の直接の子コマンド                 |
+| `* * *`    | `config get key`           | 深さ3のコマンド                           |
+
+**ワイルドカードでマッチしたコマンドのサブコマンドも自動的に対象になります**（通常のコマンドパス指定と同様）。
+
+```typescript
+// ネストしたサブコマンドのみを除外
+await assertDocMatch({
+  command: cli,
+  files: { "docs/cli.md": [""] },
+  ignores: ["* *"], // config get, config set など深さ2以上を除外
+});
+
+// 特定の親の子コマンドを別ファイルに
+await assertDocMatch({
+  command: cli,
+  files: {
+    "docs/cli.md": [""],
+    "docs/config.md": ["config *"], // config get, config set のみ
+  },
+  ignores: ["config *"], // メインファイルから config の子を除外
+});
+
+// 全てのサブコマンドの "two" を除外
+await assertDocMatch({
+  command: cli,
+  files: { "docs/cli.md": ["*"] }, // 全トップレベルコマンド
+  ignores: ["* two"], // alpha two, beta two を除外
+});
+```
+
+- ワイルドカードパターンがどのコマンドにもマッチしない場合はエラー
 
 ### `examples`
 
