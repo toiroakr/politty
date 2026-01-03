@@ -1323,7 +1323,7 @@ describe("golden-test", () => {
     });
   });
 
-  describe("targetCommand", () => {
+  describe("targetCommands", () => {
     it("should validate only the target command section", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
 
@@ -1341,7 +1341,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: { [filePath]: ["", "greet", "config"] },
-        targetCommand: "greet",
+        targetCommands: ["greet"],
       });
 
       expect(result.success).toBe(true);
@@ -1374,7 +1374,7 @@ describe("golden-test", () => {
       await generateDoc({
         command: testCommand,
         files: { [filePath]: ["", "greet", "config"] },
-        targetCommand: "greet",
+        targetCommands: ["greet"],
       });
 
       // Verify greet section was restored but other sections remain
@@ -1390,9 +1390,105 @@ describe("golden-test", () => {
         generateDoc({
           command: testCommand,
           files: { [filePath]: [""] },
-          targetCommand: "nonexistent",
+          targetCommands: ["nonexistent"],
         }),
       ).rejects.toThrow('Target command "nonexistent" not found');
+    });
+
+    it("should validate multiple target commands", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "cli.md");
+
+      // Create file with all commands
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      // Validate multiple commands - should match
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet", "config"],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("match");
+    });
+
+    it("should update multiple target command sections", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "cli.md");
+
+      // Create initial file
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      // Read original content
+      const originalContent = fs.readFileSync(filePath, "utf-8");
+
+      // Manually modify both greet and config sections in the file
+      let modifiedContent = originalContent.replace(
+        /<!-- politty:command:greet:start -->\n# greet/,
+        "<!-- politty:command:greet:start -->\n# MODIFIED greet",
+      );
+      modifiedContent = modifiedContent.replace(
+        /<!-- politty:command:config:start -->\n# config/,
+        "<!-- politty:command:config:start -->\n# MODIFIED config",
+      );
+      fs.writeFileSync(filePath, modifiedContent, "utf-8");
+
+      // Update both commands
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet", "config"],
+      });
+
+      // Verify both sections were restored
+      const updatedContent = fs.readFileSync(filePath, "utf-8");
+      expect(updatedContent).toContain("<!-- politty:command:greet:start -->\n# greet");
+      expect(updatedContent).toContain("<!-- politty:command:config:start -->\n# config");
+      expect(updatedContent).not.toContain("# MODIFIED greet");
+      expect(updatedContent).not.toContain("# MODIFIED config");
+    });
+
+    it("should handle target commands across multiple files", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const mainPath = path.join(testDir, "main.md");
+      const configPath = path.join(testDir, "config.md");
+
+      // Create files with commands split across them
+      await generateDoc({
+        command: testCommand,
+        files: {
+          [mainPath]: ["", "greet"],
+          [configPath]: ["config"],
+        },
+      });
+
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      // Validate commands from different files
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [mainPath]: ["", "greet"],
+          [configPath]: ["config"],
+        },
+        targetCommands: ["greet", "config"],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files).toHaveLength(2);
+      expect(result.files.every((f) => f.status === "match")).toBe(true);
     });
   });
 

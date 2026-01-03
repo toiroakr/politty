@@ -45,7 +45,7 @@ vi.mock("node:fs", async (importOriginal) => {
 const realFs = await vi.importActual<typeof fs>("node:fs");
 
 // Shared config for all documentation tests - fileMap is built from this
-const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommand"> = {
+const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
   command,
   files: { "playground/22-examples/README.md": ["", "read", "write", "check"] },
   formatter: mdFormatter,
@@ -83,7 +83,7 @@ describe("22-examples", () => {
       it("generates documentation", async () => {
         await assertDocMatch({
           ...baseDocConfig,
-          targetCommand: "",
+          targetCommands: [""],
           examples: {},
         });
       });
@@ -116,7 +116,7 @@ describe("22-examples", () => {
 
       await assertDocMatch({
         ...baseDocConfig,
-        targetCommand: "read",
+        targetCommands: ["read"],
         examples: {
           read: {
             mock: () => {
@@ -168,7 +168,7 @@ describe("22-examples", () => {
 
       await assertDocMatch({
         ...baseDocConfig,
-        targetCommand: "write",
+        targetCommands: ["write"],
         examples: {
           write: {
             mock: () => {
@@ -215,7 +215,7 @@ describe("22-examples", () => {
 
       await assertDocMatch({
         ...baseDocConfig,
-        targetCommand: "check",
+        targetCommands: ["check"],
         examples: {
           check: {
             mock: () => {

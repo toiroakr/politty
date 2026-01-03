@@ -1,9 +1,11 @@
 import { createCommandRenderer } from "./default-renderers.js";
 import {
-    compareWithExisting,
-    deleteFile, formatDiff,
-    readFile,
-    writeFile, type DeleteFileFs
+  compareWithExisting,
+  deleteFile,
+  formatDiff,
+  readFile,
+  writeFile,
+  type DeleteFileFs,
 } from "./doc-comparator.js";
 import { collectAllCommands } from "./doc-generator.js";
 import { executeExamples } from "./example-executor.js";
@@ -459,6 +461,32 @@ function findFileForCommand(
 }
 
 /**
+ * Find which target commands are contained in a file
+ */
+function findTargetCommandsInFile(
+  targetCommands: string[],
+  filePath: string,
+  files: GenerateDocConfig["files"],
+  allCommands: Map<string, CommandInfo>,
+  ignores: string[],
+): string[] {
+  const fileConfigRaw = files[filePath];
+  if (!fileConfigRaw) return [];
+
+  const fileConfig = normalizeFileConfig(fileConfigRaw);
+  const specifiedCommands = fileConfig.commands;
+
+  // Expand to include subcommands
+  const expandedCommands = expandCommandPaths(specifiedCommands, allCommands);
+
+  // Filter out ignored commands
+  const commandPaths = filterIgnoredCommands(expandedCommands, ignores);
+
+  // Return intersection of targetCommands and commandPaths
+  return targetCommands.filter((cmd) => commandPaths.includes(cmd));
+}
+
+/**
  * Generate a single command section with markers
  */
 function generateCommandSection(
@@ -585,7 +613,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     format = {},
     formatter,
     examples: examplesConfig,
-    targetCommand,
+    targetCommands,
   } = config;
   const updateMode = isUpdateMode();
 
@@ -619,22 +647,18 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   const results: GenerateDocResult["files"] = [];
   let hasError = false;
 
-  // If targetCommand is specified, only process the file containing that command
-  const targetFilePath = targetCommand
-    ? findFileForCommand(targetCommand, files, allCommands, ignores)
-    : null;
-
-  if (targetCommand && !targetFilePath) {
-    throw new Error(`Target command "${targetCommand}" not found in any file configuration`);
+  // Validate all targetCommands exist in files
+  if (targetCommands && targetCommands.length > 0) {
+    for (const targetCommand of targetCommands) {
+      const targetFilePath = findFileForCommand(targetCommand, files, allCommands, ignores);
+      if (!targetFilePath) {
+        throw new Error(`Target command "${targetCommand}" not found in any file configuration`);
+      }
+    }
   }
 
   // Process each file
   for (const [filePath, fileConfigRaw] of Object.entries(files)) {
-    // Skip files that don't contain the target command (if specified)
-    if (targetFilePath && filePath !== targetFilePath) {
-      continue;
-    }
-
     const fileConfig = normalizeFileConfig(fileConfigRaw);
     const specifiedCommands = fileConfig.commands;
 
@@ -655,117 +679,129 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     // Use custom renderer if provided, otherwise default
     const render = fileConfig.render ?? defaultRenderer;
 
-    // Handle partial validation when targetCommand is specified
-    if (targetCommand !== undefined) {
-      // Generate only the target command's section
-      const rawSection = generateCommandSection(
-        targetCommand,
-        allCommands,
-        render,
+    // Handle partial validation when targetCommands are specified
+    if (targetCommands !== undefined && targetCommands.length > 0) {
+      // Find which target commands are in this file
+      const fileTargetCommands = findTargetCommandsInFile(
+        targetCommands,
         filePath,
-        fileMap,
+        files,
+        allCommands,
+        ignores,
       );
 
-      if (!rawSection) {
-        throw new Error(`Target command "${targetCommand}" not found in commands`);
-      }
-
-      // For root command, include file header if configured
-      const isRootCommand = targetCommand === "";
-      const header = isRootCommand && fileConfig ? generateFileHeader(fileConfig) : null;
-      const rawContent = header ? `${header}\n${rawSection}` : rawSection;
-
-      // Apply formatter to the section
-      const generatedSection = await applyFormatter(rawContent, formatter);
-
-      const existingContent = readFile(filePath);
-
-      if (!existingContent) {
-        // File doesn't exist yet, create it with the section only
-        if (updateMode) {
-          writeFile(filePath, generatedSection);
-          results.push({
-            path: filePath,
-            status: "created",
-          });
-        } else {
-          hasError = true;
-          results.push({
-            path: filePath,
-            status: "diff",
-            diff: `File does not exist. Target command "${targetCommand}" section cannot be validated.`,
-          });
-        }
+      // Skip files that don't contain any target commands
+      if (fileTargetCommands.length === 0) {
         continue;
       }
 
-      // Extract existing section for comparison
-      const existingSection = extractCommandSection(existingContent, targetCommand);
+      // Read existing content once for all target commands in this file
+      let existingContent = readFile(filePath);
+      let fileStatus: "match" | "created" | "updated" | "diff" = "match";
+      const diffs: string[] = [];
 
-      // For comparison, extract just the section from generated content (without header)
-      const generatedSectionOnly = extractCommandSection(generatedSection, targetCommand);
-
-      if (!generatedSectionOnly) {
-        throw new Error(
-          `Generated content does not contain section for command "${targetCommand}"`,
-        );
-      }
-
-      if (!existingSection) {
-        // Section doesn't exist in existing file - insert at correct position
-        if (updateMode) {
-          const updatedContent = insertCommandSection(
-            existingContent,
-            targetCommand,
-            generatedSectionOnly,
-            specifiedCommands,
-          );
-          writeFile(filePath, updatedContent);
-          results.push({
-            path: filePath,
-            status: "updated",
-          });
-        } else {
-          hasError = true;
-          results.push({
-            path: filePath,
-            status: "diff",
-            diff: `Existing file does not contain section for command "${targetCommand}"`,
-          });
-        }
-        continue;
-      }
-
-      // Compare sections
-      if (existingSection === generatedSectionOnly) {
-        results.push({
-          path: filePath,
-          status: "match",
-        });
-      } else if (updateMode) {
-        // Replace only the target command section in the existing file
-        const updatedContent = replaceCommandSection(
-          existingContent,
+      for (const targetCommand of fileTargetCommands) {
+        // Generate only the target command's section
+        const rawSection = generateCommandSection(
           targetCommand,
-          generatedSectionOnly,
+          allCommands,
+          render,
+          filePath,
+          fileMap,
         );
-        if (updatedContent) {
-          writeFile(filePath, updatedContent);
-          results.push({
-            path: filePath,
-            status: "updated",
-          });
-        } else {
-          throw new Error(`Failed to replace section for command "${targetCommand}"`);
+
+        if (!rawSection) {
+          throw new Error(`Target command "${targetCommand}" not found in commands`);
         }
-      } else {
-        hasError = true;
-        results.push({
-          path: filePath,
-          status: "diff",
-          diff: formatDiff(existingSection, generatedSectionOnly),
-        });
+
+        // For root command, include file header if configured
+        const isRootCommand = targetCommand === "";
+        const header = isRootCommand && fileConfig ? generateFileHeader(fileConfig) : null;
+        const rawContent = header ? `${header}\n${rawSection}` : rawSection;
+
+        // Apply formatter to the section
+        const generatedSection = await applyFormatter(rawContent, formatter);
+
+        if (!existingContent) {
+          // File doesn't exist yet, create it with the section only
+          if (updateMode) {
+            writeFile(filePath, generatedSection);
+            existingContent = generatedSection;
+            fileStatus = "created";
+          } else {
+            hasError = true;
+            fileStatus = "diff";
+            diffs.push(
+              `File does not exist. Target command "${targetCommand}" section cannot be validated.`,
+            );
+          }
+          continue;
+        }
+
+        // Extract existing section for comparison
+        const existingSection = extractCommandSection(existingContent, targetCommand);
+
+        // For comparison, extract just the section from generated content (without header)
+        const generatedSectionOnly = extractCommandSection(generatedSection, targetCommand);
+
+        if (!generatedSectionOnly) {
+          throw new Error(
+            `Generated content does not contain section for command "${targetCommand}"`,
+          );
+        }
+
+        if (!existingSection) {
+          // Section doesn't exist in existing file - insert at correct position
+          if (updateMode) {
+            existingContent = insertCommandSection(
+              existingContent,
+              targetCommand,
+              generatedSectionOnly,
+              specifiedCommands,
+            );
+            writeFile(filePath, existingContent);
+            if (fileStatus !== "created") {
+              fileStatus = "updated";
+            }
+          } else {
+            hasError = true;
+            fileStatus = "diff";
+            diffs.push(`Existing file does not contain section for command "${targetCommand}"`);
+          }
+          continue;
+        }
+
+        // Compare sections
+        if (existingSection !== generatedSectionOnly) {
+          if (updateMode) {
+            // Replace only the target command section in the existing file
+            const updatedContent = replaceCommandSection(
+              existingContent,
+              targetCommand,
+              generatedSectionOnly,
+            );
+            if (updatedContent) {
+              existingContent = updatedContent;
+              writeFile(filePath, existingContent);
+              if (fileStatus !== "created") {
+                fileStatus = "updated";
+              }
+            } else {
+              throw new Error(`Failed to replace section for command "${targetCommand}"`);
+            }
+          } else {
+            hasError = true;
+            fileStatus = "diff";
+            diffs.push(formatDiff(existingSection, generatedSectionOnly));
+          }
+        }
       }
+
+      results.push({
+        path: filePath,
+        status: fileStatus,
+        diff: diffs.length > 0 ? diffs.join("\n\n") : undefined,
+      });
     } else {
       // Generate markdown with file context (pass specifiedCommands as order hint)
       const rawMarkdown = generateFileMarkdown(

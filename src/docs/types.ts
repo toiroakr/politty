@@ -288,11 +288,11 @@ export interface GenerateDocConfig {
   /** Example execution configuration (per command path) */
   examples?: ExampleConfig;
   /**
-   * Target command path to validate (e.g., "read", "config get")
-   * When specified, only this command's section is validated.
+   * Target command paths to validate (e.g., ["read", "config get"])
+   * When specified, only these commands' sections are validated.
    * The full document structure is used to maintain cross-file links.
    */
-  targetCommand?: string;
+  targetCommands?: string[];
 }
 
 /**

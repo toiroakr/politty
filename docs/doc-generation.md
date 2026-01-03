@@ -64,15 +64,15 @@ console.log(result.files); // 各ファイルのステータス
 
 ### `GenerateDocConfig`
 
-| Property        | Type                     | Description                                |
-| --------------- | ------------------------ | ------------------------------------------ |
-| `command`       | `AnyCommand`             | ドキュメント生成対象のコマンド             |
-| `files`         | `FileMapping`            | ファイルパスとコマンドのマッピング         |
-| `ignores`       | `string[]`               | 除外するコマンドパス（サブコマンドも除外） |
-| `format`        | `DefaultRendererOptions` | デフォルトレンダラーのオプション           |
-| `formatter`     | `FormatterFunction`      | 生成内容のフォーマッター                   |
-| `examples`      | `ExampleConfig`          | コマンドごとのexample実行設定              |
-| `targetCommand` | `string`                 | 特定コマンドのみを検証・生成（部分更新用） |
+| Property         | Type                     | Description                                |
+| ---------------- | ------------------------ | ------------------------------------------ |
+| `command`        | `AnyCommand`             | ドキュメント生成対象のコマンド             |
+| `files`          | `FileMapping`            | ファイルパスとコマンドのマッピング         |
+| `ignores`        | `string[]`               | 除外するコマンドパス（サブコマンドも除外） |
+| `format`         | `DefaultRendererOptions` | デフォルトレンダラーのオプション           |
+| `formatter`      | `FormatterFunction`      | 生成内容のフォーマッター                   |
+| `examples`       | `ExampleConfig`          | コマンドごとのexample実行設定              |
+| `targetCommands` | `string[]`               | 特定コマンドのみを検証・生成（部分更新用） |
 
 ### `FileMapping`
 
@@ -233,7 +233,7 @@ await assertDocMatch({
 - 各コマンドの`mock`→examples実行→`cleanup`の順で処理される
 - モックは各コマンド間で干渉しない（`cleanup`でリセット）
 
-### `targetCommand`
+### `targetCommands`
 
 特定のコマンドのセクションのみを検証・生成します。コマンドごとにテストを分離する際に使用します：
 
@@ -242,17 +242,29 @@ await assertDocMatch({
 await assertDocMatch({
   command: cli,
   files: { "docs/cli.md": ["", "read", "write"] },
-  targetCommand: "read",
+  targetCommands: ["read"],
   examples: {
     read: { mock: () => { /* ... */ }, cleanup: () => { /* ... */ } },
   },
 });
+
+// 複数のコマンドを同時に検証・生成
+await assertDocMatch({
+  command: cli,
+  files: { "docs/cli.md": ["", "read", "write"] },
+  targetCommands: ["read", "write"],
+  examples: {
+    read: { mock: () => { /* ... */ }, cleanup: () => { /* ... */ } },
+    write: { mock: () => { /* ... */ }, cleanup: () => { /* ... */ } },
+  },
+});
 ```
 
-- `targetCommand`を指定すると、そのコマンドのセクションのみが生成・検証される
+- `targetCommands`を指定すると、それらのコマンドのセクションのみが生成・検証される
 - 他のコマンドのセクションは既存ファイルにあればそのまま維持
 - セクションが存在しない場合は`files`で指定された順序の正しい位置に挿入
 - ルートコマンドを指定する場合は空文字列`""`を使用
+- 複数のファイルにまたがるコマンドも同時に指定可能
 
 ### `initDocFile(config, fileSystem?)`
 
@@ -523,7 +535,7 @@ describe("01-hello-world", () => {
 
 ### コマンドごとにテストを分離する例
 
-複数のサブコマンドがあり、各コマンドで異なるモックが必要な場合、`targetCommand`と`initDocFile`を使ってテストを分離できます：
+複数のサブコマンドがあり、各コマンドで異なるモックが必要な場合、`targetCommands`と`initDocFile`を使ってテストを分離できます：
 
 ```typescript
 // playground/22-examples/index.test.ts
@@ -535,7 +547,7 @@ import { command, readCommand, writeCommand, checkCommand } from "./index.js";
 vi.mock("node:fs");
 const realFs = await vi.importActual<typeof fs>("node:fs");
 
-const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommand"> = {
+const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
   command,
   files: { "playground/22-examples/README.md": ["", "read", "write", "check"] },
 };
@@ -562,7 +574,7 @@ describe("22-examples", () => {
     it("documentation", async () => {
       await assertDocMatch({
         ...baseDocConfig,
-        targetCommand: "",  // ルートコマンド
+        targetCommands: [""],  // ルートコマンド
         examples: {},
       });
     });
@@ -577,7 +589,7 @@ describe("22-examples", () => {
     it("documentation", async () => {
       await assertDocMatch({
         ...baseDocConfig,
-        targetCommand: "read",
+        targetCommands: ["read"],
         examples: {
           read: {
             mock: () => {
