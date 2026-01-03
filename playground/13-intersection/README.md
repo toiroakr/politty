@@ -4,19 +4,19 @@
 
 ファイルを処理（intersectionの例）
 
-## Usage
+**Usage**
 
 ```
 process [options] <input>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description  | Required |
 | -------- | ------------ | -------- |
 | `input`  | 入力ファイル | Yes      |
 
-## Options
+**Options**
 
 | Option              | Alias | Description  | Default |
 | ------------------- | ----- | ------------ | ------- |

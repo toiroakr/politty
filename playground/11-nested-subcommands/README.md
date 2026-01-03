@@ -4,13 +4,13 @@
 
 Git風のネストしたサブコマンドの例
 
-## Usage
+**Usage**
 
 ```
 git-like [command]
 ```
 
-## Commands
+**Commands**
 
 | Command             | Description |
 | ------------------- | ----------- |
@@ -19,17 +19,17 @@ git-like [command]
 <!-- politty:command::end -->
 <!-- politty:command:config:start -->
 
-# config
+## config
 
 設定を管理
 
-## Usage
+**Usage**
 
 ```
 git-like config [command]
 ```
 
-## Commands
+**Commands**
 
 | Command                       | Description          |
 | ----------------------------- | -------------------- |
@@ -40,17 +40,17 @@ git-like config [command]
 <!-- politty:command:config:end -->
 <!-- politty:command:config get:start -->
 
-# get
+### config get
 
 設定値を取得
 
-## Usage
+**Usage**
 
 ```
 git-like config get <key>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description | Required |
 | -------- | ----------- | -------- |
@@ -59,17 +59,17 @@ git-like config get <key>
 <!-- politty:command:config get:end -->
 <!-- politty:command:config list:start -->
 
-# list
+### config list
 
 全ての設定を一覧表示
 
-## Usage
+**Usage**
 
 ```
 git-like config list [options]
 ```
 
-## Options
+**Options**
 
 | Option              | Alias | Description | Default   |
 | ------------------- | ----- | ----------- | --------- |
@@ -78,17 +78,17 @@ git-like config list [options]
 <!-- politty:command:config list:end -->
 <!-- politty:command:config set:start -->
 
-# set
+### config set
 
 設定値を設定
 
-## Usage
+**Usage**
 
 ```
 git-like config set <key> <value>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description | Required |
 | -------- | ----------- | -------- |

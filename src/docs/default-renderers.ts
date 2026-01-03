@@ -518,18 +518,21 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
 
   return (info: CommandInfo): string => {
     const lines: string[] = [];
-    const h = "#".repeat(headingLevel);
-    const h2 = "#".repeat(headingLevel + 1);
+    // Calculate effective heading level based on command depth
+    // depth=1 → headingLevel, depth=2 → headingLevel+1, etc.
+    const effectiveLevel = Math.min(headingLevel + (info.depth - 1), 6);
+    const h = "#".repeat(effectiveLevel);
 
-    // Title
-    lines.push(`${h} ${info.name}`);
+    // Title - use commandPath for subcommands, name for root
+    const title = info.commandPath || info.name;
+    lines.push(`${h} ${title}`);
     lines.push("");
 
     // Description
     if (info.description) {
       const context: SimpleRenderContext = {
         content: info.description,
-        heading: h2,
+        heading: "",
         info,
       };
       const content = customRenderDescription ? customRenderDescription(context) : context.content;
@@ -541,10 +544,10 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
 
     // Usage
     {
-      const defaultUsage = `${h2} Usage\n\n\`\`\`\n${renderUsage(info)}\n\`\`\``;
+      const defaultUsage = `**Usage**\n\n\`\`\`\n${renderUsage(info)}\n\`\`\``;
       const context: SimpleRenderContext = {
         content: defaultUsage,
-        heading: h2,
+        heading: "**Usage**",
         info,
       };
       const content = customRenderUsage ? customRenderUsage(context) : context.content;
@@ -563,13 +566,13 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
           style === "table"
             ? renderArgumentsTableFromArray(args)
             : renderArgumentsListFromArray(args);
-        return withHeading ? `${h2} Arguments\n\n${content}` : content;
+        return withHeading ? `**Arguments**\n\n${content}` : content;
       };
 
       const context: ArgumentsRenderContext = {
         args: info.positionalArgs,
         render: renderArgs,
-        heading: h2,
+        heading: "**Arguments**",
         info,
       };
 
@@ -589,13 +592,13 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         const withHeading = renderOpts?.withHeading ?? true;
         const content =
           style === "table" ? renderOptionsTableFromArray(opts) : renderOptionsListFromArray(opts);
-        return withHeading ? `${h2} Options\n\n${content}` : content;
+        return withHeading ? `**Options**\n\n${content}` : content;
       };
 
       const context: OptionsRenderContext = {
         options: info.options,
         render: renderOpts,
-        heading: h2,
+        heading: "**Options**",
         info,
       };
 
@@ -616,13 +619,13 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         const anchors = opts?.generateAnchors ?? effectiveAnchors;
         const withHeading = opts?.withHeading ?? true;
         const content = renderSubcommandsTableFromArray(subs, info, anchors);
-        return withHeading ? `${h2} Commands\n\n${content}` : content;
+        return withHeading ? `**Commands**\n\n${content}` : content;
       };
 
       const context: SubcommandsRenderContext = {
         subcommands: info.subCommands,
         render: renderSubs,
-        heading: h2,
+        heading: "**Commands**",
         info,
       };
 
@@ -644,14 +647,14 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       ): string => {
         const withHeading = opts?.withHeading ?? true;
         const content = renderExamplesDefault(examples, results, opts);
-        return withHeading ? `${h2} Examples\n\n${content}` : content;
+        return withHeading ? `**Examples**\n\n${content}` : content;
       };
 
       const context: ExamplesRenderContext = {
         examples: info.examples,
         results: info.exampleResults,
         render: renderEx,
-        heading: h2,
+        heading: "**Examples**",
         info,
       };
 
@@ -667,8 +670,8 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     // Notes
     if (info.notes) {
       const context: SimpleRenderContext = {
-        content: `${h2} Notes\n\n${info.notes}`,
-        heading: h2,
+        content: `**Notes**\n\n${info.notes}`,
+        heading: "**Notes**",
         info,
       };
       const content = customRenderNotes ? customRenderNotes(context) : context.content;
@@ -682,7 +685,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     {
       const context: SimpleRenderContext = {
         content: "",
-        heading: h2,
+        heading: "",
         info,
       };
       const content = customRenderFooter ? customRenderFooter(context) : context.content;

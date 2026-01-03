@@ -4,13 +4,13 @@
 
 File operations CLI with examples
 
-## Usage
+**Usage**
 
 ```
 file-cli [command]
 ```
 
-## Commands
+**Commands**
 
 | Command             | Description           |
 | ------------------- | --------------------- |
@@ -22,29 +22,29 @@ file-cli [command]
 <!-- politty:command::end -->
 <!-- politty:command:read:start -->
 
-# read
+## read
 
 Read file contents
 
-## Usage
+**Usage**
 
 ```
 file-cli read [options] <file>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description       | Required |
 | -------- | ----------------- | -------- |
 | `file`   | File path to read | Yes      |
 
-## Options
+**Options**
 
 | Option              | Alias | Description   | Default  |
 | ------------------- | ----- | ------------- | -------- |
 | `--format <FORMAT>` | `-f`  | Output format | `"text"` |
 
-## Examples
+**Examples**
 
 **Read a JSON config file**
 
@@ -66,30 +66,30 @@ Hello from data.txt
 <!-- politty:command:read:end -->
 <!-- politty:command:write:start -->
 
-# write
+## write
 
 Write content to file
 
-## Usage
+**Usage**
 
 ```
 file-cli write [options] <file> <content>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument  | Description        | Required |
 | --------- | ------------------ | -------- |
 | `file`    | File path to write | Yes      |
 | `content` | Content to write   | Yes      |
 
-## Options
+**Options**
 
 | Option     | Alias | Description                           | Default |
 | ---------- | ----- | ------------------------------------- | ------- |
 | `--append` | `-a`  | Append to file instead of overwriting | `false` |
 
-## Examples
+**Examples**
 
 **Write text to a file**
 
@@ -108,23 +108,23 @@ Successfully appended to log.txt
 <!-- politty:command:write:end -->
 <!-- politty:command:check:start -->
 
-# check
+## check
 
 Check if file exists
 
-## Usage
+**Usage**
 
 ```
 file-cli check <file>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description        | Required |
 | -------- | ------------------ | -------- |
 | `file`   | File path to check | Yes      |
 
-## Examples
+**Examples**
 
 **Check if config file exists**
 
@@ -144,23 +144,23 @@ File not found: missing.txt
 
 <!-- politty:command:delete:start -->
 
-# delete
+## delete
 
 Delete a file
 
-## Usage
+**Usage**
 
 ```
 file-cli delete [options] <file>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description         | Required |
 | -------- | ------------------- | -------- |
 | `file`   | File path to delete | Yes      |
 
-## Options
+**Options**
 
 | Option    | Alias | Description                         | Default |
 | --------- | ----- | ----------------------------------- | ------- |

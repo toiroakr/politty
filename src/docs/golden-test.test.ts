@@ -172,8 +172,8 @@ describe("golden-test", () => {
       // Config file should contain config AND its subcommands
       const content = fs.readFileSync(filePath, "utf-8");
       expect(content).toContain("# config");
-      expect(content).toContain("# get");
-      expect(content).toContain("# set");
+      expect(content).toContain("# config get");
+      expect(content).toContain("# config set");
     });
 
     it("should handle multiple files with auto-included subcommands", async () => {
@@ -202,8 +202,8 @@ describe("golden-test", () => {
       // Config file should contain config and its subcommands
       const configContent = fs.readFileSync(configPath, "utf-8");
       expect(configContent).toContain("# config");
-      expect(configContent).toContain("# get");
-      expect(configContent).toContain("# set");
+      expect(configContent).toContain("# config get");
+      expect(configContent).toContain("# config set");
     });
 
     it("should ignore specified commands and their subcommands", async () => {
@@ -226,8 +226,8 @@ describe("golden-test", () => {
       expect(content).toContain("# greet");
       // config and its subcommands should be excluded
       expect(content).not.toContain("# config");
-      expect(content).not.toContain("# get");
-      expect(content).not.toContain("# set");
+      expect(content).not.toContain("# config get");
+      expect(content).not.toContain("# config set");
     });
 
     it("should ignore specific subcommands while keeping parent", async () => {
@@ -247,9 +247,9 @@ describe("golden-test", () => {
 
       const content = fs.readFileSync(filePath, "utf-8");
       expect(content).toContain("# config");
-      expect(content).toContain("# get");
+      expect(content).toContain("# config get");
       // Only "config set" should be excluded
-      expect(content).not.toContain("# set");
+      expect(content).not.toContain("# config set");
     });
 
     it("should throw error when files and ignores conflict", async () => {
@@ -566,8 +566,8 @@ describe("golden-test", () => {
       // All subcommands should be excluded
       expect(content).not.toContain("# greet");
       expect(content).not.toContain("# config");
-      expect(content).not.toContain("# get");
-      expect(content).not.toContain("# set");
+      expect(content).not.toContain("# config get");
+      expect(content).not.toContain("# config set");
     });
 
     // Edge case: empty ignores array (should be same as no ignores)
@@ -690,6 +690,58 @@ describe("golden-test", () => {
       expect(content).not.toMatch(/^# greet/m);
     });
 
+    it("should use relative heading level within file (subcommand as top level)", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "config-only.md");
+
+      // File containing only config and its subcommands (no root command)
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: ["config"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      // config (depth=2) should be # since it's the minimum depth in file
+      expect(content).toContain("# config");
+      // config get (depth=3) should be ## (relative to config)
+      expect(content).toContain("## config get");
+      // config set (depth=3) should be ## (relative to config)
+      expect(content).toContain("## config set");
+    });
+
+    it("should use nested heading levels within single file", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "all-commands.md");
+
+      // File containing root and all subcommands
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: ["", "greet", "config"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      // root (depth=1) → #
+      expect(content).toMatch(/^# test-cli$/m);
+      // greet (depth=2) → ##
+      expect(content).toMatch(/^## greet$/m);
+      // config (depth=2) → ##
+      expect(content).toMatch(/^## config$/m);
+      // config get (depth=3) → ###
+      expect(content).toMatch(/^### config get$/m);
+      // config set (depth=3) → ###
+      expect(content).toMatch(/^### config set$/m);
+    });
+
     // Multiple files with overlapping commands
     it("should allow same command in multiple files", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
@@ -770,8 +822,8 @@ describe("golden-test", () => {
       // All subcommands should be excluded
       expect(content).not.toContain("# greet");
       expect(content).not.toContain("# config");
-      expect(content).not.toContain("# get");
-      expect(content).not.toContain("# set");
+      expect(content).not.toContain("# config get");
+      expect(content).not.toContain("# config set");
     });
 
     // Wildcard: ignore nested subcommands with "* *"
@@ -795,8 +847,8 @@ describe("golden-test", () => {
       expect(content).toContain("# greet");
       expect(content).toContain("# config");
       // Only nested subcommands should be excluded
-      expect(content).not.toContain("# get");
-      expect(content).not.toContain("# set");
+      expect(content).not.toContain("# config get");
+      expect(content).not.toContain("# config set");
     });
 
     // Wildcard: ignore specific parent's subcommands with "config *"
@@ -820,8 +872,8 @@ describe("golden-test", () => {
       expect(content).toContain("# greet");
       expect(content).toContain("# config");
       // Only config's subcommands should be excluded
-      expect(content).not.toContain("# get");
-      expect(content).not.toContain("# set");
+      expect(content).not.toContain("# config get");
+      expect(content).not.toContain("# config set");
     });
 
     // Wildcard: error when wildcard pattern matches no commands
@@ -858,8 +910,8 @@ describe("golden-test", () => {
 
       const content = fs.readFileSync(filePath, "utf-8");
       // Should contain config's subcommands
-      expect(content).toContain("# get");
-      expect(content).toContain("# set");
+      expect(content).toContain("# config get");
+      expect(content).toContain("# config set");
       // Should not contain root or greet
       expect(content).not.toContain("# test-cli");
       expect(content).not.toContain("# greet");
@@ -946,9 +998,12 @@ describe("golden-test", () => {
       const content = fs.readFileSync(filePath, "utf-8");
       expect(content).toContain("# alpha");
       expect(content).toContain("# beta");
-      expect(content).toContain("# one");
-      // "two" subcommands should be excluded
-      expect(content).not.toContain("# two");
+      // Subcommands use full path in title
+      expect(content).toContain("## alpha one");
+      expect(content).toContain("## beta one");
+      // "two" subcommands should be excluded (check for section markers)
+      expect(content).not.toContain("<!-- politty:command:alpha two:start -->");
+      expect(content).not.toContain("<!-- politty:command:beta two:start -->");
     });
 
     // Combined: ignores parent command while files specifies different commands
@@ -972,8 +1027,8 @@ describe("golden-test", () => {
       expect(content).toContain("# greet");
       // config and all its subcommands should be excluded
       expect(content).not.toContain("# config");
-      expect(content).not.toContain("# get");
-      expect(content).not.toContain("# set");
+      expect(content).not.toContain("# config get");
+      expect(content).not.toContain("# config set");
     });
 
     // Combined: multiple ignores
@@ -996,8 +1051,8 @@ describe("golden-test", () => {
       expect(content).toContain("# test-cli");
       expect(content).not.toContain("# greet");
       expect(content).toContain("# config");
-      expect(content).toContain("# get");
-      expect(content).not.toContain("# set");
+      expect(content).toContain("# config get");
+      expect(content).not.toContain("# config set");
     });
 
     // Root command only
@@ -1364,9 +1419,10 @@ describe("golden-test", () => {
       expect(originalContent).toContain("<!-- politty:command:greet:start -->");
 
       // Manually modify the greet section in the file
+      // greet is depth=2 (subcommand), so it gets ## heading
       const modifiedContent = originalContent.replace(
-        /<!-- politty:command:greet:start -->\n# greet/,
-        "<!-- politty:command:greet:start -->\n# MODIFIED greet",
+        /<!-- politty:command:greet:start -->\n## greet/,
+        "<!-- politty:command:greet:start -->\n## MODIFIED greet",
       );
       fs.writeFileSync(filePath, modifiedContent, "utf-8");
 
@@ -1379,8 +1435,9 @@ describe("golden-test", () => {
 
       // Verify greet section was restored but other sections remain
       const updatedContent = fs.readFileSync(filePath, "utf-8");
-      expect(updatedContent).toContain("<!-- politty:command:greet:start -->\n# greet");
-      expect(updatedContent).not.toContain("# MODIFIED greet");
+      // greet is depth=2 (subcommand), so it gets ## heading
+      expect(updatedContent).toContain("<!-- politty:command:greet:start -->\n## greet");
+      expect(updatedContent).not.toContain("## MODIFIED greet");
     });
 
     it("should throw error for invalid target command", async () => {
@@ -1434,13 +1491,14 @@ describe("golden-test", () => {
       const originalContent = fs.readFileSync(filePath, "utf-8");
 
       // Manually modify both greet and config sections in the file
+      // greet and config are depth=2 (subcommands), so they get ## heading
       let modifiedContent = originalContent.replace(
-        /<!-- politty:command:greet:start -->\n# greet/,
-        "<!-- politty:command:greet:start -->\n# MODIFIED greet",
+        /<!-- politty:command:greet:start -->\n## greet/,
+        "<!-- politty:command:greet:start -->\n## MODIFIED greet",
       );
       modifiedContent = modifiedContent.replace(
-        /<!-- politty:command:config:start -->\n# config/,
-        "<!-- politty:command:config:start -->\n# MODIFIED config",
+        /<!-- politty:command:config:start -->\n## config/,
+        "<!-- politty:command:config:start -->\n## MODIFIED config",
       );
       fs.writeFileSync(filePath, modifiedContent, "utf-8");
 
@@ -1453,10 +1511,10 @@ describe("golden-test", () => {
 
       // Verify both sections were restored
       const updatedContent = fs.readFileSync(filePath, "utf-8");
-      expect(updatedContent).toContain("<!-- politty:command:greet:start -->\n# greet");
-      expect(updatedContent).toContain("<!-- politty:command:config:start -->\n# config");
-      expect(updatedContent).not.toContain("# MODIFIED greet");
-      expect(updatedContent).not.toContain("# MODIFIED config");
+      expect(updatedContent).toContain("<!-- politty:command:greet:start -->\n## greet");
+      expect(updatedContent).toContain("<!-- politty:command:config:start -->\n## config");
+      expect(updatedContent).not.toContain("## MODIFIED greet");
+      expect(updatedContent).not.toContain("## MODIFIED config");
     });
 
     it("should handle target commands across multiple files", async () => {

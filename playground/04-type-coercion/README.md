@@ -4,13 +4,13 @@
 
 サーバー設定の例（型変換とバリデーション）
 
-## Usage
+**Usage**
 
 ```
 server [options]
 ```
 
-## Options
+**Options**
 
 | Option            | Alias | Description          | Default       |
 | ----------------- | ----- | -------------------- | ------------- |

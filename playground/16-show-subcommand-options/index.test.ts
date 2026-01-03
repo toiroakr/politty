@@ -4,11 +4,11 @@ import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import {
-    cli,
-    configGetCommand,
-    configListCommand,
-    remoteAddCommand,
-    remoteRemoveCommand
+  cli,
+  configGetCommand,
+  configListCommand,
+  remoteAddCommand,
+  remoteRemoveCommand,
 } from "./index.js";
 
 describe("16-show-subcommand-options", () => {

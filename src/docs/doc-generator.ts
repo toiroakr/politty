@@ -34,6 +34,7 @@ export async function buildCommandInfo(
     description: command.description,
     fullCommandPath: commandPath.length > 0 ? `${rootName} ${commandPath.join(" ")}` : rootName,
     commandPath: commandPath.join(" "),
+    depth: commandPath.length + 1,
     positionalArgs,
     options,
     subCommands,

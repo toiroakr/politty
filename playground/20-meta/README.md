@@ -4,19 +4,19 @@
 
 Test for Zod .meta() support
 
-## Usage
+**Usage**
 
 ```
 greet-meta [options] <name>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description              | Required |
 | -------- | ------------------------ | -------- |
 | `name`   | Name to greet (via meta) | Yes      |
 
-## Options
+**Options**
 
 | Option                  | Alias | Description                | Default   |
 | ----------------------- | ----- | -------------------------- | --------- |

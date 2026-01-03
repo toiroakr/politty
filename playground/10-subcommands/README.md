@@ -4,13 +4,13 @@
 
 サブコマンドを持つCLIの例
 
-## Usage
+**Usage**
 
 ```
 my-cli [command]
 ```
 
-## Commands
+**Commands**
 
 | Command           | Description          |
 | ----------------- | -------------------- |
@@ -20,17 +20,17 @@ my-cli [command]
 <!-- politty:command::end -->
 <!-- politty:command:build:start -->
 
-# build
+## build
 
 プロジェクトをビルド
 
-## Usage
+**Usage**
 
 ```
 my-cli build [options]
 ```
 
-## Options
+**Options**
 
 | Option              | Alias | Description        | Default  |
 | ------------------- | ----- | ------------------ | -------- |
@@ -41,17 +41,17 @@ my-cli build [options]
 <!-- politty:command:build:end -->
 <!-- politty:command:init:start -->
 
-# init
+## init
 
 プロジェクトを初期化
 
-## Usage
+**Usage**
 
 ```
 my-cli init [options]
 ```
 
-## Options
+**Options**
 
 | Option                  | Alias | Description          | Default     |
 | ----------------------- | ----- | -------------------- | ----------- |

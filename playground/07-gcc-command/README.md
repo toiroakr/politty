@@ -4,19 +4,19 @@
 
 Cコンパイラ（gccコマンド風）
 
-## Usage
+**Usage**
 
 ```
 gcc [options] <sources>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument  | Description    | Required |
 | --------- | -------------- | -------- |
 | `sources` | ソースファイル | Yes      |
 
-## Options
+**Options**
 
 | Option              | Alias | Description        | Default |
 | ------------------- | ----- | ------------------ | ------- |

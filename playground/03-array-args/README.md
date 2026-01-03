@@ -4,13 +4,13 @@
 
 複数ファイルを処理する
 
-## Usage
+**Usage**
 
 ```
 process-files [options]
 ```
 
-## Options
+**Options**
 
 | Option            | Alias | Description                    | Default |
 | ----------------- | ----- | ------------------------------ | ------- |

@@ -4,7 +4,7 @@
 
 Hello Worldを表示するシンプルなコマンド
 
-## Usage
+**Usage**
 
 ```
 hello

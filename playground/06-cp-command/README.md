@@ -4,20 +4,20 @@
 
 ファイルをコピーする（cpコマンド風）
 
-## Usage
+**Usage**
 
 ```
 cp [options] <source> <destination>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument      | Description      | Required |
 | ------------- | ---------------- | -------- |
 | `source`      | コピー元ファイル | Yes      |
 | `destination` | コピー先ファイル | Yes      |
 
-## Options
+**Options**
 
 | Option        | Alias | Description                  | Default |
 | ------------- | ----- | ---------------------------- | ------- |

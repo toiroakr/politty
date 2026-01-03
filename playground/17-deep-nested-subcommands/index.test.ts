@@ -4,11 +4,11 @@ import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import {
-    cli,
-    configCoreGetCommand,
-    configCoreSetCommand,
-    configUserGetCommand,
-    configUserSetCommand
+  cli,
+  configCoreGetCommand,
+  configCoreSetCommand,
+  configUserGetCommand,
+  configUserSetCommand,
 } from "./index.js";
 
 describe("17-deep-nested-subcommands", () => {

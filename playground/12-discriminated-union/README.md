@@ -4,13 +4,13 @@
 
 リソースを管理（discriminatedUnionの例）
 
-## Usage
+**Usage**
 
 ```
 resource [options]
 ```
 
-## Options
+**Options**
 
 | Option                  | Alias | Description    | Default   |
 | ----------------------- | ----- | -------------- | --------- |
@@ -22,7 +22,7 @@ resource [options]
 | `--format <FORMAT>`     | `-F`  | 出力形式       | `"table"` |
 | `--limit <LIMIT>`       | `-n`  | 表示件数       | `10`      |
 
-## Notes
+**Notes**
 
 --action の値によって使用可能なオプションが変わります。
 create: --name, --template / delete: --id, --force / list: --format, --limit

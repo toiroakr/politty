@@ -4,13 +4,13 @@
 
 Demo of xor (exclusive union) help with auth methods
 
-## Usage
+**Usage**
 
 ```
 auth-demo [options]
 ```
 
-## Options
+**Options**
 
 | Option                  | Alias | Description | Default |
 | ----------------------- | ----- | ----------- | ------- |

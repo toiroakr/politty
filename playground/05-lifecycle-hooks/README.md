@@ -4,13 +4,13 @@
 
 データベースクエリの実行（ライフサイクルフックのデモ）
 
-## Usage
+**Usage**
 
 ```
 db-query [options]
 ```
 
-## Options
+**Options**
 
 | Option                  | Alias | Description            | Default |
 | ----------------------- | ----- | ---------------------- | ------- |
@@ -18,7 +18,7 @@ db-query [options]
 | `--query <QUERY>`       | `-q`  | SQLクエリ              | -       |
 | `--simulate_error`      | `-e`  | エラーをシミュレート   | `false` |
 
-## Notes
+**Notes**
 
 このコマンドは setup → run → cleanup の実行順序を示します。
 --simulate-error フラグを使用すると、エラー発生時でも cleanup が呼ばれることを確認できます。

@@ -13,6 +13,8 @@ export interface CommandInfo {
   fullCommandPath: string;
   /** Command path relative to root (e.g., "" for root, "config" for subcommand) */
   commandPath: string;
+  /** Command depth (1 for root commands, 2 for subcommands, etc.) */
+  depth: number;
   /** Positional arguments */
   positionalArgs: ResolvedFieldMeta[];
   /** Options (non-positional arguments) */

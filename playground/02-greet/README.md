@@ -4,19 +4,19 @@
 
 挨拶を表示するCLIツール
 
-## Usage
+**Usage**
 
 ```
 greet [options] <name>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description        | Required |
 | -------- | ------------------ | -------- |
 | `name`   | 挨拶する相手の名前 | Yes      |
 
-## Options
+**Options**
 
 | Option                  | Alias | Description    | Default   |
 | ----------------------- | ----- | -------------- | --------- |

@@ -4,13 +4,13 @@
 
 CLI demonstrating lazy loading subcommands with dynamic imports
 
-## Usage
+**Usage**
 
 ```
 my-app [command]
 ```
 
-## Commands
+**Commands**
 
 | Command                   | Description                             |
 | ------------------------- | --------------------------------------- |
@@ -21,17 +21,17 @@ my-app [command]
 <!-- politty:command::end -->
 <!-- politty:command:analytics:start -->
 
-# analytics
+## analytics
 
 Analyze project metrics (lazily loaded)
 
-## Usage
+**Usage**
 
 ```
 my-app analytics [options]
 ```
 
-## Options
+**Options**
 
 | Option              | Alias | Description       | Default   |
 | ------------------- | ----- | ----------------- | --------- |
@@ -41,17 +41,17 @@ my-app analytics [options]
 <!-- politty:command:analytics:end -->
 <!-- politty:command:heavy:start -->
 
-# heavy
+## heavy
 
 A heavy command that is lazily loaded
 
-## Usage
+**Usage**
 
 ```
 my-app heavy [options]
 ```
 
-## Options
+**Options**
 
 | Option                      | Alias | Description          | Default |
 | --------------------------- | ----- | -------------------- | ------- |
@@ -61,17 +61,17 @@ my-app heavy [options]
 <!-- politty:command:heavy:end -->
 <!-- politty:command:status:start -->
 
-# status
+## status
 
 Show current status (eagerly loaded)
 
-## Usage
+**Usage**
 
 ```
 my-app status [options]
 ```
 
-## Options
+**Options**
 
 | Option      | Alias | Description          | Default |
 | ----------- | ----- | -------------------- | ------- |

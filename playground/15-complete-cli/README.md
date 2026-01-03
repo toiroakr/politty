@@ -4,19 +4,19 @@
 
 完全なCLIツールの例
 
-## Usage
+**Usage**
 
 ```
 my-tool [options] [command] <input>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description  | Required |
 | -------- | ------------ | -------- |
 | `input`  | 入力ファイル | Yes      |
 
-## Options
+**Options**
 
 | Option              | Alias | Description          | Default  |
 | ------------------- | ----- | -------------------- | -------- |
@@ -24,30 +24,30 @@ my-tool [options] [command] <input>
 | `--verbose`         | `-v`  | 詳細出力を有効にする | `false`  |
 | `--format <FORMAT>` | `-f`  | 出力形式             | `"json"` |
 
-## Commands
+**Commands**
 
 | Command         | Description                |
 | --------------- | -------------------------- |
 | [`init`](#init) | 新しいプロジェクトを初期化 |
 
-## Notes
+**Notes**
 
 サブコマンド、ライフサイクルフック、複数の出力形式をサポートしています。
 
 <!-- politty:command::end -->
 <!-- politty:command:init:start -->
 
-# init
+## init
 
 新しいプロジェクトを初期化
 
-## Usage
+**Usage**
 
 ```
 my-tool init [options]
 ```
 
-## Options
+**Options**
 
 | Option                  | Alias | Description          | Default     |
 | ----------------------- | ----- | -------------------- | ----------- |

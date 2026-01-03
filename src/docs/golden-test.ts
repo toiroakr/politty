@@ -658,9 +658,6 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // Build file map for cross-file links
   const fileMap = buildFileMap(files, allCommands, ignores);
 
-  // Default renderer
-  const defaultRenderer = createCommandRenderer(format);
-
   const results: GenerateDocResult["files"] = [];
   let hasError = false;
 
@@ -693,8 +690,26 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       continue;
     }
 
-    // Use custom renderer if provided, otherwise default
-    const render = fileConfig.render ?? defaultRenderer;
+    // Calculate minimum depth in this file for relative heading level
+    const minDepth = Math.min(...commandPaths.map((p) => allCommands.get(p)?.depth ?? 1));
+
+    // Adjust headingLevel so that minimum depth command gets the configured headingLevel
+    const adjustedHeadingLevel = Math.max(1, (format?.headingLevel ?? 1) - (minDepth - 1)) as
+      | 1
+      | 2
+      | 3
+      | 4
+      | 5
+      | 6;
+
+    // Create file-specific renderer with adjusted headingLevel (if no custom renderer)
+    const fileRenderer = createCommandRenderer({
+      ...format,
+      headingLevel: adjustedHeadingLevel,
+    });
+
+    // Use custom renderer if provided, otherwise use file-specific renderer
+    const render = fileConfig.render ?? fileRenderer;
 
     // Handle partial validation when targetCommands are specified
     if (targetCommands !== undefined && targetCommands.length > 0) {

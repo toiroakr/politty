@@ -4,19 +4,19 @@
 
 ファイルの内容を表示する（catコマンド風）
 
-## Usage
+**Usage**
 
 ```
 cat [options] <files>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description      | Required |
 | -------- | ---------------- | -------- |
 | `files`  | 表示するファイル | Yes      |
 
-## Options
+**Options**
 
 | Option        | Alias | Description   | Default |
 | ------------- | ----- | ------------- | ------- |

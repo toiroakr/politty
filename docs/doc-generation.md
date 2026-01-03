@@ -341,7 +341,7 @@ const readCommand = defineCommand({
 生成されるMarkdown：
 
 ````markdown
-## Examples
+**Examples**
 
 **Read a JSON config file**
 
@@ -377,6 +377,26 @@ await assertDocMatch({
 });
 ```
 
+#### ヘッダーレベルの自動調整
+
+サブコマンドのヘッダーレベルは、コマンドの深さに基づいて**ファイル内で相対的に**自動調整されます：
+
+- ファイル内で最も浅いコマンドが `headingLevel` を使用
+- より深いサブコマンドは順次レベルが下がる
+
+```markdown
+<!-- docs/cli.md: ルートコマンドを含む場合 -->
+# my-cli          ← depth=1, headingLevel
+## config         ← depth=2, headingLevel+1
+### config get    ← depth=3, headingLevel+2
+
+<!-- docs/config.md: サブコマンドのみの場合 -->
+# config          ← depth=2 だが、このファイルでは最も浅いので headingLevel
+## config get     ← depth=3, headingLevel+1
+```
+
+サブコマンドのタイトルはフルパスで表示されます（例: `config get`）。
+
 ### Custom Section Renderers
 
 各セクションのレンダリングをカスタマイズできます。`render*` 関数はデフォルトのコンテンツを受け取り、最終的なコンテンツを返します：
@@ -388,7 +408,7 @@ const customRenderer = createCommandRenderer({
   // オプションセクションの後にExamplesを追加
   renderOptions: (defaultContent, info) => `${defaultContent}
 
-## Examples
+**Examples**
 
 \`\`\`bash
 ${info.fullCommandPath} --help
@@ -432,7 +452,7 @@ const myRenderer: RenderFunction = (info: CommandInfo) => `
 
 ${info.description ?? ""}
 
-## Usage
+**Usage**
 
 \`\`\`
 ${info.fullCommandPath}
@@ -444,20 +464,20 @@ ${info.fullCommandPath}
 
 レンダー関数に渡されるコマンド情報：
 
-| Property          | Type                                  | Description                                   |
-| ----------------- | ------------------------------------- | --------------------------------------------- |
-| `name`            | `string`                              | コマンド名                                    |
-| `description`     | `string \| undefined`                 | コマンドの説明                                |
-| `fullCommandPath` | `string`                              | フルコマンドパス（例: `"my-cli config get"`） |
-| `commandPath`     | `string[]`                            | コマンドパス配列（例: `["config", "get"]`）   |
-| `rootName`        | `string`                              | ルートコマンド名                              |
-| `positionalArgs`  | `ResolvedFieldMeta[]`                 | 位置引数の配列                                |
-| `options`         | `ResolvedFieldMeta[]`                 | オプション（非位置引数）の配列                |
-| `subCommands`     | `SubCommandInfo[]`                    | サブコマンド情報の配列                        |
-| `extracted`       | `ExtractedFields \| null`             | スキーマから抽出されたフィールド情報          |
-| `command`         | `AnyCommand`                          | 元のコマンドオブジェクト                      |
-| `filePath`        | `string \| undefined`                 | このコマンドが出力されるファイルパス          |
-| `fileMap`         | `Record<string, string> \| undefined` | コマンドパス→ファイルパスのマップ             |
+| Property          | Type                                  | Description                                          |
+| ----------------- | ------------------------------------- | ---------------------------------------------------- |
+| `name`            | `string`                              | コマンド名                                           |
+| `description`     | `string \| undefined`                 | コマンドの説明                                       |
+| `fullCommandPath` | `string`                              | フルコマンドパス（例: `"my-cli config get"`）        |
+| `commandPath`     | `string`                              | コマンドパス（例: `"config get"`、ルートは `""`）    |
+| `depth`           | `number`                              | コマンドの深さ（ルート=1、サブコマンド=2、以下同様） |
+| `positionalArgs`  | `ResolvedFieldMeta[]`                 | 位置引数の配列                                       |
+| `options`         | `ResolvedFieldMeta[]`                 | オプション（非位置引数）の配列                       |
+| `subCommands`     | `SubCommandInfo[]`                    | サブコマンド情報の配列                               |
+| `extracted`       | `ExtractedFields \| null`             | スキーマから抽出されたフィールド情報                 |
+| `command`         | `AnyCommand`                          | 元のコマンドオブジェクト                             |
+| `filePath`        | `string \| undefined`                 | このコマンドが出力されるファイルパス                 |
+| `fileMap`         | `Record<string, string> \| undefined` | コマンドパス→ファイルパスのマップ                    |
 
 ### `SubCommandInfo`
 
@@ -487,37 +507,63 @@ ${info.fullCommandPath}
 
 ## Generated Markdown Format
 
-デフォルトレンダラーは以下の形式の Markdown を生成します：
+デフォルトレンダラーは以下の形式の Markdown を生成します。サブコマンドのタイトルはフルパスで表示され、ヘッダーレベルは深さに応じて自動調整されます：
 
 ````markdown
 # command-name
 
 Command description
 
-## Usage
+**Usage**
 
 ```
 command-name [options] <arg>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description          | Required |
 | -------- | -------------------- | -------- |
 | `arg`    | Argument description | Yes      |
 
-## Options
+**Options**
 
 | Option             | Alias | Description        | Default     |
 | ------------------ | ----- | ------------------ | ----------- |
 | `--option <VALUE>` | `-o`  | Option description | `"default"` |
 | `--help`           | `-h`  | Show help          | -           |
 
-## Commands
+**Commands**
 
 | Command                     | Description            |
 | --------------------------- | ---------------------- |
 | [`subcommand`](#subcommand) | Subcommand description |
+
+## subcommand
+
+Subcommand description
+
+**Usage**
+
+```
+command-name subcommand [options]
+```
+
+**Commands**
+
+| Command                                   | Description                |
+| ----------------------------------------- | -------------------------- |
+| [`subcommand action`](#subcommand-action) | Nested subcommand          |
+
+### subcommand action
+
+Nested subcommand description
+
+**Usage**
+
+```
+command-name subcommand action
+```
 ````
 
 ## Environment Variables

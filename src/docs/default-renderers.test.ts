@@ -292,10 +292,10 @@ describe("default-renderers", () => {
 
       expect(markdown).toContain("# greet");
       expect(markdown).toContain("Greet someone");
-      expect(markdown).toContain("## Usage");
+      expect(markdown).toContain("**Usage**");
       expect(markdown).toContain("greet [options] <name>");
-      expect(markdown).toContain("## Arguments");
-      expect(markdown).toContain("## Options");
+      expect(markdown).toContain("**Arguments**");
+      expect(markdown).toContain("**Options**");
     });
 
     it("should use custom heading level", async () => {
@@ -310,7 +310,68 @@ describe("default-renderers", () => {
       const markdown = renderer(info);
 
       expect(markdown).toContain("## test");
-      expect(markdown).toContain("### Usage");
+      expect(markdown).toContain("**Usage**");
+    });
+
+    it("should increase heading level based on command depth", async () => {
+      const subSubCmd = defineCommand({
+        name: "action",
+        description: "Action command",
+        run: () => {},
+      });
+
+      const subCmd = defineCommand({
+        name: "sub",
+        description: "Sub command",
+        subCommands: { action: subSubCmd },
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        description: "CLI",
+        subCommands: { sub: subCmd },
+      });
+
+      const renderer = createCommandRenderer({ headingLevel: 1 });
+
+      // depth=1 (root) → h1
+      const rootInfo = await buildCommandInfo(cmd, "cli", []);
+      expect(rootInfo.depth).toBe(1);
+      const rootMarkdown = renderer(rootInfo);
+      expect(rootMarkdown).toContain("# cli");
+      expect(rootMarkdown).toContain("**Usage**");
+
+      // depth=2 (sub) → h2
+      const subInfo = await buildCommandInfo(subCmd, "cli", ["sub"]);
+      expect(subInfo.depth).toBe(2);
+      const subMarkdown = renderer(subInfo);
+      expect(subMarkdown).toContain("## sub");
+      expect(subMarkdown).toContain("**Usage**");
+
+      // depth=3 (sub action) → h3
+      const actionInfo = await buildCommandInfo(subSubCmd, "cli", ["sub", "action"]);
+      expect(actionInfo.depth).toBe(3);
+      const actionMarkdown = renderer(actionInfo);
+      // Title uses full commandPath for subcommands
+      expect(actionMarkdown).toContain("### sub action");
+      expect(actionMarkdown).toContain("**Usage**");
+    });
+
+    it("should cap heading level at 6", async () => {
+      const cmd = defineCommand({
+        name: "deep",
+        description: "Deep command",
+        run: () => {},
+      });
+
+      // depth=6 with headingLevel=3 would be 3+5=8, but should cap at 6
+      const info = await buildCommandInfo(cmd, "cli", ["a", "b", "c", "d", "e"]);
+      expect(info.depth).toBe(6);
+      const renderer = createCommandRenderer({ headingLevel: 3 });
+      const markdown = renderer(info);
+      // Title uses full commandPath for subcommands
+      expect(markdown).toContain("###### a b c d e"); // capped at h6
+      expect(markdown).toContain("**Usage**"); // sections use bold, not headers
     });
 
     it("should use list style for options", async () => {
@@ -401,7 +462,7 @@ describe("default-renderers", () => {
       });
       const markdown = renderer(info);
 
-      expect(markdown).toContain("## Options");
+      expect(markdown).toContain("**Options**");
       expect(markdown).toContain("**Custom Section:**");
       expect(markdown).toContain("Some custom content.");
     });
@@ -421,7 +482,7 @@ describe("default-renderers", () => {
       });
       const markdown = renderer(info);
 
-      expect(markdown).not.toContain("## Options");
+      expect(markdown).not.toContain("**Options**");
       expect(markdown).not.toContain("--flag");
     });
 

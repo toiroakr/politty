@@ -4,13 +4,13 @@
 
 transform/refineのデモ
 
-## Usage
+**Usage**
 
 ```
 validation-demo [command]
 ```
 
-## Commands
+**Commands**
 
 | Command                   | Description                              |
 | ------------------------- | ---------------------------------------- |
@@ -20,17 +20,17 @@ validation-demo [command]
 <!-- politty:command::end -->
 <!-- politty:command:refine:start -->
 
-# refine-example
+## refine
 
 refineを使ったカスタムバリデーションの例
 
-## Usage
+**Usage**
 
 ```
 validation-demo refine <input> <output>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description  | Required |
 | -------- | ------------ | -------- |
@@ -40,23 +40,23 @@ validation-demo refine <input> <output>
 <!-- politty:command:refine:end -->
 <!-- politty:command:transform:start -->
 
-# transform-example
+## transform
 
 transformを使った変換の例
 
-## Usage
+**Usage**
 
 ```
 validation-demo transform [options] <name>
 ```
 
-## Arguments
+**Arguments**
 
 | Argument | Description                | Required |
 | -------- | -------------------------- | -------- |
 | `name`   | 名前（大文字に変換される） | Yes      |
 
-## Options
+**Options**
 
 | Option          | Alias | Description        | Default |
 | --------------- | ----- | ------------------ | ------- |

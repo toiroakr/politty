@@ -27,8 +27,10 @@ export { buildCommandInfo, collectAllCommands } from "./doc-generator.js";
 export { executeExamples } from "./example-executor.js";
 export { assertDocMatch, generateDoc, initDocFile } from "./golden-test.js";
 export {
-    commandEndMarker,
-    commandStartMarker, COMMAND_MARKER_PREFIX, UPDATE_GOLDEN_ENV
+  commandEndMarker,
+  commandStartMarker,
+  COMMAND_MARKER_PREFIX,
+  UPDATE_GOLDEN_ENV,
 } from "./types.js";
 // Types
 export type {
