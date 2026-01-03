@@ -151,8 +151,8 @@ export interface MainOptions {
   version?: string;
   /** Enable debug mode (show stack traces on errors) */
   debug?: boolean;
-  /** Capture console.error and console.warn output during execution (default: false) */
-  captureErrorLogs?: boolean;
+  /** Capture console output during execution (default: false) */
+  captureLogs?: boolean;
   /** Skip command definition validation (useful in production where tests already verified) */
   skipValidation?: boolean;
   /** Custom logger for output (default: console) */
@@ -165,8 +165,8 @@ export interface MainOptions {
 export interface RunCommandOptions {
   /** Enable debug mode (show stack traces on errors) */
   debug?: boolean;
-  /** Capture console.error and console.warn output during execution (default: false) */
-  captureErrorLogs?: boolean;
+  /** Capture console output during execution (default: false) */
+  captureLogs?: boolean;
   /** Skip command definition validation (useful in production where tests already verified) */
   skipValidation?: boolean;
   /** Custom logger for output (default: console) */
@@ -188,13 +188,23 @@ export interface InternalRunOptions {
   handleSignals?: boolean | undefined;
   /** Enable debug mode */
   debug?: boolean | undefined;
-  /** Capture console.error and console.warn output */
-  captureErrorLogs?: boolean | undefined;
+  /** Capture console output */
+  captureLogs?: boolean | undefined;
   /** Skip command definition validation */
   skipValidation?: boolean | undefined;
   /** Custom logger for output */
   logger?: Logger | undefined;
 }
+
+/**
+ * Log level type
+ */
+export type LogLevel = "log" | "info" | "debug" | "warn" | "error";
+
+/**
+ * Output stream type
+ */
+export type LogStream = "stdout" | "stderr";
 
 /**
  * A single log entry collected during command execution
@@ -204,16 +214,18 @@ export interface LogEntry {
   message: string;
   /** Timestamp when the log was recorded */
   timestamp: Date;
+  /** Log level */
+  level: LogLevel;
+  /** Output stream (stdout or stderr) */
+  stream: LogStream;
 }
 
 /**
  * Collected logs during command execution
  */
 export interface CollectedLogs {
-  /** Error logs (console.error) */
-  errors: LogEntry[];
-  /** Warning logs (console.warn) */
-  warnings: LogEntry[];
+  /** All log entries in order */
+  entries: LogEntry[];
 }
 
 /**

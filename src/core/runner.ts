@@ -104,7 +104,7 @@ export async function runCommand<TResult = unknown>(
 export async function runMain(command: AnyCommand, options: MainOptions = {}): Promise<never> {
   const result = await runCommandInternal(command, process.argv.slice(2), {
     debug: options.debug,
-    captureErrorLogs: options.captureErrorLogs,
+    captureLogs: options.captureLogs,
     skipValidation: options.skipValidation,
     handleSignals: true,
     logger: options.logger,
@@ -136,7 +136,7 @@ async function runCommandInternal<TResult = unknown>(
   };
 
   // Start log collection if enabled
-  const shouldCaptureLogs = options.captureErrorLogs ?? false;
+  const shouldCaptureLogs = options.captureLogs ?? false;
   const collector = shouldCaptureLogs ? createLogCollector() : null;
   collector?.start();
 
@@ -261,7 +261,7 @@ async function runCommandInternal<TResult = unknown>(
       collector?.stop();
       const result = await executeLifecycle(command, {} as Record<string, never>, {
         handleSignals: options.handleSignals,
-        captureErrorLogs: options.captureErrorLogs,
+        captureLogs: options.captureLogs,
         existingLogs: getCurrentLogs(),
       });
       return result as RunResult<TResult>;
@@ -285,7 +285,7 @@ async function runCommandInternal<TResult = unknown>(
     collector?.stop();
     const result = await executeLifecycle(command, validationResult.data, {
       handleSignals: options.handleSignals,
-      captureErrorLogs: options.captureErrorLogs,
+      captureLogs: options.captureLogs,
       existingLogs: getCurrentLogs(),
     });
 

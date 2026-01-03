@@ -13,8 +13,8 @@ import { createLogCollector, emptyLogs, mergeLogs } from "./log-collector.js";
 export interface ExecuteLifecycleOptions {
   /** Handle signals (SIGINT, SIGTERM) */
   handleSignals?: boolean | undefined;
-  /** Capture console.error and console.warn output */
-  captureErrorLogs?: boolean | undefined;
+  /** Capture console output */
+  captureLogs?: boolean | undefined;
   /** Existing logs to include in result (from runCommandInternal) */
   existingLogs?: CollectedLogs | undefined;
 }
@@ -39,7 +39,7 @@ export async function executeLifecycle<TResult = unknown>(
   let error: Error | undefined;
   let result: TResult | undefined;
 
-  const shouldCollectLogs = _options.captureErrorLogs ?? false;
+  const shouldCollectLogs = _options.captureLogs ?? false;
   const collector = shouldCollectLogs ? createLogCollector() : null;
   collector?.start();
 

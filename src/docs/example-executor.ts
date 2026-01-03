@@ -1,3 +1,4 @@
+import { createLogCollector } from "../executor/log-collector.js";
 import type { AnyCommand, Example } from "../types.js";
 import type { ExampleCommandConfig, ExampleExecutionResult } from "./types.js";
 
@@ -52,23 +53,9 @@ async function executeSingleExample(
   // Build full argv: command path + example args
   const argv = [...commandPath, ...exampleArgs];
 
-  // Capture stdout and stderr
-  const stdoutCapture: string[] = [];
-  const stderrCapture: string[] = [];
-
-  const originalLog = console.log;
-  const originalError = console.error;
-  const originalWarn = console.warn;
-
-  console.log = (...args: unknown[]) => {
-    stdoutCapture.push(formatArgs(args));
-  };
-  console.error = (...args: unknown[]) => {
-    stderrCapture.push(formatArgs(args));
-  };
-  console.warn = (...args: unknown[]) => {
-    stderrCapture.push(formatArgs(args));
-  };
+  // Use unified log collector (don't passthrough to console)
+  const collector = createLogCollector({ passthrough: false });
+  collector.start();
 
   let success = true;
   try {
@@ -79,46 +66,34 @@ async function executeSingleExample(
 
     // Also capture any errors from the result
     if (!result.success && result.error) {
-      stderrCapture.push(result.error.message);
+      console.error(result.error.message);
     }
   } catch (error) {
     success = false;
-    stderrCapture.push(error instanceof Error ? error.message : String(error));
+    console.error(error instanceof Error ? error.message : String(error));
   } finally {
-    console.log = originalLog;
-    console.error = originalError;
-    console.warn = originalWarn;
+    collector.stop();
   }
+
+  // Convert entries to stdout/stderr strings
+  const logs = collector.getLogs();
+  const stdout = logs.entries
+    .filter((e) => e.stream === "stdout")
+    .map((e) => e.message)
+    .join("\n");
+  const stderr = logs.entries
+    .filter((e) => e.stream === "stderr")
+    .map((e) => e.message)
+    .join("\n");
 
   return {
     cmd: example.cmd,
     desc: example.desc,
     expectedOutput: example.output,
-    stdout: stdoutCapture.join("\n"),
-    stderr: stderrCapture.join("\n"),
+    stdout,
+    stderr,
     success,
   };
-}
-
-/**
- * Format console arguments to string
- */
-function formatArgs(args: unknown[]): string {
-  return args
-    .map((arg) => {
-      if (typeof arg === "string") {
-        return arg;
-      }
-      if (typeof arg === "object" && arg !== null) {
-        try {
-          return JSON.stringify(arg, null, 2);
-        } catch {
-          return String(arg);
-        }
-      }
-      return String(arg);
-    })
-    .join(" ");
 }
 
 /**

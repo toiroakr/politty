@@ -1,7 +1,33 @@
-import type { CollectedLogs, LogEntry } from "../types.js";
+import type { CollectedLogs, LogEntry, LogLevel, LogStream } from "../types.js";
 
 /**
- * Log collector that intercepts console.error and console.warn
+ * Mapping from log level to output stream
+ */
+const LOG_STREAM_MAP: Record<LogLevel, LogStream> = {
+  log: "stdout",
+  info: "stdout",
+  debug: "stdout",
+  warn: "stderr",
+  error: "stderr",
+};
+
+/**
+ * All log levels
+ */
+const ALL_LOG_LEVELS: LogLevel[] = ["log", "info", "debug", "warn", "error"];
+
+/**
+ * Options for log collector
+ */
+export interface LogCollectorOptions {
+  /** Log levels to capture (default: all) */
+  levels?: LogLevel[];
+  /** Whether to call original console methods (default: true) */
+  passthrough?: boolean;
+}
+
+/**
+ * Log collector that intercepts console methods
  */
 export interface LogCollector {
   /** Get collected logs */
@@ -13,8 +39,30 @@ export interface LogCollector {
 }
 
 /**
- * Create a log collector that intercepts console.error and console.warn
+ * Format console arguments to string
+ */
+export function formatArgs(args: unknown[]): string {
+  return args
+    .map((arg) => {
+      if (arg instanceof Error) {
+        return arg.message;
+      }
+      if (typeof arg === "object" && arg !== null) {
+        try {
+          return JSON.stringify(arg);
+        } catch {
+          return String(arg);
+        }
+      }
+      return String(arg);
+    })
+    .join(" ");
+}
+
+/**
+ * Create a log collector that intercepts console methods
  *
+ * @param options - Options for the log collector
  * @returns A log collector instance
  *
  * @example
@@ -22,86 +70,82 @@ export interface LogCollector {
  * const collector = createLogCollector();
  * collector.start();
  *
+ * console.log("Info message");
  * console.error("Something went wrong");
  * console.warn("This is a warning");
  *
  * collector.stop();
  * const logs = collector.getLogs();
  * // {
- * //   errors: [{ message: "Something went wrong", timestamp: ... }],
- * //   warnings: [{ message: "This is a warning", timestamp: ... }]
+ * //   entries: [
+ * //     { message: "Info message", level: "log", stream: "stdout", timestamp: ... },
+ * //     { message: "Something went wrong", level: "error", stream: "stderr", timestamp: ... },
+ * //     { message: "This is a warning", level: "warn", stream: "stderr", timestamp: ... }
+ * //   ]
  * // }
  * ```
  */
-export function createLogCollector(): LogCollector {
-  const errors: LogEntry[] = [];
-  const warnings: LogEntry[] = [];
-  let originalError: typeof console.error | null = null;
-  let originalWarn: typeof console.warn | null = null;
+export function createLogCollector(options: LogCollectorOptions = {}): LogCollector {
+  const entries: LogEntry[] = [];
+  const levels = options.levels ?? ALL_LOG_LEVELS;
+  const passthrough = options.passthrough ?? true;
 
-  const formatArgs = (args: unknown[]): string => {
-    return args
-      .map((arg) => {
-        if (arg instanceof Error) {
-          return arg.message;
-        }
-        if (typeof arg === "object" && arg !== null) {
-          try {
-            return JSON.stringify(arg);
-          } catch {
-            return String(arg);
-          }
-        }
-        return String(arg);
-      })
-      .join(" ");
-  };
+  let originals: Record<LogLevel, typeof console.log> | null = null;
 
-  const createInterceptor = (target: LogEntry[], original: typeof console.error) => {
+  const createInterceptor = (level: LogLevel, original: typeof console.log) => {
     return (...args: unknown[]) => {
-      target.push({
+      entries.push({
         message: formatArgs(args),
         timestamp: new Date(),
+        level,
+        stream: LOG_STREAM_MAP[level],
       });
-      // Still call the original method
-      original.apply(console, args);
+      if (passthrough) {
+        original.apply(console, args);
+      }
     };
   };
 
   return {
     getLogs() {
-      return { errors, warnings };
+      return { entries: [...entries] };
     },
     start() {
-      if (originalError !== null) {
+      if (originals !== null) {
         // Already started
         return;
       }
-      originalError = console.error;
-      originalWarn = console.warn;
-      console.error = createInterceptor(errors, originalError);
-      console.warn = createInterceptor(warnings, originalWarn);
+      originals = {
+        log: console.log,
+        info: console.info,
+        debug: console.debug,
+        warn: console.warn,
+        error: console.error,
+      };
+      for (const level of levels) {
+        console[level] = createInterceptor(level, originals[level]);
+      }
     },
     stop() {
-      if (originalError !== null) {
-        console.error = originalError;
-        originalError = null;
+      if (originals === null) {
+        return;
       }
-      if (originalWarn !== null) {
-        console.warn = originalWarn;
-        originalWarn = null;
+      for (const level of levels) {
+        console[level] = originals[level];
       }
+      originals = null;
     },
   };
 }
 
 /**
- * Merge multiple CollectedLogs into one
+ * Merge multiple CollectedLogs into one (sorted by timestamp)
  */
 export function mergeLogs(...logsArray: CollectedLogs[]): CollectedLogs {
   return {
-    errors: logsArray.flatMap((l) => l.errors),
-    warnings: logsArray.flatMap((l) => l.warnings),
+    entries: logsArray
+      .flatMap((l) => l.entries)
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime()),
   };
 }
 
@@ -109,5 +153,5 @@ export function mergeLogs(...logsArray: CollectedLogs[]): CollectedLogs {
  * Create an empty CollectedLogs object
  */
 export function emptyLogs(): CollectedLogs {
-  return { errors: [], warnings: [] };
+  return { entries: [] };
 }

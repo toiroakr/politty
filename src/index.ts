@@ -39,6 +39,8 @@ export type {
   LogEntry,
   // Logger type
   Logger,
+  LogLevel,
+  LogStream,
   // Options and result types
   MainOptions,
   NonRunnableCommand,

@@ -31,6 +31,13 @@ vi.mock("node:fs", async (importOriginal) => {
       }
       return false;
     }),
+    mkdirSync: vi.fn((path: fs.PathLike, options?: fs.MakeDirectoryOptions) => {
+      // Allow golden test to create directories
+      if (String(path).includes("playground/22-examples")) {
+        return actual.mkdirSync(path, options);
+      }
+      throw new Error(`mkdirSync not mocked for: ${path}`);
+    }),
   };
 });
 
