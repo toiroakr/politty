@@ -462,6 +462,7 @@ function findFileForCommand(
 
 /**
  * Find which target commands are contained in a file
+ * Also expands each target command to include subcommands that are NOT explicitly in specifiedCommands
  */
 function findTargetCommandsInFile(
   targetCommands: string[],
@@ -482,8 +483,24 @@ function findTargetCommandsInFile(
   // Filter out ignored commands
   const commandPaths = filterIgnoredCommands(expandedCommands, ignores);
 
-  // Return intersection of targetCommands and commandPaths
-  return targetCommands.filter((cmd) => commandPaths.includes(cmd));
+  // Expand targetCommands to include their subcommands,
+  // but exclude subcommands that are explicitly in specifiedCommands
+  const expandedTargets = new Set<string>();
+  for (const targetCmd of targetCommands) {
+    if (!commandPaths.includes(targetCmd)) continue;
+
+    // Add the target command itself
+    expandedTargets.add(targetCmd);
+
+    // Add subcommands that are NOT explicitly specified
+    for (const cmdPath of commandPaths) {
+      if (isSubcommandOf(cmdPath, targetCmd) && !specifiedCommands.includes(cmdPath)) {
+        expandedTargets.add(cmdPath);
+      }
+    }
+  }
+
+  return Array.from(expandedTargets);
 }
 
 /**

@@ -4,7 +4,7 @@ import { assertDocMatch, initDocFile, type GenerateDocConfig } from "../../src/d
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
-import { checkCommand, command, readCommand, writeCommand } from "./index.js";
+import { checkCommand, command, deleteCommand, readCommand, writeCommand } from "./index.js";
 
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
@@ -31,6 +31,7 @@ vi.mock("node:fs", async (importOriginal) => {
       }
       return false;
     }),
+    unlinkSync: vi.fn(),
     mkdirSync: vi.fn((path: fs.PathLike, options?: fs.MakeDirectoryOptions) => {
       // Allow golden test to create directories
       if (String(path).includes("playground/22-examples")) {
@@ -233,6 +234,28 @@ describe("22-examples", () => {
           },
         },
       });
+    });
+  });
+
+  describe("delete command", () => {
+    it("deletes existing file", async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.unlinkSync).mockImplementation(() => {});
+
+      const result = await runCommand(deleteCommand, ["temp.txt"]);
+
+      expect(result.success).toBe(true);
+      expect(fs.unlinkSync).toHaveBeenCalledWith("temp.txt");
+      expect(consoleSpy).toHaveBeenCalledWith("Deleted: temp.txt");
+    });
+
+    it("handles non-existing file", async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      const result = await runCommand(deleteCommand, ["missing.txt"]);
+
+      expect(result.success).toBe(true);
+      expect(consoleSpy).toHaveBeenCalledWith("File not found: missing.txt");
     });
   });
 });

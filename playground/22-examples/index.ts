@@ -115,6 +115,31 @@ export const checkCommand = defineCommand({
   },
 });
 
+// delete サブコマンド（examplesなし）
+export const deleteCommand = defineCommand({
+  name: "delete",
+  description: "Delete a file",
+  args: z.object({
+    file: arg(z.string(), {
+      positional: true,
+      description: "File path to delete",
+    }),
+    force: arg(z.boolean().default(false), {
+      alias: "f",
+      description: "Force deletion without confirmation",
+    }),
+  }),
+  run: (args) => {
+    if (fs.existsSync(args.file)) {
+      fs.unlinkSync(args.file);
+      console.log(`Deleted: ${args.file}`);
+      return { file: args.file, deleted: true };
+    }
+    console.log(`File not found: ${args.file}`);
+    return { file: args.file, deleted: false };
+  },
+});
+
 // メインコマンド
 export const command = defineCommand({
   name: "file-cli",
@@ -123,6 +148,7 @@ export const command = defineCommand({
     read: readCommand,
     write: writeCommand,
     check: checkCommand,
+    delete: deleteCommand,
   },
 });
 

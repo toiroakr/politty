@@ -261,10 +261,27 @@ await assertDocMatch({
 ```
 
 - `targetCommands`を指定すると、それらのコマンドのセクションのみが生成・検証される
+- **サブコマンドの再帰展開**: 指定したコマンドのサブコマンドも自動的に生成される
+  - ただし`files`で明示的に指定されたコマンドは除外（個別に`targetCommands`で生成されるため）
 - 他のコマンドのセクションは既存ファイルにあればそのまま維持
 - セクションが存在しない場合は`files`で指定された順序の正しい位置に挿入
 - ルートコマンドを指定する場合は空文字列`""`を使用
 - 複数のファイルにまたがるコマンドも同時に指定可能
+
+```typescript
+// サブコマンド再帰展開の例
+// cli: root -> read, write, check, delete (サブコマンド)
+await assertDocMatch({
+  command: cli,
+  files: { "docs/cli.md": ["", "read", "write", "check"] },
+  targetCommands: [""],  // ルートコマンドを指定
+  examples: {},
+});
+// 結果:
+// - "" (ルート) のセクションが生成される
+// - "delete" のセクションも生成される（filesに明示指定されていないサブコマンド）
+// - "read", "write", "check" は生成されない（filesに明示指定されているため個別のテストで生成）
+```
 
 ### `initDocFile(config, fileSystem?)`
 

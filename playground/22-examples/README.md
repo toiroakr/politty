@@ -12,11 +12,12 @@ file-cli [command]
 
 ## Commands
 
-| Command           | Description           |
-| ----------------- | --------------------- |
-| [`read`](#read)   | Read file contents    |
-| [`write`](#write) | Write content to file |
-| [`check`](#check) | Check if file exists  |
+| Command             | Description           |
+| ------------------- | --------------------- |
+| [`read`](#read)     | Read file contents    |
+| [`write`](#write)   | Write content to file |
+| [`check`](#check)   | Check if file exists  |
+| [`delete`](#delete) | Delete a file         |
 
 <!-- politty:command::end -->
 <!-- politty:command:read:start -->
@@ -140,3 +141,29 @@ File not found: missing.txt
 ```
 
 <!-- politty:command:check:end -->
+
+<!-- politty:command:delete:start -->
+
+# delete
+
+Delete a file
+
+## Usage
+
+```
+file-cli delete [options] <file>
+```
+
+## Arguments
+
+| Argument | Description         | Required |
+| -------- | ------------------- | -------- |
+| `file`   | File path to delete | Yes      |
+
+## Options
+
+| Option    | Alias | Description                         | Default |
+| --------- | ----- | ----------------------------------- | ------- |
+| `--force` | `-f`  | Force deletion without confirmation | `false` |
+
+<!-- politty:command:delete:end -->
