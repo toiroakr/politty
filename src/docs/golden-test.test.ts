@@ -711,28 +711,38 @@ describe("golden-test", () => {
       expect(duplicateContent).toContain("# greet");
     });
 
-    // ignores with non-existent command path (should not cause error)
-    it("should handle non-existent command path in ignores", async () => {
+    // ignores with non-existent command path should throw error
+    it("should throw error when ignores contains non-existent command path", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
 
       const filePath = path.join(testDir, "ignore-nonexistent.md");
 
-      const result = await generateDoc({
-        command: testCommand,
-        files: {
-          [filePath]: [""],
-        },
-        ignores: ["nonexistent"],
-      });
+      await expect(
+        generateDoc({
+          command: testCommand,
+          files: {
+            [filePath]: [""],
+          },
+          ignores: ["nonexistent"],
+        }),
+      ).rejects.toThrow('Ignored command paths do not exist: "nonexistent"');
+    });
 
-      expect(result.success).toBe(true);
-      expect(result.files).toHaveLength(1);
+    // ignores with multiple non-existent command paths should list all
+    it("should list all non-existent command paths in error message", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
 
-      const content = fs.readFileSync(filePath, "utf-8");
-      // All commands should be present since ignored command doesn't exist
-      expect(content).toContain("# test-cli");
-      expect(content).toContain("# greet");
-      expect(content).toContain("# config");
+      const filePath = path.join(testDir, "ignore-multiple-nonexistent.md");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          files: {
+            [filePath]: [""],
+          },
+          ignores: ["foo", "bar", "greet"], // greet exists, foo and bar don't
+        }),
+      ).rejects.toThrow('Ignored command paths do not exist: "foo", "bar"');
     });
 
     // Combined: ignores parent command while files specifies different commands

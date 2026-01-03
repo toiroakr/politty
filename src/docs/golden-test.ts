@@ -108,6 +108,23 @@ function validateNoConflicts(filesCommands: string[], ignores: string[]): void {
 }
 
 /**
+ * Validate that all ignored paths exist in the command tree
+ */
+function validateIgnoresExist(ignores: string[], allCommands: Map<string, CommandInfo>): void {
+  const nonExistent: string[] = [];
+
+  for (const ignorePath of ignores) {
+    if (!allCommands.has(ignorePath)) {
+      nonExistent.push(`"${ignorePath}"`);
+    }
+  }
+
+  if (nonExistent.length > 0) {
+    throw new Error(`Ignored command paths do not exist: ${nonExistent.join(", ")}`);
+  }
+}
+
+/**
  * Sort command paths in depth-first order while preserving the specified command order
  * Parent commands are immediately followed by their subcommands
  */
@@ -305,6 +322,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     const fileConfig = normalizeFileConfig(fileConfigRaw);
     allFilesCommands.push(...fileConfig.commands);
   }
+
+  // Validate ignores refer to existing commands
+  validateIgnoresExist(ignores, allCommands);
 
   // Validate no conflicts between files and ignores
   validateNoConflicts(allFilesCommands, ignores);
