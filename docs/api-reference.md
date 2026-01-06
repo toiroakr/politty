@@ -396,8 +396,8 @@ interface MainOptions {
   version?: string;
   /** デバッグモードを有効化（エラー時にスタックトレースを表示） */
   debug?: boolean;
-  /** 実行中の console.error と console.warn の出力をキャプチャ（デフォルト: false） */
-  captureErrorLogs?: boolean;
+  /** 実行中の console 出力をキャプチャ（デフォルト: false） */
+  captureLogs?: boolean;
   /** コマンド定義のバリデーションをスキップ（本番環境でテスト済みの場合に有用） */
   skipValidation?: boolean;
   /** カスタムロガー（デフォルト: console） */
@@ -415,8 +415,8 @@ interface MainOptions {
 interface RunCommandOptions {
   /** デバッグモードを有効化（エラー時にスタックトレースを表示） */
   debug?: boolean;
-  /** 実行中の console.error と console.warn の出力をキャプチャ（デフォルト: false） */
-  captureErrorLogs?: boolean;
+  /** 実行中の console 出力をキャプチャ（デフォルト: false） */
+  captureLogs?: boolean;
   /** コマンド定義のバリデーションをスキップ（本番環境でテスト済みの場合に有用） */
   skipValidation?: boolean;
   /** カスタムロガー（デフォルト: console） */
@@ -484,10 +484,8 @@ interface RunResultFailure {
 
 ```typescript
 interface CollectedLogs {
-  /** エラーログ (console.error) */
-  errors: LogEntry[];
-  /** 警告ログ (console.warn) */
-  warnings: LogEntry[];
+  /** 記録されたすべてのログエントリ */
+  entries: LogEntry[];
 }
 ```
 
@@ -503,7 +501,31 @@ interface LogEntry {
   message: string;
   /** 記録された時刻 */
   timestamp: Date;
+  /** ログレベル */
+  level: LogLevel;
+  /** 出力ストリーム */
+  stream: LogStream;
 }
+```
+
+---
+
+### `LogLevel`
+
+ログレベルの型です。
+
+```typescript
+type LogLevel = "log" | "info" | "debug" | "warn" | "error";
+```
+
+---
+
+### `LogStream`
+
+出力ストリームの型です。
+
+```typescript
+type LogStream = "stdout" | "stderr";
 ```
 
 ---
@@ -766,9 +788,11 @@ export { runMain, runCommand } from "./core/runner.js";
 export { arg, type ArgMeta } from "./core/arg-registry.js";
 export {
   extractFields,
+  getUnknownKeysMode,
   toKebabCase,
   type ExtractedFields,
   type ResolvedFieldMeta,
+  type UnknownKeysMode,
 } from "./core/schema-extractor.js";
 
 // Utilities
@@ -797,6 +821,8 @@ export type {
   Example,
   LogEntry,
   Logger,
+  LogLevel,
+  LogStream,
   MainOptions,
   NonRunnableCommand,
   RunCommandOptions,
@@ -805,6 +831,8 @@ export type {
   RunResultFailure,
   RunResultSuccess,
   SetupContext,
+  SubCommandsRecord,
+  SubCommandValue,
 } from "./types.js";
 
 // Command definition validation

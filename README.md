@@ -53,7 +53,7 @@ const command = defineCommand({
       description: "大文字で出力",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     let message = `${args.greeting}, ${args.name}!`;
     if (args.loud) {
       message = message.toUpperCase();
@@ -131,7 +131,7 @@ const command = defineCommand({
       description: "処理するファイル",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(args);
   },
 });
@@ -154,7 +154,7 @@ const initCommand = defineCommand({
       description: "テンプレート名",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Initializing with template: ${args.template}`);
   },
 });
@@ -172,7 +172,7 @@ const buildCommand = defineCommand({
       description: "出力を圧縮",
     }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     console.log(`Building to: ${args.output}`);
   },
 });
@@ -219,12 +219,12 @@ const command = defineCommand({
     console.log("[setup] Connecting to database...");
     // DB接続を確立
   },
-  run: async ({ args }) => {
+  run: async (args) => {
     console.log("[run] Executing query...");
     // クエリを実行
     return { rowCount: 42 };
   },
-  cleanup: async ({ error }) => {
+  cleanup: async ({ args, error }) => {
     console.log("[cleanup] Closing connection...");
     if (error) {
       console.error(`Error occurred: ${error.message}`);
@@ -247,7 +247,7 @@ const command = defineCommand({
 | `args`        | `ZodSchema`                   | 引数のスキーマ       |
 | `subCommands` | `Record<string, Command>?`    | サブコマンド         |
 | `setup`       | `(context) => Promise<void>?` | セットアップフック   |
-| `run`         | `(context) => Promise<T>?`    | 実行関数             |
+| `run`         | `(args) => T?`                | 実行関数             |
 | `cleanup`     | `(context) => Promise<void>?` | クリーンアップフック |
 
 ### `runMain(command, options?)`
@@ -268,7 +268,7 @@ runMain(command, {
 ```typescript
 const result = await runCommand(command, ["arg1", "--flag"]);
 if (result.success) {
-  console.log(result.value);
+  console.log(result.result);
 } else {
   console.error(result.error);
 }
