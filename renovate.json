@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:best-practices", ":automergeMinor", "schedule:weekends"],
+  "extends": ["config:best-practices", ":automergeMinor"],
   "labels": ["dependencies"],
   "minimumReleaseAge": "7 days",
   "prConcurrentLimit": 5,
