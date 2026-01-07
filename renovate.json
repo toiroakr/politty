@@ -1,9 +1,19 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:best-practices", ":automergeMinor", ":dependencyDashboard"],
+  "extends": [
+    "config:best-practices",
+    ":automergeMinor",
+    ":dependencyDashboard",
+    "github>aquaproj/aqua-renovate-config#2.2.1"
+  ],
   "labels": ["dependencies"],
   "minimumReleaseAge": "7 days",
   "prConcurrentLimit": 5,
+  "postUpgradeTasks": {
+    "commands": ["aqua upc -prune"],
+    "fileFilters": ["aqua-checksums.json"],
+    "executionMode": "update"
+  },
   "packageRules": [
     {
       "matchDepTypes": ["devDependencies"],
