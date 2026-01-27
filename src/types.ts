@@ -1,5 +1,106 @@
 import type { z } from "zod";
 
+// =============================================================================
+// Interactive Mode Types
+// =============================================================================
+
+/**
+ * Interactive mode for argument prompting
+ * - 'required': Prompt only for undefined required fields
+ * - 'all': If any required field is missing, prompt for ALL fields (including optional)
+ * - 'explicit': Only prompt for fields with `interactive: true` in arg()
+ * - false: Disabled (default behavior)
+ */
+export type InteractiveMode = "required" | "all" | "explicit" | false;
+
+/**
+ * Field type for determining prompt behavior
+ */
+export type FieldType = "string" | "number" | "boolean" | "array" | "unknown";
+
+/**
+ * Prompt type based on @inquirer/prompts functions
+ * - 'input': Free text input (string, number)
+ * - 'confirm': Yes/No selection (boolean)
+ * - 'select': Single selection (enum, literal union)
+ * - 'checkbox': Multiple selection (enum[])
+ * - 'password': Masked input (secret: true)
+ * - 'editor': Editor launch (editor: true)
+ */
+export type PromptType = "input" | "confirm" | "select" | "checkbox" | "password" | "editor";
+
+/**
+ * Information about a field to be prompted
+ */
+export interface PromptFieldInfo {
+  /** Field name (camelCase) */
+  name: string;
+  /** CLI option name (kebab-case) */
+  cliName: string;
+  /** Field description */
+  description?: string | undefined;
+  /** Custom prompt message (from arg() options) */
+  promptMessage?: string | undefined;
+  /** Whether the field is required */
+  required: boolean;
+  /** Default value if any */
+  defaultValue?: unknown;
+  /** Detected field type */
+  type: FieldType;
+  /** Current value (if already provided via CLI/env) */
+  currentValue?: unknown;
+  /** Original Zod schema (for advanced validation) */
+  schema: z.ZodType;
+  /** Password input (masked display) */
+  secret?: boolean | undefined;
+  /** Editor launch (long text input) */
+  editor?: boolean | undefined;
+  /** Enum choices (for select/checkbox) */
+  choices?: readonly string[] | undefined;
+}
+
+/**
+ * Custom prompt function for a single field
+ */
+export type FieldPromptFunction = (field: PromptFieldInfo) => Promise<unknown>;
+
+/**
+ * Prompt functions mapped by prompt type
+ */
+export interface PromptFunctions {
+  /** Free text input (string, number) */
+  input?: FieldPromptFunction | undefined;
+  /** Yes/No selection (boolean) */
+  confirm?: FieldPromptFunction | undefined;
+  /** Single selection (enum, literal union) */
+  select?: FieldPromptFunction | undefined;
+  /** Multiple selection (enum[]) */
+  checkbox?: FieldPromptFunction | undefined;
+  /** Masked input (secret: true) */
+  password?: FieldPromptFunction | undefined;
+  /** Editor launch (editor: true) */
+  editor?: FieldPromptFunction | undefined;
+}
+
+/**
+ * Configuration for interactive mode
+ */
+export interface InteractiveConfig {
+  /** Interactive mode setting */
+  mode: InteractiveMode;
+  /** Custom prompt functions by prompt type */
+  prompts?: PromptFunctions | undefined;
+}
+
+/**
+ * Normalized interactive configuration (mode is always InteractiveMode)
+ */
+export type InteractiveOption = InteractiveMode | InteractiveConfig;
+
+// =============================================================================
+// Command Types
+// =============================================================================
+
 /**
  * Example definition for a command
  */
@@ -72,6 +173,11 @@ export interface CommandBase<
   notes?: string | undefined;
   /** Example usages for this command */
   examples?: Example[] | undefined;
+  /**
+   * Interactive mode configuration for this command.
+   * Overrides runMain's interactive setting if specified.
+   */
+  interactive?: InteractiveOption | undefined;
 }
 
 /**
@@ -157,6 +263,12 @@ export interface MainOptions {
   skipValidation?: boolean;
   /** Custom logger for output (default: console) */
   logger?: Logger;
+  /**
+   * Interactive mode configuration.
+   * This setting propagates to all subcommands as default.
+   * Individual commands can override with their own interactive setting.
+   */
+  interactive?: InteractiveOption;
 }
 
 /**
@@ -171,6 +283,12 @@ export interface RunCommandOptions {
   skipValidation?: boolean;
   /** Custom logger for output (default: console) */
   logger?: Logger;
+  /**
+   * Interactive mode configuration.
+   * This setting propagates to all subcommands as default.
+   * Individual commands can override with their own interactive setting.
+   */
+  interactive?: InteractiveOption;
 }
 
 /**
@@ -194,6 +312,8 @@ export interface InternalRunOptions {
   skipValidation?: boolean | undefined;
   /** Custom logger for output */
   logger?: Logger | undefined;
+  /** Interactive mode configuration */
+  interactive?: InteractiveOption | undefined;
 }
 
 /**

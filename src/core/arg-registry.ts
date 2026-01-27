@@ -1,6 +1,13 @@
 import { z } from "zod";
 
 /**
+ * Custom prompt function type for arg() options
+ * Uses a simplified field info type to avoid circular type dependencies
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ArgPromptFunction = (field: any) => Promise<unknown>;
+
+/**
  * Base metadata shared by all argument types
  */
 export interface BaseArgMeta {
@@ -25,6 +32,69 @@ export interface BaseArgMeta {
    * ```
    */
   env?: string | string[];
+  /**
+   * Control interactive prompting for this field.
+   * - true: Always prompt in 'explicit' mode; include in 'all' mode
+   * - false: Never prompt for this field
+   * - undefined: Follow command's interactiveMode setting
+   *
+   * @example
+   * ```ts
+   * args: z.object({
+   *   // Always prompt in 'explicit' mode
+   *   apiKey: arg(z.string(), { interactive: true }),
+   *   // Never prompt (e.g., for internal flags)
+   *   debug: arg(z.boolean().default(false), { interactive: false }),
+   * })
+   * ```
+   */
+  interactive?: boolean;
+  /**
+   * Custom prompt message for interactive input.
+   * Overrides the default "Enter {fieldName}:" message.
+   *
+   * @example
+   * ```ts
+   * apiKey: arg(z.string(), {
+   *   promptMessage: 'Enter your API key (found in settings):',
+   * })
+   * ```
+   */
+  promptMessage?: string;
+  /**
+   * Custom prompt function for this field.
+   * Overrides the default prompt function for this field's type.
+   *
+   * @example
+   * ```ts
+   * template: arg(z.string(), {
+   *   prompt: async (field) => {
+   *     return await select({ message: 'Choose template', choices: [...] });
+   *   },
+   * })
+   * ```
+   */
+  prompt?: ArgPromptFunction | undefined;
+  /**
+   * Use password/secret input (masked display).
+   * Only applies in interactive mode.
+   *
+   * @example
+   * ```ts
+   * apiKey: arg(z.string(), { secret: true })
+   * ```
+   */
+  secret?: boolean;
+  /**
+   * Use editor for long text input.
+   * Only applies in interactive mode.
+   *
+   * @example
+   * ```ts
+   * description: arg(z.string(), { editor: true })
+   * ```
+   */
+  editor?: boolean;
 }
 
 /**
@@ -112,5 +182,6 @@ export function arg<T extends z.ZodType, M extends ArgMeta>(
  * @returns The metadata if registered, undefined otherwise
  */
 export function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
-  return argRegistry.get(schema);
+  // Type assertion needed due to exactOptionalPropertyTypes and registry type inference
+  return argRegistry.get(schema) as ArgMeta | undefined;
 }

@@ -16,6 +16,19 @@ export {
   type ResolvedFieldMeta,
   type UnknownKeysMode,
 } from "./core/schema-extractor.js";
+// Interactive mode utilities
+export {
+  createDefaultPromptFunctions,
+  determineFieldsToPrompt,
+  determinePromptType,
+  executePrompts,
+  getEffectiveMode,
+  getFieldPromptFunction,
+  normalizeInteractiveConfig,
+  PromptLibraryNotInstalledError,
+  resolveInteractiveConfig,
+  shouldSkipInteractive,
+} from "./interactive/index.js";
 // Utility exports
 export {
   generateHelp,
@@ -36,6 +49,12 @@ export type {
   CommandBase,
   // Example types
   Example,
+  // Interactive mode types
+  FieldPromptFunction,
+  FieldType,
+  InteractiveConfig,
+  InteractiveMode,
+  InteractiveOption,
   LogEntry,
   // Logger type
   Logger,
@@ -44,6 +63,9 @@ export type {
   // Options and result types
   MainOptions,
   NonRunnableCommand,
+  PromptFieldInfo,
+  PromptFunctions,
+  PromptType,
   RunCommandOptions,
   RunnableCommand,
   RunResult,

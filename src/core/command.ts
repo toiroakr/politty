@@ -3,6 +3,7 @@ import type {
   ArgsSchema,
   Command,
   Example,
+  InteractiveOption,
   NonRunnableCommand,
   RunnableCommand,
   SubCommandsRecord,
@@ -33,6 +34,34 @@ interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResul
   }) => void | Promise<void>;
   notes?: string;
   examples?: Example[];
+  /**
+   * Interactive mode configuration for this command.
+   * Overrides runMain's interactive setting if specified.
+   *
+   * @example
+   * ```ts
+   * // Simple mode setting
+   * defineCommand({
+   *   name: 'init',
+   *   interactive: 'required',
+   *   // ...
+   * });
+   *
+   * // With custom prompt functions
+   * defineCommand({
+   *   name: 'init',
+   *   interactive: {
+   *     mode: 'all',
+   *     prompts: {
+   *       input: customInputPrompt,
+   *       select: customSelectPrompt,
+   *     },
+   *   },
+   *   // ...
+   * });
+   * ```
+   */
+  interactive?: InteractiveOption;
 }
 
 /**
@@ -137,5 +166,6 @@ export function defineCommand<
     cleanup: config.cleanup,
     notes: config.notes,
     examples: config.examples,
+    interactive: config.interactive,
   } as Command<TArgsSchema, InferArgs<TArgsSchema>, TResult>;
 }

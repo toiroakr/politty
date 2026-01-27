@@ -1,11 +1,19 @@
 import { executeLifecycle } from "../executor/command-runner.js";
 import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collector.js";
 import { listSubCommands, resolveSubcommand } from "../executor/subcommand-router.js";
+import {
+  determineFieldsToPrompt,
+  executePrompts,
+  getEffectiveMode,
+  normalizeInteractiveConfig,
+  resolveInteractiveConfig,
+} from "../interactive/index.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
 import type {
   AnyCommand,
   CollectedLogs,
+  InteractiveConfig,
   InternalRunOptions,
   Logger,
   MainOptions,
@@ -34,9 +42,11 @@ const defaultLogger: Logger = {
  */
 interface InternalCommandOptions extends InternalRunOptions {
   /** Command hierarchy context (internal use) */
-  _context?: CommandContext;
+  _context?: CommandContext | undefined;
   /** Existing logs to include (for subcommand routing) */
-  _existingLogs?: CollectedLogs;
+  _existingLogs?: CollectedLogs | undefined;
+  /** Inherited interactive configuration from runMain */
+  _interactiveConfig?: InteractiveConfig | undefined;
 }
 
 /**
@@ -75,6 +85,9 @@ export async function runCommand<TResult = unknown>(
     handleSignals: false,
     skipValidation: options.skipValidation,
     logger: options.logger,
+    _interactiveConfig: options.interactive
+      ? normalizeInteractiveConfig(options.interactive)
+      : undefined,
   });
 }
 
@@ -113,6 +126,9 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
       rootName: command.name,
       rootVersion: options.version,
     },
+    _interactiveConfig: options.interactive
+      ? normalizeInteractiveConfig(options.interactive)
+      : undefined,
   });
 
   process.exit(result.exitCode);
@@ -205,12 +221,15 @@ async function runCommandInternal<TResult = unknown>(
           rootName: context.rootName,
           rootVersion: context.rootVersion,
         };
+        // Resolve interactive config for subcommand propagation
+        const interactiveConfig = resolveInteractiveConfig(command, options._interactiveConfig);
         // Stop this collector and pass logs to subcommand
         collector?.stop();
         return runCommandInternal<TResult>(subCmd, parseResult.remainingArgs, {
           ...options,
           _context: subContext,
           _existingLogs: getCurrentLogs(),
+          _interactiveConfig: interactiveConfig,
         });
       }
     }
@@ -265,6 +284,36 @@ async function runCommandInternal<TResult = unknown>(
         existingLogs: getCurrentLogs(),
       });
       return result as RunResult<TResult>;
+    }
+
+    // Interactive prompting phase
+    const interactiveConfig = resolveInteractiveConfig(command, options._interactiveConfig);
+    const effectiveMode = getEffectiveMode(interactiveConfig);
+
+    if (effectiveMode && parseResult.extractedFields) {
+      const fieldsToPrompt = determineFieldsToPrompt(
+        parseResult.extractedFields.fields,
+        parseResult.rawArgs,
+        effectiveMode,
+      );
+
+      if (fieldsToPrompt.length > 0) {
+        try {
+          const promptedValues = await executePrompts(fieldsToPrompt, interactiveConfig.prompts);
+          // Merge prompted values into rawArgs
+          Object.assign(parseResult.rawArgs, promptedValues);
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          logger.error(err.message);
+          collector?.stop();
+          return {
+            success: false,
+            error: err,
+            exitCode: 1,
+            logs: getCurrentLogs(),
+          };
+        }
+      }
     }
 
     const validationResult = validateArgs(parseResult.rawArgs, command.args);

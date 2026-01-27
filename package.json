@@ -96,7 +96,13 @@
     "zod": "4.2.1"
   },
   "peerDependencies": {
+    "@inquirer/prompts": "^7.0.0",
     "zod": "^4.2.1"
+  },
+  "peerDependenciesMeta": {
+    "@inquirer/prompts": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=18"
