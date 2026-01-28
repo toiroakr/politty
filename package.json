@@ -86,7 +86,7 @@
     "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.29.8",
+    "@changesets/cli": "2.29.8",
     "@quansync/fs": "1.0.0",
     "@types/node": "25.0.3",
     "@typescript/native-preview": "7.0.0-dev.20260104.1",
