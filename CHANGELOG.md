@@ -1,5 +1,11 @@
 # politty
 
+## 0.1.1
+
+### Patch Changes
+
+- 70d35f1: Export `parseArgv` function and related types (`ParsedArgv`, `ParserOptions`) from the main entry point.
+
 ## 0.1.0
 
 ### Minor Changes
