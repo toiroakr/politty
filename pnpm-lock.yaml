@@ -9,7 +9,7 @@ importers:
   .:
     devDependencies:
       '@changesets/cli':
-        specifier: ^2.29.8
+        specifier: 2.29.8
         version: 2.29.8(@types/node@25.0.3)
       '@quansync/fs':
         specifier: 1.0.0
