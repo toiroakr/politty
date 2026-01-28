@@ -12,7 +12,7 @@ concurrency:
 jobs:
   release:
     name: Release
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
@@ -36,7 +36,7 @@ jobs:
       - name: Build
         run: pnpm build
       - name: Create Release PR or Publish
-        uses: changesets/action@54220dd92c06e7da112b139f95d8beb933e4cdde # v1.5.3
+        uses: changesets/action@c48e67d110a68bc90ccf1098e9646092baacaa87 # v1.6.0
         with:
           version: pnpm changeset version
           publish: npm publish --provenance --access public
