@@ -1,0 +1,28 @@
+name: Aqua Checksum Update
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "aqua.yaml"
+      - "aqua-checksums.json"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  aqua-checksum:
+    name: Update Aqua Checksum
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: aquaproj/aqua-installer@11dd79b4e498d471a9385aa9fb7f62bb5f52a73c # v4.0.4
+        with:
+          aqua_version: v2.56.1
+      - name: Update checksum
+        run: aqua upc -prune
+      - uses: autofix-ci/action@551dded8c6cc8a1054039c8bc0b8b48c51dfc6ef # v1.3.2
