@@ -2,7 +2,7 @@
 
 # git-like
 
-Git風のネストしたサブコマンドの例
+Git-style nested subcommand example
 
 **Usage**
 
@@ -12,16 +12,16 @@ git-like [command]
 
 **Commands**
 
-| Command             | Description |
-| ------------------- | ----------- |
-| [`config`](#config) | 設定を管理  |
+| Command             | Description          |
+| ------------------- | -------------------- |
+| [`config`](#config) | Manage configuration |
 
 <!-- politty:command::end -->
 <!-- politty:command:config:start -->
 
 ## config
 
-設定を管理
+Manage configuration
 
 **Usage**
 
@@ -31,18 +31,18 @@ git-like config [command]
 
 **Commands**
 
-| Command                       | Description          |
-| ----------------------------- | -------------------- |
-| [`config get`](#config-get)   | 設定値を取得         |
-| [`config set`](#config-set)   | 設定値を設定         |
-| [`config list`](#config-list) | 全ての設定を一覧表示 |
+| Command                       | Description            |
+| ----------------------------- | ---------------------- |
+| [`config get`](#config-get)   | Get a config value     |
+| [`config set`](#config-set)   | Set a config value     |
+| [`config list`](#config-list) | List all config values |
 
 <!-- politty:command:config:end -->
 <!-- politty:command:config get:start -->
 
 ### config get
 
-設定値を取得
+Get a config value
 
 **Usage**
 
@@ -54,14 +54,14 @@ git-like config get <key>
 
 | Argument | Description | Required |
 | -------- | ----------- | -------- |
-| `key`    | 設定キー    | Yes      |
+| `key`    | Config key  | Yes      |
 
 <!-- politty:command:config get:end -->
 <!-- politty:command:config list:start -->
 
 ### config list
 
-全ての設定を一覧表示
+List all config values
 
 **Usage**
 
@@ -71,16 +71,16 @@ git-like config list [options]
 
 **Options**
 
-| Option              | Alias | Description | Default   |
-| ------------------- | ----- | ----------- | --------- |
-| `--format <FORMAT>` | `-f`  | 出力形式    | `"table"` |
+| Option              | Alias | Description   | Default   |
+| ------------------- | ----- | ------------- | --------- |
+| `--format <FORMAT>` | `-f`  | Output format | `"table"` |
 
 <!-- politty:command:config list:end -->
 <!-- politty:command:config set:start -->
 
 ### config set
 
-設定値を設定
+Set a config value
 
 **Usage**
 
@@ -90,9 +90,9 @@ git-like config set <key> <value>
 
 **Arguments**
 
-| Argument | Description | Required |
-| -------- | ----------- | -------- |
-| `key`    | 設定キー    | Yes      |
-| `value`  | 設定値      | Yes      |
+| Argument | Description  | Required |
+| -------- | ------------ | -------- |
+| `key`    | Config key   | Yes      |
+| `value`  | Config value | Yes      |
 
 <!-- politty:command:config set:end -->

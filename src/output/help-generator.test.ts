@@ -154,16 +154,16 @@ describe("Help Generator", () => {
       const result = renderOptions(
         cmd,
         {
-          help: "ヘルプを表示",
-          helpAll: "すべてのサブコマンドオプションを含むヘルプを表示",
-          version: "バージョンを表示",
+          help: "Display help",
+          helpAll: "Display help including all subcommand options",
+          version: "Display version",
         },
         { rootVersion: "1.0.0" },
       );
 
-      expect(result).toContain("ヘルプを表示");
-      expect(result).toContain("すべてのサブコマンドオプションを含むヘルプを表示");
-      expect(result).toContain("バージョンを表示");
+      expect(result).toContain("Display help");
+      expect(result).toContain("Display help including all subcommand options");
+      expect(result).toContain("Display version");
     });
 
     it("should use default descriptions when not provided", () => {

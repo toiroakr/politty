@@ -1,7 +1,7 @@
 /**
- * 01-hello-world.ts - 最小構成のコマンド
+ * 01-hello-world.ts - Minimal command configuration
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/01-hello-world.ts
  *   pnpx tsx playground/01-hello-world.ts --help
  */
@@ -10,7 +10,7 @@ import { defineCommand, runMain } from "../../src/index.js";
 
 export const command = defineCommand({
   name: "hello",
-  description: "Hello Worldを表示するシンプルなコマンド",
+  description: "A simple command that displays Hello World",
   run: () => {
     console.log("Hello, World!");
   },

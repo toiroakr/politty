@@ -1,10 +1,10 @@
 # Recipes
 
-## テスト
+## Testing
 
-politty はテストのしやすさを考慮して設計されています。`runCommand` に `argv` 配列を直接渡すことで、コマンドライン実行をシミュレートできます。
+politty is designed with testability in mind. You can simulate command-line execution by passing an `argv` array directly to `runCommand`.
 
-テストランナーには **Vitest** を推奨しますが、何でも構いません。
+**Vitest** is recommended as a test runner, but any runner will work.
 
 ```typescript
 import { describe, it, expect, vi } from "vitest";
@@ -12,7 +12,7 @@ import { defineCommand, runCommand, arg } from "politty";
 import { z } from "zod";
 
 describe("my-cli", () => {
-  it("引数が正しくパースされること", async () => {
+  it("should parse arguments correctly", async () => {
     const logs: string[] = [];
     vi.spyOn(console, "log").mockImplementation((msg) => logs.push(msg));
 
@@ -24,7 +24,7 @@ describe("my-cli", () => {
       run: (args) => console.log(`Hello ${args.name}`)
     });
 
-    // 引数を直接渡す
+    // Pass arguments directly
     const result = await runCommand(command, ["World"]);
 
     expect(result.exitCode).toBe(0);
@@ -33,13 +33,13 @@ describe("my-cli", () => {
 });
 ```
 
-### バリデーションエラーのテスト
+### Testing Validation Errors
 
-無効な引数が渡されたときに、期待される終了コード（通常は 1）が返ることを確認できます。
+You can verify that the expected exit code (usually 1) is returned when invalid arguments are passed.
 
 ```typescript
-it("バリデーションに失敗すること", async () => {
-  // エラー出力を抑制
+it("should fail validation", async () => {
+  // Suppress error output
   vi.spyOn(console, "error").mockImplementation(() => {});
 
   const command = defineCommand({
@@ -53,15 +53,15 @@ it("バリデーションに失敗すること", async () => {
 });
 ```
 
-### setup/cleanup のモック
+### Mocking setup/cleanup
 
-既存のコマンド定義に対して `setup` や `cleanup` をモックしたい場合は、`vi.spyOn` を使用します。
+To mock `setup` or `cleanup` for an existing command definition, use `vi.spyOn`.
 
 ```typescript
 import { myCommand } from "./my-command";
 
-it("setup をモックする", async () => {
-  // setup をモック（何もしないようにする）
+it("should mock setup", async () => {
+  // Mock setup (make it do nothing)
   vi.spyOn(myCommand, "setup").mockImplementation(() => {});
   vi.spyOn(myCommand, "cleanup").mockImplementation(() => {});
 
@@ -71,17 +71,17 @@ it("setup をモックする", async () => {
 });
 ```
 
-## ランタイム設定
+## Runtime Configuration
 
-### シグナルハンドリング (Ctrl+C)
+### Signal Handling (Ctrl+C)
 
-`runMain` を使用すると、終了シグナル（SIGINT, SIGTERM）が自動的に処理され、`cleanup` フックが実行されます。これにより、ユーザーがプロセスを中断した場合でも `cleanup` が確実に呼ばれます。
+When using `runMain`, exit signals (SIGINT, SIGTERM) are automatically handled and the `cleanup` hook is executed. This ensures that `cleanup` is called even when the user interrupts the process.
 
-> **Note:** `runCommand` はテスト用途を想定しており、シグナルハンドリングは行いません。本番環境では `runMain` を使用してください。
+> **Note:** `runCommand` is intended for testing purposes and does not handle signals. Use `runMain` in production environments.
 
-### デバッグモード
+### Debug Mode
 
-デバッグモードを有効にすると、エラー発生時にエラーメッセージだけでなく完全なスタックトレースが表示されます。
+Enable debug mode to display complete stack traces instead of just error messages when errors occur.
 
 ```typescript
 runMain(command, {
@@ -89,18 +89,18 @@ runMain(command, {
 });
 ```
 
-## エラーハンドリング
+## Error Handling
 
-`run` 内でスローされたエラーは `runMain` によって捕捉され、stderr に出力されます。`cleanup` フックは `error` オブジェクトと共に実行されます。
+Errors thrown within `run` are caught by `runMain` and output to stderr. The `cleanup` hook is executed with the `error` object.
 
 ```typescript
 const command = defineCommand({
   run: () => {
-    throw new Error("何かが壊れました！");
+    throw new Error("Something broke!");
   },
   cleanup: ({ error }) => {
     if (error) {
-      // 緊急のクリーンアップやロギングを行う
+      // Perform emergency cleanup or logging
     }
   }
 });

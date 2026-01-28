@@ -1,26 +1,26 @@
 # politty
 
-**politty** は、**Zod v4** をベースにした、軽量で型安全な Node.js 用 CLI フレームワークです。
+**politty** is a lightweight, type-safe CLI framework for Node.js built on **Zod v4**.
 
-シンプルなスクリプトから、サブコマンド、バリデーション、自動ヘルプ生成を備えた複雑な CLI ツールまで、開発者フレンドリーな API で構築できます。
+From simple scripts to complex CLI tools with subcommands, validation, and auto-generated help, you can build them all with a developer-friendly API.
 
-## 特徴
+## Features
 
-- **Zod ネイティブ**: 引数の定義とバリデーションに Zod スキーマをそのまま使用
-- **型安全性**: TypeScript を完全サポートし、パースされた引数の型を自動推論
-- **柔軟な引数定義**: Positional 引数、フラグ、エイリアス、配列、環境変数フォールバックをサポート
-- **サブコマンド**: Git スタイルのネストされたサブコマンド構築が可能（遅延読み込み対応）
-- **ライフサイクル管理**: `setup` → `run` → `cleanup` の実行順序を保証
-- **シグナルハンドリング**: SIGINT/SIGTERM を適切に処理し、cleanup の実行を保証
-- **自動ヘルプ生成**: 定義から自動的にヘルプテキストを生成
-- **Discriminated Union**: 相互排他的な引数セットのサポート
+- **Zod Native**: Use Zod schemas directly for argument definition and validation
+- **Type Safety**: Full TypeScript support with automatic type inference for parsed arguments
+- **Flexible Argument Definition**: Support for positional arguments, flags, aliases, arrays, and environment variable fallbacks
+- **Subcommands**: Build Git-style nested subcommands (with lazy loading support)
+- **Lifecycle Management**: Guaranteed `setup` → `run` → `cleanup` execution order
+- **Signal Handling**: Proper SIGINT/SIGTERM handling with guaranteed cleanup execution
+- **Auto Help Generation**: Automatically generate help text from definitions
+- **Discriminated Union**: Support for mutually exclusive argument sets
 
-## 動作環境
+## Requirements
 
 - Node.js >= 18
 - Zod >= 4.2.1
 
-## インストール
+## Installation
 
 ```bash
 npm install politty zod
@@ -30,7 +30,7 @@ pnpm add politty zod
 yarn add politty zod
 ```
 
-## クイックスタート
+## Quick Start
 
 ```typescript
 import { z } from "zod";
@@ -38,19 +38,19 @@ import { defineCommand, runMain, arg } from "politty";
 
 const command = defineCommand({
   name: "greet",
-  description: "挨拶を表示するCLIツール",
+  description: "A CLI tool that displays greetings",
   args: z.object({
     name: arg(z.string(), {
       positional: true,
-      description: "挨拶する相手の名前",
+      description: "Name of the person to greet",
     }),
     greeting: arg(z.string().default("Hello"), {
       alias: "g",
-      description: "挨拶のフレーズ",
+      description: "Greeting phrase",
     }),
     loud: arg(z.boolean().default(false), {
       alias: "l",
-      description: "大文字で出力",
+      description: "Output in uppercase",
     }),
   }),
   run: (args) => {
@@ -65,7 +65,7 @@ const command = defineCommand({
 runMain(command);
 ```
 
-実行例:
+Example usage:
 
 ```bash
 $ my-cli World
@@ -77,22 +77,22 @@ HI, WORLD!
 $ my-cli --help
 Usage: greet <name> [options]
 
-挨拶を表示するCLIツール
+A CLI tool that displays greetings
 
 Arguments:
-  name    挨拶する相手の名前
+  name    Name of the person to greet
 
 Options:
-  -g, --greeting <value>  挨拶のフレーズ (default: "Hello")
-  -l, --loud              大文字で出力
+  -g, --greeting <value>  Greeting phrase (default: "Hello")
+  -l, --loud              Output in uppercase
   -h, --help              Show help
 ```
 
-## 基本的な使い方
+## Basic Usage
 
-### 引数の定義
+### Defining Arguments
 
-`arg()` 関数を使って引数のメタデータを定義します:
+Use the `arg()` function to define argument metadata:
 
 ```typescript
 import { z } from "zod";
@@ -101,34 +101,34 @@ import { arg, defineCommand } from "politty";
 const command = defineCommand({
   name: "example",
   args: z.object({
-    // Positional 引数（必須）
+    // Positional argument (required)
     input: arg(z.string(), {
       positional: true,
-      description: "入力ファイル",
+      description: "Input file",
     }),
 
-    // オプショナルな Positional 引数
+    // Optional positional argument
     output: arg(z.string().optional(), {
       positional: true,
-      description: "出力ファイル",
+      description: "Output file",
     }),
 
-    // フラグ（エイリアス付き）
+    // Flag (with alias)
     verbose: arg(z.boolean().default(false), {
       alias: "v",
-      description: "詳細出力",
+      description: "Verbose output",
     }),
 
-    // 環境変数からのフォールバック
+    // Environment variable fallback
     apiKey: arg(z.string().optional(), {
       env: "API_KEY",
-      description: "API キー",
+      description: "API key",
     }),
 
-    // 配列引数（--file a.txt --file b.txt）
+    // Array argument (--file a.txt --file b.txt)
     files: arg(z.array(z.string()).default([]), {
       alias: "f",
-      description: "処理するファイル",
+      description: "Files to process",
     }),
   }),
   run: (args) => {
@@ -137,9 +137,9 @@ const command = defineCommand({
 });
 ```
 
-### サブコマンド
+### Subcommands
 
-Git スタイルのサブコマンドを定義できます:
+Define Git-style subcommands:
 
 ```typescript
 import { z } from "zod";
@@ -147,11 +147,11 @@ import { arg, defineCommand, runMain } from "politty";
 
 const initCommand = defineCommand({
   name: "init",
-  description: "プロジェクトを初期化",
+  description: "Initialize a project",
   args: z.object({
     template: arg(z.string().default("default"), {
       alias: "t",
-      description: "テンプレート名",
+      description: "Template name",
     }),
   }),
   run: (args) => {
@@ -161,15 +161,15 @@ const initCommand = defineCommand({
 
 const buildCommand = defineCommand({
   name: "build",
-  description: "プロジェクトをビルド",
+  description: "Build the project",
   args: z.object({
     output: arg(z.string().default("dist"), {
       alias: "o",
-      description: "出力ディレクトリ",
+      description: "Output directory",
     }),
     minify: arg(z.boolean().default(false), {
       alias: "m",
-      description: "出力を圧縮",
+      description: "Minify output",
     }),
   }),
   run: (args) => {
@@ -179,7 +179,7 @@ const buildCommand = defineCommand({
 
 const cli = defineCommand({
   name: "my-cli",
-  description: "サブコマンドを持つCLIの例",
+  description: "Example CLI with subcommands",
   subCommands: {
     init: initCommand,
     build: buildCommand,
@@ -189,7 +189,7 @@ const cli = defineCommand({
 runMain(cli, { version: "1.0.0" });
 ```
 
-実行例:
+Example usage:
 
 ```bash
 $ my-cli init -t react
@@ -197,31 +197,31 @@ $ my-cli build -o out -m
 $ my-cli --help
 ```
 
-### ライフサイクルフック
+### Lifecycle Hooks
 
-`setup` → `run` → `cleanup` の順序でフックを実行します。エラーが発生しても `cleanup` は必ず実行されます:
+Execute hooks in `setup` → `run` → `cleanup` order. The `cleanup` hook is always executed, even if an error occurs:
 
 ```typescript
 const command = defineCommand({
   name: "db-query",
-  description: "データベースクエリの実行",
+  description: "Execute database queries",
   args: z.object({
     database: arg(z.string(), {
       alias: "d",
-      description: "データベース接続文字列",
+      description: "Database connection string",
     }),
     query: arg(z.string(), {
       alias: "q",
-      description: "SQLクエリ",
+      description: "SQL query",
     }),
   }),
   setup: async ({ args }) => {
     console.log("[setup] Connecting to database...");
-    // DB接続を確立
+    // Establish DB connection
   },
   run: async (args) => {
     console.log("[run] Executing query...");
-    // クエリを実行
+    // Execute query
     return { rowCount: 42 };
   },
   cleanup: async ({ args, error }) => {
@@ -229,7 +229,7 @@ const command = defineCommand({
     if (error) {
       console.error(`Error occurred: ${error.message}`);
     }
-    // 接続をクローズ
+    // Close connection
   },
 });
 ```
@@ -238,32 +238,32 @@ const command = defineCommand({
 
 ### `defineCommand(options)`
 
-コマンドを定義します。
+Define a command.
 
-| オプション    | 型                            | 説明                 |
-| ------------- | ----------------------------- | -------------------- |
-| `name`        | `string`                      | コマンド名           |
-| `description` | `string?`                     | コマンドの説明       |
-| `args`        | `ZodSchema`                   | 引数のスキーマ       |
-| `subCommands` | `Record<string, Command>?`    | サブコマンド         |
-| `setup`       | `(context) => Promise<void>?` | セットアップフック   |
-| `run`         | `(args) => T?`                | 実行関数             |
-| `cleanup`     | `(context) => Promise<void>?` | クリーンアップフック |
+| Option        | Type                          | Description         |
+| ------------- | ----------------------------- | ------------------- |
+| `name`        | `string`                      | Command name        |
+| `description` | `string?`                     | Command description |
+| `args`        | `ZodSchema`                   | Argument schema     |
+| `subCommands` | `Record<string, Command>?`    | Subcommands         |
+| `setup`       | `(context) => Promise<void>?` | Setup hook          |
+| `run`         | `(args) => T?`                | Run function        |
+| `cleanup`     | `(context) => Promise<void>?` | Cleanup hook        |
 
 ### `runMain(command, options?)`
 
-CLI エントリーポイント。シグナルハンドリングと `process.exit()` を行います。
+CLI entry point. Handles signals and calls `process.exit()`.
 
 ```typescript
 runMain(command, {
-  version: "1.0.0",    // --version フラグで表示
-  argv: process.argv,  // カスタム argv
+  version: "1.0.0",    // Displayed with --version flag
+  argv: process.argv,  // Custom argv
 });
 ```
 
 ### `runCommand(command, argv, options?)`
 
-プログラマティック/テスト用のエントリーポイント。`process.exit()` を呼び出さず、結果オブジェクトを返します。
+Programmatic/testing entry point. Does not call `process.exit()` and returns a result object.
 
 ```typescript
 const result = await runCommand(command, ["arg1", "--flag"]);
@@ -276,39 +276,39 @@ if (result.success) {
 
 ### `arg(schema, meta)`
 
-引数にメタデータを付与します。
+Attach metadata to an argument.
 
-| メタデータ    | 型         | 説明                             |
-| ------------- | ---------- | -------------------------------- |
-| `positional`  | `boolean?` | Positional 引数として扱う        |
-| `alias`       | `string?`  | 短いエイリアス（例: `-v`）       |
-| `description` | `string?`  | 引数の説明                       |
-| `placeholder` | `string?`  | ヘルプに表示するプレースホルダー |
-| `env`         | `string?`  | 環境変数名（フォールバック用）   |
+| Metadata      | Type       | Description                          |
+| ------------- | ---------- | ------------------------------------ |
+| `positional`  | `boolean?` | Treat as positional argument         |
+| `alias`       | `string?`  | Short alias (e.g., `-v`)             |
+| `description` | `string?`  | Argument description                 |
+| `placeholder` | `string?`  | Placeholder shown in help            |
+| `env`         | `string?`  | Environment variable name (fallback) |
 
-## ドキュメント
+## Documentation
 
-詳細なドキュメントは `docs/` ディレクトリを参照してください:
+For detailed documentation, see the `docs/` directory:
 
-- [Getting Started](./docs/getting-started.md) - インストールと最初のコマンド作成
-- [Essentials](./docs/essentials.md) - コアコンセプトの解説
-- [Advanced Features](./docs/advanced-features.md) - サブコマンド、Discriminated Union
-- [Recipes](./docs/recipes.md) - テスト、設定、エラーハンドリング
-- [API Reference](./docs/api-reference.md) - 詳細な API リファレンス
-- [Doc Generation](./docs/doc-generation.md) - ドキュメント自動生成
+- [Getting Started](./docs/getting-started.md) - Installation and creating your first command
+- [Essentials](./docs/essentials.md) - Core concepts explained
+- [Advanced Features](./docs/advanced-features.md) - Subcommands, Discriminated Union
+- [Recipes](./docs/recipes.md) - Testing, configuration, error handling
+- [API Reference](./docs/api-reference.md) - Detailed API reference
+- [Doc Generation](./docs/doc-generation.md) - Automatic documentation generation
 
-## サンプル
+## Examples
 
-`playground/` ディレクトリに多数のサンプルがあります:
+The `playground/` directory contains many examples:
 
-- `01-hello-world` - 最小構成のコマンド
-- `02-greet` - Positional 引数とフラグ
-- `03-array-args` - 配列引数
-- `05-lifecycle-hooks` - ライフサイクルフック
-- `10-subcommands` - サブコマンド
+- `01-hello-world` - Minimal command configuration
+- `02-greet` - Positional arguments and flags
+- `03-array-args` - Array arguments
+- `05-lifecycle-hooks` - Lifecycle hooks
+- `10-subcommands` - Subcommands
 - `12-discriminated-union` - Discriminated Union
-- `21-lazy-subcommands` - 遅延読み込み
+- `21-lazy-subcommands` - Lazy loading
 
-## ライセンス
+## License
 
 MIT

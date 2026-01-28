@@ -2,7 +2,7 @@
 
 # my-tool
 
-完全なCLIツールの例
+Complete CLI tool example
 
 **Usage**
 
@@ -12,34 +12,34 @@ my-tool [options] [command] <input>
 
 **Arguments**
 
-| Argument | Description  | Required |
-| -------- | ------------ | -------- |
-| `input`  | 入力ファイル | Yes      |
+| Argument | Description | Required |
+| -------- | ----------- | -------- |
+| `input`  | Input file  | Yes      |
 
 **Options**
 
-| Option              | Alias | Description          | Default  |
-| ------------------- | ----- | -------------------- | -------- |
-| `--output <OUTPUT>` | `-o`  | 出力ファイル         | -        |
-| `--verbose`         | `-v`  | 詳細出力を有効にする | `false`  |
-| `--format <FORMAT>` | `-f`  | 出力形式             | `"json"` |
+| Option              | Alias | Description           | Default  |
+| ------------------- | ----- | --------------------- | -------- |
+| `--output <OUTPUT>` | `-o`  | Output file           | -        |
+| `--verbose`         | `-v`  | Enable verbose output | `false`  |
+| `--format <FORMAT>` | `-f`  | Output format         | `"json"` |
 
 **Commands**
 
-| Command         | Description                |
-| --------------- | -------------------------- |
-| [`init`](#init) | 新しいプロジェクトを初期化 |
+| Command         | Description              |
+| --------------- | ------------------------ |
+| [`init`](#init) | Initialize a new project |
 
 **Notes**
 
-サブコマンド、ライフサイクルフック、複数の出力形式をサポートしています。
+Supports subcommands, lifecycle hooks, and multiple output formats.
 
 <!-- politty:command::end -->
 <!-- politty:command:init:start -->
 
 ## init
 
-新しいプロジェクトを初期化
+Initialize a new project
 
 **Usage**
 
@@ -49,9 +49,9 @@ my-tool init [options]
 
 **Options**
 
-| Option                  | Alias | Description          | Default     |
-| ----------------------- | ----- | -------------------- | ----------- |
-| `--template <TEMPLATE>` | `-t`  | 使用するテンプレート | `"default"` |
-| `--name <NAME>`         | `-n`  | プロジェクト名       | -           |
+| Option                  | Alias | Description     | Default     |
+| ----------------------- | ----- | --------------- | ----------- |
+| `--template <TEMPLATE>` | `-t`  | Template to use | `"default"` |
+| `--name <NAME>`         | `-n`  | Project name    | -           |
 
 <!-- politty:command:init:end -->

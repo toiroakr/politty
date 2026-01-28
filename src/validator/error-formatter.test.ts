@@ -7,11 +7,11 @@ import {
 import type { ValidationError } from "./zod-validator.js";
 
 /**
- * Task 5.2: エラーフォーマッターのテスト
- * - バリデーションエラーを人間が読みやすいメッセージに変換
- * - 複数のエラーをまとめて表示
- * - 未知オプションに対して類似オプションをサジェスト
- * - デバッグモード時にスタックトレースを表示
+ * Task 5.2: Error Formatter Tests
+ * - Convert validation errors into human-readable messages
+ * - Display multiple errors in a consolidated format
+ * - Suggest similar options for unknown flags
+ * - Show stack traces in debug mode
  */
 describe("ErrorFormatter", () => {
   describe("formatValidationErrors", () => {

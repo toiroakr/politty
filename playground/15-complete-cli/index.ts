@@ -1,7 +1,7 @@
 /**
- * 15-complete-cli.ts - 完全なCLIの例
+ * 15-complete-cli.ts - Complete CLI example
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/15-complete-cli.ts --help
  *   pnpx tsx playground/15-complete-cli.ts --version
  *   pnpx tsx playground/15-complete-cli.ts file.txt -o out.txt
@@ -13,18 +13,18 @@
 import { z } from "zod";
 import { arg, defineCommand, runMain } from "../../src/index.js";
 
-// init サブコマンド
+// init subcommand
 export const initCommand = defineCommand({
   name: "init",
-  description: "新しいプロジェクトを初期化",
+  description: "Initialize a new project",
   args: z.object({
     template: arg(z.string().default("default"), {
       alias: "t",
-      description: "使用するテンプレート",
+      description: "Template to use",
     }),
     name: arg(z.string().optional(), {
       alias: "n",
-      description: "プロジェクト名",
+      description: "Project name",
     }),
   }),
   run: (args) => {
@@ -34,27 +34,27 @@ export const initCommand = defineCommand({
   },
 });
 
-// メインCLI
+// Main CLI
 export const cli = defineCommand({
   name: "my-tool",
-  description: "完全なCLIツールの例",
-  notes: "サブコマンド、ライフサイクルフック、複数の出力形式をサポートしています。",
+  description: "Complete CLI tool example",
+  notes: "Supports subcommands, lifecycle hooks, and multiple output formats.",
   args: z.object({
     input: arg(z.string(), {
       positional: true,
-      description: "入力ファイル",
+      description: "Input file",
     }),
     output: arg(z.string(), {
       alias: "o",
-      description: "出力ファイル",
+      description: "Output file",
     }),
     verbose: arg(z.boolean().default(false), {
       alias: "v",
-      description: "詳細出力を有効にする",
+      description: "Enable verbose output",
     }),
     format: arg(z.enum(["json", "yaml", "toml"]).default("json"), {
       alias: "f",
-      description: "出力形式",
+      description: "Output format",
     }),
   }),
   subCommands: {
@@ -75,7 +75,7 @@ export const cli = defineCommand({
     console.log(`  Output: ${args.output}`);
     console.log(`  Format: ${args.format}`);
 
-    // 処理をシミュレート
+    // Simulate processing
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     return { processed: true, format: args.format };

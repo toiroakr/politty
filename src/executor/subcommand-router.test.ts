@@ -3,10 +3,10 @@ import { defineCommand } from "../core/command.js";
 import { listSubCommands, resolveSubcommand } from "./subcommand-router.js";
 
 /**
- * Task 7.1: サブコマンドルーターのテスト
- * - サブコマンド名から対応するコマンド定義を解決
- * - 遅延ロード（動的import）でサブコマンドを読み込む
- * - 複数階層のサブコマンドを再帰的に処理
+ * Task 7.1: Subcommand router tests
+ * - Resolve command definition from subcommand name
+ * - Load subcommands with lazy loading (dynamic import)
+ * - Process nested subcommands recursively
  */
 describe("SubcommandRouter", () => {
   describe("resolveSubcommand", () => {

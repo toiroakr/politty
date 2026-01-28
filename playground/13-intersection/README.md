@@ -2,7 +2,7 @@
 
 # process
 
-ファイルを処理（intersectionの例）
+Process files (intersection example)
 
 **Usage**
 
@@ -12,17 +12,17 @@ process [options] <input>
 
 **Arguments**
 
-| Argument | Description  | Required |
-| -------- | ------------ | -------- |
-| `input`  | 入力ファイル | Yes      |
+| Argument | Description | Required |
+| -------- | ----------- | -------- |
+| `input`  | Input file  | Yes      |
 
 **Options**
 
-| Option              | Alias | Description  | Default |
-| ------------------- | ----- | ------------ | ------- |
-| `--verbose`         | `-v`  | 詳細出力     | `false` |
-| `--config <CONFIG>` | `-c`  | 設定ファイル | -       |
-| `--quiet`           | `-q`  | 出力を抑制   | `false` |
-| `--output <OUTPUT>` | `-o`  | 出力ファイル | -       |
+| Option              | Alias | Description     | Default |
+| ------------------- | ----- | --------------- | ------- |
+| `--verbose`         | `-v`  | Verbose output  | `false` |
+| `--config <CONFIG>` | `-c`  | Config file     | -       |
+| `--quiet`           | `-q`  | Suppress output | `false` |
+| `--output <OUTPUT>` | `-o`  | Output file     | -       |
 
 <!-- politty:command::end -->

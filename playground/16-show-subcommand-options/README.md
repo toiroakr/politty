@@ -2,7 +2,7 @@
 
 # git-like
 
-サブコマンドのオプションをまとめて表示する例
+Example of displaying subcommand options together
 
 **Usage**
 
@@ -12,17 +12,17 @@ git-like [command]
 
 **Commands**
 
-| Command             | Description    |
-| ------------------- | -------------- |
-| [`config`](#config) | 設定を管理     |
-| [`remote`](#remote) | リモートを管理 |
+| Command             | Description          |
+| ------------------- | -------------------- |
+| [`config`](#config) | Manage configuration |
+| [`remote`](#remote) | Manage remotes       |
 
 <!-- politty:command::end -->
 <!-- politty:command:config:start -->
 
 ## config
 
-設定を管理
+Manage configuration
 
 **Usage**
 
@@ -32,18 +32,18 @@ git-like config [command]
 
 **Commands**
 
-| Command                       | Description          |
-| ----------------------------- | -------------------- |
-| [`config get`](#config-get)   | 設定値を取得         |
-| [`config set`](#config-set)   | 設定値を設定         |
-| [`config list`](#config-list) | 全ての設定を一覧表示 |
+| Command                       | Description            |
+| ----------------------------- | ---------------------- |
+| [`config get`](#config-get)   | Get a config value     |
+| [`config set`](#config-set)   | Set a config value     |
+| [`config list`](#config-list) | List all config values |
 
 <!-- politty:command:config:end -->
 <!-- politty:command:config get:start -->
 
 ### config get
 
-設定値を取得
+Get a config value
 
 **Usage**
 
@@ -55,14 +55,14 @@ git-like config get <key>
 
 | Argument | Description | Required |
 | -------- | ----------- | -------- |
-| `key`    | 設定キー    | Yes      |
+| `key`    | Config key  | Yes      |
 
 <!-- politty:command:config get:end -->
 <!-- politty:command:config list:start -->
 
 ### config list
 
-全ての設定を一覧表示
+List all config values
 
 **Usage**
 
@@ -72,17 +72,17 @@ git-like config list [options]
 
 **Options**
 
-| Option              | Alias | Description          | Default   |
-| ------------------- | ----- | -------------------- | --------- |
-| `--format <FORMAT>` | `-f`  | 出力形式             | `"table"` |
-| `--global`          | `-g`  | グローバル設定を表示 | `false`   |
+| Option              | Alias | Description               | Default   |
+| ------------------- | ----- | ------------------------- | --------- |
+| `--format <FORMAT>` | `-f`  | Output format             | `"table"` |
+| `--global`          | `-g`  | Show global configuration | `false`   |
 
 <!-- politty:command:config list:end -->
 <!-- politty:command:config set:start -->
 
 ### config set
 
-設定値を設定
+Set a config value
 
 **Usage**
 
@@ -92,17 +92,17 @@ git-like config set <key> <value>
 
 **Arguments**
 
-| Argument | Description | Required |
-| -------- | ----------- | -------- |
-| `key`    | 設定キー    | Yes      |
-| `value`  | 設定値      | Yes      |
+| Argument | Description  | Required |
+| -------- | ------------ | -------- |
+| `key`    | Config key   | Yes      |
+| `value`  | Config value | Yes      |
 
 <!-- politty:command:config set:end -->
 <!-- politty:command:remote:start -->
 
 ## remote
 
-リモートを管理
+Manage remotes
 
 **Usage**
 
@@ -112,17 +112,17 @@ git-like remote [command]
 
 **Commands**
 
-| Command                           | Description    |
-| --------------------------------- | -------------- |
-| [`remote add`](#remote-add)       | リモートを追加 |
-| [`remote remove`](#remote-remove) | リモートを削除 |
+| Command                           | Description   |
+| --------------------------------- | ------------- |
+| [`remote add`](#remote-add)       | Add remote    |
+| [`remote remove`](#remote-remove) | Remove remote |
 
 <!-- politty:command:remote:end -->
 <!-- politty:command:remote add:start -->
 
 ### remote add
 
-リモートを追加
+Add remote
 
 **Usage**
 
@@ -134,15 +134,15 @@ git-like remote add <name> <url>
 
 | Argument | Description | Required |
 | -------- | ----------- | -------- |
-| `name`   | リモート名  | Yes      |
-| `url`    | リモートURL | Yes      |
+| `name`   | Remote name | Yes      |
+| `url`    | Remote URL  | Yes      |
 
 <!-- politty:command:remote add:end -->
 <!-- politty:command:remote remove:start -->
 
 ### remote remove
 
-リモートを削除
+Remove remote
 
 **Usage**
 
@@ -154,12 +154,12 @@ git-like remote remove [options] <name>
 
 | Argument | Description | Required |
 | -------- | ----------- | -------- |
-| `name`   | リモート名  | Yes      |
+| `name`   | Remote name | Yes      |
 
 **Options**
 
-| Option    | Alias | Description | Default |
-| --------- | ----- | ----------- | ------- |
-| `--force` | `-f`  | 強制削除    | `false` |
+| Option    | Alias | Description    | Default |
+| --------- | ----- | -------------- | ------- |
+| `--force` | `-f`  | Force deletion | `false` |
 
 <!-- politty:command:remote remove:end -->

@@ -1,7 +1,7 @@
 /**
- * 13-intersection.ts - intersectionの例（共通オプションの再利用）
+ * 13-intersection.ts - intersection example (reusing common options)
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/13-intersection.ts input.txt -o output.txt
  *   pnpx tsx playground/13-intersection.ts data.json -o result.json -v
  *   pnpx tsx playground/13-intersection.ts data.json -o result.json --verbose --config config.json
@@ -11,38 +11,38 @@
 import { z } from "zod";
 import { arg, defineCommand, runMain } from "../../src/index.js";
 
-// 共通オプション（複数コマンドで再利用可能）
+// Common options (reusable across multiple commands)
 const baseOptions = z.object({
   verbose: arg(z.boolean().default(false), {
     alias: "v",
-    description: "詳細出力",
+    description: "Verbose output",
   }),
   config: arg(z.string().optional(), {
     alias: "c",
-    description: "設定ファイル",
+    description: "Config file",
   }),
   quiet: arg(z.boolean().default(false), {
     alias: "q",
-    description: "出力を抑制",
+    description: "Suppress output",
   }),
 });
 
-// processコマンド固有のオプション
+// Process command specific options
 const processOptions = z.object({
   input: arg(z.string(), {
     positional: true,
-    description: "入力ファイル",
+    description: "Input file",
   }),
   output: arg(z.string(), {
     alias: "o",
-    description: "出力ファイル",
+    description: "Output file",
   }),
 });
 
-// intersectionで結合
+// Combined with intersection
 export const command = defineCommand({
   name: "process",
-  description: "ファイルを処理（intersectionの例）",
+  description: "Process files (intersection example)",
   args: baseOptions.and(processOptions),
   run: (args) => {
     if (!args.quiet) {

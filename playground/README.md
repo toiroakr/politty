@@ -1,116 +1,116 @@
 # Playground
 
-politty の動作確認用サンプルコードです。
+Sample code for testing politty functionality.
 
-## 実行方法
+## How to Run
 
-各ファイルは `pnpx tsx` で実行できます。
+Each file can be executed with `pnpx tsx`.
 
 ```bash
-# 基本的な実行
+# Basic execution
 pnpx tsx playground/01-hello-world.ts
 
-# 引数付きで実行
+# Execution with arguments
 pnpx tsx playground/02-greet.ts World -g "Hi" -l
 
-# ヘルプを表示
+# Show help
 pnpx tsx playground/10-subcommands.ts --help
 ```
 
-## ファイル一覧
+## File List
 
-### 基本編
+### Basic
 
-| ファイル                | 内容                                    |
-| ----------------------- | --------------------------------------- |
-| `01-hello-world.ts`     | 最小構成のコマンド                      |
-| `02-greet.ts`           | positional 引数とオプション             |
-| `03-array-args.ts`      | 配列引数（`--file a.txt --file b.txt`） |
-| `04-type-coercion.ts`   | 型変換とバリデーション（`z.coerce`）    |
-| `05-lifecycle-hooks.ts` | setup/run/cleanup フック                |
+| File                    | Description                                   |
+| ----------------------- | --------------------------------------------- |
+| `01-hello-world.ts`     | Minimal command configuration                 |
+| `02-greet.ts`           | Positional arguments and options              |
+| `03-array-args.ts`      | Array arguments (`--file a.txt --file b.txt`) |
+| `04-type-coercion.ts`   | Type coercion and validation (`z.coerce`)     |
+| `05-lifecycle-hooks.ts` | setup/run/cleanup hooks                       |
 
-### Positional 引数編
+### Positional Arguments
 
-| ファイル                | 内容                                   |
-| ----------------------- | -------------------------------------- |
-| `06-cp-command.ts`      | cp コマンド風（複数 positional）       |
-| `07-gcc-command.ts`     | gcc コマンド風（配列 positional）      |
-| `08-cat-command.ts`     | cat コマンド風（配列 positional のみ） |
-| `09-convert-command.ts` | オプション positional 引数             |
+| File                    | Description                               |
+| ----------------------- | ----------------------------------------- |
+| `06-cp-command.ts`      | cp command style (multiple positional)    |
+| `07-gcc-command.ts`     | gcc command style (array positional)      |
+| `08-cat-command.ts`     | cat command style (array positional only) |
+| `09-convert-command.ts` | Optional positional arguments             |
 
-### 応用編
+### Advanced
 
-| ファイル                        | 内容                                             |
-| ------------------------------- | ------------------------------------------------ |
-| `10-subcommands.ts`             | サブコマンド                                     |
-| `11-nested-subcommands.ts`      | ネストしたサブコマンド                           |
-| `12-discriminated-union.ts`     | discriminatedUnion（相互排他オプション）         |
-| `13-intersection.ts`            | intersection（共通オプションの再利用）           |
-| `14-transform-refine.ts`        | transform/refine（変換とカスタムバリデーション） |
-| `15-complete-cli.ts`            | 完全な CLI の例                                  |
-| `16-show-subcommand-options.ts` | サブコマンドのオプションをまとめて表示           |
+| File                            | Description                                   |
+| ------------------------------- | --------------------------------------------- |
+| `10-subcommands.ts`             | Subcommands                                   |
+| `11-nested-subcommands.ts`      | Nested subcommands                            |
+| `12-discriminated-union.ts`     | Discriminated union (mutually exclusive opts) |
+| `13-intersection.ts`            | Intersection (reusing common options)         |
+| `14-transform-refine.ts`        | transform/refine (conversion and validation)  |
+| `15-complete-cli.ts`            | Complete CLI example                          |
+| `16-show-subcommand-options.ts` | Display subcommand options together           |
 
-## 例
+## Examples
 
 ### 02-greet.ts
 
 ```bash
-# 基本的な使用
+# Basic usage
 pnpx tsx playground/02-greet.ts World
-# 出力: Hello, World!
+# Output: Hello, World!
 
-# オプション付き
+# With options
 pnpx tsx playground/02-greet.ts World -g "Hi" -l
-# 出力: HI, WORLD!
+# Output: HI, WORLD!
 
-# ヘルプ表示
+# Show help
 pnpx tsx playground/02-greet.ts --help
 ```
 
 ### 10-subcommands.ts
 
 ```bash
-# ヘルプ表示
+# Show help
 pnpx tsx playground/10-subcommands.ts --help
 
-# initサブコマンド
+# init subcommand
 pnpx tsx playground/10-subcommands.ts init -t react
 
-# buildサブコマンド
+# build subcommand
 pnpx tsx playground/10-subcommands.ts build -o out -m
 ```
 
 ### 12-discriminated-union.ts
 
 ```bash
-# createアクション
+# create action
 pnpx tsx playground/12-discriminated-union.ts --action create --name my-resource
 
-# deleteアクション
+# delete action
 pnpx tsx playground/12-discriminated-union.ts --action delete --id 123 -f
 
-# listアクション
+# list action
 pnpx tsx playground/12-discriminated-union.ts --action list -f json
 ```
 
 ### 16-show-subcommand-options.ts
 
 ```bash
-# 基本ヘルプ
+# Basic help
 pnpx tsx playground/16-show-subcommand-options.ts --help
 
-# 詳細ヘルプ（サブコマンドのオプションも表示）
-pnpx tsx playground/16-show-subcommand-options.ts --help-all  # または -H
+# Detailed help (shows subcommand options)
+pnpx tsx playground/16-show-subcommand-options.ts --help-all  # or -H
 
-# サブコマンドのヘルプ
+# Subcommand help
 pnpx tsx playground/16-show-subcommand-options.ts config list --help
 
-# --help-all の出力例:
+# --help-all output example:
 # Commands:
-#   config                      設定を管理
-#   config get                  設定値を取得
-#   config set                  設定値を設定
-#   config list                 全ての設定を一覧表示
-#     -f, --format <FORMAT>     出力形式 (default: "table")
-#     -g, --global              グローバル設定を表示 (default: false)
+#   config                      Manage configuration
+#   config get                  Get a config value
+#   config set                  Set a config value
+#   config list                 List all config values
+#     -f, --format <FORMAT>     Output format (default: "table")
+#     -g, --global              Show global configuration (default: false)
 ```

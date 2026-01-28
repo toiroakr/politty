@@ -1,10 +1,10 @@
 /**
- * 22-examples.ts - examplesフィールドとモック実行の使用例
+ * 22-examples.ts - Usage examples for the examples field and mock execution
  *
- * サブコマンド毎に異なるモックを設定して、examplesを実行する例。
- * ファイルシステム操作をモックして、実際のファイルを触らずにexampleを実行します。
+ * Demonstrates setting up different mocks per subcommand and running examples.
+ * Mocks file system operations to run examples without touching actual files.
  *
- * 実行方法:
+ * Usage:
  *   pnpx tsx playground/22-examples/index.ts read config.json
  *   pnpx tsx playground/22-examples/index.ts write output.txt "Hello"
  *   pnpx tsx playground/22-examples/index.ts --help
@@ -14,7 +14,7 @@ import * as fs from "node:fs";
 import { z } from "zod";
 import { arg, defineCommand, runMain } from "../../src/index.js";
 
-// read サブコマンド
+// read subcommand
 export const readCommand = defineCommand({
   name: "read",
   description: "Read file contents",
@@ -50,7 +50,7 @@ export const readCommand = defineCommand({
   },
 });
 
-// write サブコマンド
+// write subcommand
 export const writeCommand = defineCommand({
   name: "write",
   description: "Write content to file",
@@ -87,7 +87,7 @@ export const writeCommand = defineCommand({
   },
 });
 
-// check サブコマンド
+// check subcommand
 export const checkCommand = defineCommand({
   name: "check",
   description: "Check if file exists",
@@ -115,7 +115,7 @@ export const checkCommand = defineCommand({
   },
 });
 
-// delete サブコマンド（examplesなし）
+// delete subcommand (no examples)
 export const deleteCommand = defineCommand({
   name: "delete",
   description: "Delete a file",
@@ -140,7 +140,7 @@ export const deleteCommand = defineCommand({
   },
 });
 
-// メインコマンド
+// main command
 export const command = defineCommand({
   name: "file-cli",
   description: "File operations CLI with examples",

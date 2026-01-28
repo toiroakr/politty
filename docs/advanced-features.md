@@ -1,12 +1,12 @@
 # Advanced Features
 
-## サブコマンド
+## Subcommands
 
-politty は Git スタイルのサブコマンドをサポートしており、無限にネストしたり遅延ロードしたりできます。
+politty supports Git-style subcommands that can be infinitely nested or lazily loaded.
 
-### サブコマンドの定義
+### Defining Subcommands
 
-`defineCommand` の `subCommands` プロパティを使用します。
+Use the `subCommands` property in `defineCommand`.
 
 ```typescript
 const init = defineCommand({
@@ -28,27 +28,27 @@ const cli = defineCommand({
 });
 ```
 
-### 遅延ロード
+### Lazy Loading
 
-大規模な CLI の場合、起動時間を短縮するためにサブコマンドを遅延ロードできます。コマンドを直接インポートする代わりに、動的インポート (`import()`) を使って返す非同期関数を提供します。
+For large CLIs, you can lazy-load subcommands to reduce startup time. Instead of directly importing commands, provide an async function that uses dynamic import (`import()`).
 
-> **注意**: 遅延ロードの効果を得るには、必ず動的インポート (`import()`) を使用してください。
-> ファイル先頭の静的インポート (`import { ... } from "..."`) は、ファイル読み込み時に即座にモジュールを解決するため、遅延ロードにはなりません。
+> **Note**: To benefit from lazy loading, you must use dynamic import (`import()`).
+> Static imports at the top of the file (`import { ... } from "..."`) resolve modules immediately when the file is loaded, so they won't be lazily loaded.
 
 ```typescript
-// ❌ 静的インポート - ファイル読み込み時に即座に解決される
+// ❌ Static import - resolves immediately when file is loaded
 import { heavyCommand } from "./commands/heavy.js";
 
 const cli = defineCommand({
   subCommands: {
-    // heavyCommand は既に読み込み済み
+    // heavyCommand is already loaded
     heavy: async () => heavyCommand,
   }
 });
 ```
 
 ```typescript
-// ✅ 動的インポート - サブコマンド実行時に初めて読み込まれる
+// ✅ Dynamic import - loads only when subcommand is executed
 const cli = defineCommand({
   subCommands: {
     heavy: async () => {
@@ -59,11 +59,11 @@ const cli = defineCommand({
 });
 ```
 
-完全な例は `playground/21-lazy-subcommands.ts` を参照してください。
+See `playground/21-lazy-subcommands.ts` for a complete example.
 
-### ネストされたサブコマンド
+### Nested Subcommands
 
-サブコマンド自体も `subCommands` を持つことができます。
+Subcommands can have their own `subCommands`.
 
 ```typescript
 const remoteAdd = defineCommand({ name: "add", /* ... */ });
@@ -86,63 +86,63 @@ const cli = defineCommand({
 $ my-cli remote add origin https://github.com/...
 ```
 
-## 複雑なスキーマ
+## Complex Schemas
 
-### Discriminated Union（相互排他オプション）
+### Discriminated Union (Mutually Exclusive Options)
 
-相互に排他的な引数のセットを作成するには、`z.discriminatedUnion` を使用します。これは、ある「モード」引数によって、有効（かつ必須）な他の引数が変わるようなコマンドに最適です。
+Use `z.discriminatedUnion` to create mutually exclusive argument sets. This is ideal for commands where a "mode" argument determines which other arguments are valid (and required).
 
 ```typescript
 const args = z.discriminatedUnion("mode", [
-  // モード1: ファイル入力
+  // Mode 1: File input
   z.object({
     mode: z.literal("file"),
-    path: arg(z.string(), { description: "入力ファイルパス" }),
-  }).describe("ファイルから入力"),
-  // モード2: URL入力
+    path: arg(z.string(), { description: "Input file path" }),
+  }).describe("Input from file"),
+  // Mode 2: URL input
   z.object({
     mode: z.literal("url"),
-    url: arg(z.string().url(), { description: "入力URL" }),
+    url: arg(z.string().url(), { description: "Input URL" }),
     method: arg(z.enum(["GET", "POST"]).default("GET")),
-  }).describe("URLから入力"),
-]).describe("入力モード");
+  }).describe("Input from URL"),
+]).describe("Input mode");
 
 const command = defineCommand({
   args,
   run: (args) => {
     if (args.mode === "file") {
-      // ここでは args.path が有効
+      // args.path is valid here
       console.log("Reading file:", args.path);
     } else {
-      // ここでは args.url が有効
+      // args.url is valid here
       console.log("Fetching URL:", args.url);
     }
   }
 });
 ```
 
-#### 説明の設定
+#### Setting Descriptions
 
-- **discriminatedUnion全体の`.describe()`**: discriminatorフィールド（この例では`--mode`）の説明として使用されます
-- **各バリアントの`.describe()`**: ヘルプメッセージで各バリアントのセクションに表示されます
+- **`.describe()` on the entire discriminatedUnion**: Used as the description for the discriminator field (`--mode` in this example)
+- **`.describe()` on each variant**: Displayed in the help message for each variant's section
 
-ヘルプテキストは自動的にバリアントごとにグループ化されて表示されます:
+Help text is automatically grouped by variant:
 
 ```
 Options:
-  --mode <file|url>           入力モード
+  --mode <file|url>           Input mode
 
-When mode=file: ファイルから入力
-    --path <PATH>             入力ファイルパス (required)
+When mode=file: Input from file
+    --path <PATH>             Input file path (required)
 
-When mode=url: URLから入力
-    --url <URL>               入力URL (required)
+When mode=url: Input from URL
+    --url <URL>               Input URL (required)
     --method <METHOD>         (default: "GET")
 ```
 
-### Intersection（スキーマの合成）
+### Intersection (Schema Composition)
 
-`.and()` や `z.intersection()` を使ってスキーマを結合し、共通のオプションを再利用できます。
+Use `.and()` or `z.intersection()` to combine schemas and reuse common options.
 
 ```typescript
 const sharedOptions = z.object({
@@ -155,35 +155,35 @@ const command = defineCommand({
     input: arg(z.string(), { positional: true })
   })),
   run: (args) => {
-    // args は verbose, json, そして input を持ちます
+    // args has verbose, json, and input
   }
 });
 ```
 
-## 変換 (Transformations)
+## Transformations
 
-Zod の `transform` を使用して、ハンドラに渡る前に引数を加工できます。
+Use Zod's `transform` to process arguments before they reach the handler.
 
 ```typescript
 args: z.object({
-  // カンマ区切りの文字列を配列に変換
+  // Convert comma-separated string to array
   tags: arg(
     z.string().transform(val => val.split(",")),
-    { description: "カンマ区切りのタグ" }
+    { description: "Comma-separated tags" }
   )
 })
 ```
 
-## 付録: Zod グローバルレジストリの拡張
+## Appendix: Extending Zod Global Registry
 
-通常、メタデータは `arg()` 関数経由で管理しますが、Zod のグローバル型定義を拡張して `_def` に直接メタデータを保存することも可能です。
+Normally, metadata is managed through the `arg()` function, but you can also extend Zod's global type definition to store metadata directly in `_def`.
 
-### Zod `.meta()` の使用
+### Using Zod `.meta()`
 
-`politty/augment` をインポートすることで、Zod の標準 `.meta()` メソッドを使用して引数のメタデータを定義できるようになります。これにより `arg()` ヘルパーを使わずにスッキリとした定義が可能になります。
+By importing `politty/augment`, you can use Zod's standard `.meta()` method to define argument metadata. This allows for cleaner definitions without the `arg()` helper.
 
 ```typescript
-import "politty/augment"; // 必須: .meta() の型拡張を有効化 (TypeScriptのみ)
+import "politty/augment"; // Required: Enable .meta() type extension (TypeScript only)
 import { z } from "zod";
 import { defineCommand } from "politty";
 
@@ -204,4 +204,4 @@ const command = defineCommand({
 });
 ```
 
-この機能は Zod の `GlobalMeta` インターフェースを拡張することで実現されています。
+This feature is implemented by extending Zod's `GlobalMeta` interface.

@@ -1,7 +1,7 @@
 /**
- * 09-convert-command.ts - オプションpositional引数の例
+ * 09-convert-command.ts - Optional positional arguments example
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/09-convert-command.ts input.json
  *   pnpx tsx playground/09-convert-command.ts input.json output.yaml
  *   pnpx tsx playground/09-convert-command.ts input.json output.yaml -f yaml
@@ -14,19 +14,19 @@ import { arg, defineCommand, runMain } from "../../src/index.js";
 
 export const command = defineCommand({
   name: "convert",
-  description: "ファイル形式を変換する（オプションpositionalの例）",
+  description: "Convert file format (optional positional example)",
   args: z.object({
     input: arg(z.string(), {
       positional: true,
-      description: "入力ファイル",
+      description: "Input file",
     }),
     output: arg(z.string().optional(), {
       positional: true,
-      description: "出力ファイル（省略時は標準出力）",
+      description: "Output file (stdout if omitted)",
     }),
     format: arg(z.enum(["json", "yaml", "toml"]).default("json"), {
       alias: "f",
-      description: "出力形式",
+      description: "Output format",
     }),
   }),
   run: (args) => {

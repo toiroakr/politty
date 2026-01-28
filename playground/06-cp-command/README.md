@@ -2,7 +2,7 @@
 
 # cp
 
-ファイルをコピーする（cpコマンド風）
+Copy files (cp command style)
 
 **Usage**
 
@@ -14,14 +14,14 @@ cp [options] <source> <destination>
 
 | Argument      | Description      | Required |
 | ------------- | ---------------- | -------- |
-| `source`      | コピー元ファイル | Yes      |
-| `destination` | コピー先ファイル | Yes      |
+| `source`      | Source file      | Yes      |
+| `destination` | Destination file | Yes      |
 
 **Options**
 
 | Option        | Alias | Description                  | Default |
 | ------------- | ----- | ---------------------------- | ------- |
-| `--recursive` | `-r`  | ディレクトリを再帰的にコピー | `false` |
-| `--force`     | `-f`  | 上書き確認をスキップ         | `false` |
+| `--recursive` | `-r`  | Copy directories recursively | `false` |
+| `--force`     | `-f`  | Skip overwrite confirmation  | `false` |
 
 <!-- politty:command::end -->

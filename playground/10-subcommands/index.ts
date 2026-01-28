@@ -1,7 +1,7 @@
 /**
- * 10-subcommands.ts - サブコマンドの例
+ * 10-subcommands.ts - Subcommands example
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/10-subcommands.ts --help
  *   pnpx tsx playground/10-subcommands.ts init
  *   pnpx tsx playground/10-subcommands.ts init -t react
@@ -13,18 +13,18 @@
 import { z } from "zod";
 import { arg, defineCommand, runMain } from "../../src/index.js";
 
-// サブコマンド: init
+// Subcommand: init
 export const initCommand = defineCommand({
   name: "init",
-  description: "プロジェクトを初期化",
+  description: "Initialize project",
   args: z.object({
     template: arg(z.string().default("default"), {
       alias: "t",
-      description: "テンプレート名",
+      description: "Template name",
     }),
     force: arg(z.boolean().default(false), {
       alias: "f",
-      description: "既存ファイルを上書き",
+      description: "Overwrite existing files",
     }),
   }),
   run: (args) => {
@@ -36,22 +36,22 @@ export const initCommand = defineCommand({
   },
 });
 
-// サブコマンド: build
+// Subcommand: build
 export const buildCommand = defineCommand({
   name: "build",
-  description: "プロジェクトをビルド",
+  description: "Build project",
   args: z.object({
     output: arg(z.string().default("dist"), {
       alias: "o",
-      description: "出力ディレクトリ",
+      description: "Output directory",
     }),
     minify: arg(z.boolean().default(false), {
       alias: "m",
-      description: "出力を圧縮",
+      description: "Minify output",
     }),
     watch: arg(z.boolean().default(false), {
       alias: "w",
-      description: "ファイル変更を監視",
+      description: "Watch file changes",
     }),
   }),
   run: (args) => {
@@ -64,10 +64,10 @@ export const buildCommand = defineCommand({
   },
 });
 
-// メインコマンド
+// Main command
 export const cli = defineCommand({
   name: "my-cli",
-  description: "サブコマンドを持つCLIの例",
+  description: "CLI example with subcommands",
   subCommands: {
     init: initCommand,
     build: buildCommand,

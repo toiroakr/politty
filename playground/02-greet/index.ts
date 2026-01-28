@@ -1,7 +1,7 @@
 /**
- * 02-greet.ts - 引数付きの挨拶コマンド
+ * 02-greet.ts - Greeting command with arguments
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/02-greet.ts World
  *   pnpx tsx playground/02-greet.ts World -g "Hi" -l
  *   pnpx tsx playground/02-greet.ts --help
@@ -12,19 +12,19 @@ import { arg, defineCommand, runMain } from "../../src/index.js";
 
 export const command = defineCommand({
   name: "greet",
-  description: "挨拶を表示するCLIツール",
+  description: "A CLI tool that displays greetings",
   args: z.object({
     name: arg(z.string().meta({}), {
       positional: true,
-      description: "挨拶する相手の名前",
+      description: "Name of the recipient",
     }),
     greeting: arg(z.string().default("Hello"), {
       alias: "g",
-      description: "挨拶のフレーズ",
+      description: "Greeting phrase",
     }),
     loud: arg(z.boolean().default(false), {
       alias: "l",
-      description: "大文字で出力",
+      description: "Output uppercase",
     }),
   }),
   run: (args) => {

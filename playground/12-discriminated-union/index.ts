@@ -1,7 +1,7 @@
 /**
- * 12-discriminated-union.ts - discriminatedUnionの例（相互排他オプション）
+ * 12-discriminated-union.ts - discriminatedUnion example (mutually exclusive options)
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/12-discriminated-union.ts --help
  *   pnpx tsx playground/12-discriminated-union.ts --action create --name my-resource
  *   pnpx tsx playground/12-discriminated-union.ts --action create --name my-resource --template basic
@@ -16,44 +16,44 @@ import { arg, defineCommand, runMain } from "../../src/index.js";
 
 export const command = defineCommand({
   name: "resource",
-  description: "リソースを管理（discriminatedUnionの例）",
-  notes: `--action の値によって使用可能なオプションが変わります。
+  description: "Manage resources (discriminatedUnion example)",
+  notes: `Available options vary depending on the value of --action.
 create: --name, --template / delete: --id, --force / list: --format, --limit`,
   args: z
     .discriminatedUnion("action", [
-      // create アクション
+      // create action
       z
         .object({
           action: z.literal("create"),
-          name: arg(z.string(), { description: "リソース名" }),
-          template: arg(z.string().optional(), { description: "テンプレート" }),
+          name: arg(z.string(), { description: "Resource name" }),
+          template: arg(z.string().optional(), { description: "Template" }),
         })
-        .describe("新しいリソースを作成"),
-      // delete アクション
+        .describe("Create a new resource"),
+      // delete action
       z
         .object({
           action: z.literal("delete"),
-          id: arg(z.coerce.number(), { description: "リソースID" }),
+          id: arg(z.coerce.number(), { description: "Resource ID" }),
           force: arg(z.boolean().default(false), {
             alias: "f",
-            description: "確認なしで削除",
+            description: "Delete without confirmation",
           }),
         })
-        .describe("既存のリソースを削除"),
-      // list アクション
+        .describe("Delete an existing resource"),
+      // list action
       z.object({
         action: z.literal("list"),
         format: arg(z.enum(["json", "table"]).default("table"), {
           alias: "F",
-          description: "出力形式",
+          description: "Output format",
         }),
         limit: arg(z.coerce.number().default(10), {
           alias: "n",
-          description: "表示件数",
+          description: "Display limit",
         }),
       }),
     ])
-    .describe("操作"),
+    .describe("Action"),
   run: (args) => {
     switch (args.action) {
       case "create":
@@ -76,7 +76,7 @@ create: --name, --template / delete: --id, --force / list: --format, --limit`,
         console.log("Listing resources:");
         console.log(`  Format: ${args.format}`);
         console.log(`  Limit: ${args.limit}`);
-        // 実際にはここでリソースを一覧表示
+        // In practice, list resources here
         console.log("  (simulated resource list)");
         break;
     }

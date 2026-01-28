@@ -30,7 +30,7 @@ describe("01-hello-world", () => {
     expect(console).toHaveBeenCalled();
     const output = console.getLogs().join("\n");
     expect(output).toContain("hello");
-    expect(output).toContain("Hello Worldを表示するシンプルなコマンド");
+    expect(output).toContain("A simple command that displays Hello World");
   });
 
   it("documentation", async () => {

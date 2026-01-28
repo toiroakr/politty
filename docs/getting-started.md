@@ -1,20 +1,20 @@
 # Getting Started
 
-## インストール
+## Installation
 
-politty は **Zod v4** を必要とします。
+politty requires **Zod v4**.
 
 ```bash
 npm install politty zod
-# または
+# or
 pnpm add politty zod
-# または
+# or
 yarn add politty zod
 ```
 
-## 最初のコマンド
+## Your First Command
 
-最小構成の「Hello World」の例です。
+Here's a minimal "Hello World" example.
 
 ```typescript
 import { defineCommand, runMain } from "politty";
@@ -29,16 +29,16 @@ const command = defineCommand({
 runMain(command);
 ```
 
-`tsx` や `ts-node` でローカル実行できます：
+You can run it locally with `tsx` or `ts-node`:
 
 ```bash
 $ npx tsx index.ts
 Hello, World!
 ```
 
-## 引数の追加
+## Adding Arguments
 
-`z.object` と `arg()` を使って引数を定義します。
+Use `z.object` and `arg()` to define arguments.
 
 ```typescript
 import { z } from "zod";
@@ -47,16 +47,16 @@ import { defineCommand, runMain, arg } from "politty";
 const command = defineCommand({
   name: "greet",
   args: z.object({
-    // Positional引数: greet <name>
+    // Positional argument: greet <name>
     name: arg(z.string(), {
       positional: true,
-      description: "挨拶する名前"
+      description: "Name to greet"
     }),
 
-    // オプションフラグ: --loud / -l
+    // Option flag: --loud / -l
     loud: arg(z.boolean().default(false), {
       alias: "l",
-      description: "大声で挨拶する"
+      description: "Greet loudly"
     }),
   }),
   run: (args) => {
@@ -76,10 +76,10 @@ $ npx tsx greet.ts World --loud
 HELLO, WORLD!
 ```
 
-## 次のステップ
+## Next Steps
 
-基本を理解したら、以下のガイドで詳細を確認してください：
+Now that you understand the basics, check out these guides for more details:
 
-- **[Essentials](./essentials.md)**: 引数、バリデーション、ライフサイクルフックの詳細
-- **[Advanced Features](./advanced-features.md)**: サブコマンド、ネスト構造、複雑なスキーマ
-- **[Recipes](./recipes.md)**: テスト手法、エラーハンドリング、設定など
+- **[Essentials](./essentials.md)**: Details on arguments, validation, and lifecycle hooks
+- **[Advanced Features](./advanced-features.md)**: Subcommands, nested structures, complex schemas
+- **[Recipes](./recipes.md)**: Testing techniques, error handling, configuration

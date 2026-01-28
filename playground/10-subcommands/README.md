@@ -2,7 +2,7 @@
 
 # my-cli
 
-サブコマンドを持つCLIの例
+CLI example with subcommands
 
 **Usage**
 
@@ -12,17 +12,17 @@ my-cli [command]
 
 **Commands**
 
-| Command           | Description          |
-| ----------------- | -------------------- |
-| [`init`](#init)   | プロジェクトを初期化 |
-| [`build`](#build) | プロジェクトをビルド |
+| Command           | Description        |
+| ----------------- | ------------------ |
+| [`init`](#init)   | Initialize project |
+| [`build`](#build) | Build project      |
 
 <!-- politty:command::end -->
 <!-- politty:command:build:start -->
 
 ## build
 
-プロジェクトをビルド
+Build project
 
 **Usage**
 
@@ -34,16 +34,16 @@ my-cli build [options]
 
 | Option              | Alias | Description        | Default  |
 | ------------------- | ----- | ------------------ | -------- |
-| `--output <OUTPUT>` | `-o`  | 出力ディレクトリ   | `"dist"` |
-| `--minify`          | `-m`  | 出力を圧縮         | `false`  |
-| `--watch`           | `-w`  | ファイル変更を監視 | `false`  |
+| `--output <OUTPUT>` | `-o`  | Output directory   | `"dist"` |
+| `--minify`          | `-m`  | Minify output      | `false`  |
+| `--watch`           | `-w`  | Watch file changes | `false`  |
 
 <!-- politty:command:build:end -->
 <!-- politty:command:init:start -->
 
 ## init
 
-プロジェクトを初期化
+Initialize project
 
 **Usage**
 
@@ -53,9 +53,9 @@ my-cli init [options]
 
 **Options**
 
-| Option                  | Alias | Description          | Default     |
-| ----------------------- | ----- | -------------------- | ----------- |
-| `--template <TEMPLATE>` | `-t`  | テンプレート名       | `"default"` |
-| `--force`               | `-f`  | 既存ファイルを上書き | `false`     |
+| Option                  | Alias | Description              | Default     |
+| ----------------------- | ----- | ------------------------ | ----------- |
+| `--template <TEMPLATE>` | `-t`  | Template name            | `"default"` |
+| `--force`               | `-f`  | Overwrite existing files | `false`     |
 
 <!-- politty:command:init:end -->

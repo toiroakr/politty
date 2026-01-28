@@ -2,7 +2,7 @@
 
 # cat
 
-ファイルの内容を表示する（catコマンド風）
+Display file contents (cat command style)
 
 **Usage**
 
@@ -14,13 +14,13 @@ cat [options] <files>
 
 | Argument | Description      | Required |
 | -------- | ---------------- | -------- |
-| `files`  | 表示するファイル | Yes      |
+| `files`  | Files to display | Yes      |
 
 **Options**
 
-| Option        | Alias | Description   | Default |
-| ------------- | ----- | ------------- | ------- |
-| `--number`    | `-n`  | 行番号を表示  | `false` |
-| `--show-ends` | `-E`  | 行末に$を表示 | `false` |
+| Option        | Alias | Description            | Default |
+| ------------- | ----- | ---------------------- | ------- |
+| `--number`    | `-n`  | Show line numbers      | `false` |
+| `--show-ends` | `-E`  | Show $ at end of lines | `false` |
 
 <!-- politty:command::end -->

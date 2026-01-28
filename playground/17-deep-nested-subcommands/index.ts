@@ -1,7 +1,7 @@
 /**
- * 17-deep-nested-subcommands.ts - 3階層以上のネストしたサブコマンドの例
+ * 17-deep-nested-subcommands.ts - Example of 3+ level nested subcommands
  *
- * 構造:
+ * Structure:
  *   git-like
  *     └── config
  *           ├── user
@@ -11,7 +11,7 @@
  *                 ├── get
  *                 └── set
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/17-deep-nested-subcommands.ts --help
  *   pnpx tsx playground/17-deep-nested-subcommands.ts config --help
  *   pnpx tsx playground/17-deep-nested-subcommands.ts config user --help
@@ -23,14 +23,14 @@
 import { z } from "zod";
 import { arg, defineCommand, runMain } from "../../src/index.js";
 
-// config user get コマンド
+// config user get command
 export const configUserGetCommand = defineCommand({
   name: "get",
-  description: "ユーザー設定値を取得",
+  description: "Get user config value",
   args: z.object({
     key: arg(z.string(), {
       positional: true,
-      description: "設定キー (name, email など)",
+      description: "Config key (name, email etc)",
     }),
   }),
   run: (args) => {
@@ -42,22 +42,22 @@ export const configUserGetCommand = defineCommand({
   },
 });
 
-// config user set コマンド
+// config user set command
 export const configUserSetCommand = defineCommand({
   name: "set",
-  description: "ユーザー設定値を設定",
+  description: "Set user config value",
   args: z.object({
     key: arg(z.string(), {
       positional: true,
-      description: "設定キー",
+      description: "Config key",
     }),
     value: arg(z.string(), {
       positional: true,
-      description: "設定値",
+      description: "Config value",
     }),
     global: arg(z.boolean().default(false), {
       alias: "g",
-      description: "グローバル設定として保存",
+      description: "Save as global configuration",
     }),
   }),
   run: (args) => {
@@ -66,24 +66,24 @@ export const configUserSetCommand = defineCommand({
   },
 });
 
-// config user コマンド
+// config user command
 export const configUserCommand = defineCommand({
   name: "user",
-  description: "ユーザー設定を管理",
+  description: "Manage user settings",
   subCommands: {
     get: configUserGetCommand,
     set: configUserSetCommand,
   },
 });
 
-// config core get コマンド
+// config core get command
 export const configCoreGetCommand = defineCommand({
   name: "get",
-  description: "コア設定値を取得",
+  description: "Get core config value",
   args: z.object({
     key: arg(z.string(), {
       positional: true,
-      description: "設定キー (editor, pager など)",
+      description: "Config key (editor, pager etc)",
     }),
   }),
   run: (args) => {
@@ -95,18 +95,18 @@ export const configCoreGetCommand = defineCommand({
   },
 });
 
-// config core set コマンド
+// config core set command
 export const configCoreSetCommand = defineCommand({
   name: "set",
-  description: "コア設定値を設定",
+  description: "Set core config value",
   args: z.object({
     key: arg(z.string(), {
       positional: true,
-      description: "設定キー",
+      description: "Config key",
     }),
     value: arg(z.string(), {
       positional: true,
-      description: "設定値",
+      description: "Config value",
     }),
   }),
   run: (args) => {
@@ -114,30 +114,30 @@ export const configCoreSetCommand = defineCommand({
   },
 });
 
-// config core コマンド
+// config core command
 export const configCoreCommand = defineCommand({
   name: "core",
-  description: "コア設定を管理",
+  description: "Manage core settings",
   subCommands: {
     get: configCoreGetCommand,
     set: configCoreSetCommand,
   },
 });
 
-// config コマンド
+// config command
 export const configCommand = defineCommand({
   name: "config",
-  description: "設定を管理",
+  description: "Manage configuration",
   subCommands: {
     user: configUserCommand,
     core: configCoreCommand,
   },
 });
 
-// メインコマンド
+// Main command
 export const cli = defineCommand({
   name: "git-like",
-  description: "3階層ネストしたサブコマンドの例",
+  description: "Example of 3-level nested subcommands",
   subCommands: {
     config: configCommand,
   },

@@ -1,7 +1,7 @@
 /**
- * 06-cp-command.ts - cpコマンド風の例（複数positional引数）
+ * 06-cp-command.ts - cp command style example (multiple positional arguments)
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/06-cp-command.ts source.txt dest.txt
  *   pnpx tsx playground/06-cp-command.ts /path/from /path/to -r
  *   pnpx tsx playground/06-cp-command.ts file1.txt file2.txt --recursive
@@ -13,23 +13,23 @@ import { arg, defineCommand, runMain } from "../../src/index.js";
 
 export const command = defineCommand({
   name: "cp",
-  description: "ファイルをコピーする（cpコマンド風）",
+  description: "Copy files (cp command style)",
   args: z.object({
     source: arg(z.string(), {
       positional: true,
-      description: "コピー元ファイル",
+      description: "Source file",
     }),
     destination: arg(z.string(), {
       positional: true,
-      description: "コピー先ファイル",
+      description: "Destination file",
     }),
     recursive: arg(z.boolean().default(false), {
       alias: "r",
-      description: "ディレクトリを再帰的にコピー",
+      description: "Copy directories recursively",
     }),
     force: arg(z.boolean().default(false), {
       alias: "f",
-      description: "上書き確認をスキップ",
+      description: "Skip overwrite confirmation",
     }),
   }),
   run: (args) => {

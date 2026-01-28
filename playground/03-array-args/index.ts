@@ -1,7 +1,7 @@
 /**
- * 03-array-args.ts - 配列引数の例
+ * 03-array-args.ts - Array arguments example
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/03-array-args.ts --files a.txt --files b.txt -f c.txt
  *   pnpx tsx playground/03-array-args.ts -f one.txt -f two.txt -f three.txt
  *   pnpx tsx playground/03-array-args.ts --help
@@ -12,15 +12,15 @@ import { arg, defineCommand, runMain } from "../../src/index.js";
 
 export const command = defineCommand({
   name: "process-files",
-  description: "複数ファイルを処理する",
+  description: "Process multiple files",
   args: z.object({
     files: arg(z.array(z.string()), {
       alias: "f",
-      description: "処理するファイル（複数指定可）",
+      description: "Files to process (multiple allowed)",
     }),
     verbose: arg(z.boolean().default(false), {
       alias: "v",
-      description: "詳細出力",
+      description: "Verbose output",
     }),
   }),
   run: (args) => {

@@ -1,35 +1,35 @@
 /**
- * 16-show-subcommand-options.ts - サブコマンドのオプションをまとめて表示する例
+ * 16-show-subcommand-options.ts - Example of displaying subcommand options together
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/16-show-subcommand-options.ts --help
- *   pnpx tsx playground/16-show-subcommand-options.ts --help-all  # または -H
+ *   pnpx tsx playground/16-show-subcommand-options.ts --help-all  # or -H
  *   pnpx tsx playground/16-show-subcommand-options.ts config get user.name
  *   pnpx tsx playground/16-show-subcommand-options.ts config set user.name "John"
  *   pnpx tsx playground/16-show-subcommand-options.ts config list -f json
  *   pnpx tsx playground/16-show-subcommand-options.ts config list --help
  *
- * --help-all でサブコマンドのオプションも表示:
+ * --help-all displays subcommand options as well:
  *   Commands:
- *     config                      設定を管理
- *     config get                  設定値を取得
- *     config set                  設定値を設定
- *     config list                 全ての設定を一覧表示
- *       -f, --format <FORMAT>     出力形式 (default: "table")
- *       -g, --global              グローバル設定を表示 (default: false)
+ *     config                      Manage configuration
+ *     config get                  Get a config value
+ *     config set                  Set a config value
+ *     config list                 List all config values
+ *       -f, --format <FORMAT>     Output format (default: "table")
+ *       -g, --global              Show global configuration (default: false)
  */
 
 import { z } from "zod";
 import { arg, defineCommand, runMain } from "../../src/index.js";
 
-// config get コマンド
+// config get command
 export const configGetCommand = defineCommand({
   name: "get",
-  description: "設定値を取得",
+  description: "Get a config value",
   args: z.object({
     key: arg(z.string(), {
       positional: true,
-      description: "設定キー",
+      description: "Config key",
     }),
   }),
   run: (args) => {
@@ -38,18 +38,18 @@ export const configGetCommand = defineCommand({
   },
 });
 
-// config set コマンド
+// config set command
 export const configSetCommand = defineCommand({
   name: "set",
-  description: "設定値を設定",
+  description: "Set a config value",
   args: z.object({
     key: arg(z.string(), {
       positional: true,
-      description: "設定キー",
+      description: "Config key",
     }),
     value: arg(z.string(), {
       positional: true,
-      description: "設定値",
+      description: "Config value",
     }),
   }),
   run: (args) => {
@@ -57,18 +57,18 @@ export const configSetCommand = defineCommand({
   },
 });
 
-// config list コマンド
+// config list command
 export const configListCommand = defineCommand({
   name: "list",
-  description: "全ての設定を一覧表示",
+  description: "List all config values",
   args: z.object({
     format: arg(z.enum(["table", "json", "yaml"]).default("table"), {
       alias: "f",
-      description: "出力形式",
+      description: "Output format",
     }),
     global: arg(z.boolean().default(false), {
       alias: "g",
-      description: "グローバル設定を表示",
+      description: "Show global configuration",
     }),
   }),
   run: (args) => {
@@ -88,10 +88,10 @@ export const configListCommand = defineCommand({
   },
 });
 
-// config コマンド（サブコマンドを持つ）
+// config command (has subcommands)
 export const configCommand = defineCommand({
   name: "config",
-  description: "設定を管理",
+  description: "Manage configuration",
   subCommands: {
     get: configGetCommand,
     set: configSetCommand,
@@ -99,13 +99,13 @@ export const configCommand = defineCommand({
   },
 });
 
-// remote コマンド
+// remote command
 export const remoteAddCommand = defineCommand({
   name: "add",
-  description: "リモートを追加",
+  description: "Add remote",
   args: z.object({
-    name: arg(z.string(), { positional: true, description: "リモート名" }),
-    url: arg(z.string(), { positional: true, description: "リモートURL" }),
+    name: arg(z.string(), { positional: true, description: "Remote name" }),
+    url: arg(z.string(), { positional: true, description: "Remote URL" }),
   }),
   run: (args) => {
     console.log(`Adding remote: ${args.name} -> ${args.url}`);
@@ -114,10 +114,10 @@ export const remoteAddCommand = defineCommand({
 
 export const remoteRemoveCommand = defineCommand({
   name: "remove",
-  description: "リモートを削除",
+  description: "Remove remote",
   args: z.object({
-    name: arg(z.string(), { positional: true, description: "リモート名" }),
-    force: arg(z.boolean().default(false), { alias: "f", description: "強制削除" }),
+    name: arg(z.string(), { positional: true, description: "Remote name" }),
+    force: arg(z.boolean().default(false), { alias: "f", description: "Force deletion" }),
   }),
   run: (args) => {
     console.log(`Removing remote: ${args.name} (force: ${args.force})`);
@@ -126,24 +126,24 @@ export const remoteRemoveCommand = defineCommand({
 
 export const remoteCommand = defineCommand({
   name: "remote",
-  description: "リモートを管理",
+  description: "Manage remotes",
   subCommands: {
     add: remoteAddCommand,
     remove: remoteRemoveCommand,
   },
 });
 
-// メインコマンド
+// Main command
 export const cli = defineCommand({
   name: "git-like",
-  description: "サブコマンドのオプションをまとめて表示する例",
+  description: "Example of displaying subcommand options together",
   subCommands: {
     config: configCommand,
     remote: remoteCommand,
   },
 });
 
-// --help-all フラグでサブコマンドのオプションを表示できる
+// --help-all flag can display subcommand options
 if (process.argv[1]?.includes("16-show-subcommand-options")) {
   runMain(cli, { version: "1.0.0" });
 }

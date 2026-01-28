@@ -2,7 +2,7 @@
 
 # gcc
 
-Cコンパイラ（gccコマンド風）
+C compiler (gcc command style)
 
 **Usage**
 
@@ -12,15 +12,15 @@ gcc [options] <sources>
 
 **Arguments**
 
-| Argument  | Description    | Required |
-| --------- | -------------- | -------- |
-| `sources` | ソースファイル | Yes      |
+| Argument  | Description  | Required |
+| --------- | ------------ | -------- |
+| `sources` | Source files | Yes      |
 
 **Options**
 
-| Option              | Alias | Description        | Default |
-| ------------------- | ----- | ------------------ | ------- |
-| `--output <OUTPUT>` | `-o`  | 出力ファイル名     | -       |
-| `--optimize`        | `-O`  | 最適化を有効にする | `false` |
+| Option              | Alias | Description         | Default |
+| ------------------- | ----- | ------------------- | ------- |
+| `--output <OUTPUT>` | `-o`  | Output filename     | -       |
+| `--optimize`        | `-O`  | Enable optimization | `false` |
 
 <!-- politty:command::end -->

@@ -2,7 +2,7 @@
 
 # validation-demo
 
-transform/refineのデモ
+Demo of transform/refine
 
 **Usage**
 
@@ -12,17 +12,17 @@ validation-demo [command]
 
 **Commands**
 
-| Command                   | Description                              |
-| ------------------------- | ---------------------------------------- |
-| [`transform`](#transform) | transformを使った変換の例                |
-| [`refine`](#refine)       | refineを使ったカスタムバリデーションの例 |
+| Command                   | Description                                |
+| ------------------------- | ------------------------------------------ |
+| [`transform`](#transform) | Example using transform for conversion     |
+| [`refine`](#refine)       | Example using refine for custom validation |
 
 <!-- politty:command::end -->
 <!-- politty:command:refine:start -->
 
 ## refine
 
-refineを使ったカスタムバリデーションの例
+Example using refine for custom validation
 
 **Usage**
 
@@ -32,17 +32,17 @@ validation-demo refine <input> <output>
 
 **Arguments**
 
-| Argument | Description  | Required |
-| -------- | ------------ | -------- |
-| `input`  | 入力ファイル | Yes      |
-| `output` | 出力ファイル | Yes      |
+| Argument | Description | Required |
+| -------- | ----------- | -------- |
+| `input`  | Input file  | Yes      |
+| `output` | Output file | Yes      |
 
 <!-- politty:command:refine:end -->
 <!-- politty:command:transform:start -->
 
 ## transform
 
-transformを使った変換の例
+Example using transform for conversion
 
 **Usage**
 
@@ -52,14 +52,14 @@ validation-demo transform [options] <name>
 
 **Arguments**
 
-| Argument | Description                | Required |
-| -------- | -------------------------- | -------- |
-| `name`   | 名前（大文字に変換される） | Yes      |
+| Argument | Description                           | Required |
+| -------- | ------------------------------------- | -------- |
+| `name`   | Name (will be converted to uppercase) | Yes      |
 
 **Options**
 
-| Option          | Alias | Description        | Default |
-| --------------- | ----- | ------------------ | ------- |
-| `--tags <TAGS>` | `-t`  | カンマ区切りのタグ | -       |
+| Option          | Alias | Description          | Default |
+| --------------- | ----- | -------------------- | ------- |
+| `--tags <TAGS>` | `-t`  | Comma-separated tags | -       |
 
 <!-- politty:command:transform:end -->

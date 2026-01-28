@@ -2,7 +2,7 @@
 
 # greet
 
-挨拶を表示するCLIツール
+A CLI tool that displays greetings
 
 **Usage**
 
@@ -12,15 +12,15 @@ greet [options] <name>
 
 **Arguments**
 
-| Argument | Description        | Required |
-| -------- | ------------------ | -------- |
-| `name`   | 挨拶する相手の名前 | Yes      |
+| Argument | Description           | Required |
+| -------- | --------------------- | -------- |
+| `name`   | Name of the recipient | Yes      |
 
 **Options**
 
-| Option                  | Alias | Description    | Default   |
-| ----------------------- | ----- | -------------- | --------- |
-| `--greeting <GREETING>` | `-g`  | 挨拶のフレーズ | `"Hello"` |
-| `--loud`                | `-l`  | 大文字で出力   | `false`   |
+| Option                  | Alias | Description      | Default   |
+| ----------------------- | ----- | ---------------- | --------- |
+| `--greeting <GREETING>` | `-g`  | Greeting phrase  | `"Hello"` |
+| `--loud`                | `-l`  | Output uppercase | `false`   |
 
 <!-- politty:command::end -->

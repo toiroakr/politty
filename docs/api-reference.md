@@ -1,12 +1,12 @@
-# APIリファレンス
+# API Reference
 
-politty が提供する関数と型の詳細なリファレンスです。
+Detailed reference for functions and types provided by politty.
 
-## 関数
+## Functions
 
 ### `defineCommand`
 
-コマンドを定義します。
+Defines a command.
 
 ```typescript
 function defineCommand<TArgsSchema, TResult>(config: {
@@ -21,27 +21,27 @@ function defineCommand<TArgsSchema, TResult>(config: {
 }): Command<TArgs, TResult>
 ```
 
-#### パラメータ
+#### Parameters
 
-| 名前     | 型       | 説明           |
-| -------- | -------- | -------------- |
-| `config` | `object` | コマンドの設定 |
+| Name     | Type     | Description           |
+| -------- | -------- | --------------------- |
+| `config` | `object` | Command configuration |
 
-**config のプロパティ:**
+**config properties:**
 
-| プロパティ    | 型                                                          | 説明                                     |
-| ------------- | ----------------------------------------------------------- | ---------------------------------------- |
-| `name`        | `string`                                                    | コマンド名（必須）                       |
-| `description` | `string`                                                    | コマンドの説明                           |
-| `args`        | `TArgsSchema`                                               | 引数スキーマ（Zodスキーマ）              |
-| `subCommands` | `Record<string, Command \| (() => Promise<Command>)>`       | サブコマンド（遅延読み込み対応）         |
-| `setup`       | `(context: SetupContext<TArgs>) => void \| Promise<void>`   | 初期化フック                             |
-| `run`         | `(args: TArgs) => TResult \| Promise<TResult>`              | メイン処理                               |
-| `cleanup`     | `(context: CleanupContext<TArgs>) => void \| Promise<void>` | 終了フック                               |
-| `notes`       | `string`                                                    | 追加の注釈（ヘルプとドキュメントに表示） |
-| `examples`    | `Example[]`                                                 | 使用例（ヘルプとドキュメントに表示）     |
+| Property      | Type                                                        | Description                               |
+| ------------- | ----------------------------------------------------------- | ----------------------------------------- |
+| `name`        | `string`                                                    | Command name (required)                   |
+| `description` | `string`                                                    | Command description                       |
+| `args`        | `TArgsSchema`                                               | Argument schema (Zod schema)              |
+| `subCommands` | `Record<string, Command \| (() => Promise<Command>)>`       | Subcommands (supports lazy loading)       |
+| `setup`       | `(context: SetupContext<TArgs>) => void \| Promise<void>`   | Initialization hook                       |
+| `run`         | `(args: TArgs) => TResult \| Promise<TResult>`              | Main process                              |
+| `cleanup`     | `(context: CleanupContext<TArgs>) => void \| Promise<void>` | Cleanup hook                              |
+| `notes`       | `string`                                                    | Additional notes (shown in help and docs) |
+| `examples`    | `Example[]`                                                 | Usage examples (shown in help and docs)   |
 
-#### 使用例
+#### Example
 
 ```typescript
 import { z } from "zod";
@@ -49,13 +49,13 @@ import { defineCommand, arg } from "politty";
 
 const command = defineCommand({
   name: "my-cli",
-  description: "CLIツールの説明",
+  description: "CLI tool description",
   args: z.object({
     input: arg(z.string(), { positional: true }),
   }),
-  setup: ({ args }) => { /* 初期化処理 */ },
-  run: (args) => { /* メイン処理 */ },
-  cleanup: ({ args, error }) => { /* 終了処理 */ },
+  setup: ({ args }) => { /* initialization */ },
+  run: (args) => { /* main process */ },
+  cleanup: ({ args, error }) => { /* cleanup */ },
 });
 ```
 
@@ -63,7 +63,7 @@ const command = defineCommand({
 
 ### `runMain`
 
-コマンドをCLIエントリポイントとして実行します。シグナルハンドリング（SIGINT, SIGTERM）が自動的に有効になり、終了時に `process.exit` を呼び出します。
+Executes a command as the CLI entry point. Signal handling (SIGINT, SIGTERM) is automatically enabled, and `process.exit` is called on termination.
 
 ```typescript
 async function runMain(
@@ -72,18 +72,18 @@ async function runMain(
 ): Promise<never>
 ```
 
-#### パラメータ
+#### Parameters
 
-| 名前      | 型            | 説明                     |
-| --------- | ------------- | ------------------------ |
-| `command` | `Command`     | 実行するコマンド         |
-| `options` | `MainOptions` | 実行オプション（省略可） |
+| Name      | Type          | Description                  |
+| --------- | ------------- | ---------------------------- |
+| `command` | `Command`     | Command to execute           |
+| `options` | `MainOptions` | Execution options (optional) |
 
-#### 戻り値
+#### Return Value
 
-`Promise<never>` - この関数は `process.exit` を呼び出すため、戻りません。
+`Promise<never>` - This function does not return as it calls `process.exit`.
 
-#### 使用例
+#### Example
 
 ```typescript
 import { defineCommand, runMain } from "politty";
@@ -93,13 +93,13 @@ const command = defineCommand({
   run: () => console.log("Hello!")
 });
 
-// 基本的な使用
+// Basic usage
 runMain(command);
 
-// バージョン付き
+// With version
 runMain(command, { version: "1.0.0" });
 
-// デバッグモード
+// Debug mode
 runMain(command, { version: "1.0.0", debug: true });
 ```
 
@@ -107,7 +107,7 @@ runMain(command, { version: "1.0.0", debug: true });
 
 ### `runCommand`
 
-コマンドをプログラマティックに実行します。テスト用途に最適です。`process.exit` を呼び出さず、シグナルハンドリングも行いません。
+Executes a command programmatically. Ideal for testing purposes. Does not call `process.exit` and does not handle signals.
 
 ```typescript
 async function runCommand<TResult>(
@@ -117,19 +117,19 @@ async function runCommand<TResult>(
 ): Promise<RunResult<TResult>>
 ```
 
-#### パラメータ
+#### Parameters
 
-| 名前      | 型                  | 説明                     |
-| --------- | ------------------- | ------------------------ |
-| `command` | `Command`           | 実行するコマンド         |
-| `argv`    | `string[]`          | コマンドライン引数       |
-| `options` | `RunCommandOptions` | 実行オプション（省略可） |
+| Name      | Type                | Description                  |
+| --------- | ------------------- | ---------------------------- |
+| `command` | `Command`           | Command to execute           |
+| `argv`    | `string[]`          | Command-line arguments       |
+| `options` | `RunCommandOptions` | Execution options (optional) |
 
-#### 戻り値
+#### Return Value
 
-`Promise<RunResult<TResult>>` - 実行結果
+`Promise<RunResult<TResult>>` - Execution result
 
-#### 使用例
+#### Example
 
 ```typescript
 import { defineCommand, runCommand } from "politty";
@@ -139,7 +139,7 @@ const command = defineCommand({
   run: () => ({ success: true })
 });
 
-// テストでの使用
+// Usage in tests
 const result = await runCommand(command, ["--verbose", "input.txt"]);
 console.log(result.exitCode);
 console.log(result.result);
@@ -149,7 +149,7 @@ console.log(result.result);
 
 ### `arg`
 
-Zod スキーマにメタデータを付与します。
+Attaches metadata to a Zod schema.
 
 ```typescript
 function arg<T extends z.ZodType>(
@@ -158,40 +158,40 @@ function arg<T extends z.ZodType>(
 ): T
 ```
 
-#### パラメータ
+#### Parameters
 
-| 名前     | 型          | 説明             |
-| -------- | ----------- | ---------------- |
-| `schema` | `z.ZodType` | Zod スキーマ     |
-| `meta`   | `ArgMeta`   | 引数のメタデータ |
+| Name     | Type        | Description       |
+| -------- | ----------- | ----------------- |
+| `schema` | `z.ZodType` | Zod schema        |
+| `meta`   | `ArgMeta`   | Argument metadata |
 
-#### 戻り値
+#### Return Value
 
-同じ Zod スキーマ（チェーン可能）
+The same Zod schema (chainable)
 
-#### 使用例
+#### Example
 
 ```typescript
 import { z } from "zod";
 import { arg } from "politty";
 
-// positional引数
+// Positional argument
 const input = arg(z.string(), {
   positional: true,
-  description: "入力ファイル",
+  description: "Input file",
 });
 
-// エイリアス付きオプション
+// Option with alias
 const verbose = arg(z.boolean().default(false), {
   alias: "v",
-  description: "詳細出力",
+  description: "Verbose output",
 });
 
-// プレースホルダー付きオプション
+// Option with placeholder
 const output = arg(z.string(), {
   alias: "o",
-  description: "出力ファイル",
-  placeholder: "FILE",  // ヘルプで --output <FILE> と表示
+  description: "Output file",
+  placeholder: "FILE",  // Shows as --output <FILE> in help
 });
 ```
 
@@ -199,7 +199,7 @@ const output = arg(z.string(), {
 
 ### `generateHelp`
 
-コマンドのヘルプテキストを生成します。
+Generates help text for a command.
 
 ```typescript
 function generateHelp(
@@ -208,28 +208,28 @@ function generateHelp(
 ): string
 ```
 
-#### パラメータ
+#### Parameters
 
-| 名前      | 型            | 説明                     |
-| --------- | ------------- | ------------------------ |
-| `command` | `Command`     | ヘルプを生成するコマンド |
-| `options` | `HelpOptions` | ヘルプ生成オプション     |
+| Name      | Type          | Description                  |
+| --------- | ------------- | ---------------------------- |
+| `command` | `Command`     | Command to generate help for |
+| `options` | `HelpOptions` | Help generation options      |
 
-#### 戻り値
+#### Return Value
 
-フォーマットされたヘルプテキスト
+Formatted help text
 
 ---
 
 ### `extractFields`
 
-スキーマからフィールド情報を抽出します。
+Extracts field information from a schema.
 
 ```typescript
 function extractFields(schema: ArgsSchema): ExtractedFields
 ```
 
-#### 使用例
+#### Example
 
 ```typescript
 import { z } from "zod";
@@ -241,26 +241,26 @@ const schema = z.object({
 });
 
 const extracted = extractFields(schema);
-// extracted.fields には各フィールドの情報が含まれる
+// extracted.fields contains information about each field
 ```
 
 ---
 
 ### `validatePositionalConfig`
 
-positional引数の設定が有効かどうかを検証します。
+Validates whether the positional argument configuration is valid.
 
 ```typescript
 function validatePositionalConfig(extracted: ExtractedFields): void
 ```
 
-無効な設定の場合、`PositionalConfigError` をスローします。
+Throws `PositionalConfigError` if the configuration is invalid.
 
 ---
 
 ### `formatValidationErrors`
 
-バリデーションエラーをユーザーフレンドリーな文字列にフォーマットします。
+Formats validation errors into a user-friendly string.
 
 ```typescript
 function formatValidationErrors(errors: ValidationError[]): string
@@ -268,15 +268,15 @@ function formatValidationErrors(errors: ValidationError[]): string
 
 ---
 
-## 型
+## Types
 
 ### `Command`
 
-定義されたコマンドの型です。
+Type for a defined command.
 
 ```typescript
 interface Command<TArgs, TResult> {
-  /** コマンド名（必須） */
+  /** Command name (required) */
   name: string;
   description?: string;
   argsSchema?: ArgsSchema;
@@ -284,9 +284,9 @@ interface Command<TArgs, TResult> {
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
   run?: (args: TArgs) => TResult | Promise<TResult>;
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
-  /** 追加の注釈 */
+  /** Additional notes */
   notes?: string;
-  /** 使用例 */
+  /** Usage examples */
   examples?: Example[];
 }
 ```
@@ -295,15 +295,15 @@ interface Command<TArgs, TResult> {
 
 ### `Example`
 
-コマンドの使用例を定義する型です。
+Type for defining command usage examples.
 
 ```typescript
 interface Example {
-  /** コマンド引数（例: "config.json" や "--loud Alice"） */
+  /** Command arguments (e.g., "config.json" or "--loud Alice") */
   cmd: string;
-  /** 使用例の説明 */
+  /** Description of the example */
   desc: string;
-  /** 期待される出力（ドキュメント用、省略可） */
+  /** Expected output (for documentation, optional) */
   output?: string;
 }
 ```
@@ -312,7 +312,7 @@ interface Example {
 
 ### `ArgMeta`
 
-引数のメタデータの型です（union型）。
+Type for argument metadata (union type).
 
 ```typescript
 type ArgMeta = RegularArgMeta | BuiltinOverrideArgMeta;
@@ -322,20 +322,20 @@ type ArgMeta = RegularArgMeta | BuiltinOverrideArgMeta;
 
 ### `BaseArgMeta`
 
-すべての引数タイプで共通のベースメタデータです。
+Base metadata common to all argument types.
 
 ```typescript
 interface BaseArgMeta {
-  /** 引数の説明 */
+  /** Argument description */
   description?: string;
-  /** positional引数として扱う */
+  /** Treat as positional argument */
   positional?: boolean;
-  /** ヘルプ表示用のプレースホルダー */
+  /** Placeholder for help display */
   placeholder?: string;
   /**
-   * 環境変数名（単一または配列）。
-   * 配列の場合、先頭の要素が優先されます。
-   * CLI引数は常に環境変数より優先されます。
+   * Environment variable name (single or array).
+   * If array, the first element takes priority.
+   * CLI arguments always take priority over environment variables.
    */
   env?: string | string[];
 }
@@ -345,11 +345,11 @@ interface BaseArgMeta {
 
 ### `RegularArgMeta`
 
-通常の引数用メタデータです。
+Metadata for regular arguments.
 
 ```typescript
 interface RegularArgMeta extends BaseArgMeta {
-  /** 短いエイリアス（例: 'v' で --verbose を -v として使用可能） */
+  /** Short alias (e.g., 'v' allows using --verbose as -v) */
   alias?: string;
 }
 ```
@@ -358,13 +358,13 @@ interface RegularArgMeta extends BaseArgMeta {
 
 ### `BuiltinOverrideArgMeta`
 
-組み込みエイリアス (-h, -H) をオーバーライドする場合のメタデータです。
+Metadata for overriding built-in aliases (-h, -H).
 
 ```typescript
 interface BuiltinOverrideArgMeta extends BaseArgMeta {
-  /** オーバーライドする組み込みエイリアス ('h' または 'H') */
+  /** Built-in alias to override ('h' or 'H') */
   alias: "h" | "H";
-  /** 組み込みエイリアスをオーバーライドするには true が必須 */
+  /** Must be true to override built-in alias */
   overrideBuiltinAlias: true;
 }
 ```
@@ -373,13 +373,13 @@ interface BuiltinOverrideArgMeta extends BaseArgMeta {
 
 ### `Logger`
 
-CLI出力用のロガーインターフェースです。
+Logger interface for CLI output.
 
 ```typescript
 interface Logger {
-  /** 標準出力にメッセージを出力 */
+  /** Output message to stdout */
   log(message: string): void;
-  /** 標準エラー出力にメッセージを出力 */
+  /** Output message to stderr */
   error(message: string): void;
 }
 ```
@@ -388,19 +388,19 @@ interface Logger {
 
 ### `MainOptions`
 
-`runMain` に渡すオプションの型です。
+Type for options passed to `runMain`.
 
 ```typescript
 interface MainOptions {
-  /** コマンドのバージョン */
+  /** Command version */
   version?: string;
-  /** デバッグモードを有効化（エラー時にスタックトレースを表示） */
+  /** Enable debug mode (show stack traces on errors) */
   debug?: boolean;
-  /** 実行中の console 出力をキャプチャ（デフォルト: false） */
+  /** Capture console output during execution (default: false) */
   captureLogs?: boolean;
-  /** コマンド定義のバリデーションをスキップ（本番環境でテスト済みの場合に有用） */
+  /** Skip command definition validation (useful in production when already tested) */
   skipValidation?: boolean;
-  /** カスタムロガー（デフォルト: console） */
+  /** Custom logger (default: console) */
   logger?: Logger;
 }
 ```
@@ -409,17 +409,17 @@ interface MainOptions {
 
 ### `RunCommandOptions`
 
-`runCommand` に渡すオプションの型です。
+Type for options passed to `runCommand`.
 
 ```typescript
 interface RunCommandOptions {
-  /** デバッグモードを有効化（エラー時にスタックトレースを表示） */
+  /** Enable debug mode (show stack traces on errors) */
   debug?: boolean;
-  /** 実行中の console 出力をキャプチャ（デフォルト: false） */
+  /** Capture console output during execution (default: false) */
   captureLogs?: boolean;
-  /** コマンド定義のバリデーションをスキップ（本番環境でテスト済みの場合に有用） */
+  /** Skip command definition validation (useful in production when already tested) */
   skipValidation?: boolean;
-  /** カスタムロガー（デフォルト: console） */
+  /** Custom logger (default: console) */
   logger?: Logger;
 }
 ```
@@ -428,7 +428,7 @@ interface RunCommandOptions {
 
 ### `RunResult`
 
-コマンド実行結果の型です（discriminated union）。
+Type for command execution result (discriminated union).
 
 ```typescript
 type RunResult<T> = RunResultSuccess<T> | RunResultFailure;
@@ -438,19 +438,19 @@ type RunResult<T> = RunResultSuccess<T> | RunResultFailure;
 
 ### `RunResultSuccess`
 
-成功時の実行結果です。
+Execution result on success.
 
 ```typescript
 interface RunResultSuccess<T = unknown> {
-  /** 成功を示す */
+  /** Indicates success */
   success: true;
-  /** run関数の戻り値 */
+  /** Return value from run function */
   result: T | undefined;
-  /** エラー（成功時は存在しない） */
+  /** Error (not present on success) */
   error?: never;
-  /** 終了コード（成功時は常に 0） */
+  /** Exit code (always 0 on success) */
   exitCode: 0;
-  /** 実行中に収集されたログ */
+  /** Logs collected during execution */
   logs: CollectedLogs;
 }
 ```
@@ -459,19 +459,19 @@ interface RunResultSuccess<T = unknown> {
 
 ### `RunResultFailure`
 
-失敗時の実行結果です。
+Execution result on failure.
 
 ```typescript
 interface RunResultFailure {
-  /** 失敗を示す */
+  /** Indicates failure */
   success: false;
-  /** run関数の戻り値（失敗時は存在しない） */
+  /** Return value from run function (not present on failure) */
   result?: never;
-  /** 発生したエラー */
+  /** Error that occurred */
   error: Error;
-  /** 終了コード（0以外） */
+  /** Exit code (non-zero) */
   exitCode: number;
-  /** 実行中に収集されたログ */
+  /** Logs collected during execution */
   logs: CollectedLogs;
 }
 ```
@@ -480,11 +480,11 @@ interface RunResultFailure {
 
 ### `CollectedLogs`
 
-実行中に収集されたログです。
+Logs collected during execution.
 
 ```typescript
 interface CollectedLogs {
-  /** 記録されたすべてのログエントリ */
+  /** All recorded log entries */
   entries: LogEntry[];
 }
 ```
@@ -493,17 +493,17 @@ interface CollectedLogs {
 
 ### `LogEntry`
 
-単一のログエントリです。
+A single log entry.
 
 ```typescript
 interface LogEntry {
-  /** ログメッセージ */
+  /** Log message */
   message: string;
-  /** 記録された時刻 */
+  /** Time when logged */
   timestamp: Date;
-  /** ログレベル */
+  /** Log level */
   level: LogLevel;
-  /** 出力ストリーム */
+  /** Output stream */
   stream: LogStream;
 }
 ```
@@ -512,7 +512,7 @@ interface LogEntry {
 
 ### `LogLevel`
 
-ログレベルの型です。
+Type for log levels.
 
 ```typescript
 type LogLevel = "log" | "info" | "debug" | "warn" | "error";
@@ -522,7 +522,7 @@ type LogLevel = "log" | "info" | "debug" | "warn" | "error";
 
 ### `LogStream`
 
-出力ストリームの型です。
+Type for output streams.
 
 ```typescript
 type LogStream = "stdout" | "stderr";
@@ -532,11 +532,11 @@ type LogStream = "stdout" | "stderr";
 
 ### `SetupContext`
 
-`setup` フックに渡されるコンテキストの型です。
+Type for context passed to the `setup` hook.
 
 ```typescript
 interface SetupContext<TArgs> {
-  /** パース・バリデーション済みの引数 */
+  /** Parsed and validated arguments */
   args: TArgs;
 }
 ```
@@ -545,34 +545,34 @@ interface SetupContext<TArgs> {
 
 ### `CleanupContext`
 
-`cleanup` フックに渡されるコンテキストの型です。
+Type for context passed to the `cleanup` hook.
 
 ```typescript
 interface CleanupContext<TArgs> {
-  /** パース・バリデーション済みの引数 */
+  /** Parsed and validated arguments */
   args: TArgs;
-  /** 実行中に発生したエラー（あれば） */
+  /** Error that occurred during execution (if any) */
   error?: Error;
 }
 ```
 
-> **Note:** `run` 関数はコンテキストオブジェクトではなく、パース済みの引数 `args` を直接受け取ります。
+> **Note:** The `run` function receives the parsed arguments `args` directly, not a context object.
 
 ---
 
 ### `HelpOptions`
 
-`generateHelp` に渡すオプションの型です。
+Type for options passed to `generateHelp`.
 
 ```typescript
 interface HelpOptions {
-  /** サブコマンド一覧を表示 */
+  /** Show subcommand list */
   showSubcommands?: boolean;
-  /** サブコマンドのオプションを表示 */
+  /** Show subcommand options */
   showSubcommandOptions?: boolean;
-  /** 組み込みオプションのカスタム説明 */
+  /** Custom descriptions for built-in options */
   descriptions?: BuiltinOptionDescriptions;
-  /** コマンド階層のコンテキスト */
+  /** Command hierarchy context */
   context?: CommandContext;
 }
 ```
@@ -581,15 +581,15 @@ interface HelpOptions {
 
 ### `BuiltinOptionDescriptions`
 
-組み込みオプションの説明をカスタマイズするための型です。
+Type for customizing built-in option descriptions.
 
 ```typescript
 interface BuiltinOptionDescriptions {
-  /** --help オプションの説明 */
+  /** Description for --help option */
   help?: string;
-  /** --help-all オプションの説明 */
+  /** Description for --help-all option */
   helpAll?: string;
-  /** --version オプションの説明 */
+  /** Description for --version option */
   version?: string;
 }
 ```
@@ -598,15 +598,15 @@ interface BuiltinOptionDescriptions {
 
 ### `CommandContext`
 
-コマンド階層のコンテキストです。
+Context for command hierarchy.
 
 ```typescript
 interface CommandContext {
-  /** フルコマンドパス（例: ["config", "get"]） */
+  /** Full command path (e.g., ["config", "get"]) */
   commandPath?: string[];
-  /** ルートコマンド名 */
+  /** Root command name */
   rootName?: string;
-  /** ルートコマンドのバージョン */
+  /** Root command version */
   rootVersion?: string;
 }
 ```
@@ -615,27 +615,27 @@ interface CommandContext {
 
 ### `ExtractedFields`
 
-スキーマから抽出されたフィールド情報の型です。
+Type for field information extracted from a schema.
 
 ```typescript
 interface ExtractedFields {
-  /** 全フィールド定義 */
+  /** All field definitions */
   fields: ResolvedFieldMeta[];
-  /** 元のスキーマ */
+  /** Original schema */
   schema: ArgsSchema;
-  /** スキーマの種類 */
+  /** Schema type */
   schemaType: "object" | "discriminatedUnion" | "union" | "xor" | "intersection";
-  /** discriminatorキー（discriminatedUnionの場合） */
+  /** Discriminator key (for discriminatedUnion) */
   discriminator?: string;
-  /** バリアント（discriminatedUnionの場合） */
+  /** Variants (for discriminatedUnion) */
   variants?: Array<{
     discriminatorValue: string;
     fields: ResolvedFieldMeta[];
     description?: string;
   }>;
-  /** オプション（unionの場合） */
+  /** Options (for union) */
   unionOptions?: ExtractedFields[];
-  /** スキーマの説明 */
+  /** Schema description */
   description?: string;
 }
 ```
@@ -644,33 +644,33 @@ interface ExtractedFields {
 
 ### `ResolvedFieldMeta`
 
-解決されたフィールドメタデータの型です。
+Type for resolved field metadata.
 
 ```typescript
 interface ResolvedFieldMeta {
-  /** フィールド名（camelCase、スキーマ定義時の名前） */
+  /** Field name (camelCase, as defined in schema) */
   name: string;
-  /** CLIオプション名（kebab-case、コマンドラインで使用） */
+  /** CLI option name (kebab-case, used on command line) */
   cliName: string;
-  /** 短いエイリアス */
+  /** Short alias */
   alias?: string;
-  /** 説明 */
+  /** Description */
   description?: string;
-  /** positional引数かどうか */
+  /** Whether positional argument */
   positional: boolean;
-  /** プレースホルダー */
+  /** Placeholder */
   placeholder?: string;
-  /** 環境変数名（単一または配列） */
+  /** Environment variable name (single or array) */
   env?: string | string[];
-  /** 必須かどうか */
+  /** Whether required */
   required: boolean;
-  /** デフォルト値 */
+  /** Default value */
   defaultValue?: unknown;
-  /** 検出された型 */
+  /** Detected type */
   type: "string" | "number" | "boolean" | "array" | "unknown";
-  /** 元のZodスキーマ */
+  /** Original Zod schema */
   schema: z.ZodType;
-  /** 組み込みエイリアス (-h, -H) をオーバーライドする場合 true */
+  /** True if overriding built-in alias (-h, -H) */
   overrideBuiltinAlias?: true;
 }
 ```
@@ -679,13 +679,13 @@ interface ResolvedFieldMeta {
 
 ### `ValidationError`
 
-バリデーションエラーの型です。
+Type for validation errors.
 
 ```typescript
 interface ValidationError {
-  /** エラーが発生したパス */
+  /** Path where error occurred */
   path: (string | number)[];
-  /** エラーメッセージ */
+  /** Error message */
   message: string;
 }
 ```
@@ -694,7 +694,7 @@ interface ValidationError {
 
 ### `ValidationResult`
 
-バリデーション結果の型です。
+Type for validation result.
 
 ```typescript
 type ValidationResult<T> =
@@ -706,7 +706,7 @@ type ValidationResult<T> =
 
 ### `PositionalConfigError`
 
-positional引数の設定エラーを表すエラークラスです。
+Error class representing positional argument configuration errors.
 
 ```typescript
 class PositionalConfigError extends Error {
@@ -718,7 +718,7 @@ class PositionalConfigError extends Error {
 
 ### `DuplicateAliasError`
 
-重複したエイリアスのエラーを表すエラークラスです。
+Error class representing duplicate alias errors.
 
 ```typescript
 class DuplicateAliasError extends Error {
@@ -730,7 +730,7 @@ class DuplicateAliasError extends Error {
 
 ### `DuplicateFieldError`
 
-重複したフィールド名のエラーを表すエラークラスです。
+Error class representing duplicate field name errors.
 
 ```typescript
 class DuplicateFieldError extends Error {
@@ -742,7 +742,7 @@ class DuplicateFieldError extends Error {
 
 ### `ReservedAliasError`
 
-予約済みエイリアス使用時のエラーを表すエラークラスです。
+Error class representing reserved alias usage errors.
 
 ```typescript
 class ReservedAliasError extends Error {
@@ -754,13 +754,13 @@ class ReservedAliasError extends Error {
 
 ### `CommandValidationError`
 
-コマンド定義のバリデーションエラーの型です。
+Type for command definition validation errors.
 
 ```typescript
 interface CommandValidationError {
-  /** エラーの種類 */
+  /** Error type */
   type: "positional" | "duplicateAlias" | "duplicateField" | "reservedAlias";
-  /** エラーメッセージ */
+  /** Error message */
   message: string;
 }
 ```
@@ -769,7 +769,7 @@ interface CommandValidationError {
 
 ### `CommandValidationResult`
 
-コマンド定義のバリデーション結果の型です。
+Type for command definition validation result.
 
 ```typescript
 type CommandValidationResult =
@@ -779,7 +779,7 @@ type CommandValidationResult =
 
 ---
 
-## エクスポート一覧
+## Exports
 
 ```typescript
 // Core

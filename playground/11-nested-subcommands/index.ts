@@ -1,7 +1,7 @@
 /**
- * 11-nested-subcommands.ts - ネストしたサブコマンドの例
+ * 11-nested-subcommands.ts - Nested subcommands example
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/11-nested-subcommands.ts --help
  *   pnpx tsx playground/11-nested-subcommands.ts config --help
  *   pnpx tsx playground/11-nested-subcommands.ts config get user.name
@@ -13,35 +13,35 @@
 import { z } from "zod";
 import { arg, defineCommand, runMain } from "../../src/index.js";
 
-// config get コマンド
+// config get command
 export const configGetCommand = defineCommand({
   name: "get",
-  description: "設定値を取得",
+  description: "Get a config value",
   args: z.object({
     key: arg(z.string(), {
       positional: true,
-      description: "設定キー",
+      description: "Config key",
     }),
   }),
   run: (args) => {
     console.log(`Getting config: ${args.key}`);
-    // 実際にはここで設定を読み込む
+    // In practice, load config here
     console.log(`  Value: (simulated value for ${args.key})`);
   },
 });
 
-// config set コマンド
+// config set command
 export const configSetCommand = defineCommand({
   name: "set",
-  description: "設定値を設定",
+  description: "Set a config value",
   args: z.object({
     key: arg(z.string(), {
       positional: true,
-      description: "設定キー",
+      description: "Config key",
     }),
     value: arg(z.string(), {
       positional: true,
-      description: "設定値",
+      description: "Config value",
     }),
   }),
   run: (args) => {
@@ -49,14 +49,14 @@ export const configSetCommand = defineCommand({
   },
 });
 
-// config list コマンド
+// config list command
 export const configListCommand = defineCommand({
   name: "list",
-  description: "全ての設定を一覧表示",
+  description: "List all config values",
   args: z.object({
     format: arg(z.enum(["table", "json", "yaml"]).default("table"), {
       alias: "f",
-      description: "出力形式",
+      description: "Output format",
     }),
   }),
   run: (args) => {
@@ -76,10 +76,10 @@ export const configListCommand = defineCommand({
   },
 });
 
-// config コマンド（サブコマンドを持つ）
+// config command (has subcommands)
 export const configCommand = defineCommand({
   name: "config",
-  description: "設定を管理",
+  description: "Manage configuration",
   subCommands: {
     get: configGetCommand,
     set: configSetCommand,
@@ -87,10 +87,10 @@ export const configCommand = defineCommand({
   },
 });
 
-// メインコマンド
+// Main command
 export const cli = defineCommand({
   name: "git-like",
-  description: "Git風のネストしたサブコマンドの例",
+  description: "Git-style nested subcommand example",
   subCommands: {
     config: configCommand,
   },

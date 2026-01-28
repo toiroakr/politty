@@ -2,7 +2,7 @@
 
 # process-files
 
-複数ファイルを処理する
+Process multiple files
 
 **Usage**
 
@@ -12,9 +12,9 @@ process-files [options]
 
 **Options**
 
-| Option            | Alias | Description                    | Default |
-| ----------------- | ----- | ------------------------------ | ------- |
-| `--files <FILES>` | `-f`  | 処理するファイル（複数指定可） | -       |
-| `--verbose`       | `-v`  | 詳細出力                       | `false` |
+| Option            | Alias | Description                         | Default |
+| ----------------- | ----- | ----------------------------------- | ------- |
+| `--files <FILES>` | `-f`  | Files to process (multiple allowed) | -       |
+| `--verbose`       | `-v`  | Verbose output                      | `false` |
 
 <!-- politty:command::end -->

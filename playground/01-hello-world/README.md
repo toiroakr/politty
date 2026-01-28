@@ -2,7 +2,7 @@
 
 # hello
 
-Hello Worldを表示するシンプルなコマンド
+A simple command that displays Hello World
 
 **Usage**
 

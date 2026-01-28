@@ -2,7 +2,7 @@
 
 # convert
 
-ファイル形式を変換する（オプションpositionalの例）
+Convert file format (optional positional example)
 
 **Usage**
 
@@ -12,15 +12,15 @@ convert [options] <input> [output]
 
 **Arguments**
 
-| Argument | Description                      | Required |
-| -------- | -------------------------------- | -------- |
-| `input`  | 入力ファイル                     | Yes      |
-| `output` | 出力ファイル（省略時は標準出力） | No       |
+| Argument | Description                     | Required |
+| -------- | ------------------------------- | -------- |
+| `input`  | Input file                      | Yes      |
+| `output` | Output file (stdout if omitted) | No       |
 
 **Options**
 
-| Option              | Alias | Description | Default  |
-| ------------------- | ----- | ----------- | -------- |
-| `--format <FORMAT>` | `-f`  | 出力形式    | `"json"` |
+| Option              | Alias | Description   | Default  |
+| ------------------- | ----- | ------------- | -------- |
+| `--format <FORMAT>` | `-f`  | Output format | `"json"` |
 
 <!-- politty:command::end -->

@@ -2,7 +2,7 @@
 
 # db-query
 
-データベースクエリの実行（ライフサイクルフックのデモ）
+Execute database query (lifecycle hooks demo)
 
 **Usage**
 
@@ -12,15 +12,15 @@ db-query [options]
 
 **Options**
 
-| Option                  | Alias | Description            | Default |
-| ----------------------- | ----- | ---------------------- | ------- |
-| `--database <DATABASE>` | `-d`  | データベース接続文字列 | -       |
-| `--query <QUERY>`       | `-q`  | SQLクエリ              | -       |
-| `--simulate_error`      | `-e`  | エラーをシミュレート   | `false` |
+| Option                  | Alias | Description                | Default |
+| ----------------------- | ----- | -------------------------- | ------- |
+| `--database <DATABASE>` | `-d`  | Database connection string | -       |
+| `--query <QUERY>`       | `-q`  | SQL query                  | -       |
+| `--simulate_error`      | `-e`  | Simulate an error          | `false` |
 
 **Notes**
 
-このコマンドは setup → run → cleanup の実行順序を示します。
---simulate-error フラグを使用すると、エラー発生時でも cleanup が呼ばれることを確認できます。
+This command demonstrates the setup → run → cleanup execution order.
+Using the --simulate-error flag, you can verify that cleanup is called even when an error occurs.
 
 <!-- politty:command::end -->

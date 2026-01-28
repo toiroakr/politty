@@ -1,7 +1,7 @@
 /**
- * 07-gcc-command.ts - gccコマンド風の例（配列positional引数）
+ * 07-gcc-command.ts - gcc command style example (array positional arguments)
  *
- * 実行方法:
+ * How to run:
  *   pnpx tsx playground/07-gcc-command.ts -o app main.c
  *   pnpx tsx playground/07-gcc-command.ts -o myprogram main.c util.c lib.c
  *   pnpx tsx playground/07-gcc-command.ts --output build/app src/a.c src/b.c src/c.c
@@ -13,19 +13,19 @@ import { arg, defineCommand, runMain } from "../../src/index.js";
 
 export const command = defineCommand({
   name: "gcc",
-  description: "Cコンパイラ（gccコマンド風）",
+  description: "C compiler (gcc command style)",
   args: z.object({
     output: arg(z.string(), {
       alias: "o",
-      description: "出力ファイル名",
+      description: "Output filename",
     }),
     optimize: arg(z.boolean().default(false), {
       alias: "O",
-      description: "最適化を有効にする",
+      description: "Enable optimization",
     }),
     sources: arg(z.array(z.string()), {
       positional: true,
-      description: "ソースファイル",
+      description: "Source files",
     }),
   }),
   run: (args) => {

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 /**
- * Task 1.1: プロジェクト基盤構築のテスト
- * - TypeScript + ESM/CJS デュアル出力の検証
- * - 型安全性の検証
- * - Tree-shaking 対応モジュール構成の検証
+ * Task 1.1: Project setup tests
+ * - Verify TypeScript + ESM/CJS dual output
+ * - Verify type safety
+ * - Verify tree-shaking compatible module structure
  */
 describe("Project Setup", () => {
   describe("Module Exports", () => {

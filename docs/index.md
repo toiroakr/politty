@@ -1,28 +1,28 @@
 # politty
 
-**politty** は、**Zod v4** をベースにした、軽量で型安全な Node.js 用 CLI フレームワークです。
+**politty** is a lightweight, type-safe CLI framework for Node.js built on **Zod v4**.
 
-シンプルなスクリプトから、サブコマンド、バリデーション、自動ヘルプ生成を備えた複雑な CLI ツールまで、開発者フレンドリーな API で構築できます。
+From simple scripts to complex CLI tools with subcommands, validation, and auto-generated help, you can build them all with a developer-friendly API.
 
-## 特徴
+## Features
 
-- **Zod ネイティブ**: 引数の定義とバリデーションに Zod スキーマをそのまま使用可能
-- **型安全性**: TypeScript を完全サポートし、パースされた引数の型を自動推論
-- **柔軟な引数定義**: Positional 引数、フラグ、エイリアス、配列、環境変数フォールバックをサポート
-- **ネストされたコマンド**: Git スタイルのサブコマンド構築が可能（遅延読み込み対応）
-- **ライフサイクル管理**: `setup` → `run` → `cleanup` の実行順序を保証
-- **シグナルハンドリング**: SIGINT/SIGTERM を適切に処理し、cleanup の実行を保証
+- **Zod Native**: Use Zod schemas directly for argument definition and validation
+- **Type Safety**: Full TypeScript support with automatic type inference for parsed arguments
+- **Flexible Argument Definition**: Support for positional arguments, flags, aliases, arrays, and environment variable fallbacks
+- **Nested Commands**: Build Git-style subcommands (with lazy loading support)
+- **Lifecycle Management**: Guaranteed `setup` → `run` → `cleanup` execution order
+- **Signal Handling**: Proper SIGINT/SIGTERM handling with guaranteed cleanup execution
 
-## ドキュメント体系
+## Documentation
 
-- **[Getting Started](./getting-started.md)**: インストールと最初のコマンド作成
-- **[Essentials](./essentials.md)**: コアコンセプト（引数、バリデーション、ライフサイクル）の解説
-- **[Advanced Features](./advanced-features.md)**: サブコマンド、Discriminated Union、高度な機能
-- **[Recipes](./recipes.md)**: テスト、設定、エラーハンドリングなどの実践例
-- **[API Reference](./api-reference.md)**: 詳細な API リファレンス
-- **[Doc Generation](./doc-generation.md)**: ゴールデンテストによるドキュメント自動生成
+- **[Getting Started](./getting-started.md)**: Installation and creating your first command
+- **[Essentials](./essentials.md)**: Core concepts (arguments, validation, lifecycle) explained
+- **[Advanced Features](./advanced-features.md)**: Subcommands, Discriminated Union, advanced features
+- **[Recipes](./recipes.md)**: Practical examples for testing, configuration, error handling
+- **[API Reference](./api-reference.md)**: Detailed API reference
+- **[Doc Generation](./doc-generation.md)**: Automatic documentation generation with golden tests
 
-## クイックサンプル
+## Quick Example
 
 ```typescript
 import { z } from "zod";
@@ -43,6 +43,6 @@ const command = defineCommand({
 runMain(command);
 ```
 
-## ライセンス
+## License
 
 MIT

@@ -12,6 +12,10 @@
   ],
   "license": "MIT",
   "author": "",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/toiroakr/politty.git"
+  },
   "files": [
     "dist"
   ],
@@ -77,9 +81,12 @@
     "fix:oxlint": "oxlint -c oxlint.json --fix",
     "fix:oxfmt": "oxfmt",
     "prepare": "lefthook install",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run build",
+    "changeset": "changeset",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.8",
     "@quansync/fs": "1.0.0",
     "@types/node": "25.0.3",
     "@typescript/native-preview": "7.0.0-dev.20260104.1",
