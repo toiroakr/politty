@@ -33,7 +33,7 @@ describe("Signal Handling", () => {
         const child = spawn("npx", ["tsx", TEMP_APP_PATH], {
           stdio: ["ignore", "pipe", "pipe"],
           cwd: join(__dirname, ".."), // Run from project root
-          detached: false, // Ensure we can kill it
+          detached: true, // Create new process group for signal propagation
         });
 
         let output = "";
@@ -45,8 +45,8 @@ describe("Signal Handling", () => {
           output += str;
           if (str.includes("READY") && !ready) {
             ready = true;
-            // Send SIGINT
-            child.kill("SIGINT");
+            // Send SIGINT to the process group (negative pid)
+            process.kill(-child.pid!, "SIGINT");
           }
         });
 
