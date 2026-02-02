@@ -92,7 +92,7 @@
     "@typescript/native-preview": "7.0.0-dev.20260124.1",
     "@vitest/coverage-v8": "4.0.16",
     "knip": "5.82.1",
-    "lefthook": "2.0.13",
+    "lefthook": "2.0.16",
     "organize-imports-cli": "0.10.0",
     "oxfmt": "0.27.0",
     "oxlint": "1.42.0",
