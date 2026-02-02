@@ -48,12 +48,17 @@ function isLeafCommand(info: CommandInfo): boolean {
 }
 
 /**
- * Expand commands to include their leaf subcommands
- * If a command has subcommands, recursively find all leaf commands under it
+ * Expand commands to include their subcommands
+ * If a command has subcommands, recursively find all commands under it
+ *
+ * @param commandPaths - Command paths to expand
+ * @param allCommands - Map of all available commands
+ * @param leafOnly - If true, only include leaf commands; if false, include all commands
  */
-function expandToLeafCommands(
+function expandCommands(
   commandPaths: string[],
   allCommands: Map<string, CommandInfo>,
+  leafOnly: boolean,
 ): string[] {
   const result: string[] = [];
 
@@ -65,14 +70,17 @@ function expandToLeafCommands(
       // Already a leaf command
       result.push(cmdPath);
     } else {
-      // Find all leaf commands under this parent
+      // Find all commands under this parent
       for (const [path, pathInfo] of allCommands) {
         // Check if this is a subcommand of the current command
         const isSubcommand =
           cmdPath === "" ? path.length > 0 : path.startsWith(cmdPath + " ") || path === cmdPath;
 
-        if (isSubcommand && isLeafCommand(pathInfo)) {
-          result.push(path);
+        if (isSubcommand) {
+          // Include if it's a leaf command, or if we're including all commands
+          if (isLeafCommand(pathInfo) || !leafOnly) {
+            result.push(path);
+          }
         }
       }
     }
@@ -101,10 +109,8 @@ function renderCategory(
   lines.push(category.description);
   lines.push("");
 
-  // Determine which commands to include
-  const commandPaths = leafOnly
-    ? expandToLeafCommands(category.commands, allCommands)
-    : category.commands;
+  // Determine which commands to include (always expand, leafOnly controls filtering)
+  const commandPaths = expandCommands(category.commands, allCommands, leafOnly);
 
   // Build command table
   lines.push("| Command | Description |");
