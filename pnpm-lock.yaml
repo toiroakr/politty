@@ -51,8 +51,8 @@ importers:
         specifier: 4.0.16
         version: 4.0.16(@types/node@25.0.10)(jiti@2.6.1)
       zod:
-        specifier: 4.2.1
-        version: 4.2.1
+        specifier: 4.3.6
+        version: 4.3.6
 
 packages:
 
@@ -1676,8 +1676,8 @@ packages:
   yallist@2.1.2:
     resolution: {integrity: sha512-ncTzHV7NvsQZkYe1DW7cbDLm0YpzHmZF5r/iyP3ZnQtMiJ+pjzisCiMNI+Sj+xQF5pXhSHxSB3uDbsBTzY/c2A==}
 
-  zod@4.2.1:
-    resolution: {integrity: sha512-0wZ1IRqGGhMP76gLqz8EyfBXKk0J2qo2+H3fi4mcUP/KtTocoX08nmIAHl1Z2kJIZbZee8KOpBCSNPRgauucjw==}
+  zod@4.3.6:
+    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
 snapshots:
 
@@ -2670,7 +2670,7 @@ snapshots:
       smol-toml: 1.6.0
       strip-json-comments: 5.0.3
       typescript: 5.9.3
-      zod: 4.2.1
+      zod: 4.3.6
 
   lefthook-darwin-arm64@2.0.13:
     optional: true
@@ -3144,4 +3144,4 @@ snapshots:
 
   yallist@2.1.2: {}
 
-  zod@4.2.1: {}
+  zod@4.3.6: {}
