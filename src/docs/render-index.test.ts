@@ -153,8 +153,9 @@ describe("renderCommandIndex", () => {
 
     const result = await renderCommandIndex(mainCmd, categories, { leafOnly: false });
 
-    // Should include non-leaf command when leafOnly is false
+    // Should include both parent and child commands when leafOnly is false
     expect(result).toContain("| [parent](./cli/commands.md#parent) |");
+    expect(result).toContain("| [parent sub](./cli/commands.md#parent-sub) |");
   });
 
   it("should use custom heading level", async () => {
