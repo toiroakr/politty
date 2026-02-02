@@ -26,6 +26,12 @@ export { buildCommandInfo, collectAllCommands } from "./doc-generator.js";
 // Example executor
 export { executeExamples } from "./example-executor.js";
 export { assertDocMatch, generateDoc, initDocFile } from "./golden-test.js";
+// Args table renderer
+export { renderArgsTable } from "./render-args.js";
+export type { ArgsShape, ArgsTableOptions } from "./render-args.js";
+// Command index renderer
+export { renderCommandIndex } from "./render-index.js";
+export type { CommandCategory, CommandIndexOptions } from "./render-index.js";
 export {
   commandEndMarker,
   commandStartMarker,
