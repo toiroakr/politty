@@ -1,4 +1,4 @@
-name: Aqua Checksum Update
+name: autofix.ci
 
 on:
   pull_request:
