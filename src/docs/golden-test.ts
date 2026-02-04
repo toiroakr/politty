@@ -494,9 +494,7 @@ function replaceMarkerSection(
 /**
  * Check if config is an object with 'args' property
  */
-function isArgsConfigWithOptions(
-  config: ArgsMarkerConfig[string],
-): config is {
+function isArgsConfigWithOptions(config: ArgsMarkerConfig[string]): config is {
   args: import("./render-args.js").ArgsShape;
   options?: import("./render-args.js").ArgsTableOptions;
 } {
