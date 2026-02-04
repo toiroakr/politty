@@ -1,5 +1,7 @@
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
 import type { AnyCommand, Example } from "../types.js";
+import type { ArgsShape, ArgsTableOptions } from "./render-args.js";
+import type { CommandCategory, CommandIndexOptions } from "./render-index.js";
 
 /**
  * Command information for rendering
@@ -246,6 +248,26 @@ export interface DefaultRendererOptions {
 }
 
 /**
+ * Args marker configuration
+ * Key: marker identifier (used in <!-- politty:args:<identifier>:start/end -->)
+ * Value: Args shape and optional rendering options
+ */
+export type ArgsMarkerConfig = Record<
+  string,
+  { args: ArgsShape; options?: ArgsTableOptions } | ArgsShape
+>;
+
+/**
+ * Index marker configuration
+ * Key: marker identifier (used in <!-- politty:index:<identifier>:start/end -->)
+ * Value: Categories array and optional rendering options
+ */
+export type IndexMarkerConfig = Record<
+  string,
+  { categories: CommandCategory[]; options?: CommandIndexOptions } | CommandCategory[]
+>;
+
+/**
  * Per-file configuration with custom renderer
  */
 export interface FileConfig {
@@ -257,6 +279,16 @@ export interface FileConfig {
   title?: string;
   /** File description (added after title) */
   description?: string;
+  /**
+   * Args marker configurations
+   * Renders args tables within <!-- politty:args:<identifier>:start/end --> markers
+   */
+  args?: ArgsMarkerConfig;
+  /**
+   * Index marker configurations
+   * Renders command index within <!-- politty:index:<identifier>:start/end --> markers
+   */
+  index?: IndexMarkerConfig;
 }
 
 /**
@@ -345,4 +377,44 @@ export function commandStartMarker(commandPath: string): string {
  */
 export function commandEndMarker(commandPath: string): string {
   return `<!-- ${COMMAND_MARKER_PREFIX}:${commandPath}:end -->`;
+}
+
+/**
+ * Marker prefix for args sections in generated documentation
+ * Format: <!-- politty:args:<identifier>:start --> ... <!-- politty:args:<identifier>:end -->
+ */
+export const ARGS_MARKER_PREFIX = "politty:args";
+
+/**
+ * Generate start marker for an args section
+ */
+export function argsStartMarker(identifier: string): string {
+  return `<!-- ${ARGS_MARKER_PREFIX}:${identifier}:start -->`;
+}
+
+/**
+ * Generate end marker for an args section
+ */
+export function argsEndMarker(identifier: string): string {
+  return `<!-- ${ARGS_MARKER_PREFIX}:${identifier}:end -->`;
+}
+
+/**
+ * Marker prefix for index sections in generated documentation
+ * Format: <!-- politty:index:<identifier>:start --> ... <!-- politty:index:<identifier>:end -->
+ */
+export const INDEX_MARKER_PREFIX = "politty:index";
+
+/**
+ * Generate start marker for an index section
+ */
+export function indexStartMarker(identifier: string): string {
+  return `<!-- ${INDEX_MARKER_PREFIX}:${identifier}:start -->`;
+}
+
+/**
+ * Generate end marker for an index section
+ */
+export function indexEndMarker(identifier: string): string {
+  return `<!-- ${INDEX_MARKER_PREFIX}:${identifier}:end -->`;
 }

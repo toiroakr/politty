@@ -9,16 +9,28 @@ import {
 } from "./doc-comparator.js";
 import { collectAllCommands } from "./doc-generator.js";
 import { executeExamples } from "./example-executor.js";
+import { renderArgsTable } from "./render-args.js";
+import { renderCommandIndex } from "./render-index.js";
 import type {
+  ArgsMarkerConfig,
   CommandInfo,
   ExampleConfig,
   FileConfig,
   FormatterFunction,
   GenerateDocConfig,
   GenerateDocResult,
+  IndexMarkerConfig,
   RenderFunction,
 } from "./types.js";
-import { commandEndMarker, commandStartMarker, UPDATE_GOLDEN_ENV } from "./types.js";
+import {
+  argsEndMarker,
+  argsStartMarker,
+  commandEndMarker,
+  commandStartMarker,
+  indexEndMarker,
+  indexStartMarker,
+  UPDATE_GOLDEN_ENV,
+} from "./types.js";
 
 /**
  * Apply formatter to content if provided
@@ -435,6 +447,222 @@ function insertCommandSection(
 }
 
 /**
+ * Extract a marker section from content
+ * Returns the content between start and end markers (including markers)
+ */
+function extractMarkerSection(
+  content: string,
+  startMarker: string,
+  endMarker: string,
+): string | null {
+  const startIndex = content.indexOf(startMarker);
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const endIndex = content.indexOf(endMarker, startIndex);
+  if (endIndex === -1) {
+    return null;
+  }
+
+  return content.slice(startIndex, endIndex + endMarker.length);
+}
+
+/**
+ * Replace a marker section in content
+ * Returns the updated content with the new section
+ */
+function replaceMarkerSection(
+  content: string,
+  startMarker: string,
+  endMarker: string,
+  newSection: string,
+): string | null {
+  const startIndex = content.indexOf(startMarker);
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const endIndex = content.indexOf(endMarker, startIndex);
+  if (endIndex === -1) {
+    return null;
+  }
+
+  return content.slice(0, startIndex) + newSection + content.slice(endIndex + endMarker.length);
+}
+
+/**
+ * Check if config is an object with 'args' property
+ */
+function isArgsConfigWithOptions(
+  config: ArgsMarkerConfig[string],
+): config is {
+  args: import("./render-args.js").ArgsShape;
+  options?: import("./render-args.js").ArgsTableOptions;
+} {
+  return typeof config === "object" && config !== null && "args" in config;
+}
+
+/**
+ * Generate args section content with markers
+ */
+function generateArgsSection(identifier: string, config: ArgsMarkerConfig[string]): string {
+  const startMarker = argsStartMarker(identifier);
+  const endMarker = argsEndMarker(identifier);
+
+  // Normalize config to extract args and options
+  const { args, options } = isArgsConfigWithOptions(config)
+    ? { args: config.args, options: config.options }
+    : { args: config, options: undefined };
+
+  const table = renderArgsTable(args, options);
+
+  return [startMarker, table, endMarker].join("\n");
+}
+
+/**
+ * Generate index section content with markers
+ */
+async function generateIndexSection(
+  identifier: string,
+  config: IndexMarkerConfig[string],
+  command: import("../types.js").AnyCommand,
+): Promise<string> {
+  const startMarker = indexStartMarker(identifier);
+  const endMarker = indexEndMarker(identifier);
+
+  // Normalize config to extract categories and options
+  const { categories, options } = Array.isArray(config)
+    ? { categories: config, options: undefined }
+    : { categories: config.categories, options: config.options };
+
+  const indexContent = await renderCommandIndex(command, categories, options);
+
+  return [startMarker, indexContent, endMarker].join("\n");
+}
+
+/**
+ * Process args markers in file content
+ * Returns result with updated content and any diffs
+ */
+async function processArgsMarkers(
+  existingContent: string,
+  argsConfig: ArgsMarkerConfig,
+  updateMode: boolean,
+  formatter: FormatterFunction | undefined,
+): Promise<{
+  content: string;
+  diffs: string[];
+  hasError: boolean;
+  wasUpdated: boolean;
+}> {
+  let content = existingContent;
+  const diffs: string[] = [];
+  let hasError = false;
+  let wasUpdated = false;
+
+  for (const [identifier, config] of Object.entries(argsConfig)) {
+    const startMarker = argsStartMarker(identifier);
+    const endMarker = argsEndMarker(identifier);
+
+    // Generate new section
+    const rawSection = generateArgsSection(identifier, config);
+    const generatedSection = await applyFormatter(rawSection, formatter);
+
+    // Extract existing section
+    const existingSection = extractMarkerSection(content, startMarker, endMarker);
+
+    if (!existingSection) {
+      hasError = true;
+      diffs.push(
+        `Marker section "${identifier}" not found in file. Expected markers:\n${startMarker}\n...\n${endMarker}`,
+      );
+      continue;
+    }
+
+    // Compare sections
+    if (existingSection !== generatedSection) {
+      if (updateMode) {
+        const updated = replaceMarkerSection(content, startMarker, endMarker, generatedSection);
+        if (updated) {
+          content = updated;
+          wasUpdated = true;
+        } else {
+          hasError = true;
+          diffs.push(`Failed to replace args section "${identifier}"`);
+        }
+      } else {
+        hasError = true;
+        diffs.push(formatDiff(existingSection, generatedSection));
+      }
+    }
+  }
+
+  return { content, diffs, hasError, wasUpdated };
+}
+
+/**
+ * Process index markers in file content
+ * Returns result with updated content and any diffs
+ */
+async function processIndexMarkers(
+  existingContent: string,
+  indexConfig: IndexMarkerConfig,
+  command: import("../types.js").AnyCommand,
+  updateMode: boolean,
+  formatter: FormatterFunction | undefined,
+): Promise<{
+  content: string;
+  diffs: string[];
+  hasError: boolean;
+  wasUpdated: boolean;
+}> {
+  let content = existingContent;
+  const diffs: string[] = [];
+  let hasError = false;
+  let wasUpdated = false;
+
+  for (const [identifier, config] of Object.entries(indexConfig)) {
+    const startMarker = indexStartMarker(identifier);
+    const endMarker = indexEndMarker(identifier);
+
+    // Generate new section
+    const rawSection = await generateIndexSection(identifier, config, command);
+    const generatedSection = await applyFormatter(rawSection, formatter);
+
+    // Extract existing section
+    const existingSection = extractMarkerSection(content, startMarker, endMarker);
+
+    if (!existingSection) {
+      hasError = true;
+      diffs.push(
+        `Marker section "${identifier}" not found in file. Expected markers:\n${startMarker}\n...\n${endMarker}`,
+      );
+      continue;
+    }
+
+    // Compare sections
+    if (existingSection !== generatedSection) {
+      if (updateMode) {
+        const updated = replaceMarkerSection(content, startMarker, endMarker, generatedSection);
+        if (updated) {
+          content = updated;
+          wasUpdated = true;
+        } else {
+          hasError = true;
+          diffs.push(`Failed to replace index section "${identifier}"`);
+        }
+      } else {
+        hasError = true;
+        diffs.push(formatDiff(existingSection, generatedSection));
+      }
+    }
+  }
+
+  return { content, diffs, hasError, wasUpdated };
+}
+
+/**
  * Find which file contains a specific command
  */
 function findFileForCommand(
@@ -675,6 +903,74 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   for (const [filePath, fileConfigRaw] of Object.entries(files)) {
     const fileConfig = normalizeFileConfig(fileConfigRaw);
     const specifiedCommands = fileConfig.commands;
+
+    // Check if file has only args/index markers (no commands)
+    const hasArgsOrIndexOnly =
+      specifiedCommands.length === 0 && (fileConfig.args || fileConfig.index);
+
+    if (hasArgsOrIndexOnly) {
+      // Process args and index markers only
+      let existingContent = readFile(filePath);
+      if (!existingContent) {
+        hasError = true;
+        results.push({
+          path: filePath,
+          status: "diff",
+          diff: `File does not exist. Cannot validate args/index markers.`,
+        });
+        continue;
+      }
+
+      let fileStatus: "match" | "created" | "updated" | "diff" = "match";
+      const diffs: string[] = [];
+      let content = existingContent;
+
+      // Process args markers
+      if (fileConfig.args) {
+        const argsResult = await processArgsMarkers(
+          content,
+          fileConfig.args,
+          updateMode,
+          formatter,
+        );
+        content = argsResult.content;
+        diffs.push(...argsResult.diffs);
+        if (argsResult.hasError) hasError = true;
+        if (argsResult.wasUpdated && fileStatus === "match") fileStatus = "updated";
+      }
+
+      // Process index markers
+      if (fileConfig.index) {
+        const indexResult = await processIndexMarkers(
+          content,
+          fileConfig.index,
+          command,
+          updateMode,
+          formatter,
+        );
+        content = indexResult.content;
+        diffs.push(...indexResult.diffs);
+        if (indexResult.hasError) hasError = true;
+        if (indexResult.wasUpdated && fileStatus === "match") fileStatus = "updated";
+      }
+
+      // Write updated content if in update mode and content changed
+      if (updateMode && content !== existingContent) {
+        writeFile(filePath, content);
+      }
+
+      // Determine final status
+      if (diffs.length > 0) {
+        fileStatus = "diff";
+      }
+
+      results.push({
+        path: filePath,
+        status: fileStatus,
+        diff: diffs.length > 0 ? diffs.join("\n\n") : undefined,
+      });
+      continue;
+    }
 
     if (specifiedCommands.length === 0) {
       continue;

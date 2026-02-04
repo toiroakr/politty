@@ -1607,4 +1607,623 @@ describe("golden-test", () => {
       expect(content).toContain("# test-cli");
     });
   });
+
+  describe("args markers", () => {
+    it("should validate args marker section", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "args-test.md");
+
+      // Generate the expected args content
+      const { renderArgsTable } = await import("./render-args.js");
+      const argsContent = renderArgsTable({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      // Create a file with the correct args marker content
+      const initialContent = `# CLI Reference
+
+## Common Options
+
+<!-- politty:args:common-options:start -->
+${argsContent}
+<!-- politty:args:common-options:end -->
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      // Validate the args marker
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            args: {
+              "common-options": {
+                verbose: arg(z.boolean().default(false), {
+                  alias: "v",
+                  description: "Enable verbose output",
+                }),
+              },
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("match");
+    });
+
+    it("should update args marker section when content differs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "args-update.md");
+
+      // Create a file with outdated args marker content
+      const initialContent = `# CLI Reference
+
+## Common Options
+
+<!-- politty:args:common-options:start -->
+| Option | Alias | Description | Default |
+| ------ | ----- | ----------- | ------- |
+| \`--old-option\` | - | Old description | - |
+<!-- politty:args:common-options:end -->
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      // Update the args marker
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            args: {
+              "common-options": {
+                verbose: arg(z.boolean().default(false), {
+                  alias: "v",
+                  description: "Enable verbose output",
+                }),
+              },
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("--verbose");
+      expect(content).toContain("Enable verbose output");
+      expect(content).not.toContain("--old-option");
+    });
+
+    it("should report diff when args marker section differs in check mode", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const filePath = path.join(testDir, "args-diff.md");
+
+      // Create a file with outdated args marker content
+      const initialContent = `# CLI Reference
+
+## Common Options
+
+<!-- politty:args:common-options:start -->
+| Option | Alias | Description | Default |
+| ------ | ----- | ----------- | ------- |
+| \`--old-option\` | - | Old description | - |
+<!-- politty:args:common-options:end -->
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      // Check the args marker (should report diff)
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            args: {
+              "common-options": {
+                verbose: arg(z.boolean().default(false), {
+                  alias: "v",
+                  description: "Enable verbose output",
+                }),
+              },
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.status).toBe("diff");
+      expect(result.files[0]?.diff).toBeDefined();
+    });
+
+    it("should report error when args marker is missing", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const filePath = path.join(testDir, "args-missing.md");
+
+      // Create a file without the expected marker
+      const initialContent = `# CLI Reference
+
+## Common Options
+
+Some content without markers.
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      // Check the args marker (should report error)
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            args: {
+              "common-options": {
+                verbose: arg(z.boolean().default(false), {
+                  alias: "v",
+                  description: "Enable verbose output",
+                }),
+              },
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.status).toBe("diff");
+      expect(result.files[0]?.diff).toContain('Marker section "common-options" not found');
+    });
+
+    it("should support shorthand args config (without options)", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "args-shorthand.md");
+
+      // Create a file with args marker
+      const initialContent = `# CLI Reference
+
+<!-- politty:args:options:start -->
+outdated
+<!-- politty:args:options:end -->
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      // Use shorthand config (just ArgsShape, not { args, options })
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            args: {
+              options: {
+                debug: arg(z.boolean().default(false), {
+                  description: "Enable debug mode",
+                }),
+              },
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("--debug");
+      expect(content).toContain("Enable debug mode");
+    });
+  });
+
+  describe("index markers", () => {
+    it("should validate index marker section", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "index-test.md");
+
+      // First generate the expected index content
+      const categories = [
+        {
+          title: "Greeting Commands",
+          description: "Commands for greeting.",
+          commands: ["greet"],
+          docPath: "./cli/greet.md",
+        },
+      ];
+
+      // Create a file with the correct index marker content
+      const { renderCommandIndex } = await import("./render-index.js");
+      const indexContent = await renderCommandIndex(testCommand, categories);
+
+      const initialContent = `# CLI Reference
+
+## Commands
+
+<!-- politty:index:commands:start -->
+${indexContent}
+<!-- politty:index:commands:end -->
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      // Validate the index marker
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            index: {
+              commands: categories,
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("match");
+    });
+
+    it("should update index marker section when content differs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "index-update.md");
+
+      // Create a file with outdated index marker content
+      const initialContent = `# CLI Reference
+
+## Commands
+
+<!-- politty:index:commands:start -->
+### [Old Category](./old.md)
+
+Old description.
+
+| Command | Description |
+|---------|-------------|
+| [old](./old.md#old) | Old command |
+<!-- politty:index:commands:end -->
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      const categories = [
+        {
+          title: "Greeting Commands",
+          description: "Commands for greeting.",
+          commands: ["greet"],
+          docPath: "./cli/greet.md",
+        },
+      ];
+
+      // Update the index marker
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            index: {
+              commands: categories,
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("Greeting Commands");
+      expect(content).toContain("greet");
+      expect(content).not.toContain("Old Category");
+    });
+
+    it("should report diff when index marker section differs in check mode", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const filePath = path.join(testDir, "index-diff.md");
+
+      // Create a file with outdated index marker content
+      const initialContent = `# CLI Reference
+
+## Commands
+
+<!-- politty:index:commands:start -->
+### [Old Category](./old.md)
+
+Old description.
+<!-- politty:index:commands:end -->
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      const categories = [
+        {
+          title: "Greeting Commands",
+          description: "Commands for greeting.",
+          commands: ["greet"],
+          docPath: "./cli/greet.md",
+        },
+      ];
+
+      // Check the index marker (should report diff)
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            index: {
+              commands: categories,
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.status).toBe("diff");
+      expect(result.files[0]?.diff).toBeDefined();
+    });
+
+    it("should report error when index marker is missing", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const filePath = path.join(testDir, "index-missing.md");
+
+      // Create a file without the expected marker
+      const initialContent = `# CLI Reference
+
+## Commands
+
+Some content without markers.
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      const categories = [
+        {
+          title: "Greeting Commands",
+          description: "Commands for greeting.",
+          commands: ["greet"],
+          docPath: "./cli/greet.md",
+        },
+      ];
+
+      // Check the index marker (should report error)
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            index: {
+              commands: categories,
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.status).toBe("diff");
+      expect(result.files[0]?.diff).toContain('Marker section "commands" not found');
+    });
+
+    it("should support shorthand index config (array of categories)", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "index-shorthand.md");
+
+      // Create a file with index marker
+      const initialContent = `# CLI Reference
+
+<!-- politty:index:nav:start -->
+outdated
+<!-- politty:index:nav:end -->
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      const categories = [
+        {
+          title: "Config Commands",
+          description: "Commands for configuration.",
+          commands: ["config"],
+          docPath: "./cli/config.md",
+        },
+      ];
+
+      // Use shorthand config (just array of categories)
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            index: {
+              nav: categories,
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("Config Commands");
+      expect(content).toContain("config get");
+      expect(content).toContain("config set");
+    });
+
+    it("should support index config with options", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "index-options.md");
+
+      // Create a file with index marker
+      const initialContent = `# CLI Reference
+
+<!-- politty:index:nav:start -->
+outdated
+<!-- politty:index:nav:end -->
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      const categories = [
+        {
+          title: "Config Commands",
+          description: "Commands for configuration.",
+          commands: ["config"],
+          docPath: "./cli/config.md",
+        },
+      ];
+
+      // Use config with options (headingLevel: 2)
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            index: {
+              nav: {
+                categories,
+                options: { headingLevel: 2 },
+              },
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      // Should use ## instead of default ###
+      expect(content).toContain("## [Config Commands]");
+    });
+  });
+
+  describe("combined args and index markers", () => {
+    it("should validate both args and index markers in same file", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "combined-test.md");
+
+      const categories = [
+        {
+          title: "All Commands",
+          description: "All available commands.",
+          commands: ["greet", "config"],
+          docPath: "./cli/all.md",
+        },
+      ];
+
+      const { renderCommandIndex } = await import("./render-index.js");
+      const { renderArgsTable } = await import("./render-args.js");
+
+      const indexContent = await renderCommandIndex(testCommand, categories);
+      const argsContent = renderArgsTable({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      const initialContent = `# CLI Reference
+
+## Common Options
+
+<!-- politty:args:options:start -->
+${argsContent}
+<!-- politty:args:options:end -->
+
+## Commands
+
+<!-- politty:index:commands:start -->
+${indexContent}
+<!-- politty:index:commands:end -->
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      // Validate both markers
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            args: {
+              options: {
+                verbose: arg(z.boolean().default(false), {
+                  alias: "v",
+                  description: "Enable verbose output",
+                }),
+              },
+            },
+            index: {
+              commands: categories,
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("match");
+    });
+
+    it("should update both args and index markers when both differ", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "combined-update.md");
+
+      const initialContent = `# CLI Reference
+
+## Common Options
+
+<!-- politty:args:options:start -->
+outdated args
+<!-- politty:args:options:end -->
+
+## Commands
+
+<!-- politty:index:commands:start -->
+outdated index
+<!-- politty:index:commands:end -->
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      const categories = [
+        {
+          title: "All Commands",
+          description: "All available commands.",
+          commands: ["greet"],
+          docPath: "./cli/all.md",
+        },
+      ];
+
+      // Update both markers
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            args: {
+              options: {
+                debug: arg(z.boolean().default(false), {
+                  description: "Enable debug mode",
+                }),
+              },
+            },
+            index: {
+              commands: categories,
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("--debug");
+      expect(content).toContain("Enable debug mode");
+      expect(content).toContain("All Commands");
+      expect(content).toContain("greet");
+      expect(content).not.toContain("outdated");
+    });
+  });
 });
