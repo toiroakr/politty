@@ -1817,6 +1817,53 @@ outdated
       expect(content).toContain("--debug");
       expect(content).toContain("Enable debug mode");
     });
+
+    it("should handle shorthand args config with option named 'args'", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "args-named-args.md");
+
+      // Create a file with args marker
+      const initialContent = `# CLI Reference
+
+<!-- politty:args:options:start -->
+outdated
+<!-- politty:args:options:end -->
+`;
+      fs.writeFileSync(filePath, initialContent, "utf-8");
+
+      // Use shorthand config with an option literally named "args"
+      // This should NOT be confused with { args: ArgsShape, options?: ... } shape
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [],
+            args: {
+              options: {
+                args: arg(z.boolean().default(false), {
+                  description: "Show arguments",
+                }),
+                verbose: arg(z.boolean().default(false), {
+                  alias: "v",
+                  description: "Enable verbose output",
+                }),
+              },
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      // Both options should be rendered
+      expect(content).toContain("--args");
+      expect(content).toContain("Show arguments");
+      expect(content).toContain("--verbose");
+      expect(content).toContain("Enable verbose output");
+    });
   });
 
   describe("index markers", () => {

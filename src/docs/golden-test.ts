@@ -492,13 +492,37 @@ function replaceMarkerSection(
 }
 
 /**
- * Check if config is an object with 'args' property
+ * Check if a value is a Zod schema (has _def or def property)
+ */
+function isZodType(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const v = value as Record<string, unknown>;
+  return "_def" in v || "def" in v;
+}
+
+/**
+ * Check if config is the { args, options? } shape (not shorthand ArgsShape)
+ *
+ * Distinguishes between:
+ * - { args: ArgsShape, options?: ArgsTableOptions } → returns true
+ * - ArgsShape (e.g., { verbose: ZodType, args: ZodType }) → returns false
+ *
+ * The key insight is that in the { args, options? } shape, config.args is an ArgsShape
+ * (Record of ZodTypes), while in shorthand, config itself is the ArgsShape and config.args
+ * would be a single ZodType if user has an option named "args".
  */
 function isArgsConfigWithOptions(config: ArgsMarkerConfig[string]): config is {
   args: import("./render-args.js").ArgsShape;
   options?: import("./render-args.js").ArgsTableOptions;
 } {
-  return typeof config === "object" && config !== null && "args" in config;
+  if (typeof config !== "object" || config === null || !("args" in config)) {
+    return false;
+  }
+  // If config.args is a ZodType, this is shorthand with an option named "args"
+  // If config.args is an object (ArgsShape), this is the { args, options? } shape
+  return !isZodType(config.args);
 }
 
 /**
