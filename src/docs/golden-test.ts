@@ -9,7 +9,7 @@ import {
 } from "./doc-comparator.js";
 import { collectAllCommands } from "./doc-generator.js";
 import { executeExamples } from "./example-executor.js";
-import { renderArgsTable } from "./render-args.js";
+import { renderArgsTable, type ArgsShape, type ArgsTableOptions } from "./render-args.js";
 import { renderCommandIndex } from "./render-index.js";
 import type {
   ArgsMarkerConfig,
@@ -514,8 +514,8 @@ function isZodType(value: unknown): boolean {
  * would be a single ZodType if user has an option named "args".
  */
 function isArgsConfigWithOptions(config: ArgsMarkerConfig[string]): config is {
-  args: import("./render-args.js").ArgsShape;
-  options?: import("./render-args.js").ArgsTableOptions;
+  args: ArgsShape;
+  options?: ArgsTableOptions;
 } {
   if (typeof config !== "object" || config === null || !("args" in config)) {
     return false;
