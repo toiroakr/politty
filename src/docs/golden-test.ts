@@ -1,3 +1,4 @@
+import type { AnyCommand } from "../types.js";
 import { createCommandRenderer } from "./default-renderers.js";
 import {
   compareWithExisting,
@@ -548,7 +549,7 @@ function generateArgsSection(identifier: string, config: ArgsMarkerConfig[string
 async function generateIndexSection(
   identifier: string,
   config: IndexMarkerConfig[string],
-  command: import("../types.js").AnyCommand,
+  command: AnyCommand,
 ): Promise<string> {
   const startMarker = indexStartMarker(identifier);
   const endMarker = indexEndMarker(identifier);
@@ -630,7 +631,7 @@ async function processArgsMarkers(
 async function processIndexMarkers(
   existingContent: string,
   indexConfig: IndexMarkerConfig,
-  command: import("../types.js").AnyCommand,
+  command: AnyCommand,
   updateMode: boolean,
   formatter: FormatterFunction | undefined,
 ): Promise<{
@@ -847,7 +848,7 @@ function buildFileMap(
 async function executeConfiguredExamples(
   allCommands: Map<string, CommandInfo>,
   examplesConfig: ExampleConfig,
-  rootCommand: import("../types.js").AnyCommand,
+  rootCommand: AnyCommand,
 ): Promise<void> {
   for (const [cmdPath, cmdConfig] of Object.entries(examplesConfig)) {
     const commandInfo = allCommands.get(cmdPath);
