@@ -1,5 +1,5 @@
 ---
-"politty": minor
+"politty": patch
 ---
 
 Add args and index marker support for documentation files
