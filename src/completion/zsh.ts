@@ -179,7 +179,7 @@ function generateZshScript(
 
 ${functions.join("\n")}
 
-_${programName} "$@"
+compdef _${programName} ${programName}
 `;
 }
 
