@@ -5,7 +5,8 @@ import { styles } from "./logger.js";
  *
  * Supports a subset of Markdown tailored for CLI help notes:
  * - Inline: bold, italic, inline code, links
- * - Block: paragraphs, unordered/ordered lists, blockquotes, headings, horizontal rules
+ * - Block: paragraphs, unordered/ordered lists, blockquotes, headings,
+ *          horizontal rules, fenced code blocks
  */
 
 /**
@@ -58,7 +59,7 @@ export function renderInline(text: string): string {
  *
  * Block-level processing:
  *   - Splits input into blocks separated by blank lines
- *   - Detects headings, horizontal rules, blockquotes, lists, and paragraphs
+ *   - Detects headings, horizontal rules, blockquotes, lists, code blocks, and paragraphs
  *   - Applies inline formatting within each block
  */
 export function renderMarkdown(markdown: string): string {
@@ -101,21 +102,29 @@ interface OrderedListBlock {
   start: number;
 }
 
+interface CodeBlock {
+  type: "code";
+  lang: string;
+  lines: string[];
+}
+
 type Block =
   | ParagraphBlock
   | HeadingBlock
   | HorizontalRuleBlock
   | BlockquoteBlock
   | UnorderedListBlock
-  | OrderedListBlock;
+  | OrderedListBlock
+  | CodeBlock;
 
 // --- Block detection patterns ---
 
 const HEADING_RE = /^(#{1,6})\s+(.+)$/;
 const HR_RE = /^(?:---+|\*\*\*+|___+)\s*$/;
 const BLOCKQUOTE_RE = /^>\s?(.*)$/;
-const UL_RE = /^[-*+]\s+(.+)$/;
+const UL_RE = /^-\s+(.+)$/;
 const OL_RE = /^(\d+)[.)]\s+(.+)$/;
+const FENCE_OPEN_RE = /^(`{3,}|~{3,})(\S*)\s*$/;
 
 /**
  * Split lines into logical blocks separated by blank lines.
@@ -131,6 +140,30 @@ function splitIntoBlocks(lines: string[]): Block[] {
     // Skip blank lines
     if (line.trim() === "") {
       i++;
+      continue;
+    }
+
+    // Fenced code block
+    const fenceMatch = line.match(FENCE_OPEN_RE);
+    if (fenceMatch) {
+      const fence = fenceMatch[1]!;
+      const lang = fenceMatch[2] ?? "";
+      const codeLines: string[] = [];
+      i++; // skip opening fence
+      while (i < lines.length) {
+        // Closing fence: same char, at least same length
+        if (
+          lines[i]!.startsWith(fence.charAt(0).repeat(fence.length)) &&
+          lines[i]!.trim() ===
+            fence.charAt(0).repeat(Math.max(fence.length, lines[i]!.trim().length))
+        ) {
+          i++; // skip closing fence
+          break;
+        }
+        codeLines.push(lines[i]!);
+        i++;
+      }
+      blocks.push({ type: "code", lang, lines: codeLines });
       continue;
     }
 
@@ -169,7 +202,7 @@ function splitIntoBlocks(lines: string[]): Block[] {
       continue;
     }
 
-    // Unordered list (consecutive - / * / + lines)
+    // Unordered list (consecutive - lines only)
     if (UL_RE.test(line)) {
       const items: string[] = [];
       while (i < lines.length) {
@@ -213,7 +246,8 @@ function splitIntoBlocks(lines: string[]): Block[] {
         HR_RE.test(l) ||
         BLOCKQUOTE_RE.test(l) ||
         UL_RE.test(l) ||
-        OL_RE.test(l)
+        OL_RE.test(l) ||
+        FENCE_OPEN_RE.test(l)
       ) {
         break;
       }
@@ -234,7 +268,8 @@ function splitIntoBlocks(lines: string[]): Block[] {
 function renderBlock(block: Block): string {
   switch (block.type) {
     case "heading": {
-      return styles.bold(renderInline(block.content));
+      // Inspired by marked-terminal: bold + underline for distinction from plain bold text
+      return styles.sectionHeader(renderInline(block.content));
     }
 
     case "hr": {
@@ -259,6 +294,11 @@ function renderBlock(block: Block): string {
           return `  ${styles.dim(`${num}.`)} ${renderInline(item)}`;
         })
         .join("\n");
+    }
+
+    case "code": {
+      // Indent each line and apply dim styling (no syntax highlighting to keep zero-dep)
+      return block.lines.map((line) => `  ${styles.yellow(line)}`).join("\n");
     }
 
     case "paragraph": {

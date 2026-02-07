@@ -17,8 +17,13 @@ import { arg, defineCommand, runMain } from "../../src/index.js";
 export const command = defineCommand({
   name: "resource",
   description: "Manage resources (discriminatedUnion example)",
-  notes: `Available options vary depending on the value of --action.
-create: --name, --template / delete: --id, --force / list: --format, --limit`,
+  notes: `Available options vary depending on the value of \`--action\`.
+
+- \`create\` — \`--name\`, \`--template\`
+- \`delete\` — \`--id\`, \`--force\`
+- \`list\` — \`--format\`, \`--limit\`
+
+> **Note:** Only the options for the selected action are accepted.`,
   args: z
     .discriminatedUnion("action", [
       // create action

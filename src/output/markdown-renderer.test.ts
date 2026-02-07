@@ -84,7 +84,8 @@ describe("renderMarkdown", () => {
   });
 
   describe("headings", () => {
-    it("should render # heading", () => {
+    it("should render # heading with bold + underline", () => {
+      // sectionHeader = bold + underline (with color disabled, text is unchanged)
       expect(renderMarkdown("# Title")).toBe("Title");
     });
 
@@ -135,14 +136,10 @@ describe("renderMarkdown", () => {
       expect(result).toBe("  • Item one\n  • Item two");
     });
 
-    it("should render * items", () => {
-      const result = renderMarkdown("* Item one\n* Item two");
-      expect(result).toBe("  • Item one\n  • Item two");
-    });
-
-    it("should render + items", () => {
-      const result = renderMarkdown("+ Item one\n+ Item two");
-      expect(result).toBe("  • Item one\n  • Item two");
+    it("should not treat * as list marker", () => {
+      // * at line start should be treated as paragraph with italic, not a list
+      const result = renderMarkdown("* emphasized text *");
+      expect(result).not.toContain("•");
     });
 
     it("should apply inline formatting in list items", () => {
@@ -174,6 +171,56 @@ describe("renderMarkdown", () => {
     it("should support ) delimiter", () => {
       const result = renderMarkdown("1) First\n2) Second");
       expect(result).toBe("  1. First\n  2. Second");
+    });
+  });
+
+  describe("fenced code blocks", () => {
+    it("should render a basic code block with backticks", () => {
+      const md = "```\nconst x = 1;\nconsole.log(x);\n```";
+      const result = renderMarkdown(md);
+      expect(result).toBe("  const x = 1;\n  console.log(x);");
+    });
+
+    it("should render a code block with language specifier", () => {
+      const md = "```js\nconst x = 1;\n```";
+      const result = renderMarkdown(md);
+      expect(result).toBe("  const x = 1;");
+    });
+
+    it("should render a code block with tilde fence", () => {
+      const md = "~~~\nsome code\n~~~";
+      const result = renderMarkdown(md);
+      expect(result).toBe("  some code");
+    });
+
+    it("should preserve content literally (no inline processing)", () => {
+      const md = "```\n**not bold** and `not code`\n```";
+      const result = renderMarkdown(md);
+      expect(result).toBe("  **not bold** and `not code`");
+    });
+
+    it("should preserve blank lines within code block", () => {
+      const md = "```\nline 1\n\nline 3\n```";
+      const result = renderMarkdown(md);
+      expect(result).toBe("  line 1\n  \n  line 3");
+    });
+
+    it("should handle code block adjacent to other blocks", () => {
+      const md = `Run the following:
+
+\`\`\`sh
+npm install
+npm start
+\`\`\`
+
+Then open your browser.`;
+
+      const result = renderMarkdown(md);
+      const parts = result.split("\n\n");
+      expect(parts).toHaveLength(3);
+      expect(parts[0]).toBe("Run the following:");
+      expect(parts[1]).toBe("  npm install\n  npm start");
+      expect(parts[2]).toBe("Then open your browser.");
     });
   });
 
@@ -242,6 +289,26 @@ Available actions:
       expect(result).toContain("production");
       expect(result).toContain("documentation (https://example.com/docs)");
       expect(result).toContain("• create — Create a new resource");
+    });
+
+    it("should render notes with code block", () => {
+      const md = `## Configuration
+
+Add the following to your config file:
+
+\`\`\`json
+{
+  "port": 3000,
+  "host": "localhost"
+}
+\`\`\`
+
+Then restart the server with \`--reload\`.`;
+
+      const result = renderMarkdown(md);
+      expect(result).toContain("Configuration");
+      expect(result).toContain('  "port": 3000,');
+      expect(result).toContain("--reload");
     });
   });
 });

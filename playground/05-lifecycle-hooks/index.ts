@@ -13,8 +13,13 @@ import { arg, defineCommand, runMain } from "../../src/index.js";
 export const command = defineCommand({
   name: "db-query",
   description: "Execute database query (lifecycle hooks demo)",
-  notes: `This command demonstrates the setup → run → cleanup execution order.
-Using the --simulate-error flag, you can verify that cleanup is called even when an error occurs.`,
+  notes: `## Execution Order
+
+1. \`setup\` — Initialize resources (e.g. DB connection)
+2. \`run\` — Execute the main logic
+3. \`cleanup\` — Release resources (always runs, even on error)
+
+Use \`--simulate-error\` to verify that cleanup is called on failure.`,
   args: z.object({
     database: arg(z.string(), {
       alias: "d",
