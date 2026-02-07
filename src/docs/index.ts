@@ -36,6 +36,12 @@ export {
   commandEndMarker,
   commandStartMarker,
   COMMAND_MARKER_PREFIX,
+  globalOptionsEndMarker,
+  globalOptionsStartMarker,
+  GLOBAL_OPTIONS_MARKER_PREFIX,
+  indexEndMarker,
+  indexStartMarker,
+  INDEX_MARKER_PREFIX,
   UPDATE_GOLDEN_ENV,
 } from "./types.js";
 // Types
@@ -59,6 +65,7 @@ export type {
   OptionsRenderFunction,
   RenderContentOptions,
   RenderFunction,
+  RootDocConfig,
   SectionRenderFunction,
   SimpleRenderContext,
   SimpleRenderFunction,

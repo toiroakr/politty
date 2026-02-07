@@ -1,5 +1,6 @@
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
 import type { AnyCommand, Example } from "../types.js";
+import type { ArgsShape, ArgsTableOptions } from "./render-args.js";
 
 /**
  * Command information for rendering
@@ -248,11 +249,25 @@ export interface DefaultRendererOptions {
 }
 
 /**
+ * Root document configuration
+ * The root document contains global options tables and command index sections.
+ */
+export interface RootDocConfig {
+  /** Output file path */
+  path: string;
+  /**
+   * Global options configuration.
+   * ArgsShape directly, or { args, options } for render options.
+   */
+  globalOptions?: ArgsShape | { args: ArgsShape; options?: ArgsTableOptions };
+}
+
+/**
  * Per-file configuration with custom renderer
  */
 export interface FileConfig {
   /** Command paths to include in this file (e.g., ["", "user", "config get"]) */
-  commands: string[];
+  commands?: string[];
   /** Custom renderer for this file (optional) */
   render?: RenderFunction;
   /** File title (prepended to the file content) */
@@ -281,6 +296,12 @@ export type FileMapping = Record<string, string[] | FileConfig>;
 export interface GenerateDocConfig {
   /** Command to generate documentation for */
   command: AnyCommand;
+  /**
+   * Root document configuration.
+   * The root document contains global options tables and command index sections.
+   * Title and description are derived from `command.name` and `command.description`.
+   */
+  rootDoc?: RootDocConfig;
   /** File output configuration (command path -> file mapping) */
   files: FileMapping;
   /** Command paths to ignore (including their subcommands) */
@@ -347,4 +368,44 @@ export function commandStartMarker(commandPath: string): string {
  */
 export function commandEndMarker(commandPath: string): string {
   return `<!-- ${COMMAND_MARKER_PREFIX}:${commandPath}:end -->`;
+}
+
+/**
+ * Marker prefix for global options sections in generated documentation
+ * Format: <!-- politty:global-options:start --> ... <!-- politty:global-options:end -->
+ */
+export const GLOBAL_OPTIONS_MARKER_PREFIX = "politty:global-options";
+
+/**
+ * Generate start marker for a global options section
+ */
+export function globalOptionsStartMarker(): string {
+  return `<!-- ${GLOBAL_OPTIONS_MARKER_PREFIX}:start -->`;
+}
+
+/**
+ * Generate end marker for a global options section
+ */
+export function globalOptionsEndMarker(): string {
+  return `<!-- ${GLOBAL_OPTIONS_MARKER_PREFIX}:end -->`;
+}
+
+/**
+ * Marker prefix for index sections in generated documentation
+ * Format: <!-- politty:index:start --> ... <!-- politty:index:end -->
+ */
+export const INDEX_MARKER_PREFIX = "politty:index";
+
+/**
+ * Generate start marker for an index section
+ */
+export function indexStartMarker(): string {
+  return `<!-- ${INDEX_MARKER_PREFIX}:start -->`;
+}
+
+/**
+ * Generate end marker for an index section
+ */
+export function indexEndMarker(): string {
+  return `<!-- ${INDEX_MARKER_PREFIX}:end -->`;
 }
