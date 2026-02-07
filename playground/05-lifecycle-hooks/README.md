@@ -12,11 +12,11 @@ db-query [options]
 
 **Options**
 
-| Option                  | Alias | Description                | Default |
-| ----------------------- | ----- | -------------------------- | ------- |
-| `--database <DATABASE>` | `-d`  | Database connection string | -       |
-| `--query <QUERY>`       | `-q`  | SQL query                  | -       |
-| `--simulate_error`      | `-e`  | Simulate an error          | `false` |
+| Option                  | Alias | Description                | Required | Default |
+| ----------------------- | ----- | -------------------------- | -------- | ------- |
+| `--database <DATABASE>` | `-d`  | Database connection string | Yes      | -       |
+| `--query <QUERY>`       | `-q`  | SQL query                  | Yes      | -       |
+| `--simulate_error`      | `-e`  | Simulate an error          | No       | `false` |
 
 **Notes**
 

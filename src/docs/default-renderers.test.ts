@@ -137,9 +137,9 @@ describe("default-renderers", () => {
       const info = await buildCommandInfo(cmd, "test");
       const table = renderOptionsTable(info);
 
-      expect(table).toContain("| Option | Alias | Description | Default |");
-      expect(table).toContain("| `--verbose` | `-v` | Enable verbose mode | `false` |");
-      expect(table).toContain('| `--output <OUTPUT>` | `-o` | Output directory | `"dist"` |');
+      expect(table).toContain("| Option | Alias | Description | Required | Default |");
+      expect(table).toContain("| `--verbose` | `-v` | Enable verbose mode | No | `false` |");
+      expect(table).toContain('| `--output <OUTPUT>` | `-o` | Output directory | No | `"dist"` |');
     });
 
     it("should handle options without alias", async () => {
@@ -154,7 +154,7 @@ describe("default-renderers", () => {
       const info = await buildCommandInfo(cmd, "test");
       const table = renderOptionsTable(info);
 
-      expect(table).toContain("| `--config <CONFIG>` | - | Config file | - |");
+      expect(table).toContain("| `--config <CONFIG>` | - | Config file | Yes | - |");
     });
 
     it("should display camelCase options in kebab-case", async () => {
@@ -191,7 +191,7 @@ describe("default-renderers", () => {
       const info = await buildCommandInfo(cmd, "test");
       const table = renderOptionsTable(info);
 
-      expect(table).toContain("| Option | Alias | Description | Default | Env |");
+      expect(table).toContain("| Option | Alias | Description | Required | Default | Env |");
       expect(table).toContain("`PORT`");
       // Options without env should show "-"
       expect(table).toMatch(/host.*\| - \|$/m);
@@ -391,6 +391,7 @@ describe("default-renderers", () => {
       const markdown = renderer(info);
 
       expect(markdown).toContain("- `-v`, `--verbose` - Verbose (default: false)");
+      expect(markdown).not.toContain("(required)");
       expect(markdown).not.toContain("| Option |");
     });
 

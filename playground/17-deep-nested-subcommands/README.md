@@ -156,8 +156,8 @@ git-like config user set [options] <key> <value>
 
 **Options**
 
-| Option     | Alias | Description                  | Default |
-| ---------- | ----- | ---------------------------- | ------- |
-| `--global` | `-g`  | Save as global configuration | `false` |
+| Option     | Alias | Description                  | Required | Default |
+| ---------- | ----- | ---------------------------- | -------- | ------- |
+| `--global` | `-g`  | Save as global configuration | No       | `false` |
 
 <!-- politty:command:config user set:end -->

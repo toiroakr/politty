@@ -18,8 +18,8 @@ greet-meta [options] <name>
 
 **Options**
 
-| Option                  | Alias | Description                | Default   |
-| ----------------------- | ----- | -------------------------- | --------- |
-| `--greeting <GREETING>` | `-g`  | Greeting phrase (via meta) | `"Hello"` |
+| Option                  | Alias | Description                | Required | Default   |
+| ----------------------- | ----- | -------------------------- | -------- | --------- |
+| `--greeting <GREETING>` | `-g`  | Greeting phrase (via meta) | No       | `"Hello"` |
 
 <!-- politty:command::end -->
