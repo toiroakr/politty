@@ -1,4 +1,4 @@
-import { createCommandRenderer } from "./default-renderers.js";
+import { createCommandRenderer, type CreateCommandRendererOptions } from "./default-renderers.js";
 import {
   compareWithExisting,
   deleteFile,
@@ -631,11 +631,13 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     formatter,
     examples: examplesConfig,
     targetCommands,
+    globalArgs,
+    rootInfo,
   } = config;
   const updateMode = isUpdateMode();
 
-  // Collect all commands
-  const allCommands = await collectAllCommands(command);
+  // Collect all commands with global args and root info
+  const allCommands = await collectAllCommands(command, undefined, { globalArgs, rootInfo });
 
   // Execute examples for all commands specified in examplesConfig
   if (examplesConfig) {
@@ -703,10 +705,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       | 6;
 
     // Create file-specific renderer with adjusted headingLevel (if no custom renderer)
-    const fileRenderer = createCommandRenderer({
+    const rendererOptions: CreateCommandRendererOptions = {
       ...format,
       headingLevel: adjustedHeadingLevel,
-    });
+      rootInfo,
+    };
+    const fileRenderer = createCommandRenderer(rendererOptions);
 
     // Use custom renderer if provided, otherwise use file-specific renderer
     const render = fileConfig.render ?? fileRenderer;

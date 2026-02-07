@@ -1,5 +1,5 @@
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
-import type { AnyCommand, Example } from "../types.js";
+import type { AnyCommand, ArgsSchema, Example } from "../types.js";
 
 /**
  * Command information for rendering
@@ -35,6 +35,10 @@ export interface CommandInfo {
   examples?: Example[] | undefined;
   /** Example execution results (populated when examples are executed) */
   exampleResults?: ExampleExecutionResult[] | undefined;
+  /** Global options (available to all subcommands) */
+  globalOptions?: ResolvedFieldMeta[] | undefined;
+  /** Whether this is the root command */
+  isRoot?: boolean | undefined;
 }
 
 /**
@@ -218,6 +222,36 @@ export interface SimpleRenderContext {
 export type SimpleRenderFunction = (context: SimpleRenderContext) => string;
 
 /**
+ * Global options render context
+ */
+export interface GlobalOptionsRenderContext {
+  /** Global options to render */
+  globalOptions: ResolvedFieldMeta[];
+  /** Render function that accepts options and optional rendering options */
+  render: (options: ResolvedFieldMeta[], opts?: RenderContentOptions) => string;
+  /** Heading prefix (e.g., "###") */
+  heading: string;
+  /** Command information */
+  info: CommandInfo;
+  /** Whether this is the root command (full table) or subcommand (link only) */
+  isRoot: boolean;
+}
+export type GlobalOptionsRenderFunction = (context: GlobalOptionsRenderContext) => string;
+
+/**
+ * Root header render context
+ */
+export interface RootHeaderRenderContext {
+  /** Command information */
+  info: CommandInfo;
+  /** Root command configuration */
+  rootInfo: RootCommandInfo;
+  /** Heading prefix (e.g., "#") */
+  heading: string;
+}
+export type RootHeaderRenderFunction = (context: RootHeaderRenderContext) => string;
+
+/**
  * Default renderer customization options
  */
 export interface DefaultRendererOptions {
@@ -245,6 +279,10 @@ export interface DefaultRendererOptions {
   renderFooter?: SimpleRenderFunction;
   /** Custom renderer for examples section */
   renderExamples?: ExamplesRenderFunction;
+  /** Custom renderer for global options section */
+  renderGlobalOptions?: GlobalOptionsRenderFunction;
+  /** Custom renderer for root header (title, installation, etc.) */
+  renderRootHeader?: RootHeaderRenderFunction;
 }
 
 /**
@@ -276,6 +314,24 @@ export interface FileConfig {
 export type FileMapping = Record<string, string[] | FileConfig>;
 
 /**
+ * Root command specific information (for CLI overview documentation)
+ */
+export interface RootCommandInfo {
+  /** CLI title (defaults to command name) */
+  title?: string | undefined;
+  /** CLI version */
+  version?: string | undefined;
+  /** Detailed description */
+  description?: string | undefined;
+  /** Installation instructions (markdown) */
+  installation?: string | undefined;
+  /** Custom markdown content added after title/description (before Usage) */
+  headerContent?: string | undefined;
+  /** Custom markdown content added at the end (after all sections) */
+  footerContent?: string | undefined;
+}
+
+/**
  * generateDoc configuration
  */
 export interface GenerateDocConfig {
@@ -297,6 +353,10 @@ export interface GenerateDocConfig {
    * The full document structure is used to maintain cross-file links.
    */
   targetCommands?: string[];
+  /** Global arguments schema (available to all subcommands) */
+  globalArgs?: ArgsSchema | undefined;
+  /** Root command information (for CLI overview) */
+  rootInfo?: RootCommandInfo | undefined;
 }
 
 /**

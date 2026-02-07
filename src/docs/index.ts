@@ -10,19 +10,24 @@ export {
   renderArgumentsTable,
   renderArgumentsTableFromArray,
   renderExamplesDefault,
+  renderGlobalOptionsLink,
+  renderGlobalOptionsTableFromArray,
   renderOptionsList,
   renderOptionsListFromArray,
   renderOptionsTable,
   renderOptionsTableFromArray,
+  renderRootHeader,
   renderSubcommandsTable,
   renderSubcommandsTableFromArray,
   renderUsage,
 } from "./default-renderers.js";
+export type { CreateCommandRendererOptions } from "./default-renderers.js";
 // Comparator utilities
 export { compareWithExisting, formatDiff, writeFile } from "./doc-comparator.js";
 export type { DeleteFileFs } from "./doc-comparator.js";
 // Document generator utilities
 export { buildCommandInfo, collectAllCommands } from "./doc-generator.js";
+export type { BuildCommandInfoOptions, CollectAllCommandsOptions } from "./doc-generator.js";
 // Example executor
 export { executeExamples } from "./example-executor.js";
 export { assertDocMatch, generateDoc, initDocFile } from "./golden-test.js";
@@ -55,10 +60,15 @@ export type {
   FormatterFunction,
   GenerateDocConfig,
   GenerateDocResult,
+  GlobalOptionsRenderContext,
+  GlobalOptionsRenderFunction,
   OptionsRenderContext,
   OptionsRenderFunction,
   RenderContentOptions,
   RenderFunction,
+  RootCommandInfo,
+  RootHeaderRenderContext,
+  RootHeaderRenderFunction,
   SectionRenderFunction,
   SimpleRenderContext,
   SimpleRenderFunction,

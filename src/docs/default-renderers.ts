@@ -7,9 +7,12 @@ import type {
   ExampleExecutionResult,
   ExamplesRenderContext,
   ExamplesRenderOptions,
+  GlobalOptionsRenderContext,
   OptionsRenderContext,
   RenderContentOptions,
   RenderFunction,
+  RootCommandInfo,
+  RootHeaderRenderContext,
   SimpleRenderContext,
   SubCommandInfo,
   SubcommandsRenderContext,
@@ -437,6 +440,80 @@ export function renderSubcommandsTableFromArray(
 }
 
 /**
+ * Render global options section for root command (full table)
+ */
+export function renderGlobalOptionsTableFromArray(
+  globalOptions: ResolvedFieldMeta[],
+  style: "table" | "list" = "table",
+): string {
+  if (globalOptions.length === 0) {
+    return "";
+  }
+
+  return style === "table"
+    ? renderOptionsTableFromArray(globalOptions)
+    : renderOptionsListFromArray(globalOptions);
+}
+
+/**
+ * Render global options reference for subcommands (link only)
+ */
+export function renderGlobalOptionsLink(): string {
+  return "See [Global Options](#global-options) for options available to all commands.";
+}
+
+/**
+ * Render root header with title, version, installation, etc.
+ */
+export function renderRootHeader(info: CommandInfo, rootInfo?: RootCommandInfo): string {
+  if (!rootInfo) {
+    return "";
+  }
+
+  const lines: string[] = [];
+
+  // Title
+  const title = rootInfo.title ?? info.name;
+  if (title) {
+    lines.push(`# ${title}`);
+    lines.push("");
+  }
+
+  // Version
+  if (rootInfo.version) {
+    lines.push(`Version: ${rootInfo.version}`);
+    lines.push("");
+  }
+
+  // Description
+  if (rootInfo.description) {
+    lines.push(rootInfo.description);
+    lines.push("");
+  }
+
+  // Installation
+  if (rootInfo.installation) {
+    lines.push("## Installation");
+    lines.push("");
+    lines.push(rootInfo.installation);
+    lines.push("");
+  }
+
+  // Header content (custom content before Usage)
+  if (rootInfo.headerContent) {
+    lines.push(rootInfo.headerContent);
+    lines.push("");
+  }
+
+  // Remove trailing empty lines
+  while (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * Render examples as markdown
  *
  * @example
@@ -507,9 +584,17 @@ export function renderExamplesDefault(
 }
 
 /**
+ * Extended options for createCommandRenderer
+ */
+export interface CreateCommandRendererOptions extends DefaultRendererOptions {
+  /** Root command configuration (for CLI overview) */
+  rootInfo?: RootCommandInfo | undefined;
+}
+
+/**
  * Create command renderer with options
  */
-export function createCommandRenderer(options: DefaultRendererOptions = {}): RenderFunction {
+export function createCommandRenderer(options: CreateCommandRendererOptions = {}): RenderFunction {
   const {
     headingLevel = 1,
     optionStyle = "table",
@@ -523,6 +608,9 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     renderNotes: customRenderNotes,
     renderFooter: customRenderFooter,
     renderExamples: customRenderExamples,
+    renderGlobalOptions: customRenderGlobalOptions,
+    renderRootHeader: customRenderRootHeader,
+    rootInfo,
   } = options;
 
   return (info: CommandInfo): string => {
@@ -532,13 +620,30 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     const effectiveLevel = Math.min(headingLevel + (info.depth - 1), 6);
     const h = "#".repeat(effectiveLevel);
 
-    // Title - use commandPath for subcommands, name for root
-    const title = info.commandPath || info.name;
-    lines.push(`${h} ${title}`);
-    lines.push("");
+    // Root Header (title, version, installation, headerContent)
+    // Only render for root command when rootInfo is provided
+    if (info.isRoot && rootInfo) {
+      const context: RootHeaderRenderContext = {
+        info,
+        rootInfo,
+        heading: h,
+      };
+      const content = customRenderRootHeader
+        ? customRenderRootHeader(context)
+        : renderRootHeader(info, rootInfo);
+      if (content) {
+        lines.push(content);
+        lines.push("");
+      }
+    } else {
+      // Title - use commandPath for subcommands, name for root
+      const title = info.commandPath || info.name;
+      lines.push(`${h} ${title}`);
+      lines.push("");
+    }
 
-    // Description
-    if (info.description) {
+    // Description (skip if rootInfo has description, to avoid duplication)
+    if (info.description && !(info.isRoot && rootInfo?.description)) {
       const context: SimpleRenderContext = {
         content: info.description,
         heading: "",
@@ -560,6 +665,43 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         info,
       };
       const content = customRenderUsage ? customRenderUsage(context) : context.content;
+      if (content) {
+        lines.push(content);
+        lines.push("");
+      }
+    }
+
+    // Global Options
+    if (info.globalOptions && info.globalOptions.length > 0) {
+      const renderGlobalOpts = (
+        opts: ResolvedFieldMeta[],
+        renderOpts?: RenderContentOptions,
+      ): string => {
+        const style = renderOpts?.style ?? optionStyle;
+        const withHeading = renderOpts?.withHeading ?? true;
+        const content = renderGlobalOptionsTableFromArray(opts, style);
+        return withHeading ? `**Global Options**\n\n${content}` : content;
+      };
+
+      const context: GlobalOptionsRenderContext = {
+        globalOptions: info.globalOptions,
+        render: renderGlobalOpts,
+        heading: "**Global Options**",
+        info,
+        isRoot: info.isRoot ?? false,
+      };
+
+      let content: string;
+      if (customRenderGlobalOptions) {
+        content = customRenderGlobalOptions(context);
+      } else if (info.isRoot) {
+        // Root command: render full table
+        content = renderGlobalOpts(context.globalOptions);
+      } else {
+        // Subcommand: render link only
+        content = renderGlobalOptionsLink();
+      }
+
       if (content) {
         lines.push(content);
         lines.push("");
@@ -694,10 +836,13 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       }
     }
 
-    // Footer (default is empty)
+    // Footer (default is empty, but includes footerContent for root)
     {
+      // For root command, use footerContent from rootInfo if available
+      const defaultFooterContent =
+        info.isRoot && rootInfo?.footerContent ? rootInfo.footerContent : "";
       const context: SimpleRenderContext = {
-        content: "",
+        content: defaultFooterContent,
         heading: "",
         info,
       };

@@ -5,7 +5,10 @@ import {
   createCommandRenderer,
   defaultRenderers,
   renderArgumentsTable,
+  renderGlobalOptionsLink,
+  renderGlobalOptionsTableFromArray,
   renderOptionsTable,
+  renderRootHeader,
   renderSubcommandsTable,
   renderUsage,
 } from "./default-renderers.js";
@@ -554,6 +557,237 @@ describe("default-renderers", () => {
 
       expect(markdown).toContain("- `--flag`");
       expect(markdown).not.toContain("| Option |");
+    });
+  });
+
+  describe("renderGlobalOptionsTableFromArray", () => {
+    it("should render global options as table", async () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+        config: arg(z.string().optional(), {
+          alias: "c",
+          description: "Path to config file",
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "test",
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test", [], {
+        globalArgs: globalArgsSchema,
+      });
+
+      const result = renderGlobalOptionsTableFromArray(info.globalOptions ?? [], "table");
+
+      expect(result).toContain("| Option |");
+      expect(result).toContain("`--verbose`");
+      expect(result).toContain("`-v`");
+      expect(result).toContain("Enable verbose output");
+      expect(result).toContain("`--config <CONFIG>`");
+      expect(result).toContain("`-c`");
+    });
+
+    it("should render global options as list", async () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "test",
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test", [], {
+        globalArgs: globalArgsSchema,
+      });
+
+      const result = renderGlobalOptionsTableFromArray(info.globalOptions ?? [], "list");
+
+      expect(result).toContain("-v");
+      expect(result).toContain("--verbose");
+      expect(result).toContain("Enable verbose output");
+    });
+
+    it("should return empty string for empty array", () => {
+      const result = renderGlobalOptionsTableFromArray([], "table");
+      expect(result).toBe("");
+    });
+  });
+
+  describe("renderGlobalOptionsLink", () => {
+    it("should render link to global options section", () => {
+      const result = renderGlobalOptionsLink();
+      expect(result).toContain("Global Options");
+      expect(result).toContain("#global-options");
+    });
+  });
+
+  describe("renderRootHeader", () => {
+    it("should render title from rootInfo", async () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        description: "A CLI tool",
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "my-cli");
+      const result = renderRootHeader(info, { title: "My CLI Tool" });
+
+      expect(result).toContain("# My CLI Tool");
+    });
+
+    it("should render version", async () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "my-cli");
+      const result = renderRootHeader(info, { version: "1.0.0" });
+
+      expect(result).toContain("Version: 1.0.0");
+    });
+
+    it("should render installation instructions", async () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "my-cli");
+      const result = renderRootHeader(info, {
+        installation: "```bash\nnpm install -g my-cli\n```",
+      });
+
+      expect(result).toContain("## Installation");
+      expect(result).toContain("npm install -g my-cli");
+    });
+
+    it("should render headerContent", async () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "my-cli");
+      const result = renderRootHeader(info, {
+        headerContent: "> Note: Requires Node.js 18+",
+      });
+
+      expect(result).toContain("> Note: Requires Node.js 18+");
+    });
+
+    it("should render full root header", async () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "my-cli");
+      const result = renderRootHeader(info, {
+        title: "My CLI",
+        version: "2.0.0",
+        description: "A powerful CLI tool.",
+        installation: "```bash\nnpm i -g my-cli\n```",
+        headerContent: "[![Build](https://img.shields.io/badge/build-passing-green)]",
+      });
+
+      expect(result).toContain("# My CLI");
+      expect(result).toContain("Version: 2.0.0");
+      expect(result).toContain("A powerful CLI tool.");
+      expect(result).toContain("## Installation");
+      expect(result).toContain("npm i -g my-cli");
+      expect(result).toContain("[![Build]");
+    });
+
+    it("should return empty string when no rootInfo provided", async () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "my-cli");
+      const result = renderRootHeader(info, undefined);
+
+      expect(result).toBe("");
+    });
+  });
+
+  describe("createCommandRenderer with rootInfo", () => {
+    it("should render root header for root command", async () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      const subCmd = defineCommand({
+        name: "build",
+        description: "Build the project",
+        run: () => {},
+      });
+
+      const cmd = defineCommand({
+        name: "my-cli",
+        description: "A CLI tool",
+        subCommands: { build: subCmd },
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "my-cli", [], {
+        globalArgs: globalArgsSchema,
+      });
+
+      const render = createCommandRenderer({
+        rootInfo: {
+          title: "My CLI",
+          version: "1.0.0",
+          footerContent: "## License\n\nMIT",
+        },
+      });
+
+      const markdown = render(info);
+
+      expect(markdown).toContain("# My CLI");
+      expect(markdown).toContain("Version: 1.0.0");
+      expect(markdown).toContain("**Global Options**");
+      expect(markdown).toContain("`--verbose`");
+      expect(markdown).toContain("## License");
+      expect(markdown).toContain("MIT");
+    });
+
+    it("should render global options link for subcommand", async () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "build",
+        description: "Build the project",
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "my-cli", ["build"], {
+        globalArgs: globalArgsSchema,
+      });
+
+      const render = createCommandRenderer();
+      const markdown = render(info);
+
+      expect(markdown).toContain("See [Global Options](#global-options)");
+      expect(markdown).not.toContain("**Global Options**");
     });
   });
 });

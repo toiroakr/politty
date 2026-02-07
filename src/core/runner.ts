@@ -75,6 +75,7 @@ export async function runCommand<TResult = unknown>(
     handleSignals: false,
     skipValidation: options.skipValidation,
     logger: options.logger,
+    _globalArgsContext: options.globalArgs ? { schema: options.globalArgs } : undefined,
   });
 }
 
@@ -113,6 +114,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
       rootName: command.name,
       rootVersion: options.version,
     },
+    _globalArgsContext: options.globalArgs ? { schema: options.globalArgs } : undefined,
   });
 
   process.exit(result.exitCode);
@@ -148,8 +150,15 @@ async function runCommandInternal<TResult = unknown>(
   };
 
   try {
-    // Parse arguments
-    const parseResult = parseArgs(argv, command, { skipValidation: options.skipValidation });
+    // Get global args context
+    const globalArgsContext = options._globalArgsContext;
+    const globalArgsSchema = globalArgsContext?.schema;
+
+    // Parse arguments (include global args schema for proper parsing)
+    const parseResult = parseArgs(argv, command, {
+      skipValidation: options.skipValidation,
+      globalArgsSchema,
+    });
 
     // Handle --help or --help-all
     if (parseResult.helpRequested || parseResult.helpAllRequested) {
@@ -170,6 +179,7 @@ async function runCommandInternal<TResult = unknown>(
         showSubcommands: options.showSubcommands ?? true,
         showSubcommandOptions: parseResult.helpAllRequested || options.showSubcommandOptions,
         context,
+        globalArgsSchema,
       });
       logger.log(help);
       collector?.stop();
@@ -205,12 +215,30 @@ async function runCommandInternal<TResult = unknown>(
           rootName: context.rootName,
           rootVersion: context.rootVersion,
         };
+
+        // Parse and propagate global args to subcommand
+        let updatedGlobalArgsContext = globalArgsContext;
+        if (globalArgsContext && !globalArgsContext.values) {
+          // First time: parse global args and store values
+          const globalValidation = validateArgs(
+            parseResult.globalRawArgs ?? {},
+            globalArgsContext.schema,
+          );
+          if (globalValidation.success) {
+            updatedGlobalArgsContext = {
+              schema: globalArgsContext.schema,
+              values: globalValidation.data as Record<string, unknown>,
+            };
+          }
+        }
+
         // Stop this collector and pass logs to subcommand
         collector?.stop();
         return runCommandInternal<TResult>(subCmd, parseResult.remainingArgs, {
           ...options,
           _context: subContext,
           _existingLogs: getCurrentLogs(),
+          _globalArgsContext: updatedGlobalArgsContext,
         });
       }
     }
@@ -221,6 +249,7 @@ async function runCommandInternal<TResult = unknown>(
       const help = generateHelp(command, {
         showSubcommands: options.showSubcommands ?? true,
         context,
+        globalArgsSchema,
       });
       logger.log(help);
       collector?.stop();
@@ -254,12 +283,30 @@ async function runCommandInternal<TResult = unknown>(
       // passthrough mode: silently ignore unknown flags
     }
 
+    // Get global args values (either from context or parse now)
+    let globalArgsValues: Record<string, unknown> = {};
+    if (globalArgsContext) {
+      if (globalArgsContext.values) {
+        // Use cached values from parent command
+        globalArgsValues = globalArgsContext.values;
+      } else {
+        // Parse global args for the first time
+        const globalValidation = validateArgs(
+          parseResult.globalRawArgs ?? {},
+          globalArgsContext.schema,
+        );
+        if (globalValidation.success) {
+          globalArgsValues = globalValidation.data as Record<string, unknown>;
+        }
+      }
+    }
+
     // Validate arguments
     if (!command.args) {
-      // No schema, run with empty args
+      // No schema, run with global args only
       // Stop this collector and pass logs to executeLifecycle
       collector?.stop();
-      const result = await executeLifecycle(command, {} as Record<string, never>, {
+      const result = await executeLifecycle(command, globalArgsValues, {
         handleSignals: options.handleSignals,
         captureLogs: options.captureLogs,
         existingLogs: getCurrentLogs(),
@@ -280,10 +327,13 @@ async function runCommandInternal<TResult = unknown>(
       };
     }
 
+    // Merge global args with command args (command args take precedence)
+    const mergedArgs = { ...globalArgsValues, ...validationResult.data };
+
     // Run the command
     // Stop this collector and pass logs to executeLifecycle
     collector?.stop();
-    const result = await executeLifecycle(command, validationResult.data, {
+    const result = await executeLifecycle(command, mergedArgs, {
       handleSignals: options.handleSignals,
       captureLogs: options.captureLogs,
       existingLogs: getCurrentLogs(),

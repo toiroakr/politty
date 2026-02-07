@@ -39,6 +39,8 @@ export type {
   CommandBase,
   // Example types
   Example,
+  // Global args (for declaration merging)
+  GlobalArgs,
   LogEntry,
   // Logger type
   Logger,

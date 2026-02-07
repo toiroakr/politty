@@ -1,9 +1,10 @@
 import {
+  extractFields,
   getExtractedFields,
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
-import type { AnyCommand, Example } from "../types.js";
+import type { AnyCommand, ArgsSchema, Example } from "../types.js";
 import { styles } from "./logger.js";
 import { renderMarkdown } from "./markdown-renderer.js";
 
@@ -52,6 +53,8 @@ export interface HelpOptions {
   descriptions?: BuiltinOptionDescriptions | undefined;
   /** Command hierarchy context */
   context?: CommandContext | undefined;
+  /** Global arguments schema (for displaying Global Options section) */
+  globalArgsSchema?: ArgsSchema | undefined;
 }
 
 /**
@@ -520,6 +523,42 @@ function renderSubcommandsWithOptions(
 }
 
 /**
+ * Render the Global Options section
+ */
+export function renderGlobalOptions(globalArgsSchema: ArgsSchema): string {
+  const lines: string[] = [];
+  const extracted = extractFields(globalArgsSchema);
+
+  for (const opt of extracted.fields) {
+    // Skip positional arguments (global options should not have positionals)
+    if (opt.positional) continue;
+
+    const flags = formatFlags(opt);
+    let desc = opt.description ?? "";
+
+    // Add default value indicator
+    if (opt.defaultValue !== undefined) {
+      desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(opt.defaultValue)})`)}`;
+    }
+
+    // Add required indicator
+    if (opt.required) {
+      desc += ` ${styles.required("(required)")}`;
+    }
+
+    // Add environment variable info
+    const envInfo = formatEnvInfo(opt.env);
+    if (envInfo) {
+      desc += ` ${envInfo}`;
+    }
+
+    lines.push(formatOption(flags, desc));
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * Generate help text for a command
  *
  * @param command - The command to generate help for
@@ -561,6 +600,16 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   const optionsText = renderOptions(command, options.descriptions, context);
   if (optionsText) {
     sections.push(`${styles.sectionHeader("Options:")}\n${optionsText}`);
+  }
+
+  // Global Options (shown for all commands when globalArgsSchema is provided)
+  // For --help-all, this is shown at root level only (subcommand sections rendered by
+  // renderSubcommandsWithOptions don't include global options)
+  if (options.globalArgsSchema) {
+    const globalOptionsText = renderGlobalOptions(options.globalArgsSchema);
+    if (globalOptionsText) {
+      sections.push(`${styles.sectionHeader("Global Options:")}\n${globalOptionsText}`);
+    }
   }
 
   // Subcommands

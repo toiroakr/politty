@@ -443,4 +443,228 @@ describe("runCommand", () => {
       consoleSpy.mockRestore();
     });
   });
+
+  describe("Global arguments", () => {
+    it("should pass global args to command run function", async () => {
+      const runFn = vi.fn();
+
+      const globalArgs = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          name: z.string(),
+        }),
+        run: runFn,
+      });
+
+      await runCommand(cmd, ["--verbose", "--name", "John"], { globalArgs });
+
+      expect(runFn).toHaveBeenCalledWith({
+        name: "John",
+        verbose: true,
+      });
+    });
+
+    it("should pass global args to subcommand run function", async () => {
+      const buildFn = vi.fn();
+
+      const globalArgs = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+        config: arg(z.string().optional(), { alias: "c" }),
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              output: arg(z.string().default("dist"), { alias: "o" }),
+            }),
+            run: buildFn,
+          }),
+        },
+      });
+
+      await runCommand(cmd, ["--verbose", "build", "--output", "build"], {
+        globalArgs,
+      });
+
+      expect(buildFn).toHaveBeenCalledWith({
+        verbose: true,
+        config: undefined,
+        output: "build",
+      });
+    });
+
+    it("should allow command args to override global args with same name", async () => {
+      const runFn = vi.fn();
+
+      const globalArgs = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          // Command-level verbose overrides global verbose
+          verbose: arg(z.boolean().default(true)),
+        }),
+        run: runFn,
+      });
+
+      // Without --verbose flag, command default should be used
+      await runCommand(cmd, [], { globalArgs });
+
+      expect(runFn).toHaveBeenCalledWith({
+        verbose: true, // Command default, not global default
+      });
+    });
+
+    it("should work with command that has no args", async () => {
+      const runFn = vi.fn();
+
+      const globalArgs = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const cmd = defineCommand({
+        name: "test",
+        run: runFn,
+      });
+
+      await runCommand(cmd, ["--verbose"], { globalArgs });
+
+      expect(runFn).toHaveBeenCalledWith({
+        verbose: true,
+      });
+    });
+
+    it("should show Global Options in help output", async () => {
+      const console = spyOnConsoleLog();
+
+      const globalArgs = z.object({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+        config: arg(z.string().optional(), {
+          alias: "c",
+          description: "Path to config file",
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "my-cli",
+        description: "Test CLI",
+      });
+
+      await runCommand(cmd, ["--help"], { globalArgs });
+
+      const output = console.getLogs()[0] ?? "";
+      expect(output).toContain("Global Options:");
+      expect(output).toContain("--verbose");
+      expect(output).toContain("-v");
+      expect(output).toContain("Enable verbose output");
+      expect(output).toContain("--config");
+      expect(output).toContain("-c");
+      expect(output).toContain("Path to config file");
+      console.mockRestore();
+    });
+
+    it("should show Global Options in subcommand help output", async () => {
+      const console = spyOnConsoleLog();
+
+      const globalArgs = z.object({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            description: "Build the project",
+            args: z.object({
+              output: arg(z.string().default("dist"), { alias: "o" }),
+            }),
+          }),
+        },
+      });
+
+      await runCommand(cmd, ["build", "--help"], { globalArgs });
+
+      const output = console.getLogs()[0] ?? "";
+      expect(output).toContain("build");
+      expect(output).toContain("Build the project");
+      expect(output).toContain("--output");
+      expect(output).toContain("Global Options:");
+      expect(output).toContain("--verbose");
+      console.mockRestore();
+    });
+
+    it("should apply default values for global args", async () => {
+      const runFn = vi.fn();
+
+      const globalArgs = z.object({
+        verbose: arg(z.boolean().default(false)),
+        level: arg(z.coerce.number().default(1)),
+      });
+
+      const cmd = defineCommand({
+        name: "test",
+        run: runFn,
+      });
+
+      await runCommand(cmd, [], { globalArgs });
+
+      expect(runFn).toHaveBeenCalledWith({
+        verbose: false,
+        level: 1,
+      });
+    });
+
+    it("should propagate global args through nested subcommands", async () => {
+      const nestedFn = vi.fn();
+
+      const globalArgs = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          config: defineCommand({
+            name: "config",
+            subCommands: {
+              set: defineCommand({
+                name: "set",
+                args: z.object({
+                  key: arg(z.string(), { positional: true }),
+                  value: arg(z.string(), { positional: true }),
+                }),
+                run: nestedFn,
+              }),
+            },
+          }),
+        },
+      });
+
+      await runCommand(cmd, ["--verbose", "config", "set", "foo", "bar"], {
+        globalArgs,
+      });
+
+      expect(nestedFn).toHaveBeenCalledWith({
+        verbose: true,
+        key: "foo",
+        value: "bar",
+      });
+    });
+  });
 });
