@@ -23,7 +23,8 @@ export const command = defineCommand({
 - \`delete\` — \`--id\`, \`--force\`
 - \`list\` — \`--format\`, \`--limit\`
 
-> **Note:** Only the options for the selected action are accepted.`,
+> [!NOTE]
+> Only the options for the selected action are accepted.`,
   args: z
     .discriminatedUnion("action", [
       // create action

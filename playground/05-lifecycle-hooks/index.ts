@@ -19,7 +19,9 @@ export const command = defineCommand({
 2. \`run\` — Execute the main logic
 3. \`cleanup\` — Release resources (always runs, even on error)
 
-Use \`--simulate-error\` to verify that cleanup is called on failure.`,
+> [!WARNING]
+> When \`--simulate-error\` is set, an error is thrown during \`run\`.
+> The \`cleanup\` hook is still called to release resources.`,
   args: z.object({
     database: arg(z.string(), {
       alias: "d",

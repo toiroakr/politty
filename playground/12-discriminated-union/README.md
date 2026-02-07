@@ -30,6 +30,7 @@ Available options vary depending on the value of `--action`.
 - `delete` — `--id`, `--force`
 - `list` — `--format`, `--limit`
 
-> **Note:** Only the options for the selected action are accepted.
+> [!NOTE]
+> Only the options for the selected action are accepted.
 
 <!-- politty:command::end -->
