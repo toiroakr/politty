@@ -320,8 +320,8 @@ function renderBlock(block: Block): string {
 
     case "alert": {
       const { icon, label, styleFn } = alertStyles[block.alertType];
-      const prefix = styles.dim("│ ");
-      const header = `${prefix}${icon} ${styleFn(label)}`;
+      const prefix = styleFn(styles.bold("│")) + " ";
+      const header = `${prefix}${styleFn(icon)} ${styleFn(label)}`;
       if (block.lines.length === 0) {
         return header;
       }
