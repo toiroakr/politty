@@ -133,7 +133,7 @@ describe("renderMarkdown", () => {
   describe("unordered lists", () => {
     it("should render - items", () => {
       const result = renderMarkdown("- Item one\n- Item two");
-      expect(result).toBe("  • Item one\n  • Item two");
+      expect(result).toBe("• Item one\n• Item two");
     });
 
     it("should not treat * as list marker", () => {
@@ -144,19 +144,19 @@ describe("renderMarkdown", () => {
 
     it("should apply inline formatting in list items", () => {
       const result = renderMarkdown("- Use `--verbose` for **debug** output");
-      expect(result).toBe("  • Use --verbose for debug output");
+      expect(result).toBe("• Use --verbose for debug output");
     });
   });
 
   describe("ordered lists", () => {
     it("should render numbered items", () => {
       const result = renderMarkdown("1. First\n2. Second\n3. Third");
-      expect(result).toBe("  1. First\n  2. Second\n  3. Third");
+      expect(result).toBe("1. First\n2. Second\n3. Third");
     });
 
     it("should respect start number", () => {
       const result = renderMarkdown("3. Third\n4. Fourth");
-      expect(result).toBe("  3. Third\n  4. Fourth");
+      expect(result).toBe("3. Third\n4. Fourth");
     });
 
     it("should pad numbers for alignment", () => {
@@ -164,13 +164,13 @@ describe("renderMarkdown", () => {
       const result = renderMarkdown(items);
       const lines = result.split("\n");
       // Single-digit numbers should be right-aligned with double-digit
-      expect(lines[0]).toBe("   1. Item 1");
-      expect(lines[9]).toBe("  10. Item 10");
+      expect(lines[0]).toBe(" 1. Item 1");
+      expect(lines[9]).toBe("10. Item 10");
     });
 
     it("should support ) delimiter", () => {
       const result = renderMarkdown("1) First\n2) Second");
-      expect(result).toBe("  1. First\n  2. Second");
+      expect(result).toBe("1. First\n2. Second");
     });
   });
 

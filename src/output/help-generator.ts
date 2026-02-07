@@ -602,9 +602,14 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
     sections.push(`${styles.sectionHeader("Examples:")}\n${exampleLines}`);
   }
 
-  // Notes (render Markdown for styled terminal output)
+  // Notes (render Markdown for styled terminal output, indented under header)
   if (command.notes) {
-    sections.push(`${styles.sectionHeader("Notes:")}\n${renderMarkdown(command.notes)}`);
+    const rendered = renderMarkdown(command.notes);
+    const indented = rendered
+      .split("\n")
+      .map((line) => (line === "" ? "" : `  ${line}`))
+      .join("\n");
+    sections.push(`${styles.sectionHeader("Notes:")}\n${indented}`);
   }
 
   return sections.join("\n\n");

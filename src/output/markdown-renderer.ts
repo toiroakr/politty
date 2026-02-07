@@ -282,7 +282,7 @@ function renderBlock(block: Block): string {
     }
 
     case "ul": {
-      return block.items.map((item) => `  ${styles.dim("•")} ${renderInline(item)}`).join("\n");
+      return block.items.map((item) => `${styles.dim("•")} ${renderInline(item)}`).join("\n");
     }
 
     case "ol": {
@@ -291,13 +291,13 @@ function renderBlock(block: Block): string {
       return block.items
         .map((item, i) => {
           const num = String(block.start + i).padStart(width, " ");
-          return `  ${styles.dim(`${num}.`)} ${renderInline(item)}`;
+          return `${styles.dim(`${num}.`)} ${renderInline(item)}`;
         })
         .join("\n");
     }
 
     case "code": {
-      // Indent each line and apply dim styling (no syntax highlighting to keep zero-dep)
+      // Extra indent for code blocks to distinguish from surrounding text
       return block.lines.map((line) => `  ${styles.yellow(line)}`).join("\n");
     }
 
