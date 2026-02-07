@@ -268,8 +268,8 @@ function splitIntoBlocks(lines: string[]): Block[] {
 function renderBlock(block: Block): string {
   switch (block.type) {
     case "heading": {
-      // Inspired by marked-terminal: bold + underline for distinction from plain bold text
-      return styles.sectionHeader(renderInline(block.content));
+      // Inspired by marked-terminal: green + bold to distinguish from section headers (bold + underline)
+      return styles.green(styles.bold(renderInline(block.content)));
     }
 
     case "hr": {
