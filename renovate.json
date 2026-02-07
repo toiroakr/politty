@@ -4,7 +4,7 @@
     "config:best-practices",
     ":automergeMinor",
     ":dependencyDashboard",
-    "github>aquaproj/aqua-renovate-config#2.2.1"
+    "github>aquaproj/aqua-renovate-config#2.10.0"
   ],
   "labels": ["dependencies"],
   "minimumReleaseAge": "7 days",

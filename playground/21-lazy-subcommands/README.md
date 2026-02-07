@@ -33,10 +33,10 @@ my-app analytics [options]
 
 **Options**
 
-| Option              | Alias | Description       | Default   |
-| ------------------- | ----- | ----------------- | --------- |
-| `--metric <METRIC>` | `-m`  | Metric to analyze | `"lines"` |
-| `--format <FORMAT>` | `-f`  | Output format     | `"text"`  |
+| Option              | Alias | Description       | Required | Default   |
+| ------------------- | ----- | ----------------- | -------- | --------- |
+| `--metric <METRIC>` | `-m`  | Metric to analyze | No       | `"lines"` |
+| `--format <FORMAT>` | `-f`  | Output format     | No       | `"text"`  |
 
 <!-- politty:command:analytics:end -->
 <!-- politty:command:heavy:start -->
@@ -53,10 +53,10 @@ my-app heavy [options]
 
 **Options**
 
-| Option                      | Alias | Description          | Default |
-| --------------------------- | ----- | -------------------- | ------- |
-| `--iterations <ITERATIONS>` | `-n`  | Number of iterations | `1000`  |
-| `--verbose`                 | `-v`  | Verbose output       | `false` |
+| Option                      | Alias | Description          | Required | Default |
+| --------------------------- | ----- | -------------------- | -------- | ------- |
+| `--iterations <ITERATIONS>` | `-n`  | Number of iterations | No       | `1000`  |
+| `--verbose`                 | `-v`  | Verbose output       | No       | `false` |
 
 <!-- politty:command:heavy:end -->
 <!-- politty:command:status:start -->
@@ -73,8 +73,8 @@ my-app status [options]
 
 **Options**
 
-| Option      | Alias | Description          | Default |
-| ----------- | ----- | -------------------- | ------- |
-| `--verbose` | `-v`  | Show detailed status | `false` |
+| Option      | Alias | Description          | Required | Default |
+| ----------- | ----- | -------------------- | -------- | ------- |
+| `--verbose` | `-v`  | Show detailed status | No       | `false` |
 
 <!-- politty:command:status:end -->

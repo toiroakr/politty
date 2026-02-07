@@ -1,6 +1,6 @@
 {
   "name": "politty",
-  "version": "0.1.2",
+  "version": "0.2.1",
   "description": "A lightweight CLI framework inspired by citty with zod v4 registry integration for type-safe metadata management",
   "keywords": [
     "argument-parser",
@@ -88,18 +88,18 @@
   "devDependencies": {
     "@changesets/cli": "2.29.8",
     "@quansync/fs": "1.0.0",
-    "@types/node": "25.0.10",
-    "@typescript/native-preview": "7.0.0-dev.20260124.1",
-    "@vitest/coverage-v8": "4.0.16",
-    "knip": "5.82.1",
-    "lefthook": "2.0.16",
+    "@types/node": "25.2.0",
+    "@typescript/native-preview": "7.0.0-dev.20260204.1",
+    "@vitest/coverage-v8": "4.0.18",
+    "knip": "5.83.0",
+    "lefthook": "2.1.0",
     "organize-imports-cli": "0.10.0",
-    "oxfmt": "0.27.0",
-    "oxlint": "1.42.0",
+    "oxfmt": "0.28.0",
+    "oxlint": "1.43.0",
     "quansync": "1.0.0",
     "tsdown": "0.20.1",
     "typescript": "5.9.3",
-    "vitest": "4.0.16",
+    "vitest": "4.0.18",
     "zod": "4.3.6"
   },
   "peerDependencies": {
@@ -108,5 +108,5 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@10.27.0"
+  "packageManager": "pnpm@10.28.2"
 }

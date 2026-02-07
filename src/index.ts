@@ -24,6 +24,7 @@ export {
   type HelpOptions,
 } from "./output/help-generator.js";
 export { isColorEnabled, logger, setColorEnabled, styles, symbols } from "./output/logger.js";
+export { renderInline, renderMarkdown } from "./output/markdown-renderer.js";
 // Parser exports
 export { parseArgv, type ParsedArgv, type ParserOptions } from "./parser/argv-parser.js";
 // Type exports

@@ -19,8 +19,8 @@ convert [options] <input> [output]
 
 **Options**
 
-| Option              | Alias | Description   | Default  |
-| ------------------- | ----- | ------------- | -------- |
-| `--format <FORMAT>` | `-f`  | Output format | `"json"` |
+| Option              | Alias | Description   | Required | Default  |
+| ------------------- | ----- | ------------- | -------- | -------- |
+| `--format <FORMAT>` | `-f`  | Output format | No       | `"json"` |
 
 <!-- politty:command::end -->

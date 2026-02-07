@@ -12,15 +12,22 @@ db-query [options]
 
 **Options**
 
-| Option                  | Alias | Description                | Default |
-| ----------------------- | ----- | -------------------------- | ------- |
-| `--database <DATABASE>` | `-d`  | Database connection string | -       |
-| `--query <QUERY>`       | `-q`  | SQL query                  | -       |
-| `--simulate_error`      | `-e`  | Simulate an error          | `false` |
+| Option                  | Alias | Description                | Required | Default |
+| ----------------------- | ----- | -------------------------- | -------- | ------- |
+| `--database <DATABASE>` | `-d`  | Database connection string | Yes      | -       |
+| `--query <QUERY>`       | `-q`  | SQL query                  | Yes      | -       |
+| `--simulate_error`      | `-e`  | Simulate an error          | No       | `false` |
 
 **Notes**
 
-This command demonstrates the setup → run → cleanup execution order.
-Using the --simulate-error flag, you can verify that cleanup is called even when an error occurs.
+## Execution Order
+
+1. `setup` — Initialize resources (e.g. DB connection)
+2. `run` — Execute the main logic
+3. `cleanup` — Release resources (always runs, even on error)
+
+> [!WARNING]
+> When `--simulate-error` is set, an error is thrown during `run`.
+> The `cleanup` hook is still called to release resources.
 
 <!-- politty:command::end -->

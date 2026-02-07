@@ -13,7 +13,7 @@ export type ArgsShape = Record<string, z.ZodType>;
  */
 export type ArgsTableOptions = {
   /** Columns to include in the table (default: all columns) */
-  columns?: ("option" | "alias" | "description" | "default" | "env")[];
+  columns?: ("option" | "alias" | "description" | "required" | "default" | "env")[];
 };
 
 /**
@@ -94,7 +94,7 @@ function formatDefaultValue(value: unknown): string {
  */
 function renderFilteredTable(
   options: ResolvedFieldMeta[],
-  columns: ("option" | "alias" | "description" | "default" | "env")[],
+  columns: ("option" | "alias" | "description" | "required" | "default" | "env")[],
 ): string {
   const lines: string[] = [];
 
@@ -115,6 +115,10 @@ function renderFilteredTable(
       case "description":
         headerCells.push("Description");
         separatorCells.push("-----------");
+        break;
+      case "required":
+        headerCells.push("Required");
+        separatorCells.push("--------");
         break;
       case "default":
         headerCells.push("Default");
@@ -150,6 +154,9 @@ function renderFilteredTable(
           break;
         case "description":
           cells.push(escapeTableCell(opt.description ?? ""));
+          break;
+        case "required":
+          cells.push(opt.required ? "Yes" : "No");
           break;
         case "default":
           cells.push(formatDefaultValue(opt.defaultValue));

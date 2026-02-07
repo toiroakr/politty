@@ -1,5 +1,22 @@
 # politty
 
+## 0.2.1
+
+### Patch Changes
+
+- f447c8d: Add lightweight markdown renderer for styled terminal help notes with support for headings, lists, code blocks, blockquotes, and GitHub alert syntax
+- 92f3dc3: Show required/optional status in options documentation output
+
+## 0.2.0
+
+### Minor Changes
+
+- ac11f29: Auto-prepend full command path in documentation examples via `commandPrefix` option in `ExamplesRenderOptions`
+
+### Patch Changes
+
+- 11fa620: Fix zsh completion error when loading via eval by using compdef instead of direct function call
+
 ## 0.1.2
 
 ### Patch Changes

@@ -58,8 +58,8 @@ validation-demo transform [options] <name>
 
 **Options**
 
-| Option          | Alias | Description          | Default |
-| --------------- | ----- | -------------------- | ------- |
-| `--tags <TAGS>` | `-t`  | Comma-separated tags | -       |
+| Option          | Alias | Description          | Required | Default |
+| --------------- | ----- | -------------------- | -------- | ------- |
+| `--tags <TAGS>` | `-t`  | Comma-separated tags | Yes      | -       |
 
 <!-- politty:command:transform:end -->

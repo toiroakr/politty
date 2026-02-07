@@ -18,9 +18,9 @@ gcc [options] <sources>
 
 **Options**
 
-| Option              | Alias | Description         | Default |
-| ------------------- | ----- | ------------------- | ------- |
-| `--output <OUTPUT>` | `-o`  | Output filename     | -       |
-| `--optimize`        | `-O`  | Enable optimization | `false` |
+| Option              | Alias | Description         | Required | Default |
+| ------------------- | ----- | ------------------- | -------- | ------- |
+| `--output <OUTPUT>` | `-o`  | Output filename     | Yes      | -       |
+| `--optimize`        | `-O`  | Enable optimization | No       | `false` |
 
 <!-- politty:command::end -->

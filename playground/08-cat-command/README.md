@@ -18,9 +18,9 @@ cat [options] <files>
 
 **Options**
 
-| Option        | Alias | Description            | Default |
-| ------------- | ----- | ---------------------- | ------- |
-| `--number`    | `-n`  | Show line numbers      | `false` |
-| `--show-ends` | `-E`  | Show $ at end of lines | `false` |
+| Option        | Alias | Description            | Required | Default |
+| ------------- | ----- | ---------------------- | -------- | ------- |
+| `--number`    | `-n`  | Show line numbers      | No       | `false` |
+| `--show-ends` | `-E`  | Show $ at end of lines | No       | `false` |
 
 <!-- politty:command::end -->

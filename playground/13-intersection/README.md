@@ -18,11 +18,11 @@ process [options] <input>
 
 **Options**
 
-| Option              | Alias | Description     | Default |
-| ------------------- | ----- | --------------- | ------- |
-| `--verbose`         | `-v`  | Verbose output  | `false` |
-| `--config <CONFIG>` | `-c`  | Config file     | -       |
-| `--quiet`           | `-q`  | Suppress output | `false` |
-| `--output <OUTPUT>` | `-o`  | Output file     | -       |
+| Option              | Alias | Description     | Required | Default |
+| ------------------- | ----- | --------------- | -------- | ------- |
+| `--verbose`         | `-v`  | Verbose output  | No       | `false` |
+| `--config <CONFIG>` | `-c`  | Config file     | No       | -       |
+| `--quiet`           | `-q`  | Suppress output | No       | `false` |
+| `--output <OUTPUT>` | `-o`  | Output file     | Yes      | -       |
 
 <!-- politty:command::end -->

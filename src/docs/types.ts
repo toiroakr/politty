@@ -180,6 +180,8 @@ export interface ExamplesRenderOptions {
   withHeading?: boolean;
   /** Show execution output (default: true when results available) */
   showOutput?: boolean;
+  /** Command prefix to prepend to example commands (e.g., "my-cli config get") */
+  commandPrefix?: string;
 }
 
 /**

@@ -32,11 +32,11 @@ my-cli build [options]
 
 **Options**
 
-| Option              | Alias | Description        | Default  |
-| ------------------- | ----- | ------------------ | -------- |
-| `--output <OUTPUT>` | `-o`  | Output directory   | `"dist"` |
-| `--minify`          | `-m`  | Minify output      | `false`  |
-| `--watch`           | `-w`  | Watch file changes | `false`  |
+| Option              | Alias | Description        | Required | Default  |
+| ------------------- | ----- | ------------------ | -------- | -------- |
+| `--output <OUTPUT>` | `-o`  | Output directory   | No       | `"dist"` |
+| `--minify`          | `-m`  | Minify output      | No       | `false`  |
+| `--watch`           | `-w`  | Watch file changes | No       | `false`  |
 
 <!-- politty:command:build:end -->
 <!-- politty:command:init:start -->
@@ -53,9 +53,9 @@ my-cli init [options]
 
 **Options**
 
-| Option                  | Alias | Description              | Default     |
-| ----------------------- | ----- | ------------------------ | ----------- |
-| `--template <TEMPLATE>` | `-t`  | Template name            | `"default"` |
-| `--force`               | `-f`  | Overwrite existing files | `false`     |
+| Option                  | Alias | Description              | Required | Default     |
+| ----------------------- | ----- | ------------------------ | -------- | ----------- |
+| `--template <TEMPLATE>` | `-t`  | Template name            | No       | `"default"` |
+| `--force`               | `-f`  | Overwrite existing files | No       | `false`     |
 
 <!-- politty:command:init:end -->
