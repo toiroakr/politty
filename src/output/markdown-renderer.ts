@@ -91,6 +91,14 @@ interface BlockquoteBlock {
   lines: string[];
 }
 
+type AlertType = "NOTE" | "TIP" | "IMPORTANT" | "WARNING" | "CAUTION";
+
+interface AlertBlock {
+  type: "alert";
+  alertType: AlertType;
+  lines: string[];
+}
+
 interface UnorderedListBlock {
   type: "ul";
   items: string[];
@@ -113,6 +121,7 @@ type Block =
   | HeadingBlock
   | HorizontalRuleBlock
   | BlockquoteBlock
+  | AlertBlock
   | UnorderedListBlock
   | OrderedListBlock
   | CodeBlock;
@@ -125,6 +134,7 @@ const BLOCKQUOTE_RE = /^>\s?(.*)$/;
 const UL_RE = /^-\s+(.+)$/;
 const OL_RE = /^(\d+)[.)]\s+(.+)$/;
 const FENCE_OPEN_RE = /^(`{3,}|~{3,})(\S*)\s*$/;
+const ALERT_RE = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$/;
 
 /**
  * Split lines into logical blocks separated by blank lines.
@@ -186,7 +196,7 @@ function splitIntoBlocks(lines: string[]): Block[] {
       continue;
     }
 
-    // Blockquote (consecutive > lines)
+    // Blockquote or GitHub alert (consecutive > lines)
     if (BLOCKQUOTE_RE.test(line)) {
       const bqLines: string[] = [];
       while (i < lines.length) {
@@ -196,6 +206,19 @@ function splitIntoBlocks(lines: string[]): Block[] {
           i++;
         } else {
           break;
+        }
+      }
+      // Check if first line is a GitHub alert marker: [!TYPE]
+      if (bqLines.length > 0) {
+        const alertMatch = bqLines[0]!.match(ALERT_RE);
+        if (alertMatch) {
+          const contentLines = bqLines.slice(1).filter((l) => l !== "");
+          blocks.push({
+            type: "alert",
+            alertType: alertMatch[1] as AlertType,
+            lines: contentLines,
+          });
+          continue;
         }
       }
       blocks.push({ type: "blockquote", lines: bqLines });
@@ -263,6 +286,20 @@ function splitIntoBlocks(lines: string[]): Block[] {
 }
 
 /**
+ * Style configuration for GitHub-style alert blocks.
+ */
+const alertStyles: Record<
+  AlertType,
+  { icon: string; label: string; styleFn: (s: string) => string }
+> = {
+  NOTE: { icon: "ℹ", label: "Note", styleFn: styles.cyan },
+  TIP: { icon: "💡", label: "Tip", styleFn: styles.green },
+  IMPORTANT: { icon: "❗", label: "Important", styleFn: styles.magenta },
+  WARNING: { icon: "⚠", label: "Warning", styleFn: styles.yellow },
+  CAUTION: { icon: "🔴", label: "Caution", styleFn: styles.red },
+};
+
+/**
  * Render a single block to styled terminal output.
  */
 function renderBlock(block: Block): string {
@@ -279,6 +316,17 @@ function renderBlock(block: Block): string {
     case "blockquote": {
       const prefix = styles.dim("│ ");
       return block.lines.map((line) => `${prefix}${renderInline(line)}`).join("\n");
+    }
+
+    case "alert": {
+      const { icon, label, styleFn } = alertStyles[block.alertType];
+      const prefix = styles.dim("│ ");
+      const header = `${prefix}${icon} ${styleFn(label)}`;
+      if (block.lines.length === 0) {
+        return header;
+      }
+      const body = block.lines.map((line) => `${prefix}${renderInline(line)}`).join("\n");
+      return `${header}\n${body}`;
     }
 
     case "ul": {

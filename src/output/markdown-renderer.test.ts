@@ -271,6 +271,73 @@ Choose one of the above options.`;
     });
   });
 
+  describe("GitHub alerts", () => {
+    it("should render [!NOTE] alert", () => {
+      const md = "> [!NOTE]\n> This is a note.";
+      const result = renderMarkdown(md);
+      expect(result).toContain("ℹ");
+      expect(result).toContain("Note");
+      expect(result).toContain("│ This is a note.");
+    });
+
+    it("should render [!TIP] alert", () => {
+      const md = "> [!TIP]\n> Use `--verbose` for more details.";
+      const result = renderMarkdown(md);
+      expect(result).toContain("💡");
+      expect(result).toContain("Tip");
+      expect(result).toContain("--verbose");
+    });
+
+    it("should render [!IMPORTANT] alert", () => {
+      const md = "> [!IMPORTANT]\n> This step is required.";
+      const result = renderMarkdown(md);
+      expect(result).toContain("❗");
+      expect(result).toContain("Important");
+    });
+
+    it("should render [!WARNING] alert", () => {
+      const md = "> [!WARNING]\n> This may cause data loss.";
+      const result = renderMarkdown(md);
+      expect(result).toContain("⚠");
+      expect(result).toContain("Warning");
+    });
+
+    it("should render [!CAUTION] alert", () => {
+      const md = "> [!CAUTION]\n> Irreversible action.";
+      const result = renderMarkdown(md);
+      expect(result).toContain("🔴");
+      expect(result).toContain("Caution");
+    });
+
+    it("should render alert without body", () => {
+      const md = "> [!NOTE]";
+      const result = renderMarkdown(md);
+      expect(result).toContain("ℹ");
+      expect(result).toContain("Note");
+    });
+
+    it("should render multi-line alert body", () => {
+      const md = "> [!WARNING]\n> Line one.\n> Line two.";
+      const result = renderMarkdown(md);
+      expect(result).toContain("│ Line one.");
+      expect(result).toContain("│ Line two.");
+    });
+
+    it("should not treat regular blockquote as alert", () => {
+      const md = "> Just a regular quote.";
+      const result = renderMarkdown(md);
+      expect(result).not.toContain("ℹ");
+      expect(result).toContain("│ Just a regular quote.");
+    });
+
+    it("should apply inline formatting in alert body", () => {
+      const md = "> [!TIP]\n> Use `--dry-run` before **committing**.";
+      const result = renderMarkdown(md);
+      expect(result).toContain("--dry-run");
+      expect(result).toContain("committing");
+    });
+  });
+
   describe("realistic CLI notes", () => {
     it("should render a typical notes section", () => {
       const md = `**Warning:** This operation is destructive and cannot be undone.
