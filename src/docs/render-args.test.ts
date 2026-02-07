@@ -18,9 +18,9 @@ describe("renderArgsTable", () => {
 
     const table = renderArgsTable(args);
 
-    expect(table).toContain("| Option | Alias | Description | Default |");
-    expect(table).toContain("| `--verbose` | `-v` | Enable verbose mode | `false` |");
-    expect(table).toContain("| `--output <OUTPUT>` | `-o` | Output directory | - |");
+    expect(table).toContain("| Option | Alias | Description | Required | Default |");
+    expect(table).toContain("| `--verbose` | `-v` | Enable verbose mode | No | `false` |");
+    expect(table).toContain("| `--output <OUTPUT>` | `-o` | Output directory | Yes | - |");
   });
 
   it("should handle args without alias", () => {
@@ -32,7 +32,7 @@ describe("renderArgsTable", () => {
 
     const table = renderArgsTable(args);
 
-    expect(table).toContain("| `--config <CONFIG>` | - | Config file path | - |");
+    expect(table).toContain("| `--config <CONFIG>` | - | Config file path | Yes | - |");
   });
 
   it("should convert camelCase to kebab-case", () => {
@@ -66,7 +66,7 @@ describe("renderArgsTable", () => {
 
     const table = renderArgsTable(args);
 
-    expect(table).toContain("| Option | Alias | Description | Default | Env |");
+    expect(table).toContain("| Option | Alias | Description | Required | Default | Env |");
     expect(table).toContain("`PORT`");
   });
 

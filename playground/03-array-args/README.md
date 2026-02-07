@@ -12,9 +12,9 @@ process-files [options]
 
 **Options**
 
-| Option            | Alias | Description                         | Default |
-| ----------------- | ----- | ----------------------------------- | ------- |
-| `--files <FILES>` | `-f`  | Files to process (multiple allowed) | -       |
-| `--verbose`       | `-v`  | Verbose output                      | `false` |
+| Option            | Alias | Description                         | Required | Default |
+| ----------------- | ----- | ----------------------------------- | -------- | ------- |
+| `--files <FILES>` | `-f`  | Files to process (multiple allowed) | Yes      | -       |
+| `--verbose`       | `-v`  | Verbose output                      | No       | `false` |
 
 <!-- politty:command::end -->

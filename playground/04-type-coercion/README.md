@@ -12,10 +12,10 @@ server [options]
 
 **Options**
 
-| Option            | Alias | Description           | Default       |
-| ----------------- | ----- | --------------------- | ------------- |
-| `--port <PORT>`   | `-p`  | Port number (1-65535) | -             |
-| `--count <COUNT>` | `-n`  | Repeat count          | `1`           |
-| `--host <HOST>`   | `-h`  | Hostname              | `"localhost"` |
+| Option            | Alias | Description           | Required | Default       |
+| ----------------- | ----- | --------------------- | -------- | ------------- |
+| `--port <PORT>`   | `-p`  | Port number (1-65535) | Yes      | -             |
+| `--count <COUNT>` | `-n`  | Repeat count          | No       | `1`           |
+| `--host <HOST>`   | `-h`  | Hostname              | No       | `"localhost"` |
 
 <!-- politty:command::end -->

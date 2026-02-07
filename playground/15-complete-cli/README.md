@@ -18,11 +18,11 @@ my-tool [options] [command] <input>
 
 **Options**
 
-| Option              | Alias | Description           | Default  |
-| ------------------- | ----- | --------------------- | -------- |
-| `--output <OUTPUT>` | `-o`  | Output file           | -        |
-| `--verbose`         | `-v`  | Enable verbose output | `false`  |
-| `--format <FORMAT>` | `-f`  | Output format         | `"json"` |
+| Option              | Alias | Description           | Required | Default  |
+| ------------------- | ----- | --------------------- | -------- | -------- |
+| `--output <OUTPUT>` | `-o`  | Output file           | Yes      | -        |
+| `--verbose`         | `-v`  | Enable verbose output | No       | `false`  |
+| `--format <FORMAT>` | `-f`  | Output format         | No       | `"json"` |
 
 **Commands**
 
@@ -49,9 +49,9 @@ my-tool init [options]
 
 **Options**
 
-| Option                  | Alias | Description     | Default     |
-| ----------------------- | ----- | --------------- | ----------- |
-| `--template <TEMPLATE>` | `-t`  | Template to use | `"default"` |
-| `--name <NAME>`         | `-n`  | Project name    | -           |
+| Option                  | Alias | Description     | Required | Default     |
+| ----------------------- | ----- | --------------- | -------- | ----------- |
+| `--template <TEMPLATE>` | `-t`  | Template to use | No       | `"default"` |
+| `--name <NAME>`         | `-n`  | Project name    | No       | -           |
 
 <!-- politty:command:init:end -->

@@ -18,9 +18,9 @@ greet [options] <name>
 
 **Options**
 
-| Option                  | Alias | Description      | Default   |
-| ----------------------- | ----- | ---------------- | --------- |
-| `--greeting <GREETING>` | `-g`  | Greeting phrase  | `"Hello"` |
-| `--loud`                | `-l`  | Output uppercase | `false`   |
+| Option                  | Alias | Description      | Required | Default   |
+| ----------------------- | ----- | ---------------- | -------- | --------- |
+| `--greeting <GREETING>` | `-g`  | Greeting phrase  | No       | `"Hello"` |
+| `--loud`                | `-l`  | Output uppercase | No       | `false`   |
 
 <!-- politty:command::end -->

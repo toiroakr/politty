@@ -40,9 +40,9 @@ file-cli read [options] <file>
 
 **Options**
 
-| Option              | Alias | Description   | Default  |
-| ------------------- | ----- | ------------- | -------- |
-| `--format <FORMAT>` | `-f`  | Output format | `"text"` |
+| Option              | Alias | Description   | Required | Default  |
+| ------------------- | ----- | ------------- | -------- | -------- |
+| `--format <FORMAT>` | `-f`  | Output format | No       | `"text"` |
 
 **Examples**
 
@@ -85,9 +85,9 @@ file-cli write [options] <file> <content>
 
 **Options**
 
-| Option     | Alias | Description                           | Default |
-| ---------- | ----- | ------------------------------------- | ------- |
-| `--append` | `-a`  | Append to file instead of overwriting | `false` |
+| Option     | Alias | Description                           | Required | Default |
+| ---------- | ----- | ------------------------------------- | -------- | ------- |
+| `--append` | `-a`  | Append to file instead of overwriting | No       | `false` |
 
 **Examples**
 
@@ -162,8 +162,8 @@ file-cli delete [options] <file>
 
 **Options**
 
-| Option    | Alias | Description                         | Default |
-| --------- | ----- | ----------------------------------- | ------- |
-| `--force` | `-f`  | Force deletion without confirmation | `false` |
+| Option    | Alias | Description                         | Required | Default |
+| --------- | ----- | ----------------------------------- | -------- | ------- |
+| `--force` | `-f`  | Force deletion without confirmation | No       | `false` |
 
 <!-- politty:command:delete:end -->

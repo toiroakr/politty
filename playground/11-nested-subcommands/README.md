@@ -71,9 +71,9 @@ git-like config list [options]
 
 **Options**
 
-| Option              | Alias | Description   | Default   |
-| ------------------- | ----- | ------------- | --------- |
-| `--format <FORMAT>` | `-f`  | Output format | `"table"` |
+| Option              | Alias | Description   | Required | Default   |
+| ------------------- | ----- | ------------- | -------- | --------- |
+| `--format <FORMAT>` | `-f`  | Output format | No       | `"table"` |
 
 <!-- politty:command:config list:end -->
 <!-- politty:command:config set:start -->

@@ -135,10 +135,10 @@ function formatOptionFlags(opt: ResolvedFieldMeta): string {
  * - Displays multiple env vars as comma-separated list
  *
  * @example
- * | Option | Alias | Description | Default | Env |
- * |--------|-------|-------------|---------|-----|
- * | `--dry-run` | `-d` | Dry run mode | `false` | - |
- * | `--port <PORT>` | - | Server port | - | `PORT`, `SERVER_PORT` |
+ * | Option | Alias | Description | Required | Default | Env |
+ * |--------|-------|-------------|----------|---------|-----|
+ * | `--dry-run` | `-d` | Dry run mode | No | `false` | - |
+ * | `--port <PORT>` | - | Server port | Yes | - | `PORT`, `SERVER_PORT` |
  */
 export function renderOptionsTable(info: CommandInfo): string {
   if (info.options.length === 0) {
@@ -150,11 +150,11 @@ export function renderOptionsTable(info: CommandInfo): string {
 
   const lines: string[] = [];
   if (hasEnv) {
-    lines.push("| Option | Alias | Description | Default | Env |");
-    lines.push("|--------|-------|-------------|---------|-----|");
+    lines.push("| Option | Alias | Description | Required | Default | Env |");
+    lines.push("|--------|-------|-------------|----------|---------|-----|");
   } else {
-    lines.push("| Option | Alias | Description | Default |");
-    lines.push("|--------|-------|-------------|---------|");
+    lines.push("| Option | Alias | Description | Required | Default |");
+    lines.push("|--------|-------|-------------|----------|---------|");
   }
 
   for (const opt of info.options) {
@@ -164,6 +164,7 @@ export function renderOptionsTable(info: CommandInfo): string {
       opt.type === "boolean" ? `\`--${opt.cliName}\`` : `\`--${opt.cliName} <${placeholder}>\``;
     const alias = opt.alias ? `\`-${opt.alias}\`` : "-";
     const desc = escapeTableCell(opt.description ?? "");
+    const required = opt.required ? "Yes" : "No";
     const defaultVal = formatDefaultValue(opt.defaultValue);
 
     if (hasEnv) {
@@ -172,9 +173,11 @@ export function renderOptionsTable(info: CommandInfo): string {
           ? opt.env.map((e) => `\`${e}\``).join(", ")
           : `\`${opt.env}\``
         : "-";
-      lines.push(`| ${optionName} | ${alias} | ${desc} | ${defaultVal} | ${envNames} |`);
+      lines.push(
+        `| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} | ${envNames} |`,
+      );
     } else {
-      lines.push(`| ${optionName} | ${alias} | ${desc} | ${defaultVal} |`);
+      lines.push(`| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} |`);
     }
   }
 
@@ -190,7 +193,7 @@ export function renderOptionsTable(info: CommandInfo): string {
  *
  * @example
  * - `-d`, `--dry-run` - Dry run mode (default: false)
- * - `--port <PORT>` - Server port [env: PORT, SERVER_PORT]
+ * - `--port <PORT>` - Server port (required) [env: PORT, SERVER_PORT]
  */
 export function renderOptionsList(info: CommandInfo): string {
   if (info.options.length === 0) {
@@ -201,10 +204,11 @@ export function renderOptionsList(info: CommandInfo): string {
   for (const opt of info.options) {
     const flags = formatOptionFlags(opt);
     const desc = opt.description ? ` - ${opt.description}` : "";
+    const required = opt.required ? " (required)" : "";
     const defaultVal =
       opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
     const envInfo = formatEnvInfo(opt.env);
-    lines.push(`- ${flags}${desc}${defaultVal}${envInfo}`);
+    lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
   }
 
   return lines.join("\n");
@@ -294,11 +298,11 @@ export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): strin
 
   const lines: string[] = [];
   if (hasEnv) {
-    lines.push("| Option | Alias | Description | Default | Env |");
-    lines.push("|--------|-------|-------------|---------|-----|");
+    lines.push("| Option | Alias | Description | Required | Default | Env |");
+    lines.push("|--------|-------|-------------|----------|---------|-----|");
   } else {
-    lines.push("| Option | Alias | Description | Default |");
-    lines.push("|--------|-------|-------------|---------|");
+    lines.push("| Option | Alias | Description | Required | Default |");
+    lines.push("|--------|-------|-------------|----------|---------|");
   }
 
   for (const opt of options) {
@@ -307,6 +311,7 @@ export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): strin
       opt.type === "boolean" ? `\`--${opt.cliName}\`` : `\`--${opt.cliName} <${placeholder}>\``;
     const alias = opt.alias ? `\`-${opt.alias}\`` : "-";
     const desc = escapeTableCell(opt.description ?? "");
+    const required = opt.required ? "Yes" : "No";
     const defaultVal = formatDefaultValue(opt.defaultValue);
 
     if (hasEnv) {
@@ -315,9 +320,11 @@ export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): strin
           ? opt.env.map((e) => `\`${e}\``).join(", ")
           : `\`${opt.env}\``
         : "-";
-      lines.push(`| ${optionName} | ${alias} | ${desc} | ${defaultVal} | ${envNames} |`);
+      lines.push(
+        `| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} | ${envNames} |`,
+      );
     } else {
-      lines.push(`| ${optionName} | ${alias} | ${desc} | ${defaultVal} |`);
+      lines.push(`| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} |`);
     }
   }
 
@@ -336,10 +343,11 @@ export function renderOptionsListFromArray(options: ResolvedFieldMeta[]): string
   for (const opt of options) {
     const flags = formatOptionFlags(opt);
     const desc = opt.description ? ` - ${opt.description}` : "";
+    const required = opt.required ? " (required)" : "";
     const defaultVal =
       opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
     const envInfo = formatEnvInfo(opt.env);
-    lines.push(`- ${flags}${desc}${defaultVal}${envInfo}`);
+    lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
   }
 
   return lines.join("\n");

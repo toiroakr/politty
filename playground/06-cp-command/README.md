@@ -19,9 +19,9 @@ cp [options] <source> <destination>
 
 **Options**
 
-| Option        | Alias | Description                  | Default |
-| ------------- | ----- | ---------------------------- | ------- |
-| `--recursive` | `-r`  | Copy directories recursively | `false` |
-| `--force`     | `-f`  | Skip overwrite confirmation  | `false` |
+| Option        | Alias | Description                  | Required | Default |
+| ------------- | ----- | ---------------------------- | -------- | ------- |
+| `--recursive` | `-r`  | Copy directories recursively | No       | `false` |
+| `--force`     | `-f`  | Skip overwrite confirmation  | No       | `false` |
 
 <!-- politty:command::end -->

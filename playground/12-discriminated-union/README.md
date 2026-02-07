@@ -12,15 +12,15 @@ resource [options]
 
 **Options**
 
-| Option                  | Alias | Description                 | Default   |
-| ----------------------- | ----- | --------------------------- | --------- |
-| `--action <ACTION>`     | -     |                             | -         |
-| `--name <NAME>`         | -     | Resource name               | -         |
-| `--template <TEMPLATE>` | -     | Template                    | -         |
-| `--id <ID>`             | -     | Resource ID                 | -         |
-| `--force`               | `-f`  | Delete without confirmation | `false`   |
-| `--format <FORMAT>`     | `-F`  | Output format               | `"table"` |
-| `--limit <LIMIT>`       | `-n`  | Display limit               | `10`      |
+| Option                  | Alias | Description                 | Required | Default   |
+| ----------------------- | ----- | --------------------------- | -------- | --------- |
+| `--action <ACTION>`     | -     |                             | Yes      | -         |
+| `--name <NAME>`         | -     | Resource name               | Yes      | -         |
+| `--template <TEMPLATE>` | -     | Template                    | No       | -         |
+| `--id <ID>`             | -     | Resource ID                 | Yes      | -         |
+| `--force`               | `-f`  | Delete without confirmation | No       | `false`   |
+| `--format <FORMAT>`     | `-F`  | Output format               | No       | `"table"` |
+| `--limit <LIMIT>`       | `-n`  | Display limit               | No       | `10`      |
 
 **Notes**
 

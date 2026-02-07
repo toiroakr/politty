@@ -12,10 +12,10 @@ auth-demo [options]
 
 **Options**
 
-| Option                  | Alias | Description | Default |
-| ----------------------- | ----- | ----------- | ------- |
-| `--token <TOKEN>`       | -     | API Token   | -       |
-| `--username <USERNAME>` | -     | Username    | -       |
-| `--password <PASSWORD>` | -     | Password    | -       |
+| Option                  | Alias | Description | Required | Default |
+| ----------------------- | ----- | ----------- | -------- | ------- |
+| `--token <TOKEN>`       | -     | API Token   | Yes      | -       |
+| `--username <USERNAME>` | -     | Username    | Yes      | -       |
+| `--password <PASSWORD>` | -     | Password    | Yes      | -       |
 
 <!-- politty:command::end -->

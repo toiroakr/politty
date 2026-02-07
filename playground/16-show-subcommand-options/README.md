@@ -72,10 +72,10 @@ git-like config list [options]
 
 **Options**
 
-| Option              | Alias | Description               | Default   |
-| ------------------- | ----- | ------------------------- | --------- |
-| `--format <FORMAT>` | `-f`  | Output format             | `"table"` |
-| `--global`          | `-g`  | Show global configuration | `false`   |
+| Option              | Alias | Description               | Required | Default   |
+| ------------------- | ----- | ------------------------- | -------- | --------- |
+| `--format <FORMAT>` | `-f`  | Output format             | No       | `"table"` |
+| `--global`          | `-g`  | Show global configuration | No       | `false`   |
 
 <!-- politty:command:config list:end -->
 <!-- politty:command:config set:start -->
@@ -158,8 +158,8 @@ git-like remote remove [options] <name>
 
 **Options**
 
-| Option    | Alias | Description    | Default |
-| --------- | ----- | -------------- | ------- |
-| `--force` | `-f`  | Force deletion | `false` |
+| Option    | Alias | Description    | Required | Default |
+| --------- | ----- | -------------- | -------- | ------- |
+| `--force` | `-f`  | Force deletion | No       | `false` |
 
 <!-- politty:command:remote remove:end -->
