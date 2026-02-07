@@ -1,5 +1,15 @@
 # politty
 
+## 0.2.0
+
+### Minor Changes
+
+- ac11f29: Auto-prepend full command path in documentation examples via `commandPrefix` option in `ExamplesRenderOptions`
+
+### Patch Changes
+
+- 11fa620: Fix zsh completion error when loading via eval by using compdef instead of direct function call
+
 ## 0.1.2
 
 ### Patch Changes
