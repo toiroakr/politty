@@ -1,3 +1,8 @@
+import * as path from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import { z } from "zod";
+import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
+import type { AnyCommand } from "../types.js";
 import { createCommandRenderer } from "./default-renderers.js";
 import {
   compareWithExisting,
@@ -9,16 +14,28 @@ import {
 } from "./doc-comparator.js";
 import { collectAllCommands } from "./doc-generator.js";
 import { executeExamples } from "./example-executor.js";
+import { renderArgsTable, type ArgsShape, type ArgsTableOptions } from "./render-args.js";
+import { renderCommandIndex, type CommandCategory } from "./render-index.js";
 import type {
   CommandInfo,
   ExampleConfig,
   FileConfig,
+  FileMapping,
   FormatterFunction,
   GenerateDocConfig,
   GenerateDocResult,
   RenderFunction,
+  RootDocConfig,
 } from "./types.js";
-import { commandEndMarker, commandStartMarker, UPDATE_GOLDEN_ENV } from "./types.js";
+import {
+  commandEndMarker,
+  commandStartMarker,
+  globalOptionsEndMarker,
+  globalOptionsStartMarker,
+  indexEndMarker,
+  indexStartMarker,
+  UPDATE_GOLDEN_ENV,
+} from "./types.js";
 
 /**
  * Apply formatter to content if provided
@@ -31,7 +48,12 @@ async function applyFormatter(
   if (!formatter) {
     return content;
   }
-  return await formatter(content);
+  const formatted = await formatter(content);
+  // Preserve trailing newline behavior of input
+  if (!content.endsWith("\n") && formatted.endsWith("\n")) {
+    return formatted.slice(0, -1);
+  }
+  return formatted;
 }
 
 /**
@@ -45,11 +67,11 @@ function isUpdateMode(): boolean {
 /**
  * Normalize file mapping entry to FileConfig
  */
-function normalizeFileConfig(config: string[] | FileConfig): FileConfig {
+function normalizeFileConfig(config: string[] | FileConfig): FileConfig & { commands: string[] } {
   if (Array.isArray(config)) {
     return { commands: config };
   }
-  return config;
+  return { ...config, commands: config.commands ?? [] };
 }
 
 /**
@@ -186,6 +208,31 @@ function filterIgnoredCommands(commandPaths: string[], ignores: string[]): strin
   return commandPaths.filter((path) => {
     return !ignores.some((ignorePattern) => matchesIgnorePattern(path, ignorePattern));
   });
+}
+
+/**
+ * Resolve file command configuration to concrete command paths.
+ * This applies wildcard/subcommand expansion and ignore filtering.
+ */
+function resolveConfiguredCommandPaths(
+  fileConfigRaw: string[] | FileConfig,
+  allCommands: Map<string, CommandInfo>,
+  ignores: string[],
+): {
+  fileConfig: FileConfig & { commands: string[] };
+  specifiedCommands: string[];
+  commandPaths: string[];
+} {
+  const fileConfig = normalizeFileConfig(fileConfigRaw);
+  const specifiedCommands = fileConfig.commands;
+  const expandedCommands = expandCommandPaths(specifiedCommands, allCommands);
+  const commandPaths = filterIgnoredCommands(expandedCommands, ignores);
+
+  return {
+    fileConfig,
+    specifiedCommands,
+    commandPaths,
+  };
 }
 
 /**
@@ -333,6 +380,86 @@ function generateFileHeader(fileConfig: FileConfig): string | null {
 }
 
 /**
+ * Extract a leading file header (title and optional description paragraph)
+ */
+function extractFileHeader(content: string): string | null {
+  if (!content.startsWith("# ")) {
+    return null;
+  }
+
+  const titleEnd = content.indexOf("\n");
+  if (titleEnd === -1) {
+    return content;
+  }
+
+  let cursor = titleEnd + 1;
+
+  // Header description is represented as a paragraph after one blank line.
+  if (content[cursor] === "\n") {
+    cursor += 1;
+
+    while (cursor < content.length) {
+      const lineEnd = content.indexOf("\n", cursor);
+      const line = lineEnd === -1 ? content.slice(cursor) : content.slice(cursor, lineEnd);
+
+      // Stop before the first section heading so marker-mode updates do not erase it.
+      if (line.length === 0 || /^#{1,6}\s/.test(line) || line.startsWith("<!-- politty:")) {
+        break;
+      }
+
+      cursor = lineEnd === -1 ? content.length : lineEnd + 1;
+    }
+  }
+
+  return content.slice(0, cursor);
+}
+
+/**
+ * Validate and optionally update configured file header
+ */
+function processFileHeader(
+  existingContent: string,
+  fileConfig: FileConfig,
+  updateMode: boolean,
+): {
+  content: string;
+  diff?: string;
+  hasError: boolean;
+  wasUpdated: boolean;
+} {
+  const generatedHeader = generateFileHeader(fileConfig);
+  if (!generatedHeader) {
+    return { content: existingContent, hasError: false, wasUpdated: false };
+  }
+
+  if (existingContent.startsWith(generatedHeader)) {
+    return { content: existingContent, hasError: false, wasUpdated: false };
+  }
+
+  const existingHeader = extractFileHeader(existingContent) ?? "";
+
+  if (!updateMode) {
+    return {
+      content: existingContent,
+      diff: formatDiff(existingHeader, generatedHeader),
+      hasError: true,
+      wasUpdated: false,
+    };
+  }
+
+  const contentWithoutHeader = existingHeader
+    ? existingContent.slice(existingHeader.length)
+    : existingContent;
+  const normalizedBody = contentWithoutHeader.replace(/^\n+/, "");
+
+  return {
+    content: `${generatedHeader}${normalizedBody}`,
+    hasError: false,
+    wasUpdated: true,
+  };
+}
+
+/**
  * Extract a command section from content using markers
  * Returns the content between start and end markers (including markers)
  */
@@ -351,6 +478,24 @@ function extractCommandSection(content: string, commandPath: string): string | n
   }
 
   return content.slice(startIndex, endIndex + endMarker.length);
+}
+
+/**
+ * Collect command paths from command start markers in content.
+ */
+function collectCommandMarkerPaths(content: string): string[] {
+  const markerPattern = /<!--\s*politty:command:(.*?):start\s*-->/g;
+  const paths: string[] = [];
+
+  for (const match of content.matchAll(markerPattern)) {
+    paths.push(match[1] ?? "");
+  }
+
+  return paths;
+}
+
+function formatCommandPath(commandPath: string): string {
+  return commandPath === "" ? "<root>" : commandPath;
 }
 
 /**
@@ -435,6 +580,447 @@ function insertCommandSection(
 }
 
 /**
+ * Extract a marker section from content
+ * Returns the content between start and end markers (including markers)
+ */
+function extractMarkerSection(
+  content: string,
+  startMarker: string,
+  endMarker: string,
+): string | null {
+  const startIndex = content.indexOf(startMarker);
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const endIndex = content.indexOf(endMarker, startIndex);
+  if (endIndex === -1) {
+    return null;
+  }
+
+  return content.slice(startIndex, endIndex + endMarker.length);
+}
+
+/**
+ * Replace a marker section in content
+ * Returns the updated content with the new section
+ */
+function replaceMarkerSection(
+  content: string,
+  startMarker: string,
+  endMarker: string,
+  newSection: string,
+): string | null {
+  const startIndex = content.indexOf(startMarker);
+  if (startIndex === -1) {
+    return null;
+  }
+
+  const endIndex = content.indexOf(endMarker, startIndex);
+  if (endIndex === -1) {
+    return null;
+  }
+
+  return content.slice(0, startIndex) + newSection + content.slice(endIndex + endMarker.length);
+}
+
+/**
+ * Check if a value is a Zod schema.
+ * Require parser methods to avoid colliding with args keys such as "def" or "_def".
+ */
+function isZodType(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const v = value as {
+    parse?: unknown;
+    safeParse?: unknown;
+    _def?: unknown;
+    def?: unknown;
+  };
+
+  return (
+    typeof v.parse === "function" &&
+    typeof v.safeParse === "function" &&
+    ("_def" in v || "def" in v)
+  );
+}
+
+/**
+ * Check if config is the { args, options? } shape (not shorthand ArgsShape)
+ *
+ * Distinguishes between:
+ * - { args: ArgsShape, options?: ArgsTableOptions } → returns true
+ * - ArgsShape (e.g., { verbose: ZodType, args: ZodType }) → returns false
+ *
+ * The key insight is that in the { args, options? } shape, config.args is an ArgsShape
+ * (Record of ZodTypes), while in shorthand, config itself is the ArgsShape and config.args
+ * would be a single ZodType if user has an option named "args".
+ */
+function isGlobalOptionsConfigWithOptions(
+  config: NonNullable<RootDocConfig["globalOptions"]>,
+): config is {
+  args: ArgsShape;
+  options?: ArgsTableOptions;
+} {
+  if (typeof config !== "object" || config === null || !("args" in config)) {
+    return false;
+  }
+  // If config.args is a ZodType, this is shorthand with an option named "args"
+  // If config.args is an object (ArgsShape), this is the { args, options? } shape
+  return !isZodType(config.args);
+}
+
+/**
+ * Collect option fields that are actually rendered by global options markers.
+ * Positional args are not rendered in args tables, so they must not be excluded.
+ */
+function collectRenderableGlobalOptionFields(argsShape: ArgsShape): ResolvedFieldMeta[] {
+  const extracted = extractFields(z.object(argsShape));
+  return extracted.fields.filter((field) => !field.positional);
+}
+
+/**
+ * Compare option definitions for global-options compatibility.
+ */
+function areGlobalOptionsEquivalent(a: ResolvedFieldMeta, b: ResolvedFieldMeta): boolean {
+  const aEnv = Array.isArray(a.env) ? a.env.join(",") : a.env;
+  const bEnv = Array.isArray(b.env) ? b.env.join(",") : b.env;
+
+  return (
+    a.name === b.name &&
+    a.cliName === b.cliName &&
+    a.alias === b.alias &&
+    a.description === b.description &&
+    a.type === b.type &&
+    a.required === b.required &&
+    a.positional === b.positional &&
+    a.placeholder === b.placeholder &&
+    isDeepStrictEqual(a.defaultValue, b.defaultValue) &&
+    a.overrideBuiltinAlias === b.overrideBuiltinAlias &&
+    aEnv === bEnv
+  );
+}
+
+/**
+ * Normalize rootDoc.globalOptions to { args, options? } form.
+ */
+function normalizeGlobalOptions(
+  config: RootDocConfig["globalOptions"],
+): { args: ArgsShape; options?: ArgsTableOptions } | undefined {
+  if (!config) return undefined;
+  return isGlobalOptionsConfigWithOptions(config) ? config : { args: config };
+}
+
+/**
+ * Collect global option definitions from rootDoc.
+ * Global options are intentionally applied to all generated command sections.
+ */
+function collectGlobalOptionDefinitions(
+  rootDoc: RootDocConfig | undefined,
+): Map<string, ResolvedFieldMeta> {
+  const globalOptions = new Map<string, ResolvedFieldMeta>();
+  if (!rootDoc?.globalOptions) return globalOptions;
+
+  const normalized = normalizeGlobalOptions(rootDoc.globalOptions);
+  if (!normalized) return globalOptions;
+
+  for (const field of collectRenderableGlobalOptionFields(normalized.args)) {
+    globalOptions.set(field.name, field);
+  }
+
+  return globalOptions;
+}
+
+/**
+ * Derive CommandCategory[] from files mapping.
+ * Category title/description come from the first command in each file entry.
+ */
+function deriveIndexFromFiles(
+  files: FileMapping,
+  rootDocPath: string,
+  allCommands: Map<string, CommandInfo>,
+  ignores: string[],
+): CommandCategory[] {
+  const categories: CommandCategory[] = [];
+  for (const [filePath, fileConfigRaw] of Object.entries(files)) {
+    const { commandPaths } = resolveConfiguredCommandPaths(fileConfigRaw, allCommands, ignores);
+    if (commandPaths.length === 0) continue;
+
+    const docPath = "./" + path.relative(path.dirname(rootDocPath), filePath).replace(/\\/g, "/");
+    const firstCmdPath = commandPaths[0];
+    const cmdInfo = firstCmdPath !== undefined ? allCommands.get(firstCmdPath) : undefined;
+    const indexCommands = commandPaths.filter((commandPath) => {
+      const info = allCommands.get(commandPath);
+      return info?.subCommands.length === 0;
+    });
+
+    categories.push({
+      title: cmdInfo?.name ?? path.basename(filePath, path.extname(filePath)),
+      description: cmdInfo?.description ?? "",
+      commands: indexCommands,
+      docPath,
+    });
+  }
+  return categories;
+}
+
+/**
+ * Collect command paths that are actually documented in configured files.
+ */
+function collectDocumentedCommandPaths(
+  files: FileMapping,
+  allCommands: Map<string, CommandInfo>,
+  ignores: string[],
+): Set<string> {
+  const documentedCommandPaths = new Set<string>();
+
+  for (const fileConfigRaw of Object.values(files)) {
+    const { commandPaths } = resolveConfiguredCommandPaths(fileConfigRaw, allCommands, ignores);
+    for (const commandPath of commandPaths) {
+      documentedCommandPaths.add(commandPath);
+    }
+  }
+
+  return documentedCommandPaths;
+}
+
+/**
+ * Collect command paths that are targeted in configured files.
+ */
+function collectTargetDocumentedCommandPaths(
+  targetCommands: string[],
+  files: FileMapping,
+  allCommands: Map<string, CommandInfo>,
+  ignores: string[],
+): Set<string> {
+  const documentedTargetCommandPaths = new Set<string>();
+
+  for (const filePath of Object.keys(files)) {
+    const targetCommandsInFile = findTargetCommandsInFile(
+      targetCommands,
+      filePath,
+      files,
+      allCommands,
+      ignores,
+    );
+
+    for (const commandPath of targetCommandsInFile) {
+      documentedTargetCommandPaths.add(commandPath);
+    }
+  }
+
+  return documentedTargetCommandPaths;
+}
+
+/**
+ * Validate that excluded command options match globalOptions definitions.
+ */
+function validateGlobalOptionCompatibility(
+  documentedCommandPaths: Iterable<string>,
+  allCommands: Map<string, CommandInfo>,
+  globalOptions: Map<string, ResolvedFieldMeta>,
+): void {
+  if (globalOptions.size === 0) {
+    return;
+  }
+
+  const conflicts: string[] = [];
+
+  for (const commandPath of documentedCommandPaths) {
+    const info = allCommands.get(commandPath);
+    if (!info) {
+      continue;
+    }
+
+    for (const option of info.options) {
+      const globalOption = globalOptions.get(option.name);
+      if (!globalOption) {
+        continue;
+      }
+
+      if (!areGlobalOptionsEquivalent(globalOption, option)) {
+        conflicts.push(
+          `Command "${formatCommandPath(commandPath)}" option "--${option.cliName}" does not match globalOptions definition for "${option.name}".`,
+        );
+      }
+    }
+  }
+
+  if (conflicts.length > 0) {
+    throw new Error(`Invalid globalOptions configuration:\n  - ${conflicts.join("\n  - ")}`);
+  }
+}
+
+/**
+ * Generate global options section content with markers
+ */
+function generateGlobalOptionsSection(config: {
+  args: ArgsShape;
+  options?: ArgsTableOptions;
+}): string {
+  const startMarker = globalOptionsStartMarker();
+  const endMarker = globalOptionsEndMarker();
+
+  const table = renderArgsTable(config.args, config.options);
+
+  return [startMarker, table, endMarker].join("\n");
+}
+
+/**
+ * Generate index section content with markers
+ */
+async function generateIndexSection(
+  categories: CommandCategory[],
+  command: AnyCommand,
+): Promise<string> {
+  const startMarker = indexStartMarker();
+  const endMarker = indexEndMarker();
+
+  const indexContent = await renderCommandIndex(command, categories);
+
+  return [startMarker, indexContent, endMarker].join("\n");
+}
+
+/**
+ * Normalize a doc file path for equivalence checks.
+ */
+function normalizeDocPathForComparison(filePath: string): string {
+  return path.resolve(filePath);
+}
+
+/**
+ * Process global options marker in file content
+ * Returns result with updated content and any diffs
+ */
+async function processGlobalOptionsMarker(
+  existingContent: string,
+  globalOptionsConfig: { args: ArgsShape; options?: ArgsTableOptions },
+  updateMode: boolean,
+  formatter: FormatterFunction | undefined,
+): Promise<{
+  content: string;
+  diffs: string[];
+  hasError: boolean;
+  wasUpdated: boolean;
+}> {
+  let content = existingContent;
+  const diffs: string[] = [];
+  let hasError = false;
+  let wasUpdated = false;
+
+  const startMarker = globalOptionsStartMarker();
+  const endMarker = globalOptionsEndMarker();
+
+  // Generate new section
+  const rawSection = generateGlobalOptionsSection(globalOptionsConfig);
+  const generatedSection = await applyFormatter(rawSection, formatter);
+
+  // Extract existing section
+  const existingSection = extractMarkerSection(content, startMarker, endMarker);
+
+  if (!existingSection) {
+    hasError = true;
+    diffs.push(
+      `Global options marker not found in file. Expected markers:\n${startMarker}\n...\n${endMarker}`,
+    );
+    return { content, diffs, hasError, wasUpdated };
+  }
+
+  // Compare sections
+  if (existingSection !== generatedSection) {
+    if (updateMode) {
+      const updated = replaceMarkerSection(content, startMarker, endMarker, generatedSection);
+      if (updated) {
+        content = updated;
+        wasUpdated = true;
+      } else {
+        hasError = true;
+        diffs.push("Failed to replace global options section");
+      }
+    } else {
+      hasError = true;
+      diffs.push(formatDiff(existingSection, generatedSection));
+    }
+  }
+
+  return { content, diffs, hasError, wasUpdated };
+}
+
+/**
+ * Process index marker in file content
+ * Returns result with updated content and any diffs.
+ * If the marker is not present in the file, the section is silently skipped.
+ */
+async function processIndexMarker(
+  existingContent: string,
+  categories: CommandCategory[],
+  command: AnyCommand,
+  updateMode: boolean,
+  formatter: FormatterFunction | undefined,
+): Promise<{
+  content: string;
+  diffs: string[];
+  hasError: boolean;
+  wasUpdated: boolean;
+}> {
+  let content = existingContent;
+  const diffs: string[] = [];
+  let hasError = false;
+  let wasUpdated = false;
+
+  const startMarker = indexStartMarker();
+  const endMarker = indexEndMarker();
+
+  const hasStartMarker = content.includes(startMarker);
+  const hasEndMarker = content.includes(endMarker);
+
+  // Skip silently only when marker is completely absent
+  if (!hasStartMarker && !hasEndMarker) {
+    return { content, diffs, hasError, wasUpdated };
+  }
+
+  if (!hasStartMarker || !hasEndMarker) {
+    hasError = true;
+    diffs.push("Index marker section is malformed: both start and end markers are required.");
+    return { content, diffs, hasError, wasUpdated };
+  }
+
+  // Extract existing section. If extraction fails despite both markers existing,
+  // marker placement/order is malformed.
+  const existingSection = extractMarkerSection(content, startMarker, endMarker);
+  if (!existingSection) {
+    hasError = true;
+    diffs.push("Index marker section is malformed: start marker must appear before end marker.");
+    return { content, diffs, hasError, wasUpdated };
+  }
+
+  // Generate new section
+  const rawSection = await generateIndexSection(categories, command);
+  const generatedSection = await applyFormatter(rawSection, formatter);
+
+  // Compare sections
+  if (existingSection !== generatedSection) {
+    if (updateMode) {
+      const updated = replaceMarkerSection(content, startMarker, endMarker, generatedSection);
+      if (updated) {
+        content = updated;
+        wasUpdated = true;
+      } else {
+        hasError = true;
+        diffs.push("Failed to replace index section");
+      }
+    } else {
+      hasError = true;
+      diffs.push(formatDiff(existingSection, generatedSection));
+    }
+  }
+
+  return { content, diffs, hasError, wasUpdated };
+}
+
+/**
  * Find which file contains a specific command
  */
 function findFileForCommand(
@@ -444,14 +1030,7 @@ function findFileForCommand(
   ignores: string[],
 ): string | null {
   for (const [filePath, fileConfigRaw] of Object.entries(files)) {
-    const fileConfig = normalizeFileConfig(fileConfigRaw);
-    const specifiedCommands = fileConfig.commands;
-
-    // Expand to include subcommands
-    const expandedCommands = expandCommandPaths(specifiedCommands, allCommands);
-
-    // Filter out ignored commands
-    const commandPaths = filterIgnoredCommands(expandedCommands, ignores);
+    const { commandPaths } = resolveConfiguredCommandPaths(fileConfigRaw, allCommands, ignores);
 
     if (commandPaths.includes(commandPath)) {
       return filePath;
@@ -474,14 +1053,11 @@ function findTargetCommandsInFile(
   const fileConfigRaw = files[filePath];
   if (!fileConfigRaw) return [];
 
-  const fileConfig = normalizeFileConfig(fileConfigRaw);
-  const specifiedCommands = fileConfig.commands;
-
-  // Expand to include subcommands
-  const expandedCommands = expandCommandPaths(specifiedCommands, allCommands);
-
-  // Filter out ignored commands
-  const commandPaths = filterIgnoredCommands(expandedCommands, ignores);
+  const { specifiedCommands, commandPaths } = resolveConfiguredCommandPaths(
+    fileConfigRaw,
+    allCommands,
+    ignores,
+  );
 
   // Expand targetCommands to include their subcommands,
   // but exclude subcommands that are explicitly in specifiedCommands
@@ -560,7 +1136,7 @@ function generateFileMarkdown(
     }
   }
 
-  return sections.join("\n");
+  return `${sections.join("\n")}\n`;
 }
 
 /**
@@ -574,14 +1150,7 @@ function buildFileMap(
   const fileMap: Record<string, string> = {};
 
   for (const [filePath, fileConfigRaw] of Object.entries(files)) {
-    const fileConfig = normalizeFileConfig(fileConfigRaw);
-    const specifiedCommands = fileConfig.commands;
-
-    // Expand to include subcommands
-    const expandedCommands = expandCommandPaths(specifiedCommands, allCommands);
-
-    // Filter out ignored commands
-    const commandPaths = filterIgnoredCommands(expandedCommands, ignores);
+    const { commandPaths } = resolveConfiguredCommandPaths(fileConfigRaw, allCommands, ignores);
 
     for (const cmdPath of commandPaths) {
       fileMap[cmdPath] = filePath;
@@ -597,7 +1166,7 @@ function buildFileMap(
 async function executeConfiguredExamples(
   allCommands: Map<string, CommandInfo>,
   examplesConfig: ExampleConfig,
-  rootCommand: import("../types.js").AnyCommand,
+  rootCommand: AnyCommand,
 ): Promise<void> {
   for (const [cmdPath, cmdConfig] of Object.entries(examplesConfig)) {
     const commandInfo = allCommands.get(cmdPath);
@@ -625,6 +1194,7 @@ async function executeConfiguredExamples(
 export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDocResult> {
   const {
     command,
+    rootDoc,
     files,
     ignores = [],
     format = {},
@@ -634,12 +1204,49 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   } = config;
   const updateMode = isUpdateMode();
 
+  // Validate rootDoc.path does not overlap with files keys
+  if (rootDoc) {
+    const normalizedRootDocPath = normalizeDocPathForComparison(rootDoc.path);
+    const hasOverlap = Object.keys(files).some(
+      (filePath) => normalizeDocPathForComparison(filePath) === normalizedRootDocPath,
+    );
+    if (hasOverlap) {
+      throw new Error(`rootDoc.path "${rootDoc.path}" must not also appear as a key in files.`);
+    }
+  }
+
   // Collect all commands
   const allCommands = await collectAllCommands(command);
 
   // Execute examples for all commands specified in examplesConfig
   if (examplesConfig) {
     await executeConfiguredExamples(allCommands, examplesConfig, command);
+  }
+
+  const hasTargetCommands = targetCommands !== undefined && targetCommands.length > 0;
+
+  // Validate all targetCommands exist in files
+  if (hasTargetCommands) {
+    for (const targetCommand of targetCommands) {
+      const targetFilePath = findFileForCommand(targetCommand, files, allCommands, ignores);
+      if (!targetFilePath) {
+        throw new Error(`Target command "${targetCommand}" not found in any file configuration`);
+      }
+    }
+  }
+
+  // Auto-exclude options defined in global options markers from command option tables.
+  // These exclusions are intentionally global.
+  const globalOptionDefinitions = collectGlobalOptionDefinitions(rootDoc);
+  const documentedCommandPaths = hasTargetCommands
+    ? collectTargetDocumentedCommandPaths(targetCommands, files, allCommands, ignores)
+    : collectDocumentedCommandPaths(files, allCommands, ignores);
+  validateGlobalOptionCompatibility(documentedCommandPaths, allCommands, globalOptionDefinitions);
+
+  if (globalOptionDefinitions.size > 0) {
+    for (const info of allCommands.values()) {
+      info.options = info.options.filter((opt) => !globalOptionDefinitions.has(opt.name));
+    }
   }
 
   // Collect all explicitly specified commands from files
@@ -661,34 +1268,33 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   const results: GenerateDocResult["files"] = [];
   let hasError = false;
 
-  // Validate all targetCommands exist in files
-  if (targetCommands && targetCommands.length > 0) {
-    for (const targetCommand of targetCommands) {
-      const targetFilePath = findFileForCommand(targetCommand, files, allCommands, ignores);
-      if (!targetFilePath) {
-        throw new Error(`Target command "${targetCommand}" not found in any file configuration`);
-      }
-    }
-  }
-
   // Process each file
   for (const [filePath, fileConfigRaw] of Object.entries(files)) {
-    const fileConfig = normalizeFileConfig(fileConfigRaw);
-    const specifiedCommands = fileConfig.commands;
+    const { fileConfig, specifiedCommands, commandPaths } = resolveConfiguredCommandPaths(
+      fileConfigRaw,
+      allCommands,
+      ignores,
+    );
 
     if (specifiedCommands.length === 0) {
       continue;
     }
 
-    // Expand to include subcommands
-    const expandedCommands = expandCommandPaths(specifiedCommands, allCommands);
-
-    // Filter out ignored commands
-    const commandPaths = filterIgnoredCommands(expandedCommands, ignores);
-
+    // Skip files where no commands resolved
     if (commandPaths.length === 0) {
       continue;
     }
+
+    // In target mode, skip non-target files entirely
+    const fileTargetCommands = hasTargetCommands
+      ? findTargetCommandsInFile(targetCommands, filePath, files, allCommands, ignores)
+      : [];
+    if (hasTargetCommands && fileTargetCommands.length === 0) {
+      continue;
+    }
+
+    let fileStatus: "match" | "created" | "updated" | "diff" = "match";
+    const diffs: string[] = [];
 
     // Calculate minimum depth in this file for relative heading level
     const minDepth = Math.min(...commandPaths.map((p) => allCommands.get(p)?.depth ?? 1));
@@ -712,25 +1318,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     const render = fileConfig.render ?? fileRenderer;
 
     // Handle partial validation when targetCommands are specified
-    if (targetCommands !== undefined && targetCommands.length > 0) {
-      // Find which target commands are in this file
-      const fileTargetCommands = findTargetCommandsInFile(
-        targetCommands,
-        filePath,
-        files,
-        allCommands,
-        ignores,
-      );
-
-      // Skip files that don't contain any target commands
-      if (fileTargetCommands.length === 0) {
-        continue;
-      }
-
+    if (hasTargetCommands) {
       // Read existing content once for all target commands in this file
       let existingContent = readFile(filePath);
-      let fileStatus: "match" | "created" | "updated" | "diff" = "match";
-      const diffs: string[] = [];
 
       for (const targetCommand of fileTargetCommands) {
         // Generate only the target command's section
@@ -828,12 +1418,6 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           }
         }
       }
-
-      results.push({
-        path: filePath,
-        status: fileStatus,
-        diff: diffs.length > 0 ? diffs.join("\n\n") : undefined,
-      });
     } else {
       // Generate markdown with file context (pass specifiedCommands as order hint)
       const rawMarkdown = generateFileMarkdown(
@@ -852,25 +1436,132 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       const comparison = compareWithExisting(generatedMarkdown, filePath);
 
       if (comparison.match) {
-        results.push({
-          path: filePath,
-          status: "match",
-        });
+        // fileStatus stays "match"
       } else if (updateMode) {
         writeFile(filePath, generatedMarkdown);
-        results.push({
-          path: filePath,
-          status: comparison.fileExists ? "updated" : "created",
-        });
+        fileStatus = comparison.fileExists ? "updated" : "created";
       } else {
         hasError = true;
-        results.push({
-          path: filePath,
-          status: "diff",
-          diff: comparison.diff,
-        });
+        fileStatus = "diff";
+        if (comparison.diff) {
+          diffs.push(comparison.diff);
+        }
       }
     }
+
+    // Determine final status based on diffs
+    if (diffs.length > 0) {
+      fileStatus = "diff";
+    }
+
+    results.push({
+      path: filePath,
+      status: fileStatus,
+      diff: diffs.length > 0 ? diffs.join("\n\n") : undefined,
+    });
+  }
+
+  // === Root document processing ===
+  if (rootDoc) {
+    const rootDocFilePath = rootDoc.path;
+    let rootDocStatus: "match" | "created" | "updated" | "diff" = "match";
+    const rootDocDiffs: string[] = [];
+
+    const existingContent = readFile(rootDocFilePath);
+    if (existingContent === null) {
+      hasError = true;
+      rootDocStatus = "diff";
+      rootDocDiffs.push("File does not exist. Cannot validate rootDoc markers.");
+    } else {
+      let content = existingContent;
+      let markerUpdated = false;
+
+      // Validate/update rootDoc file header derived from command.name/description
+      const rootDocFileConfig: FileConfig = { title: command.name };
+      if (command.description !== undefined) {
+        rootDocFileConfig.description = command.description;
+      }
+      const headerResult = processFileHeader(content, rootDocFileConfig, updateMode);
+      content = headerResult.content;
+      if (headerResult.diff) {
+        rootDocDiffs.push(headerResult.diff);
+      }
+      if (headerResult.hasError) {
+        hasError = true;
+      }
+      if (headerResult.wasUpdated) {
+        markerUpdated = true;
+      }
+
+      // Detect unexpected command markers in rootDoc
+      const unexpectedCommandMarkers = Array.from(new Set(collectCommandMarkerPaths(content)));
+      if (unexpectedCommandMarkers.length > 0) {
+        hasError = true;
+        rootDocDiffs.push(
+          `Found unexpected command marker sections in rootDoc: ${unexpectedCommandMarkers
+            .map((commandPath) => `"${formatCommandPath(commandPath)}"`)
+            .join(", ")}.`,
+        );
+      }
+
+      // Process global options marker
+      const normalizedGlobalOptions = normalizeGlobalOptions(rootDoc.globalOptions);
+      if (normalizedGlobalOptions) {
+        const globalOptionsResult = await processGlobalOptionsMarker(
+          content,
+          normalizedGlobalOptions,
+          updateMode,
+          formatter,
+        );
+        content = globalOptionsResult.content;
+        rootDocDiffs.push(...globalOptionsResult.diffs);
+        if (globalOptionsResult.hasError) {
+          hasError = true;
+        }
+        if (globalOptionsResult.wasUpdated) {
+          markerUpdated = true;
+        }
+      }
+
+      // Process index marker (auto-derived from files)
+      const derivedCategories = deriveIndexFromFiles(files, rootDocFilePath, allCommands, ignores);
+      if (derivedCategories.length > 0) {
+        const indexResult = await processIndexMarker(
+          content,
+          derivedCategories,
+          command,
+          updateMode,
+          formatter,
+        );
+        content = indexResult.content;
+        rootDocDiffs.push(...indexResult.diffs);
+        if (indexResult.hasError) {
+          hasError = true;
+        }
+        if (indexResult.wasUpdated) {
+          markerUpdated = true;
+        }
+      }
+
+      // Write updated content if markers were modified
+      if (updateMode && markerUpdated) {
+        writeFile(rootDocFilePath, content);
+        if (rootDocStatus === "match") {
+          rootDocStatus = "updated";
+        }
+      }
+    }
+
+    // Determine final status based on diffs
+    if (rootDocDiffs.length > 0) {
+      rootDocStatus = "diff";
+    }
+
+    results.push({
+      path: rootDocFilePath,
+      status: rootDocStatus,
+      diff: rootDocDiffs.length > 0 ? rootDocDiffs.join("\n\n") : undefined,
+    });
   }
 
   return {
@@ -926,6 +1617,8 @@ export function initDocFile(
   if (typeof config === "string") {
     deleteFile(config, fileSystem);
   } else {
+    // rootDoc is NOT deleted because generateDoc expects it to exist with markers.
+    // Only generated files (which are fully regenerated) are deleted.
     for (const filePath of Object.keys(config.files)) {
       deleteFile(filePath, fileSystem);
     }
