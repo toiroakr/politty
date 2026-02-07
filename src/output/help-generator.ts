@@ -612,7 +612,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
     sections.push(`${styles.sectionHeader("Notes:")}\n${indented}`);
   }
 
-  return sections.join("\n\n");
+  return `\n${sections.join("\n\n")}\n`;
 }
 
 /**

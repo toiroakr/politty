@@ -95,7 +95,7 @@ export const styles = {
 
   // Help-specific styles
   command: createStyleFn("bold"),
-  commandName: createStyleFn("bold", "cyan"),
+  commandName: createStyleFn("bold", "underline", "cyan"),
   option: createStyleFn("cyan"),
   optionName: createStyleFn("bold"),
   placeholder: createStyleFn("dim"),
