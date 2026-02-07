@@ -39,8 +39,11 @@ jobs:
         uses: changesets/action@c48e67d110a68bc90ccf1098e9646092baacaa87 # v1.6.0
         with:
           version: pnpm changeset version
-          publish: npm publish --provenance --access public
+          publish: pnpm changeset publish
           title: "chore: release"
           commit: "chore: release"
+          createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"
