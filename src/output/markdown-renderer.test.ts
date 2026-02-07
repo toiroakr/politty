@@ -339,24 +339,35 @@ Choose one of the above options.`;
   });
 
   describe("tables", () => {
-    it("should render a basic table", () => {
+    it("should render a basic table with borders", () => {
       const md = `| Name | Value |
 |------|-------|
 | foo  | 1     |
 | bar  | 2     |`;
       const result = renderMarkdown(md);
       const lines = result.split("\n");
-      expect(lines).toHaveLength(4);
-      expect(lines[0]).toContain("Name");
-      expect(lines[0]).toContain("Value");
-      // Separator row
-      expect(lines[1]).toContain("─");
-      expect(lines[1]).toContain("┼");
+      // top border + header + mid border + 2 body rows + bottom border = 6
+      expect(lines).toHaveLength(6);
+      // Top border
+      expect(lines[0]).toContain("┌");
+      expect(lines[0]).toContain("┬");
+      expect(lines[0]).toContain("┐");
+      // Header
+      expect(lines[1]).toContain("Name");
+      expect(lines[1]).toContain("Value");
+      // Mid border
+      expect(lines[2]).toContain("├");
+      expect(lines[2]).toContain("┼");
+      expect(lines[2]).toContain("┤");
       // Body rows
-      expect(lines[2]).toContain("foo");
-      expect(lines[2]).toContain("1");
-      expect(lines[3]).toContain("bar");
-      expect(lines[3]).toContain("2");
+      expect(lines[3]).toContain("foo");
+      expect(lines[3]).toContain("1");
+      expect(lines[4]).toContain("bar");
+      expect(lines[4]).toContain("2");
+      // Bottom border
+      expect(lines[5]).toContain("└");
+      expect(lines[5]).toContain("┴");
+      expect(lines[5]).toContain("┘");
     });
 
     it("should pad columns to equal width", () => {
@@ -365,9 +376,8 @@ Choose one of the above options.`;
 | x | y      |`;
       const result = renderMarkdown(md);
       const lines = result.split("\n");
-      // Header "A" should be padded to match "x" (both 1 char)
-      // "Longer" should be padded to match max of "Longer","y" = 6
-      expect(lines[2]).toContain("y     ");
+      // Body row (index 3: top border, header, mid border, then body)
+      expect(lines[3]).toContain("y     ");
     });
 
     it("should support right alignment", () => {
@@ -377,8 +387,8 @@ Choose one of the above options.`;
 | bar  | 7     |`;
       const result = renderMarkdown(md);
       const lines = result.split("\n");
-      // Right-aligned: " 7" should be padded left
-      expect(lines[3]).toContain("    7");
+      // Right-aligned: " 7" should be padded left (body row at index 4)
+      expect(lines[4]).toContain("    7");
     });
 
     it("should support center alignment", () => {
@@ -415,9 +425,9 @@ Choose one of the above options.`;
 | 4 | 5 | 6 |`;
       const result = renderMarkdown(md);
       const lines = result.split("\n");
-      // Row with missing cell should not crash
-      expect(lines).toHaveLength(4);
-      expect(lines[2]).toContain("1");
+      // top + header + mid + 2 body + bottom = 6
+      expect(lines).toHaveLength(6);
+      expect(lines[3]).toContain("1");
     });
 
     it("should render table between other blocks", () => {

@@ -414,23 +414,24 @@ function renderBlock(block: Block): string {
         const cellLengths = block.rows.map((row) => (row[i] ?? "").length);
         return Math.max(h.length, ...cellLengths);
       });
-      const sep = styles.dim("│");
+      const pipe = styles.dim("│");
+      // Border rows
+      const topBorder = styles.dim(`┌─${colWidths.map((w) => "─".repeat(w)).join("─┬─")}─┐`);
+      const midBorder = styles.dim(`├─${colWidths.map((w) => "─".repeat(w)).join("─┼─")}─┤`);
+      const botBorder = styles.dim(`└─${colWidths.map((w) => "─".repeat(w)).join("─┴─")}─┘`);
       // Header row (bold)
       const headerCells = block.headers.map((h, i) =>
         styles.bold(alignText(h, colWidths[i]!, block.alignments[i] ?? "left")),
       );
-      const headerRow = ` ${headerCells.join(` ${sep} `)} `;
-      // Separator row
-      const sepCells = Array.from({ length: colCount }, (_, i) => "─".repeat(colWidths[i]!));
-      const sepRow = styles.dim(`─${sepCells.join("─┼─")}─`);
+      const headerRow = `${pipe} ${headerCells.join(` ${pipe} `)} ${pipe}`;
       // Body rows
       const bodyRows = block.rows.map((row) => {
         const cells = Array.from({ length: colCount }, (_, i) =>
           renderInline(alignText(row[i] ?? "", colWidths[i]!, block.alignments[i] ?? "left")),
         );
-        return ` ${cells.join(` ${sep} `)} `;
+        return `${pipe} ${cells.join(` ${pipe} `)} ${pipe}`;
       });
-      return [headerRow, sepRow, ...bodyRows].join("\n");
+      return [topBorder, headerRow, midBorder, ...bodyRows, botBorder].join("\n");
     }
 
     case "code": {
