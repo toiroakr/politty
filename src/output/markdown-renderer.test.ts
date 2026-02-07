@@ -338,6 +338,105 @@ Choose one of the above options.`;
     });
   });
 
+  describe("tables", () => {
+    it("should render a basic table", () => {
+      const md = `| Name | Value |
+|------|-------|
+| foo  | 1     |
+| bar  | 2     |`;
+      const result = renderMarkdown(md);
+      const lines = result.split("\n");
+      expect(lines).toHaveLength(4);
+      expect(lines[0]).toContain("Name");
+      expect(lines[0]).toContain("Value");
+      // Separator row
+      expect(lines[1]).toContain("─");
+      expect(lines[1]).toContain("┼");
+      // Body rows
+      expect(lines[2]).toContain("foo");
+      expect(lines[2]).toContain("1");
+      expect(lines[3]).toContain("bar");
+      expect(lines[3]).toContain("2");
+    });
+
+    it("should pad columns to equal width", () => {
+      const md = `| A | Longer |
+|---|--------|
+| x | y      |`;
+      const result = renderMarkdown(md);
+      const lines = result.split("\n");
+      // Header "A" should be padded to match "x" (both 1 char)
+      // "Longer" should be padded to match max of "Longer","y" = 6
+      expect(lines[2]).toContain("y     ");
+    });
+
+    it("should support right alignment", () => {
+      const md = `| Name | Count |
+|------|------:|
+| foo  | 42    |
+| bar  | 7     |`;
+      const result = renderMarkdown(md);
+      const lines = result.split("\n");
+      // Right-aligned: " 7" should be padded left
+      expect(lines[3]).toContain("    7");
+    });
+
+    it("should support center alignment", () => {
+      const md = `| Name | Status |
+|------|:------:|
+| foo  | OK     |
+| bar  | FAIL   |`;
+      const result = renderMarkdown(md);
+      expect(result).toContain("OK");
+      expect(result).toContain("FAIL");
+    });
+
+    it("should support left alignment (explicit)", () => {
+      const md = `| Name | Value |
+|:-----|-------|
+| foo  | 1     |`;
+      const result = renderMarkdown(md);
+      expect(result).toContain("foo");
+    });
+
+    it("should apply inline formatting in cells", () => {
+      const md = `| Option | Description |
+|--------|-------------|
+| \`--verbose\` | Enable **debug** output |`;
+      const result = renderMarkdown(md);
+      expect(result).toContain("--verbose");
+      expect(result).toContain("debug");
+    });
+
+    it("should handle missing cells gracefully", () => {
+      const md = `| A | B | C |
+|---|---|---|
+| 1 | 2 |
+| 4 | 5 | 6 |`;
+      const result = renderMarkdown(md);
+      const lines = result.split("\n");
+      // Row with missing cell should not crash
+      expect(lines).toHaveLength(4);
+      expect(lines[2]).toContain("1");
+    });
+
+    it("should render table between other blocks", () => {
+      const md = `Options table:
+
+| Flag | Description |
+|------|-------------|
+| \`-v\` | Verbose     |
+
+Use these flags as needed.`;
+      const result = renderMarkdown(md);
+      const parts = result.split("\n\n");
+      expect(parts).toHaveLength(3);
+      expect(parts[0]).toBe("Options table:");
+      expect(parts[1]).toContain("Flag");
+      expect(parts[2]).toBe("Use these flags as needed.");
+    });
+  });
+
   describe("realistic CLI notes", () => {
     it("should render a typical notes section", () => {
       const md = `**Warning:** This operation is destructive and cannot be undone.
