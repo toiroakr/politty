@@ -18,9 +18,9 @@ project-cli init [options] <name>
 
 **Options**
 
-| Option                  | Alias | Description             | Default     |
-| ----------------------- | ----- | ----------------------- | ----------- |
-| `--template <TEMPLATE>` | `-t`  | Project template to use | `"default"` |
+| Option                  | Alias | Description             | Required | Default     |
+| ----------------------- | ----- | ----------------------- | -------- | ----------- |
+| `--template <TEMPLATE>` | `-t`  | Project template to use | No       | `"default"` |
 
 <!-- politty:command:init:end -->
 <!-- politty:command:build:start -->
@@ -37,9 +37,9 @@ project-cli build [options]
 
 **Options**
 
-| Option    | Alias | Description       | Default |
-| --------- | ----- | ----------------- | ------- |
-| `--watch` | `-w`  | Watch for changes | `false` |
+| Option    | Alias | Description       | Required | Default |
+| --------- | ----- | ----------------- | -------- | ------- |
+| `--watch` | `-w`  | Watch for changes | No       | `false` |
 
 <!-- politty:command:build:end -->
 <!-- politty:command:deploy:start -->
@@ -56,8 +56,8 @@ project-cli deploy [options]
 
 **Options**
 
-| Option    | Alias | Description                           | Default |
-| --------- | ----- | ------------------------------------- | ------- |
-| `--force` | `-f`  | Force deployment without confirmation | `false` |
+| Option    | Alias | Description                           | Required | Default |
+| --------- | ----- | ------------------------------------- | -------- | ------- |
+| `--force` | `-f`  | Force deployment without confirmation | No       | `false` |
 
 <!-- politty:command:deploy:end -->
