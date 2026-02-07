@@ -49,7 +49,7 @@ file-cli read [options] <file>
 **Read a JSON config file**
 
 ```bash
-$ config.json
+$ file-cli read config.json
 {
   "name": "my-app",
   "version": "1.0.0"
@@ -59,7 +59,7 @@ $ config.json
 **Read a text file**
 
 ```bash
-$ data.txt -f text
+$ file-cli read data.txt -f text
 Hello from data.txt
 ```
 
@@ -94,14 +94,14 @@ file-cli write [options] <file> <content>
 **Write text to a file**
 
 ```bash
-$ output.txt "Hello, World!"
+$ file-cli write output.txt "Hello, World!"
 Successfully written to output.txt
 ```
 
 **Append text to a file**
 
 ```bash
-$ log.txt "New entry" --append
+$ file-cli write log.txt "New entry" --append
 Successfully appended to log.txt
 ```
 
@@ -129,14 +129,14 @@ file-cli check <file>
 **Check if config file exists**
 
 ```bash
-$ config.json
+$ file-cli check config.json
 File exists: config.json
 ```
 
 **Check non-existent file**
 
 ```bash
-$ missing.txt
+$ file-cli check missing.txt
 File not found: missing.txt
 ```
 
