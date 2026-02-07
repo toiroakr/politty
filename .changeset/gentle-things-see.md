@@ -14,3 +14,8 @@ feat: add global options support
   - Added `rootInfo` option with `title`, `version`, `description`, `installation`, `headerContent`, and `footerContent`
   - Root commands display full Global Options table
   - Subcommands display link to Global Options section ("See [Global Options](#global-options)")
+  - Cross-file links for Global Options when documentation is split across multiple files
+  - `footerContent` is rendered at the very end of the document (after all subcommands)
+- Added type parameter support for global args in `defineCommand`:
+  - Use `defineCommand<TArgsSchema, TResult, TGlobalArgs>()` for explicit typing
+  - Declaration merging with `GlobalArgs` interface still works as fallback

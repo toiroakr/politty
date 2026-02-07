@@ -27,70 +27,101 @@ export const globalArgsSchema = z.object({
   }),
 });
 
-// For type safety with declaration merging, users can extend GlobalArgs:
-// declare module "politty" {
-//   interface GlobalArgs extends z.infer<typeof globalArgsSchema> {}
-// }
+// Type for global args (for use with type parameter pattern)
+export type GlobalArgsType = z.infer<typeof globalArgsSchema>;
 
-// Subcommand: build
-export const buildCommand = defineCommand({
+// ============================================================
+// Pattern 1: Type parameter (recommended for explicit typing)
+// ============================================================
+// Use the third type parameter to specify global args type.
+// This provides full type safety without declaration merging.
+
+// Define args schemas separately to use in type parameters
+const buildArgsSchema = z.object({
+  output: arg(z.string().default("dist"), {
+    alias: "o",
+    description: "Output directory",
+  }),
+  minify: arg(z.boolean().default(false), {
+    alias: "m",
+    description: "Minify output files",
+  }),
+});
+
+const deployArgsSchema = z.object({
+  target: arg(z.string(), {
+    alias: "t",
+    description: "Deployment target (e.g., prod, staging)",
+  }),
+  dryRun: arg(z.boolean().default(false), {
+    alias: "n",
+    description: "Perform a dry run without actual deployment",
+  }),
+});
+
+// Subcommand: build (using type parameter for global args)
+export const buildCommand = defineCommand<
+  typeof buildArgsSchema,
+  void,
+  GlobalArgsType // Third type parameter specifies global args type
+>({
   name: "build",
   description: "Build the project",
-  args: z.object({
-    output: arg(z.string().default("dist"), {
-      alias: "o",
-      description: "Output directory",
-    }),
-    minify: arg(z.boolean().default(false), {
-      alias: "m",
-      description: "Minify output files",
-    }),
-  }),
+  args: buildArgsSchema,
   run: (args) => {
     // args includes both command-specific and global options
-    // TypeScript knows about global options via declaration merging
+    // TypeScript knows about verbose and config from GlobalArgsType
     console.log("Building project:");
     console.log(`  Output: ${args.output}`);
     console.log(`  Minify: ${args.minify}`);
 
-    // Access global options
-    if ((args as { verbose?: boolean }).verbose) {
+    // Access global options (fully typed!)
+    if (args.verbose) {
       console.log("  [verbose] Verbose mode enabled");
     }
-    if ((args as { config?: string }).config) {
-      console.log(`  [verbose] Using config: ${(args as { config?: string }).config}`);
+    if (args.config) {
+      console.log(`  [verbose] Using config: ${args.config}`);
     }
   },
 });
 
-// Subcommand: deploy
-export const deployCommand = defineCommand({
+// Subcommand: deploy (using type parameter for global args)
+export const deployCommand = defineCommand<typeof deployArgsSchema, void, GlobalArgsType>({
   name: "deploy",
   description: "Deploy the project",
-  args: z.object({
-    target: arg(z.string(), {
-      alias: "t",
-      description: "Deployment target (e.g., prod, staging)",
-    }),
-    dryRun: arg(z.boolean().default(false), {
-      alias: "n",
-      description: "Perform a dry run without actual deployment",
-    }),
-  }),
+  args: deployArgsSchema,
   run: (args) => {
     console.log("Deploying project:");
     console.log(`  Target: ${args.target}`);
     console.log(`  Dry run: ${args.dryRun}`);
 
-    // Access global options
-    if ((args as { verbose?: boolean }).verbose) {
+    // Access global options (fully typed!)
+    if (args.verbose) {
       console.log("  [verbose] Verbose mode enabled");
     }
-    if ((args as { config?: string }).config) {
-      console.log(`  [verbose] Using config: ${(args as { config?: string }).config}`);
+    if (args.config) {
+      console.log(`  [verbose] Using config: ${args.config}`);
     }
   },
 });
+
+// ============================================================
+// Pattern 2: Declaration merging (alternative approach)
+// ============================================================
+// Uncomment the following to use declaration merging instead:
+//
+// declare module "politty" {
+//   interface GlobalArgs extends z.infer<typeof globalArgsSchema> {}
+// }
+//
+// Then you can define commands without the type parameter:
+// const buildCommand = defineCommand({
+//   name: "build",
+//   args: z.object({ ... }),
+//   run: (args) => {
+//     // args.verbose is typed automatically via GlobalArgs
+//   },
+// });
 
 // Main command with subcommands
 export const cli = defineCommand({
