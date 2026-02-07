@@ -4,15 +4,7 @@
 
 Version: 1.0.0
 
-A CLI with global options example.
-
-## Installation
-
-```bash
-npm install -g my-cli
-```
-
-> **Note**: This CLI requires Node.js 18 or higher.
+CLI with global options example
 
 **Usage**
 
@@ -29,10 +21,10 @@ my-cli [command]
 
 **Commands**
 
-| Command             | Description        |
-| ------------------- | ------------------ |
-| [`build`](#build)   | Build the project  |
-| [`deploy`](#deploy) | Deploy the project |
+| Command                   | Description        |
+| ------------------------- | ------------------ |
+| [`build`](build.md#build) | Build the project  |
+| [`deploy`](#deploy)       | Deploy the project |
 
 <!-- politty:command::end -->
 <!-- politty:command:build:start -->
@@ -79,7 +71,3 @@ See [Global Options](#global-options) for options available to all commands.
 | `--dry-run`         | `-n`  | Perform a dry run without actual deployment | No       | `false` |
 
 <!-- politty:command:deploy:end -->
-
-## License
-
-MIT License

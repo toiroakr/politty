@@ -541,6 +541,7 @@ function generateFileMarkdown(
   fileMap?: Record<string, string>,
   specifiedOrder?: string[],
   fileConfig?: FileConfig,
+  footerContent?: string,
 ): string {
   const sections: string[] = [];
 
@@ -558,6 +559,11 @@ function generateFileMarkdown(
     if (section) {
       sections.push(section);
     }
+  }
+
+  // Add footer content at the very end (after all command sections)
+  if (footerContent) {
+    sections.push(footerContent);
   }
 
   return sections.join("\n");
@@ -840,6 +846,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       });
     } else {
       // Generate markdown with file context (pass specifiedCommands as order hint)
+      // Add footerContent only if this file contains the root command
+      const includesRoot = commandPaths.includes("");
       const rawMarkdown = generateFileMarkdown(
         commandPaths,
         allCommands,
@@ -848,6 +856,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         fileMap,
         specifiedCommands,
         fileConfig,
+        includesRoot ? rootInfo?.footerContent : undefined,
       );
 
       // Apply formatter if provided

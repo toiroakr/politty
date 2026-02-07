@@ -623,10 +623,51 @@ describe("default-renderers", () => {
   });
 
   describe("renderGlobalOptionsLink", () => {
-    it("should render link to global options section", () => {
+    it("should render link to global options section (same file)", () => {
       const result = renderGlobalOptionsLink();
       expect(result).toContain("Global Options");
       expect(result).toContain("#global-options");
+      expect(result).not.toContain(".md#");
+    });
+
+    it("should render cross-file link when subcommand is in different file", async () => {
+      const cmd = defineCommand({
+        name: "build",
+        description: "Build the project",
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "my-cli", ["build"]);
+      // Simulate cross-file scenario
+      info.filePath = "docs/commands/build.md";
+      info.fileMap = {
+        "": "docs/CLI.md",
+        build: "docs/commands/build.md",
+      };
+
+      const result = renderGlobalOptionsLink(info);
+      expect(result).toContain("Global Options");
+      expect(result).toContain("../CLI.md#global-options");
+    });
+
+    it("should render same-file link when subcommand is in same file as root", async () => {
+      const cmd = defineCommand({
+        name: "build",
+        description: "Build the project",
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "my-cli", ["build"]);
+      // Simulate same-file scenario
+      info.filePath = "docs/CLI.md";
+      info.fileMap = {
+        "": "docs/CLI.md",
+        build: "docs/CLI.md",
+      };
+
+      const result = renderGlobalOptionsLink(info);
+      expect(result).toContain("#global-options");
+      expect(result).not.toContain(".md#");
     });
   });
 
@@ -751,7 +792,6 @@ describe("default-renderers", () => {
         rootInfo: {
           title: "My CLI",
           version: "1.0.0",
-          footerContent: "## License\n\nMIT",
         },
       });
 
@@ -761,8 +801,7 @@ describe("default-renderers", () => {
       expect(markdown).toContain("Version: 1.0.0");
       expect(markdown).toContain("**Global Options**");
       expect(markdown).toContain("`--verbose`");
-      expect(markdown).toContain("## License");
-      expect(markdown).toContain("MIT");
+      // Note: footerContent is handled at file level (generateFileMarkdown), not command level
     });
 
     it("should render global options link for subcommand", async () => {

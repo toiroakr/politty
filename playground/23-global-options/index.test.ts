@@ -160,4 +160,28 @@ describe("23-global-options", () => {
       });
     });
   });
+
+  describe("documentation generation (split files)", () => {
+    const rootFile = "playground/23-global-options/docs/split/README.md";
+    const buildFile = "playground/23-global-options/docs/split/build.md";
+
+    beforeAll(() => {
+      initDocFile({ files: { [rootFile]: [""], [buildFile]: ["build"] } });
+    });
+
+    it("generates cross-file link for global options", async () => {
+      await assertDocMatch({
+        command: cli,
+        files: {
+          [rootFile]: [""],
+          [buildFile]: ["build"],
+        },
+        globalArgs: globalArgsSchema,
+        rootInfo: {
+          title: "My CLI",
+          version: "1.0.0",
+        },
+      });
+    });
+  });
 });

@@ -456,9 +456,42 @@ export function renderGlobalOptionsTableFromArray(
 }
 
 /**
- * Render global options reference for subcommands (link only)
+ * Generate relative path from one file to another
  */
-export function renderGlobalOptionsLink(): string {
+function getRelativePathForGlobalOptions(from: string, to: string): string {
+  const fromParts = from.split("/").slice(0, -1); // directory of 'from'
+  const toParts = to.split("/");
+
+  // Find common prefix
+  let commonLength = 0;
+  while (
+    commonLength < fromParts.length &&
+    commonLength < toParts.length - 1 &&
+    fromParts[commonLength] === toParts[commonLength]
+  ) {
+    commonLength++;
+  }
+
+  // Build relative path
+  const upCount = fromParts.length - commonLength;
+  const relativeParts = [...Array(upCount).fill(".."), ...toParts.slice(commonLength)];
+
+  return relativeParts.join("/") || (toParts[toParts.length - 1] ?? "");
+}
+
+/**
+ * Render global options reference for subcommands (link only)
+ * @param info - Command info (used to determine relative path when files are split)
+ */
+export function renderGlobalOptionsLink(info?: CommandInfo): string {
+  // If command is in a different file from root, include relative path
+  if (info?.filePath && info?.fileMap) {
+    const rootFilePath = info.fileMap[""];
+    if (rootFilePath && rootFilePath !== info.filePath) {
+      const relativePath = getRelativePathForGlobalOptions(info.filePath, rootFilePath);
+      return `See [Global Options](${relativePath}#global-options) for options available to all commands.`;
+    }
+  }
   return "See [Global Options](#global-options) for options available to all commands.";
 }
 
@@ -698,8 +731,8 @@ export function createCommandRenderer(options: CreateCommandRendererOptions = {}
         // Root command: render full table
         content = renderGlobalOpts(context.globalOptions);
       } else {
-        // Subcommand: render link only
-        content = renderGlobalOptionsLink();
+        // Subcommand: render link only (with cross-file support)
+        content = renderGlobalOptionsLink(info);
       }
 
       if (content) {
@@ -836,13 +869,11 @@ export function createCommandRenderer(options: CreateCommandRendererOptions = {}
       }
     }
 
-    // Footer (default is empty, but includes footerContent for root)
+    // Footer (default is empty)
+    // Note: rootInfo.footerContent is handled at the file level in generateFileMarkdown
     {
-      // For root command, use footerContent from rootInfo if available
-      const defaultFooterContent =
-        info.isRoot && rootInfo?.footerContent ? rootInfo.footerContent : "";
       const context: SimpleRenderContext = {
-        content: defaultFooterContent,
+        content: "",
         heading: "",
         info,
       };
