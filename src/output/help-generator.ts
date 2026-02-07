@@ -5,6 +5,7 @@ import {
 } from "../core/schema-extractor.js";
 import type { AnyCommand, Example } from "../types.js";
 import { styles } from "./logger.js";
+import { renderMarkdown } from "./markdown-renderer.js";
 
 /**
  * Descriptions for built-in options
@@ -601,9 +602,9 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
     sections.push(`${styles.sectionHeader("Examples:")}\n${exampleLines}`);
   }
 
-  // Notes
+  // Notes (render Markdown for styled terminal output)
   if (command.notes) {
-    sections.push(`${styles.sectionHeader("Notes:")}\n${command.notes}`);
+    sections.push(`${styles.sectionHeader("Notes:")}\n${renderMarkdown(command.notes)}`);
   }
 
   return sections.join("\n\n");
