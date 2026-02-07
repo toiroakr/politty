@@ -1,5 +1,12 @@
 # politty
 
+## 0.2.1
+
+### Patch Changes
+
+- f447c8d: Add lightweight markdown renderer for styled terminal help notes with support for headings, lists, code blocks, blockquotes, and GitHub alert syntax
+- 92f3dc3: Show required/optional status in options documentation output
+
 ## 0.2.0
 
 ### Minor Changes
