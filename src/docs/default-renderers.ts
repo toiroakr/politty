@@ -453,6 +453,7 @@ export function renderExamplesDefault(
   }
 
   const showOutput = opts?.showOutput ?? true;
+  const prefix = opts?.commandPrefix ? `${opts.commandPrefix} ` : "";
   const lines: string[] = [];
 
   for (let i = 0; i < examples.length; i++) {
@@ -467,7 +468,7 @@ export function renderExamplesDefault(
 
     // Command and output in a single code block
     lines.push("```bash");
-    lines.push(`$ ${example.cmd}`);
+    lines.push(`$ ${prefix}${example.cmd}`);
 
     // Output
     if (showOutput) {
@@ -646,7 +647,11 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         opts?: ExamplesRenderOptions,
       ): string => {
         const withHeading = opts?.withHeading ?? true;
-        const content = renderExamplesDefault(examples, results, opts);
+        const mergedOpts: ExamplesRenderOptions = {
+          commandPrefix: info.fullCommandPath,
+          ...opts,
+        };
+        const content = renderExamplesDefault(examples, results, mergedOpts);
         return withHeading ? `**Examples**\n\n${content}` : content;
       };
 
