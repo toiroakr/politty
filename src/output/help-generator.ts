@@ -530,8 +530,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   const sections: string[] = [];
   const context = options.context;
 
-  // Build header block (name + version + description without empty line)
-  const headerLines: string[] = [];
+  // Command name + version
   const displayName = buildFullCommandName(command, context);
   if (displayName) {
     let header = styles.commandName(displayName);
@@ -547,16 +546,12 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
       // Root command: show vX.X.X
       header += ` ${styles.version(`v${context.rootVersion}`)}`;
     }
-    headerLines.push(header);
+    sections.push(header);
   }
 
-  // Description (no empty line after header)
+  // Description
   if (command.description) {
-    headerLines.push(command.description);
-  }
-
-  if (headerLines.length > 0) {
-    sections.push(headerLines.join("\n"));
+    sections.push(command.description);
   }
 
   // Usage
