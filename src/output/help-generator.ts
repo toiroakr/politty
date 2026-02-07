@@ -5,6 +5,7 @@ import {
 } from "../core/schema-extractor.js";
 import type { AnyCommand, Example } from "../types.js";
 import { styles } from "./logger.js";
+import { renderMarkdown } from "./markdown-renderer.js";
 
 /**
  * Descriptions for built-in options
@@ -529,8 +530,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   const sections: string[] = [];
   const context = options.context;
 
-  // Build header block (name + version + description without empty line)
-  const headerLines: string[] = [];
+  // Command name + version
   const displayName = buildFullCommandName(command, context);
   if (displayName) {
     let header = styles.commandName(displayName);
@@ -546,16 +546,12 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
       // Root command: show vX.X.X
       header += ` ${styles.version(`v${context.rootVersion}`)}`;
     }
-    headerLines.push(header);
+    sections.push(header);
   }
 
-  // Description (no empty line after header)
+  // Description
   if (command.description) {
-    headerLines.push(command.description);
-  }
-
-  if (headerLines.length > 0) {
-    sections.push(headerLines.join("\n"));
+    sections.push(command.description);
   }
 
   // Usage
@@ -601,12 +597,17 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
     sections.push(`${styles.sectionHeader("Examples:")}\n${exampleLines}`);
   }
 
-  // Notes
+  // Notes (render Markdown for styled terminal output, indented under header)
   if (command.notes) {
-    sections.push(`${styles.sectionHeader("Notes:")}\n${command.notes}`);
+    const rendered = renderMarkdown(command.notes);
+    const indented = rendered
+      .split("\n")
+      .map((line) => (line === "" ? "" : `  ${line}`))
+      .join("\n");
+    sections.push(`${styles.sectionHeader("Notes:")}\n${indented}`);
   }
 
-  return sections.join("\n\n");
+  return `\n${sections.join("\n\n")}\n`;
 }
 
 /**
