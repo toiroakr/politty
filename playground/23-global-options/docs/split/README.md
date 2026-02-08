@@ -2,8 +2,6 @@
 
 # My CLI
 
-Version: 1.0.0
-
 CLI with global options example
 
 **Usage**

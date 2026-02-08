@@ -512,15 +512,10 @@ export function renderRootHeader(info: CommandInfo, rootInfo?: RootCommandInfo):
     lines.push("");
   }
 
-  // Version
-  if (rootInfo.version) {
-    lines.push(`Version: ${rootInfo.version}`);
-    lines.push("");
-  }
-
-  // Description
-  if (rootInfo.description) {
-    lines.push(rootInfo.description);
+  // Description (rootInfo.description overrides command.description)
+  const description = rootInfo.description ?? info.description;
+  if (description) {
+    lines.push(description);
     lines.push("");
   }
 
@@ -675,8 +670,8 @@ export function createCommandRenderer(options: CreateCommandRendererOptions = {}
       lines.push("");
     }
 
-    // Description (skip if rootInfo has description, to avoid duplication)
-    if (info.description && !(info.isRoot && rootInfo?.description)) {
+    // Description (skip for root command with rootInfo, as it's handled in renderRootHeader)
+    if (info.description && !(info.isRoot && rootInfo)) {
       const context: SimpleRenderContext = {
         content: info.description,
         heading: "",

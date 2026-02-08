@@ -2,9 +2,7 @@
 
 # My CLI
 
-Version: 1.0.0
-
-A CLI with global options example.
+CLI with global options example
 
 ## Installation
 

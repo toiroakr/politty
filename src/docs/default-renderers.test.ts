@@ -685,18 +685,6 @@ describe("default-renderers", () => {
       expect(result).toContain("# My CLI Tool");
     });
 
-    it("should render version", async () => {
-      const cmd = defineCommand({
-        name: "my-cli",
-        run: () => {},
-      });
-
-      const info = await buildCommandInfo(cmd, "my-cli");
-      const result = renderRootHeader(info, { version: "1.0.0" });
-
-      expect(result).toContain("Version: 1.0.0");
-    });
-
     it("should render installation instructions", async () => {
       const cmd = defineCommand({
         name: "my-cli",
@@ -735,14 +723,12 @@ describe("default-renderers", () => {
       const info = await buildCommandInfo(cmd, "my-cli");
       const result = renderRootHeader(info, {
         title: "My CLI",
-        version: "2.0.0",
         description: "A powerful CLI tool.",
         installation: "```bash\nnpm i -g my-cli\n```",
         headerContent: "[![Build](https://img.shields.io/badge/build-passing-green)]",
       });
 
       expect(result).toContain("# My CLI");
-      expect(result).toContain("Version: 2.0.0");
       expect(result).toContain("A powerful CLI tool.");
       expect(result).toContain("## Installation");
       expect(result).toContain("npm i -g my-cli");
@@ -791,14 +777,12 @@ describe("default-renderers", () => {
       const render = createCommandRenderer({
         rootInfo: {
           title: "My CLI",
-          version: "1.0.0",
         },
       });
 
       const markdown = render(info);
 
       expect(markdown).toContain("# My CLI");
-      expect(markdown).toContain("Version: 1.0.0");
       expect(markdown).toContain("**Global Options**");
       expect(markdown).toContain("`--verbose`");
       // Note: footerContent is handled at file level (generateFileMarkdown), not command level

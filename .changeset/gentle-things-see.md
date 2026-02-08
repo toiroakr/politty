@@ -11,7 +11,8 @@ feat: add global options support
 - Global options can be specified before subcommand name (e.g., `cli --verbose subcommand`)
 - Extended `assertDocMatch` for documentation generation with global options and root command info:
   - Added `globalArgs` option to include Global Options section in documentation
-  - Added `rootInfo` option with `title`, `version`, `description`, `installation`, `headerContent`, and `footerContent`
+  - Added `rootInfo` option with `title`, `description`, `installation`, `headerContent`, and `footerContent`
+  - `title` defaults to `command.name`, `description` defaults to `command.description`
   - Root commands display full Global Options table
   - Subcommands display link to Global Options section ("See [Global Options](#global-options)")
   - Cross-file links for Global Options when documentation is split across multiple files

@@ -137,8 +137,6 @@ describe("23-global-options", () => {
         globalArgs: globalArgsSchema,
         rootInfo: {
           title: "My CLI",
-          version: "1.0.0",
-          description: "A CLI with global options example.",
           installation: "```bash\nnpm install -g my-cli\n```",
           headerContent: "> **Note**: This CLI requires Node.js 18 or higher.",
           footerContent: "## License\n\nMIT License",
@@ -156,7 +154,6 @@ describe("23-global-options", () => {
         globalArgs: globalArgsSchema,
         rootInfo: {
           title: "My CLI",
-          version: "1.0.0",
         },
         targetCommands: ["build"],
         formatter: mdFormatter,
@@ -182,7 +179,6 @@ describe("23-global-options", () => {
         globalArgs: globalArgsSchema,
         rootInfo: {
           title: "My CLI",
-          version: "1.0.0",
         },
         formatter: mdFormatter,
       });

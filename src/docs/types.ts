@@ -315,13 +315,12 @@ export type FileMapping = Record<string, string[] | FileConfig>;
 
 /**
  * Root command specific information (for CLI overview documentation)
+ * Note: title defaults to command.name, description defaults to command.description
  */
 export interface RootCommandInfo {
   /** CLI title (defaults to command name) */
   title?: string | undefined;
-  /** CLI version */
-  version?: string | undefined;
-  /** Detailed description */
+  /** Description override (defaults to command.description) */
   description?: string | undefined;
   /** Installation instructions (markdown) */
   installation?: string | undefined;
