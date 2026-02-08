@@ -976,5 +976,135 @@ describe("ArgParser", () => {
         }
       }
     });
+
+    it("should stop scanning and handle --help before subcommand", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: buildCmd },
+      });
+
+      // --help should be recognized even with globalArgsSchema
+      const result = parseArgs(["--help", "build"], cmd, {
+        globalArgsSchema,
+      });
+
+      expect(result.helpRequested).toBe(true);
+      expect(result.subCommand).toBeUndefined();
+    });
+
+    it("should stop scanning and handle -h before subcommand", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: buildCmd },
+      });
+
+      const result = parseArgs(["-h", "build"], cmd, {
+        globalArgsSchema,
+      });
+
+      expect(result.helpRequested).toBe(true);
+      expect(result.subCommand).toBeUndefined();
+    });
+
+    it("should stop scanning when encountering unknown flag before subcommand", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: buildCmd },
+      });
+
+      // --unknown is not a global arg, so it should stop scanning
+      // and let normal parsing handle it (which detects unknown flags)
+      const result = parseArgs(["--unknown", "build"], cmd, {
+        globalArgsSchema,
+      });
+
+      expect(result.subCommand).toBeUndefined();
+      expect(result.unknownFlags).toContain("unknown");
+    });
+  });
+
+  describe("subcommand scanning without globalArgsSchema", () => {
+    it("should detect --help before subcommand without globalArgsSchema", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: buildCmd },
+      });
+
+      // Without globalArgsSchema, --help should be detected normally
+      const result = parseArgs(["--help", "build"], cmd);
+
+      expect(result.helpRequested).toBe(true);
+      expect(result.subCommand).toBeUndefined();
+    });
+
+    it("should detect -h before subcommand without globalArgsSchema", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: buildCmd },
+      });
+
+      const result = parseArgs(["-h", "build"], cmd);
+
+      expect(result.helpRequested).toBe(true);
+      expect(result.subCommand).toBeUndefined();
+    });
+
+    it("should detect unknown flag before subcommand without globalArgsSchema", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+        }),
+        subCommands: { build: buildCmd },
+      });
+
+      // Without globalArgsSchema, no subcommand scanning should occur
+      // so --unknown-flag should be detected as unknown
+      const result = parseArgs(["--unknown-flag", "build"], cmd);
+
+      expect(result.subCommand).toBeUndefined();
+      expect(result.unknownFlags).toContain("unknown-flag");
+    });
+
+    it("should still route to subcommand when first arg is subcommand name", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: buildCmd },
+      });
+
+      // Without globalArgsSchema, first positional is still checked for subcommand
+      const result = parseArgs(["build", "--help"], cmd);
+
+      expect(result.subCommand).toBe("build");
+      expect(result.remainingArgs).toEqual(["--help"]);
+    });
   });
 });

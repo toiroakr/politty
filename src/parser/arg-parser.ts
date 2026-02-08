@@ -62,23 +62,52 @@ export function parseArgs(
   const subCommandNames = command.subCommands ? Object.keys(command.subCommands) : [];
   const hasSubCommands = subCommandNames.length > 0;
 
+  // Simple subcommand detection when no globalArgsSchema:
+  // Check if first positional (first arg that doesn't start with -) is a subcommand
+  // This maintains backward compatibility where `cli build --help` routes to build
+  if (hasSubCommands && argv.length > 0 && !options.globalArgsSchema) {
+    const firstArg = argv[0]!;
+    // Only check if it's not a flag
+    if (!firstArg.startsWith("-") && subCommandNames.includes(firstArg)) {
+      return {
+        helpRequested: false,
+        helpAllRequested: false,
+        versionRequested: false,
+        subCommand: firstArg,
+        remainingArgs: argv.slice(1),
+        rawArgs: {},
+        globalRawArgs: undefined,
+        positionals: [],
+        unknownFlags: [],
+      };
+    }
+  }
+
   // Find subcommand: look for first positional that matches a subcommand name
   // This allows `cli --global-opt subcommand --subcmd-opt` pattern
-  if (hasSubCommands && argv.length > 0) {
+  // Only perform this scanning when globalArgsSchema is provided, since without
+  // global args there's no valid reason for flags to appear before subcommands
+  if (hasSubCommands && argv.length > 0 && options.globalArgsSchema) {
     // First, check if first non-flag argument is a subcommand
     // We need to handle global options that may come before the subcommand
     let subCommandIndex = -1;
     let skipNext = false;
 
-    // Extract global args fields to know which flags take values
-    let globalExtractedForSubcmd: ExtractedFields | undefined;
-    if (options.globalArgsSchema) {
-      globalExtractedForSubcmd = extractFields(options.globalArgsSchema);
-    }
+    // Builtin flags that should stop the scan and be handled by normal parsing
+    const builtinFlags = new Set(["--help", "-h", "--help-all", "-H", "--version"]);
 
-    // Build set of flags that take values (non-boolean)
+    // Extract global args fields to know which flags take values
+    const globalExtractedForSubcmd = extractFields(options.globalArgsSchema);
+
+    // Build set of known global flags
+    const knownGlobalFlags = new Set<string>();
     const flagsWithValues = new Set<string>();
-    for (const field of globalExtractedForSubcmd?.fields ?? []) {
+    for (const field of globalExtractedForSubcmd.fields) {
+      knownGlobalFlags.add(`--${field.cliName}`);
+      knownGlobalFlags.add(`--${field.name}`);
+      if (field.alias) {
+        knownGlobalFlags.add(`-${field.alias}`);
+      }
       if (field.type !== "boolean") {
         flagsWithValues.add(`--${field.cliName}`);
         flagsWithValues.add(`--${field.name}`);
@@ -99,6 +128,18 @@ export function parseArgs(
       if (arg.startsWith("-")) {
         // Check if this flag takes a value
         const flagName = arg.includes("=") ? arg.split("=")[0]! : arg;
+
+        // Stop scanning if we encounter a builtin flag - let normal parsing handle it
+        if (builtinFlags.has(flagName)) {
+          break;
+        }
+
+        // Stop scanning if we encounter an unknown flag - let normal parsing handle it
+        // This ensures unknown flags are properly reported as errors
+        if (!knownGlobalFlags.has(flagName)) {
+          break;
+        }
+
         if (flagsWithValues.has(flagName) && !arg.includes("=")) {
           // This flag takes a value, skip the next argument
           skipNext = true;
@@ -124,26 +165,24 @@ export function parseArgs(
       const argsAfterSubcmd = argv.slice(subCommandIndex + 1);
 
       // Parse global args from argsBeforeSubcmd
-      let globalRawArgs: Record<string, unknown> | undefined;
-      if (globalExtractedForSubcmd) {
-        if (argsBeforeSubcmd.length > 0) {
-          const globalParserOptions = buildParserOptions(globalExtractedForSubcmd);
-          const globalParsed = parseArgv(argsBeforeSubcmd, globalParserOptions);
-          globalRawArgs = mergeWithPositionals(globalParsed, globalExtractedForSubcmd);
-        } else {
-          globalRawArgs = {};
-        }
+      let globalRawArgs: Record<string, unknown>;
+      if (argsBeforeSubcmd.length > 0) {
+        const globalParserOptions = buildParserOptions(globalExtractedForSubcmd);
+        const globalParsed = parseArgv(argsBeforeSubcmd, globalParserOptions);
+        globalRawArgs = mergeWithPositionals(globalParsed, globalExtractedForSubcmd);
+      } else {
+        globalRawArgs = {};
+      }
 
-        // Apply environment variable fallbacks for global fields
-        for (const field of globalExtractedForSubcmd.fields) {
-          if (field.env && globalRawArgs[field.name] === undefined) {
-            const envNames = Array.isArray(field.env) ? field.env : [field.env];
-            for (const envName of envNames) {
-              const envValue = process.env[envName];
-              if (envValue !== undefined) {
-                globalRawArgs[field.name] = envValue;
-                break;
-              }
+      // Apply environment variable fallbacks for global fields
+      for (const field of globalExtractedForSubcmd.fields) {
+        if (field.env && globalRawArgs[field.name] === undefined) {
+          const envNames = Array.isArray(field.env) ? field.env : [field.env];
+          for (const envName of envNames) {
+            const envValue = process.env[envName];
+            if (envValue !== undefined) {
+              globalRawArgs[field.name] = envValue;
+              break;
             }
           }
         }
