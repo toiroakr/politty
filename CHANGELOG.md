@@ -1,5 +1,11 @@
 # politty
 
+## 0.2.2
+
+### Patch Changes
+
+- b08beb5: Add markdown table syntax support to the terminal markdown renderer
+
 ## 0.2.1
 
 ### Patch Changes
