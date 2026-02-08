@@ -7,9 +7,12 @@ import type {
   ExampleExecutionResult,
   ExamplesRenderContext,
   ExamplesRenderOptions,
+  GlobalOptionsRenderContext,
   OptionsRenderContext,
   RenderContentOptions,
   RenderFunction,
+  RootCommandInfo,
+  RootHeaderRenderContext,
   SimpleRenderContext,
   SubCommandInfo,
   SubcommandsRenderContext,
@@ -437,6 +440,108 @@ export function renderSubcommandsTableFromArray(
 }
 
 /**
+ * Render global options section for root command (full table)
+ */
+export function renderGlobalOptionsTableFromArray(
+  globalOptions: ResolvedFieldMeta[],
+  style: "table" | "list" = "table",
+): string {
+  if (globalOptions.length === 0) {
+    return "";
+  }
+
+  return style === "table"
+    ? renderOptionsTableFromArray(globalOptions)
+    : renderOptionsListFromArray(globalOptions);
+}
+
+/**
+ * Generate relative path from one file to another
+ */
+function getRelativePathForGlobalOptions(from: string, to: string): string {
+  const fromParts = from.split("/").slice(0, -1); // directory of 'from'
+  const toParts = to.split("/");
+
+  // Find common prefix
+  let commonLength = 0;
+  while (
+    commonLength < fromParts.length &&
+    commonLength < toParts.length - 1 &&
+    fromParts[commonLength] === toParts[commonLength]
+  ) {
+    commonLength++;
+  }
+
+  // Build relative path
+  const upCount = fromParts.length - commonLength;
+  const relativeParts = [...Array(upCount).fill(".."), ...toParts.slice(commonLength)];
+
+  return relativeParts.join("/") || (toParts[toParts.length - 1] ?? "");
+}
+
+/**
+ * Render global options reference for subcommands (link only)
+ * @param info - Command info (used to determine relative path when files are split)
+ */
+export function renderGlobalOptionsLink(info?: CommandInfo): string {
+  // If command is in a different file from root, include relative path
+  if (info?.filePath && info?.fileMap) {
+    const rootFilePath = info.fileMap[""];
+    if (rootFilePath && rootFilePath !== info.filePath) {
+      const relativePath = getRelativePathForGlobalOptions(info.filePath, rootFilePath);
+      return `See [Global Options](${relativePath}#global-options) for options available to all commands.`;
+    }
+  }
+  return "See [Global Options](#global-options) for options available to all commands.";
+}
+
+/**
+ * Render root header with title, version, installation, etc.
+ */
+export function renderRootHeader(info: CommandInfo, rootInfo?: RootCommandInfo): string {
+  if (!rootInfo) {
+    return "";
+  }
+
+  const lines: string[] = [];
+
+  // Title
+  const title = rootInfo.title ?? info.name;
+  if (title) {
+    lines.push(`# ${title}`);
+    lines.push("");
+  }
+
+  // Description (rootInfo.description overrides command.description)
+  const description = rootInfo.description ?? info.description;
+  if (description) {
+    lines.push(description);
+    lines.push("");
+  }
+
+  // Installation
+  if (rootInfo.installation) {
+    lines.push("## Installation");
+    lines.push("");
+    lines.push(rootInfo.installation);
+    lines.push("");
+  }
+
+  // Header content (custom content before Usage)
+  if (rootInfo.headerContent) {
+    lines.push(rootInfo.headerContent);
+    lines.push("");
+  }
+
+  // Remove trailing empty lines
+  while (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * Render examples as markdown
  *
  * @example
@@ -507,9 +612,17 @@ export function renderExamplesDefault(
 }
 
 /**
+ * Extended options for createCommandRenderer
+ */
+export interface CreateCommandRendererOptions extends DefaultRendererOptions {
+  /** Root command configuration (for CLI overview) */
+  rootInfo?: RootCommandInfo | undefined;
+}
+
+/**
  * Create command renderer with options
  */
-export function createCommandRenderer(options: DefaultRendererOptions = {}): RenderFunction {
+export function createCommandRenderer(options: CreateCommandRendererOptions = {}): RenderFunction {
   const {
     headingLevel = 1,
     optionStyle = "table",
@@ -523,6 +636,9 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     renderNotes: customRenderNotes,
     renderFooter: customRenderFooter,
     renderExamples: customRenderExamples,
+    renderGlobalOptions: customRenderGlobalOptions,
+    renderRootHeader: customRenderRootHeader,
+    rootInfo,
   } = options;
 
   return (info: CommandInfo): string => {
@@ -532,13 +648,30 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     const effectiveLevel = Math.min(headingLevel + (info.depth - 1), 6);
     const h = "#".repeat(effectiveLevel);
 
-    // Title - use commandPath for subcommands, name for root
-    const title = info.commandPath || info.name;
-    lines.push(`${h} ${title}`);
-    lines.push("");
+    // Root Header (title, version, installation, headerContent)
+    // Only render for root command when rootInfo is provided
+    if (info.isRoot && rootInfo) {
+      const context: RootHeaderRenderContext = {
+        info,
+        rootInfo,
+        heading: h,
+      };
+      const content = customRenderRootHeader
+        ? customRenderRootHeader(context)
+        : renderRootHeader(info, rootInfo);
+      if (content) {
+        lines.push(content);
+        lines.push("");
+      }
+    } else {
+      // Title - use commandPath for subcommands, name for root
+      const title = info.commandPath || info.name;
+      lines.push(`${h} ${title}`);
+      lines.push("");
+    }
 
-    // Description
-    if (info.description) {
+    // Description (skip for root command with rootInfo, as it's handled in renderRootHeader)
+    if (info.description && !(info.isRoot && rootInfo)) {
       const context: SimpleRenderContext = {
         content: info.description,
         heading: "",
@@ -560,6 +693,46 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         info,
       };
       const content = customRenderUsage ? customRenderUsage(context) : context.content;
+      if (content) {
+        lines.push(content);
+        lines.push("");
+      }
+    }
+
+    // Global Options
+    if (info.globalOptions && info.globalOptions.length > 0) {
+      // Add explicit anchor for cross-linking from subcommands
+      const globalOptionsHeading = '<a id="global-options"></a>\n\n**Global Options**';
+
+      const renderGlobalOpts = (
+        opts: ResolvedFieldMeta[],
+        renderOpts?: RenderContentOptions,
+      ): string => {
+        const style = renderOpts?.style ?? optionStyle;
+        const withHeading = renderOpts?.withHeading ?? true;
+        const content = renderGlobalOptionsTableFromArray(opts, style);
+        return withHeading ? `${globalOptionsHeading}\n\n${content}` : content;
+      };
+
+      const context: GlobalOptionsRenderContext = {
+        globalOptions: info.globalOptions,
+        render: renderGlobalOpts,
+        heading: globalOptionsHeading,
+        info,
+        isRoot: info.isRoot ?? false,
+      };
+
+      let content: string;
+      if (customRenderGlobalOptions) {
+        content = customRenderGlobalOptions(context);
+      } else if (info.isRoot) {
+        // Root command: render full table
+        content = renderGlobalOpts(context.globalOptions);
+      } else {
+        // Subcommand: render link only (with cross-file support)
+        content = renderGlobalOptionsLink(info);
+      }
+
       if (content) {
         lines.push(content);
         lines.push("");
@@ -695,6 +868,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     }
 
     // Footer (default is empty)
+    // Note: rootInfo.footerContent is handled at the file level in generateFileMarkdown
     {
       const context: SimpleRenderContext = {
         content: "",

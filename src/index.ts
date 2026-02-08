@@ -6,7 +6,7 @@
 
 // Core exports
 export { arg, type ArgMeta } from "./core/arg-registry.js";
-export { defineCommand } from "./core/command.js";
+export { createDefineCommand, defineCommand } from "./core/command.js";
 export { runCommand, runMain } from "./core/runner.js";
 export {
   extractFields,
@@ -39,6 +39,8 @@ export type {
   CommandBase,
   // Example types
   Example,
+  // Global args (for declaration merging)
+  GlobalArgs,
   LogEntry,
   // Logger type
   Logger,

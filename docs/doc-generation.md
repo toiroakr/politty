@@ -73,6 +73,8 @@ console.log(result.files); // Status for each file
 | `formatter`      | `FormatterFunction`      | Formatter for generated content                              |
 | `examples`       | `ExampleConfig`          | Example execution settings per command                       |
 | `targetCommands` | `string[]`               | Specific commands to validate/generate (for partial updates) |
+| `globalArgs`     | `ArgsSchema`             | Global arguments schema (adds Global Options section)        |
+| `rootInfo`       | `RootCommandInfo`        | Root command info (title, installation, etc.)                |
 
 ### `FileMapping`
 
@@ -102,8 +104,8 @@ const files: FileMapping = {
 ```typescript
 // Example: Splitting config subcommand to separate file
 const files: FileMapping = {
-  "docs/cli.md": [""],              // Link to config becomes config.md#config
-  "docs/config.md": ["config"],     // config get, config set are same-file anchors
+  "docs/cli.md": [""], // Link to config becomes config.md#config
+  "docs/config.md": ["config"], // config get, config set are same-file anchors
 };
 ```
 
@@ -244,7 +246,14 @@ await assertDocMatch({
   files: { "docs/cli.md": ["", "read", "write"] },
   targetCommands: ["read"],
   examples: {
-    read: { mock: () => { /* ... */ }, cleanup: () => { /* ... */ } },
+    read: {
+      mock: () => {
+        /* ... */
+      },
+      cleanup: () => {
+        /* ... */
+      },
+    },
   },
 });
 
@@ -254,8 +263,22 @@ await assertDocMatch({
   files: { "docs/cli.md": ["", "read", "write"] },
   targetCommands: ["read", "write"],
   examples: {
-    read: { mock: () => { /* ... */ }, cleanup: () => { /* ... */ } },
-    write: { mock: () => { /* ... */ }, cleanup: () => { /* ... */ } },
+    read: {
+      mock: () => {
+        /* ... */
+      },
+      cleanup: () => {
+        /* ... */
+      },
+    },
+    write: {
+      mock: () => {
+        /* ... */
+      },
+      cleanup: () => {
+        /* ... */
+      },
+    },
   },
 });
 ```
@@ -274,7 +297,7 @@ await assertDocMatch({
 await assertDocMatch({
   command: cli,
   files: { "docs/cli.md": ["", "read", "write", "check"] },
-  targetCommands: [""],  // Specify root command
+  targetCommands: [""], // Specify root command
   examples: {},
 });
 // Result:
@@ -282,6 +305,99 @@ await assertDocMatch({
 // - "delete" section is also generated (subcommand not explicitly in files)
 // - "read", "write", "check" are not generated (explicitly in files, generated in individual tests)
 ```
+
+### `globalArgs`
+
+Adds a "Global Options" section to the documentation. For root commands, displays the full options table. For subcommands, displays a link to the Global Options section.
+
+```typescript
+const globalArgsSchema = z.object({
+  verbose: arg(z.boolean().default(false), { alias: "v", description: "Verbose output" }),
+  config: arg(z.string().optional(), { alias: "c", description: "Config file path" }),
+});
+
+await assertDocMatch({
+  command: cli,
+  files: { "docs/cli.md": [""] },
+  globalArgs: globalArgsSchema,
+});
+```
+
+Generated output for root command:
+
+```markdown
+**Global Options**
+
+| Option              | Alias | Description      | Required | Default |
+| ------------------- | ----- | ---------------- | -------- | ------- |
+| `--verbose`         | `-v`  | Verbose output   | No       | `false` |
+| `--config <CONFIG>` | `-c`  | Config file path | No       | -       |
+```
+
+Generated output for subcommands:
+
+```markdown
+See [Global Options](#global-options) for options available to all commands.
+```
+
+When documentation is split across multiple files, cross-file links are automatically generated:
+
+```markdown
+See [Global Options](../cli.md#global-options) for options available to all commands.
+```
+
+### `rootInfo`
+
+Adds CLI overview content to the root command documentation.
+
+````typescript
+await assertDocMatch({
+  command: cli,
+  files: { "docs/cli.md": [""] },
+  globalArgs: globalArgsSchema,
+  rootInfo: {
+    title: "My CLI", // Defaults to command.name
+    description: "A powerful CLI tool", // Defaults to command.description
+    installation: "```bash\nnpm install -g my-cli\n```",
+    headerContent: "> **Note**: Requires Node.js 18+",
+    footerContent: "## License\n\nMIT License",
+  },
+});
+````
+
+| Property        | Type                  | Description                                          |
+| --------------- | --------------------- | ---------------------------------------------------- |
+| `title`         | `string \| undefined` | CLI title (defaults to `command.name`)               |
+| `description`   | `string \| undefined` | CLI description (defaults to `command.description`)  |
+| `installation`  | `string \| undefined` | Installation instructions (markdown)                 |
+| `headerContent` | `string \| undefined` | Custom content after title/description, before Usage |
+| `footerContent` | `string \| undefined` | Custom content at the very end of the document       |
+
+Generated output:
+
+````markdown
+# My CLI
+
+A powerful CLI tool
+
+## Installation
+
+```bash
+npm install -g my-cli
+```
+````
+
+> **Note**: Requires Node.js 18+
+
+**Usage**
+
+...
+
+## License
+
+MIT License
+
+````
 
 ### `initDocFile(config, fileSystem?)`
 
@@ -297,12 +413,12 @@ const docConfig = {
 
 describe("my-cli", () => {
   beforeAll(() => {
-    initDocFile(docConfig);  // Initialize all files in files
+    initDocFile(docConfig); // Initialize all files in files
   });
 
   // Tests for each command...
 });
-```
+````
 
 - First argument is an object containing `{ files: ... }`, or a single file path string
 - Deletes files only when `POLITTY_DOCS_UPDATE=true`
@@ -386,13 +502,18 @@ Subcommand heading levels are **relatively adjusted within the file** based on c
 
 ```markdown
 <!-- docs/cli.md: When including root command -->
-# my-cli          ← depth=1, headingLevel
-## config         ← depth=2, headingLevel+1
-### config get    ← depth=3, headingLevel+2
+
+# my-cli ← depth=1, headingLevel
+
+## config ← depth=2, headingLevel+1
+
+### config get ← depth=3, headingLevel+2
 
 <!-- docs/config.md: When subcommands only -->
-# config          ← depth=2 but shallowest in this file, so headingLevel
-## config get     ← depth=3, headingLevel+1
+
+# config ← depth=2 but shallowest in this file, so headingLevel
+
+## config get ← depth=3, headingLevel+1
 ```
 
 Subcommand titles display the full path (e.g., `config get`).
@@ -447,7 +568,8 @@ Generate completely custom Markdown:
 ```typescript
 import type { RenderFunction, CommandInfo } from "politty/docs";
 
-const myRenderer: RenderFunction = (info: CommandInfo) => `
+const myRenderer: RenderFunction = (info: CommandInfo) =>
+  `
 # ${info.name}
 
 ${info.description ?? ""}
@@ -551,9 +673,9 @@ command-name subcommand [options]
 
 **Commands**
 
-| Command                                   | Description                |
-| ----------------------------------------- | -------------------------- |
-| [`subcommand action`](#subcommand-action) | Nested subcommand          |
+| Command                                   | Description       |
+| ----------------------------------------- | ----------------- |
+| [`subcommand action`](#subcommand-action) | Nested subcommand |
 
 ### subcommand action
 
@@ -637,7 +759,7 @@ describe("22-examples", () => {
     it("documentation", async () => {
       await assertDocMatch({
         ...baseDocConfig,
-        targetCommands: [""],  // Root command
+        targetCommands: [""], // Root command
         examples: {},
       });
     });

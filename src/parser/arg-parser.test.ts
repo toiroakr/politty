@@ -828,4 +828,283 @@ describe("ArgParser", () => {
       expect(result.rawArgs.outputDir).toBe("./local");
     });
   });
+
+  describe("global args", () => {
+    const globalArgsSchema = z.object({
+      verbose: arg(z.boolean().default(false), {
+        alias: "v",
+        description: "Enable verbose output",
+      }),
+      config: arg(z.string().optional(), {
+        alias: "c",
+        description: "Path to configuration file",
+        env: "CLI_CONFIG",
+      }),
+    });
+
+    it("should parse global args with command args", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          output: arg(z.string().default("dist"), { alias: "o" }),
+        }),
+      });
+
+      const result = parseArgs(["--verbose", "--output", "build"], cmd, {
+        globalArgsSchema,
+      });
+
+      expect(result.globalRawArgs).toBeDefined();
+      expect(result.globalRawArgs?.verbose).toBe(true);
+      expect(result.rawArgs.output).toBe("build");
+    });
+
+    it("should apply env fallback for global args (no subcommand)", () => {
+      const originalEnv = process.env.CLI_CONFIG;
+      process.env.CLI_CONFIG = "/etc/myapp.json";
+
+      try {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            output: arg(z.string().default("dist"), { alias: "o" }),
+          }),
+        });
+
+        const result = parseArgs(["--output", "build"], cmd, {
+          globalArgsSchema,
+        });
+
+        expect(result.globalRawArgs?.config).toBe("/etc/myapp.json");
+      } finally {
+        if (originalEnv === undefined) {
+          delete process.env.CLI_CONFIG;
+        } else {
+          process.env.CLI_CONFIG = originalEnv;
+        }
+      }
+    });
+
+    it("should apply env fallback for global args (with subcommand)", () => {
+      const originalEnv = process.env.CLI_CONFIG;
+      process.env.CLI_CONFIG = "/etc/myapp.json";
+
+      try {
+        const buildCmd = defineCommand({
+          name: "build",
+          args: z.object({
+            output: arg(z.string().default("dist"), { alias: "o" }),
+          }),
+        });
+
+        const cmd = defineCommand({
+          name: "test-cmd",
+          subCommands: { build: buildCmd },
+        });
+
+        const result = parseArgs(["build"], cmd, {
+          globalArgsSchema,
+        });
+
+        expect(result.subCommand).toBe("build");
+        expect(result.globalRawArgs?.config).toBe("/etc/myapp.json");
+      } finally {
+        if (originalEnv === undefined) {
+          delete process.env.CLI_CONFIG;
+        } else {
+          process.env.CLI_CONFIG = originalEnv;
+        }
+      }
+    });
+
+    it("should parse global args before subcommand", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+        args: z.object({
+          output: arg(z.string().default("dist"), { alias: "o" }),
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        subCommands: { build: buildCmd },
+      });
+
+      const result = parseArgs(["--verbose", "-c", "config.json", "build", "-o", "out"], cmd, {
+        globalArgsSchema,
+      });
+
+      expect(result.subCommand).toBe("build");
+      expect(result.globalRawArgs?.verbose).toBe(true);
+      expect(result.globalRawArgs?.config).toBe("config.json");
+      expect(result.remainingArgs).toEqual(["-o", "out"]);
+    });
+
+    it("should handle global args with array env", () => {
+      const globalWithArrayEnv = z.object({
+        apiKey: arg(z.string().optional(), {
+          env: ["API_KEY", "FALLBACK_API_KEY"],
+        }),
+      });
+
+      const originalApiKey = process.env.API_KEY;
+      const originalFallback = process.env.FALLBACK_API_KEY;
+      delete process.env.API_KEY;
+      process.env.FALLBACK_API_KEY = "fallback-key";
+
+      try {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          run: () => {},
+        });
+
+        const result = parseArgs([], cmd, {
+          globalArgsSchema: globalWithArrayEnv,
+        });
+
+        expect(result.globalRawArgs?.apiKey).toBe("fallback-key");
+      } finally {
+        if (originalApiKey === undefined) {
+          delete process.env.API_KEY;
+        } else {
+          process.env.API_KEY = originalApiKey;
+        }
+        if (originalFallback === undefined) {
+          delete process.env.FALLBACK_API_KEY;
+        } else {
+          process.env.FALLBACK_API_KEY = originalFallback;
+        }
+      }
+    });
+
+    it("should stop scanning and handle --help before subcommand", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: buildCmd },
+      });
+
+      // --help should be recognized even with globalArgsSchema
+      const result = parseArgs(["--help", "build"], cmd, {
+        globalArgsSchema,
+      });
+
+      expect(result.helpRequested).toBe(true);
+      expect(result.subCommand).toBeUndefined();
+    });
+
+    it("should stop scanning and handle -h before subcommand", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: buildCmd },
+      });
+
+      const result = parseArgs(["-h", "build"], cmd, {
+        globalArgsSchema,
+      });
+
+      expect(result.helpRequested).toBe(true);
+      expect(result.subCommand).toBeUndefined();
+    });
+
+    it("should stop scanning when encountering unknown flag before subcommand", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: buildCmd },
+      });
+
+      // --unknown is not a global arg, so it should stop scanning
+      // and let normal parsing handle it (which detects unknown flags)
+      const result = parseArgs(["--unknown", "build"], cmd, {
+        globalArgsSchema,
+      });
+
+      expect(result.subCommand).toBeUndefined();
+      expect(result.unknownFlags).toContain("unknown");
+    });
+  });
+
+  describe("subcommand scanning without globalArgsSchema", () => {
+    it("should detect --help before subcommand without globalArgsSchema", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: buildCmd },
+      });
+
+      // Without globalArgsSchema, --help should be detected normally
+      const result = parseArgs(["--help", "build"], cmd);
+
+      expect(result.helpRequested).toBe(true);
+      expect(result.subCommand).toBeUndefined();
+    });
+
+    it("should detect -h before subcommand without globalArgsSchema", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: buildCmd },
+      });
+
+      const result = parseArgs(["-h", "build"], cmd);
+
+      expect(result.helpRequested).toBe(true);
+      expect(result.subCommand).toBeUndefined();
+    });
+
+    it("should detect unknown flag before subcommand without globalArgsSchema", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+        }),
+        subCommands: { build: buildCmd },
+      });
+
+      // Without globalArgsSchema, no subcommand scanning should occur
+      // so --unknown-flag should be detected as unknown
+      const result = parseArgs(["--unknown-flag", "build"], cmd);
+
+      expect(result.subCommand).toBeUndefined();
+      expect(result.unknownFlags).toContain("unknown-flag");
+    });
+
+    it("should still route to subcommand when first arg is subcommand name", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: buildCmd },
+      });
+
+      // Without globalArgsSchema, first positional is still checked for subcommand
+      const result = parseArgs(["build", "--help"], cmd);
+
+      expect(result.subCommand).toBe("build");
+      expect(result.remainingArgs).toEqual(["--help"]);
+    });
+  });
 });

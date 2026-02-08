@@ -1,6 +1,20 @@
 import type { z } from "zod";
 
 /**
+ * Global arguments interface for declaration merging.
+ * Users can extend this interface to add global options type.
+ *
+ * @example
+ * ```typescript
+ * declare module "politty" {
+ *   interface GlobalArgs extends z.infer<typeof globalArgsSchema> {}
+ * }
+ * ```
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface GlobalArgs {}
+
+/**
  * Example definition for a command
  */
 export interface Example {
@@ -33,16 +47,16 @@ export type ArgsSchema = z.ZodType<Record<string, any>>;
  * Context provided to setup function
  */
 export interface SetupContext<TArgs = unknown> {
-  /** Parsed and validated arguments */
-  args: TArgs;
+  /** Parsed and validated arguments (includes global args) */
+  args: TArgs & GlobalArgs;
 }
 
 /**
  * Context provided to cleanup function
  */
 export interface CleanupContext<TArgs = unknown> {
-  /** Parsed and validated arguments */
-  args: TArgs;
+  /** Parsed and validated arguments (includes global args) */
+  args: TArgs & GlobalArgs;
   /** Error if command execution failed */
   error?: Error | undefined;
 }
@@ -85,8 +99,8 @@ export interface RunnableCommand<
   TArgs = unknown,
   TResult = unknown,
 > extends CommandBase<TArgsSchema, TArgs> {
-  /** Main run function */
-  run: (args: TArgs) => TResult;
+  /** Main run function (args includes global args) */
+  run: (args: TArgs & GlobalArgs) => TResult;
 }
 
 /**
@@ -157,6 +171,8 @@ export interface MainOptions {
   skipValidation?: boolean;
   /** Custom logger for output (default: console) */
   logger?: Logger;
+  /** Global arguments schema (available to all subcommands) */
+  globalArgs?: ArgsSchema | undefined;
 }
 
 /**
@@ -171,6 +187,19 @@ export interface RunCommandOptions {
   skipValidation?: boolean;
   /** Custom logger for output (default: console) */
   logger?: Logger;
+  /** Global arguments schema (available to all subcommands) */
+  globalArgs?: ArgsSchema | undefined;
+}
+
+/**
+ * Context for global arguments (passed through command hierarchy)
+ * @internal
+ */
+export interface GlobalArgsContext {
+  /** Global arguments schema */
+  schema: ArgsSchema;
+  /** Parsed global argument values (reused across subcommands) */
+  values?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -194,6 +223,8 @@ export interface InternalRunOptions {
   skipValidation?: boolean | undefined;
   /** Custom logger for output */
   logger?: Logger | undefined;
+  /** Global arguments context (internal use) */
+  _globalArgsContext?: GlobalArgsContext | undefined;
 }
 
 /**

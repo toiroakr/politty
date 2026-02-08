@@ -18,7 +18,7 @@ function defineCommand<TArgsSchema, TResult>(config: {
   run?: (args: TArgs) => TResult | Promise<TResult>;
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
   notes?: string;
-}): Command<TArgs, TResult>
+}): Command<TArgs, TResult>;
 ```
 
 #### Parameters
@@ -53,9 +53,66 @@ const command = defineCommand({
   args: z.object({
     input: arg(z.string(), { positional: true }),
   }),
-  setup: ({ args }) => { /* initialization */ },
-  run: (args) => { /* main process */ },
-  cleanup: ({ args, error }) => { /* cleanup */ },
+  setup: ({ args }) => {
+    /* initialization */
+  },
+  run: (args) => {
+    /* main process */
+  },
+  cleanup: ({ args, error }) => {
+    /* cleanup */
+  },
+});
+```
+
+---
+
+### `createDefineCommand`
+
+Creates a `defineCommand` function with global args type pre-applied. Useful for avoiding repetitive type parameters across multiple command definitions.
+
+```typescript
+function createDefineCommand<TGlobalArgs>(): typeof defineCommand;
+```
+
+#### Type Parameters
+
+| Name          | Description                       |
+| ------------- | --------------------------------- |
+| `TGlobalArgs` | Type of global arguments to merge |
+
+#### Return Value
+
+A `defineCommand` function with `TGlobalArgs` pre-applied to the third type parameter.
+
+#### Example
+
+```typescript
+import { z } from "zod";
+import { arg, createDefineCommand } from "politty";
+
+// Define global args schema and type
+const globalArgsSchema = z.object({
+  verbose: arg(z.boolean().default(false), { alias: "v" }),
+  config: arg(z.string().optional(), { alias: "c" }),
+});
+type GlobalArgsType = z.infer<typeof globalArgsSchema>;
+
+// Create a project-specific defineCommand
+const defineAppCommand = createDefineCommand<GlobalArgsType>();
+
+// Use it without repeating type parameters
+const buildCommand = defineAppCommand({
+  name: "build",
+  args: z.object({
+    output: arg(z.string().default("dist")),
+  }),
+  run: (args) => {
+    // args.verbose is typed automatically
+    if (args.verbose) {
+      console.log("Verbose mode enabled");
+    }
+  },
 });
 ```
 
@@ -66,10 +123,7 @@ const command = defineCommand({
 Executes a command as the CLI entry point. Signal handling (SIGINT, SIGTERM) is automatically enabled, and `process.exit` is called on termination.
 
 ```typescript
-async function runMain(
-  command: Command,
-  options?: MainOptions
-): Promise<never>
+async function runMain(command: Command, options?: MainOptions): Promise<never>;
 ```
 
 #### Parameters
@@ -90,7 +144,7 @@ import { defineCommand, runMain } from "politty";
 
 const command = defineCommand({
   name: "my-cli",
-  run: () => console.log("Hello!")
+  run: () => console.log("Hello!"),
 });
 
 // Basic usage
@@ -113,8 +167,8 @@ Executes a command programmatically. Ideal for testing purposes. Does not call `
 async function runCommand<TResult>(
   command: Command,
   argv: string[],
-  options?: RunCommandOptions
-): Promise<RunResult<TResult>>
+  options?: RunCommandOptions,
+): Promise<RunResult<TResult>>;
 ```
 
 #### Parameters
@@ -136,7 +190,7 @@ import { defineCommand, runCommand } from "politty";
 
 const command = defineCommand({
   name: "my-cli",
-  run: () => ({ success: true })
+  run: () => ({ success: true }),
 });
 
 // Usage in tests
@@ -152,10 +206,7 @@ console.log(result.result);
 Attaches metadata to a Zod schema.
 
 ```typescript
-function arg<T extends z.ZodType>(
-  schema: T,
-  meta: ArgMeta
-): T
+function arg<T extends z.ZodType>(schema: T, meta: ArgMeta): T;
 ```
 
 #### Parameters
@@ -191,7 +242,7 @@ const verbose = arg(z.boolean().default(false), {
 const output = arg(z.string(), {
   alias: "o",
   description: "Output file",
-  placeholder: "FILE",  // Shows as --output <FILE> in help
+  placeholder: "FILE", // Shows as --output <FILE> in help
 });
 ```
 
@@ -202,10 +253,7 @@ const output = arg(z.string(), {
 Generates help text for a command.
 
 ```typescript
-function generateHelp(
-  command: Command,
-  options: HelpOptions
-): string
+function generateHelp(command: Command, options: HelpOptions): string;
 ```
 
 #### Parameters
@@ -226,7 +274,7 @@ Formatted help text
 Extracts field information from a schema.
 
 ```typescript
-function extractFields(schema: ArgsSchema): ExtractedFields
+function extractFields(schema: ArgsSchema): ExtractedFields;
 ```
 
 #### Example
@@ -251,7 +299,7 @@ const extracted = extractFields(schema);
 Validates whether the positional argument configuration is valid.
 
 ```typescript
-function validatePositionalConfig(extracted: ExtractedFields): void
+function validatePositionalConfig(extracted: ExtractedFields): void;
 ```
 
 Throws `PositionalConfigError` if the configuration is invalid.
@@ -263,7 +311,7 @@ Throws `PositionalConfigError` if the configuration is invalid.
 Formats validation errors into a user-friendly string.
 
 ```typescript
-function formatValidationErrors(errors: ValidationError[]): string
+function formatValidationErrors(errors: ValidationError[]): string;
 ```
 
 ---
@@ -402,6 +450,8 @@ interface MainOptions {
   skipValidation?: boolean;
   /** Custom logger (default: console) */
   logger?: Logger;
+  /** Global arguments schema (available to all subcommands) */
+  globalArgs?: ArgsSchema;
 }
 ```
 
@@ -421,6 +471,8 @@ interface RunCommandOptions {
   skipValidation?: boolean;
   /** Custom logger (default: console) */
   logger?: Logger;
+  /** Global arguments schema (available to all subcommands) */
+  globalArgs?: ArgsSchema;
 }
 ```
 
@@ -527,6 +579,27 @@ Type for output streams.
 ```typescript
 type LogStream = "stdout" | "stderr";
 ```
+
+---
+
+### `GlobalArgs`
+
+Interface for declaration merging to provide type-safe global options. Extend this interface in your project to automatically add global args types to all commands.
+
+```typescript
+// In politty
+interface GlobalArgs {}
+
+// In your project
+declare module "politty" {
+  interface GlobalArgs {
+    verbose: boolean;
+    config?: string;
+  }
+}
+```
+
+When extended, all `run`, `setup`, and `cleanup` handlers automatically receive the merged args type.
 
 ---
 
@@ -802,13 +875,7 @@ export {
   type CommandContext,
   type HelpOptions,
 } from "./output/help-generator.js";
-export {
-  isColorEnabled,
-  logger,
-  setColorEnabled,
-  styles,
-  symbols,
-} from "./output/logger.js";
+export { isColorEnabled, logger, setColorEnabled, styles, symbols } from "./output/logger.js";
 
 // Types
 export type {

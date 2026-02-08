@@ -43,14 +43,16 @@ export async function executeLifecycle<TResult = unknown>(
   const collector = shouldCollectLogs ? createLogCollector() : null;
   collector?.start();
 
-  const setupContext: SetupContext<unknown> = {
+  // Type assertion needed because SetupContext/CleanupContext include GlobalArgs
+  // At runtime, args already contains merged global args from runner.ts
+  const setupContext = {
     args,
-  };
+  } as SetupContext<unknown>;
 
-  const cleanupContext: CleanupContext<unknown> = {
+  const cleanupContext = {
     args,
     error,
-  };
+  } as CleanupContext<unknown>;
 
   // Signal handler
   let signalHandler: ((signal: NodeJS.Signals) => Promise<void>) | undefined;

@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 import { arg } from "./arg-registry.js";
-import { defineCommand } from "./command.js";
+import { createDefineCommand, defineCommand } from "./command.js";
 
 /**
  * Task 2.2: Command definition API tests
@@ -333,5 +333,77 @@ describe("defineCommand", () => {
       const result = cmd.run({ name: "test", count: 5, verbose: true });
       expect(result).toBe("test: 5");
     });
+  });
+});
+
+describe("createDefineCommand", () => {
+  type TestGlobalArgs = {
+    verbose: boolean;
+    config?: string;
+  };
+
+  it("should create a defineCommand function with global args type pre-applied", () => {
+    const defineAppCommand = createDefineCommand<TestGlobalArgs>();
+
+    const cmd = defineAppCommand({
+      name: "test",
+      args: z.object({
+        output: arg(z.string().default("dist"), { alias: "o" }),
+      }),
+      run: (args) => {
+        // Type test: args should have both command args and global args
+        expectTypeOf(args.output).toEqualTypeOf<string>();
+        expectTypeOf(args.verbose).toEqualTypeOf<boolean>();
+        expectTypeOf(args.config).toEqualTypeOf<string | undefined>();
+        return `${args.output}-${args.verbose}`;
+      },
+    });
+
+    expect(cmd.name).toBe("test");
+    expect(cmd.args).toBeDefined();
+    expect(cmd.run).toBeDefined();
+  });
+
+  it("should work with non-runnable commands", () => {
+    const defineAppCommand = createDefineCommand<TestGlobalArgs>();
+
+    const cmd = defineAppCommand({
+      name: "parent",
+      subCommands: {
+        child: defineCommand({
+          name: "child",
+          run: () => {},
+        }),
+      },
+    });
+
+    expect(cmd.name).toBe("parent");
+    expect(cmd.subCommands?.child).toBeDefined();
+  });
+
+  it("should infer types correctly in setup and cleanup", () => {
+    const defineAppCommand = createDefineCommand<TestGlobalArgs>();
+
+    const cmd = defineAppCommand({
+      name: "test",
+      args: z.object({
+        output: arg(z.string().default("dist")),
+      }),
+      setup: ({ args }) => {
+        expectTypeOf(args.verbose).toEqualTypeOf<boolean>();
+        expectTypeOf(args.output).toEqualTypeOf<string>();
+      },
+      run: (args) => {
+        expectTypeOf(args.verbose).toEqualTypeOf<boolean>();
+        return args.output;
+      },
+      cleanup: ({ args }) => {
+        expectTypeOf(args.verbose).toEqualTypeOf<boolean>();
+        expectTypeOf(args.output).toEqualTypeOf<string>();
+      },
+    });
+
+    expect(cmd.setup).toBeDefined();
+    expect(cmd.cleanup).toBeDefined();
   });
 });
