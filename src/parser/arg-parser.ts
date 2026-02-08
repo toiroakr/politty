@@ -125,10 +125,14 @@ export function parseArgs(
 
       // Parse global args from argsBeforeSubcmd
       let globalRawArgs: Record<string, unknown> | undefined;
-      if (globalExtractedForSubcmd && argsBeforeSubcmd.length > 0) {
-        const globalParserOptions = buildParserOptions(globalExtractedForSubcmd);
-        const globalParsed = parseArgv(argsBeforeSubcmd, globalParserOptions);
-        globalRawArgs = mergeWithPositionals(globalParsed, globalExtractedForSubcmd);
+      if (globalExtractedForSubcmd) {
+        if (argsBeforeSubcmd.length > 0) {
+          const globalParserOptions = buildParserOptions(globalExtractedForSubcmd);
+          const globalParsed = parseArgv(argsBeforeSubcmd, globalParserOptions);
+          globalRawArgs = mergeWithPositionals(globalParsed, globalExtractedForSubcmd);
+        } else {
+          globalRawArgs = {};
+        }
 
         // Apply environment variable fallbacks for global fields
         for (const field of globalExtractedForSubcmd.fields) {

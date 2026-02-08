@@ -828,4 +828,153 @@ describe("ArgParser", () => {
       expect(result.rawArgs.outputDir).toBe("./local");
     });
   });
+
+  describe("global args", () => {
+    const globalArgsSchema = z.object({
+      verbose: arg(z.boolean().default(false), {
+        alias: "v",
+        description: "Enable verbose output",
+      }),
+      config: arg(z.string().optional(), {
+        alias: "c",
+        description: "Path to configuration file",
+        env: "CLI_CONFIG",
+      }),
+    });
+
+    it("should parse global args with command args", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          output: arg(z.string().default("dist"), { alias: "o" }),
+        }),
+      });
+
+      const result = parseArgs(["--verbose", "--output", "build"], cmd, {
+        globalArgsSchema,
+      });
+
+      expect(result.globalRawArgs).toBeDefined();
+      expect(result.globalRawArgs?.verbose).toBe(true);
+      expect(result.rawArgs.output).toBe("build");
+    });
+
+    it("should apply env fallback for global args (no subcommand)", () => {
+      const originalEnv = process.env.CLI_CONFIG;
+      process.env.CLI_CONFIG = "/etc/myapp.json";
+
+      try {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            output: arg(z.string().default("dist"), { alias: "o" }),
+          }),
+        });
+
+        const result = parseArgs(["--output", "build"], cmd, {
+          globalArgsSchema,
+        });
+
+        expect(result.globalRawArgs?.config).toBe("/etc/myapp.json");
+      } finally {
+        if (originalEnv === undefined) {
+          delete process.env.CLI_CONFIG;
+        } else {
+          process.env.CLI_CONFIG = originalEnv;
+        }
+      }
+    });
+
+    it("should apply env fallback for global args (with subcommand)", () => {
+      const originalEnv = process.env.CLI_CONFIG;
+      process.env.CLI_CONFIG = "/etc/myapp.json";
+
+      try {
+        const buildCmd = defineCommand({
+          name: "build",
+          args: z.object({
+            output: arg(z.string().default("dist"), { alias: "o" }),
+          }),
+        });
+
+        const cmd = defineCommand({
+          name: "test-cmd",
+          subCommands: { build: buildCmd },
+        });
+
+        const result = parseArgs(["build"], cmd, {
+          globalArgsSchema,
+        });
+
+        expect(result.subCommand).toBe("build");
+        expect(result.globalRawArgs?.config).toBe("/etc/myapp.json");
+      } finally {
+        if (originalEnv === undefined) {
+          delete process.env.CLI_CONFIG;
+        } else {
+          process.env.CLI_CONFIG = originalEnv;
+        }
+      }
+    });
+
+    it("should parse global args before subcommand", () => {
+      const buildCmd = defineCommand({
+        name: "build",
+        args: z.object({
+          output: arg(z.string().default("dist"), { alias: "o" }),
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        subCommands: { build: buildCmd },
+      });
+
+      const result = parseArgs(["--verbose", "-c", "config.json", "build", "-o", "out"], cmd, {
+        globalArgsSchema,
+      });
+
+      expect(result.subCommand).toBe("build");
+      expect(result.globalRawArgs?.verbose).toBe(true);
+      expect(result.globalRawArgs?.config).toBe("config.json");
+      expect(result.remainingArgs).toEqual(["-o", "out"]);
+    });
+
+    it("should handle global args with array env", () => {
+      const globalWithArrayEnv = z.object({
+        apiKey: arg(z.string().optional(), {
+          env: ["API_KEY", "FALLBACK_API_KEY"],
+        }),
+      });
+
+      const originalApiKey = process.env.API_KEY;
+      const originalFallback = process.env.FALLBACK_API_KEY;
+      delete process.env.API_KEY;
+      process.env.FALLBACK_API_KEY = "fallback-key";
+
+      try {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          run: () => {},
+        });
+
+        const result = parseArgs([], cmd, {
+          globalArgsSchema: globalWithArrayEnv,
+        });
+
+        expect(result.globalRawArgs?.apiKey).toBe("fallback-key");
+      } finally {
+        if (originalApiKey === undefined) {
+          delete process.env.API_KEY;
+        } else {
+          process.env.API_KEY = originalApiKey;
+        }
+        if (originalFallback === undefined) {
+          delete process.env.FALLBACK_API_KEY;
+        } else {
+          process.env.FALLBACK_API_KEY = originalFallback;
+        }
+      }
+    });
+  });
 });
