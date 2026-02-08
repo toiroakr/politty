@@ -26,9 +26,11 @@ resource [options]
 
 Available options vary depending on the value of `--action`.
 
-- `create` — `--name`, `--template`
-- `delete` — `--id`, `--force`
-- `list` — `--format`, `--limit`
+| Action   | Options                |
+| -------- | ---------------------- |
+| `create` | `--name`, `--template` |
+| `delete` | `--id`, `--force`      |
+| `list`   | `--format`, `--limit`  |
 
 > [!NOTE]
 > Only the options for the selected action are accepted.

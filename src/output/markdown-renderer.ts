@@ -116,6 +116,13 @@ interface CodeBlock {
   lines: string[];
 }
 
+interface TableBlock {
+  type: "table";
+  headers: string[];
+  alignments: ("left" | "center" | "right")[];
+  rows: string[][];
+}
+
 type Block =
   | ParagraphBlock
   | HeadingBlock
@@ -124,7 +131,8 @@ type Block =
   | AlertBlock
   | UnorderedListBlock
   | OrderedListBlock
-  | CodeBlock;
+  | CodeBlock
+  | TableBlock;
 
 // --- Block detection patterns ---
 
@@ -135,6 +143,8 @@ const UL_RE = /^-\s+(.+)$/;
 const OL_RE = /^(\d+)[.)]\s+(.+)$/;
 const FENCE_OPEN_RE = /^(`{3,}|~{3,})(\S*)\s*$/;
 const ALERT_RE = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$/;
+const TABLE_ROW_RE = /^\|(.+)\|$/;
+const TABLE_SEP_RE = /^\|(\s*:?-+:?\s*\|)+$/;
 
 /**
  * Split lines into logical blocks separated by blank lines.
@@ -259,6 +269,20 @@ function splitIntoBlocks(lines: string[]): Block[] {
       continue;
     }
 
+    // Table: header row | separator row | body rows
+    if (TABLE_ROW_RE.test(line) && i + 1 < lines.length && TABLE_SEP_RE.test(lines[i + 1]!)) {
+      const headers = parseCells(line);
+      const alignments = parseAlignments(lines[i + 1]!);
+      i += 2; // skip header + separator
+      const rows: string[][] = [];
+      while (i < lines.length && TABLE_ROW_RE.test(lines[i]!)) {
+        rows.push(parseCells(lines[i]!));
+        i++;
+      }
+      blocks.push({ type: "table", headers, alignments, rows });
+      continue;
+    }
+
     // Paragraph: collect consecutive non-blank, non-block-start lines
     const paraLines: string[] = [];
     while (i < lines.length) {
@@ -270,7 +294,8 @@ function splitIntoBlocks(lines: string[]): Block[] {
         BLOCKQUOTE_RE.test(l) ||
         UL_RE.test(l) ||
         OL_RE.test(l) ||
-        FENCE_OPEN_RE.test(l)
+        FENCE_OPEN_RE.test(l) ||
+        (TABLE_ROW_RE.test(l) && i + 1 < lines.length && TABLE_SEP_RE.test(lines[i + 1]!))
       ) {
         break;
       }
@@ -283,6 +308,44 @@ function splitIntoBlocks(lines: string[]): Block[] {
   }
 
   return blocks;
+}
+
+/**
+ * Parse cells from a table row: `| a | b | c |` → `["a", "b", "c"]`
+ */
+function parseCells(row: string): string[] {
+  return row
+    .slice(1, -1)
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+/**
+ * Parse alignment from separator row: `|:---|:---:|---:|` → `["left", "center", "right"]`
+ */
+function parseAlignments(sepRow: string): ("left" | "center" | "right")[] {
+  return sepRow
+    .slice(1, -1)
+    .split("|")
+    .map((cell) => {
+      const trimmed = cell.trim();
+      if (trimmed.startsWith(":") && trimmed.endsWith(":")) return "center";
+      if (trimmed.endsWith(":")) return "right";
+      return "left";
+    });
+}
+
+/**
+ * Pad a string to a given width with the specified alignment.
+ */
+function alignText(text: string, width: number, alignment: "left" | "center" | "right"): string {
+  if (alignment === "right") return text.padStart(width);
+  if (alignment === "center") {
+    const total = width - text.length;
+    const left = Math.floor(total / 2);
+    return " ".repeat(left) + text + " ".repeat(total - left);
+  }
+  return text.padEnd(width);
 }
 
 /**
@@ -342,6 +405,33 @@ function renderBlock(block: Block): string {
           return `${styles.dim(`${num}.`)} ${renderInline(item)}`;
         })
         .join("\n");
+    }
+
+    case "table": {
+      const colCount = block.headers.length;
+      // Calculate column widths from headers and all rows
+      const colWidths = block.headers.map((h, i) => {
+        const cellLengths = block.rows.map((row) => (row[i] ?? "").length);
+        return Math.max(h.length, ...cellLengths);
+      });
+      const pipe = styles.dim("│");
+      // Border rows
+      const topBorder = styles.dim(`┌─${colWidths.map((w) => "─".repeat(w)).join("─┬─")}─┐`);
+      const midBorder = styles.dim(`├─${colWidths.map((w) => "─".repeat(w)).join("─┼─")}─┤`);
+      const botBorder = styles.dim(`└─${colWidths.map((w) => "─".repeat(w)).join("─┴─")}─┘`);
+      // Header row (bold)
+      const headerCells = block.headers.map((h, i) =>
+        styles.bold(alignText(h, colWidths[i]!, block.alignments[i] ?? "left")),
+      );
+      const headerRow = `${pipe} ${headerCells.join(` ${pipe} `)} ${pipe}`;
+      // Body rows
+      const bodyRows = block.rows.map((row) => {
+        const cells = Array.from({ length: colCount }, (_, i) =>
+          renderInline(alignText(row[i] ?? "", colWidths[i]!, block.alignments[i] ?? "left")),
+        );
+        return `${pipe} ${cells.join(` ${pipe} `)} ${pipe}`;
+      });
+      return [topBorder, headerRow, midBorder, ...bodyRows, botBorder].join("\n");
     }
 
     case "code": {

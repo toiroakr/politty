@@ -338,6 +338,123 @@ Choose one of the above options.`;
     });
   });
 
+  describe("tables", () => {
+    it("should render a basic table with borders", () => {
+      const md = `| Name | Value |
+|------|-------|
+| foo  | 1     |
+| bar  | 2     |`;
+      const result = renderMarkdown(md);
+      const lines = result.split("\n");
+      // top border + header + mid border + 2 body rows + bottom border = 6
+      expect(lines).toHaveLength(6);
+      // Top border
+      expect(lines[0]).toContain("┌");
+      expect(lines[0]).toContain("┬");
+      expect(lines[0]).toContain("┐");
+      // Header
+      expect(lines[1]).toContain("Name");
+      expect(lines[1]).toContain("Value");
+      // Mid border
+      expect(lines[2]).toContain("├");
+      expect(lines[2]).toContain("┼");
+      expect(lines[2]).toContain("┤");
+      // Body rows
+      expect(lines[3]).toContain("foo");
+      expect(lines[3]).toContain("1");
+      expect(lines[4]).toContain("bar");
+      expect(lines[4]).toContain("2");
+      // Bottom border
+      expect(lines[5]).toContain("└");
+      expect(lines[5]).toContain("┴");
+      expect(lines[5]).toContain("┘");
+    });
+
+    it("should pad columns to equal width", () => {
+      const md = `| A | Longer |
+|---|--------|
+| x | y      |`;
+      const result = renderMarkdown(md);
+      const lines = result.split("\n");
+      // Body row (index 3: top border, header, mid border, then body)
+      expect(lines[3]).toContain("y     ");
+    });
+
+    it("should support right alignment", () => {
+      const md = `| Name | Count |
+|------|------:|
+| foo  | 42    |
+| bar  | 7     |`;
+      const result = renderMarkdown(md);
+      const lines = result.split("\n");
+      // Right-aligned: " 7" should be padded left (body row at index 4)
+      expect(lines[4]).toContain("    7");
+    });
+
+    it("should support center alignment", () => {
+      const md = `| Name | Status |
+|------|:------:|
+| foo  | OK     |
+| bar  | FAIL   |`;
+      const result = renderMarkdown(md);
+      expect(result).toContain("OK");
+      expect(result).toContain("FAIL");
+    });
+
+    it("should support left alignment (explicit)", () => {
+      const md = `| Name | Value |
+|:-----|-------|
+| foo  | 1     |`;
+      const result = renderMarkdown(md);
+      expect(result).toContain("foo");
+    });
+
+    it("should apply inline formatting in cells", () => {
+      const md = `| Option | Description |
+|--------|-------------|
+| \`--verbose\` | Enable **debug** output |`;
+      const result = renderMarkdown(md);
+      expect(result).toContain("--verbose");
+      expect(result).toContain("debug");
+    });
+
+    it("should handle missing cells gracefully", () => {
+      const md = `| A | B | C |
+|---|---|---|
+| 1 | 2 |
+| 4 | 5 | 6 |`;
+      const result = renderMarkdown(md);
+      const lines = result.split("\n");
+      // top + header + mid + 2 body + bottom = 6
+      expect(lines).toHaveLength(6);
+      // Row with missing cell should fill empty and still have 3 columns
+      // Count pipe separators (│) in each data row — should be 4 (outer left, 2 inner, outer right)
+      const pipeCount = (s: string) => [...s].filter((c) => c === "│").length;
+      expect(pipeCount(lines[1]!)).toBe(4); // header
+      expect(pipeCount(lines[3]!)).toBe(4); // body row with missing cell
+      expect(pipeCount(lines[4]!)).toBe(4); // body row with all cells
+      // All border rows should have same length
+      expect(lines[0]!.length).toBe(lines[2]!.length);
+      expect(lines[0]!.length).toBe(lines[5]!.length);
+    });
+
+    it("should render table between other blocks", () => {
+      const md = `Options table:
+
+| Flag | Description |
+|------|-------------|
+| \`-v\` | Verbose     |
+
+Use these flags as needed.`;
+      const result = renderMarkdown(md);
+      const parts = result.split("\n\n");
+      expect(parts).toHaveLength(3);
+      expect(parts[0]).toBe("Options table:");
+      expect(parts[1]).toContain("Flag");
+      expect(parts[2]).toBe("Use these flags as needed.");
+    });
+  });
+
   describe("realistic CLI notes", () => {
     it("should render a typical notes section", () => {
       const md = `**Warning:** This operation is destructive and cannot be undone.
