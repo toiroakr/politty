@@ -2,6 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { assertDocMatch, initDocFile } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { mdFormatter } from "../../tests/utils/formatter.js";
 import { buildCommand, cli, deployCommand, globalArgsSchema } from "./index.js";
 
 describe("23-global-options", () => {
@@ -142,6 +143,7 @@ describe("23-global-options", () => {
           headerContent: "> **Note**: This CLI requires Node.js 18 or higher.",
           footerContent: "## License\n\nMIT License",
         },
+        formatter: mdFormatter,
       });
     });
 
@@ -157,6 +159,7 @@ describe("23-global-options", () => {
           version: "1.0.0",
         },
         targetCommands: ["build"],
+        formatter: mdFormatter,
       });
     });
   });
@@ -181,6 +184,7 @@ describe("23-global-options", () => {
           title: "My CLI",
           version: "1.0.0",
         },
+        formatter: mdFormatter,
       });
     });
   });
