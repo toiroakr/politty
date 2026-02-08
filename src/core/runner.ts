@@ -287,14 +287,22 @@ async function runCommandInternal<TResult = unknown>(
     let globalArgsValues: Record<string, unknown> = {};
     if (globalArgsContext) {
       if (globalArgsContext.values) {
-        // Use cached values from parent command
-        globalArgsValues = globalArgsContext.values;
-      } else {
-        // Parse global args for the first time
-        const globalValidation = validateArgs(
-          parseResult.globalRawArgs ?? {},
-          globalArgsContext.schema,
-        );
+        // Start with cached values from parent command
+        globalArgsValues = { ...globalArgsContext.values };
+      }
+
+      // Merge any newly parsed global args from this command's argv
+      // This handles the case where global flags appear after the subcommand:
+      // e.g., `cli build --verbose` where --verbose is a global option
+      if (parseResult.globalRawArgs && Object.keys(parseResult.globalRawArgs).length > 0) {
+        const globalValidation = validateArgs(parseResult.globalRawArgs, globalArgsContext.schema);
+        if (globalValidation.success) {
+          // Newly parsed global args take precedence over cached values
+          globalArgsValues = { ...globalArgsValues, ...globalValidation.data };
+        }
+      } else if (!globalArgsContext.values) {
+        // No cached values and no new global args: apply defaults
+        const globalValidation = validateArgs({}, globalArgsContext.schema);
         if (globalValidation.success) {
           globalArgsValues = globalValidation.data as Record<string, unknown>;
         }

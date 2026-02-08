@@ -10,6 +10,8 @@ CLI with global options example
 my-cli [command]
 ```
 
+<a id="global-options"></a>
+
 **Global Options**
 
 | Option              | Alias | Description                | Required | Default |

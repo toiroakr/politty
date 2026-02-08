@@ -701,6 +701,9 @@ export function createCommandRenderer(options: CreateCommandRendererOptions = {}
 
     // Global Options
     if (info.globalOptions && info.globalOptions.length > 0) {
+      // Add explicit anchor for cross-linking from subcommands
+      const globalOptionsHeading = '<a id="global-options"></a>\n\n**Global Options**';
+
       const renderGlobalOpts = (
         opts: ResolvedFieldMeta[],
         renderOpts?: RenderContentOptions,
@@ -708,13 +711,13 @@ export function createCommandRenderer(options: CreateCommandRendererOptions = {}
         const style = renderOpts?.style ?? optionStyle;
         const withHeading = renderOpts?.withHeading ?? true;
         const content = renderGlobalOptionsTableFromArray(opts, style);
-        return withHeading ? `**Global Options**\n\n${content}` : content;
+        return withHeading ? `${globalOptionsHeading}\n\n${content}` : content;
       };
 
       const context: GlobalOptionsRenderContext = {
         globalOptions: info.globalOptions,
         render: renderGlobalOpts,
-        heading: "**Global Options**",
+        heading: globalOptionsHeading,
         info,
         isRoot: info.isRoot ?? false,
       };

@@ -18,6 +18,8 @@ npm install -g my-cli
 my-cli [command]
 ```
 
+<a id="global-options"></a>
+
 **Global Options**
 
 | Option              | Alias | Description                | Required | Default |

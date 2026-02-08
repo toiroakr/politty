@@ -666,5 +666,71 @@ describe("runCommand", () => {
         value: "bar",
       });
     });
+
+    it("should handle global args after subcommand", async () => {
+      const buildFn = vi.fn();
+
+      const globalArgs = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+        config: arg(z.string().optional(), { alias: "c" }),
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              output: arg(z.string().default("dist"), { alias: "o" }),
+            }),
+            run: buildFn,
+          }),
+        },
+      });
+
+      // Global arg --verbose specified AFTER subcommand
+      await runCommand(cmd, ["build", "--verbose", "-o", "out"], {
+        globalArgs,
+      });
+
+      expect(buildFn).toHaveBeenCalledWith({
+        verbose: true,
+        config: undefined,
+        output: "out",
+      });
+    });
+
+    it("should handle global args both before and after subcommand", async () => {
+      const buildFn = vi.fn();
+
+      const globalArgs = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+        config: arg(z.string().optional(), { alias: "c" }),
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              output: arg(z.string().default("dist"), { alias: "o" }),
+            }),
+            run: buildFn,
+          }),
+        },
+      });
+
+      // --config before subcommand, --verbose after subcommand
+      await runCommand(cmd, ["-c", "myconfig.json", "build", "--verbose", "-o", "out"], {
+        globalArgs,
+      });
+
+      expect(buildFn).toHaveBeenCalledWith({
+        verbose: true,
+        config: "myconfig.json",
+        output: "out",
+      });
+    });
   });
 });
