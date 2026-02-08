@@ -42,8 +42,8 @@ importers:
         specifier: 1.0.0
         version: 1.0.0
       tsdown:
-        specifier: 0.20.2
-        version: 0.20.2(@typescript/native-preview@7.0.0-dev.20260205.1)(oxc-resolver@11.16.2)(typescript@5.9.3)
+        specifier: 0.20.3
+        version: 0.20.3(@typescript/native-preview@7.0.0-dev.20260205.1)(oxc-resolver@11.16.2)(typescript@5.9.3)
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -1544,8 +1544,8 @@ packages:
   tsconfig@7.0.0:
     resolution: {integrity: sha512-vZXmzPrL+EmC4T/4rVlT2jNVMWCi/O4DIiSj3UHg1OE5kCKbk4mfrXc6dZksLgRM/TZlKnousKH9bbTazUWRRw==}
 
-  tsdown@0.20.2:
-    resolution: {integrity: sha512-CBoA7rDtyuNkRcFsf8OgFQqBZjCC/ffbNHuS8aUE3HvTJDysWiW7REsQ/nqCYPqsCzy/MqA0tleJj8r+gfy97Q==}
+  tsdown@0.20.3:
+    resolution: {integrity: sha512-qWOUXSbe4jN8JZEgrkc/uhJpC8VN2QpNu3eZkBWwNuTEjc/Ik1kcc54ycfcQ5QPRHeu9OQXaLfCI3o7pEJgB2w==}
     engines: {node: '>=20.19.0'}
     hasBin: true
     peerDependencies:
@@ -3025,7 +3025,7 @@ snapshots:
       strip-bom: 3.0.0
       strip-json-comments: 2.0.1
 
-  tsdown@0.20.2(@typescript/native-preview@7.0.0-dev.20260205.1)(oxc-resolver@11.16.2)(typescript@5.9.3):
+  tsdown@0.20.3(@typescript/native-preview@7.0.0-dev.20260205.1)(oxc-resolver@11.16.2)(typescript@5.9.3):
     dependencies:
       ansis: 4.2.0
       cac: 6.7.14
