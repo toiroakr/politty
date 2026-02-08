@@ -159,3 +159,59 @@ export function defineCommand<
     examples: config.examples,
   } as Command<TArgsSchema, InferArgs<TArgsSchema>, TResult>;
 }
+
+/**
+ * Create a defineCommand function with global args type pre-applied.
+ * This is useful when you want to avoid repeating the global args type parameter
+ * across multiple command definitions.
+ *
+ * @returns A defineCommand function with the global args type already specified
+ *
+ * @example
+ * ```ts
+ * // global-args.ts
+ * import { z } from "zod";
+ * import { arg, createDefineCommand } from "politty";
+ *
+ * export const globalArgsSchema = z.object({
+ *   verbose: arg(z.boolean().default(false), { alias: "v" }),
+ *   config: arg(z.string().optional(), { alias: "c" }),
+ * });
+ *
+ * export type GlobalArgsType = z.infer<typeof globalArgsSchema>;
+ *
+ * // Create a project-specific defineCommand with global args type pre-applied
+ * export const defineAppCommand = createDefineCommand<GlobalArgsType>();
+ * ```
+ *
+ * @example
+ * ```ts
+ * // commands/build.ts
+ * import { defineAppCommand } from "../global-args.js";
+ *
+ * export const buildCommand = defineAppCommand({
+ *   name: "build",
+ *   args: z.object({
+ *     output: arg(z.string().default("dist"), { alias: "o" }),
+ *   }),
+ *   run: (args) => {
+ *     // args.verbose is typed via GlobalArgsType
+ *     if (args.verbose) {
+ *       console.log("Verbose mode enabled");
+ *     }
+ *   },
+ * });
+ * ```
+ */
+export function createDefineCommand<TGlobalArgs>(): {
+  // Overload 1: with run function
+  <TArgsSchema extends ArgsSchema | undefined = undefined, TResult = void>(
+    config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
+  ): RunnableCommand<TArgsSchema, InferArgs<TArgsSchema>, TResult>;
+  // Overload 2: without run function
+  <TArgsSchema extends ArgsSchema | undefined = undefined>(
+    config: NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+  ): NonRunnableCommand<TArgsSchema, InferArgs<TArgsSchema>>;
+} {
+  return defineCommand as ReturnType<typeof createDefineCommand<TGlobalArgs>>;
+}

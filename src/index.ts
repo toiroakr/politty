@@ -6,7 +6,7 @@
 
 // Core exports
 export { arg, type ArgMeta } from "./core/arg-registry.js";
-export { defineCommand } from "./core/command.js";
+export { createDefineCommand, defineCommand } from "./core/command.js";
 export { runCommand, runMain } from "./core/runner.js";
 export {
   extractFields,

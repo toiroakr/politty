@@ -20,3 +20,6 @@ feat: add global options support
 - Added type parameter support for global args in `defineCommand`:
   - Use `defineCommand<TArgsSchema, TResult, TGlobalArgs>()` for explicit typing
   - Declaration merging with `GlobalArgs` interface still works as fallback
+- Added `createDefineCommand<TGlobalArgs>()` factory function:
+  - Creates a project-specific `defineCommand` with global args type pre-applied
+  - Avoids repeating the global args type parameter across multiple command definitions
