@@ -427,7 +427,15 @@ Choose one of the above options.`;
       const lines = result.split("\n");
       // top + header + mid + 2 body + bottom = 6
       expect(lines).toHaveLength(6);
-      expect(lines[3]).toContain("1");
+      // Row with missing cell should fill empty and still have 3 columns
+      // Count pipe separators (│) in each data row — should be 4 (outer left, 2 inner, outer right)
+      const pipeCount = (s: string) => [...s].filter((c) => c === "│").length;
+      expect(pipeCount(lines[1]!)).toBe(4); // header
+      expect(pipeCount(lines[3]!)).toBe(4); // body row with missing cell
+      expect(pipeCount(lines[4]!)).toBe(4); // body row with all cells
+      // All border rows should have same length
+      expect(lines[0]!.length).toBe(lines[2]!.length);
+      expect(lines[0]!.length).toBe(lines[5]!.length);
     });
 
     it("should render table between other blocks", () => {
