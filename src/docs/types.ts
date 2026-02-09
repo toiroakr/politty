@@ -267,7 +267,7 @@ export interface RootDocConfig {
  */
 export interface FileConfig {
   /** Command paths to include in this file (e.g., ["", "user", "config get"]) */
-  commands?: string[];
+  commands: string[];
   /** Custom renderer for this file (optional) */
   render?: RenderFunction;
   /** File title (prepended to the file content) */

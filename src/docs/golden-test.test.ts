@@ -508,6 +508,24 @@ describe("golden-test", () => {
       expect(fs.existsSync(filePath)).toBe(false);
     });
 
+    it("should throw when object file config omits commands", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "invalid-config.md");
+      const invalidFileConfig = {
+        title: "Invalid config",
+      } as unknown as { commands: string[]; title?: string };
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          files: {
+            [filePath]: invalidFileConfig,
+          },
+        }),
+      ).rejects.toThrow('Invalid file config: object form must include a "commands" array');
+    });
+
     // Edge case: non-existent command path in files
     it("should handle non-existent command path in files", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
@@ -2215,6 +2233,42 @@ Old description.
         },
         files: {
           [greetPath]: ["greet"],
+        },
+      });
+
+      expect(result.success).toBe(false);
+      const rootDocResult = result.files.find((f) => f.path === rootDocPath);
+      expect(rootDocResult?.status).toBe("diff");
+      expect(rootDocResult?.diff).toBeDefined();
+    });
+
+    it("should validate index marker even when derived categories are empty", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const rootDocPath = path.join(testDir, "index-empty-categories.md");
+      const skippedPath = path.join(testDir, "cli", "skipped.md");
+
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Commands
+
+<!-- politty:index:start -->
+### [Old Category](./old.md)
+
+Old description.
+<!-- politty:index:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+        },
+        files: {
+          [skippedPath]: [],
         },
       });
 

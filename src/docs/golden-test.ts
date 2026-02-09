@@ -71,7 +71,12 @@ function normalizeFileConfig(config: string[] | FileConfig): FileConfig & { comm
   if (Array.isArray(config)) {
     return { commands: config };
   }
-  return { ...config, commands: config.commands ?? [] };
+  if (!("commands" in config) || !Array.isArray(config.commands)) {
+    throw new Error(
+      'Invalid file config: object form must include a "commands" array. Use [] to skip generation intentionally.',
+    );
+  }
+  return config;
 }
 
 /**
@@ -361,7 +366,9 @@ function sortDepthFirst(commandPaths: string[], specifiedOrder: string[]): strin
 /**
  * Generate file header from FileConfig
  */
-function generateFileHeader(fileConfig: FileConfig): string | null {
+type FileHeaderConfig = Pick<FileConfig, "title" | "description">;
+
+function generateFileHeader(fileConfig: FileHeaderConfig): string | null {
   if (!fileConfig.title && !fileConfig.description) {
     return null;
   }
@@ -419,7 +426,7 @@ function extractFileHeader(content: string): string | null {
  */
 function processFileHeader(
   existingContent: string,
-  fileConfig: FileConfig,
+  fileConfig: FileHeaderConfig,
   updateMode: boolean,
 ): {
   content: string;
@@ -1441,7 +1448,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       let markerUpdated = false;
 
       // Validate/update rootDoc file header derived from command.name/description
-      const rootDocFileConfig: FileConfig = { title: command.name };
+      const rootDocFileConfig: FileHeaderConfig = { title: command.name };
       if (command.description !== undefined) {
         rootDocFileConfig.description = command.description;
       }
@@ -1489,22 +1496,20 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
       // Process index marker (auto-derived from files)
       const derivedCategories = deriveIndexFromFiles(files, rootDocFilePath, allCommands, ignores);
-      if (derivedCategories.length > 0) {
-        const indexResult = await processIndexMarker(
-          content,
-          derivedCategories,
-          command,
-          updateMode,
-          formatter,
-        );
-        content = indexResult.content;
-        rootDocDiffs.push(...indexResult.diffs);
-        if (indexResult.hasError) {
-          hasError = true;
-        }
-        if (indexResult.wasUpdated) {
-          markerUpdated = true;
-        }
+      const indexResult = await processIndexMarker(
+        content,
+        derivedCategories,
+        command,
+        updateMode,
+        formatter,
+      );
+      content = indexResult.content;
+      rootDocDiffs.push(...indexResult.diffs);
+      if (indexResult.hasError) {
+        hasError = true;
+      }
+      if (indexResult.wasUpdated) {
+        markerUpdated = true;
       }
 
       // Write updated content if markers were modified
