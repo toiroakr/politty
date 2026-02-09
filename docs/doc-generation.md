@@ -878,6 +878,8 @@ Benefits of this pattern:
 - `DefaultRendererOptions` - Renderer options
 - `FileConfig` - File configuration
 - `FileMapping` - File mapping
+- `PathConfig` - Simplified path configuration
+- `RootCommandInfo` - Root command information (title, header, footer)
 - `GenerateDocConfig` - Configuration
 - `GenerateDocResult` - Result
 - `ExampleConfig` - Example execution settings
