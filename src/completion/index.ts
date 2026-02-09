@@ -18,7 +18,7 @@
  * const mainCommand = defineCommand({
  *   name: "mycli",
  *   subCommands: {
- *     completion: createCompletionCommand(myCommand, "mycli")
+ *     completion: createCompletionCommand(myCommand)
  *   }
  * });
  * ```
@@ -125,16 +125,17 @@ type CompletionArgs = z.infer<typeof completionArgsSchema>;
  * const mainCommand = defineCommand({
  *   name: "mycli",
  *   subCommands: {
- *     completion: createCompletionCommand(mainCommand, "mycli")
+ *     completion: createCompletionCommand(mainCommand)
  *   }
  * });
  * ```
  */
 export function createCompletionCommand(
   rootCommand: AnyCommand,
-  programName: string,
+  programName?: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Command<typeof completionArgsSchema, CompletionArgs, any> {
+  const resolvedProgramName = programName ?? rootCommand.name;
   return defineCommand({
     name: "completion",
     description: "Generate shell completion script",
@@ -151,7 +152,7 @@ export function createCompletionCommand(
 
       const result = generateCompletion(rootCommand, {
         shell: shellType,
-        programName,
+        programName: resolvedProgramName,
         includeDescriptions: true,
       });
 
@@ -172,7 +173,7 @@ export function createCompletionCommand(
  * const command = defineCommand({
  *   name: "mycli",
  *   subCommands: {
- *     ...withCompletionCommand(command, "mycli"),
+ *     ...withCompletionCommand(command),
  *     // other subcommands
  *   }
  * });
@@ -180,7 +181,7 @@ export function createCompletionCommand(
  */
 export function withCompletionCommand(
   rootCommand: AnyCommand,
-  programName: string,
+  programName?: string,
 ): { completion: ReturnType<typeof createCompletionCommand> } {
   return {
     completion: createCompletionCommand(rootCommand, programName),

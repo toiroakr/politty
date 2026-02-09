@@ -303,6 +303,21 @@ describe("Completion", () => {
       expect(completionCmd.run).toBeDefined();
     });
 
+    it("should use rootCommand.name as programName when not specified", () => {
+      const mainCmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+        }),
+        run: () => {},
+      });
+
+      const completionCmd = createCompletionCommand(mainCmd);
+
+      expect(completionCmd.name).toBe("completion");
+      expect(completionCmd.description).toBe("Generate shell completion script");
+    });
+
     it("should be usable as a subcommand", () => {
       const mainCmd = defineCommand({
         name: "mycli",
