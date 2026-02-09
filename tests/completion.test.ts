@@ -5,6 +5,7 @@ import {
   extractCompletionData,
   generateCompletion,
   getSupportedShells,
+  withCompletionCommand,
 } from "../src/completion/index.js";
 import { arg, defineCommand } from "../src/index.js";
 
@@ -337,6 +338,60 @@ describe("Completion", () => {
       });
 
       expect(cmdWithCompletion.subCommands?.completion).toBe(completionCmd);
+    });
+  });
+
+  describe("withCompletionCommand", () => {
+    it("should wrap a command with a completion subcommand", () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        description: "My CLI tool",
+        subCommands: {
+          build: defineCommand({ name: "build", run: () => {} }),
+        },
+      });
+
+      const wrapped = withCompletionCommand(cmd);
+
+      expect(wrapped.name).toBe("mycli");
+      expect(wrapped.description).toBe("My CLI tool");
+      expect(wrapped.subCommands?.build).toBe(cmd.subCommands?.build);
+      expect(wrapped.subCommands?.completion).toBeDefined();
+
+      const completionCmd = wrapped.subCommands?.completion;
+      expect(typeof completionCmd).toBe("object");
+      if (typeof completionCmd === "object") {
+        expect(completionCmd.name).toBe("completion");
+      }
+    });
+
+    it("should use command.name as programName by default", () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: {
+          test: defineCommand({ name: "test", run: () => {} }),
+        },
+      });
+
+      const wrapped = withCompletionCommand(cmd);
+
+      expect(wrapped.subCommands?.completion).toBeDefined();
+    });
+
+    it("should preserve existing subcommands", () => {
+      const buildCmd = defineCommand({ name: "build", run: () => {} });
+      const testCmd = defineCommand({ name: "test", run: () => {} });
+
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: { build: buildCmd, test: testCmd },
+      });
+
+      const wrapped = withCompletionCommand(cmd);
+
+      expect(wrapped.subCommands?.build).toBe(buildCmd);
+      expect(wrapped.subCommands?.test).toBe(testCmd);
+      expect(wrapped.subCommands?.completion).toBeDefined();
     });
   });
 });

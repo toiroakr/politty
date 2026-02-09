@@ -15,12 +15,12 @@
  * console.log(result.script);
  *
  * // Or add a completion subcommand to your CLI
- * const mainCommand = defineCommand({
- *   name: "mycli",
- *   subCommands: {
- *     completion: createCompletionCommand(myCommand)
- *   }
- * });
+ * const mainCommand = withCompletionCommand(
+ *   defineCommand({
+ *     name: "mycli",
+ *     subCommands: { ... },
+ *   }),
+ * );
  * ```
  */
 
@@ -166,24 +166,31 @@ export function createCompletionCommand(
 }
 
 /**
- * Helper to add completion command to an existing command's subCommands
+ * Wrap a command with a completion subcommand
+ *
+ * This avoids circular references that occur when a command references itself
+ * in its subCommands (e.g., for completion generation).
+ *
+ * @param command - The command to wrap
+ * @param programName - Override the program name (defaults to command.name)
+ * @returns A new command with the completion subcommand added
  *
  * @example
  * ```typescript
- * const command = defineCommand({
- *   name: "mycli",
- *   subCommands: {
- *     ...withCompletionCommand(command),
- *     // other subcommands
- *   }
- * });
+ * const mainCommand = withCompletionCommand(
+ *   defineCommand({
+ *     name: "mycli",
+ *     subCommands: { ... },
+ *   }),
+ * );
  * ```
  */
-export function withCompletionCommand(
-  rootCommand: AnyCommand,
-  programName?: string,
-): { completion: ReturnType<typeof createCompletionCommand> } {
+export function withCompletionCommand<T extends AnyCommand>(command: T, programName?: string): T {
   return {
-    completion: createCompletionCommand(rootCommand, programName),
-  };
+    ...command,
+    subCommands: {
+      ...command.subCommands,
+      completion: createCompletionCommand(command, programName),
+    },
+  } as T;
 }
