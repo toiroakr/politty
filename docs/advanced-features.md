@@ -143,48 +143,9 @@ $ my-cli -v -c config.json build -o out
 
 There are three patterns for type-safe global options access in subcommands.
 
-#### Pattern 1: Declaration Merging (Project-wide)
+#### Pattern 1: createDefineCommand Factory (Recommended)
 
-Extend the `GlobalArgs` interface for automatic type inference across all commands.
-
-```typescript
-// global-args.ts
-import { z } from "zod";
-import { arg } from "politty";
-
-export const globalArgsSchema = z.object({
-  verbose: arg(z.boolean().default(false), { alias: "v" }),
-  config: arg(z.string().optional(), { alias: "c" }),
-});
-
-// Extend GlobalArgs interface
-declare module "politty" {
-  interface GlobalArgs extends z.infer<typeof globalArgsSchema> {}
-}
-```
-
-```typescript
-// commands/build.ts
-import { defineCommand } from "politty";
-
-// No type parameter needed - GlobalArgs is automatically merged
-export const buildCommand = defineCommand({
-  name: "build",
-  args: z.object({
-    output: arg(z.string().default("dist")),
-  }),
-  run: (args) => {
-    // args.verbose is typed automatically
-    if (args.verbose) {
-      console.log("Verbose mode enabled");
-    }
-  },
-});
-```
-
-#### Pattern 2: createDefineCommand Factory (Recommended)
-
-Use `createDefineCommand` to create a project-specific command factory with global args type pre-applied.
+Use `createDefineCommand` to create a project-specific command factory with global args type pre-applied. This is the recommended approach for most projects.
 
 ```typescript
 // global-args.ts
@@ -221,7 +182,7 @@ export const buildCommand = defineAppCommand({
 });
 ```
 
-#### Pattern 3: Explicit Type Parameter
+#### Pattern 2: Explicit Type Parameter
 
 For one-off commands or when you need different global args per command.
 
@@ -235,6 +196,45 @@ const buildCommand = defineCommand<
   args: buildArgsSchema,
   run: (args) => {
     // args.verbose is typed
+  },
+});
+```
+
+#### Pattern 3: Declaration Merging (Advanced)
+
+Extend the `GlobalArgs` interface for automatic type inference across all commands. This approach uses TypeScript's module augmentation and is useful for advanced use cases or code generation.
+
+```typescript
+// global-args.ts
+import { z } from "zod";
+import { arg } from "politty";
+
+export const globalArgsSchema = z.object({
+  verbose: arg(z.boolean().default(false), { alias: "v" }),
+  config: arg(z.string().optional(), { alias: "c" }),
+});
+
+// Extend GlobalArgs interface
+declare module "politty" {
+  interface GlobalArgs extends z.infer<typeof globalArgsSchema> {}
+}
+```
+
+```typescript
+// commands/build.ts
+import { defineCommand } from "politty";
+
+// No type parameter needed - GlobalArgs is automatically merged
+export const buildCommand = defineCommand({
+  name: "build",
+  args: z.object({
+    output: arg(z.string().default("dist")),
+  }),
+  run: (args) => {
+    // args.verbose is typed automatically
+    if (args.verbose) {
+      console.log("Verbose mode enabled");
+    }
   },
 });
 ```

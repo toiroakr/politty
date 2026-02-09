@@ -64,17 +64,49 @@ console.log(result.files); // Status for each file
 
 ### `GenerateDocConfig`
 
-| Property         | Type                     | Description                                                  |
-| ---------------- | ------------------------ | ------------------------------------------------------------ |
-| `command`        | `AnyCommand`             | Command to generate documentation for                        |
-| `files`          | `FileMapping`            | Mapping of file paths to commands                            |
-| `ignores`        | `string[]`               | Command paths to exclude (with subcommands)                  |
-| `format`         | `DefaultRendererOptions` | Options for default renderer                                 |
-| `formatter`      | `FormatterFunction`      | Formatter for generated content                              |
-| `examples`       | `ExampleConfig`          | Example execution settings per command                       |
-| `targetCommands` | `string[]`               | Specific commands to validate/generate (for partial updates) |
-| `globalArgs`     | `ArgsSchema`             | Global arguments schema (adds Global Options section)        |
-| `rootInfo`       | `RootCommandInfo`        | Root command info (title, installation, etc.)                |
+| Property         | Type                     | Description                                                      |
+| ---------------- | ------------------------ | ---------------------------------------------------------------- |
+| `command`        | `AnyCommand`             | Command to generate documentation for                            |
+| `files`          | `FileMapping`            | Mapping of file paths to commands (use `path` for simpler cases) |
+| `path`           | `PathConfig`             | Simplified path config (alternative to `files`)                  |
+| `ignores`        | `string[]`               | Command paths to exclude (with subcommands)                      |
+| `format`         | `DefaultRendererOptions` | Options for default renderer                                     |
+| `formatter`      | `FormatterFunction`      | Formatter for generated content                                  |
+| `examples`       | `ExampleConfig`          | Example execution settings per command                           |
+| `targetCommands` | `string[]`               | Specific commands to validate/generate (for partial updates)     |
+| `globalArgs`     | `ArgsSchema`             | Global arguments schema (adds Global Options section)            |
+| `rootInfo`       | `RootCommandInfo`        | Root command info (title, header, footer)                        |
+
+### `path` (Simplified Path Configuration)
+
+For common use cases, use `path` instead of `files`:
+
+```typescript
+// Single file for all commands
+await assertDocMatch({
+  command: cli,
+  path: "docs/cli.md",
+});
+
+// Split files with explicit mapping
+await assertDocMatch({
+  command: cli,
+  path: {
+    root: "docs/README.md",
+    commands: {
+      build: "docs/build.md",
+      deploy: "docs/deploy.md",
+    },
+  },
+});
+```
+
+| Form                       | Description                                    |
+| -------------------------- | ---------------------------------------------- |
+| `path: "docs/cli.md"`      | All commands in a single file                  |
+| `path: { root, commands }` | Root in `root` file, subcommands in `commands` |
+
+For advanced configurations (custom render per file, wildcards), use `files` instead.
 
 ### `FileMapping`
 
@@ -358,20 +390,19 @@ await assertDocMatch({
   rootInfo: {
     title: "My CLI", // Defaults to command.name
     description: "A powerful CLI tool", // Defaults to command.description
-    installation: "```bash\nnpm install -g my-cli\n```",
-    headerContent: "> **Note**: Requires Node.js 18+",
-    footerContent: "## License\n\nMIT License",
+    header:
+      "## Installation\n\n```bash\nnpm install -g my-cli\n```\n\n> **Note**: Requires Node.js 18+",
+    footer: "## License\n\nMIT License",
   },
 });
 ````
 
-| Property        | Type                  | Description                                          |
-| --------------- | --------------------- | ---------------------------------------------------- |
-| `title`         | `string \| undefined` | CLI title (defaults to `command.name`)               |
-| `description`   | `string \| undefined` | CLI description (defaults to `command.description`)  |
-| `installation`  | `string \| undefined` | Installation instructions (markdown)                 |
-| `headerContent` | `string \| undefined` | Custom content after title/description, before Usage |
-| `footerContent` | `string \| undefined` | Custom content at the very end of the document       |
+| Property      | Type                  | Description                                                   |
+| ------------- | --------------------- | ------------------------------------------------------------- |
+| `title`       | `string \| undefined` | CLI title (defaults to `command.name`)                        |
+| `description` | `string \| undefined` | CLI description (defaults to `command.description`)           |
+| `header`      | `string \| undefined` | Custom markdown after title/description, before Usage section |
+| `footer`      | `string \| undefined` | Custom markdown at the very end of the document               |
 
 Generated output:
 
@@ -385,7 +416,6 @@ A powerful CLI tool
 ```bash
 npm install -g my-cli
 ```
-````
 
 > **Note**: Requires Node.js 18+
 
@@ -396,7 +426,6 @@ npm install -g my-cli
 ## License
 
 MIT License
-
 ````
 
 ### `initDocFile(config, fileSystem?)`
@@ -418,7 +447,7 @@ describe("my-cli", () => {
 
   // Tests for each command...
 });
-````
+```
 
 - First argument is an object containing `{ files: ... }`, or a single file path string
 - Deletes files only when `POLITTY_DOCS_UPDATE=true`

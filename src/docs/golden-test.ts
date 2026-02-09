@@ -13,6 +13,7 @@ import type {
   CommandInfo,
   ExampleConfig,
   FileConfig,
+  FileMapping,
   FormatterFunction,
   GenerateDocConfig,
   GenerateDocResult,
@@ -439,7 +440,7 @@ function insertCommandSection(
  */
 function findFileForCommand(
   commandPath: string,
-  files: GenerateDocConfig["files"],
+  files: FileMapping,
   allCommands: Map<string, CommandInfo>,
   ignores: string[],
 ): string | null {
@@ -467,7 +468,7 @@ function findFileForCommand(
 function findTargetCommandsInFile(
   targetCommands: string[],
   filePath: string,
-  files: GenerateDocConfig["files"],
+  files: FileMapping,
   allCommands: Map<string, CommandInfo>,
   ignores: string[],
 ): string[] {
@@ -541,7 +542,7 @@ function generateFileMarkdown(
   fileMap?: Record<string, string>,
   specifiedOrder?: string[],
   fileConfig?: FileConfig,
-  footerContent?: string,
+  footer?: string,
 ): string {
   const sections: string[] = [];
 
@@ -562,8 +563,8 @@ function generateFileMarkdown(
   }
 
   // Add footer content at the very end (after all command sections)
-  if (footerContent) {
-    sections.push(footerContent);
+  if (footer) {
+    sections.push(footer);
   }
 
   return sections.join("\n");
@@ -573,7 +574,7 @@ function generateFileMarkdown(
  * Build a map of command path to file path
  */
 function buildFileMap(
-  files: GenerateDocConfig["files"],
+  files: FileMapping,
   allCommands: Map<string, CommandInfo>,
   ignores: string[],
 ): Record<string, string> {
@@ -626,12 +627,37 @@ async function executeConfiguredExamples(
 }
 
 /**
+ * Convert path config to files mapping
+ */
+function pathToFiles(path: import("./types.js").PathConfig): import("./types.js").FileMapping {
+  if (typeof path === "string") {
+    // Single file: all commands including root
+    return { [path]: ["*"] };
+  }
+  // Split files: root command in root file, each command in its specified file
+  const files: import("./types.js").FileMapping = {
+    [path.root]: [""],
+  };
+  if (path.commands) {
+    for (const [cmdPath, filePath] of Object.entries(path.commands)) {
+      files[filePath] = [cmdPath];
+    }
+  }
+  return files;
+}
+
+/**
  * Generate documentation from command definition
  */
 export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDocResult> {
+  // Convert path to files if provided, validate that one is present
+  if (!config.files && !config.path) {
+    throw new Error("Either 'files' or 'path' must be provided in generateDoc config");
+  }
+  const files = config.path ? pathToFiles(config.path) : config.files!;
+
   const {
     command,
-    files,
     ignores = [],
     format = {},
     formatter,
@@ -856,7 +882,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         fileMap,
         specifiedCommands,
         fileConfig,
-        includesRoot ? rootInfo?.footerContent : undefined,
+        includesRoot ? rootInfo?.footer : undefined,
       );
 
       // Apply formatter if provided
@@ -925,11 +951,11 @@ export async function assertDocMatch(config: GenerateDocConfig): Promise<void> {
  * Initialize documentation files by deleting them
  * Only deletes when update mode is enabled (POLITTY_DOCS_UPDATE=true)
  * Use this in beforeAll to ensure skipped tests don't leave stale sections
- * @param config - Config containing files to initialize, or a single file path
+ * @param config - Config containing files/path to initialize, or a single file path
  * @param fileSystem - Optional fs implementation (useful when fs is mocked)
  */
 export function initDocFile(
-  config: Pick<GenerateDocConfig, "files"> | string,
+  config: Pick<GenerateDocConfig, "files" | "path"> | string,
   fileSystem?: DeleteFileFs,
 ): void {
   if (!isUpdateMode()) {
@@ -939,8 +965,12 @@ export function initDocFile(
   if (typeof config === "string") {
     deleteFile(config, fileSystem);
   } else {
-    for (const filePath of Object.keys(config.files)) {
-      deleteFile(filePath, fileSystem);
+    // Convert path to files if provided
+    const files = config.path ? pathToFiles(config.path) : config.files;
+    if (files) {
+      for (const filePath of Object.keys(files)) {
+        deleteFile(filePath, fileSystem);
+      }
     }
   }
 }

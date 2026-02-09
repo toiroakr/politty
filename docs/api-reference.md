@@ -67,9 +67,9 @@ const command = defineCommand({
 
 ---
 
-### `createDefineCommand`
+### `createDefineCommand` (Recommended for Global Options)
 
-Creates a `defineCommand` function with global args type pre-applied. Useful for avoiding repetitive type parameters across multiple command definitions.
+Creates a `defineCommand` function with global args type pre-applied. This is the recommended approach for type-safe global options access across multiple command definitions.
 
 ```typescript
 function createDefineCommand<TGlobalArgs>(): typeof defineCommand;

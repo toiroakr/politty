@@ -496,7 +496,9 @@ export function renderGlobalOptionsLink(info?: CommandInfo): string {
 }
 
 /**
- * Render root header with title, version, installation, etc.
+ * Render root header with title, description, and custom header content.
+ * The header property allows users to include any markdown content
+ * (e.g., installation instructions, badges, notes) after the title/description.
  */
 export function renderRootHeader(info: CommandInfo, rootInfo?: RootCommandInfo): string {
   if (!rootInfo) {
@@ -519,17 +521,9 @@ export function renderRootHeader(info: CommandInfo, rootInfo?: RootCommandInfo):
     lines.push("");
   }
 
-  // Installation
-  if (rootInfo.installation) {
-    lines.push("## Installation");
-    lines.push("");
-    lines.push(rootInfo.installation);
-    lines.push("");
-  }
-
-  // Header content (custom content before Usage)
-  if (rootInfo.headerContent) {
-    lines.push(rootInfo.headerContent);
+  // Header content (custom markdown before Usage)
+  if (rootInfo.header) {
+    lines.push(rootInfo.header);
     lines.push("");
   }
 

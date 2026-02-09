@@ -64,6 +64,7 @@ export type {
   GlobalOptionsRenderFunction,
   OptionsRenderContext,
   OptionsRenderFunction,
+  PathConfig,
   RenderContentOptions,
   RenderFunction,
   RootCommandInfo,

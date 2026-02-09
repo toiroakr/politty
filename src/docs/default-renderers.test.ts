@@ -685,7 +685,7 @@ describe("default-renderers", () => {
       expect(result).toContain("# My CLI Tool");
     });
 
-    it("should render installation instructions", async () => {
+    it("should render header content (custom markdown)", async () => {
       const cmd = defineCommand({
         name: "my-cli",
         run: () => {},
@@ -693,24 +693,12 @@ describe("default-renderers", () => {
 
       const info = await buildCommandInfo(cmd, "my-cli");
       const result = renderRootHeader(info, {
-        installation: "```bash\nnpm install -g my-cli\n```",
+        header:
+          "## Installation\n\n```bash\nnpm install -g my-cli\n```\n\n> Note: Requires Node.js 18+",
       });
 
       expect(result).toContain("## Installation");
       expect(result).toContain("npm install -g my-cli");
-    });
-
-    it("should render headerContent", async () => {
-      const cmd = defineCommand({
-        name: "my-cli",
-        run: () => {},
-      });
-
-      const info = await buildCommandInfo(cmd, "my-cli");
-      const result = renderRootHeader(info, {
-        headerContent: "> Note: Requires Node.js 18+",
-      });
-
       expect(result).toContain("> Note: Requires Node.js 18+");
     });
 
@@ -724,8 +712,8 @@ describe("default-renderers", () => {
       const result = renderRootHeader(info, {
         title: "My CLI",
         description: "A powerful CLI tool.",
-        installation: "```bash\nnpm i -g my-cli\n```",
-        headerContent: "[![Build](https://img.shields.io/badge/build-passing-green)]",
+        header:
+          "## Installation\n\n```bash\nnpm i -g my-cli\n```\n\n[![Build](https://img.shields.io/badge/build-passing-green)]",
       });
 
       expect(result).toContain("# My CLI");

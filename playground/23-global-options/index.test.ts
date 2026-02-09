@@ -137,9 +137,9 @@ describe("23-global-options", () => {
         globalArgs: globalArgsSchema,
         rootInfo: {
           title: "My CLI",
-          installation: "```bash\nnpm install -g my-cli\n```",
-          headerContent: "> **Note**: This CLI requires Node.js 18 or higher.",
-          footerContent: "## License\n\nMIT License",
+          header:
+            "## Installation\n\n```bash\nnpm install -g my-cli\n```\n\n> **Note**: This CLI requires Node.js 18 or higher.",
+          footer: "## License\n\nMIT License",
         },
         formatter: mdFormatter,
       });

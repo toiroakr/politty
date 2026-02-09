@@ -322,22 +322,43 @@ export interface RootCommandInfo {
   title?: string | undefined;
   /** Description override (defaults to command.description) */
   description?: string | undefined;
-  /** Installation instructions (markdown) */
-  installation?: string | undefined;
-  /** Custom markdown content added after title/description (before Usage) */
-  headerContent?: string | undefined;
-  /** Custom markdown content added at the end (after all sections) */
-  footerContent?: string | undefined;
+  /** Custom markdown content added after title/description, before Usage (e.g., installation instructions, notes) */
+  header?: string | undefined;
+  /** Custom markdown content added at the end of the document (e.g., license, links) */
+  footer?: string | undefined;
 }
 
 /**
+ * Path configuration for document generation
+ * Simplified alternative to files mapping
+ */
+export type PathConfig =
+  | string
+  | {
+      /** File path for root command documentation */
+      root: string;
+      /** Command path to file path mapping */
+      commands?: Record<string, string>;
+    };
+
+/**
  * generateDoc configuration
+ * Either `files` or `path` must be provided (path is converted to files internally)
  */
 export interface GenerateDocConfig {
   /** Command to generate documentation for */
   command: AnyCommand;
-  /** File output configuration (command path -> file mapping) */
-  files: FileMapping;
+  /**
+   * File output configuration (command path -> file mapping)
+   * Required unless `path` is provided
+   */
+  files?: FileMapping;
+  /**
+   * Simplified path configuration (alternative to files)
+   * - string: all commands in single file
+   * - { root, commands }: root command file + command-to-file mapping
+   */
+  path?: PathConfig;
   /** Command paths to ignore (including their subcommands) */
   ignores?: string[];
   /** Default renderer options (used when render is not specified per file) */
