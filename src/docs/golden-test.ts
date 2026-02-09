@@ -625,29 +625,6 @@ function replaceMarkerSection(
 }
 
 /**
- * Check if a value is a Zod schema.
- * Require parser methods to avoid colliding with args keys such as "def" or "_def".
- */
-function isZodType(value: unknown): boolean {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const v = value as {
-    parse?: unknown;
-    safeParse?: unknown;
-    _def?: unknown;
-    def?: unknown;
-  };
-
-  return (
-    typeof v.parse === "function" &&
-    typeof v.safeParse === "function" &&
-    ("_def" in v || "def" in v)
-  );
-}
-
-/**
  * Check if config is the { args, options? } shape (not shorthand ArgsShape)
  *
  * Distinguishes between:
@@ -669,7 +646,7 @@ function isGlobalOptionsConfigWithOptions(
   }
   // If config.args is a ZodType, this is shorthand with an option named "args"
   // If config.args is an object (ArgsShape), this is the { args, options? } shape
-  return !isZodType(config.args);
+  return !(config.args instanceof z.ZodType);
 }
 
 /**
@@ -685,22 +662,9 @@ function collectRenderableGlobalOptionFields(argsShape: ArgsShape): ResolvedFiel
  * Compare option definitions for global-options compatibility.
  */
 function areGlobalOptionsEquivalent(a: ResolvedFieldMeta, b: ResolvedFieldMeta): boolean {
-  const aEnv = Array.isArray(a.env) ? a.env.join(",") : a.env;
-  const bEnv = Array.isArray(b.env) ? b.env.join(",") : b.env;
-
-  return (
-    a.name === b.name &&
-    a.cliName === b.cliName &&
-    a.alias === b.alias &&
-    a.description === b.description &&
-    a.type === b.type &&
-    a.required === b.required &&
-    a.positional === b.positional &&
-    a.placeholder === b.placeholder &&
-    isDeepStrictEqual(a.defaultValue, b.defaultValue) &&
-    a.overrideBuiltinAlias === b.overrideBuiltinAlias &&
-    aEnv === bEnv
-  );
+  const { schema: _aSchema, ...aRest } = a;
+  const { schema: _bSchema, ...bRest } = b;
+  return isDeepStrictEqual(aRest, bRest);
 }
 
 /**
