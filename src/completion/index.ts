@@ -186,11 +186,14 @@ export function createCompletionCommand(
  * ```
  */
 export function withCompletionCommand<T extends AnyCommand>(command: T, programName?: string): T {
-  return {
+  const wrappedCommand = {
     ...command,
-    subCommands: {
-      ...command.subCommands,
-      completion: createCompletionCommand(command, programName),
-    },
   } as T;
+
+  wrappedCommand.subCommands = {
+    ...command.subCommands,
+    completion: createCompletionCommand(wrappedCommand, programName),
+  };
+
+  return wrappedCommand;
 }

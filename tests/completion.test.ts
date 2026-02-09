@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   createCompletionCommand,
@@ -392,6 +392,38 @@ describe("Completion", () => {
       expect(wrapped.subCommands?.build).toBe(buildCmd);
       expect(wrapped.subCommands?.test).toBe(testCmd);
       expect(wrapped.subCommands?.completion).toBeDefined();
+    });
+
+    it("should generate completion from the wrapped command tree", () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: {
+          build: defineCommand({ name: "build", run: () => {} }),
+        },
+      });
+
+      const wrapped = withCompletionCommand(cmd);
+      wrapped.subCommands = {
+        ...wrapped.subCommands,
+        deploy: defineCommand({ name: "deploy", run: () => {} }),
+      };
+
+      const completionSubcommand = wrapped.subCommands?.completion;
+      expect(completionSubcommand).toBeDefined();
+      if (!completionSubcommand || typeof completionSubcommand === "function") {
+        throw new Error("Expected completion to be a command object");
+      }
+
+      expect(completionSubcommand.run).toBeDefined();
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      completionSubcommand.run?.({ shell: "bash", instructions: false });
+
+      const output = consoleSpy.mock.calls
+        .map((args) => args.map((value) => String(value)).join(" "))
+        .join("\n");
+      consoleSpy.mockRestore();
+      expect(output).toContain("completion");
+      expect(output).toContain("deploy");
     });
   });
 });
