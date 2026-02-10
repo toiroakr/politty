@@ -102,4 +102,27 @@ describe("23-global-options-index-markers", () => {
       });
     });
   });
+
+  describe("custom heading levels", () => {
+    const customHeadingDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
+      command,
+      rootDoc: {
+        path: "playground/23-global-options-index-markers/REFERENCE-CUSTOM-HEADING.md",
+        globalOptions: commonOptions,
+        headingLevel: 2,
+        index: { headingLevel: 4 },
+      },
+      files: {
+        "playground/23-global-options-index-markers/README.md": ["init", "build", "deploy"],
+      },
+      formatter: mdFormatter,
+    };
+
+    it("validates rootDoc with custom heading levels", async () => {
+      await assertDocMatch({
+        ...customHeadingDocConfig,
+        examples: {},
+      });
+    });
+  });
 });

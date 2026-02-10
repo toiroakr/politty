@@ -17,6 +17,7 @@ import { executeExamples } from "./example-executor.js";
 import { renderArgsTable, type ArgsShape, type ArgsTableOptions } from "./render-args.js";
 import { renderCommandIndex, type CommandCategory } from "./render-index.js";
 import type {
+  CommandIndexOptions,
   CommandInfo,
   ExampleConfig,
   FileConfig,
@@ -24,6 +25,7 @@ import type {
   FormatterFunction,
   GenerateDocConfig,
   GenerateDocResult,
+  HeadingLevel,
   RenderFunction,
   RootDocConfig,
 } from "./types.js";
@@ -366,7 +368,9 @@ function sortDepthFirst(commandPaths: string[], specifiedOrder: string[]): strin
 /**
  * Generate file header from FileConfig
  */
-type FileHeaderConfig = Pick<FileConfig, "title" | "description">;
+type FileHeaderConfig = Pick<FileConfig, "title" | "description"> & {
+  headingLevel?: HeadingLevel;
+};
 
 function generateFileHeader(fileConfig: FileHeaderConfig): string | null {
   if (!fileConfig.title && !fileConfig.description) {
@@ -375,7 +379,8 @@ function generateFileHeader(fileConfig: FileHeaderConfig): string | null {
 
   const parts: string[] = [];
   if (fileConfig.title) {
-    parts.push(`# ${fileConfig.title}`);
+    const heading = "#".repeat(fileConfig.headingLevel ?? 1);
+    parts.push(`${heading} ${fileConfig.title}`);
   }
   if (fileConfig.description) {
     parts.push("");
@@ -390,7 +395,7 @@ function generateFileHeader(fileConfig: FileHeaderConfig): string | null {
  * Extract a leading file header (title and optional description paragraph)
  */
 function extractFileHeader(content: string): string | null {
-  if (!content.startsWith("# ")) {
+  if (!/^#{1,6} /.test(content)) {
     return null;
   }
 
@@ -845,11 +850,12 @@ function generateGlobalOptionsSection(config: {
 async function generateIndexSection(
   categories: CommandCategory[],
   command: AnyCommand,
+  options?: CommandIndexOptions,
 ): Promise<string> {
   const startMarker = indexStartMarker();
   const endMarker = indexEndMarker();
 
-  const indexContent = await renderCommandIndex(command, categories);
+  const indexContent = await renderCommandIndex(command, categories, options);
 
   return [startMarker, indexContent, endMarker].join("\n");
 }
@@ -930,6 +936,7 @@ async function processIndexMarker(
   command: AnyCommand,
   updateMode: boolean,
   formatter: FormatterFunction | undefined,
+  indexOptions?: CommandIndexOptions,
 ): Promise<{
   content: string;
   diffs: string[];
@@ -968,7 +975,7 @@ async function processIndexMarker(
   }
 
   // Generate new section
-  const rawSection = await generateIndexSection(categories, command);
+  const rawSection = await generateIndexSection(categories, command, indexOptions);
   const generatedSection = await applyFormatter(rawSection, formatter);
 
   // Compare sections
@@ -1271,13 +1278,10 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     const minDepth = Math.min(...commandPaths.map((p) => allCommands.get(p)?.depth ?? 1));
 
     // Adjust headingLevel so that minimum depth command gets the configured headingLevel
-    const adjustedHeadingLevel = Math.max(1, (format?.headingLevel ?? 1) - (minDepth - 1)) as
-      | 1
-      | 2
-      | 3
-      | 4
-      | 5
-      | 6;
+    const adjustedHeadingLevel = Math.max(
+      1,
+      (format?.headingLevel ?? 1) - (minDepth - 1),
+    ) as HeadingLevel;
 
     // Create file-specific renderer with adjusted headingLevel (if no custom renderer)
     const fileRenderer = createCommandRenderer({
@@ -1449,6 +1453,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
       // Validate/update rootDoc file header derived from command.name/description
       const rootDocFileConfig: FileHeaderConfig = { title: command.name };
+      if (rootDoc.headingLevel !== undefined) {
+        rootDocFileConfig.headingLevel = rootDoc.headingLevel;
+      }
       if (command.description !== undefined) {
         rootDocFileConfig.description = command.description;
       }
@@ -1502,6 +1509,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         command,
         updateMode,
         formatter,
+        rootDoc.index,
       );
       content = indexResult.content;
       rootDocDiffs.push(...indexResult.diffs);

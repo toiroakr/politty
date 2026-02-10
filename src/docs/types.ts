@@ -2,6 +2,19 @@ import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extracto
 import type { AnyCommand, Example } from "../types.js";
 import type { ArgsShape, ArgsTableOptions } from "./render-args.js";
 
+/** Heading level for markdown headings (1-6) */
+export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+
+/**
+ * Options for rendering command index
+ */
+export type CommandIndexOptions = {
+  /** Base heading level (default: 3, which renders as ###) */
+  headingLevel?: HeadingLevel;
+  /** Only include leaf commands (commands without subcommands). Default: true */
+  leafOnly?: boolean;
+};
+
 /**
  * Command information for rendering
  */
@@ -223,7 +236,7 @@ export type SimpleRenderFunction = (context: SimpleRenderContext) => string;
  */
 export interface DefaultRendererOptions {
   /** Heading level (default: 1) */
-  headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
+  headingLevel?: HeadingLevel;
   /** Option display style */
   optionStyle?: "table" | "list";
   /** Generate anchor links to subcommands */
@@ -260,6 +273,10 @@ export interface RootDocConfig {
    * ArgsShape directly, or { args, options } for render options.
    */
   globalOptions?: ArgsShape | { args: ArgsShape; options?: ArgsTableOptions };
+  /** Heading level for the file header (default: 1) */
+  headingLevel?: HeadingLevel;
+  /** Index section rendering options */
+  index?: CommandIndexOptions;
 }
 
 /**

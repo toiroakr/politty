@@ -2537,6 +2537,122 @@ A test CLI for documentation generation
     });
   });
 
+  describe("rootDoc custom heading levels", () => {
+    it("should generate file header with custom heading level", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "rootdoc-heading-level.md");
+      fs.writeFileSync(rootDocPath, "", "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: { path: rootDocPath, headingLevel: 2 },
+        files: {},
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toMatch(/^## test-cli$/m);
+      expect(content).not.toMatch(/^# test-cli$/m);
+    });
+
+    it("should generate index section with custom heading level", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "rootdoc-index-level.md");
+      const filePath = path.join(testDir, "rootdoc-index-level-cmds.md");
+
+      fs.writeFileSync(
+        rootDocPath,
+        `# test-cli
+
+A test CLI for documentation generation
+
+<!-- politty:index:start -->
+<!-- politty:index:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: { path: rootDocPath, index: { headingLevel: 4 } },
+        files: {
+          [filePath]: ["greet", "config"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toMatch(/^#### \[/m);
+      expect(content).not.toMatch(/^### \[/m);
+    });
+
+    it("should customize both header and index heading levels", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "rootdoc-both-levels.md");
+      const filePath = path.join(testDir, "rootdoc-both-levels-cmds.md");
+
+      fs.writeFileSync(
+        rootDocPath,
+        `## test-cli
+
+A test CLI for documentation generation
+
+<!-- politty:index:start -->
+<!-- politty:index:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: { path: rootDocPath, headingLevel: 2, index: { headingLevel: 4 } },
+        files: {
+          [filePath]: ["greet", "config"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toMatch(/^## test-cli$/m);
+      expect(content).toMatch(/^#### \[/m);
+    });
+
+    it("should default to heading level 1 and index level 3 when not specified", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "rootdoc-default-levels.md");
+      const filePath = path.join(testDir, "rootdoc-default-levels-cmds.md");
+
+      fs.writeFileSync(
+        rootDocPath,
+        `# test-cli
+
+A test CLI for documentation generation
+
+<!-- politty:index:start -->
+<!-- politty:index:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: { path: rootDocPath },
+        files: {
+          [filePath]: ["greet", "config"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toMatch(/^# test-cli$/m);
+      expect(content).toMatch(/^### \[/m);
+    });
+  });
+
   describe("rootDoc.path overlap with files", () => {
     it("should throw when rootDoc.path is also in files", async () => {
       const filePath = path.join(testDir, "overlap.md");
