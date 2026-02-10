@@ -1,5 +1,11 @@
 # politty
 
+## 0.3.0
+
+### Minor Changes
+
+- 7289e4d: Make `programName` parameter optional in `createCompletionCommand` and `withCompletionCommand`, defaulting to `rootCommand.name`
+
 ## 0.2.2
 
 ### Patch Changes
