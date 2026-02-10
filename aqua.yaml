@@ -8,4 +8,4 @@ registries:
     ref: v4.464.0 # renovate: depName=aquaproj/aqua-registry
 packages:
   - name: suzuki-shunsuke/ghalint@v1.5.5
-  - name: suzuki-shunsuke/pinact@v3.8.0
+  - name: suzuki-shunsuke/pinact@v3.9.0
