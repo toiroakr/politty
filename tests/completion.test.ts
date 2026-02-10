@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   createCompletionCommand,
   extractCompletionData,
   generateCompletion,
   getSupportedShells,
+  withCompletionCommand,
 } from "../src/completion/index.js";
 import { arg, defineCommand } from "../src/index.js";
 
@@ -303,6 +304,21 @@ describe("Completion", () => {
       expect(completionCmd.run).toBeDefined();
     });
 
+    it("should use rootCommand.name as programName when not specified", () => {
+      const mainCmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+        }),
+        run: () => {},
+      });
+
+      const completionCmd = createCompletionCommand(mainCmd);
+
+      expect(completionCmd.name).toBe("completion");
+      expect(completionCmd.description).toBe("Generate shell completion script");
+    });
+
     it("should be usable as a subcommand", () => {
       const mainCmd = defineCommand({
         name: "mycli",
@@ -322,6 +338,92 @@ describe("Completion", () => {
       });
 
       expect(cmdWithCompletion.subCommands?.completion).toBe(completionCmd);
+    });
+  });
+
+  describe("withCompletionCommand", () => {
+    it("should wrap a command with a completion subcommand", () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        description: "My CLI tool",
+        subCommands: {
+          build: defineCommand({ name: "build", run: () => {} }),
+        },
+      });
+
+      const wrapped = withCompletionCommand(cmd);
+
+      expect(wrapped.name).toBe("mycli");
+      expect(wrapped.description).toBe("My CLI tool");
+      expect(wrapped.subCommands?.build).toBe(cmd.subCommands?.build);
+      expect(wrapped.subCommands?.completion).toBeDefined();
+
+      const completionCmd = wrapped.subCommands?.completion;
+      expect(typeof completionCmd).toBe("object");
+      if (typeof completionCmd === "object") {
+        expect(completionCmd.name).toBe("completion");
+      }
+    });
+
+    it("should use command.name as programName by default", () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: {
+          test: defineCommand({ name: "test", run: () => {} }),
+        },
+      });
+
+      const wrapped = withCompletionCommand(cmd);
+
+      expect(wrapped.subCommands?.completion).toBeDefined();
+    });
+
+    it("should preserve existing subcommands", () => {
+      const buildCmd = defineCommand({ name: "build", run: () => {} });
+      const testCmd = defineCommand({ name: "test", run: () => {} });
+
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: { build: buildCmd, test: testCmd },
+      });
+
+      const wrapped = withCompletionCommand(cmd);
+
+      expect(wrapped.subCommands?.build).toBe(buildCmd);
+      expect(wrapped.subCommands?.test).toBe(testCmd);
+      expect(wrapped.subCommands?.completion).toBeDefined();
+    });
+
+    it("should generate completion from the wrapped command tree", () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: {
+          build: defineCommand({ name: "build", run: () => {} }),
+        },
+      });
+
+      const wrapped = withCompletionCommand(cmd);
+      wrapped.subCommands = {
+        ...wrapped.subCommands,
+        deploy: defineCommand({ name: "deploy", run: () => {} }),
+      };
+
+      const completionSubcommand = wrapped.subCommands?.completion;
+      expect(completionSubcommand).toBeDefined();
+      if (!completionSubcommand || typeof completionSubcommand === "function") {
+        throw new Error("Expected completion to be a command object");
+      }
+
+      expect(completionSubcommand.run).toBeDefined();
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      completionSubcommand.run?.({ shell: "bash", instructions: false });
+
+      const output = consoleSpy.mock.calls
+        .map((args) => args.map((value) => String(value)).join(" "))
+        .join("\n");
+      consoleSpy.mockRestore();
+      expect(output).toContain("completion");
+      expect(output).toContain("deploy");
     });
   });
 });
