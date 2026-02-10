@@ -218,6 +218,26 @@ function filterIgnoredCommands(commandPaths: string[], ignores: string[]): strin
 }
 
 /**
+ * Resolve wildcards to direct matches without subcommand expansion.
+ * Returns the "top-level" commands for use in CommandCategory.commands,
+ * where expandCommands in render-index handles subcommand expansion.
+ */
+function resolveTopLevelCommands(
+  specifiedCommands: string[],
+  allCommands: Map<string, CommandInfo>,
+): string[] {
+  const result: string[] = [];
+  for (const cmdPath of specifiedCommands) {
+    if (containsWildcard(cmdPath)) {
+      result.push(...expandWildcardPattern(cmdPath, allCommands));
+    } else if (allCommands.has(cmdPath)) {
+      result.push(cmdPath);
+    }
+  }
+  return result;
+}
+
+/**
  * Resolve file command configuration to concrete command paths.
  * This applies wildcard/subcommand expansion and ignore filtering.
  */
@@ -229,16 +249,22 @@ function resolveConfiguredCommandPaths(
   fileConfig: FileConfig & { commands: string[] };
   specifiedCommands: string[];
   commandPaths: string[];
+  topLevelCommands: string[];
 } {
   const fileConfig = normalizeFileConfig(fileConfigRaw);
   const specifiedCommands = fileConfig.commands;
   const expandedCommands = expandCommandPaths(specifiedCommands, allCommands);
   const commandPaths = filterIgnoredCommands(expandedCommands, ignores);
+  const topLevelCommands = filterIgnoredCommands(
+    resolveTopLevelCommands(specifiedCommands, allCommands),
+    ignores,
+  );
 
   return {
     fileConfig,
     specifiedCommands,
     commandPaths,
+    topLevelCommands,
   };
 }
 
@@ -406,21 +432,21 @@ function extractFileHeader(content: string): string | null {
 
   let cursor = titleEnd + 1;
 
-  // Header description is represented as a paragraph after one blank line.
+  // Skip an optional blank line between the title and description paragraph.
   if (content[cursor] === "\n") {
     cursor += 1;
+  }
 
-    while (cursor < content.length) {
-      const lineEnd = content.indexOf("\n", cursor);
-      const line = lineEnd === -1 ? content.slice(cursor) : content.slice(cursor, lineEnd);
+  // Consume description paragraph lines until we hit a blank line, heading, or marker.
+  while (cursor < content.length) {
+    const lineEnd = content.indexOf("\n", cursor);
+    const line = lineEnd === -1 ? content.slice(cursor) : content.slice(cursor, lineEnd);
 
-      // Stop before the first section heading so marker-mode updates do not erase it.
-      if (line.length === 0 || /^#{1,6}\s/.test(line) || line.startsWith("<!-- politty:")) {
-        break;
-      }
-
-      cursor = lineEnd === -1 ? content.length : lineEnd + 1;
+    if (line.length === 0 || /^#{1,6}\s/.test(line) || line.startsWith("<!-- politty:")) {
+      break;
     }
+
+    cursor = lineEnd === -1 ? content.length : lineEnd + 1;
   }
 
   return content.slice(0, cursor);
@@ -721,21 +747,20 @@ function deriveIndexFromFiles(
 ): CommandCategory[] {
   const categories: CommandCategory[] = [];
   for (const [filePath, fileConfigRaw] of Object.entries(files)) {
-    const { commandPaths } = resolveConfiguredCommandPaths(fileConfigRaw, allCommands, ignores);
+    const { commandPaths, topLevelCommands } = resolveConfiguredCommandPaths(
+      fileConfigRaw,
+      allCommands,
+      ignores,
+    );
     if (commandPaths.length === 0) continue;
 
     const docPath = "./" + path.relative(path.dirname(rootDocPath), filePath).replace(/\\/g, "/");
     const firstCmdPath = commandPaths[0];
     const cmdInfo = firstCmdPath !== undefined ? allCommands.get(firstCmdPath) : undefined;
-    const indexCommands = commandPaths.filter((commandPath) => {
-      const info = allCommands.get(commandPath);
-      return info?.subCommands.length === 0;
-    });
-
     categories.push({
       title: cmdInfo?.name ?? path.basename(filePath, path.extname(filePath)),
       description: cmdInfo?.description ?? "",
-      commands: indexCommands,
+      commands: topLevelCommands,
       docPath,
     });
   }
