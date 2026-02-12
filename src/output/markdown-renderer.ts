@@ -47,6 +47,7 @@ export function renderInline(text: string): string {
 
   // Restore code spans
   result = result.replace(
+    // eslint-disable-next-line no-control-regex -- null bytes are intentionally used as code span delimiters
     /\x00CODE(\d+)\x00/g,
     (_match, index: string) => codeSpans[Number(index)]!,
   );
