@@ -1,5 +1,11 @@
 # politty
 
+## 0.3.1
+
+### Patch Changes
+
+- 582600a: Add globalOptions and index marker support for documentation generation
+
 ## 0.3.0
 
 ### Minor Changes
