@@ -1,6 +1,6 @@
 import type { AnyCommand } from "../types.js";
 import { collectAllCommands } from "./doc-generator.js";
-import type { CommandInfo } from "./types.js";
+import type { CommandIndexOptions, CommandInfo } from "./types.js";
 
 /**
  * Escape markdown special characters in table cells
@@ -30,15 +30,7 @@ export type CommandCategory = {
   docPath: string;
 };
 
-/**
- * Options for rendering command index
- */
-export type CommandIndexOptions = {
-  /** Base heading level (default: 3, which renders as ###) */
-  headingLevel?: 1 | 2 | 3 | 4 | 5 | 6;
-  /** Only include leaf commands (commands without subcommands). Default: true */
-  leafOnly?: boolean;
-};
+export type { CommandIndexOptions };
 
 /**
  * Check if a command is a leaf (has no subcommands)

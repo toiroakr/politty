@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { arg, defineCommand } from "../index.js";
 import { assertDocMatch, generateDoc } from "./golden-test.js";
+import { renderArgsTable } from "./render-args.js";
+import { renderCommandIndex } from "./render-index.js";
 import { UPDATE_GOLDEN_ENV } from "./types.js";
 
 describe("golden-test", () => {
@@ -504,6 +506,24 @@ describe("golden-test", () => {
       // File with empty commands should be skipped (no files created)
       expect(result.files).toHaveLength(0);
       expect(fs.existsSync(filePath)).toBe(false);
+    });
+
+    it("should throw when object file config omits commands", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "invalid-config.md");
+      const invalidFileConfig = {
+        title: "Invalid config",
+      } as unknown as { commands: string[]; title?: string };
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          files: {
+            [filePath]: invalidFileConfig,
+          },
+        }),
+      ).rejects.toThrow('Invalid file config: object form must include a "commands" array');
     });
 
     // Edge case: non-existent command path in files
@@ -1548,6 +1568,41 @@ describe("golden-test", () => {
       expect(result.files).toHaveLength(2);
       expect(result.files.every((f) => f.status === "match")).toBe(true);
     });
+
+    it("should skip non-target files entirely in targetCommands mode", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const targetPath = path.join(testDir, "target.md");
+      const otherPath = path.join(testDir, "other.md");
+
+      await generateDoc({
+        command: testCommand,
+        files: {
+          [targetPath]: ["greet"],
+          [otherPath]: ["config"],
+        },
+      });
+
+      // Modify the other file to have outdated content
+      const otherContent = fs.readFileSync(otherPath, "utf-8");
+      fs.writeFileSync(otherPath, otherContent.replace("## config", "## MODIFIED config"), "utf-8");
+
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [targetPath]: ["greet"],
+          [otherPath]: ["config"],
+        },
+        targetCommands: ["greet"],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0]?.path).toBe(targetPath);
+      expect(result.files[0]?.status).toBe("match");
+    });
   });
 
   describe("assertDocMatch", () => {
@@ -1605,6 +1660,1690 @@ describe("golden-test", () => {
       // File should be updated
       const content = fs.readFileSync(filePath, "utf-8");
       expect(content).toContain("# test-cli");
+    });
+
+    it("should include marker diff details when update mode still has unresolved marker errors", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "assert-doc-match-marker-error.md");
+      const refPath = path.join(testDir, "assert-doc-match-marker-ref.md");
+
+      await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: ["greet"],
+        },
+      });
+
+      // Create a rootDoc file without the expected marker
+      fs.writeFileSync(refPath, "# test-cli\n\nNo markers here.\n", "utf-8");
+
+      await expect(
+        assertDocMatch({
+          command: testCommand,
+          rootDoc: {
+            path: refPath,
+            globalOptions: {
+              verbose: arg(z.boolean().default(false), {
+                alias: "v",
+                description: "Enable verbose output",
+              }),
+            },
+          },
+          files: {
+            [filePath]: ["greet"],
+          },
+        }),
+      ).rejects.toThrow("Global options marker not found");
+    });
+  });
+
+  describe("rootDoc globalOptions markers", () => {
+    it("should validate globalOptions marker section", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "args-test.md");
+
+      // Generate the expected args content
+      const argsContent = renderArgsTable({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      // Create a file with the correct globalOptions marker content
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Global Options
+
+<!-- politty:global-options:start -->
+${argsContent}
+<!-- politty:global-options:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      // Validate the globalOptions marker
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {},
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("match");
+    });
+
+    it("should update globalOptions marker section when content differs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "args-update.md");
+
+      // Create a file with outdated globalOptions marker content
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Global Options
+
+<!-- politty:global-options:start -->
+| Option | Alias | Description | Default |
+| ------ | ----- | ----------- | ------- |
+| \`--old-option\` | - | Old description | - |
+<!-- politty:global-options:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      // Update the globalOptions marker
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {},
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toContain("--verbose");
+      expect(content).toContain("Enable verbose output");
+      expect(content).not.toContain("--old-option");
+    });
+
+    it("should report diff when globalOptions marker section differs in check mode", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const rootDocPath = path.join(testDir, "args-diff.md");
+
+      // Create a file with outdated globalOptions marker content
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Global Options
+
+<!-- politty:global-options:start -->
+| Option | Alias | Description | Default |
+| ------ | ----- | ----------- | ------- |
+| \`--old-option\` | - | Old description | - |
+<!-- politty:global-options:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      // Check the globalOptions marker (should report diff)
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {},
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.status).toBe("diff");
+      expect(result.files[0]?.diff).toBeDefined();
+    });
+
+    it("should report error when globalOptions marker is missing", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const rootDocPath = path.join(testDir, "args-missing.md");
+
+      // Create a file without the expected marker
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Global Options
+
+Some content without markers.
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      // Check the globalOptions marker (should report error)
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {},
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.status).toBe("diff");
+      expect(result.files[0]?.diff).toContain("Global options marker not found");
+    });
+
+    it("should support shorthand args config (without options)", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "args-shorthand.md");
+
+      // Create a file with globalOptions marker
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+<!-- politty:global-options:start -->
+outdated
+<!-- politty:global-options:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      // Use shorthand config (just ArgsShape, not { args, options })
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            debug: arg(z.boolean().default(false), {
+              description: "Enable debug mode",
+            }),
+          },
+        },
+        files: {},
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toContain("--debug");
+      expect(content).toContain("Enable debug mode");
+    });
+
+    it("should handle shorthand args config with option named 'args'", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "args-named-args.md");
+
+      // Create a file with globalOptions marker
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+<!-- politty:global-options:start -->
+outdated
+<!-- politty:global-options:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      // Use shorthand config with an option literally named "args"
+      // This should NOT be confused with { args: ArgsShape, options?: ... } shape
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            args: arg(z.boolean().default(false), {
+              description: "Show arguments",
+            }),
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {},
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      // Both options should be rendered
+      expect(content).toContain("--args");
+      expect(content).toContain("Show arguments");
+      expect(content).toContain("--verbose");
+      expect(content).toContain("Enable verbose output");
+    });
+
+    it("should handle ArgsConfigWithOptions when args include def/_def keys", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "args-with-def-keys.md");
+
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+<!-- politty:global-options:start -->
+outdated
+<!-- politty:global-options:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            args: {
+              def: arg(z.boolean().default(false), {
+                description: "Enable def option",
+              }),
+              _def: arg(z.boolean().default(false), {
+                description: "Enable _def option",
+              }),
+            },
+            options: {
+              columns: ["option", "description"],
+            },
+          },
+        },
+        files: {},
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toContain("--def");
+      expect(content).toContain("--_def");
+      expect(content).toContain("Enable def option");
+      expect(content).toContain("Enable _def option");
+      expect(content).not.toContain("| Alias |");
+    });
+  });
+
+  describe("rootDoc index markers", () => {
+    it("should auto-derive index from files and validate", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "index-test.md");
+      const greetPath = path.join(testDir, "cli", "greet.md");
+
+      // First generate the expected index content using derived categories
+      const categories = [
+        {
+          title: "greet",
+          description: "Greet someone",
+          commands: ["greet"],
+          docPath: "./cli/greet.md",
+        },
+      ];
+
+      const indexContent = await renderCommandIndex(testCommand, categories);
+
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Commands
+
+<!-- politty:index:start -->
+${indexContent}
+<!-- politty:index:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+        },
+        files: {
+          [greetPath]: ["greet"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.find((f) => f.path === rootDocPath)?.status).toBe("match");
+    });
+
+    it("should expand wildcard file commands when deriving rootDoc index", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "index-wildcard.md");
+      const allPath = path.join(testDir, "cli", "all.md");
+
+      const categories = [
+        {
+          title: "greet",
+          description: "Greet someone",
+          commands: ["greet", "config"],
+          docPath: "./cli/all.md",
+        },
+      ];
+
+      const indexContent = await renderCommandIndex(testCommand, categories);
+
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Commands
+
+<!-- politty:index:start -->
+${indexContent}
+<!-- politty:index:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+        },
+        files: {
+          [allPath]: ["*"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.find((f) => f.path === rootDocPath)?.status).toBe("match");
+    });
+
+    it("should update index marker section when content differs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "index-update.md");
+      const greetPath = path.join(testDir, "cli", "greet.md");
+
+      // Create a file with outdated index marker content
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Commands
+
+<!-- politty:index:start -->
+### [Old Category](./old.md)
+
+Old description.
+
+| Command | Description |
+|---------|-------------|
+| [old](./old.md#old) | Old command |
+<!-- politty:index:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+        },
+        files: {
+          [greetPath]: ["greet"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const rootDocResult = result.files.find((f) => f.path === rootDocPath);
+      expect(rootDocResult?.status).toBe("updated");
+
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toContain("greet");
+      expect(content).toContain("Greet someone");
+      expect(content).not.toContain("Old Category");
+    });
+
+    it("should skip index processing when no index marker is present", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "no-index-marker.md");
+      const greetPath = path.join(testDir, "cli", "greet.md");
+
+      // Create a rootDoc file with globalOptions but no index marker
+      const argsContent = renderArgsTable({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+<!-- politty:global-options:start -->
+${argsContent}
+<!-- politty:global-options:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {
+          [greetPath]: ["greet"],
+        },
+      });
+
+      // Should succeed without error — no index marker to validate
+      expect(result.success).toBe(true);
+    });
+
+    it("should report malformed index markers in rootDoc", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const rootDocPath = path.join(testDir, "malformed-index-marker.md");
+      const greetPath = path.join(testDir, "cli", "greet.md");
+
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Commands
+
+<!-- politty:index:start -->
+### Broken section without end marker
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+        },
+        files: {
+          [greetPath]: ["greet"],
+        },
+      });
+
+      expect(result.success).toBe(false);
+      const rootDocResult = result.files.find((f) => f.path === rootDocPath);
+      expect(rootDocResult?.status).toBe("diff");
+      expect(rootDocResult?.diff).toContain("Index marker section is malformed");
+    });
+
+    it("should report diff when index marker differs in check mode", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const rootDocPath = path.join(testDir, "index-diff.md");
+      const greetPath = path.join(testDir, "cli", "greet.md");
+
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Commands
+
+<!-- politty:index:start -->
+### [Old Category](./old.md)
+
+Old description.
+<!-- politty:index:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+        },
+        files: {
+          [greetPath]: ["greet"],
+        },
+      });
+
+      expect(result.success).toBe(false);
+      const rootDocResult = result.files.find((f) => f.path === rootDocPath);
+      expect(rootDocResult?.status).toBe("diff");
+      expect(rootDocResult?.diff).toBeDefined();
+    });
+
+    it("should validate index marker even when derived categories are empty", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const rootDocPath = path.join(testDir, "index-empty-categories.md");
+      const skippedPath = path.join(testDir, "cli", "skipped.md");
+
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Commands
+
+<!-- politty:index:start -->
+### [Old Category](./old.md)
+
+Old description.
+<!-- politty:index:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+        },
+        files: {
+          [skippedPath]: [],
+        },
+      });
+
+      expect(result.success).toBe(false);
+      const rootDocResult = result.files.find((f) => f.path === rootDocPath);
+      expect(rootDocResult?.status).toBe("diff");
+      expect(rootDocResult?.diff).toBeDefined();
+    });
+  });
+
+  describe("rootDoc combined globalOptions and index markers", () => {
+    it("should validate both globalOptions and index markers in rootDoc", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "combined-test.md");
+      const allPath = path.join(testDir, "cli", "all.md");
+
+      const categories = [
+        {
+          title: "greet",
+          description: "Greet someone",
+          commands: ["greet", "config"],
+          docPath: "./cli/all.md",
+        },
+      ];
+
+      const indexContent = await renderCommandIndex(testCommand, categories);
+      const argsContent = renderArgsTable({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Global Options
+
+<!-- politty:global-options:start -->
+${argsContent}
+<!-- politty:global-options:end -->
+
+## Commands
+
+<!-- politty:index:start -->
+${indexContent}
+<!-- politty:index:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {
+          [allPath]: ["greet", "config"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.find((f) => f.path === rootDocPath)?.status).toBe("match");
+    });
+
+    it("should update both globalOptions and index markers when both differ", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "combined-update.md");
+      const greetPath = path.join(testDir, "cli", "greet.md");
+
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Global Options
+
+<!-- politty:global-options:start -->
+outdated args
+<!-- politty:global-options:end -->
+
+## Commands
+
+<!-- politty:index:start -->
+outdated index
+<!-- politty:index:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            debug: arg(z.boolean().default(false), {
+              description: "Enable debug mode",
+            }),
+          },
+        },
+        files: {
+          [greetPath]: ["greet"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.find((f) => f.path === rootDocPath)?.status).toBe("updated");
+
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toContain("--debug");
+      expect(content).toContain("Enable debug mode");
+      expect(content).toContain("greet");
+      expect(content).not.toContain("outdated");
+    });
+  });
+
+  describe("rootDoc header derived from command", () => {
+    it("should report diff when rootDoc file header differs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const rootDocPath = path.join(testDir, "rootdoc-header-diff.md");
+
+      const argsContent = renderArgsTable({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      fs.writeFileSync(
+        rootDocPath,
+        `# Outdated Title
+
+Outdated description.
+
+<!-- politty:global-options:start -->
+${argsContent}
+<!-- politty:global-options:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {},
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.status).toBe("diff");
+      expect(result.files[0]?.diff).toContain("test-cli");
+      expect(result.files[0]?.diff).toContain("Outdated Title");
+    });
+
+    it("should update rootDoc file header from command name/description", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "rootdoc-header-update.md");
+
+      const argsContent = renderArgsTable({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      fs.writeFileSync(
+        rootDocPath,
+        `# Outdated Title
+
+Outdated description.
+
+<!-- politty:global-options:start -->
+${argsContent}
+<!-- politty:global-options:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {},
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const updatedContent = fs.readFileSync(rootDocPath, "utf-8");
+      expect(updatedContent).toContain("# test-cli");
+      expect(updatedContent).toContain("A test CLI for documentation generation");
+      expect(updatedContent).not.toContain("# Outdated Title");
+      expect(updatedContent).not.toContain("Outdated description.");
+    });
+
+    it("should treat empty rootDoc as existing and update header in update mode", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "rootdoc-empty.md");
+      fs.writeFileSync(rootDocPath, "", "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: { path: rootDocPath },
+        files: {},
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("updated");
+
+      const updatedContent = fs.readFileSync(rootDocPath, "utf-8");
+      expect(updatedContent).toContain("# test-cli");
+      expect(updatedContent).toContain("A test CLI for documentation generation");
+    });
+
+    it("should detect unexpected command markers in rootDoc", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const rootDocPath = path.join(testDir, "rootdoc-unexpected-cmd.md");
+
+      fs.writeFileSync(
+        rootDocPath,
+        `# test-cli
+
+A test CLI for documentation generation
+
+<!-- politty:command:config:start -->
+## stale config
+<!-- politty:command:config:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: { path: rootDocPath },
+        files: {},
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.status).toBe("diff");
+      expect(result.files[0]?.diff).toContain("unexpected command marker sections in rootDoc");
+      expect(result.files[0]?.diff).toContain("config");
+    });
+  });
+
+  describe("rootDoc custom heading levels", () => {
+    it("should generate file header with custom heading level", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "rootdoc-heading-level.md");
+      fs.writeFileSync(rootDocPath, "", "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: { path: rootDocPath, headingLevel: 2 },
+        files: {},
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toMatch(/^## test-cli$/m);
+      expect(content).not.toMatch(/^# test-cli$/m);
+    });
+
+    it("should generate index section with custom heading level", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "rootdoc-index-level.md");
+      const filePath = path.join(testDir, "rootdoc-index-level-cmds.md");
+
+      fs.writeFileSync(
+        rootDocPath,
+        `# test-cli
+
+A test CLI for documentation generation
+
+<!-- politty:index:start -->
+<!-- politty:index:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: { path: rootDocPath, index: { headingLevel: 4 } },
+        files: {
+          [filePath]: ["greet", "config"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toMatch(/^#### \[/m);
+      expect(content).not.toMatch(/^### \[/m);
+    });
+
+    it("should customize both header and index heading levels", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "rootdoc-both-levels.md");
+      const filePath = path.join(testDir, "rootdoc-both-levels-cmds.md");
+
+      fs.writeFileSync(
+        rootDocPath,
+        `## test-cli
+
+A test CLI for documentation generation
+
+<!-- politty:index:start -->
+<!-- politty:index:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: { path: rootDocPath, headingLevel: 2, index: { headingLevel: 4 } },
+        files: {
+          [filePath]: ["greet", "config"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toMatch(/^## test-cli$/m);
+      expect(content).toMatch(/^#### \[/m);
+    });
+
+    it("should default to heading level 1 and index level 3 when not specified", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "rootdoc-default-levels.md");
+      const filePath = path.join(testDir, "rootdoc-default-levels-cmds.md");
+
+      fs.writeFileSync(
+        rootDocPath,
+        `# test-cli
+
+A test CLI for documentation generation
+
+<!-- politty:index:start -->
+<!-- politty:index:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: { path: rootDocPath },
+        files: {
+          [filePath]: ["greet", "config"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      expect(content).toMatch(/^# test-cli$/m);
+      expect(content).toMatch(/^### \[/m);
+    });
+  });
+
+  describe("rootDoc.path overlap with files", () => {
+    it("should throw when rootDoc.path is also in files", async () => {
+      const filePath = path.join(testDir, "overlap.md");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          rootDoc: { path: filePath },
+          files: {
+            [filePath]: ["greet"],
+          },
+        }),
+      ).rejects.toThrow("must not also appear as a key in files");
+    });
+
+    it("should throw when rootDoc.path overlaps with normalized files path", async () => {
+      const filePath = path.join(testDir, "overlap-normalized.md");
+      const equivalentPath = `${path.dirname(filePath)}${path.sep}.${path.sep}${path.basename(filePath)}`;
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          rootDoc: { path: filePath },
+          files: {
+            [equivalentPath]: ["greet"],
+          },
+        }),
+      ).rejects.toThrow("must not also appear as a key in files");
+    });
+  });
+
+  describe("auto-exclude globalOptions from command options", () => {
+    const commandWithSharedOptions = defineCommand({
+      name: "shared-cli",
+      description: "CLI with shared options",
+      subCommands: {
+        build: defineCommand({
+          name: "build",
+          description: "Build the project",
+          args: z.object({
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+            env: arg(z.string().default("development"), {
+              alias: "e",
+              description: "Target environment",
+            }),
+            watch: arg(z.boolean().default(false), {
+              alias: "w",
+              description: "Watch for changes",
+            }),
+          }),
+          run: () => {},
+        }),
+        deploy: defineCommand({
+          name: "deploy",
+          description: "Deploy the project",
+          args: z.object({
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+            env: arg(z.string().default("development"), {
+              alias: "e",
+              description: "Target environment",
+            }),
+            force: arg(z.boolean().default(false), {
+              alias: "f",
+              description: "Force deployment",
+            }),
+          }),
+          run: () => {},
+        }),
+      },
+    });
+
+    it("should exclude globalOptions marker options from command option tables", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const readmePath = path.join(testDir, "readme.md");
+      const refPath = path.join(testDir, "reference.md");
+
+      const argsContent = renderArgsTable({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+        env: arg(z.string().default("development"), {
+          alias: "e",
+          description: "Target environment",
+        }),
+      });
+
+      // Create reference file with globalOptions marker
+      fs.writeFileSync(
+        refPath,
+        `# shared-cli\n\nCLI with shared options\n\n<!-- politty:global-options:start -->\n${argsContent}\n<!-- politty:global-options:end -->\n`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: commandWithSharedOptions,
+        rootDoc: {
+          path: refPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+            env: arg(z.string().default("development"), {
+              alias: "e",
+              description: "Target environment",
+            }),
+          },
+        },
+        files: {
+          [readmePath]: ["build", "deploy"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+
+      const readmeContent = fs.readFileSync(readmePath, "utf-8");
+      // verbose and env should be excluded from command option tables
+      expect(readmeContent).not.toContain("--verbose");
+      expect(readmeContent).not.toContain("--env");
+      // watch and force should remain
+      expect(readmeContent).toContain("--watch");
+      expect(readmeContent).toContain("--force");
+    });
+
+    it("should keep all options in globalOptions marker table", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const readmePath = path.join(testDir, "readme.md");
+      const refPath = path.join(testDir, "reference.md");
+
+      const argsContent = renderArgsTable({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      // Create reference file with globalOptions marker
+      fs.writeFileSync(
+        refPath,
+        `# shared-cli\n\nCLI with shared options\n\n<!-- politty:global-options:start -->\n${argsContent}\n<!-- politty:global-options:end -->\n`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: commandWithSharedOptions,
+        rootDoc: {
+          path: refPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {
+          [readmePath]: ["build"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+
+      // Global options marker table should still contain verbose
+      const refContent = fs.readFileSync(refPath, "utf-8");
+      expect(refContent).toContain("--verbose");
+      expect(refContent).toContain("Enable verbose output");
+    });
+
+    it("should pass filtered CommandInfo to custom render function", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const readmePath = path.join(testDir, "readme.md");
+      const refPath = path.join(testDir, "reference.md");
+
+      const argsContent = renderArgsTable({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      fs.writeFileSync(
+        refPath,
+        `# shared-cli\n\nCLI with shared options\n\n<!-- politty:global-options:start -->\n${argsContent}\n<!-- politty:global-options:end -->\n`,
+        "utf-8",
+      );
+
+      const capturedOptions: string[][] = [];
+
+      const result = await generateDoc({
+        command: commandWithSharedOptions,
+        rootDoc: {
+          path: refPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {
+          [readmePath]: {
+            commands: ["build"],
+            render: (info) => {
+              capturedOptions.push(info.options.map((o) => o.name));
+              return `# ${info.name}\n`;
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      // Custom render should receive filtered options (verbose excluded)
+      expect(capturedOptions.length).toBeGreaterThan(0);
+      const buildOptions = capturedOptions[0]!;
+      expect(buildOptions).not.toContain("verbose");
+      expect(buildOptions).toContain("env");
+      expect(buildOptions).toContain("watch");
+    });
+
+    it("should not exclude options when no rootDoc globalOptions exist", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "no-args.md");
+
+      const result = await generateDoc({
+        command: commandWithSharedOptions,
+        files: {
+          [filePath]: ["build"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      // All options should be present
+      expect(content).toContain("--verbose");
+      expect(content).toContain("--env");
+      expect(content).toContain("--watch");
+    });
+
+    it("should handle ArgsConfigWithOptions shape for exclusion", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const readmePath = path.join(testDir, "readme.md");
+      const refPath = path.join(testDir, "reference.md");
+
+      const argsContent = renderArgsTable({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      fs.writeFileSync(
+        refPath,
+        `# shared-cli\n\nCLI with shared options\n\n<!-- politty:global-options:start -->\n${argsContent}\n<!-- politty:global-options:end -->\n`,
+        "utf-8",
+      );
+
+      // Use the { args, options } shape
+      const result = await generateDoc({
+        command: commandWithSharedOptions,
+        rootDoc: {
+          path: refPath,
+          globalOptions: {
+            args: {
+              verbose: arg(z.boolean().default(false), {
+                alias: "v",
+                description: "Enable verbose output",
+              }),
+            },
+          },
+        },
+        files: {
+          [readmePath]: ["build"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+
+      const readmeContent = fs.readFileSync(readmePath, "utf-8");
+      // verbose should be excluded (even though using { args, options } shape)
+      expect(readmeContent).not.toContain("--verbose");
+      expect(readmeContent).toContain("--env");
+      expect(readmeContent).toContain("--watch");
+    });
+
+    it("should not exclude command option when globalOptions key is positional", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const readmePath = path.join(testDir, "positional-name-readme.md");
+      const refPath = path.join(testDir, "positional-name-reference.md");
+
+      const positionalMarkerCommand = defineCommand({
+        name: "positional-marker-cli",
+        description: "CLI for positional marker exclusion tests",
+        subCommands: {
+          create: defineCommand({
+            name: "create",
+            description: "Create a resource",
+            args: z.object({
+              name: arg(z.string(), {
+                description: "Resource name option",
+              }),
+              verbose: arg(z.boolean().default(false), {
+                alias: "v",
+                description: "Enable verbose output",
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      const argsContent = renderArgsTable({
+        name: arg(z.string(), {
+          positional: true,
+          description: "Resource name positional argument",
+        }),
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      fs.writeFileSync(
+        refPath,
+        `# positional-marker-cli
+
+CLI for positional marker exclusion tests
+
+<!-- politty:global-options:start -->
+${argsContent}
+<!-- politty:global-options:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: positionalMarkerCommand,
+        rootDoc: {
+          path: refPath,
+          globalOptions: {
+            name: arg(z.string(), {
+              positional: true,
+              description: "Resource name positional argument",
+            }),
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {
+          [readmePath]: ["create"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+
+      const readmeContent = fs.readFileSync(readmePath, "utf-8");
+      const refContent = fs.readFileSync(refPath, "utf-8");
+
+      // Positional args in marker config should not exclude command options.
+      expect(readmeContent).toContain("--name");
+      // Non-positional marker args should still be excluded.
+      expect(readmeContent).not.toContain("--verbose");
+      expect(refContent).toContain("--verbose");
+      expect(refContent).not.toContain("--name");
+    });
+
+    it("should throw when command option conflicts with globalOptions definition", async () => {
+      const readmePath = path.join(testDir, "conflict-readme.md");
+      const refPath = path.join(testDir, "conflict-reference.md");
+
+      const commandWithConflictingOptions = defineCommand({
+        name: "conflict-cli",
+        description: "CLI with conflicting option definitions",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              output: arg(z.string().default("dist"), {
+                alias: "o",
+                description: "Build output directory",
+              }),
+            }),
+            run: () => {},
+          }),
+          deploy: defineCommand({
+            name: "deploy",
+            args: z.object({
+              output: arg(z.string().default("prod"), {
+                alias: "o",
+                description: "Deployment output target",
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      await expect(
+        generateDoc({
+          command: commandWithConflictingOptions,
+          rootDoc: {
+            path: refPath,
+            globalOptions: {
+              output: arg(z.string().default("dist"), {
+                alias: "o",
+                description: "Build output directory",
+              }),
+            },
+          },
+          files: {
+            [readmePath]: ["build", "deploy"],
+          },
+        }),
+      ).rejects.toThrow('does not match globalOptions definition for "output"');
+    });
+
+    it("should ignore non-target globalOptions conflicts in targetCommands mode", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const targetPath = path.join(testDir, "target-build.md");
+      const nonTargetPath = path.join(testDir, "non-target-deploy.md");
+      const refPath = path.join(testDir, "target-conflict-reference.md");
+
+      const commandWithTargetConflict = defineCommand({
+        name: "target-conflict-cli",
+        description: "CLI with target-only conflict behavior",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              output: arg(z.string().default("dist"), {
+                alias: "o",
+                description: "Output directory",
+              }),
+            }),
+            run: () => {},
+          }),
+          deploy: defineCommand({
+            name: "deploy",
+            args: z.object({
+              output: arg(z.string().default("prod"), {
+                alias: "o",
+                description: "Deployment output target",
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      const argsContent = renderArgsTable({
+        output: arg(z.string().default("dist"), {
+          alias: "o",
+          description: "Output directory",
+        }),
+      });
+
+      fs.writeFileSync(
+        refPath,
+        `# target-conflict-cli
+
+CLI with target-only conflict behavior
+
+<!-- politty:global-options:start -->
+${argsContent}
+<!-- politty:global-options:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: commandWithTargetConflict,
+        rootDoc: {
+          path: refPath,
+          globalOptions: {
+            output: arg(z.string().default("dist"), {
+              alias: "o",
+              description: "Output directory",
+            }),
+          },
+        },
+        files: {
+          [targetPath]: ["build"],
+          [nonTargetPath]: ["deploy"],
+        },
+        targetCommands: ["build"],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.some((f) => f.path === nonTargetPath)).toBe(false);
+      const targetContent = fs.readFileSync(targetPath, "utf-8");
+      expect(targetContent).not.toContain("--output");
+    });
+
+    it("should ignore conflicts from commands not mapped to documentation files", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const readmePath = path.join(testDir, "partial-doc-readme.md");
+      const refPath = path.join(testDir, "partial-doc-reference.md");
+
+      const partialDocCommand = defineCommand({
+        name: "partial-doc-cli",
+        description: "CLI with partially documented commands",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              output: arg(z.string().default("dist"), {
+                alias: "o",
+                description: "Output directory",
+              }),
+            }),
+            run: () => {},
+          }),
+          deploy: defineCommand({
+            name: "deploy",
+            args: z.object({
+              output: arg(z.string().default("prod"), {
+                alias: "o",
+                description: "Deployment output target",
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      const argsContent = renderArgsTable({
+        output: arg(z.string().default("dist"), {
+          alias: "o",
+          description: "Output directory",
+        }),
+      });
+
+      fs.writeFileSync(
+        refPath,
+        `# partial-doc-cli
+
+CLI with partially documented commands
+
+<!-- politty:global-options:start -->
+${argsContent}
+<!-- politty:global-options:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: partialDocCommand,
+        rootDoc: {
+          path: refPath,
+          globalOptions: {
+            output: arg(z.string().default("dist"), {
+              alias: "o",
+              description: "Output directory",
+            }),
+          },
+        },
+        files: {
+          [readmePath]: ["build"],
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const readmeContent = fs.readFileSync(readmePath, "utf-8");
+      expect(readmeContent).not.toContain("--output");
+    });
+
+    it("should throw when command option defaultValue conflicts with globalOptions definition", async () => {
+      const readmePath = path.join(testDir, "default-conflict-readme.md");
+      const refPath = path.join(testDir, "default-conflict-reference.md");
+
+      const commandWithDefaultConflict = defineCommand({
+        name: "default-conflict-cli",
+        description: "CLI with conflicting option defaults",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              output: arg(z.string().default("dist"), {
+                alias: "o",
+                description: "Output directory",
+              }),
+            }),
+            run: () => {},
+          }),
+          deploy: defineCommand({
+            name: "deploy",
+            args: z.object({
+              output: arg(z.string().default("prod"), {
+                alias: "o",
+                description: "Output directory",
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      await expect(
+        generateDoc({
+          command: commandWithDefaultConflict,
+          rootDoc: {
+            path: refPath,
+            globalOptions: {
+              output: arg(z.string().default("dist"), {
+                alias: "o",
+                description: "Output directory",
+              }),
+            },
+          },
+          files: {
+            [readmePath]: ["build", "deploy"],
+          },
+        }),
+      ).rejects.toThrow('does not match globalOptions definition for "output"');
+    });
+
+    it("should process rootDoc with targetCommands", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const readmePath = path.join(testDir, "readme.md");
+      const refPath = path.join(testDir, "reference.md");
+
+      const argsContent = renderArgsTable({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose output",
+        }),
+      });
+
+      fs.writeFileSync(
+        refPath,
+        `# shared-cli\n\nCLI with shared options\n\n<!-- politty:global-options:start -->\n${argsContent}\n<!-- politty:global-options:end -->\n`,
+        "utf-8",
+      );
+
+      // First create the readme with all commands
+      await generateDoc({
+        command: commandWithSharedOptions,
+        rootDoc: {
+          path: refPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {
+          [readmePath]: ["build", "deploy"],
+        },
+      });
+
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      // targetCommands should still process rootDoc
+      const result = await generateDoc({
+        command: commandWithSharedOptions,
+        rootDoc: {
+          path: refPath,
+          globalOptions: {
+            verbose: arg(z.boolean().default(false), {
+              alias: "v",
+              description: "Enable verbose output",
+            }),
+          },
+        },
+        files: {
+          [readmePath]: ["build", "deploy"],
+        },
+        targetCommands: ["build"],
+      });
+
+      expect(result.success).toBe(true);
+      // Should have results for both target file and rootDoc
+      expect(result.files.length).toBeGreaterThanOrEqual(2);
     });
   });
 });

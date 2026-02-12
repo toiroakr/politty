@@ -31,17 +31,24 @@ export { renderArgsTable } from "./render-args.js";
 export type { ArgsShape, ArgsTableOptions } from "./render-args.js";
 // Command index renderer
 export { renderCommandIndex } from "./render-index.js";
-export type { CommandCategory, CommandIndexOptions } from "./render-index.js";
+export type { CommandCategory } from "./render-index.js";
 export {
   commandEndMarker,
   commandStartMarker,
   COMMAND_MARKER_PREFIX,
+  globalOptionsEndMarker,
+  globalOptionsStartMarker,
+  GLOBAL_OPTIONS_MARKER_PREFIX,
+  indexEndMarker,
+  indexStartMarker,
+  INDEX_MARKER_PREFIX,
   UPDATE_GOLDEN_ENV,
 } from "./types.js";
 // Types
 export type {
   ArgumentsRenderContext,
   ArgumentsRenderFunction,
+  CommandIndexOptions,
   CommandInfo,
   DefaultRendererOptions,
   ExampleCommandConfig,
@@ -55,10 +62,12 @@ export type {
   FormatterFunction,
   GenerateDocConfig,
   GenerateDocResult,
+  HeadingLevel,
   OptionsRenderContext,
   OptionsRenderFunction,
   RenderContentOptions,
   RenderFunction,
+  RootDocConfig,
   SectionRenderFunction,
   SimpleRenderContext,
   SimpleRenderFunction,
