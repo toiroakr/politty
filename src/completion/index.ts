@@ -28,13 +28,27 @@ import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
 import type { AnyCommand, Command } from "../types.js";
-import { generateBashCompletion } from "./bash.js";
-import { generateFishCompletion } from "./fish.js";
+import { generateBashCompletion, generateDynamicBashScript } from "./bash.js";
+import { createDynamicCompleteCommand } from "./dynamic/index.js";
+import { generateDynamicFishScript, generateFishCompletion } from "./fish.js";
 import type { CompletionOptions, CompletionResult, ShellType } from "./types.js";
-import { generateZshCompletion } from "./zsh.js";
+import { generateDynamicZshScript, generateZshCompletion } from "./zsh.js";
 
 // Re-export types
 // Re-export extractor
+// Re-export dynamic completion
+export {
+  CompletionDirective,
+  createDynamicCompleteCommand,
+  formatOutput,
+  generateCandidates,
+  hasCompleteCommand,
+  parseCompletionContext,
+  type CandidateResult,
+  type CompletionCandidate,
+  type CompletionContext,
+  type CompletionType,
+} from "./dynamic/index.js";
 export { extractCompletionData, extractPositionals } from "./extractor.js";
 export type {
   CompletableOption,
@@ -47,12 +61,26 @@ export type {
 } from "./types.js";
 
 /**
+ * Extended options for completion generation with dynamic mode support
+ */
+export interface ExtendedCompletionOptions extends CompletionOptions {
+  /** Use dynamic completion via __complete command (default: false) */
+  dynamic?: boolean;
+}
+
+/**
  * Generate completion script for the specified shell
  */
 export function generateCompletion(
   command: AnyCommand,
-  options: CompletionOptions,
+  options: ExtendedCompletionOptions,
 ): CompletionResult {
+  // Dynamic mode: generate script that calls __complete command
+  if (options.dynamic) {
+    return generateDynamicCompletion(command, options);
+  }
+
+  // Static mode: generate full completion script
   switch (options.shell) {
     case "bash":
       return generateBashCompletion(command, options);
@@ -62,6 +90,67 @@ export function generateCompletion(
       return generateFishCompletion(command, options);
     default:
       throw new Error(`Unsupported shell: ${options.shell}`);
+  }
+}
+
+/**
+ * Generate dynamic completion script that calls __complete command
+ */
+export function generateDynamicCompletion(
+  _command: AnyCommand,
+  options: CompletionOptions,
+): CompletionResult {
+  const programName = options.programName;
+
+  switch (options.shell) {
+    case "bash":
+      return {
+        script: generateDynamicBashScript(programName),
+        shell: "bash",
+        installInstructions: getDynamicInstallInstructions("bash", programName),
+      };
+    case "zsh":
+      return {
+        script: generateDynamicZshScript(programName),
+        shell: "zsh",
+        installInstructions: getDynamicInstallInstructions("zsh", programName),
+      };
+    case "fish":
+      return {
+        script: generateDynamicFishScript(programName),
+        shell: "fish",
+        installInstructions: getDynamicInstallInstructions("fish", programName),
+      };
+    default:
+      throw new Error(`Unsupported shell: ${options.shell}`);
+  }
+}
+
+/**
+ * Get installation instructions for dynamic completion
+ */
+function getDynamicInstallInstructions(shell: ShellType, programName: string): string {
+  switch (shell) {
+    case "bash":
+      return `# To enable completions, add the following to your ~/.bashrc:
+eval "$(${programName} completion bash --dynamic)"
+
+# Or save to a file:
+${programName} completion bash --dynamic > ~/.local/share/bash-completion/completions/${programName}`;
+
+    case "zsh":
+      return `# To enable completions, add the following to your ~/.zshrc:
+eval "$(${programName} completion zsh --dynamic)"
+
+# Or save to a file in your fpath:
+${programName} completion zsh --dynamic > ~/.zsh/completions/_${programName}`;
+
+    case "fish":
+      return `# To enable completions, run:
+${programName} completion fish --dynamic | source
+
+# Or save to the completions directory:
+${programName} completion fish --dynamic > ~/.config/fish/completions/${programName}.fish`;
   }
 }
 
@@ -107,6 +196,10 @@ const completionArgsSchema = z.object({
       placeholder: "SHELL",
     },
   ),
+  dynamic: arg(z.boolean().default(false), {
+    alias: "d",
+    description: "Use dynamic completion (calls CLI for completions)",
+  }),
   instructions: arg(z.boolean().default(false), {
     alias: "i",
     description: "Show installation instructions",
@@ -154,6 +247,7 @@ export function createCompletionCommand(
         shell: shellType,
         programName: resolvedProgramName,
         includeDescriptions: true,
+        dynamic: args.dynamic,
       });
 
       if (args.instructions) {
@@ -166,13 +260,23 @@ export function createCompletionCommand(
 }
 
 /**
+ * Options for withCompletionCommand
+ */
+export interface WithCompletionOptions {
+  /** Override the program name (defaults to command.name) */
+  programName?: string;
+  /** Include __complete command for dynamic completion (default: true) */
+  includeDynamicComplete?: boolean;
+}
+
+/**
  * Wrap a command with a completion subcommand
  *
  * This avoids circular references that occur when a command references itself
  * in its subCommands (e.g., for completion generation).
  *
  * @param command - The command to wrap
- * @param programName - Override the program name (defaults to command.name)
+ * @param options - Options including programName and whether to include __complete
  * @returns A new command with the completion subcommand added
  *
  * @example
@@ -185,7 +289,16 @@ export function createCompletionCommand(
  * );
  * ```
  */
-export function withCompletionCommand<T extends AnyCommand>(command: T, programName?: string): T {
+export function withCompletionCommand<T extends AnyCommand>(
+  command: T,
+  options?: string | WithCompletionOptions,
+): T {
+  // Support both string (programName) and options object for backwards compatibility
+  const opts: WithCompletionOptions =
+    typeof options === "string" ? { programName: options } : (options ?? {});
+
+  const { programName, includeDynamicComplete = true } = opts;
+
   const wrappedCommand = {
     ...command,
   } as T;
@@ -193,6 +306,9 @@ export function withCompletionCommand<T extends AnyCommand>(command: T, programN
   wrappedCommand.subCommands = {
     ...command.subCommands,
     completion: createCompletionCommand(wrappedCommand, programName),
+    ...(includeDynamicComplete && {
+      __complete: createDynamicCompleteCommand(wrappedCommand, programName),
+    }),
   };
 
   return wrappedCommand;

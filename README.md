@@ -256,8 +256,8 @@ CLI entry point. Handles signals and calls `process.exit()`.
 
 ```typescript
 runMain(command, {
-  version: "1.0.0",    // Displayed with --version flag
-  argv: process.argv,  // Custom argv
+  version: "1.0.0", // Displayed with --version flag
+  argv: process.argv, // Custom argv
 });
 ```
 
@@ -285,6 +285,103 @@ Attach metadata to an argument.
 | `description` | `string?`  | Argument description                 |
 | `placeholder` | `string?`  | Placeholder shown in help            |
 | `env`         | `string?`  | Environment variable name (fallback) |
+| `completion`  | `object?`  | Shell completion configuration       |
+
+## Shell Completion
+
+politty provides automatic shell completion generation for bash, zsh, and fish.
+
+### Quick Setup
+
+Use `withCompletionCommand` to add completion support to your CLI:
+
+```typescript
+import { defineCommand, runMain, withCompletionCommand } from "politty";
+
+const mainCommand = withCompletionCommand(
+  defineCommand({
+    name: "mycli",
+    subCommands: {
+      build: buildCommand,
+      test: testCommand,
+    },
+  }),
+);
+
+runMain(mainCommand);
+```
+
+Then users can enable completions:
+
+```bash
+# Bash
+eval "$(mycli completion bash)"
+
+# Zsh
+eval "$(mycli completion zsh)"
+
+# Fish
+mycli completion fish | source
+```
+
+### Dynamic Completion (Recommended)
+
+Dynamic completion calls your CLI at runtime to generate completions, enabling context-aware suggestions:
+
+```bash
+# Enable dynamic completion
+eval "$(mycli completion bash --dynamic)"
+```
+
+This approach:
+
+- Supports dynamic values (e.g., list of git branches)
+- No need to regenerate scripts when commands change
+- Works with lazy-loaded subcommands
+
+### Value Completion
+
+Define completion hints for arguments:
+
+```typescript
+const command = defineCommand({
+  name: "build",
+  args: z.object({
+    // Auto-detected from z.enum()
+    format: arg(z.enum(["json", "yaml", "xml"]), {
+      alias: "f",
+      description: "Output format",
+    }),
+
+    // File completion
+    config: arg(z.string(), {
+      completion: { type: "file", extensions: ["json", "yaml"] },
+    }),
+
+    // Directory completion
+    outputDir: arg(z.string(), {
+      completion: { type: "directory" },
+    }),
+
+    // Custom shell command
+    branch: arg(z.string().optional(), {
+      completion: {
+        custom: { shellCommand: "git branch --format='%(refname:short)'" },
+      },
+    }),
+
+    // Static choices
+    environment: arg(z.string(), {
+      completion: {
+        custom: { choices: ["development", "staging", "production"] },
+      },
+    }),
+  }),
+  run: (args) => {
+    /* ... */
+  },
+});
+```
 
 ## Documentation
 

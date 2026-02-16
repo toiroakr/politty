@@ -24,6 +24,20 @@ export interface CompletionOptions {
 }
 
 /**
+ * Value completion specification for shell scripts
+ */
+export interface ValueCompletion {
+  /** Completion type */
+  type: "choices" | "file" | "directory" | "command" | "none";
+  /** List of valid choices (for "choices" type) */
+  choices?: string[];
+  /** Shell command for dynamic completion (for "command" type) */
+  shellCommand?: string;
+  /** File extension filters (for "file" type) */
+  extensions?: string[];
+}
+
+/**
  * Information about a completable option
  */
 export interface CompletableOption {
@@ -41,6 +55,26 @@ export interface CompletableOption {
   valueType: "string" | "number" | "boolean" | "array" | "unknown";
   /** Whether the option is required */
   required: boolean;
+  /** Value completion specification */
+  valueCompletion?: ValueCompletion | undefined;
+}
+
+/**
+ * Information about a positional argument for completion
+ */
+export interface CompletablePositional {
+  /** Field name */
+  name: string;
+  /** CLI name (kebab-case) */
+  cliName: string;
+  /** Position index (0-based) */
+  position: number;
+  /** Description */
+  description?: string | undefined;
+  /** Whether required */
+  required: boolean;
+  /** Value completion specification */
+  valueCompletion?: ValueCompletion | undefined;
 }
 
 /**
@@ -55,6 +89,8 @@ export interface CompletableSubcommand {
   subcommands: CompletableSubcommand[];
   /** Options for this subcommand */
   options: CompletableOption[];
+  /** Positional arguments */
+  positionals: CompletablePositional[];
 }
 
 /**

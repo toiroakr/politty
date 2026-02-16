@@ -18,7 +18,7 @@ function defineCommand<TArgsSchema, TResult>(config: {
   run?: (args: TArgs) => TResult | Promise<TResult>;
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
   notes?: string;
-}): Command<TArgs, TResult>
+}): Command<TArgs, TResult>;
 ```
 
 #### Parameters
@@ -53,9 +53,15 @@ const command = defineCommand({
   args: z.object({
     input: arg(z.string(), { positional: true }),
   }),
-  setup: ({ args }) => { /* initialization */ },
-  run: (args) => { /* main process */ },
-  cleanup: ({ args, error }) => { /* cleanup */ },
+  setup: ({ args }) => {
+    /* initialization */
+  },
+  run: (args) => {
+    /* main process */
+  },
+  cleanup: ({ args, error }) => {
+    /* cleanup */
+  },
 });
 ```
 
@@ -66,10 +72,7 @@ const command = defineCommand({
 Executes a command as the CLI entry point. Signal handling (SIGINT, SIGTERM) is automatically enabled, and `process.exit` is called on termination.
 
 ```typescript
-async function runMain(
-  command: Command,
-  options?: MainOptions
-): Promise<never>
+async function runMain(command: Command, options?: MainOptions): Promise<never>;
 ```
 
 #### Parameters
@@ -90,7 +93,7 @@ import { defineCommand, runMain } from "politty";
 
 const command = defineCommand({
   name: "my-cli",
-  run: () => console.log("Hello!")
+  run: () => console.log("Hello!"),
 });
 
 // Basic usage
@@ -113,8 +116,8 @@ Executes a command programmatically. Ideal for testing purposes. Does not call `
 async function runCommand<TResult>(
   command: Command,
   argv: string[],
-  options?: RunCommandOptions
-): Promise<RunResult<TResult>>
+  options?: RunCommandOptions,
+): Promise<RunResult<TResult>>;
 ```
 
 #### Parameters
@@ -136,7 +139,7 @@ import { defineCommand, runCommand } from "politty";
 
 const command = defineCommand({
   name: "my-cli",
-  run: () => ({ success: true })
+  run: () => ({ success: true }),
 });
 
 // Usage in tests
@@ -152,10 +155,7 @@ console.log(result.result);
 Attaches metadata to a Zod schema.
 
 ```typescript
-function arg<T extends z.ZodType>(
-  schema: T,
-  meta: ArgMeta
-): T
+function arg<T extends z.ZodType>(schema: T, meta: ArgMeta): T;
 ```
 
 #### Parameters
@@ -191,7 +191,7 @@ const verbose = arg(z.boolean().default(false), {
 const output = arg(z.string(), {
   alias: "o",
   description: "Output file",
-  placeholder: "FILE",  // Shows as --output <FILE> in help
+  placeholder: "FILE", // Shows as --output <FILE> in help
 });
 ```
 
@@ -202,10 +202,7 @@ const output = arg(z.string(), {
 Generates help text for a command.
 
 ```typescript
-function generateHelp(
-  command: Command,
-  options: HelpOptions
-): string
+function generateHelp(command: Command, options: HelpOptions): string;
 ```
 
 #### Parameters
@@ -226,7 +223,7 @@ Formatted help text
 Extracts field information from a schema.
 
 ```typescript
-function extractFields(schema: ArgsSchema): ExtractedFields
+function extractFields(schema: ArgsSchema): ExtractedFields;
 ```
 
 #### Example
@@ -246,12 +243,266 @@ const extracted = extractFields(schema);
 
 ---
 
+## Shell Completion
+
+### `withCompletionCommand`
+
+Wraps a command with shell completion support. Adds both a `completion` subcommand and a hidden `__complete` command for dynamic completion.
+
+```typescript
+function withCompletionCommand<T extends AnyCommand>(
+  command: T,
+  options?: string | WithCompletionOptions,
+): T;
+```
+
+#### Parameters
+
+| Name      | Type                              | Description                    |
+| --------- | --------------------------------- | ------------------------------ |
+| `command` | `AnyCommand`                      | Command to wrap                |
+| `options` | `string \| WithCompletionOptions` | Program name or options object |
+
+**WithCompletionOptions:**
+
+| Property                 | Type       | Description                                      |
+| ------------------------ | ---------- | ------------------------------------------------ |
+| `programName`            | `string?`  | Override program name (defaults to command.name) |
+| `includeDynamicComplete` | `boolean?` | Include `__complete` command (default: true)     |
+
+#### Example
+
+```typescript
+import { defineCommand, runMain, withCompletionCommand } from "politty";
+
+const mainCommand = withCompletionCommand(
+  defineCommand({
+    name: "mycli",
+    subCommands: {
+      /* ... */
+    },
+  }),
+);
+
+// Now includes:
+// - mycli completion bash|zsh|fish [--dynamic]
+// - mycli __complete -- <args>
+
+runMain(mainCommand);
+```
+
+---
+
+### `generateCompletion`
+
+Generates a shell completion script for a command.
+
+```typescript
+function generateCompletion(
+  command: AnyCommand,
+  options: ExtendedCompletionOptions,
+): CompletionResult;
+```
+
+#### Parameters
+
+| Name      | Type                        | Description         |
+| --------- | --------------------------- | ------------------- |
+| `command` | `AnyCommand`                | Command to generate |
+| `options` | `ExtendedCompletionOptions` | Generation options  |
+
+**ExtendedCompletionOptions:**
+
+| Property              | Type        | Description                                         |
+| --------------------- | ----------- | --------------------------------------------------- |
+| `shell`               | `ShellType` | Target shell: "bash", "zsh", or "fish"              |
+| `programName`         | `string`    | Program name as invoked                             |
+| `dynamic`             | `boolean?`  | Generate dynamic completion script (default: false) |
+| `includeDescriptions` | `boolean?`  | Include descriptions (default: true)                |
+
+#### Return Value
+
+```typescript
+interface CompletionResult {
+  script: string; // The completion script
+  shell: ShellType; // Shell type
+  installInstructions: string; // Installation instructions
+}
+```
+
+#### Example
+
+```typescript
+import { generateCompletion } from "politty/completion";
+
+// Static completion
+const result = generateCompletion(command, {
+  shell: "bash",
+  programName: "mycli",
+});
+
+// Dynamic completion (calls CLI at runtime)
+const dynamicResult = generateCompletion(command, {
+  shell: "bash",
+  programName: "mycli",
+  dynamic: true,
+});
+
+console.log(result.script);
+```
+
+---
+
+### `createDynamicCompleteCommand`
+
+Creates the hidden `__complete` command for dynamic completion.
+
+```typescript
+function createDynamicCompleteCommand(rootCommand: AnyCommand, programName?: string): Command;
+```
+
+#### Usage
+
+The `__complete` command is automatically added by `withCompletionCommand`. It can be invoked directly:
+
+```bash
+# Get completions for "mycli build --"
+mycli __complete -- build --
+
+# Output (tab-separated: value\tdescription)
+--watch	Watch mode
+--output	Output directory
+:4
+```
+
+The last line (`:N`) is a directive that tells the shell how to handle completions:
+
+- `:0` - Default
+- `:4` - Filter by prefix
+- `:16` - File completion
+- `:32` - Directory completion
+
+---
+
+### `parseCompletionContext`
+
+Parses a partial command line to determine what kind of completion is needed.
+
+```typescript
+function parseCompletionContext(argv: string[], rootCommand: AnyCommand): CompletionContext;
+```
+
+#### Return Value
+
+```typescript
+interface CompletionContext {
+  subcommandPath: string[]; // e.g., ["plugin", "add"]
+  currentCommand: AnyCommand; // Resolved command
+  currentWord: string; // Current partial word
+  previousWord: string; // Previous word
+  completionType: CompletionType; // What to complete
+  targetOption?: CompletableOption; // For option-value completion
+  positionalIndex?: number; // For positional completion
+  options: CompletableOption[]; // Available options
+  subcommands: string[]; // Available subcommands
+  positionals: CompletablePositional[];
+  usedOptions: Set<string>; // Already used options
+}
+
+type CompletionType = "subcommand" | "option-name" | "option-value" | "positional";
+```
+
+---
+
+### `generateCandidates`
+
+Generates completion candidates based on context.
+
+```typescript
+function generateCandidates(context: CompletionContext): CandidateResult;
+```
+
+#### Return Value
+
+```typescript
+interface CandidateResult {
+  candidates: CompletionCandidate[];
+  directive: number; // Bitwise flags
+}
+
+interface CompletionCandidate {
+  value: string;
+  description?: string;
+  type?: "option" | "subcommand" | "value" | "file" | "directory";
+}
+```
+
+---
+
+### `CompletionMeta`
+
+Completion configuration for arguments.
+
+```typescript
+interface CompletionMeta {
+  /** Completion type */
+  type?: "file" | "directory" | "none";
+  /** Custom completion */
+  custom?: {
+    /** Static choices */
+    choices?: string[];
+    /** Shell command for dynamic values */
+    shellCommand?: string;
+  };
+  /** File extension filters (for type: "file") */
+  extensions?: string[];
+}
+```
+
+#### Example
+
+```typescript
+import { z } from "zod";
+import { arg, defineCommand } from "politty";
+
+const command = defineCommand({
+  name: "deploy",
+  args: z.object({
+    // File completion with extension filter
+    config: arg(z.string(), {
+      completion: { type: "file", extensions: ["json", "yaml"] },
+    }),
+
+    // Directory completion
+    outputDir: arg(z.string(), {
+      completion: { type: "directory" },
+    }),
+
+    // Static choices
+    env: arg(z.string(), {
+      completion: { custom: { choices: ["dev", "staging", "prod"] } },
+    }),
+
+    // Dynamic from shell command
+    branch: arg(z.string().optional(), {
+      completion: { custom: { shellCommand: "git branch --format='%(refname:short)'" } },
+    }),
+
+    // Auto-detected from z.enum()
+    format: arg(z.enum(["json", "yaml"]), {}),
+  }),
+  run: () => {},
+});
+```
+
+---
+
 ### `validatePositionalConfig`
 
 Validates whether the positional argument configuration is valid.
 
 ```typescript
-function validatePositionalConfig(extracted: ExtractedFields): void
+function validatePositionalConfig(extracted: ExtractedFields): void;
 ```
 
 Throws `PositionalConfigError` if the configuration is invalid.
@@ -263,7 +514,7 @@ Throws `PositionalConfigError` if the configuration is invalid.
 Formats validation errors into a user-friendly string.
 
 ```typescript
-function formatValidationErrors(errors: ValidationError[]): string
+function formatValidationErrors(errors: ValidationError[]): string;
 ```
 
 ---
@@ -802,13 +1053,7 @@ export {
   type CommandContext,
   type HelpOptions,
 } from "./output/help-generator.js";
-export {
-  isColorEnabled,
-  logger,
-  setColorEnabled,
-  styles,
-  symbols,
-} from "./output/logger.js";
+export { isColorEnabled, logger, setColorEnabled, styles, symbols } from "./output/logger.js";
 
 // Types
 export type {

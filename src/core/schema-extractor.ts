@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { AnyCommand, ArgsSchema } from "../types.js";
-import { getArgMeta as getArgMetaFromRegistry, type ArgMeta } from "./arg-registry.js";
+import {
+  getArgMeta as getArgMetaFromRegistry,
+  type ArgMeta,
+  type CompletionMeta,
+} from "./arg-registry.js";
 
 /**
  * Get ArgMeta from both the custom registry and Zod's _def
@@ -60,6 +64,10 @@ export interface ResolvedFieldMeta {
   schema: z.ZodType;
   /** True if this overrides built-in aliases (-h, -H) */
   overrideBuiltinAlias?: true;
+  /** Enum values if detected from schema (z.enum) */
+  enumValues?: string[] | undefined;
+  /** Completion metadata from arg() */
+  completion?: CompletionMeta | undefined;
 }
 
 /**
@@ -200,6 +208,7 @@ function detectType(schema: z.ZodType): "string" | "number" | "boolean" | "array
 
   switch (typeName) {
     case "string":
+    case "enum":
       return "string";
     case "number":
     case "int":
@@ -211,6 +220,65 @@ function detectType(schema: z.ZodType): "string" | "number" | "boolean" | "array
     default:
       return "unknown";
   }
+}
+
+/**
+ * Extract enum values from a schema if it's an enum type
+ *
+ * @param schema - The Zod schema to extract enum values from
+ * @returns Array of enum values if schema is an enum, undefined otherwise
+ */
+export function extractEnumValues(schema: z.ZodType): string[] | undefined {
+  const innerSchema = unwrapSchema(schema);
+  const typeName = getTypeName(innerSchema);
+  const s = innerSchema as ZodSchemaWithDef;
+  const def = s.def ?? s._def;
+
+  if (typeName === "enum") {
+    // Zod v4: enum values are in def.entries or def.values
+    const entries = (def as { entries?: Record<string, string> })?.entries;
+    if (entries && typeof entries === "object") {
+      return Object.values(entries);
+    }
+
+    // Check for values array (some Zod versions)
+    const values = (def as { values?: string[] })?.values;
+    if (Array.isArray(values)) {
+      return values;
+    }
+
+    // Fallback: check for options property on schema
+    const options = (s as { options?: string[] }).options;
+    if (Array.isArray(options)) {
+      return options;
+    }
+  }
+
+  // Also handle literal union patterns (z.literal("a").or(z.literal("b")))
+  if (typeName === "union") {
+    const options = def?.options;
+    if (Array.isArray(options)) {
+      const literalValues: string[] = [];
+      for (const option of options) {
+        const optionTypeName = getTypeName(option);
+        if (optionTypeName === "literal") {
+          const optionDef = (option as ZodSchemaWithDef).def ?? (option as ZodSchemaWithDef)._def;
+          const value = (optionDef as { value?: unknown; values?: unknown[] })?.value;
+          const values = (optionDef as { value?: unknown; values?: unknown[] })?.values;
+          const literalValue = value ?? values?.[0];
+          if (typeof literalValue === "string") {
+            literalValues.push(literalValue);
+          }
+        }
+      }
+      // Only return if all options are string literals
+      if (literalValues.length === options.length && literalValues.length > 0) {
+        return literalValues;
+      }
+    }
+  }
+
+  return undefined;
 }
 
 /**
@@ -302,6 +370,9 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   // Convert camelCase field name to kebab-case for CLI usage
   const cliName = toKebabCase(name);
 
+  // Extract enum values from schema
+  const enumValues = extractEnumValues(schema);
+
   const meta: ResolvedFieldMeta = {
     name,
     cliName,
@@ -314,6 +385,8 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
     defaultValue: extractDefaultValue(schema),
     type: detectType(schema),
     schema,
+    enumValues,
+    completion: argMeta?.completion,
   };
 
   // Add overrideBuiltinAlias only if it's true
