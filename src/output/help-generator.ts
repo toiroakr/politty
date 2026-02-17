@@ -55,6 +55,19 @@ export interface HelpOptions {
 }
 
 /**
+ * Internal subcommands are reserved for framework internals and hidden from help output.
+ */
+function isVisibleSubcommand(name: string): boolean {
+  return !name.startsWith("__");
+}
+
+function getVisibleSubcommandEntries(
+  subCommands: Record<string, AnyCommand | (() => Promise<AnyCommand>)>,
+): Array<[string, AnyCommand | (() => Promise<AnyCommand>)]> {
+  return Object.entries(subCommands).filter(([name]) => isVisibleSubcommand(name));
+}
+
+/**
  * Build full command name from context
  */
 function buildFullCommandName(command: AnyCommand, context?: CommandContext): string {
@@ -96,7 +109,7 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
     }
 
     // Add [command] if there are subcommands
-    if (command.subCommands && Object.keys(command.subCommands).length > 0) {
+    if (command.subCommands && getVisibleSubcommandEntries(command.subCommands).length > 0) {
       parts.push(styles.placeholder("[command]"));
     }
 
@@ -110,7 +123,7 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
     }
   } else {
     // Add [command] if there are subcommands
-    if (command.subCommands && Object.keys(command.subCommands).length > 0) {
+    if (command.subCommands && getVisibleSubcommandEntries(command.subCommands).length > 0) {
       parts.push(styles.placeholder("[command]"));
     }
   }
@@ -494,7 +507,7 @@ function renderSubcommandsWithOptions(
 ): string[] {
   const lines: string[] = [];
 
-  for (const [name, subCmd] of Object.entries(subCommands)) {
+  for (const [name, subCmd] of getVisibleSubcommandEntries(subCommands)) {
     // Handle both sync and async commands
     const cmd = typeof subCmd === "function" ? null : subCmd;
     const fullPath = parentPath ? `${parentPath} ${name}` : name;
@@ -509,7 +522,7 @@ function renderSubcommandsWithOptions(
       lines.push(...optionLines);
 
       // Recursively add nested subcommands (same base indent - flat style)
-      if (cmd.subCommands && Object.keys(cmd.subCommands).length > 0) {
+      if (cmd.subCommands && getVisibleSubcommandEntries(cmd.subCommands).length > 0) {
         const nestedLines = renderSubcommandsWithOptions(cmd.subCommands, fullPath, baseIndent);
         lines.push(...nestedLines);
       }
@@ -567,7 +580,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   if (
     options.showSubcommands !== false &&
     command.subCommands &&
-    Object.keys(command.subCommands).length > 0
+    getVisibleSubcommandEntries(command.subCommands).length > 0
   ) {
     // Get current command path for prefixing subcommands
     const currentPath = context?.commandPath?.join(" ") ?? "";
@@ -579,7 +592,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
     } else {
       // Show only subcommand names and descriptions
       const subLines: string[] = [];
-      for (const [name, subCmd] of Object.entries(command.subCommands)) {
+      for (const [name, subCmd] of getVisibleSubcommandEntries(command.subCommands)) {
         // Handle both sync and async commands
         const cmd = typeof subCmd === "function" ? { description: undefined } : subCmd;
         const desc = cmd.description ?? "";

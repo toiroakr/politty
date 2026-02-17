@@ -12,7 +12,7 @@ import {
   parseCompletionContext,
   withCompletionCommand,
 } from "../src/completion/index.js";
-import { arg, defineCommand } from "../src/index.js";
+import { arg, defineCommand, runCommand } from "../src/index.js";
 
 describe("Completion", () => {
   describe("extractCompletionData", () => {
@@ -553,6 +553,30 @@ describe("Completion", () => {
 
       expect(wrapped.subCommands?.__complete).toBeDefined();
       expect(wrapped.subCommands?.completion).toBeDefined();
+    });
+
+    it("should hide __complete from help output", async () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: {
+          build: defineCommand({ name: "build", run: () => {} }),
+        },
+      });
+
+      const wrapped = withCompletionCommand(cmd);
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await runCommand(wrapped, ["--help"]);
+
+      const output = consoleSpy.mock.calls
+        .map((args) => args.map((value) => String(value)).join(" "))
+        .join("\n");
+
+      consoleSpy.mockRestore();
+
+      expect(output).toContain("build");
+      expect(output).toContain("completion");
+      expect(output).not.toContain("__complete");
     });
   });
 
