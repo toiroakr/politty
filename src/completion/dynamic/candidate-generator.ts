@@ -115,9 +115,14 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
   const directive = CompletionDirective.FilterPrefix;
 
   // Filter out already used options
-  const availableOptions = context.options.filter(
-    (opt) => !context.usedOptions.has(opt.cliName) && !context.usedOptions.has(opt.alias || ""),
-  );
+  const availableOptions = context.options.filter((opt) => {
+    // Array options can be specified multiple times, so keep them available.
+    if (opt.valueType === "array") {
+      return true;
+    }
+
+    return !context.usedOptions.has(opt.cliName) && !context.usedOptions.has(opt.alias || "");
+  });
 
   for (const opt of availableOptions) {
     candidates.push({

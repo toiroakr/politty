@@ -656,6 +656,7 @@ describe("Completion", () => {
         args: z.object({
           verbose: arg(z.boolean().default(false), { alias: "v" }),
           format: arg(z.enum(["json", "yaml"]), { alias: "f" }),
+          tags: arg(z.array(z.string()).default([]), { alias: "t" }),
           config: arg(z.string().optional(), { completion: { type: "file" } }),
           dir: arg(z.string().optional(), { completion: { type: "directory" } }),
         }),
@@ -711,6 +712,14 @@ describe("Completion", () => {
 
         const optionCandidates = result.candidates.filter((c) => c.type === "option");
         expect(optionCandidates.some((c) => c.value === "--verbose")).toBe(false);
+      });
+
+      it("should keep array options available after they are used", () => {
+        const ctx = parseCompletionContext(["--tags", "one", "--"], testCmd);
+        const result = generateCandidates(ctx);
+
+        const optionCandidates = result.candidates.filter((c) => c.type === "option");
+        expect(optionCandidates.some((c) => c.value === "--tags")).toBe(true);
       });
     });
 
