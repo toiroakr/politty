@@ -265,10 +265,9 @@ function withCompletionCommand<T extends AnyCommand>(
 
 **WithCompletionOptions:**
 
-| Property                 | Type       | Description                                      |
-| ------------------------ | ---------- | ------------------------------------------------ |
-| `programName`            | `string?`  | Override program name (defaults to command.name) |
-| `includeDynamicComplete` | `boolean?` | Include `__complete` command (default: true)     |
+| Property      | Type      | Description                                      |
+| ------------- | --------- | ------------------------------------------------ |
+| `programName` | `string?` | Override program name (defaults to command.name) |
 
 #### Example
 
@@ -285,7 +284,7 @@ const mainCommand = withCompletionCommand(
 );
 
 // Now includes:
-// - mycli completion bash|zsh|fish [--dynamic]
+// - mycli completion bash|zsh|fish
 // - mycli __complete -- <args>
 
 runMain(mainCommand);
@@ -298,27 +297,23 @@ runMain(mainCommand);
 Generates a shell completion script for a command.
 
 ```typescript
-function generateCompletion(
-  command: AnyCommand,
-  options: ExtendedCompletionOptions,
-): CompletionResult;
+function generateCompletion(command: AnyCommand, options: CompletionOptions): CompletionResult;
 ```
 
 #### Parameters
 
-| Name      | Type                        | Description         |
-| --------- | --------------------------- | ------------------- |
-| `command` | `AnyCommand`                | Command to generate |
-| `options` | `ExtendedCompletionOptions` | Generation options  |
+| Name      | Type                | Description         |
+| --------- | ------------------- | ------------------- |
+| `command` | `AnyCommand`        | Command to generate |
+| `options` | `CompletionOptions` | Generation options  |
 
-**ExtendedCompletionOptions:**
+**CompletionOptions:**
 
-| Property              | Type        | Description                                         |
-| --------------------- | ----------- | --------------------------------------------------- |
-| `shell`               | `ShellType` | Target shell: "bash", "zsh", or "fish"              |
-| `programName`         | `string`    | Program name as invoked                             |
-| `dynamic`             | `boolean?`  | Generate dynamic completion script (default: false) |
-| `includeDescriptions` | `boolean?`  | Include descriptions (default: true)                |
+| Property              | Type        | Description                            |
+| --------------------- | ----------- | -------------------------------------- |
+| `shell`               | `ShellType` | Target shell: "bash", "zsh", or "fish" |
+| `programName`         | `string`    | Program name as invoked                |
+| `includeDescriptions` | `boolean?`  | Include descriptions (default: true)   |
 
 #### Return Value
 
@@ -335,17 +330,9 @@ interface CompletionResult {
 ```typescript
 import { generateCompletion } from "politty/completion";
 
-// Static completion
 const result = generateCompletion(command, {
   shell: "bash",
   programName: "mycli",
-});
-
-// Dynamic completion (calls CLI at runtime)
-const dynamicResult = generateCompletion(command, {
-  shell: "bash",
-  programName: "mycli",
-  dynamic: true,
 });
 
 console.log(result.script);

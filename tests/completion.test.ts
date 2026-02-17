@@ -335,10 +335,7 @@ describe("Completion", () => {
         expect(result.script).toContain("# Bash completion for mycli");
         expect(result.script).toContain("_mycli_completions()");
         expect(result.script).toContain("complete -F _mycli_completions mycli");
-        expect(result.script).toContain("--verbose");
-        expect(result.script).toContain("-v");
-        expect(result.script).toContain("build");
-        expect(result.script).toContain("test");
+        expect(result.script).toContain("mycli __complete");
       });
 
       it("should include installation instructions", () => {
@@ -349,41 +346,6 @@ describe("Completion", () => {
 
         expect(result.installInstructions).toContain("~/.bashrc");
         expect(result.installInstructions).toContain("mycli completion bash");
-      });
-
-      it("should include enum value completion in bash", () => {
-        const cmd = defineCommand({
-          name: "test",
-          args: z.object({
-            format: arg(z.enum(["json", "yaml", "xml"]), { alias: "f" }),
-          }),
-          run: () => {},
-        });
-
-        const result = generateCompletion(cmd, {
-          shell: "bash",
-          programName: "test",
-        });
-
-        expect(result.script).toContain("--format|-f)");
-        expect(result.script).toContain('compgen -W "json yaml xml"');
-      });
-
-      it("should include file completion in bash", () => {
-        const cmd = defineCommand({
-          name: "test",
-          args: z.object({
-            config: arg(z.string(), { completion: { type: "file" } }),
-          }),
-          run: () => {},
-        });
-
-        const result = generateCompletion(cmd, {
-          shell: "bash",
-          programName: "test",
-        });
-
-        expect(result.script).toContain("compgen -f");
       });
     });
 
@@ -398,71 +360,7 @@ describe("Completion", () => {
         expect(result.script).toContain("#compdef mycli");
         expect(result.script).toContain("# Zsh completion for mycli");
         expect(result.script).toContain("_mycli()");
-        expect(result.script).toContain("--verbose");
-        expect(result.script).toContain("build");
-        expect(result.script).toContain("test");
-      });
-
-      it("should include descriptions in zsh format", () => {
-        const result = generateCompletion(testCommand, {
-          shell: "zsh",
-          programName: "mycli",
-          includeDescriptions: true,
-        });
-
-        expect(result.script).toContain("Verbose output");
-        expect(result.script).toContain("Build the project");
-      });
-
-      it("should include enum value completion in zsh", () => {
-        const cmd = defineCommand({
-          name: "test",
-          args: z.object({
-            format: arg(z.enum(["json", "yaml", "xml"]), { alias: "f" }),
-          }),
-          run: () => {},
-        });
-
-        const result = generateCompletion(cmd, {
-          shell: "zsh",
-          programName: "test",
-        });
-
-        expect(result.script).toContain(":value:(json yaml xml)");
-      });
-
-      it("should include file completion in zsh", () => {
-        const cmd = defineCommand({
-          name: "test",
-          args: z.object({
-            config: arg(z.string(), { completion: { type: "file" } }),
-          }),
-          run: () => {},
-        });
-
-        const result = generateCompletion(cmd, {
-          shell: "zsh",
-          programName: "test",
-        });
-
-        expect(result.script).toContain(":file:_files");
-      });
-
-      it("should include directory completion in zsh", () => {
-        const cmd = defineCommand({
-          name: "test",
-          args: z.object({
-            dir: arg(z.string(), { completion: { type: "directory" } }),
-          }),
-          run: () => {},
-        });
-
-        const result = generateCompletion(cmd, {
-          shell: "zsh",
-          programName: "test",
-        });
-
-        expect(result.script).toContain(":directory:_files -/");
+        expect(result.script).toContain("mycli __complete");
       });
     });
 
@@ -476,82 +374,8 @@ describe("Completion", () => {
         expect(result.shell).toBe("fish");
         expect(result.script).toContain("# Fish completion for mycli");
         expect(result.script).toContain("complete -c mycli");
-        expect(result.script).toContain("-l verbose");
-        expect(result.script).toContain("-s v");
-      });
-
-      it("should include descriptions in fish format", () => {
-        const result = generateCompletion(testCommand, {
-          shell: "fish",
-          programName: "mycli",
-          includeDescriptions: true,
-        });
-
-        expect(result.script).toContain("-d 'Verbose output'");
-      });
-
-      it("should include helper functions", () => {
-        const result = generateCompletion(testCommand, {
-          shell: "fish",
-          programName: "mycli",
-        });
-
-        expect(result.script).toContain("function __fish_use_subcommand_mycli");
-        expect(result.script).toContain("function __fish_mycli_using_command");
-      });
-
-      it("should include enum value completion in fish", () => {
-        const cmd = defineCommand({
-          name: "test",
-          args: z.object({
-            format: arg(z.enum(["json", "yaml", "xml"]), { alias: "f" }),
-          }),
-          run: () => {},
-        });
-
-        const result = generateCompletion(cmd, {
-          shell: "fish",
-          programName: "test",
-        });
-
-        expect(result.script).toContain('-a "json yaml xml"');
-      });
-
-      it("should include directory completion in fish", () => {
-        const cmd = defineCommand({
-          name: "test",
-          args: z.object({
-            dir: arg(z.string(), { completion: { type: "directory" } }),
-          }),
-          run: () => {},
-        });
-
-        const result = generateCompletion(cmd, {
-          shell: "fish",
-          programName: "test",
-        });
-
-        expect(result.script).toContain("__fish_complete_directories");
-      });
-
-      it("should include positional helper function", () => {
-        const cmd = defineCommand({
-          name: "test",
-          args: z.object({
-            file: arg(z.string(), {
-              positional: true,
-              completion: { type: "file" },
-            }),
-          }),
-          run: () => {},
-        });
-
-        const result = generateCompletion(cmd, {
-          shell: "fish",
-          programName: "test",
-        });
-
-        expect(result.script).toContain("function __fish_test_needs_positional");
+        expect(result.script).toContain("__fish_mycli_complete");
+        expect(result.script).toContain("mycli __complete");
       });
     });
 
@@ -706,17 +530,18 @@ describe("Completion", () => {
 
       expect(completionSubcommand.run).toBeDefined();
       const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-      completionSubcommand.run?.({ shell: "bash", instructions: false, dynamic: false });
+      completionSubcommand.run?.({ shell: "bash", instructions: false });
 
       const output = consoleSpy.mock.calls
         .map((args) => args.map((value) => String(value)).join(" "))
         .join("\n");
       consoleSpy.mockRestore();
-      expect(output).toContain("completion");
-      expect(output).toContain("deploy");
+      // Dynamic script calls __complete at runtime, so it contains the program name and __complete
+      expect(output).toContain("mycli __complete");
+      expect(output).toContain("_mycli_completions");
     });
 
-    it("should include __complete command by default", () => {
+    it("should always include __complete command", () => {
       const cmd = defineCommand({
         name: "mycli",
         subCommands: {
@@ -727,20 +552,6 @@ describe("Completion", () => {
       const wrapped = withCompletionCommand(cmd);
 
       expect(wrapped.subCommands?.__complete).toBeDefined();
-      expect(wrapped.subCommands?.completion).toBeDefined();
-    });
-
-    it("should allow disabling __complete command", () => {
-      const cmd = defineCommand({
-        name: "mycli",
-        subCommands: {
-          build: defineCommand({ name: "build", run: () => {} }),
-        },
-      });
-
-      const wrapped = withCompletionCommand(cmd, { includeDynamicComplete: false });
-
-      expect(wrapped.subCommands?.__complete).toBeUndefined();
       expect(wrapped.subCommands?.completion).toBeDefined();
     });
   });
@@ -953,8 +764,8 @@ describe("Completion", () => {
       });
     });
 
-    describe("dynamic completion scripts", () => {
-      it("should generate dynamic bash script", () => {
+    describe("completion scripts", () => {
+      it("should generate bash script that calls __complete", () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -966,15 +777,14 @@ describe("Completion", () => {
         const result = generateCompletion(cmd, {
           shell: "bash",
           programName: "mycli",
-          dynamic: true,
         });
 
-        expect(result.script).toContain("# Bash dynamic completion for mycli");
+        expect(result.script).toContain("# Bash completion for mycli");
         expect(result.script).toContain("mycli __complete");
-        expect(result.script).toContain("_mycli_dynamic_completions");
+        expect(result.script).toContain("_mycli_completions");
       });
 
-      it("should generate dynamic zsh script", () => {
+      it("should generate zsh script that calls __complete", () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -986,15 +796,14 @@ describe("Completion", () => {
         const result = generateCompletion(cmd, {
           shell: "zsh",
           programName: "mycli",
-          dynamic: true,
         });
 
-        expect(result.script).toContain("# Zsh dynamic completion for mycli");
+        expect(result.script).toContain("# Zsh completion for mycli");
         expect(result.script).toContain("mycli __complete");
         expect(result.script).toContain("#compdef mycli");
       });
 
-      it("should generate dynamic fish script", () => {
+      it("should generate fish script that calls __complete", () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -1006,10 +815,9 @@ describe("Completion", () => {
         const result = generateCompletion(cmd, {
           shell: "fish",
           programName: "mycli",
-          dynamic: true,
         });
 
-        expect(result.script).toContain("# Fish dynamic completion for mycli");
+        expect(result.script).toContain("# Fish completion for mycli");
         expect(result.script).toContain("mycli __complete");
         expect(result.script).toContain("__fish_mycli_complete");
       });

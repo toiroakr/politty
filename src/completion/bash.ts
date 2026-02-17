@@ -1,346 +1,26 @@
 /**
- * Bash completion script generator
+ * Bash completion script generator (dynamic)
  */
 
 import type { AnyCommand } from "../types.js";
-import { extractCompletionData } from "./extractor.js";
-import type {
-  CompletableOption,
-  CompletablePositional,
-  CompletableSubcommand,
-  CompletionOptions,
-  CompletionResult,
-  ValueCompletion,
-} from "./types.js";
-
-/**
- * Escape a string for use in bash
- */
-function escapeForBash(str: string): string {
-  return str.replace(/'/g, "'\\''").replace(/"/g, '\\"');
-}
-
-/**
- * Generate value completion code for bash
- */
-function generateValueCompletionCode(vc: ValueCompletion | undefined): string {
-  if (!vc) return "";
-
-  switch (vc.type) {
-    case "choices": {
-      const choices = vc.choices?.map((c) => escapeForBash(c)).join(" ") ?? "";
-      return `COMPREPLY=($(compgen -W "${choices}" -- "$cur"))`;
-    }
-    case "file":
-      if (vc.extensions && vc.extensions.length > 0) {
-        const exts = vc.extensions.map((e) => `*.${e}`).join("|");
-        return `COMPREPLY=($(compgen -f -X '!@(${exts})' -- "$cur"))`;
-      }
-      return `COMPREPLY=($(compgen -f -- "$cur"))`;
-    case "directory":
-      return `COMPREPLY=($(compgen -d -- "$cur"))`;
-    case "command":
-      if (vc.shellCommand) {
-        return `COMPREPLY=($(${vc.shellCommand} 2>/dev/null | grep -E "^$cur" || true))`;
-      }
-      return "";
-    case "none":
-      return `COMPREPLY=()`;
-    default:
-      return "";
-  }
-}
-
-/**
- * Generate option completions for bash
- */
-function generateOptionCompletions(options: CompletableOption[]): string[] {
-  const completions: string[] = [];
-
-  for (const opt of options) {
-    completions.push(`--${opt.cliName}`);
-    if (opt.alias) {
-      completions.push(`-${opt.alias}`);
-    }
-  }
-
-  return completions;
-}
-
-/**
- * Generate subcommand completions for bash
- */
-function generateSubcommandCompletions(subcommands: CompletableSubcommand[]): string[] {
-  return subcommands.map((sub) => sub.name);
-}
-
-/**
- * Generate option value completion cases for bash
- */
-function generateOptionValueCases(options: CompletableOption[]): string {
-  const cases: string[] = [];
-
-  for (const opt of options) {
-    if (!opt.takesValue || !opt.valueCompletion) continue;
-
-    const patterns: string[] = [`--${opt.cliName}`];
-    if (opt.alias) patterns.push(`-${opt.alias}`);
-
-    const completionCode = generateValueCompletionCode(opt.valueCompletion);
-    if (completionCode) {
-      cases.push(`            ${patterns.join("|")})
-                ${completionCode}
-                return
-                ;;`);
-    }
-  }
-
-  return cases.join("\n");
-}
-
-/**
- * Generate positional completion code for bash
- */
-function generatePositionalCompletionCode(positionals: CompletablePositional[]): string {
-  if (positionals.length === 0) return "";
-
-  const cases = positionals
-    .map((pos) => {
-      const completionCode = generateValueCompletionCode(pos.valueCompletion);
-      if (!completionCode) return "";
-
-      return `            ${pos.position + 1})
-                ${completionCode}
-                ;;`;
-    })
-    .filter(Boolean);
-
-  if (cases.length === 0) return "";
-
-  return `
-    # Positional argument completion
-    case $positional_count in
-${cases.join("\n")}
-    esac`;
-}
-
-/**
- * Collect all options with value completions from a command tree
- */
-function collectOptionsWithValueCompletion(command: CompletableSubcommand): CompletableOption[] {
-  const options = command.options.filter((opt) => opt.takesValue && opt.valueCompletion);
-
-  for (const sub of command.subcommands) {
-    options.push(...collectOptionsWithValueCompletion(sub));
-  }
-
-  // Deduplicate by name
-  const seen = new Set<string>();
-  return options.filter((opt) => {
-    if (seen.has(opt.name)) {
-      return false;
-    }
-    seen.add(opt.name);
-    return true;
-  });
-}
-
-/**
- * Generate the bash completion script
- */
-function generateBashScript(command: CompletableSubcommand, programName: string): string {
-  const allOptions = collectAllOptions(command);
-  const optionsWithValueCompletion = collectOptionsWithValueCompletion(command);
-
-  const optionList = generateOptionCompletions(allOptions).join(" ");
-  const subcommandList = generateSubcommandCompletions(command.subcommands).join(" ");
-
-  // Build option value completion cases
-  const optionValueCases = generateOptionValueCases(optionsWithValueCompletion);
-
-  // Build subcommand-specific completions
-  const subcommandCases = buildSubcommandCases(command.subcommands);
-
-  // Build positional completion code for root command
-  const positionalCompletion = generatePositionalCompletionCode(command.positionals);
-
-  // Generate option patterns for value-taking options
-  const valueTakingOptions = allOptions
-    .filter((o) => o.takesValue)
-    .map((o) => {
-      const patterns = [`--${o.cliName}`];
-      if (o.alias) patterns.push(`-${o.alias}`);
-      return patterns.join("|");
-    })
-    .join("|");
-
-  return `# Bash completion for ${programName}
-# Generated by politty
-
-_${programName}_completions() {
-    local cur prev words cword
-    _init_completion || return
-
-    local commands="${subcommandList}"
-    local global_opts="${optionList}"
-
-    # Check if previous word is an option that takes a value
-    case "$prev" in
-${optionValueCases}
-    esac
-
-    # Handle subcommand-specific completions
-    local cmd_index=1
-    local cmd=""
-    local positional_count=0
-
-    # Find the subcommand and count positionals
-    for ((i=1; i < cword; i++)); do
-        case "\${words[i]}" in
-            -*)
-                # Skip options and their values
-                if [[ "\${words[i]}" == *=* ]]; then
-                    continue
-                fi
-                # Check if next word is the option's value
-                local opt="\${words[i]}"
-                case "$opt" in
-                    ${valueTakingOptions || "--*"})
-                        ((i++))
-                        ;;
-                esac
-                ;;
-            *)
-                if [[ -z "$cmd" ]]; then
-                    # Check if it's a subcommand
-                    case "\${words[i]}" in
-                        ${subcommandList.split(" ").join("|") || "''"}${subcommandList ? ")" : ""}
-                            ${subcommandList ? 'cmd="${words[i]}"' : ""}
-                            ${subcommandList ? "cmd_index=$i" : ""}
-                            ;;
-                        *)
-                            # It's a positional argument
-                            ((positional_count++))
-                            ;;
-                    esac
-                else
-                    # After subcommand, count positionals
-                    ((positional_count++))
-                fi
-                ;;
-        esac
-    done
-${positionalCompletion}
-
-    # Subcommand-specific completions
-    case "$cmd" in
-${subcommandCases}
-        *)
-            # Root level completions
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=($(compgen -W "$global_opts" -- "$cur"))
-            else
-                COMPREPLY=($(compgen -W "$commands" -- "$cur"))
-            fi
-            ;;
-    esac
-
-    return 0
-}
-
-# Register the completion function
-complete -F _${programName}_completions ${programName}
-`;
-}
-
-/**
- * Build case statements for subcommand-specific completions
- */
-function buildSubcommandCases(subcommands: CompletableSubcommand[]): string {
-  if (subcommands.length === 0) {
-    return "";
-  }
-
-  let cases = "";
-
-  for (const sub of subcommands) {
-    const options = generateOptionCompletions(sub.options).join(" ");
-    const nestedSubcommands = generateSubcommandCompletions(sub.subcommands).join(" ");
-    const completions = [options, nestedSubcommands].filter(Boolean).join(" ");
-
-    cases += `        ${sub.name})\n`;
-    cases += `            COMPREPLY=($(compgen -W "${completions}" -- "$cur"))\n`;
-    cases += `            ;;\n`;
-
-    // Add nested subcommand cases if any
-    if (sub.subcommands.length > 0) {
-      const nestedCases = buildSubcommandCases(sub.subcommands);
-      if (nestedCases) {
-        cases += nestedCases;
-      }
-    }
-  }
-
-  return cases;
-}
-
-/**
- * Collect all options from a command tree
- */
-function collectAllOptions(command: CompletableSubcommand): CompletableOption[] {
-  const options = [...command.options];
-
-  for (const sub of command.subcommands) {
-    options.push(...collectAllOptions(sub));
-  }
-
-  // Deduplicate by name
-  const seen = new Set<string>();
-  return options.filter((opt) => {
-    if (seen.has(opt.name)) {
-      return false;
-    }
-    seen.add(opt.name);
-    return true;
-  });
-}
+import type { CompletionOptions, CompletionResult } from "./types.js";
 
 /**
  * Generate bash completion script for a command
+ *
+ * Generates a dynamic script that calls the CLI's __complete command at runtime.
  */
 export function generateBashCompletion(
-  command: AnyCommand,
+  _command: AnyCommand,
   options: CompletionOptions,
 ): CompletionResult {
-  const data = extractCompletionData(command, options.programName);
-
-  const script = generateBashScript(data.command, options.programName);
+  const programName = options.programName;
 
   return {
-    script,
-    shell: "bash",
-    installInstructions: `# To enable completions, add the following to your ~/.bashrc:
-
-# Option 1: Source directly
-eval "$(${options.programName} completion bash)"
-
-# Option 2: Save to a file
-${options.programName} completion bash > ~/.local/share/bash-completion/completions/${options.programName}
-
-# Then reload your shell or run:
-source ~/.bashrc`,
-  };
-}
-
-/**
- * Generate dynamic bash completion script that calls __complete command
- */
-export function generateDynamicBashScript(programName: string): string {
-  return `# Bash dynamic completion for ${programName}
+    script: `# Bash completion for ${programName}
 # Generated by politty
-# This script calls the CLI to generate completions dynamically
 
-_${programName}_dynamic_completions() {
+_${programName}_completions() {
     local cur="\${COMP_WORDS[COMP_CWORD]}"
     local args=("\${COMP_WORDS[@]:1:COMP_CWORD}")
 
@@ -374,6 +54,18 @@ _${programName}_dynamic_completions() {
 }
 
 # Register the completion function
-complete -F _${programName}_dynamic_completions ${programName}
-`;
+complete -F _${programName}_completions ${programName}
+`,
+    shell: "bash",
+    installInstructions: `# To enable completions, add the following to your ~/.bashrc:
+
+# Option 1: Source directly
+eval "$(${programName} completion bash)"
+
+# Option 2: Save to a file
+${programName} completion bash > ~/.local/share/bash-completion/completions/${programName}
+
+# Then reload your shell or run:
+source ~/.bashrc`,
+  };
 }

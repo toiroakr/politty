@@ -324,21 +324,6 @@ eval "$(mycli completion zsh)"
 mycli completion fish | source
 ```
 
-### Dynamic Completion (Recommended)
-
-Dynamic completion calls your CLI at runtime to generate completions, enabling context-aware suggestions:
-
-```bash
-# Enable dynamic completion
-eval "$(mycli completion bash --dynamic)"
-```
-
-This approach:
-
-- Supports dynamic values (e.g., list of git branches)
-- No need to regenerate scripts when commands change
-- Works with lazy-loaded subcommands
-
 ### Value Completion
 
 Define completion hints for arguments:
