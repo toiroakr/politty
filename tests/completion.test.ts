@@ -648,6 +648,21 @@ describe("Completion", () => {
         expect(ctx.completionType).toBe("option-value");
         expect(ctx.targetOption?.cliName).toBe("format");
       });
+
+      it("should treat arguments after -- as positional", () => {
+        const positionalCmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            target: arg(z.string().optional(), { positional: true }),
+          }),
+          run: () => {},
+        });
+
+        const ctx = parseCompletionContext(["--", "foo", "-"], positionalCmd);
+
+        expect(ctx.currentWord).toBe("-");
+        expect(ctx.completionType).toBe("positional");
+      });
     });
 
     describe("generateCandidates", () => {
