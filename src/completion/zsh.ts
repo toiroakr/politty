@@ -25,6 +25,7 @@ export function generateZshCompletion(
 _${programName}() {
     local -a candidates
     local output line directive=0
+    local command_completion=""
 
     # Get the current words being completed
     local -a args
@@ -37,6 +38,8 @@ _${programName}() {
     for line in "\${output[@]}"; do
         if [[ "$line" == :* ]]; then
             directive="\${line:1}"
+        elif [[ "$line" == __command:* ]]; then
+            command_completion="\${line#__command:}"
         elif [[ -n "$line" ]]; then
             local name="\${line%%$'\\t'*}"
             local desc="\${line#*$'\\t'}"
@@ -47,6 +50,16 @@ _${programName}() {
             fi
         fi
     done
+
+    # Execute shellCommand completion if requested by __complete
+    if [[ -n "$command_completion" ]]; then
+        local command_candidate
+        for command_candidate in "\${(@f)$(eval "$command_completion" 2>/dev/null)}"; do
+            if [[ -n "$command_candidate" ]]; then
+                candidates+=("$command_candidate")
+            fi
+        done
+    fi
 
     # Handle directives
     # 16 = FileCompletion, 32 = DirectoryCompletion

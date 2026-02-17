@@ -844,6 +844,72 @@ describe("Completion", () => {
         expect(result.script).toContain("mycli __complete");
         expect(result.script).toContain("__fish_mycli_complete");
       });
+
+      it("should include shellCommand completion handling in bash script", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            branch: arg(z.string().optional(), {
+              completion: {
+                custom: { shellCommand: "git branch --format='%(refname:short)'" },
+              },
+            }),
+          }),
+          run: () => {},
+        });
+
+        const result = generateCompletion(cmd, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        expect(result.script).toContain("__command:");
+        expect(result.script).toContain("command_completion");
+      });
+
+      it("should include shellCommand completion handling in zsh script", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            branch: arg(z.string().optional(), {
+              completion: {
+                custom: { shellCommand: "git branch --format='%(refname:short)'" },
+              },
+            }),
+          }),
+          run: () => {},
+        });
+
+        const result = generateCompletion(cmd, {
+          shell: "zsh",
+          programName: "mycli",
+        });
+
+        expect(result.script).toContain("__command:");
+        expect(result.script).toContain("command_completion");
+      });
+
+      it("should include shellCommand completion handling in fish script", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            branch: arg(z.string().optional(), {
+              completion: {
+                custom: { shellCommand: "git branch --format='%(refname:short)'" },
+              },
+            }),
+          }),
+          run: () => {},
+        });
+
+        const result = generateCompletion(cmd, {
+          shell: "fish",
+          programName: "mycli",
+        });
+
+        expect(result.script).toContain("__command:");
+        expect(result.script).toContain("command_completion");
+      });
     });
   });
 });
