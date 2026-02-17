@@ -15,6 +15,12 @@
       }
     },
     {
+      "files": ["src/index.ts"],
+      "rules": {
+        "no-restricted-imports": ["error", { "patterns": ["**/tests/utils/**"] }]
+      }
+    },
+    {
       "files": ["src/docs/**/*.ts"],
       "rules": {
         "no-restricted-imports": ["error", { "patterns": ["**/tests/utils/**"] }]

@@ -11,3 +11,4 @@ dist/
 .pnpm-store
 coverage/
 tests/temp-*.ts
+.tmp-bin/

@@ -98,8 +98,8 @@ function generateSubcommandCandidates(context: CompletionContext): CandidateResu
     });
   }
 
-  // Also add options if current word starts with - or is empty
-  if (context.currentWord === "" || context.currentWord.startsWith("-")) {
+  // Add options when no subcommands exist, or when typing an option prefix
+  if (candidates.length === 0 || context.currentWord.startsWith("-")) {
     const optionResult = generateOptionNameCandidates(context);
     candidates.push(...optionResult.candidates);
   }
@@ -119,43 +119,18 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
     (opt) => !context.usedOptions.has(opt.cliName) && !context.usedOptions.has(opt.alias || ""),
   );
 
-  // Determine if we should show long options, short options, or both
-  const showLong = context.currentWord === "" || context.currentWord.startsWith("--");
-  const showShort =
-    context.currentWord === "" ||
-    (context.currentWord.startsWith("-") && !context.currentWord.startsWith("--"));
-
   for (const opt of availableOptions) {
-    // Long option
-    if (showLong) {
-      candidates.push({
-        value: `--${opt.cliName}`,
-        description: opt.description,
-        type: "option",
-      });
-    }
-
-    // Short option (alias)
-    if (showShort && opt.alias) {
-      candidates.push({
-        value: `-${opt.alias}`,
-        description: opt.description,
-        type: "option",
-      });
-    }
-  }
-
-  // Always add help and version options if not already used
-  if (!context.usedOptions.has("help") && showLong) {
     candidates.push({
-      value: "--help",
-      description: "Show help information",
+      value: `--${opt.cliName}`,
+      description: opt.description,
       type: "option",
     });
   }
-  if (!context.usedOptions.has("h") && showShort) {
+
+  // Add help option if not already used
+  if (!context.usedOptions.has("help")) {
     candidates.push({
-      value: "-h",
+      value: "--help",
       description: "Show help information",
       type: "option",
     });

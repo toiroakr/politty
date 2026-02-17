@@ -687,7 +687,6 @@ describe("Completion", () => {
 
         const optionCandidates = result.candidates.filter((c) => c.type === "option");
         expect(optionCandidates.some((c) => c.value === "--verbose")).toBe(false);
-        expect(optionCandidates.some((c) => c.value === "-v")).toBe(false);
       });
     });
 

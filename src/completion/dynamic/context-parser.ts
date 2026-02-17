@@ -142,7 +142,8 @@ function getSubcommandNames(command: AnyCommand): string[] {
   if (!command.subCommands) {
     return [];
   }
-  return Object.keys(command.subCommands);
+  // Filter out internal subcommands (e.g., __complete)
+  return Object.keys(command.subCommands).filter((name) => !name.startsWith("__"));
 }
 
 /**

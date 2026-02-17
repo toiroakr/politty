@@ -5,6 +5,14 @@
  */
 
 // Core exports
+// Completion exports
+export {
+  generateCompletion,
+  withCompletionCommand,
+  type CompletionOptions,
+  type CompletionResult,
+  type WithCompletionOptions,
+} from "./completion/index.js";
 export {
   arg,
   type ArgMeta,
