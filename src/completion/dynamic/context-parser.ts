@@ -257,8 +257,8 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     }
 
     // Check if this is a subcommand (before "--")
-    const subcommand = !afterDoubleDash ? resolveSubcommand(currentCommand, word) : null;
-    if (subcommand && !afterDoubleDash) {
+    const subcommand = afterDoubleDash ? null : resolveSubcommand(currentCommand, word);
+    if (subcommand) {
       subcommandPath.push(word);
       currentCommand = subcommand;
       options = extractOptions(currentCommand);
