@@ -347,6 +347,25 @@ describe("Completion", () => {
         expect(result.installInstructions).toContain("~/.bashrc");
         expect(result.installInstructions).toContain("mycli completion bash");
       });
+
+      it("should only treat long options as inline value completion", () => {
+        const result = generateCompletion(testCommand, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        expect(result.script).toContain('if [[ "$cur" == --*=* ]]; then');
+        expect(result.script).not.toContain('|| "$cur" == -*=*');
+      });
+
+      it("should preserve directories when filtering file extensions", () => {
+        const result = generateCompletion(testCommand, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        expect(result.script).toContain('if [[ -d "$file_candidate" ]]; then');
+      });
     });
 
     describe("zsh completion", () => {

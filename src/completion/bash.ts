@@ -26,8 +26,8 @@ _${programName}_completions() {
     local completion_prefix=""
     local completion_cur="$cur"
 
-    # Handle inline option-value completion (e.g. --format=js)
-    if [[ "$cur" == --*=* || "$cur" == -*=* ]]; then
+    # Handle inline option-value completion for long options (e.g. --format=js)
+    if [[ "$cur" == --*=* ]]; then
         completion_prefix="\${cur%%=*}="
         completion_cur="\${cur#*=}"
     fi
@@ -79,6 +79,11 @@ _${programName}_completions() {
             IFS=',' read -r -a extension_list <<< "$file_extensions"
 
             for file_candidate in "\${COMPREPLY[@]}"; do
+                if [[ -d "$file_candidate" ]]; then
+                    filtered+=("$file_candidate")
+                    continue
+                fi
+
                 for ext in "\${extension_list[@]}"; do
                     if [[ "$file_candidate" == *."$ext" ]]; then
                         filtered+=("$file_candidate")
