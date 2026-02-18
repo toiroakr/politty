@@ -1,6 +1,56 @@
 import { z } from "zod";
 
 /**
+ * Built-in completion types
+ */
+export type CompletionType = "file" | "directory" | "none";
+
+/**
+ * Custom completion specification
+ */
+export interface CustomCompletion {
+  /** Static list of choices for completion */
+  choices?: string[];
+  /** Shell command to execute for dynamic completion */
+  shellCommand?: string;
+}
+
+/**
+ * Completion metadata for an argument
+ *
+ * @example
+ * ```ts
+ * // File completion with extension filter
+ * input: arg(z.string(), {
+ *   completion: { type: "file", extensions: ["json", "yaml"] }
+ * })
+ *
+ * // Directory completion
+ * outputDir: arg(z.string(), {
+ *   completion: { type: "directory" }
+ * })
+ *
+ * // Custom static choices
+ * logLevel: arg(z.string(), {
+ *   completion: { custom: { choices: ["debug", "info", "warn", "error"] } }
+ * })
+ *
+ * // Dynamic completion from shell command
+ * branch: arg(z.string(), {
+ *   completion: { custom: { shellCommand: "git branch --format='%(refname:short)'" } }
+ * })
+ * ```
+ */
+export interface CompletionMeta {
+  /** Built-in completion type */
+  type?: CompletionType;
+  /** Custom completion (takes precedence over type if both specified) */
+  custom?: CustomCompletion;
+  /** File extension filter (only applies when type is "file") */
+  extensions?: string[];
+}
+
+/**
  * Base metadata shared by all argument types
  */
 export interface BaseArgMeta {
@@ -25,6 +75,8 @@ export interface BaseArgMeta {
    * ```
    */
   env?: string | string[];
+  /** Completion configuration for shell tab-completion */
+  completion?: CompletionMeta;
 }
 
 /**

@@ -225,18 +225,22 @@ export function mergeWithPositionals(
   // Assign positional arguments to their fields
   const positionalFields = extracted.fields.filter((f) => f.positional);
 
+  // Combine positionals with rest args (after --) for assignment
+  const allPositionals =
+    parsed.rest.length > 0 ? [...parsed.positionals, ...parsed.rest] : parsed.positionals;
+
   let positionalIndex = 0;
   for (const field of positionalFields) {
-    if (positionalIndex >= parsed.positionals.length) {
+    if (positionalIndex >= allPositionals.length) {
       break;
     }
 
     if (field.type === "array") {
-      // Array positional consumes all remaining positionals
-      result[field.name] = parsed.positionals.slice(positionalIndex);
+      // Array positional consumes all remaining positionals (including rest args after --)
+      result[field.name] = allPositionals.slice(positionalIndex);
       break; // No more positionals can follow (validated by validatePositionalConfig)
     } else {
-      result[field.name] = parsed.positionals[positionalIndex]!;
+      result[field.name] = allPositionals[positionalIndex]!;
       positionalIndex++;
     }
   }

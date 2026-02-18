@@ -1,240 +1,100 @@
 /**
- * Fish completion script generator
+ * Fish completion script generator (dynamic)
  */
 
 import type { AnyCommand } from "../types.js";
-import { extractCompletionData } from "./extractor.js";
-import type {
-  CompletableOption,
-  CompletableSubcommand,
-  CompletionOptions,
-  CompletionResult,
-} from "./types.js";
+import type { CompletionOptions, CompletionResult } from "./types.js";
 
 /**
- * Escape a string for use in fish completion descriptions
+ * Generate fish completion script for a command
+ *
+ * Generates a dynamic script that calls the CLI's __complete command at runtime.
  */
-function escapeForFish(str: string): string {
-  return str.replace(/'/g, "\\'").replace(/"/g, '\\"');
-}
+export function generateFishCompletion(
+  _command: AnyCommand,
+  options: CompletionOptions,
+): CompletionResult {
+  const programName = options.programName;
 
-/**
- * Generate completion entries for options
- */
-function generateOptionCompletions(
-  options: CompletableOption[],
-  programName: string,
-  condition: string,
-  includeDescriptions: boolean,
-): string[] {
-  const completions: string[] = [];
-
-  for (const opt of options) {
-    let cmd = `complete -c ${programName}`;
-
-    // Add condition if specified
-    if (condition) {
-      cmd += ` -n '${condition}'`;
-    }
-
-    // Add long option
-    cmd += ` -l ${opt.cliName}`;
-
-    // Add short option if exists
-    if (opt.alias) {
-      cmd += ` -s ${opt.alias}`;
-    }
-
-    // Add flag for options that take values
-    if (opt.takesValue) {
-      cmd += " -r"; // Require argument
-    } else {
-      cmd += " -f"; // No argument (flag)
-    }
-
-    // Add description
-    if (includeDescriptions && opt.description) {
-      cmd += ` -d '${escapeForFish(opt.description)}'`;
-    }
-
-    completions.push(cmd);
-  }
-
-  return completions;
-}
-
-/**
- * Generate completion entries for subcommands
- */
-function generateSubcommandCompletions(
-  subcommands: CompletableSubcommand[],
-  programName: string,
-  condition: string,
-  includeDescriptions: boolean,
-): string[] {
-  const completions: string[] = [];
-
-  for (const sub of subcommands) {
-    let cmd = `complete -c ${programName}`;
-
-    // Add condition
-    if (condition) {
-      cmd += ` -n '${condition}'`;
-    }
-
-    // Subcommands are exclusive (no prefix)
-    cmd += ` -f -a ${sub.name}`;
-
-    // Add description
-    if (includeDescriptions && sub.description) {
-      cmd += ` -d '${escapeForFish(sub.description)}'`;
-    }
-
-    completions.push(cmd);
-  }
-
-  return completions;
-}
-
-/**
- * Generate helper functions for fish
- */
-function generateHelperFunctions(programName: string): string {
-  return `# Helper function to check if using subcommand
-function __fish_use_subcommand_${programName}
-    set -l cmd (commandline -opc)
-    if test (count $cmd) -eq 1
-        return 0
-    end
-    return 1
-end
-
-# Helper function to check current subcommand
-function __fish_${programName}_using_command
-    set -l cmd (commandline -opc)
-    if contains -- $argv[1] $cmd
-        return 0
-    end
-    return 1
-end
-`;
-}
-
-/**
- * Recursively generate completions for a command and its subcommands
- */
-function generateCommandCompletions(
-  command: CompletableSubcommand,
-  programName: string,
-  includeDescriptions: boolean,
-  parentCommands: string[] = [],
-): string[] {
-  const completions: string[] = [];
-
-  // Build condition for this level
-  const optionCondition =
-    parentCommands.length === 0
-      ? ""
-      : `__fish_${programName}_using_command ${parentCommands[parentCommands.length - 1]}`;
-
-  const subcommandCondition =
-    parentCommands.length === 0
-      ? `__fish_use_subcommand_${programName}`
-      : `__fish_${programName}_using_command ${parentCommands[parentCommands.length - 1]}`;
-
-  // Add option completions
-  completions.push(
-    ...generateOptionCompletions(
-      command.options,
-      programName,
-      optionCondition,
-      includeDescriptions,
-    ),
-  );
-
-  // Add subcommand completions
-  if (command.subcommands.length > 0) {
-    completions.push(
-      ...generateSubcommandCompletions(
-        command.subcommands,
-        programName,
-        subcommandCondition,
-        includeDescriptions,
-      ),
-    );
-
-    // Recursively add completions for subcommands
-    for (const sub of command.subcommands) {
-      completions.push(
-        ...generateCommandCompletions(sub, programName, includeDescriptions, [
-          ...parentCommands,
-          sub.name,
-        ]),
-      );
-    }
-  }
-
-  return completions;
-}
-
-/**
- * Generate the fish completion script
- */
-function generateFishScript(
-  command: CompletableSubcommand,
-  programName: string,
-  includeDescriptions: boolean,
-): string {
-  const helpers = generateHelperFunctions(programName);
-  const completions = generateCommandCompletions(command, programName, includeDescriptions);
-
-  // Add built-in options (help and version)
-  const builtinCompletions = [
-    `complete -c ${programName} -l help -s h -d 'Show help information'`,
-    `complete -c ${programName} -l version -d 'Show version information'`,
-  ];
-
-  return `# Fish completion for ${programName}
+  return {
+    script: `# Fish completion for ${programName}
 # Generated by politty
+# This script calls the CLI to generate completions dynamically
 
-${helpers}
+function __fish_${programName}_complete
+    # Get current command line arguments
+    set -l args (commandline -opc)
+    # Remove the program name
+    set -e args[1]
+
+    # Call the CLI to get completions
+    set -l directive 0
+    set -l command_completion
+
+    for line in (${programName} __complete -- $args 2>/dev/null)
+        if string match -q ':*' -- $line
+            # Parse directive
+            set directive (string sub -s 2 -- $line)
+        else if string match -q '__command:*' -- $line
+            # Parse shell command completion request
+            set command_completion (string sub -s 11 -- $line)
+        else if test -n "$line"
+            # Parse completion: value\\tdescription
+            set -l parts (string split \\t -- $line)
+            if test (count $parts) -ge 2
+                echo $parts[1]\\t$parts[2]
+            else
+                echo $parts[1]
+            end
+        end
+    end
+
+    # Execute shellCommand completion if requested by __complete
+    if test -n "$command_completion"
+        for command_candidate in (eval "$command_completion" 2>/dev/null)
+            if test -n "$command_candidate"
+                echo $command_candidate
+            end
+        end
+    end
+
+    # Handle directives by returning special values
+    # The main completion function will check for these
+    if test (math "$directive & 16") -ne 0
+        echo "__directive:file"
+    else if test (math "$directive & 32") -ne 0
+        echo "__directive:directory"
+    end
+end
 
 # Clear existing completions
 complete -e -c ${programName}
 
-# Built-in options
-${builtinCompletions.join("\n")}
-
-# Command-specific completions
-${completions.join("\n")}
-`;
-}
-
-/**
- * Generate fish completion script for a command
- */
-export function generateFishCompletion(
-  command: AnyCommand,
-  options: CompletionOptions,
-): CompletionResult {
-  const data = extractCompletionData(command, options.programName);
-  const includeDescriptions = options.includeDescriptions ?? true;
-
-  const script = generateFishScript(data.command, options.programName, includeDescriptions);
-
-  return {
-    script,
+# Main completion
+complete -c ${programName} -f -a '(
+    set -l completions (__fish_${programName}_complete)
+    for c in $completions
+        if string match -q "__directive:file" -- $c
+            __fish_complete_path
+        else if string match -q "__directive:directory" -- $c
+            __fish_complete_directories
+        else
+            echo $c
+        end
+    end
+)'
+`,
     shell: "fish",
     installInstructions: `# To enable completions, run one of the following:
 
 # Option 1: Source directly
-${options.programName} completion fish | source
+${programName} completion fish | source
 
 # Option 2: Save to the fish completions directory
-${options.programName} completion fish > ~/.config/fish/completions/${options.programName}.fish
+${programName} completion fish > ~/.config/fish/completions/${programName}.fish
 
 # The completion will be available immediately in new shell sessions.
 # To use in the current session, run:
-source ~/.config/fish/completions/${options.programName}.fish`,
+source ~/.config/fish/completions/${programName}.fish`,
   };
 }

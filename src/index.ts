@@ -5,7 +5,21 @@
  */
 
 // Core exports
-export { arg, type ArgMeta } from "./core/arg-registry.js";
+// Completion exports
+export {
+  generateCompletion,
+  withCompletionCommand,
+  type CompletionOptions,
+  type CompletionResult,
+  type WithCompletionOptions,
+} from "./completion/index.js";
+export {
+  arg,
+  type ArgMeta,
+  type CompletionMeta,
+  type CompletionType,
+  type CustomCompletion,
+} from "./core/arg-registry.js";
 export { defineCommand } from "./core/command.js";
 export { runCommand, runMain } from "./core/runner.js";
 export {

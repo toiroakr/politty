@@ -29,12 +29,26 @@ import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
 import type { AnyCommand, Command } from "../types.js";
 import { generateBashCompletion } from "./bash.js";
+import { createDynamicCompleteCommand } from "./dynamic/index.js";
 import { generateFishCompletion } from "./fish.js";
 import type { CompletionOptions, CompletionResult, ShellType } from "./types.js";
 import { generateZshCompletion } from "./zsh.js";
 
 // Re-export types
 // Re-export extractor
+// Re-export dynamic completion
+export {
+  CompletionDirective,
+  createDynamicCompleteCommand,
+  formatOutput,
+  generateCandidates,
+  hasCompleteCommand,
+  parseCompletionContext,
+  type CandidateResult,
+  type CompletionCandidate,
+  type CompletionContext,
+  type CompletionType,
+} from "./dynamic/index.js";
 export { extractCompletionData, extractPositionals } from "./extractor.js";
 export type {
   CompletableOption,
@@ -166,13 +180,21 @@ export function createCompletionCommand(
 }
 
 /**
+ * Options for withCompletionCommand
+ */
+export interface WithCompletionOptions {
+  /** Override the program name (defaults to command.name) */
+  programName?: string;
+}
+
+/**
  * Wrap a command with a completion subcommand
  *
  * This avoids circular references that occur when a command references itself
  * in its subCommands (e.g., for completion generation).
  *
  * @param command - The command to wrap
- * @param programName - Override the program name (defaults to command.name)
+ * @param options - Options including programName
  * @returns A new command with the completion subcommand added
  *
  * @example
@@ -185,7 +207,16 @@ export function createCompletionCommand(
  * );
  * ```
  */
-export function withCompletionCommand<T extends AnyCommand>(command: T, programName?: string): T {
+export function withCompletionCommand<T extends AnyCommand>(
+  command: T,
+  options?: string | WithCompletionOptions,
+): T {
+  // Support both string (programName) and options object for backwards compatibility
+  const opts: WithCompletionOptions =
+    typeof options === "string" ? { programName: options } : (options ?? {});
+
+  const { programName } = opts;
+
   const wrappedCommand = {
     ...command,
   } as T;
@@ -193,6 +224,7 @@ export function withCompletionCommand<T extends AnyCommand>(command: T, programN
   wrappedCommand.subCommands = {
     ...command.subCommands,
     completion: createCompletionCommand(wrappedCommand, programName),
+    __complete: createDynamicCompleteCommand(wrappedCommand, programName),
   };
 
   return wrappedCommand;
