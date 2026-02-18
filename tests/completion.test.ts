@@ -453,6 +453,32 @@ describe("Completion", () => {
 
       expect(cmdWithCompletion.subCommands?.completion).toBe(completionCmd);
     });
+
+    it("should add __complete command for legacy integration", async () => {
+      const mainCmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          format: arg(z.enum(["json", "yaml"]), { alias: "f" }),
+        }),
+        run: () => {},
+      });
+
+      const completionCmd = createCompletionCommand(mainCmd, "mycli");
+      mainCmd.subCommands = { ...mainCmd.subCommands, completion: completionCmd };
+
+      expect(mainCmd.subCommands?.__complete).toBeDefined();
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      await runCommand(mainCmd, ["__complete", "--", "--format", ""]);
+
+      const output = consoleSpy.mock.calls
+        .map((args) => args.map((value) => String(value)).join(" "))
+        .join("\n");
+      consoleSpy.mockRestore();
+
+      expect(output).toContain("json");
+      expect(output).toContain("yaml");
+    });
   });
 
   describe("withCompletionCommand", () => {
@@ -714,6 +740,24 @@ describe("Completion", () => {
         expect(result.directive & CompletionDirective.FileCompletion).toBeTruthy();
       });
 
+      it("should include extension metadata for file completion", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            config: arg(z.string().optional(), {
+              completion: { type: "file", extensions: ["json", "yaml"] },
+            }),
+          }),
+          run: () => {},
+        });
+
+        const ctx = parseCompletionContext(["--config", ""], cmd);
+        const result = generateCandidates(ctx);
+
+        expect(result.directive & CompletionDirective.FileCompletion).toBeTruthy();
+        expect(result.candidates.some((c) => c.value === "__extensions:json,yaml")).toBe(true);
+      });
+
       it("should set directory directive for directory completion", () => {
         const ctx = parseCompletionContext(["--dir", ""], testCmd);
         const result = generateCandidates(ctx);
@@ -829,6 +873,41 @@ describe("Completion", () => {
         expect(result.script).toContain("# Bash completion for mycli");
         expect(result.script).toContain("mycli __complete");
         expect(result.script).toContain("_mycli_completions");
+      });
+
+      it("should fallback to completion __complete when __complete command is unavailable", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            verbose: arg(z.boolean().default(false), { alias: "v" }),
+          }),
+          run: () => {},
+        });
+
+        const result = generateCompletion(cmd, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        expect(result.script).toContain("mycli completion __complete");
+      });
+
+      it("should handle inline option value completion in bash", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            format: arg(z.enum(["json", "yaml"]), { alias: "f" }),
+          }),
+          run: () => {},
+        });
+
+        const result = generateCompletion(cmd, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        expect(result.script).toContain('completion_prefix="${cur%%=*}="');
+        expect(result.script).toContain('completion_cur="${cur#*=}"');
       });
 
       it("should generate zsh script that calls __complete", () => {

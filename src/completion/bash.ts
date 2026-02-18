@@ -23,14 +23,26 @@ export function generateBashCompletion(
 _${programName}_completions() {
     local cur="\${COMP_WORDS[COMP_CWORD]}"
     local args=("\${COMP_WORDS[@]:1:COMP_CWORD}")
+    local completion_prefix=""
+    local completion_cur="$cur"
+
+    # Handle inline option-value completion (e.g. --format=js)
+    if [[ "$cur" == --*=* || "$cur" == -*=* ]]; then
+        completion_prefix="\${cur%%=*}="
+        completion_cur="\${cur#*=}"
+    fi
 
     # Call the CLI to get completions
     local output
-    output=$(${programName} __complete -- "\${args[@]}" 2>/dev/null)
+    if ! output=$(${programName} __complete -- "\${args[@]}" 2>/dev/null); then
+        # Backward compatibility for CLIs exposing only completion
+        output=$(${programName} completion __complete -- "\${args[@]}" 2>/dev/null)
+    fi
 
     local candidates=()
     local directive=0
     local command_completion=""
+    local file_extensions=""
 
     # Parse output: value\\tdescription lines, ending with :directive
     while IFS=$'\\t' read -r name desc; do
@@ -38,6 +50,8 @@ _${programName}_completions() {
             directive="\${name:1}"
         elif [[ "$name" == __command:* ]]; then
             command_completion="\${name#__command:}"
+        elif [[ "$name" == __extensions:* ]]; then
+            file_extensions="\${name#__extensions:}"
         elif [[ -n "$name" ]]; then
             candidates+=("$name")
         fi
@@ -55,11 +69,39 @@ _${programName}_completions() {
     # Handle directives
     # 16 = FileCompletion, 32 = DirectoryCompletion
     if (( directive & 16 )); then
-        COMPREPLY=($(compgen -f -- "$cur"))
+        COMPREPLY=($(compgen -f -- "$completion_cur"))
+
+        if [[ -n "$file_extensions" ]]; then
+            local -a filtered=()
+            local -a extension_list=()
+            local file_candidate ext
+
+            IFS=',' read -r -a extension_list <<< "$file_extensions"
+
+            for file_candidate in "\${COMPREPLY[@]}"; do
+                for ext in "\${extension_list[@]}"; do
+                    if [[ "$file_candidate" == *."$ext" ]]; then
+                        filtered+=("$file_candidate")
+                        break
+                    fi
+                done
+            done
+
+            COMPREPLY=("\${filtered[@]}")
+        fi
     elif (( directive & 32 )); then
-        COMPREPLY=($(compgen -d -- "$cur"))
+        COMPREPLY=($(compgen -d -- "$completion_cur"))
     elif [[ \${#candidates[@]} -gt 0 ]]; then
-        COMPREPLY=($(compgen -W "\${candidates[*]}" -- "$cur"))
+        COMPREPLY=($(compgen -W "\${candidates[*]}" -- "$completion_cur"))
+    fi
+
+    if [[ -n "$completion_prefix" && \${#COMPREPLY[@]} -gt 0 ]]; then
+        local -a prefixed=()
+        local candidate
+        for candidate in "\${COMPREPLY[@]}"; do
+            prefixed+=("$completion_prefix$candidate")
+        done
+        COMPREPLY=("\${prefixed[@]}")
     fi
 
     return 0
