@@ -29,11 +29,15 @@ function __fish_${programName}_complete
 
     # Call the CLI to get completions
     set -l directive 0
+    set -l command_completion
 
     for line in (${programName} __complete -- $args 2>/dev/null)
         if string match -q ':*' -- $line
             # Parse directive
             set directive (string sub -s 2 -- $line)
+        else if string match -q '__command:*' -- $line
+            # Parse shell command completion request
+            set command_completion (string sub -s 11 -- $line)
         else if test -n "$line"
             # Parse completion: value\\tdescription
             set -l parts (string split \\t -- $line)
@@ -41,6 +45,15 @@ function __fish_${programName}_complete
                 echo $parts[1]\\t$parts[2]
             else
                 echo $parts[1]
+            end
+        end
+    end
+
+    # Execute shellCommand completion if requested by __complete
+    if test -n "$command_completion"
+        for command_candidate in (eval "$command_completion" 2>/dev/null)
+            if test -n "$command_candidate"
+                echo $command_candidate
             end
         end
     end

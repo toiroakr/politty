@@ -12,7 +12,7 @@ import {
   parseCompletionContext,
   withCompletionCommand,
 } from "../src/completion/index.js";
-import { arg, defineCommand } from "../src/index.js";
+import { arg, defineCommand, runCommand } from "../src/index.js";
 
 describe("Completion", () => {
   describe("extractCompletionData", () => {
@@ -554,6 +554,30 @@ describe("Completion", () => {
       expect(wrapped.subCommands?.__complete).toBeDefined();
       expect(wrapped.subCommands?.completion).toBeDefined();
     });
+
+    it("should hide __complete from help output", async () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: {
+          build: defineCommand({ name: "build", run: () => {} }),
+        },
+      });
+
+      const wrapped = withCompletionCommand(cmd);
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await runCommand(wrapped, ["--help"]);
+
+      const output = consoleSpy.mock.calls
+        .map((args) => args.map((value) => String(value)).join(" "))
+        .join("\n");
+
+      consoleSpy.mockRestore();
+
+      expect(output).toContain("build");
+      expect(output).toContain("completion");
+      expect(output).not.toContain("__complete");
+    });
   });
 
   describe("Dynamic Completion", () => {
@@ -624,6 +648,21 @@ describe("Completion", () => {
         expect(ctx.completionType).toBe("option-value");
         expect(ctx.targetOption?.cliName).toBe("format");
       });
+
+      it("should treat arguments after -- as positional", () => {
+        const positionalCmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            target: arg(z.string().optional(), { positional: true }),
+          }),
+          run: () => {},
+        });
+
+        const ctx = parseCompletionContext(["--", "foo", "-"], positionalCmd);
+
+        expect(ctx.currentWord).toBe("-");
+        expect(ctx.completionType).toBe("positional");
+      });
     });
 
     describe("generateCandidates", () => {
@@ -632,6 +671,7 @@ describe("Completion", () => {
         args: z.object({
           verbose: arg(z.boolean().default(false), { alias: "v" }),
           format: arg(z.enum(["json", "yaml"]), { alias: "f" }),
+          tags: arg(z.array(z.string()).default([]), { alias: "t" }),
           config: arg(z.string().optional(), { completion: { type: "file" } }),
           dir: arg(z.string().optional(), { completion: { type: "directory" } }),
         }),
@@ -687,6 +727,14 @@ describe("Completion", () => {
 
         const optionCandidates = result.candidates.filter((c) => c.type === "option");
         expect(optionCandidates.some((c) => c.value === "--verbose")).toBe(false);
+      });
+
+      it("should keep array options available after they are used", () => {
+        const ctx = parseCompletionContext(["--tags", "one", "--"], testCmd);
+        const result = generateCandidates(ctx);
+
+        const optionCandidates = result.candidates.filter((c) => c.type === "option");
+        expect(optionCandidates.some((c) => c.value === "--tags")).toBe(true);
       });
     });
 
@@ -819,6 +867,72 @@ describe("Completion", () => {
         expect(result.script).toContain("# Fish completion for mycli");
         expect(result.script).toContain("mycli __complete");
         expect(result.script).toContain("__fish_mycli_complete");
+      });
+
+      it("should include shellCommand completion handling in bash script", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            branch: arg(z.string().optional(), {
+              completion: {
+                custom: { shellCommand: "git branch --format='%(refname:short)'" },
+              },
+            }),
+          }),
+          run: () => {},
+        });
+
+        const result = generateCompletion(cmd, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        expect(result.script).toContain("__command:");
+        expect(result.script).toContain("command_completion");
+      });
+
+      it("should include shellCommand completion handling in zsh script", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            branch: arg(z.string().optional(), {
+              completion: {
+                custom: { shellCommand: "git branch --format='%(refname:short)'" },
+              },
+            }),
+          }),
+          run: () => {},
+        });
+
+        const result = generateCompletion(cmd, {
+          shell: "zsh",
+          programName: "mycli",
+        });
+
+        expect(result.script).toContain("__command:");
+        expect(result.script).toContain("command_completion");
+      });
+
+      it("should include shellCommand completion handling in fish script", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            branch: arg(z.string().optional(), {
+              completion: {
+                custom: { shellCommand: "git branch --format='%(refname:short)'" },
+              },
+            }),
+          }),
+          run: () => {},
+        });
+
+        const result = generateCompletion(cmd, {
+          shell: "fish",
+          programName: "mycli",
+        });
+
+        expect(result.script).toContain("__command:");
+        expect(result.script).toContain("command_completion");
       });
     });
   });

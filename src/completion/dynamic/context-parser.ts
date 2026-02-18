@@ -225,13 +225,21 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
   // Process arguments to resolve subcommands and track state
   let i = 0;
   let options = extractOptions(currentCommand);
+  let afterDoubleDash = false;
 
   // Traverse subcommands
   while (i < argv.length - 1) {
     const word = argv[i]!;
 
-    // Skip options and their values
-    if (isOption(word)) {
+    // "--" marks the end of option parsing
+    if (!afterDoubleDash && word === "--") {
+      afterDoubleDash = true;
+      i++;
+      continue;
+    }
+
+    // Skip options and their values (before "--")
+    if (!afterDoubleDash && isOption(word)) {
       const optName = parseOptionName(word);
       const opt = findOption(options, optName);
 
@@ -248,9 +256,9 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
       continue;
     }
 
-    // Check if this is a subcommand
-    const subcommand = resolveSubcommand(currentCommand, word);
-    if (subcommand) {
+    // Check if this is a subcommand (before "--")
+    const subcommand = !afterDoubleDash ? resolveSubcommand(currentCommand, word) : null;
+    if (subcommand && !afterDoubleDash) {
       subcommandPath.push(word);
       currentCommand = subcommand;
       options = extractOptions(currentCommand);
@@ -279,7 +287,7 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
   let positionalIndex: number | undefined;
 
   // Case 1: Previous word is an option that takes a value
-  if (previousWord && isOption(previousWord) && !hasInlineValue(previousWord)) {
+  if (!afterDoubleDash && previousWord && isOption(previousWord) && !hasInlineValue(previousWord)) {
     const optName = parseOptionName(previousWord);
     const opt = findOption(options, optName);
     if (opt && opt.takesValue) {
@@ -295,7 +303,7 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     }
   }
   // Case 2: Current word is an option with inline value (--foo=)
-  else if (currentWord.startsWith("--") && hasInlineValue(currentWord)) {
+  else if (!afterDoubleDash && currentWord.startsWith("--") && hasInlineValue(currentWord)) {
     const optName = parseOptionName(currentWord);
     const opt = findOption(options, optName);
     if (opt && opt.takesValue) {
@@ -306,7 +314,7 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     }
   }
   // Case 3: Current word starts with - (completing option name)
-  else if (currentWord.startsWith("-")) {
+  else if (!afterDoubleDash && currentWord.startsWith("-")) {
     completionType = "option-name";
   }
   // Case 4: Determine based on available subcommands and positionals

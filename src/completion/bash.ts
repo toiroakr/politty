@@ -30,15 +30,27 @@ _${programName}_completions() {
 
     local candidates=()
     local directive=0
+    local command_completion=""
 
     # Parse output: value\\tdescription lines, ending with :directive
     while IFS=$'\\t' read -r name desc; do
         if [[ "$name" == :* ]]; then
             directive="\${name:1}"
+        elif [[ "$name" == __command:* ]]; then
+            command_completion="\${name#__command:}"
         elif [[ -n "$name" ]]; then
             candidates+=("$name")
         fi
     done <<< "$output"
+
+    # Execute shellCommand completion if requested by __complete
+    if [[ -n "$command_completion" ]]; then
+        while IFS= read -r command_candidate; do
+            if [[ -n "$command_candidate" ]]; then
+                candidates+=("$command_candidate")
+            fi
+        done < <(eval "$command_completion" 2>/dev/null)
+    fi
 
     # Handle directives
     # 16 = FileCompletion, 32 = DirectoryCompletion
