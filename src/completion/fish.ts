@@ -30,8 +30,6 @@ function __fish_${programName}_complete
     # Call the CLI to get completions
     set -l directive 0
     set -l command_completion
-    set -l file_extensions
-
     for line in (${programName} __complete -- $args 2>/dev/null)
         if string match -q ':*' -- $line
             # Parse directive
@@ -39,9 +37,6 @@ function __fish_${programName}_complete
         else if string match -q '__command:*' -- $line
             # Parse shell command completion request
             set command_completion (string sub -s 11 -- $line)
-        else if string match -q '__extensions:*' -- $line
-            # Parse optional file extension metadata
-            set file_extensions (string sub -s 14 -- $line)
         else if test -n "$line"
             # Parse completion: value\\tdescription
             set -l parts (string split \\t -- $line)

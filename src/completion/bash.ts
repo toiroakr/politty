@@ -34,7 +34,9 @@ _${programName}_completions() {
 
     # Call the CLI to get completions
     local output
-    if ! output=$(${programName} __complete -- "\${args[@]}" 2>/dev/null); then
+    if ${programName} __complete --help &>/dev/null; then
+        output=$(${programName} __complete -- "\${args[@]}" 2>/dev/null)
+    else
         # Backward compatibility for CLIs exposing only completion
         output=$(${programName} completion __complete -- "\${args[@]}" 2>/dev/null)
     fi
@@ -42,7 +44,6 @@ _${programName}_completions() {
     local candidates=()
     local directive=0
     local command_completion=""
-    local file_extensions=""
 
     # Parse output: value\\tdescription lines, ending with :directive
     while IFS=$'\\t' read -r name desc; do
@@ -50,8 +51,6 @@ _${programName}_completions() {
             directive="\${name:1}"
         elif [[ "$name" == __command:* ]]; then
             command_completion="\${name#__command:}"
-        elif [[ "$name" == __extensions:* ]]; then
-            file_extensions="\${name#__extensions:}"
         elif [[ -n "$name" ]]; then
             candidates+=("$name")
         fi
@@ -70,30 +69,6 @@ _${programName}_completions() {
     # 16 = FileCompletion, 32 = DirectoryCompletion
     if (( directive & 16 )); then
         COMPREPLY=($(compgen -f -- "$completion_cur"))
-
-        if [[ -n "$file_extensions" ]]; then
-            local -a filtered=()
-            local -a extension_list=()
-            local file_candidate ext
-
-            IFS=',' read -r -a extension_list <<< "$file_extensions"
-
-            for file_candidate in "\${COMPREPLY[@]}"; do
-                if [[ -d "$file_candidate" ]]; then
-                    filtered+=("$file_candidate")
-                    continue
-                fi
-
-                for ext in "\${extension_list[@]}"; do
-                    if [[ "$file_candidate" == *."$ext" ]]; then
-                        filtered+=("$file_candidate")
-                        break
-                    fi
-                done
-            done
-
-            COMPREPLY=("\${filtered[@]}")
-        fi
     elif (( directive & 32 )); then
         COMPREPLY=($(compgen -d -- "$completion_cur"))
     elif [[ \${#candidates[@]} -gt 0 ]]; then

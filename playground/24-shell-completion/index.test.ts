@@ -169,11 +169,17 @@ describe("24-shell-completion", () => {
       expect(values).toContain("--dry-run");
     });
 
-    it("returns file directive for file completion", async () => {
+    it("returns filtered file candidates for file completion with extensions", async () => {
       await runCommand(cli, ["__complete", "--", "deploy", "--config", ""]);
+      const values = getCompletionValues(console);
       const output = console.getLogs().join("\n");
 
-      expect(output).toContain(":20"); // FilterPrefix(4) | FileCompletion(16)
+      // With extensions, Node returns filtered candidates directly
+      // Only FilterPrefix, not FileCompletion
+      expect(output).toContain(":4"); // FilterPrefix(4)
+      expect(output).not.toContain(":20");
+      // Candidates include files and directories
+      expect(values.length).toBeGreaterThan(0);
     });
 
     it("returns directory directive for directory completion", async () => {
@@ -225,11 +231,15 @@ describe("24-shell-completion", () => {
       expect(values).toContain("production");
     });
 
-    it("returns file directive for deploy --config", () => {
+    it("returns filtered file candidates for deploy --config", () => {
       const ctx = parseCompletionContext(["deploy", "--config", ""], cli);
       const result = generateCandidates(ctx);
 
-      expect(result.directive & CompletionDirective.FileCompletion).toBeTruthy();
+      // With extensions, returns candidates directly (not FileCompletion)
+      expect(result.directive & CompletionDirective.FileCompletion).toBeFalsy();
+      expect(result.candidates.length).toBeGreaterThan(0);
+      // Directories are included for navigation
+      expect(result.candidates.some((c) => c.type === "directory")).toBe(true);
     });
 
     it("returns directory directive for build --output", () => {

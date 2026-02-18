@@ -26,14 +26,16 @@ _${programName}() {
     local -a candidates
     local output line directive=0
     local command_completion=""
-    local file_extensions=""
 
-    # Get the current words being completed
+    # Get the current words being completed (up to cursor position)
     local -a args
-    args=("\${words[@]:1}")
+    args=("\${words[@]:1:$((CURRENT-1))}")
 
     # Call the CLI to get completions
     output=("\${(@f)$(${programName} __complete -- "\${args[@]}" 2>/dev/null)}")
+
+    # Debug: uncomment to diagnose completion issues
+    # echo "args=\${args[@]} candidates=\${#candidates[@]} directive=$directive" >> /tmp/zsh-completion-debug.log
 
     # Parse output
     for line in "\${output[@]}"; do
@@ -41,8 +43,6 @@ _${programName}() {
             directive="\${line:1}"
         elif [[ "$line" == __command:* ]]; then
             command_completion="\${line#__command:}"
-        elif [[ "$line" == __extensions:* ]]; then
-            file_extensions="\${line#__extensions:}"
         elif [[ -n "$line" ]]; then
             local name="\${line%%$'\\t'*}"
             local desc="\${line#*$'\\t'}"
@@ -71,7 +71,7 @@ _${programName}() {
     elif (( directive & 32 )); then
         _files -/
     elif (( \${#candidates[@]} > 0 )); then
-        _describe 'completions' candidates
+        compadd -- "\${candidates[@]}"
     fi
 }
 

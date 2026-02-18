@@ -357,15 +357,6 @@ describe("Completion", () => {
         expect(result.script).toContain('if [[ "$cur" == --*=* ]]; then');
         expect(result.script).not.toContain('|| "$cur" == -*=*');
       });
-
-      it("should preserve directories when filtering file extensions", () => {
-        const result = generateCompletion(testCommand, {
-          shell: "bash",
-          programName: "mycli",
-        });
-
-        expect(result.script).toContain('if [[ -d "$file_candidate" ]]; then');
-      });
     });
 
     describe("zsh completion", () => {
@@ -759,22 +750,47 @@ describe("Completion", () => {
         expect(result.directive & CompletionDirective.FileCompletion).toBeTruthy();
       });
 
-      it("should include extension metadata for file completion", () => {
-        const cmd = defineCommand({
-          name: "mycli",
-          args: z.object({
-            config: arg(z.string().optional(), {
-              completion: { type: "file", extensions: ["json", "yaml"] },
+      it("should return filtered file candidates for file completion with extensions", async () => {
+        const fs = await import("node:fs");
+        const os = await import("node:os");
+        const path = await import("node:path");
+
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "completion-test-"));
+        fs.writeFileSync(path.join(tmpDir, "config.json"), "");
+        fs.writeFileSync(path.join(tmpDir, "settings.yaml"), "");
+        fs.writeFileSync(path.join(tmpDir, "data.csv"), "");
+        fs.writeFileSync(path.join(tmpDir, "README.md"), "");
+        fs.mkdirSync(path.join(tmpDir, "subdir"));
+
+        const originalCwd = process.cwd();
+        try {
+          process.chdir(tmpDir);
+
+          const cmd = defineCommand({
+            name: "mycli",
+            args: z.object({
+              config: arg(z.string().optional(), {
+                completion: { type: "file", extensions: ["json", "yaml"] },
+              }),
             }),
-          }),
-          run: () => {},
-        });
+            run: () => {},
+          });
 
-        const ctx = parseCompletionContext(["--config", ""], cmd);
-        const result = generateCandidates(ctx);
+          const ctx = parseCompletionContext(["--config", ""], cmd);
+          const result = generateCandidates(ctx);
 
-        expect(result.directive & CompletionDirective.FileCompletion).toBeTruthy();
-        expect(result.candidates.some((c) => c.value === "__extensions:json,yaml")).toBe(true);
+          const values = result.candidates.map((c) => c.value);
+          expect(values).toContain("config.json");
+          expect(values).toContain("settings.yaml");
+          expect(values).toContain("subdir/");
+          expect(values).not.toContain("data.csv");
+          expect(values).not.toContain("README.md");
+          // FileCompletion directive is not set (candidates are returned directly)
+          expect(result.directive & CompletionDirective.FileCompletion).toBeFalsy();
+        } finally {
+          process.chdir(originalCwd);
+          fs.rmSync(tmpDir, { recursive: true });
+        }
       });
 
       it("should set directory directive for directory completion", () => {
@@ -892,6 +908,24 @@ describe("Completion", () => {
         expect(result.script).toContain("# Bash completion for mycli");
         expect(result.script).toContain("mycli __complete");
         expect(result.script).toContain("_mycli_completions");
+      });
+
+      it("should use command existence check instead of exit code for fallback", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            verbose: arg(z.boolean().default(false), { alias: "v" }),
+          }),
+          run: () => {},
+        });
+
+        const result = generateCompletion(cmd, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        // Should use command existence check, not exit code for fallback
+        expect(result.script).not.toContain("if ! output=$(");
       });
 
       it("should fallback to completion __complete when __complete command is unavailable", () => {
