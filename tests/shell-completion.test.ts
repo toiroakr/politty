@@ -152,20 +152,37 @@ _myapp 2>/dev/null
 }
 
 /**
- * Fish: Use `complete --do-complete` for non-interactive completion query.
+ * Fish: Stub `commandline` to return controlled tokens, then call the
+ * completion function directly.  This avoids fish-version-dependent
+ * behaviour of `complete --do-complete` + `commandline -opc`.
  */
 function fishComplete(args: string[], opts?: ExecOptions): string[] {
-  const cmdLine = ["myapp", ...args].join(" ");
+  // -opc returns all tokens up to cursor, excluding an empty trailing token
+  const allTokens = ["myapp", ...args];
+  const opcTokens = allTokens.filter((_, i) => i < allTokens.length - 1 || allTokens[i] !== "");
+  const currentToken = args[args.length - 1] ?? "";
 
-  const result = execSync(
-    `fish -c 'source (myapp completion fish | psub); complete --do-complete "${cmdLine}"'`,
-    {
-      env: testEnv,
-      encoding: "utf-8",
-      timeout: 15000,
-      cwd: opts?.cwd,
-    },
-  );
+  const opcEchoLines = opcTokens.map((t) => `echo '${t}'`).join("\n    ");
+  const ctBody = currentToken ? `echo '${currentToken}'` : "true";
+
+  const script = `
+function commandline
+    if contains -- -opc $argv
+        ${opcEchoLines}
+    else if contains -- -ct $argv
+        ${ctBody}
+    end
+end
+source (myapp completion fish | psub)
+__fish_myapp_complete
+`;
+
+  const result = execSync(`fish -c '${script.replace(/'/g, "'\\''")}'`, {
+    env: testEnv,
+    encoding: "utf-8",
+    timeout: 15000,
+    cwd: opts?.cwd,
+  });
   return result
     .trim()
     .split("\n")

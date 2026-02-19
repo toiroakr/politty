@@ -30,6 +30,12 @@ function __fish_${programName}_complete
     set -e args[1]
     set -l directive 0
 
+    # When cursor is after a space (new word), add empty arg
+    # so __complete knows we are completing a new value, not the previous token
+    if test -z (commandline -ct)
+        set -a args ""
+    end
+
     for line in (${programName} __complete --shell fish -- $args 2>/dev/null)
         if string match -q ':*' -- $line
             set directive (string sub -s 2 -- $line)
