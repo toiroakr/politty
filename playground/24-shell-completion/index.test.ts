@@ -183,8 +183,9 @@ describe("24-shell-completion", () => {
       const output = console.getLogs().join("\n");
 
       // deploy --config has extensions specified, so files are resolved in JS
-      // Directive should be FilterPrefix(4) only, NOT FileCompletion(16)
-      expect(output).toContain(":4");
+      // Directive should be FilterPrefix(4) | DirectoryCompletion(32) = 36
+      // NOT FileCompletion(16) — files are resolved in JS, directories via shell
+      expect(output).toContain(":36");
       expect(output).not.toContain(":20");
     });
 
