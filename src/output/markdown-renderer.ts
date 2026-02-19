@@ -1,3 +1,4 @@
+import stringWidth from "string-width";
 import { styles } from "./logger.js";
 
 /**
@@ -340,13 +341,14 @@ function parseAlignments(sepRow: string): ("left" | "center" | "right")[] {
  * Pad a string to a given width with the specified alignment.
  */
 function alignText(text: string, width: number, alignment: "left" | "center" | "right"): string {
-  if (alignment === "right") return text.padStart(width);
+  const visualWidth = stringWidth(text);
+  const total = Math.max(0, width - visualWidth);
+  if (alignment === "right") return " ".repeat(total) + text;
   if (alignment === "center") {
-    const total = width - text.length;
     const left = Math.floor(total / 2);
     return " ".repeat(left) + text + " ".repeat(total - left);
   }
-  return text.padEnd(width);
+  return text + " ".repeat(total);
 }
 
 /**
@@ -410,25 +412,31 @@ function renderBlock(block: Block): string {
 
     case "table": {
       const colCount = block.headers.length;
-      // Calculate column widths from headers and all rows
-      const colWidths = block.headers.map((h, i) => {
-        const cellLengths = block.rows.map((row) => (row[i] ?? "").length);
-        return Math.max(h.length, ...cellLengths);
+      // Render inline formatting first, then calculate visual widths
+      const renderedHeaders = block.headers.map((h) => renderInline(h));
+      const renderedRows = block.rows.map((row) =>
+        Array.from({ length: colCount }, (_, i) => renderInline(row[i] ?? "")),
+      );
+      // Calculate column widths based on visual width (handles ANSI codes and full-width chars)
+      const colWidths = renderedHeaders.map((h, i) => {
+        const headerWidth = stringWidth(h);
+        const cellWidths = renderedRows.map((row) => stringWidth(row[i]!));
+        return Math.max(headerWidth, ...cellWidths);
       });
       const pipe = styles.dim("│");
       // Border rows
       const topBorder = styles.dim(`┌─${colWidths.map((w) => "─".repeat(w)).join("─┬─")}─┐`);
       const midBorder = styles.dim(`├─${colWidths.map((w) => "─".repeat(w)).join("─┼─")}─┤`);
       const botBorder = styles.dim(`└─${colWidths.map((w) => "─".repeat(w)).join("─┴─")}─┘`);
-      // Header row (bold)
-      const headerCells = block.headers.map((h, i) =>
+      // Header row (bold, with inline rendering already applied)
+      const headerCells = renderedHeaders.map((h, i) =>
         styles.bold(alignText(h, colWidths[i]!, block.alignments[i] ?? "left")),
       );
       const headerRow = `${pipe} ${headerCells.join(` ${pipe} `)} ${pipe}`;
-      // Body rows
-      const bodyRows = block.rows.map((row) => {
-        const cells = Array.from({ length: colCount }, (_, i) =>
-          renderInline(alignText(row[i] ?? "", colWidths[i]!, block.alignments[i] ?? "left")),
+      // Body rows (inline rendering already applied)
+      const bodyRows = renderedRows.map((row) => {
+        const cells = row.map((cell, i) =>
+          alignText(cell, colWidths[i]!, block.alignments[i] ?? "left"),
         );
         return `${pipe} ${cells.join(` ${pipe} `)} ${pipe}`;
       });

@@ -1,3 +1,4 @@
+import stringWidth from "string-width";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setColorEnabled } from "./logger.js";
 import { renderInline, renderMarkdown } from "./markdown-renderer.js";
@@ -436,6 +437,34 @@ Choose one of the above options.`;
       // All border rows should have same length
       expect(lines[0]!.length).toBe(lines[2]!.length);
       expect(lines[0]!.length).toBe(lines[5]!.length);
+    });
+
+    it("should align columns correctly with inline code in cells", () => {
+      const md = `| Action | Options |
+|--------|---------|
+| \`create\` | \`--name\`, \`--template\` |
+| \`delete\` | \`--id\`, \`--force\` |
+| \`list\` | \`--format\`, \`--limit\` |`;
+      const result = renderMarkdown(md);
+      const lines = result.split("\n");
+      // All lines should have the same visual width (borders + data rows)
+      for (let i = 1; i < lines.length; i++) {
+        expect(lines[i]!.length).toBe(lines[0]!.length);
+      }
+    });
+
+    it("should align columns correctly with full-width characters", () => {
+      const md = `| 名前 | 説明 |
+|------|------|
+| テスト | サンプル |
+| ab | cd |`;
+      const result = renderMarkdown(md);
+      const lines = result.split("\n");
+      // All lines should have the same visual width (using stringWidth for full-width chars)
+      const firstLineWidth = stringWidth(lines[0]!);
+      for (let i = 1; i < lines.length; i++) {
+        expect(stringWidth(lines[i]!)).toBe(firstLineWidth);
+      }
     });
 
     it("should render table between other blocks", () => {
