@@ -1,5 +1,22 @@
 # politty
 
+## 0.3.3
+
+### Patch Changes
+
+- eab1560: Fix table alignment in Markdown renderer when cells contain inline formatting (backticks, bold, italic) or full-width characters. Column widths are now calculated based on visual width using string-width instead of string length.
+
+## 0.3.2
+
+### Patch Changes
+
+- eb25582: Add dynamic shell completion via `__complete` command
+  - Add `__complete` command that outputs completion candidates at runtime
+  - Support dynamic completion mode with `--dynamic` flag in completion command
+  - Auto-include `__complete` in `withCompletionCommand()` by default
+  - Add context-aware completion parsing for subcommands, options, and positional arguments
+  - Support completion directives for file/directory completion
+
 ## 0.3.1
 
 ### Patch Changes
