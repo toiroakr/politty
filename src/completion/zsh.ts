@@ -8,7 +8,12 @@ import type { CompletionOptions, CompletionResult } from "./types.js";
 /**
  * Generate zsh completion script for a command
  *
- * Generates a dynamic script that calls the CLI's __complete command at runtime.
+ * Generates a minimal script that delegates all logic to the CLI's __complete command.
+ * The shell script only handles:
+ * - Getting current command line tokens
+ * - Calling __complete with --shell zsh
+ * - Passing output directly to _describe
+ * - Falling back to native file/directory completion when directed
  */
 export function generateZshCompletion(
   _command: AnyCommand,
@@ -24,47 +29,18 @@ export function generateZshCompletion(
 
 _${programName}() {
     local -a candidates
-    local output line directive=0
-    local command_completion=""
-    local file_extensions=""
+    local line directive=0
+    local -a args=("\${words[@]:1}")
+    local -a output=("\${(@f)$(${programName} __complete --shell zsh -- "\${args[@]}" 2>/dev/null)}")
 
-    # Get the current words being completed
-    local -a args
-    args=("\${words[@]:1}")
-
-    # Call the CLI to get completions
-    output=("\${(@f)$(${programName} __complete -- "\${args[@]}" 2>/dev/null)}")
-
-    # Parse output
     for line in "\${output[@]}"; do
         if [[ "$line" == :* ]]; then
             directive="\${line:1}"
-        elif [[ "$line" == __command:* ]]; then
-            command_completion="\${line#__command:}"
-        elif [[ "$line" == __extensions:* ]]; then
-            file_extensions="\${line#__extensions:}"
         elif [[ -n "$line" ]]; then
-            local name="\${line%%$'\\t'*}"
-            local desc="\${line#*$'\\t'}"
-            if [[ "$name" == "$desc" ]]; then
-                candidates+=("$name")
-            else
-                candidates+=("$name:$desc")
-            fi
+            candidates+=("$line")
         fi
     done
 
-    # Execute shellCommand completion if requested by __complete
-    if [[ -n "$command_completion" ]]; then
-        local command_candidate
-        for command_candidate in "\${(@f)$(eval "$command_completion" 2>/dev/null)}"; do
-            if [[ -n "$command_candidate" ]]; then
-                candidates+=("$command_candidate")
-            fi
-        done
-    fi
-
-    # Handle directives
     # 16 = FileCompletion, 32 = DirectoryCompletion
     if (( directive & 16 )); then
         _files

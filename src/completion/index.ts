@@ -34,13 +34,11 @@ import { generateFishCompletion } from "./fish.js";
 import type { CompletionOptions, CompletionResult, ShellType } from "./types.js";
 import { generateZshCompletion } from "./zsh.js";
 
-// Re-export types
-// Re-export extractor
 // Re-export dynamic completion
 export {
   CompletionDirective,
   createDynamicCompleteCommand,
-  formatOutput,
+  formatForShell,
   generateCandidates,
   hasCompleteCommand,
   parseCompletionContext,
@@ -48,8 +46,11 @@ export {
   type CompletionCandidate,
   type CompletionContext,
   type CompletionType,
+  type ShellFormatOptions,
 } from "./dynamic/index.js";
+// Re-export extractor
 export { extractCompletionData, extractPositionals } from "./extractor.js";
+// Re-export types
 export type {
   CompletableOption,
   CompletableSubcommand,
@@ -59,6 +60,8 @@ export type {
   CompletionResult,
   ShellType,
 } from "./types.js";
+// Re-export value completion resolver
+export { resolveValueCompletion, type ValueCompletionField } from "./value-completion-resolver.js";
 
 /**
  * Generate completion script for the specified shell
