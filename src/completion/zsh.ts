@@ -26,6 +26,7 @@ _${programName}() {
     local -a candidates
     local output line directive=0
     local command_completion=""
+    local file_extensions=""
 
     # Get the current words being completed
     local -a args
@@ -40,6 +41,8 @@ _${programName}() {
             directive="\${line:1}"
         elif [[ "$line" == __command:* ]]; then
             command_completion="\${line#__command:}"
+        elif [[ "$line" == __extensions:* ]]; then
+            file_extensions="\${line#__extensions:}"
         elif [[ -n "$line" ]]; then
             local name="\${line%%$'\\t'*}"
             local desc="\${line#*$'\\t'}"

@@ -73,6 +73,28 @@ export function generateCandidates(context: CompletionContext): CandidateResult 
   }
 }
 
+function addFileExtensionMetadata(
+  candidates: CompletionCandidate[],
+  extensions: string[] | undefined,
+): void {
+  if (!extensions || extensions.length === 0) {
+    return;
+  }
+
+  const normalized = Array.from(
+    new Set(extensions.map((ext) => ext.trim().replace(/^\./, "")).filter((ext) => ext.length > 0)),
+  );
+
+  if (normalized.length === 0) {
+    return;
+  }
+
+  candidates.push({
+    value: `__extensions:${normalized.join(",")}`,
+    type: "value",
+  });
+}
+
 /**
  * Generate subcommand candidates
  */
@@ -175,6 +197,7 @@ function generateOptionValueCandidates(context: CompletionContext): CandidateRes
 
     case "file":
       directive |= CompletionDirective.FileCompletion;
+      addFileExtensionMetadata(candidates, vc.extensions);
       break;
 
     case "directory":
@@ -239,6 +262,7 @@ function generatePositionalCandidates(context: CompletionContext): CandidateResu
 
     case "file":
       directive |= CompletionDirective.FileCompletion;
+      addFileExtensionMetadata(candidates, vc.extensions);
       break;
 
     case "directory":

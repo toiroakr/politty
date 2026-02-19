@@ -150,6 +150,14 @@ export function createCompletionCommand(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Command<typeof completionArgsSchema, CompletionArgs, any> {
   const resolvedProgramName = programName ?? rootCommand.name;
+
+  if (!rootCommand.subCommands?.__complete) {
+    rootCommand.subCommands = {
+      ...rootCommand.subCommands,
+      __complete: createDynamicCompleteCommand(rootCommand, resolvedProgramName),
+    };
+  }
+
   return defineCommand({
     name: "completion",
     description: "Generate shell completion script",
