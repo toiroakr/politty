@@ -10,6 +10,6 @@ export default defineConfig({
   minify: false,
   target: "node18",
   outDir: "dist",
-  external: ["zod"],
+  external: ["zod", "string-width"],
   fixedExtension: false,
 });
