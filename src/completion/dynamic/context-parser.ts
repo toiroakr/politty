@@ -4,7 +4,8 @@
 
 import { extractFields } from "../../core/schema-extractor.js";
 import type { AnyCommand } from "../../types.js";
-import type { CompletableOption, CompletablePositional, ValueCompletion } from "../types.js";
+import type { CompletableOption, CompletablePositional } from "../types.js";
+import { resolveValueCompletion } from "../value-completion-resolver.js";
 
 /**
  * Completion type indicates what kind of completion is expected
@@ -43,52 +44,6 @@ export interface CompletionContext {
   usedOptions: Set<string>;
   /** Number of positional arguments already provided */
   providedPositionalCount: number;
-}
-
-/**
- * Resolve value completion from field metadata
- */
-function resolveValueCompletion(field: {
-  completion?:
-    | {
-        type?: string;
-        custom?: { choices?: string[]; shellCommand?: string };
-        extensions?: string[];
-      }
-    | undefined;
-  enumValues?: string[] | undefined;
-}): ValueCompletion | undefined {
-  const meta = field.completion;
-
-  // Priority 1: Explicit custom completion
-  if (meta?.custom) {
-    if (meta.custom.choices && meta.custom.choices.length > 0) {
-      return { type: "choices", choices: meta.custom.choices };
-    }
-    if (meta.custom.shellCommand) {
-      return { type: "command", shellCommand: meta.custom.shellCommand };
-    }
-  }
-
-  // Priority 2: Explicit completion type
-  if (meta?.type) {
-    if (meta.type === "file") {
-      return meta.extensions ? { type: "file", extensions: meta.extensions } : { type: "file" };
-    }
-    if (meta.type === "directory") {
-      return { type: "directory" };
-    }
-    if (meta.type === "none") {
-      return { type: "none" };
-    }
-  }
-
-  // Priority 3: Auto-detect from enum schema
-  if (field.enumValues && field.enumValues.length > 0) {
-    return { type: "choices", choices: field.enumValues };
-  }
-
-  return undefined;
 }
 
 /**
