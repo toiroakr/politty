@@ -64,6 +64,8 @@ beforeAll(() => {
   fs.writeFileSync(path.join(testFilesDir, "configs", "prod.json"), "{}");
   fs.writeFileSync(path.join(testFilesDir, "configs", "dev.yaml"), "");
   fs.writeFileSync(path.join(testFilesDir, "configs", "notes.txt"), "");
+  // Empty directory
+  fs.mkdirSync(path.join(testFilesDir, "empty"));
 });
 
 afterAll(() => {
@@ -279,6 +281,43 @@ describe.each(shells)("%s completion", (_shell, available, complete) => {
     // Non-matching extensions should be excluded
     expect(values).not.toContain("configs/notes.txt");
   });
+
+  it.skipIf(!available)("filters file extension matches by filename prefix", () => {
+    const values = complete(["deploy", "--config", "app"], { cwd: testFilesDir });
+    expect(values).toContain("app.json");
+    expect(values).toContain("app.yaml");
+    // Non-matching prefix
+    expect(values).not.toContain("deploy.yml");
+  });
+
+  it.skipIf(!available)("returns empty for non-existent directory path", () => {
+    const values = complete(["deploy", "--config", "nonexistent/"], { cwd: testFilesDir });
+    // No file candidates from a non-existent directory
+    expect(values.filter((v) => v.startsWith("nonexistent/"))).toHaveLength(0);
+  });
+
+  it.skipIf(!available)("returns no file matches inside empty directory", () => {
+    const values = complete(["deploy", "--config", "empty/"], { cwd: testFilesDir });
+    // No files inside the empty directory
+    expect(values.filter((v) => v.startsWith("empty/"))).toHaveLength(0);
+  });
+
+  it.skipIf(!available)("completes options after boolean flag (no value consumed)", () => {
+    const values = complete(["deploy", "--dry-run", "--"]);
+    // --dry-run is boolean and should NOT consume the next word as its value
+    expect(values).toContain("--env");
+    expect(values).toContain("--config");
+    // --dry-run itself should be filtered out (already used)
+    expect(values).not.toContain("--dry-run");
+  });
+
+  it.skipIf(!available)("completes files inside subdirectory via trailing slash", () => {
+    const values = complete(["deploy", "--config", "configs/"], { cwd: testFilesDir });
+    expect(values).toContain("configs/prod.json");
+    expect(values).toContain("configs/dev.yaml");
+    // Non-matching extensions excluded
+    expect(values).not.toContain("configs/notes.txt");
+  });
 });
 
 // ─── Bash-specific tests ──────────────────────────────────────────────────────
@@ -327,6 +366,13 @@ describe.skipIf(!hasBash)("bash-specific completion", () => {
     expect(values).toContain("configs/prod.json");
     expect(values).toContain("configs/dev.yaml");
     expect(values).not.toContain("configs/notes.txt");
+  });
+
+  it("filters directory completion by prefix", () => {
+    const values = bashComplete(["build", "--output", "con"], { cwd: testFilesDir });
+    expect(values).toContain("configs");
+    expect(values).not.toContain("scripts");
+    expect(values).not.toContain("empty");
   });
 });
 
