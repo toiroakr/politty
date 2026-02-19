@@ -266,8 +266,6 @@ describe.each(shells)("%s completion", (_shell, available, complete) => {
       // Non-matching extensions should be excluded
       expect(values).not.toContain("readme.md");
       expect(values).not.toContain("index.ts");
-      // Directories should be included for navigation
-      expect(values.some((v) => v.startsWith("configs"))).toBe(true);
     },
   );
 
@@ -317,6 +315,19 @@ describe.skipIf(!hasBash)("bash-specific completion", () => {
     expect(values).not.toContain("app.json");
     expect(values).not.toContain("readme.md");
   });
+
+  it("includes directories for file extension completion navigation", () => {
+    const values = bashComplete(["deploy", "--config", ""], { cwd: testFilesDir });
+    expect(values).toContain("configs");
+    expect(values).toContain("scripts");
+  });
+
+  it("completes files inside subdirectory after directory selection", () => {
+    const values = bashComplete(["deploy", "--config", "configs/"], { cwd: testFilesDir });
+    expect(values).toContain("configs/prod.json");
+    expect(values).toContain("configs/dev.yaml");
+    expect(values).not.toContain("configs/notes.txt");
+  });
 });
 
 // ─── Zsh-specific tests ──────────────────────────────────────────────────────
@@ -326,5 +337,28 @@ describe.skipIf(!hasZsh)("zsh-specific completion", () => {
     const values = zshComplete(["build", "--output", ""]);
     // Our _files stub returns __directive:directory__ for -/ flag
     expect(values).toContain("__directive:directory__");
+  });
+
+  it("delegates to _files -/ for file extension directory navigation", () => {
+    const values = zshComplete(["deploy", "--config", ""], { cwd: testFilesDir });
+    expect(values).toContain("__directive:directory__");
+  });
+
+  it("completes files inside subdirectory", () => {
+    const values = zshComplete(["deploy", "--config", "configs/"], { cwd: testFilesDir });
+    expect(values).toContain("configs/prod.json");
+    expect(values).toContain("configs/dev.yaml");
+    expect(values).not.toContain("configs/notes.txt");
+  });
+});
+
+// ─── Fish-specific tests ─────────────────────────────────────────────────────
+
+describe.skipIf(!hasFish)("fish-specific completion", () => {
+  it("completes files inside subdirectory", () => {
+    const values = fishComplete(["deploy", "--config", "configs/"], { cwd: testFilesDir });
+    expect(values).toContain("configs/prod.json");
+    expect(values).toContain("configs/dev.yaml");
+    expect(values).not.toContain("configs/notes.txt");
   });
 });

@@ -44,13 +44,22 @@ _${programName}_completions() {
 
     local cur="\${COMP_WORDS[COMP_CWORD]}"
 
-    # 16 = FileCompletion, 32 = DirectoryCompletion
+    # 16 = FileCompletion: delegate entirely to native file completion
     if (( directive & 16 )); then
         COMPREPLY=($(compgen -f -- "$cur"))
-    elif (( directive & 32 )); then
-        COMPREPLY=($(compgen -d -- "$cur"))
-    elif (( \${#lines[@]} > 0 )); then
+        compopt -o filenames
+        return 0
+    fi
+
+    # Start with JS candidates
+    if (( \${#lines[@]} > 0 )); then
         COMPREPLY=("\${lines[@]}")
+    fi
+
+    # 32 = DirectoryCompletion: merge native directory matches
+    if (( directive & 32 )); then
+        COMPREPLY+=($(compgen -d -- "$cur"))
+        compopt -o filenames
     fi
 
     return 0

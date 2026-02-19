@@ -105,8 +105,23 @@ function resolveFileExtensions(extensions: string[], currentWord: string): Compl
   }
 
   try {
-    const dir = currentWord && currentWord !== basename(currentWord) ? dirname(currentWord) : ".";
-    const prefix = basename(currentWord);
+    let dir: string;
+    let prefix: string;
+
+    if (currentWord.endsWith("/")) {
+      // "configs/" → list contents of the directory
+      dir = currentWord.slice(0, -1) || ".";
+      prefix = "";
+    } else if (currentWord && currentWord !== basename(currentWord)) {
+      // "configs/p" → list contents matching prefix
+      dir = dirname(currentWord);
+      prefix = basename(currentWord);
+    } else {
+      // "" or "app" → list current directory
+      dir = ".";
+      prefix = currentWord;
+    }
+
     const entries = readdirSync(dir, { withFileTypes: true });
 
     return entries
@@ -155,8 +170,10 @@ function resolveValueCandidates(
 
     case "file":
       if (vc.extensions && vc.extensions.length > 0) {
-        // Extensions specified: resolve in JS
-        candidates.push(...resolveFileExtensions(vc.extensions, currentWord));
+        // Extensions specified: resolve files in JS, directories via shell
+        const fileCandidates = resolveFileExtensions(vc.extensions, currentWord);
+        candidates.push(...fileCandidates.filter((c) => c.type !== "directory"));
+        directive |= CompletionDirective.DirectoryCompletion;
       } else {
         // No extensions: let shell handle native file completion
         directive |= CompletionDirective.FileCompletion;

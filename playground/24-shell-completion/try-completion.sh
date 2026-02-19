@@ -55,6 +55,9 @@ elif [ -n "$BASH_VERSION" ]; then
     echo "bash completion をセットアップ中..."
     eval "$(myapp completion bash)"
     echo "セットアップ完了!"
+else
+    echo "Error: bash or zsh が必要です (fish は try-completion.fish を使ってください)"
+    return 1 2>/dev/null || exit 1
 fi
 
 # Cleanup function

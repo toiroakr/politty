@@ -45,9 +45,10 @@ function __fish_${programName}_complete
     end
 
     # 16 = FileCompletion, 32 = DirectoryCompletion
-    if test (math "$directive & 16") -ne 0
+    if test (math "bitand($directive, 16)") -ne 0
         __fish_complete_path
-    else if test (math "$directive & 32") -ne 0
+    end
+    if test (math "bitand($directive, 32)") -ne 0
         __fish_complete_directories
     end
 end

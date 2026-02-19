@@ -41,13 +41,19 @@ _${programName}() {
         fi
     done
 
-    # 16 = FileCompletion, 32 = DirectoryCompletion
+    # 16 = FileCompletion: delegate entirely to native file completion
     if (( directive & 16 )); then
         _files
-    elif (( directive & 32 )); then
-        _files -/
-    elif (( \${#candidates[@]} > 0 )); then
+        return
+    fi
+
+    if (( \${#candidates[@]} > 0 )); then
         _describe 'completions' candidates
+    fi
+
+    # 32 = DirectoryCompletion: add native directory matches
+    if (( directive & 32 )); then
+        _files -/
     fi
 }
 
