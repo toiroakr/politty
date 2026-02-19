@@ -1067,5 +1067,160 @@ describe("Completion", () => {
         expect(result.script).toContain("command_completion");
       });
     });
+
+    /**
+     * Helper: run a zsh script that simulates the generated completion function's
+     * behavior (args construction, __complete call, output parsing) and return
+     * the parsed candidates and directive.
+     */
+    async function runZshCompletionSimulation(
+      wordsArray: string[],
+      current: number,
+    ): Promise<{ candidates: string[]; directive: string; raw: string }> {
+      const { execSync } = await import("node:child_process");
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      const os = await import("node:os");
+
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "zsh-comp-"));
+      const projectDir = process.cwd();
+      const npxPath = execSync("which npx", { encoding: "utf-8" }).trim();
+      const cliPath = path.join(tmpDir, "testcli");
+
+      try {
+        // Create test files in tmpDir
+        fs.writeFileSync(path.join(tmpDir, "config.json"), "");
+        fs.writeFileSync(path.join(tmpDir, "settings.yaml"), "");
+        fs.writeFileSync(path.join(tmpDir, "data.csv"), "");
+        fs.writeFileSync(path.join(tmpDir, "README.md"), "");
+        fs.mkdirSync(path.join(tmpDir, "subdir"));
+
+        // Create CLI wrapper using absolute npx path
+        fs.writeFileSync(
+          cliPath,
+          [
+            `#!/bin/bash`,
+            `exec "${npxPath}" tsx "${projectDir}/playground/24-shell-completion/index.ts" "$@"`,
+          ].join("\n"),
+          { mode: 0o755 },
+        );
+
+        // Build zsh words array literal
+        const wordsLiteral = wordsArray.map((w) => (w === "" ? "''" : w)).join(" ");
+
+        const scriptPath = path.join(tmpDir, "test.zsh");
+        fs.writeFileSync(
+          scriptPath,
+          [
+            `#!/usr/bin/env zsh`,
+            `cd "${tmpDir}"`,
+            ``,
+            `words=(${wordsLiteral})`,
+            `CURRENT=${current}`,
+            ``,
+            `# Replicate the generated completion function's args construction`,
+            `local -a args`,
+            `args=("\${words[@]:1:$((CURRENT-1))}")`,
+            ``,
+            `# Call __complete (same as generated script)`,
+            `local -a output`,
+            `output=("\${(@f)$("${cliPath}" __complete -- "\${args[@]}" 2>/dev/null)}")`,
+            ``,
+            `# Parse output (same as generated script)`,
+            `local -a candidates`,
+            `local line directive=0`,
+            `for line in "\${output[@]}"; do`,
+            `    if [[ "$line" == :* ]]; then`,
+            `        directive="\${line:1}"`,
+            `    elif [[ -n "$line" ]]; then`,
+            `        local name="\${line%%$'\\t'*}"`,
+            `        candidates+=("$name")`,
+            `    fi`,
+            `done`,
+            ``,
+            `echo "DIRECTIVE:$directive"`,
+            `echo "COUNT:\${#candidates[@]}"`,
+            `for c in "\${candidates[@]}"; do`,
+            `    echo "CANDIDATE:$c"`,
+            `done`,
+          ].join("\n"),
+          { mode: 0o755 },
+        );
+
+        const result = execSync(`zsh -f "${scriptPath}"`, {
+          encoding: "utf-8",
+          timeout: 30000,
+          cwd: tmpDir,
+          env: { ...process.env },
+        });
+
+        const lines = result.trim().split("\n");
+        const directive =
+          lines.find((l) => l.startsWith("DIRECTIVE:"))?.replace("DIRECTIVE:", "") ?? "";
+        const candidates = lines
+          .filter((l) => l.startsWith("CANDIDATE:"))
+          .map((l) => l.replace("CANDIDATE:", ""));
+
+        return { candidates, directive, raw: result };
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+    }
+
+    it("zsh: file completion with empty current word (--config)", async () => {
+      // Simulates: testcli deploy --config [Tab]
+      const { candidates } = await runZshCompletionSimulation(
+        ["testcli", "deploy", "--config", ""],
+        4,
+      );
+
+      expect(candidates).toContain("config.json");
+      expect(candidates).toContain("settings.yaml");
+      expect(candidates).not.toContain("data.csv");
+      expect(candidates).not.toContain("README.md");
+      // Directories should be included for navigation
+      expect(candidates.some((c) => c.endsWith("/"))).toBe(true);
+    });
+
+    it("zsh: file completion with short option alias (-c)", async () => {
+      // Simulates: testcli deploy -c [Tab]
+      const { candidates } = await runZshCompletionSimulation(["testcli", "deploy", "-c", ""], 4);
+
+      expect(candidates).toContain("config.json");
+      expect(candidates).toContain("settings.yaml");
+      expect(candidates).not.toContain("data.csv");
+      expect(candidates).not.toContain("README.md");
+    });
+
+    it("zsh: subcommand completion with empty current word", async () => {
+      // Simulates: testcli [Tab]
+      const { candidates } = await runZshCompletionSimulation(["testcli", ""], 2);
+
+      expect(candidates).toContain("build");
+      expect(candidates).toContain("deploy");
+      expect(candidates).toContain("test");
+      expect(candidates).not.toContain("__complete");
+    });
+
+    it("zsh: option completion with empty current word", async () => {
+      // Simulates: testcli deploy [Tab]  (no -- prefix, but deploy has no subcommands)
+      const { candidates } = await runZshCompletionSimulation(["testcli", "deploy", ""], 3);
+
+      expect(candidates).toContain("--env");
+      expect(candidates).toContain("--config");
+      expect(candidates).toContain("--dry-run");
+    });
+
+    it("zsh: enum value completion with empty current word", async () => {
+      // Simulates: testcli build --format [Tab]
+      const { candidates } = await runZshCompletionSimulation(
+        ["testcli", "build", "--format", ""],
+        4,
+      );
+
+      expect(candidates).toContain("json");
+      expect(candidates).toContain("yaml");
+      expect(candidates).toContain("xml");
+    });
   });
 });

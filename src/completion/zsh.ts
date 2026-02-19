@@ -71,7 +71,7 @@ _${programName}() {
     elif (( directive & 32 )); then
         _files -/
     elif (( \${#candidates[@]} > 0 )); then
-        compadd -- "\${candidates[@]}"
+        _describe 'completions' candidates
     fi
 }
 
