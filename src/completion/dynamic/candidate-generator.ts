@@ -2,6 +2,8 @@
  * Generate completion candidates based on context
  */
 
+import { readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { CompletionContext } from "./context-parser.js";
 
 /**
@@ -73,26 +75,42 @@ export function generateCandidates(context: CompletionContext): CandidateResult 
   }
 }
 
-function addFileExtensionMetadata(
-  candidates: CompletionCandidate[],
-  extensions: string[] | undefined,
-): void {
-  if (!extensions || extensions.length === 0) {
-    return;
-  }
-
-  const normalized = Array.from(
-    new Set(extensions.map((ext) => ext.trim().replace(/^\./, "")).filter((ext) => ext.length > 0)),
+function listFilteredFiles(currentWord: string, extensions: string[]): CompletionCandidate[] {
+  const normalizedExts = new Set(
+    extensions.map((ext) => ext.trim().replace(/^\./, "")).filter((ext) => ext.length > 0),
   );
 
-  if (normalized.length === 0) {
-    return;
+  if (normalizedExts.size === 0) {
+    return [];
   }
 
-  candidates.push({
-    value: `__extensions:${normalized.join(",")}`,
-    type: "value",
-  });
+  let dir = ".";
+  if (currentWord.includes("/")) {
+    dir = dirname(currentWord) || ".";
+  }
+
+  try {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    const candidates: CompletionCandidate[] = [];
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const path = dir === "." ? `${entry.name}/` : `${join(dir, entry.name)}/`;
+        candidates.push({ value: path, type: "directory" });
+      } else {
+        const dotIndex = entry.name.lastIndexOf(".");
+        const ext = dotIndex >= 0 ? entry.name.slice(dotIndex + 1) : "";
+        if (normalizedExts.has(ext)) {
+          const path = dir === "." ? entry.name : join(dir, entry.name);
+          candidates.push({ value: path, type: "file" });
+        }
+      }
+    }
+
+    return candidates;
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -196,8 +214,11 @@ function generateOptionValueCandidates(context: CompletionContext): CandidateRes
       break;
 
     case "file":
-      directive |= CompletionDirective.FileCompletion;
-      addFileExtensionMetadata(candidates, vc.extensions);
+      if (vc.extensions && vc.extensions.length > 0) {
+        candidates.push(...listFilteredFiles(context.currentWord, vc.extensions));
+      } else {
+        directive |= CompletionDirective.FileCompletion;
+      }
       break;
 
     case "directory":
@@ -261,8 +282,11 @@ function generatePositionalCandidates(context: CompletionContext): CandidateResu
       break;
 
     case "file":
-      directive |= CompletionDirective.FileCompletion;
-      addFileExtensionMetadata(candidates, vc.extensions);
+      if (vc.extensions && vc.extensions.length > 0) {
+        candidates.push(...listFilteredFiles(context.currentWord, vc.extensions));
+      } else {
+        directive |= CompletionDirective.FileCompletion;
+      }
       break;
 
     case "directory":
