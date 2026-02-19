@@ -36,16 +36,34 @@ const hasFish = shellExists("fish");
 
 let tmpDir: string;
 let testEnv: NodeJS.ProcessEnv;
+let testFilesDir: string;
 
 beforeAll(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "politty-completion-"));
+
+  // CLI wrapper script — resolve tsx from project's node_modules (devDependency)
+  const projectRoot = path.resolve(import.meta.dirname, "..");
+  const tsxBin = path.join(projectRoot, "node_modules", ".bin", "tsx");
   const wrapperPath = path.join(tmpDir, "myapp");
-  fs.writeFileSync(
-    wrapperPath,
-    `#!/bin/sh\nexec ${process.execPath} --import tsx ${playgroundPath} "$@"\n`,
-    { mode: 0o755 },
-  );
+  fs.writeFileSync(wrapperPath, `#!/bin/sh\nexec ${tsxBin} ${playgroundPath} "$@"\n`, {
+    mode: 0o755,
+  });
   testEnv = { ...process.env, PATH: `${tmpDir}:${process.env.PATH}` };
+
+  // Test filesystem for file/directory completion
+  testFilesDir = path.join(tmpDir, "testfiles");
+  fs.mkdirSync(testFilesDir);
+  fs.mkdirSync(path.join(testFilesDir, "configs"));
+  fs.mkdirSync(path.join(testFilesDir, "scripts"));
+  fs.writeFileSync(path.join(testFilesDir, "app.json"), "{}");
+  fs.writeFileSync(path.join(testFilesDir, "app.yaml"), "");
+  fs.writeFileSync(path.join(testFilesDir, "deploy.yml"), "");
+  fs.writeFileSync(path.join(testFilesDir, "readme.md"), "");
+  fs.writeFileSync(path.join(testFilesDir, "index.ts"), "");
+  // Files inside subdirectory
+  fs.writeFileSync(path.join(testFilesDir, "configs", "prod.json"), "{}");
+  fs.writeFileSync(path.join(testFilesDir, "configs", "dev.yaml"), "");
+  fs.writeFileSync(path.join(testFilesDir, "configs", "notes.txt"), "");
 });
 
 afterAll(() => {
@@ -54,13 +72,15 @@ afterAll(() => {
   }
 });
 
+interface ExecOptions {
+  cwd?: string;
+}
+
 /**
  * Bash: Set COMP_WORDS/COMP_CWORD and call the completion function directly.
  * This is the same approach used by cobra-completion-testing and bash-completion.
  */
-function bashComplete(args: string[]): string[] {
-  // COMP_WORDS: ["myapp", ...args]
-  // COMP_CWORD: index of the word being completed (last element)
+function bashComplete(args: string[], opts?: ExecOptions): string[] {
   const compWords = ["myapp", ...args];
   const compCword = compWords.length - 1;
   const compLine = compWords.join(" ");
@@ -79,6 +99,7 @@ printf '%s\\n' "\${COMPREPLY[@]}"
     env: testEnv,
     encoding: "utf-8",
     timeout: 15000,
+    cwd: opts?.cwd,
   });
   return result
     .trim()
@@ -89,8 +110,11 @@ printf '%s\\n' "\${COMPREPLY[@]}"
 /**
  * Zsh: Stub compdef/_describe/_files, set words array, call the function.
  * No zpty needed — the completion function uses `words` which we can set directly.
+ *
+ * _describe stub: extracts value (before colon) from each candidate.
+ * _files stub: outputs __directive:file__ or __directive:directory__ to verify directive path.
  */
-function zshComplete(args: string[]): string[] {
+function zshComplete(args: string[], opts?: ExecOptions): string[] {
   const wordsArray = ["myapp", ...args];
 
   const script = `
@@ -119,6 +143,7 @@ _myapp 2>/dev/null
     env: testEnv,
     encoding: "utf-8",
     timeout: 15000,
+    cwd: opts?.cwd,
   });
   return result
     .trim()
@@ -129,7 +154,7 @@ _myapp 2>/dev/null
 /**
  * Fish: Use `complete --do-complete` for non-interactive completion query.
  */
-function fishComplete(args: string[]): string[] {
+function fishComplete(args: string[], opts?: ExecOptions): string[] {
   const cmdLine = ["myapp", ...args].join(" ");
 
   const result = execSync(
@@ -138,6 +163,7 @@ function fishComplete(args: string[]): string[] {
       env: testEnv,
       encoding: "utf-8",
       timeout: 15000,
+      cwd: opts?.cwd,
     },
   );
   return result
@@ -147,7 +173,7 @@ function fishComplete(args: string[]): string[] {
     .map((l) => l.split("\t")[0]!);
 }
 
-type ShellCompleter = (args: string[]) => string[];
+type ShellCompleter = (args: string[], opts?: ExecOptions) => string[];
 
 const shells: [string, boolean, ShellCompleter][] = [
   ["bash", hasBash, bashComplete],
@@ -155,12 +181,20 @@ const shells: [string, boolean, ShellCompleter][] = [
   ["fish", hasFish, fishComplete],
 ];
 
+// ─── Common tests across all shells ───────────────────────────────────────────
+
 describe.each(shells)("%s completion", (_shell, available, complete) => {
   it.skipIf(!available)("completes subcommands at root level", () => {
     const values = complete([""]);
     expect(values).toContain("build");
     expect(values).toContain("deploy");
     expect(values).toContain("test");
+    expect(values).toContain("completion");
+  });
+
+  it.skipIf(!available)("does not show __complete in subcommand list", () => {
+    const values = complete([""]);
+    expect(values).not.toContain("__complete");
   });
 
   it.skipIf(!available)("completes options for subcommand", () => {
@@ -196,5 +230,84 @@ describe.each(shells)("%s completion", (_shell, available, complete) => {
     expect(values).not.toContain("--env");
     expect(values).toContain("--config");
     expect(values).toContain("--dry-run");
+  });
+
+  it.skipIf(!available)("completes completion subcommand shells", () => {
+    const values = complete(["completion", ""]);
+    expect(values).toContain("bash");
+    expect(values).toContain("zsh");
+    expect(values).toContain("fish");
+  });
+
+  it.skipIf(!available)(
+    "returns file extension matches for deploy --config (resolved in JS)",
+    () => {
+      const values = complete(["deploy", "--config", ""], { cwd: testFilesDir });
+      expect(values).toContain("app.json");
+      expect(values).toContain("app.yaml");
+      expect(values).toContain("deploy.yml");
+      // Non-matching extensions should be excluded
+      expect(values).not.toContain("readme.md");
+      expect(values).not.toContain("index.ts");
+      // Directories should be included for navigation
+      expect(values.some((v) => v.startsWith("configs"))).toBe(true);
+    },
+  );
+
+  it.skipIf(!available)("returns file extension matches with subdirectory path prefix", () => {
+    const values = complete(["deploy", "--config", "configs/p"], {
+      cwd: testFilesDir,
+    });
+    expect(values).toContain("configs/prod.json");
+    // Non-matching prefix should be excluded
+    expect(values).not.toContain("configs/dev.yaml");
+    // Non-matching extensions should be excluded
+    expect(values).not.toContain("configs/notes.txt");
+  });
+});
+
+// ─── Bash-specific tests ──────────────────────────────────────────────────────
+
+describe.skipIf(!hasBash)("bash-specific completion", () => {
+  it("filters candidates by prefix", () => {
+    const values = bashComplete(["deploy", "--env", "dev"]);
+    expect(values).toContain("development");
+    expect(values).not.toContain("staging");
+    expect(values).not.toContain("production");
+  });
+
+  it("handles inline option value (--format=)", () => {
+    const values = bashComplete(["build", "--format=j"]);
+    expect(values).toContain("--format=json");
+    expect(values).not.toContain("--format=yaml");
+    expect(values).not.toContain("--format=xml");
+  });
+
+  it("handles inline option value with empty value (--format=)", () => {
+    const values = bashComplete(["build", "--format="]);
+    expect(values).toContain("--format=json");
+    expect(values).toContain("--format=yaml");
+    expect(values).toContain("--format=xml");
+  });
+
+  it("uses compgen -d for directory completion (build --output)", () => {
+    const values = bashComplete(["build", "--output", ""], {
+      cwd: testFilesDir,
+    });
+    expect(values).toContain("configs");
+    expect(values).toContain("scripts");
+    // Files should not appear in directory completion
+    expect(values).not.toContain("app.json");
+    expect(values).not.toContain("readme.md");
+  });
+});
+
+// ─── Zsh-specific tests ──────────────────────────────────────────────────────
+
+describe.skipIf(!hasZsh)("zsh-specific completion", () => {
+  it("delegates to _files -/ for directory completion", () => {
+    const values = zshComplete(["build", "--output", ""]);
+    // Our _files stub returns __directive:directory__ for -/ flag
+    expect(values).toContain("__directive:directory__");
   });
 });
