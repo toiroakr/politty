@@ -1649,6 +1649,41 @@ describe("golden-test", () => {
       expect(updatedContent).toContain("<!-- politty:command:greet:heading:start -->");
       expect(updatedContent).toContain("<!-- politty:command:greet:usage:start -->");
     });
+
+    it("should report success in read-only mode when sections are opted out", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "opt-out-readonly.md");
+
+      // Create initial file with all sections
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      // Remove the description section marker block for greet (opt-out)
+      const originalContent = fs.readFileSync(filePath, "utf-8");
+      const descStart = "<!-- politty:command:greet:description:start -->";
+      const descEnd = "<!-- politty:command:greet:description:end -->";
+      const startIdx = originalContent.indexOf(descStart);
+      const endIdx = originalContent.indexOf(descEnd) + descEnd.length;
+      const optedOutContent =
+        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      fs.writeFileSync(filePath, optedOutContent, "utf-8");
+
+      // Switch to read-only mode
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      // Validate targeting greet — should succeed (opted-out sections should not cause diff)
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet"],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("match");
+    });
   });
 
   describe("assertDocMatch", () => {
