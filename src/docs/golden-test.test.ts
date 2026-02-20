@@ -7,7 +7,7 @@ import { arg, defineCommand } from "../index.js";
 import { assertDocMatch, generateDoc } from "./golden-test.js";
 import { renderArgsTable } from "./render-args.js";
 import { renderCommandIndex } from "./render-index.js";
-import { UPDATE_GOLDEN_ENV } from "./types.js";
+import { SECTION_TYPES, UPDATE_GOLDEN_ENV, type SectionType } from "./types.js";
 
 /** Get relative path from CWD (for index marker scope) */
 function relPath(absPath: string): string {
@@ -97,9 +97,24 @@ describe("golden-test", () => {
       expect(content).toContain("# test-cli");
       expect(content).toContain("A test CLI for documentation generation");
 
-      // Verify section markers are included
-      expect(content).toContain("<!-- politty:command::heading:start -->");
-      expect(content).toContain("<!-- politty:command::heading:end -->");
+      // Verify all expected section markers are included
+      const expectedSections: SectionType[] = [
+        "heading",
+        "description",
+        "usage",
+        "options",
+        "subcommands",
+      ];
+      for (const section of expectedSections) {
+        expect(content).toContain(`<!-- politty:command::${section}:start -->`);
+        expect(content).toContain(`<!-- politty:command::${section}:end -->`);
+      }
+
+      // Verify sections without data are not included
+      const absentSections = SECTION_TYPES.filter((s) => !expectedSections.includes(s));
+      for (const section of absentSections) {
+        expect(content).not.toContain(`<!-- politty:command::${section}:start -->`);
+      }
     });
 
     it("should report match when content is identical", async () => {
