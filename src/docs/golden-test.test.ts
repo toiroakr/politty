@@ -1608,6 +1608,47 @@ describe("golden-test", () => {
       expect(result.files[0]?.path).toBe(targetPath);
       expect(result.files[0]?.status).toBe("match");
     });
+
+    it("should respect section opt-out by not re-inserting removed markers", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "opt-out.md");
+
+      // Create initial file with all sections
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      // Read the generated content and remove the description marker for greet
+      const originalContent = fs.readFileSync(filePath, "utf-8");
+      expect(originalContent).toContain("<!-- politty:command:greet:description:start -->");
+
+      // Remove the description section marker block for greet (opt-out)
+      const descStart = "<!-- politty:command:greet:description:start -->";
+      const descEnd = "<!-- politty:command:greet:description:end -->";
+      const startIdx = originalContent.indexOf(descStart);
+      const endIdx = originalContent.indexOf(descEnd) + descEnd.length;
+      const optedOutContent =
+        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      fs.writeFileSync(filePath, optedOutContent, "utf-8");
+
+      // Run update targeting greet
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet"],
+      });
+
+      // Verify: the description marker was NOT re-inserted (opt-out respected)
+      const updatedContent = fs.readFileSync(filePath, "utf-8");
+      expect(updatedContent).not.toContain("<!-- politty:command:greet:description:start -->");
+      expect(updatedContent).not.toContain("<!-- politty:command:greet:description:end -->");
+
+      // Other sections for greet should still be present
+      expect(updatedContent).toContain("<!-- politty:command:greet:heading:start -->");
+      expect(updatedContent).toContain("<!-- politty:command:greet:usage:start -->");
+    });
   });
 
   describe("assertDocMatch", () => {
