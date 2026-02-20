@@ -295,9 +295,11 @@ function generateOptionValueCandidates(context: CompletionContext): CandidateRes
 function generatePositionalCandidates(context: CompletionContext): CandidateResult {
   const candidates: CompletionCandidate[] = [];
 
-  // Get the positional at current index
+  // Get the positional at current index, clamping to last (variadic) positional
   const positionalIndex = context.positionalIndex ?? 0;
-  const positional = context.positionals[positionalIndex];
+  const positional =
+    context.positionals[positionalIndex] ??
+    (context.positionals.at(-1)?.variadic ? context.positionals.at(-1) : undefined);
 
   if (!positional) {
     return { candidates, directive: CompletionDirective.FilterPrefix };

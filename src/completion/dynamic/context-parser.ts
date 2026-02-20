@@ -86,6 +86,7 @@ function extractPositionalsForContext(command: AnyCommand): CompletablePositiona
       position: index,
       description: field.description,
       required: field.required,
+      variadic: field.type === "array",
       valueCompletion: resolveValueCompletion(field),
     }));
 }
@@ -248,6 +249,9 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     if (opt && opt.takesValue) {
       completionType = "option-value";
       targetOption = opt;
+    } else if (currentWord.startsWith("-")) {
+      // Previous word is boolean flag, current word starts with - → option name
+      completionType = "option-name";
     } else {
       completionType = determineDefaultCompletionType(
         currentWord,
@@ -279,6 +283,7 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
       subcommands,
       positionals,
       positionalCount,
+      afterDoubleDash,
     );
     if (completionType === "positional") {
       positionalIndex = positionalCount;
@@ -309,7 +314,13 @@ function determineDefaultCompletionType(
   subcommands: string[],
   positionals: CompletablePositional[],
   positionalCount: number,
+  afterDoubleDash?: boolean,
 ): CompletionType {
+  // After --, everything is positional — never suggest subcommands or options
+  if (afterDoubleDash) {
+    return "positional";
+  }
+
   // If there are subcommands and current word might match one, suggest subcommands
   if (subcommands.length > 0) {
     // Check if any subcommand starts with current word
@@ -325,8 +336,7 @@ function determineDefaultCompletionType(
   }
 
   // If the last positional is variadic (array), continue with positional
-  if (positionals.length > 0) {
-    // TODO: Check if last positional is variadic
+  if (positionals.length > 0 && positionals[positionals.length - 1]!.variadic) {
     return "positional";
   }
 

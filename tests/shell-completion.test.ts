@@ -164,8 +164,9 @@ function fishComplete(args: string[], opts?: ExecOptions): string[] {
   const opcTokens = allTokens.filter((_, i) => i < allTokens.length - 1 || allTokens[i] !== "");
   const currentToken = args[args.length - 1] ?? "";
 
-  const opcEchoLines = opcTokens.map((t) => `echo '${t}'`).join("\n    ");
-  const ctBody = currentToken ? `echo '${currentToken}'` : "true";
+  // Use printf instead of echo: fish's echo interprets -e/-n/-- as flags
+  const opcEchoLines = opcTokens.map((t) => `printf '%s\\n' '${t}'`).join("\n    ");
+  const ctBody = currentToken ? `printf '%s\\n' '${currentToken}'` : "true";
 
   const script = `
 function commandline
@@ -317,6 +318,148 @@ describe.each(shells)("%s completion", (_shell, available, complete) => {
     expect(values).toContain("configs/dev.yaml");
     // Non-matching extensions excluded
     expect(values).not.toContain("configs/notes.txt");
+  });
+
+  it.skipIf(!available)("completes option value after short alias", () => {
+    const values = complete(["deploy", "-e", ""]);
+    expect(values).toContain("development");
+    expect(values).toContain("staging");
+    expect(values).toContain("production");
+  });
+
+  it.skipIf(!available)("filters out option used via short alias", () => {
+    const values = complete(["deploy", "-e", "staging", "--"]);
+    expect(values).not.toContain("--env");
+    expect(values).toContain("--config");
+    expect(values).toContain("--dry-run");
+  });
+
+  it.skipIf(!available)("completes options after positional argument", () => {
+    const values = complete(["test", "unit", "--"]);
+    expect(values).toContain("--watch");
+    expect(values).toContain("--help");
+  });
+
+  it.skipIf(!available)("completes file after multiple options", () => {
+    const values = complete(["deploy", "--env", "staging", "--config", ""], {
+      cwd: testFilesDir,
+    });
+    expect(values).toContain("app.json");
+    expect(values).toContain("app.yaml");
+    expect(values).toContain("deploy.yml");
+  });
+
+  // ─── Multiple positionals ──────────────────────────────────────────────────
+
+  it.skipIf(!available)("completes first positional choices", () => {
+    const values = complete(["migrate", ""]);
+    expect(values).toContain("local");
+    expect(values).toContain("staging");
+    expect(values).toContain("production");
+  });
+
+  it.skipIf(!available)("completes second positional with different choices", () => {
+    const values = complete(["migrate", "local", ""]);
+    expect(values).toContain("dev");
+    expect(values).toContain("qa");
+    expect(values).toContain("prod");
+    // First positional choices should NOT appear
+    expect(values).not.toContain("local");
+    expect(values).not.toContain("staging");
+    expect(values).not.toContain("production");
+  });
+
+  it.skipIf(!available)("completes options after all positionals provided", () => {
+    const values = complete(["migrate", "local", "dev", "--"]);
+    expect(values).toContain("--dry-run");
+    expect(values).toContain("--verbose");
+    expect(values).toContain("--help");
+  });
+
+  // ─── Array (variadic) positional ───────────────────────────────────────────
+
+  it.skipIf(!available)("completes array positional enum values", () => {
+    const values = complete(["tag", ""]);
+    expect(values).toContain("stable");
+    expect(values).toContain("beta");
+    expect(values).toContain("nightly");
+    expect(values).toContain("rc");
+  });
+
+  it.skipIf(!available)("continues completing array positional after first value", () => {
+    const values = complete(["tag", "stable", ""]);
+    expect(values).toContain("stable");
+    expect(values).toContain("beta");
+    expect(values).toContain("nightly");
+    expect(values).toContain("rc");
+  });
+
+  it.skipIf(!available)("completes options after array positional values", () => {
+    const values = complete(["tag", "stable", "beta", "--"]);
+    expect(values).toContain("--force");
+    expect(values).toContain("--help");
+  });
+
+  // ─── Options interleaved with positionals ──────────────────────────────────
+
+  it.skipIf(!available)("completes positional after interleaved option", () => {
+    const values = complete(["migrate", "--dry-run", "local", ""]);
+    expect(values).toContain("dev");
+    expect(values).toContain("qa");
+    expect(values).toContain("prod");
+    // First positional choices should not appear
+    expect(values).not.toContain("local");
+  });
+
+  it.skipIf(!available)("completes variadic positional after interleaved option", () => {
+    const values = complete(["tag", "--force", "stable", ""]);
+    expect(values).toContain("beta");
+    expect(values).toContain("nightly");
+    expect(values).toContain("rc");
+  });
+
+  // ─── Double-dash separator ─────────────────────────────────────────────────
+
+  it.skipIf(!available)("does not show options after -- for command without positionals", () => {
+    const values = complete(["deploy", "--"]);
+    // "--" as current word (starts with -) → should show option completions
+    expect(values).toContain("--env");
+    // But after -- is consumed as separator, options must not appear
+    const valuesAfter = complete(["deploy", "--", ""]);
+    expect(valuesAfter).not.toContain("--env");
+    expect(valuesAfter).not.toContain("--config");
+    expect(valuesAfter).not.toContain("--dry-run");
+  });
+
+  it.skipIf(!available)("completes positional after -- separator", () => {
+    const values = complete(["test", "--", ""]);
+    expect(values).toContain("unit");
+    expect(values).toContain("integration");
+    expect(values).toContain("e2e");
+  });
+
+  it.skipIf(!available)("completes options after boolean flag in variadic command", () => {
+    const values = complete(["tag", "--force", "--"]);
+    expect(values).toContain("--help");
+    // Should NOT show positional values
+    expect(values).not.toContain("stable");
+    expect(values).not.toContain("beta");
+  });
+
+  it.skipIf(!available)("completes options with short alias and file completion", () => {
+    const values = complete(["deploy", "-e", "staging", "-c", ""], {
+      cwd: testFilesDir,
+    });
+    expect(values).toContain("app.json");
+    expect(values).toContain("app.yaml");
+    expect(values).toContain("deploy.yml");
+  });
+
+  it.skipIf(!available)("shows options after inline = value", () => {
+    const values = complete(["build", "--format=json", "--"]);
+    expect(values).not.toContain("--format");
+    expect(values).toContain("--output");
+    expect(values).toContain("--minify");
   });
 });
 
