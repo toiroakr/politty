@@ -1,16 +1,16 @@
-# Shell completion の動作確認用セットアップスクリプト (fish)
+# Setup script for testing shell completion interactively (fish)
 #
-# 使い方:
+# Usage:
 #   source playground/24-shell-completion/try-completion.fish
 #
-# セットアップ後、以下を試してください:
-#   myapp <TAB>           → サブコマンド一覧 (build, deploy, test, ...)
-#   myapp build --<TAB>   → build のオプション (--format, --output, ...)
-#   myapp build -f <TAB>  → format の値 (json, yaml, xml)
-#   myapp deploy -e <TAB> → env の値 (development, staging, production)
-#   myapp test <TAB>      → test suite の値 (unit, integration, e2e)
+# After setup, try the following:
+#   myapp <TAB>           → subcommands (build, deploy, test, ...)
+#   myapp build --<TAB>   → build options (--format, --output, ...)
+#   myapp build -f <TAB>  → format values (json, yaml, xml)
+#   myapp deploy -e <TAB> → env values (development, staging, production)
+#   myapp test <TAB>      → test suite values (unit, integration, e2e)
 #
-# クリーンアップ:
+# Cleanup:
 #   myapp-cleanup
 
 # Resolve script directory
@@ -20,7 +20,7 @@ set -g _try_comp_bin "$project_dir/.tmp-bin"
 
 # Check tsx is available
 if not command -q tsx
-    echo "Error: tsx が見つかりません。npm install -g tsx でインストールしてください"
+    echo "Error: tsx not found. Install it with: npm install -g tsx"
     set -e _try_comp_bin
     return 1
 end
@@ -35,25 +35,25 @@ chmod +x $_try_comp_bin/myapp
 set -gx PATH $_try_comp_bin $PATH
 
 # Source completion
-echo "fish completion をセットアップ中..."
+echo "Setting up fish completion..."
 source (myapp completion fish | psub)
-echo "セットアップ完了!"
+echo "Setup complete!"
 
 # Cleanup function
 function myapp-cleanup
     rm -rf $_try_comp_bin
     set -e _try_comp_bin
     functions -e myapp-cleanup
-    echo "クリーンアップ完了 (.tmp-bin を削除しました)"
+    echo "Cleanup complete (removed .tmp-bin)"
 end
 
 echo ""
-echo "以下を試してください:"
-echo "  myapp <TAB>              サブコマンド補完"
-echo "  myapp build -f <TAB>     enum値補完 (json/yaml/xml)"
-echo "  myapp deploy -e <TAB>    カスタム値補完 (development/staging/production)"
-echo "  myapp deploy -c <TAB>    ファイル補完"
-echo "  myapp build -o <TAB>     ディレクトリ補完"
-echo "  myapp test <TAB>         positional enum補完 (unit/integration/e2e)"
+echo "Try the following:"
+echo "  myapp <TAB>              subcommand completion"
+echo "  myapp build -f <TAB>     enum value completion (json/yaml/xml)"
+echo "  myapp deploy -e <TAB>    custom value completion (development/staging/production)"
+echo "  myapp deploy -c <TAB>    file completion"
+echo "  myapp build -o <TAB>     directory completion"
+echo "  myapp test <TAB>         positional enum completion (unit/integration/e2e)"
 echo ""
-echo "クリーンアップ: myapp-cleanup"
+echo "Cleanup: myapp-cleanup"

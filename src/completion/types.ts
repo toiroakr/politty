@@ -73,6 +73,8 @@ export interface CompletablePositional {
   description?: string | undefined;
   /** Whether required */
   required: boolean;
+  /** Whether this positional accepts multiple values (array type) */
+  variadic?: boolean | undefined;
   /** Value completion specification */
   valueCompletion?: ValueCompletion | undefined;
 }
