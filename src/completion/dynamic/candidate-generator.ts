@@ -123,6 +123,7 @@ function resolveValueCandidates(
           });
         }
       }
+      directive |= CompletionDirective.NoFileCompletion;
       break;
 
     case "file":
@@ -155,6 +156,7 @@ function resolveValueCandidates(
       if (vc.shellCommand) {
         candidates.push(...executeShellCommand(vc.shellCommand));
       }
+      directive |= CompletionDirective.NoFileCompletion;
       break;
 
     case "none":
