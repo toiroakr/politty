@@ -109,23 +109,43 @@ function formatEnvInfo(env: string | string[] | undefined): string {
 }
 
 /**
- * Format option flags (uses kebab-case cliName)
+ * Resolve placeholder for an option (uses kebab-case cliName)
+ */
+function resolvePlaceholder(opt: ResolvedFieldMeta): string {
+  return opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
+}
+
+/**
+ * Format option name for table display (e.g., `--dry-run` or `--port <PORT>`)
+ */
+function formatOptionName(opt: ResolvedFieldMeta): string {
+  const placeholder = resolvePlaceholder(opt);
+  return opt.type === "boolean" ? `\`--${opt.cliName}\`` : `\`--${opt.cliName} <${placeholder}>\``;
+}
+
+/**
+ * Format option flags for list display (uses kebab-case cliName)
  */
 function formatOptionFlags(opt: ResolvedFieldMeta): string {
-  const parts: string[] = [];
-
-  // Use cliName (kebab-case) for CLI display
-  const placeholder = opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
+  const placeholder = resolvePlaceholder(opt);
   const longFlag =
     opt.type === "boolean" ? `--${opt.cliName}` : `--${opt.cliName} <${placeholder}>`;
 
   if (opt.alias) {
-    parts.push(`\`-${opt.alias}\`, \`${longFlag}\``);
-  } else {
-    parts.push(`\`${longFlag}\``);
+    return `\`-${opt.alias}\`, \`${longFlag}\``;
   }
+  return `\`${longFlag}\``;
+}
 
-  return parts.join("");
+/**
+ * Format env variable names for table display
+ */
+function formatEnvNames(env: string | string[] | undefined): string {
+  if (!env) return "-";
+  if (Array.isArray(env)) {
+    return env.map((e) => `\`${e}\``).join(", ");
+  }
+  return `\`${env}\``;
 }
 
 /**
@@ -160,21 +180,14 @@ export function renderOptionsTable(info: CommandInfo): string {
   }
 
   for (const opt of info.options) {
-    // Use cliName (kebab-case) for CLI display
-    const placeholder = opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
-    const optionName =
-      opt.type === "boolean" ? `\`--${opt.cliName}\`` : `\`--${opt.cliName} <${placeholder}>\``;
+    const optionName = formatOptionName(opt);
     const alias = opt.alias ? `\`-${opt.alias}\`` : "-";
     const desc = escapeTableCell(opt.description ?? "");
     const required = opt.required ? "Yes" : "No";
     const defaultVal = formatDefaultValue(opt.defaultValue);
 
     if (hasEnv) {
-      const envNames = opt.env
-        ? Array.isArray(opt.env)
-          ? opt.env.map((e) => `\`${e}\``).join(", ")
-          : `\`${opt.env}\``
-        : "-";
+      const envNames = formatEnvNames(opt.env);
       lines.push(
         `| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} | ${envNames} |`,
       );
@@ -308,20 +321,14 @@ export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): strin
   }
 
   for (const opt of options) {
-    const placeholder = opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
-    const optionName =
-      opt.type === "boolean" ? `\`--${opt.cliName}\`` : `\`--${opt.cliName} <${placeholder}>\``;
+    const optionName = formatOptionName(opt);
     const alias = opt.alias ? `\`-${opt.alias}\`` : "-";
     const desc = escapeTableCell(opt.description ?? "");
     const required = opt.required ? "Yes" : "No";
     const defaultVal = formatDefaultValue(opt.defaultValue);
 
     if (hasEnv) {
-      const envNames = opt.env
-        ? Array.isArray(opt.env)
-          ? opt.env.map((e) => `\`${e}\``).join(", ")
-          : `\`${opt.env}\``
-        : "-";
+      const envNames = formatEnvNames(opt.env);
       lines.push(
         `| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} | ${envNames} |`,
       );

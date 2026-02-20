@@ -180,29 +180,16 @@ function expandCommandPaths(
 ): string[] {
   const expanded = new Set<string>();
 
-  for (const cmdPath of commandPaths) {
-    if (containsWildcard(cmdPath)) {
-      // Expand wildcard pattern to matching commands
-      const matches = expandWildcardPattern(cmdPath, allCommands);
-      for (const match of matches) {
-        expanded.add(match);
-        // Also add subcommands of matched commands
-        for (const path of allCommands.keys()) {
-          if (isSubcommandOf(path, match)) {
-            expanded.add(path);
-          }
-        }
-      }
-    } else {
-      // Add the command itself
-      if (allCommands.has(cmdPath)) {
-        expanded.add(cmdPath);
-      }
-      // Add all subcommands
-      for (const path of allCommands.keys()) {
-        if (isSubcommandOf(path, cmdPath)) {
-          expanded.add(path);
-        }
+  // Resolve wildcards to concrete command paths
+  const resolved = commandPaths.flatMap((cmdPath) =>
+    containsWildcard(cmdPath) ? expandWildcardPattern(cmdPath, allCommands) : [cmdPath],
+  );
+
+  // Add each resolved command and its subcommands
+  for (const cmdPath of resolved) {
+    for (const existingPath of allCommands.keys()) {
+      if (isSubcommandOf(existingPath, cmdPath)) {
+        expanded.add(existingPath);
       }
     }
   }
