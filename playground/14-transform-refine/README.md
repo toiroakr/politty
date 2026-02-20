@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # validation-demo
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 Demo of transform/refine
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Demo of transform/refine
 validation-demo [command]
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:subcommands::start -->
+<!-- politty:command::subcommands:start -->
 
 **Commands**
 
@@ -29,21 +29,21 @@ validation-demo [command]
 | [`transform`](#transform) | Example using transform for conversion     |
 | [`refine`](#refine)       | Example using refine for custom validation |
 
-<!-- politty:subcommands::end -->
+<!-- politty:command::subcommands:end -->
 
-<!-- politty:heading:refine:start -->
+<!-- politty:command:refine:heading:start -->
 
 ## refine
 
-<!-- politty:heading:refine:end -->
+<!-- politty:command:refine:heading:end -->
 
-<!-- politty:description:refine:start -->
+<!-- politty:command:refine:description:start -->
 
 Example using refine for custom validation
 
-<!-- politty:description:refine:end -->
+<!-- politty:command:refine:description:end -->
 
-<!-- politty:usage:refine:start -->
+<!-- politty:command:refine:usage:start -->
 
 **Usage**
 
@@ -51,9 +51,9 @@ Example using refine for custom validation
 validation-demo refine <input> <output>
 ```
 
-<!-- politty:usage:refine:end -->
+<!-- politty:command:refine:usage:end -->
 
-<!-- politty:arguments:refine:start -->
+<!-- politty:command:refine:arguments:start -->
 
 **Arguments**
 
@@ -62,21 +62,21 @@ validation-demo refine <input> <output>
 | `input`  | Input file  | Yes      |
 | `output` | Output file | Yes      |
 
-<!-- politty:arguments:refine:end -->
+<!-- politty:command:refine:arguments:end -->
 
-<!-- politty:heading:transform:start -->
+<!-- politty:command:transform:heading:start -->
 
 ## transform
 
-<!-- politty:heading:transform:end -->
+<!-- politty:command:transform:heading:end -->
 
-<!-- politty:description:transform:start -->
+<!-- politty:command:transform:description:start -->
 
 Example using transform for conversion
 
-<!-- politty:description:transform:end -->
+<!-- politty:command:transform:description:end -->
 
-<!-- politty:usage:transform:start -->
+<!-- politty:command:transform:usage:start -->
 
 **Usage**
 
@@ -84,9 +84,9 @@ Example using transform for conversion
 validation-demo transform [options] <name>
 ```
 
-<!-- politty:usage:transform:end -->
+<!-- politty:command:transform:usage:end -->
 
-<!-- politty:arguments:transform:start -->
+<!-- politty:command:transform:arguments:start -->
 
 **Arguments**
 
@@ -94,9 +94,9 @@ validation-demo transform [options] <name>
 | -------- | ------------------------------------- | -------- |
 | `name`   | Name (will be converted to uppercase) | Yes      |
 
-<!-- politty:arguments:transform:end -->
+<!-- politty:command:transform:arguments:end -->
 
-<!-- politty:options:transform:start -->
+<!-- politty:command:transform:options:start -->
 
 **Options**
 
@@ -104,4 +104,4 @@ validation-demo transform [options] <name>
 | --------------- | ----- | -------------------- | -------- | ------- |
 | `--tags <TAGS>` | `-t`  | Comma-separated tags | Yes      | -       |
 
-<!-- politty:options:transform:end -->
+<!-- politty:command:transform:options:end -->

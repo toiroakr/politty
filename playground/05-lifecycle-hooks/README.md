@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # db-query
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 Execute database query (lifecycle hooks demo)
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Execute database query (lifecycle hooks demo)
 db-query [options]
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:options::start -->
+<!-- politty:command::options:start -->
 
 **Options**
 
@@ -30,9 +30,9 @@ db-query [options]
 | `--query <QUERY>`       | `-q`  | SQL query                  | Yes      | -       |
 | `--simulate_error`      | `-e`  | Simulate an error          | No       | `false` |
 
-<!-- politty:options::end -->
+<!-- politty:command::options:end -->
 
-<!-- politty:notes::start -->
+<!-- politty:command::notes:start -->
 
 **Notes**
 
@@ -46,4 +46,4 @@ db-query [options]
 > When `--simulate-error` is set, an error is thrown during `run`.
 > The `cleanup` hook is still called to release resources.
 
-<!-- politty:notes::end -->
+<!-- politty:command::notes:end -->

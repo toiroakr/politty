@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # process-files
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 Process multiple files
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Process multiple files
 process-files [options]
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:options::start -->
+<!-- politty:command::options:start -->
 
 **Options**
 
@@ -29,4 +29,4 @@ process-files [options]
 | `--files <FILES>` | `-f`  | Files to process (multiple allowed) | Yes      | -       |
 | `--verbose`       | `-v`  | Verbose output                      | No       | `false` |
 
-<!-- politty:options::end -->
+<!-- politty:command::options:end -->

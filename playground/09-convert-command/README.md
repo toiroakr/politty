@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # convert
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 Convert file format (optional positional example)
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Convert file format (optional positional example)
 convert [options] <input> [output]
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:arguments::start -->
+<!-- politty:command::arguments:start -->
 
 **Arguments**
 
@@ -29,9 +29,9 @@ convert [options] <input> [output]
 | `input`  | Input file                      | Yes      |
 | `output` | Output file (stdout if omitted) | No       |
 
-<!-- politty:arguments::end -->
+<!-- politty:command::arguments:end -->
 
-<!-- politty:options::start -->
+<!-- politty:command::options:start -->
 
 **Options**
 
@@ -39,4 +39,4 @@ convert [options] <input> [output]
 | ------------------- | ----- | ------------- | -------- | -------- |
 | `--format <FORMAT>` | `-f`  | Output format | No       | `"json"` |
 
-<!-- politty:options::end -->
+<!-- politty:command::options:end -->

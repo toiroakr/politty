@@ -381,23 +381,23 @@ export type SectionType =
   | "notes";
 
 /**
- * Marker prefix for section markers in generated documentation
- * Format: <!-- politty:<type>:<scope>:start --> ... <!-- politty:<type>:<scope>:end -->
+ * Marker prefix for command section markers in generated documentation
+ * Format: <!-- politty:command:<scope>:<type>:start --> ... <!-- politty:command:<scope>:<type>:end -->
  */
-export const SECTION_MARKER_PREFIX = "politty";
+export const SECTION_MARKER_PREFIX = "politty:command";
 
 /**
- * Generate start marker for a section
+ * Generate start marker for a command section
  */
 export function sectionStartMarker(type: SectionType, scope: string): string {
-  return `<!-- ${SECTION_MARKER_PREFIX}:${type}:${scope}:start -->`;
+  return `<!-- ${SECTION_MARKER_PREFIX}:${scope}:${type}:start -->`;
 }
 
 /**
- * Generate end marker for a section
+ * Generate end marker for a command section
  */
 export function sectionEndMarker(type: SectionType, scope: string): string {
-  return `<!-- ${SECTION_MARKER_PREFIX}:${type}:${scope}:end -->`;
+  return `<!-- ${SECTION_MARKER_PREFIX}:${scope}:${type}:end -->`;
 }
 
 /**

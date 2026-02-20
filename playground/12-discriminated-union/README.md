@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # resource
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 Manage resources (discriminatedUnion example)
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Manage resources (discriminatedUnion example)
 resource [options]
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:options::start -->
+<!-- politty:command::options:start -->
 
 **Options**
 
@@ -34,9 +34,9 @@ resource [options]
 | `--format <FORMAT>`     | `-F`  | Output format               | No       | `"table"` |
 | `--limit <LIMIT>`       | `-n`  | Display limit               | No       | `10`      |
 
-<!-- politty:options::end -->
+<!-- politty:command::options:end -->
 
-<!-- politty:notes::start -->
+<!-- politty:command::notes:start -->
 
 **Notes**
 
@@ -51,4 +51,4 @@ Available options vary depending on the value of `--action`.
 > [!NOTE]
 > Only the options for the selected action are accepted.
 
-<!-- politty:notes::end -->
+<!-- politty:command::notes:end -->

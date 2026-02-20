@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # process
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 Process files (intersection example)
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Process files (intersection example)
 process [options] <input>
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:arguments::start -->
+<!-- politty:command::arguments:start -->
 
 **Arguments**
 
@@ -28,9 +28,9 @@ process [options] <input>
 | -------- | ----------- | -------- |
 | `input`  | Input file  | Yes      |
 
-<!-- politty:arguments::end -->
+<!-- politty:command::arguments:end -->
 
-<!-- politty:options::start -->
+<!-- politty:command::options:start -->
 
 **Options**
 
@@ -41,4 +41,4 @@ process [options] <input>
 | `--quiet`           | `-q`  | Suppress output | No       | `false` |
 | `--output <OUTPUT>` | `-o`  | Output file     | Yes      | -       |
 
-<!-- politty:options::end -->
+<!-- politty:command::options:end -->

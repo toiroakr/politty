@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # git-like
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 Example of 3-level nested subcommands
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Example of 3-level nested subcommands
 git-like [command]
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:subcommands::start -->
+<!-- politty:command::subcommands:start -->
 
 **Commands**
 
@@ -28,21 +28,21 @@ git-like [command]
 | ------------------- | -------------------- |
 | [`config`](#config) | Manage configuration |
 
-<!-- politty:subcommands::end -->
+<!-- politty:command::subcommands:end -->
 
-<!-- politty:heading:config:start -->
+<!-- politty:command:config:heading:start -->
 
 ## config
 
-<!-- politty:heading:config:end -->
+<!-- politty:command:config:heading:end -->
 
-<!-- politty:description:config:start -->
+<!-- politty:command:config:description:start -->
 
 Manage configuration
 
-<!-- politty:description:config:end -->
+<!-- politty:command:config:description:end -->
 
-<!-- politty:usage:config:start -->
+<!-- politty:command:config:usage:start -->
 
 **Usage**
 
@@ -50,9 +50,9 @@ Manage configuration
 git-like config [command]
 ```
 
-<!-- politty:usage:config:end -->
+<!-- politty:command:config:usage:end -->
 
-<!-- politty:subcommands:config:start -->
+<!-- politty:command:config:subcommands:start -->
 
 **Commands**
 
@@ -61,21 +61,21 @@ git-like config [command]
 | [`config user`](#config-user) | Manage user settings |
 | [`config core`](#config-core) | Manage core settings |
 
-<!-- politty:subcommands:config:end -->
+<!-- politty:command:config:subcommands:end -->
 
-<!-- politty:heading:config core:start -->
+<!-- politty:command:config core:heading:start -->
 
 ### config core
 
-<!-- politty:heading:config core:end -->
+<!-- politty:command:config core:heading:end -->
 
-<!-- politty:description:config core:start -->
+<!-- politty:command:config core:description:start -->
 
 Manage core settings
 
-<!-- politty:description:config core:end -->
+<!-- politty:command:config core:description:end -->
 
-<!-- politty:usage:config core:start -->
+<!-- politty:command:config core:usage:start -->
 
 **Usage**
 
@@ -83,9 +83,9 @@ Manage core settings
 git-like config core [command]
 ```
 
-<!-- politty:usage:config core:end -->
+<!-- politty:command:config core:usage:end -->
 
-<!-- politty:subcommands:config core:start -->
+<!-- politty:command:config core:subcommands:start -->
 
 **Commands**
 
@@ -94,21 +94,21 @@ git-like config core [command]
 | [`config core get`](#config-core-get) | Get core config value |
 | [`config core set`](#config-core-set) | Set core config value |
 
-<!-- politty:subcommands:config core:end -->
+<!-- politty:command:config core:subcommands:end -->
 
-<!-- politty:heading:config core get:start -->
+<!-- politty:command:config core get:heading:start -->
 
 #### config core get
 
-<!-- politty:heading:config core get:end -->
+<!-- politty:command:config core get:heading:end -->
 
-<!-- politty:description:config core get:start -->
+<!-- politty:command:config core get:description:start -->
 
 Get core config value
 
-<!-- politty:description:config core get:end -->
+<!-- politty:command:config core get:description:end -->
 
-<!-- politty:usage:config core get:start -->
+<!-- politty:command:config core get:usage:start -->
 
 **Usage**
 
@@ -116,9 +116,9 @@ Get core config value
 git-like config core get <key>
 ```
 
-<!-- politty:usage:config core get:end -->
+<!-- politty:command:config core get:usage:end -->
 
-<!-- politty:arguments:config core get:start -->
+<!-- politty:command:config core get:arguments:start -->
 
 **Arguments**
 
@@ -126,21 +126,21 @@ git-like config core get <key>
 | -------- | ------------------------------ | -------- |
 | `key`    | Config key (editor, pager etc) | Yes      |
 
-<!-- politty:arguments:config core get:end -->
+<!-- politty:command:config core get:arguments:end -->
 
-<!-- politty:heading:config core set:start -->
+<!-- politty:command:config core set:heading:start -->
 
 #### config core set
 
-<!-- politty:heading:config core set:end -->
+<!-- politty:command:config core set:heading:end -->
 
-<!-- politty:description:config core set:start -->
+<!-- politty:command:config core set:description:start -->
 
 Set core config value
 
-<!-- politty:description:config core set:end -->
+<!-- politty:command:config core set:description:end -->
 
-<!-- politty:usage:config core set:start -->
+<!-- politty:command:config core set:usage:start -->
 
 **Usage**
 
@@ -148,9 +148,9 @@ Set core config value
 git-like config core set <key> <value>
 ```
 
-<!-- politty:usage:config core set:end -->
+<!-- politty:command:config core set:usage:end -->
 
-<!-- politty:arguments:config core set:start -->
+<!-- politty:command:config core set:arguments:start -->
 
 **Arguments**
 
@@ -159,21 +159,21 @@ git-like config core set <key> <value>
 | `key`    | Config key   | Yes      |
 | `value`  | Config value | Yes      |
 
-<!-- politty:arguments:config core set:end -->
+<!-- politty:command:config core set:arguments:end -->
 
-<!-- politty:heading:config user:start -->
+<!-- politty:command:config user:heading:start -->
 
 ### config user
 
-<!-- politty:heading:config user:end -->
+<!-- politty:command:config user:heading:end -->
 
-<!-- politty:description:config user:start -->
+<!-- politty:command:config user:description:start -->
 
 Manage user settings
 
-<!-- politty:description:config user:end -->
+<!-- politty:command:config user:description:end -->
 
-<!-- politty:usage:config user:start -->
+<!-- politty:command:config user:usage:start -->
 
 **Usage**
 
@@ -181,9 +181,9 @@ Manage user settings
 git-like config user [command]
 ```
 
-<!-- politty:usage:config user:end -->
+<!-- politty:command:config user:usage:end -->
 
-<!-- politty:subcommands:config user:start -->
+<!-- politty:command:config user:subcommands:start -->
 
 **Commands**
 
@@ -192,21 +192,21 @@ git-like config user [command]
 | [`config user get`](#config-user-get) | Get user config value |
 | [`config user set`](#config-user-set) | Set user config value |
 
-<!-- politty:subcommands:config user:end -->
+<!-- politty:command:config user:subcommands:end -->
 
-<!-- politty:heading:config user get:start -->
+<!-- politty:command:config user get:heading:start -->
 
 #### config user get
 
-<!-- politty:heading:config user get:end -->
+<!-- politty:command:config user get:heading:end -->
 
-<!-- politty:description:config user get:start -->
+<!-- politty:command:config user get:description:start -->
 
 Get user config value
 
-<!-- politty:description:config user get:end -->
+<!-- politty:command:config user get:description:end -->
 
-<!-- politty:usage:config user get:start -->
+<!-- politty:command:config user get:usage:start -->
 
 **Usage**
 
@@ -214,9 +214,9 @@ Get user config value
 git-like config user get <key>
 ```
 
-<!-- politty:usage:config user get:end -->
+<!-- politty:command:config user get:usage:end -->
 
-<!-- politty:arguments:config user get:start -->
+<!-- politty:command:config user get:arguments:start -->
 
 **Arguments**
 
@@ -224,21 +224,21 @@ git-like config user get <key>
 | -------- | ---------------------------- | -------- |
 | `key`    | Config key (name, email etc) | Yes      |
 
-<!-- politty:arguments:config user get:end -->
+<!-- politty:command:config user get:arguments:end -->
 
-<!-- politty:heading:config user set:start -->
+<!-- politty:command:config user set:heading:start -->
 
 #### config user set
 
-<!-- politty:heading:config user set:end -->
+<!-- politty:command:config user set:heading:end -->
 
-<!-- politty:description:config user set:start -->
+<!-- politty:command:config user set:description:start -->
 
 Set user config value
 
-<!-- politty:description:config user set:end -->
+<!-- politty:command:config user set:description:end -->
 
-<!-- politty:usage:config user set:start -->
+<!-- politty:command:config user set:usage:start -->
 
 **Usage**
 
@@ -246,9 +246,9 @@ Set user config value
 git-like config user set [options] <key> <value>
 ```
 
-<!-- politty:usage:config user set:end -->
+<!-- politty:command:config user set:usage:end -->
 
-<!-- politty:arguments:config user set:start -->
+<!-- politty:command:config user set:arguments:start -->
 
 **Arguments**
 
@@ -257,9 +257,9 @@ git-like config user set [options] <key> <value>
 | `key`    | Config key   | Yes      |
 | `value`  | Config value | Yes      |
 
-<!-- politty:arguments:config user set:end -->
+<!-- politty:command:config user set:arguments:end -->
 
-<!-- politty:options:config user set:start -->
+<!-- politty:command:config user set:options:start -->
 
 **Options**
 
@@ -267,4 +267,4 @@ git-like config user set [options] <key> <value>
 | ---------- | ----- | ---------------------------- | -------- | ------- |
 | `--global` | `-g`  | Save as global configuration | No       | `false` |
 
-<!-- politty:options:config user set:end -->
+<!-- politty:command:config user set:options:end -->

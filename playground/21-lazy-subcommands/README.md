@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # my-app
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 CLI demonstrating lazy loading subcommands with dynamic imports
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ CLI demonstrating lazy loading subcommands with dynamic imports
 my-app [command]
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:subcommands::start -->
+<!-- politty:command::subcommands:start -->
 
 **Commands**
 
@@ -30,21 +30,21 @@ my-app [command]
 | [`heavy`](#heavy)         | A heavy command that is lazily loaded   |
 | [`analytics`](#analytics) | Analyze project metrics (lazily loaded) |
 
-<!-- politty:subcommands::end -->
+<!-- politty:command::subcommands:end -->
 
-<!-- politty:heading:analytics:start -->
+<!-- politty:command:analytics:heading:start -->
 
 ## analytics
 
-<!-- politty:heading:analytics:end -->
+<!-- politty:command:analytics:heading:end -->
 
-<!-- politty:description:analytics:start -->
+<!-- politty:command:analytics:description:start -->
 
 Analyze project metrics (lazily loaded)
 
-<!-- politty:description:analytics:end -->
+<!-- politty:command:analytics:description:end -->
 
-<!-- politty:usage:analytics:start -->
+<!-- politty:command:analytics:usage:start -->
 
 **Usage**
 
@@ -52,9 +52,9 @@ Analyze project metrics (lazily loaded)
 my-app analytics [options]
 ```
 
-<!-- politty:usage:analytics:end -->
+<!-- politty:command:analytics:usage:end -->
 
-<!-- politty:options:analytics:start -->
+<!-- politty:command:analytics:options:start -->
 
 **Options**
 
@@ -63,21 +63,21 @@ my-app analytics [options]
 | `--metric <METRIC>` | `-m`  | Metric to analyze | No       | `"lines"` |
 | `--format <FORMAT>` | `-f`  | Output format     | No       | `"text"`  |
 
-<!-- politty:options:analytics:end -->
+<!-- politty:command:analytics:options:end -->
 
-<!-- politty:heading:heavy:start -->
+<!-- politty:command:heavy:heading:start -->
 
 ## heavy
 
-<!-- politty:heading:heavy:end -->
+<!-- politty:command:heavy:heading:end -->
 
-<!-- politty:description:heavy:start -->
+<!-- politty:command:heavy:description:start -->
 
 A heavy command that is lazily loaded
 
-<!-- politty:description:heavy:end -->
+<!-- politty:command:heavy:description:end -->
 
-<!-- politty:usage:heavy:start -->
+<!-- politty:command:heavy:usage:start -->
 
 **Usage**
 
@@ -85,9 +85,9 @@ A heavy command that is lazily loaded
 my-app heavy [options]
 ```
 
-<!-- politty:usage:heavy:end -->
+<!-- politty:command:heavy:usage:end -->
 
-<!-- politty:options:heavy:start -->
+<!-- politty:command:heavy:options:start -->
 
 **Options**
 
@@ -96,21 +96,21 @@ my-app heavy [options]
 | `--iterations <ITERATIONS>` | `-n`  | Number of iterations | No       | `1000`  |
 | `--verbose`                 | `-v`  | Verbose output       | No       | `false` |
 
-<!-- politty:options:heavy:end -->
+<!-- politty:command:heavy:options:end -->
 
-<!-- politty:heading:status:start -->
+<!-- politty:command:status:heading:start -->
 
 ## status
 
-<!-- politty:heading:status:end -->
+<!-- politty:command:status:heading:end -->
 
-<!-- politty:description:status:start -->
+<!-- politty:command:status:description:start -->
 
 Show current status (eagerly loaded)
 
-<!-- politty:description:status:end -->
+<!-- politty:command:status:description:end -->
 
-<!-- politty:usage:status:start -->
+<!-- politty:command:status:usage:start -->
 
 **Usage**
 
@@ -118,9 +118,9 @@ Show current status (eagerly loaded)
 my-app status [options]
 ```
 
-<!-- politty:usage:status:end -->
+<!-- politty:command:status:usage:end -->
 
-<!-- politty:options:status:start -->
+<!-- politty:command:status:options:start -->
 
 **Options**
 
@@ -128,4 +128,4 @@ my-app status [options]
 | ----------- | ----- | -------------------- | -------- | ------- |
 | `--verbose` | `-v`  | Show detailed status | No       | `false` |
 
-<!-- politty:options:status:end -->
+<!-- politty:command:status:options:end -->

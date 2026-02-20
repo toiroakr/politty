@@ -556,9 +556,12 @@ function collectSectionMarkers(content: string, commandPath: string): SectionTyp
  * Collect all command paths that have any section markers in the content.
  */
 function collectSectionMarkerPaths(content: string): string[] {
-  // Match any section marker: <!-- politty:<type>:<scope>:start -->
+  // Match any section marker: <!-- politty:command:<scope>:<type>:start -->
   const sectionTypes = SECTION_TYPES.join("|");
-  const markerPattern = new RegExp(`<!--\\s*politty:(?:${sectionTypes}):(.*?):start\\s*-->`, "g");
+  const markerPattern = new RegExp(
+    `<!--\\s*politty:command:(.*?):(?:${sectionTypes}):start\\s*-->`,
+    "g",
+  );
   const paths = new Set<string>();
 
   for (const match of content.matchAll(markerPattern)) {
@@ -1538,11 +1541,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
       // Process index marker (auto-derived from files)
       const derivedCategories = deriveIndexFromFiles(files, rootDocFilePath, allCommands, ignores);
+      const indexScope = path.relative(process.cwd(), rootDocFilePath);
       const indexResult = await processIndexMarker(
         content,
         derivedCategories,
         command,
-        rootDocFilePath,
+        indexScope,
         updateMode,
         formatter,
         rootDoc.index,

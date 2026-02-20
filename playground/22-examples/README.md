@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # file-cli
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 File operations CLI with examples
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ File operations CLI with examples
 file-cli [command]
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:subcommands::start -->
+<!-- politty:command::subcommands:start -->
 
 **Commands**
 
@@ -31,20 +31,20 @@ file-cli [command]
 | [`check`](#check)   | Check if file exists  |
 | [`delete`](#delete) | Delete a file         |
 
-<!-- politty:subcommands::end -->
-<!-- politty:heading:read:start -->
+<!-- politty:command::subcommands:end -->
+<!-- politty:command:read:heading:start -->
 
 ## read
 
-<!-- politty:heading:read:end -->
+<!-- politty:command:read:heading:end -->
 
-<!-- politty:description:read:start -->
+<!-- politty:command:read:description:start -->
 
 Read file contents
 
-<!-- politty:description:read:end -->
+<!-- politty:command:read:description:end -->
 
-<!-- politty:usage:read:start -->
+<!-- politty:command:read:usage:start -->
 
 **Usage**
 
@@ -52,9 +52,9 @@ Read file contents
 file-cli read [options] <file>
 ```
 
-<!-- politty:usage:read:end -->
+<!-- politty:command:read:usage:end -->
 
-<!-- politty:arguments:read:start -->
+<!-- politty:command:read:arguments:start -->
 
 **Arguments**
 
@@ -62,9 +62,9 @@ file-cli read [options] <file>
 | -------- | ----------------- | -------- |
 | `file`   | File path to read | Yes      |
 
-<!-- politty:arguments:read:end -->
+<!-- politty:command:read:arguments:end -->
 
-<!-- politty:options:read:start -->
+<!-- politty:command:read:options:start -->
 
 **Options**
 
@@ -72,9 +72,9 @@ file-cli read [options] <file>
 | ------------------- | ----- | ------------- | -------- | -------- |
 | `--format <FORMAT>` | `-f`  | Output format | No       | `"text"` |
 
-<!-- politty:options:read:end -->
+<!-- politty:command:read:options:end -->
 
-<!-- politty:examples:read:start -->
+<!-- politty:command:read:examples:start -->
 
 **Examples**
 
@@ -95,20 +95,20 @@ $ file-cli read data.txt -f text
 Hello from data.txt
 ```
 
-<!-- politty:examples:read:end -->
-<!-- politty:heading:write:start -->
+<!-- politty:command:read:examples:end -->
+<!-- politty:command:write:heading:start -->
 
 ## write
 
-<!-- politty:heading:write:end -->
+<!-- politty:command:write:heading:end -->
 
-<!-- politty:description:write:start -->
+<!-- politty:command:write:description:start -->
 
 Write content to file
 
-<!-- politty:description:write:end -->
+<!-- politty:command:write:description:end -->
 
-<!-- politty:usage:write:start -->
+<!-- politty:command:write:usage:start -->
 
 **Usage**
 
@@ -116,9 +116,9 @@ Write content to file
 file-cli write [options] <file> <content>
 ```
 
-<!-- politty:usage:write:end -->
+<!-- politty:command:write:usage:end -->
 
-<!-- politty:arguments:write:start -->
+<!-- politty:command:write:arguments:start -->
 
 **Arguments**
 
@@ -127,9 +127,9 @@ file-cli write [options] <file> <content>
 | `file`    | File path to write | Yes      |
 | `content` | Content to write   | Yes      |
 
-<!-- politty:arguments:write:end -->
+<!-- politty:command:write:arguments:end -->
 
-<!-- politty:options:write:start -->
+<!-- politty:command:write:options:start -->
 
 **Options**
 
@@ -137,9 +137,9 @@ file-cli write [options] <file> <content>
 | ---------- | ----- | ------------------------------------- | -------- | ------- |
 | `--append` | `-a`  | Append to file instead of overwriting | No       | `false` |
 
-<!-- politty:options:write:end -->
+<!-- politty:command:write:options:end -->
 
-<!-- politty:examples:write:start -->
+<!-- politty:command:write:examples:start -->
 
 **Examples**
 
@@ -157,20 +157,20 @@ $ file-cli write log.txt "New entry" --append
 Successfully appended to log.txt
 ```
 
-<!-- politty:examples:write:end -->
-<!-- politty:heading:check:start -->
+<!-- politty:command:write:examples:end -->
+<!-- politty:command:check:heading:start -->
 
 ## check
 
-<!-- politty:heading:check:end -->
+<!-- politty:command:check:heading:end -->
 
-<!-- politty:description:check:start -->
+<!-- politty:command:check:description:start -->
 
 Check if file exists
 
-<!-- politty:description:check:end -->
+<!-- politty:command:check:description:end -->
 
-<!-- politty:usage:check:start -->
+<!-- politty:command:check:usage:start -->
 
 **Usage**
 
@@ -178,9 +178,9 @@ Check if file exists
 file-cli check <file>
 ```
 
-<!-- politty:usage:check:end -->
+<!-- politty:command:check:usage:end -->
 
-<!-- politty:arguments:check:start -->
+<!-- politty:command:check:arguments:start -->
 
 **Arguments**
 
@@ -188,9 +188,9 @@ file-cli check <file>
 | -------- | ------------------ | -------- |
 | `file`   | File path to check | Yes      |
 
-<!-- politty:arguments:check:end -->
+<!-- politty:command:check:arguments:end -->
 
-<!-- politty:examples:check:start -->
+<!-- politty:command:check:examples:start -->
 
 **Examples**
 
@@ -208,21 +208,21 @@ $ file-cli check missing.txt
 File not found: missing.txt
 ```
 
-<!-- politty:examples:check:end -->
+<!-- politty:command:check:examples:end -->
 
-<!-- politty:heading:delete:start -->
+<!-- politty:command:delete:heading:start -->
 
 ## delete
 
-<!-- politty:heading:delete:end -->
+<!-- politty:command:delete:heading:end -->
 
-<!-- politty:description:delete:start -->
+<!-- politty:command:delete:description:start -->
 
 Delete a file
 
-<!-- politty:description:delete:end -->
+<!-- politty:command:delete:description:end -->
 
-<!-- politty:usage:delete:start -->
+<!-- politty:command:delete:usage:start -->
 
 **Usage**
 
@@ -230,9 +230,9 @@ Delete a file
 file-cli delete [options] <file>
 ```
 
-<!-- politty:usage:delete:end -->
+<!-- politty:command:delete:usage:end -->
 
-<!-- politty:arguments:delete:start -->
+<!-- politty:command:delete:arguments:start -->
 
 **Arguments**
 
@@ -240,9 +240,9 @@ file-cli delete [options] <file>
 | -------- | ------------------- | -------- |
 | `file`   | File path to delete | Yes      |
 
-<!-- politty:arguments:delete:end -->
+<!-- politty:command:delete:arguments:end -->
 
-<!-- politty:options:delete:start -->
+<!-- politty:command:delete:options:start -->
 
 **Options**
 
@@ -250,4 +250,4 @@ file-cli delete [options] <file>
 | --------- | ----- | ----------------------------------- | -------- | ------- |
 | `--force` | `-f`  | Force deletion without confirmation | No       | `false` |
 
-<!-- politty:options:delete:end -->
+<!-- politty:command:delete:options:end -->

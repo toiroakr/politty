@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # my-tool
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 Complete CLI tool example
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Complete CLI tool example
 my-tool [options] [command] <input>
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:arguments::start -->
+<!-- politty:command::arguments:start -->
 
 **Arguments**
 
@@ -28,9 +28,9 @@ my-tool [options] [command] <input>
 | -------- | ----------- | -------- |
 | `input`  | Input file  | Yes      |
 
-<!-- politty:arguments::end -->
+<!-- politty:command::arguments:end -->
 
-<!-- politty:options::start -->
+<!-- politty:command::options:start -->
 
 **Options**
 
@@ -40,9 +40,9 @@ my-tool [options] [command] <input>
 | `--verbose`         | `-v`  | Enable verbose output | No       | `false`  |
 | `--format <FORMAT>` | `-f`  | Output format         | No       | `"json"` |
 
-<!-- politty:options::end -->
+<!-- politty:command::options:end -->
 
-<!-- politty:subcommands::start -->
+<!-- politty:command::subcommands:start -->
 
 **Commands**
 
@@ -50,29 +50,29 @@ my-tool [options] [command] <input>
 | --------------- | ------------------------ |
 | [`init`](#init) | Initialize a new project |
 
-<!-- politty:subcommands::end -->
+<!-- politty:command::subcommands:end -->
 
-<!-- politty:notes::start -->
+<!-- politty:command::notes:start -->
 
 **Notes**
 
 Supports subcommands, lifecycle hooks, and multiple output formats.
 
-<!-- politty:notes::end -->
+<!-- politty:command::notes:end -->
 
-<!-- politty:heading:init:start -->
+<!-- politty:command:init:heading:start -->
 
 ## init
 
-<!-- politty:heading:init:end -->
+<!-- politty:command:init:heading:end -->
 
-<!-- politty:description:init:start -->
+<!-- politty:command:init:description:start -->
 
 Initialize a new project
 
-<!-- politty:description:init:end -->
+<!-- politty:command:init:description:end -->
 
-<!-- politty:usage:init:start -->
+<!-- politty:command:init:usage:start -->
 
 **Usage**
 
@@ -80,9 +80,9 @@ Initialize a new project
 my-tool init [options]
 ```
 
-<!-- politty:usage:init:end -->
+<!-- politty:command:init:usage:end -->
 
-<!-- politty:options:init:start -->
+<!-- politty:command:init:options:start -->
 
 **Options**
 
@@ -91,4 +91,4 @@ my-tool init [options]
 | `--template <TEMPLATE>` | `-t`  | Template to use | No       | `"default"` |
 | `--name <NAME>`         | `-n`  | Project name    | No       | -           |
 
-<!-- politty:options:init:end -->
+<!-- politty:command:init:options:end -->

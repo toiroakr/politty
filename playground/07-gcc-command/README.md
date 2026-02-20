@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # gcc
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 C compiler (gcc command style)
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ C compiler (gcc command style)
 gcc [options] <sources>
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:arguments::start -->
+<!-- politty:command::arguments:start -->
 
 **Arguments**
 
@@ -28,9 +28,9 @@ gcc [options] <sources>
 | --------- | ------------ | -------- |
 | `sources` | Source files | Yes      |
 
-<!-- politty:arguments::end -->
+<!-- politty:command::arguments:end -->
 
-<!-- politty:options::start -->
+<!-- politty:command::options:start -->
 
 **Options**
 
@@ -39,4 +39,4 @@ gcc [options] <sources>
 | `--output <OUTPUT>` | `-o`  | Output filename     | Yes      | -       |
 | `--optimize`        | `-O`  | Enable optimization | No       | `false` |
 
-<!-- politty:options::end -->
+<!-- politty:command::options:end -->

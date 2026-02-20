@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # cat
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 Display file contents (cat command style)
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Display file contents (cat command style)
 cat [options] <files>
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:arguments::start -->
+<!-- politty:command::arguments:start -->
 
 **Arguments**
 
@@ -28,9 +28,9 @@ cat [options] <files>
 | -------- | ---------------- | -------- |
 | `files`  | Files to display | Yes      |
 
-<!-- politty:arguments::end -->
+<!-- politty:command::arguments:end -->
 
-<!-- politty:options::start -->
+<!-- politty:command::options:start -->
 
 **Options**
 
@@ -39,4 +39,4 @@ cat [options] <files>
 | `--number`    | `-n`  | Show line numbers      | No       | `false` |
 | `--show-ends` | `-E`  | Show $ at end of lines | No       | `false` |
 
-<!-- politty:options::end -->
+<!-- politty:command::options:end -->

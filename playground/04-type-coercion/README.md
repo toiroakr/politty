@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # server
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 Server configuration example (type coercion and validation)
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Server configuration example (type coercion and validation)
 server [options]
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:options::start -->
+<!-- politty:command::options:start -->
 
 **Options**
 
@@ -30,4 +30,4 @@ server [options]
 | `--count <COUNT>` | `-n`  | Repeat count          | No       | `1`           |
 | `--host <HOST>`   | `-h`  | Hostname              | No       | `"localhost"` |
 
-<!-- politty:options::end -->
+<!-- politty:command::options:end -->

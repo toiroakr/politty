@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # git-like
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 Example of displaying subcommand options together
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Example of displaying subcommand options together
 git-like [command]
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:subcommands::start -->
+<!-- politty:command::subcommands:start -->
 
 **Commands**
 
@@ -29,21 +29,21 @@ git-like [command]
 | [`config`](#config) | Manage configuration |
 | [`remote`](#remote) | Manage remotes       |
 
-<!-- politty:subcommands::end -->
+<!-- politty:command::subcommands:end -->
 
-<!-- politty:heading:config:start -->
+<!-- politty:command:config:heading:start -->
 
 ## config
 
-<!-- politty:heading:config:end -->
+<!-- politty:command:config:heading:end -->
 
-<!-- politty:description:config:start -->
+<!-- politty:command:config:description:start -->
 
 Manage configuration
 
-<!-- politty:description:config:end -->
+<!-- politty:command:config:description:end -->
 
-<!-- politty:usage:config:start -->
+<!-- politty:command:config:usage:start -->
 
 **Usage**
 
@@ -51,9 +51,9 @@ Manage configuration
 git-like config [command]
 ```
 
-<!-- politty:usage:config:end -->
+<!-- politty:command:config:usage:end -->
 
-<!-- politty:subcommands:config:start -->
+<!-- politty:command:config:subcommands:start -->
 
 **Commands**
 
@@ -63,21 +63,21 @@ git-like config [command]
 | [`config set`](#config-set)   | Set a config value     |
 | [`config list`](#config-list) | List all config values |
 
-<!-- politty:subcommands:config:end -->
+<!-- politty:command:config:subcommands:end -->
 
-<!-- politty:heading:config get:start -->
+<!-- politty:command:config get:heading:start -->
 
 ### config get
 
-<!-- politty:heading:config get:end -->
+<!-- politty:command:config get:heading:end -->
 
-<!-- politty:description:config get:start -->
+<!-- politty:command:config get:description:start -->
 
 Get a config value
 
-<!-- politty:description:config get:end -->
+<!-- politty:command:config get:description:end -->
 
-<!-- politty:usage:config get:start -->
+<!-- politty:command:config get:usage:start -->
 
 **Usage**
 
@@ -85,9 +85,9 @@ Get a config value
 git-like config get <key>
 ```
 
-<!-- politty:usage:config get:end -->
+<!-- politty:command:config get:usage:end -->
 
-<!-- politty:arguments:config get:start -->
+<!-- politty:command:config get:arguments:start -->
 
 **Arguments**
 
@@ -95,21 +95,21 @@ git-like config get <key>
 | -------- | ----------- | -------- |
 | `key`    | Config key  | Yes      |
 
-<!-- politty:arguments:config get:end -->
+<!-- politty:command:config get:arguments:end -->
 
-<!-- politty:heading:config list:start -->
+<!-- politty:command:config list:heading:start -->
 
 ### config list
 
-<!-- politty:heading:config list:end -->
+<!-- politty:command:config list:heading:end -->
 
-<!-- politty:description:config list:start -->
+<!-- politty:command:config list:description:start -->
 
 List all config values
 
-<!-- politty:description:config list:end -->
+<!-- politty:command:config list:description:end -->
 
-<!-- politty:usage:config list:start -->
+<!-- politty:command:config list:usage:start -->
 
 **Usage**
 
@@ -117,9 +117,9 @@ List all config values
 git-like config list [options]
 ```
 
-<!-- politty:usage:config list:end -->
+<!-- politty:command:config list:usage:end -->
 
-<!-- politty:options:config list:start -->
+<!-- politty:command:config list:options:start -->
 
 **Options**
 
@@ -128,21 +128,21 @@ git-like config list [options]
 | `--format <FORMAT>` | `-f`  | Output format             | No       | `"table"` |
 | `--global`          | `-g`  | Show global configuration | No       | `false`   |
 
-<!-- politty:options:config list:end -->
+<!-- politty:command:config list:options:end -->
 
-<!-- politty:heading:config set:start -->
+<!-- politty:command:config set:heading:start -->
 
 ### config set
 
-<!-- politty:heading:config set:end -->
+<!-- politty:command:config set:heading:end -->
 
-<!-- politty:description:config set:start -->
+<!-- politty:command:config set:description:start -->
 
 Set a config value
 
-<!-- politty:description:config set:end -->
+<!-- politty:command:config set:description:end -->
 
-<!-- politty:usage:config set:start -->
+<!-- politty:command:config set:usage:start -->
 
 **Usage**
 
@@ -150,9 +150,9 @@ Set a config value
 git-like config set <key> <value>
 ```
 
-<!-- politty:usage:config set:end -->
+<!-- politty:command:config set:usage:end -->
 
-<!-- politty:arguments:config set:start -->
+<!-- politty:command:config set:arguments:start -->
 
 **Arguments**
 
@@ -161,21 +161,21 @@ git-like config set <key> <value>
 | `key`    | Config key   | Yes      |
 | `value`  | Config value | Yes      |
 
-<!-- politty:arguments:config set:end -->
+<!-- politty:command:config set:arguments:end -->
 
-<!-- politty:heading:remote:start -->
+<!-- politty:command:remote:heading:start -->
 
 ## remote
 
-<!-- politty:heading:remote:end -->
+<!-- politty:command:remote:heading:end -->
 
-<!-- politty:description:remote:start -->
+<!-- politty:command:remote:description:start -->
 
 Manage remotes
 
-<!-- politty:description:remote:end -->
+<!-- politty:command:remote:description:end -->
 
-<!-- politty:usage:remote:start -->
+<!-- politty:command:remote:usage:start -->
 
 **Usage**
 
@@ -183,9 +183,9 @@ Manage remotes
 git-like remote [command]
 ```
 
-<!-- politty:usage:remote:end -->
+<!-- politty:command:remote:usage:end -->
 
-<!-- politty:subcommands:remote:start -->
+<!-- politty:command:remote:subcommands:start -->
 
 **Commands**
 
@@ -194,21 +194,21 @@ git-like remote [command]
 | [`remote add`](#remote-add)       | Add remote    |
 | [`remote remove`](#remote-remove) | Remove remote |
 
-<!-- politty:subcommands:remote:end -->
+<!-- politty:command:remote:subcommands:end -->
 
-<!-- politty:heading:remote add:start -->
+<!-- politty:command:remote add:heading:start -->
 
 ### remote add
 
-<!-- politty:heading:remote add:end -->
+<!-- politty:command:remote add:heading:end -->
 
-<!-- politty:description:remote add:start -->
+<!-- politty:command:remote add:description:start -->
 
 Add remote
 
-<!-- politty:description:remote add:end -->
+<!-- politty:command:remote add:description:end -->
 
-<!-- politty:usage:remote add:start -->
+<!-- politty:command:remote add:usage:start -->
 
 **Usage**
 
@@ -216,9 +216,9 @@ Add remote
 git-like remote add <name> <url>
 ```
 
-<!-- politty:usage:remote add:end -->
+<!-- politty:command:remote add:usage:end -->
 
-<!-- politty:arguments:remote add:start -->
+<!-- politty:command:remote add:arguments:start -->
 
 **Arguments**
 
@@ -227,21 +227,21 @@ git-like remote add <name> <url>
 | `name`   | Remote name | Yes      |
 | `url`    | Remote URL  | Yes      |
 
-<!-- politty:arguments:remote add:end -->
+<!-- politty:command:remote add:arguments:end -->
 
-<!-- politty:heading:remote remove:start -->
+<!-- politty:command:remote remove:heading:start -->
 
 ### remote remove
 
-<!-- politty:heading:remote remove:end -->
+<!-- politty:command:remote remove:heading:end -->
 
-<!-- politty:description:remote remove:start -->
+<!-- politty:command:remote remove:description:start -->
 
 Remove remote
 
-<!-- politty:description:remote remove:end -->
+<!-- politty:command:remote remove:description:end -->
 
-<!-- politty:usage:remote remove:start -->
+<!-- politty:command:remote remove:usage:start -->
 
 **Usage**
 
@@ -249,9 +249,9 @@ Remove remote
 git-like remote remove [options] <name>
 ```
 
-<!-- politty:usage:remote remove:end -->
+<!-- politty:command:remote remove:usage:end -->
 
-<!-- politty:arguments:remote remove:start -->
+<!-- politty:command:remote remove:arguments:start -->
 
 **Arguments**
 
@@ -259,9 +259,9 @@ git-like remote remove [options] <name>
 | -------- | ----------- | -------- |
 | `name`   | Remote name | Yes      |
 
-<!-- politty:arguments:remote remove:end -->
+<!-- politty:command:remote remove:arguments:end -->
 
-<!-- politty:options:remote remove:start -->
+<!-- politty:command:remote remove:options:start -->
 
 **Options**
 
@@ -269,4 +269,4 @@ git-like remote remove [options] <name>
 | --------- | ----- | -------------- | -------- | ------- |
 | `--force` | `-f`  | Force deletion | No       | `false` |
 
-<!-- politty:options:remote remove:end -->
+<!-- politty:command:remote remove:options:end -->

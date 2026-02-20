@@ -1,16 +1,16 @@
-<!-- politty:heading::start -->
+<!-- politty:command::heading:start -->
 
 # cp
 
-<!-- politty:heading::end -->
+<!-- politty:command::heading:end -->
 
-<!-- politty:description::start -->
+<!-- politty:command::description:start -->
 
 Copy files (cp command style)
 
-<!-- politty:description::end -->
+<!-- politty:command::description:end -->
 
-<!-- politty:usage::start -->
+<!-- politty:command::usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Copy files (cp command style)
 cp [options] <source> <destination>
 ```
 
-<!-- politty:usage::end -->
+<!-- politty:command::usage:end -->
 
-<!-- politty:arguments::start -->
+<!-- politty:command::arguments:start -->
 
 **Arguments**
 
@@ -29,9 +29,9 @@ cp [options] <source> <destination>
 | `source`      | Source file      | Yes      |
 | `destination` | Destination file | Yes      |
 
-<!-- politty:arguments::end -->
+<!-- politty:command::arguments:end -->
 
-<!-- politty:options::start -->
+<!-- politty:command::options:start -->
 
 **Options**
 
@@ -40,4 +40,4 @@ cp [options] <source> <destination>
 | `--recursive` | `-r`  | Copy directories recursively | No       | `false` |
 | `--force`     | `-f`  | Skip overwrite confirmation  | No       | `false` |
 
-<!-- politty:options::end -->
+<!-- politty:command::options:end -->

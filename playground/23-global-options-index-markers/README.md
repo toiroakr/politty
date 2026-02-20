@@ -1,16 +1,16 @@
-<!-- politty:heading:init:start -->
+<!-- politty:command:init:heading:start -->
 
 ## init
 
-<!-- politty:heading:init:end -->
+<!-- politty:command:init:heading:end -->
 
-<!-- politty:description:init:start -->
+<!-- politty:command:init:description:start -->
 
 Initialize a new project
 
-<!-- politty:description:init:end -->
+<!-- politty:command:init:description:end -->
 
-<!-- politty:usage:init:start -->
+<!-- politty:command:init:usage:start -->
 
 **Usage**
 
@@ -18,9 +18,9 @@ Initialize a new project
 project-cli init [options] <name>
 ```
 
-<!-- politty:usage:init:end -->
+<!-- politty:command:init:usage:end -->
 
-<!-- politty:arguments:init:start -->
+<!-- politty:command:init:arguments:start -->
 
 **Arguments**
 
@@ -28,9 +28,9 @@ project-cli init [options] <name>
 | -------- | ------------ | -------- |
 | `name`   | Project name | Yes      |
 
-<!-- politty:arguments:init:end -->
+<!-- politty:command:init:arguments:end -->
 
-<!-- politty:options:init:start -->
+<!-- politty:command:init:options:start -->
 
 **Options**
 
@@ -38,21 +38,21 @@ project-cli init [options] <name>
 | ----------------------- | ----- | ----------------------- | -------- | ----------- |
 | `--template <TEMPLATE>` | `-t`  | Project template to use | No       | `"default"` |
 
-<!-- politty:options:init:end -->
+<!-- politty:command:init:options:end -->
 
-<!-- politty:heading:build:start -->
+<!-- politty:command:build:heading:start -->
 
 ## build
 
-<!-- politty:heading:build:end -->
+<!-- politty:command:build:heading:end -->
 
-<!-- politty:description:build:start -->
+<!-- politty:command:build:description:start -->
 
 Build the project
 
-<!-- politty:description:build:end -->
+<!-- politty:command:build:description:end -->
 
-<!-- politty:usage:build:start -->
+<!-- politty:command:build:usage:start -->
 
 **Usage**
 
@@ -60,9 +60,9 @@ Build the project
 project-cli build [options]
 ```
 
-<!-- politty:usage:build:end -->
+<!-- politty:command:build:usage:end -->
 
-<!-- politty:options:build:start -->
+<!-- politty:command:build:options:start -->
 
 **Options**
 
@@ -70,21 +70,21 @@ project-cli build [options]
 | --------- | ----- | ----------------- | -------- | ------- |
 | `--watch` | `-w`  | Watch for changes | No       | `false` |
 
-<!-- politty:options:build:end -->
+<!-- politty:command:build:options:end -->
 
-<!-- politty:heading:deploy:start -->
+<!-- politty:command:deploy:heading:start -->
 
 ## deploy
 
-<!-- politty:heading:deploy:end -->
+<!-- politty:command:deploy:heading:end -->
 
-<!-- politty:description:deploy:start -->
+<!-- politty:command:deploy:description:start -->
 
 Deploy the project
 
-<!-- politty:description:deploy:end -->
+<!-- politty:command:deploy:description:end -->
 
-<!-- politty:usage:deploy:start -->
+<!-- politty:command:deploy:usage:start -->
 
 **Usage**
 
@@ -92,9 +92,9 @@ Deploy the project
 project-cli deploy [options]
 ```
 
-<!-- politty:usage:deploy:end -->
+<!-- politty:command:deploy:usage:end -->
 
-<!-- politty:options:deploy:start -->
+<!-- politty:command:deploy:options:start -->
 
 **Options**
 
@@ -102,4 +102,4 @@ project-cli deploy [options]
 | --------- | ----- | ------------------------------------- | -------- | ------- |
 | `--force` | `-f`  | Force deployment without confirmation | No       | `false` |
 
-<!-- politty:options:deploy:end -->
+<!-- politty:command:deploy:options:end -->
