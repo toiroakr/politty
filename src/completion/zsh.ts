@@ -33,9 +33,12 @@ _${programName}() {
     local -a args=("\${words[@]:1}")
     local -a output=("\${(@f)$(${programName} __complete --shell zsh -- "\${args[@]}" 2>/dev/null)}")
 
+    local extensions=""
     for line in "\${output[@]}"; do
         if [[ "$line" == :* ]]; then
             directive="\${line:1}"
+        elif [[ "$line" == @ext:* ]]; then
+            extensions="\${line:5}"
         elif [[ -n "$line" ]]; then
             candidates+=("$line")
         fi
@@ -47,6 +50,17 @@ _${programName}() {
         return
     fi
 
+    # Extension-filtered file completion using native _files -g
+    if [[ -n "$extensions" ]]; then
+        local ext_list="\${extensions//,/|}"
+        if [[ "$ext_list" == *"|"* ]]; then
+            _files -g "*.(\${ext_list})"
+        else
+            _files -g "*.$ext_list"
+        fi
+        return
+    fi
+
     if (( \${#candidates[@]} > 0 )); then
         _describe 'completions' candidates
     fi
@@ -54,6 +68,12 @@ _${programName}() {
     # 32 = DirectoryCompletion: add native directory matches
     if (( directive & 32 )); then
         _files -/
+    fi
+
+    # 2 = NoFileCompletion, 32 = DirectoryCompletion:
+    # prevent fallback to default completers (e.g. file completion)
+    if (( directive & 2 )) || (( directive & 32 )); then
+        return
     fi
 }
 

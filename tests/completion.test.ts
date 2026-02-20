@@ -751,7 +751,7 @@ describe("Completion", () => {
         expect(result.directive & CompletionDirective.FileCompletion).toBeTruthy();
       });
 
-      it("should resolve file extensions in JS instead of using markers", () => {
+      it("should pass file extensions to shell via metadata instead of resolving in JS", () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -765,10 +765,12 @@ describe("Completion", () => {
         const ctx = parseCompletionContext(["--config", ""], cmd);
         const result = generateCandidates(ctx);
 
-        // Should NOT have __extensions: marker
-        expect(result.candidates.some((c) => c.value.startsWith("__extensions:"))).toBe(false);
-        // Should NOT have FileCompletion directive (resolved in JS)
+        // Should NOT have any file candidates resolved in JS
+        expect(result.candidates).toHaveLength(0);
+        // Should NOT have FileCompletion directive (shell uses @ext: metadata instead)
         expect(result.directive & CompletionDirective.FileCompletion).toBeFalsy();
+        // Should have fileExtensions metadata for shell-native completion
+        expect(result.fileExtensions).toEqual(["json", "yaml"]);
       });
 
       it("should set directory directive for directory completion", () => {

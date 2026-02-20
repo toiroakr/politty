@@ -178,15 +178,15 @@ describe("24-shell-completion", () => {
       expect(values).toContain("--dry-run");
     });
 
-    it("resolves file completion with extensions in JS (no FileCompletion directive)", async () => {
+    it("passes file extensions to shell via @ext: metadata (no FileCompletion directive)", async () => {
       await runCommand(cli, ["__complete", "--shell", "fish", "--", "deploy", "--config", ""]);
       const output = console.getLogs().join("\n");
 
-      // deploy --config has extensions specified, so files are resolved in JS
-      // Directive should be FilterPrefix(4) | DirectoryCompletion(32) = 36
-      // NOT FileCompletion(16) — files are resolved in JS, directories via shell
-      expect(output).toContain(":36");
-      expect(output).not.toContain(":20");
+      // deploy --config has extensions specified, so extensions are passed to shell via @ext: metadata
+      // Directive should be FilterPrefix(4) only — shell handles file completion natively
+      expect(output).toContain("@ext:json,yaml,yml");
+      expect(output).toContain(":4");
+      expect(output).not.toContain(":20"); // NOT FileCompletion(16) | FilterPrefix(4)
     });
 
     it("returns directory directive for directory completion", async () => {

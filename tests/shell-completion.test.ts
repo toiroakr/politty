@@ -132,6 +132,24 @@ _describe() {
 _files() {
   if [[ "$1" == "-/" ]]; then
     echo "__directive:directory__"
+  elif [[ "$1" == "-g" ]]; then
+    local pat="$2" cur="\${words[-1]}" dir="" prefix=""
+    if [[ -z "$cur" || "$cur" != */* ]]; then
+      dir="." prefix="$cur"
+    elif [[ "$cur" == */ ]]; then
+      dir="\${cur%/}" prefix=""
+    else
+      dir="\${cur%/*}" prefix="\${cur##*/}"
+    fi
+    setopt null_glob
+    local f
+    for f in \${~dir}/\${prefix}\${~pat}(N); do
+      [[ -f "$f" ]] && { [[ "$dir" == "." ]] && echo "\${f#./}" || echo "$f" }
+    done
+    for f in "\${dir}"/\${prefix}*(N/); do
+      [[ "$dir" == "." ]] && echo "\${f#./}" || echo "$f"
+    done
+    unsetopt null_glob
   else
     echo "__directive:file__"
   fi
@@ -528,9 +546,17 @@ describe.skipIf(!hasZsh)("zsh-specific completion", () => {
     expect(values).toContain("__directive:directory__");
   });
 
-  it("delegates to _files -/ for file extension directory navigation", () => {
+  it("uses _files -g for extension-filtered file completion", () => {
     const values = zshComplete(["deploy", "--config", ""], { cwd: testFilesDir });
-    expect(values).toContain("__directive:directory__");
+    // _files -g stub lists matching files and directories
+    expect(values).toContain("app.json");
+    expect(values).toContain("app.yaml");
+    expect(values).toContain("deploy.yml");
+    expect(values).not.toContain("readme.md");
+    expect(values).not.toContain("index.ts");
+    // Directories for navigation
+    expect(values).toContain("configs");
+    expect(values).toContain("scripts");
   });
 
   it("completes files inside subdirectory", () => {

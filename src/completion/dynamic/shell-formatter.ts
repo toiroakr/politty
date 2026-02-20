@@ -56,6 +56,16 @@ function filterByPrefix(candidates: CompletionCandidate[], prefix: string): Comp
 }
 
 /**
+ * Append extension metadata and directive to output lines
+ */
+function appendMetadata(lines: string[], result: CandidateResult): void {
+  if (result.fileExtensions && result.fileExtensions.length > 0) {
+    lines.push(`@ext:${result.fileExtensions.join(",")}`);
+  }
+  lines.push(`:${result.directive}`);
+}
+
+/**
  * Format for bash
  *
  * - Pre-filters candidates by currentWord prefix (replaces compgen -W)
@@ -77,7 +87,7 @@ function formatForBash(result: CandidateResult, options: ShellFormatOptions): st
     return c.value;
   });
 
-  lines.push(`:${result.directive}`);
+  appendMetadata(lines, result);
   return lines.join("\n");
 }
 
@@ -98,7 +108,7 @@ function formatForZsh(result: CandidateResult, _options: ShellFormatOptions): st
     return escapedValue;
   });
 
-  lines.push(`:${result.directive}`);
+  appendMetadata(lines, result);
   return lines.join("\n");
 }
 
@@ -116,6 +126,6 @@ function formatForFish(result: CandidateResult, _options: ShellFormatOptions): s
     return c.value;
   });
 
-  lines.push(`:${result.directive}`);
+  appendMetadata(lines, result);
   return lines.join("\n");
 }

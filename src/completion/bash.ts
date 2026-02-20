@@ -40,6 +40,17 @@ _${programName}_completions() {
     if [[ "$last" == :* ]]; then
         directive="\${last:1}"
         unset 'lines[count-1]'
+        (( count-- ))
+    fi
+
+    # Parse @ext: metadata (extension filter for native file completion)
+    local extensions=""
+    if (( count > 0 )); then
+        local maybe_ext="\${lines[count-1]}"
+        if [[ "$maybe_ext" == @ext:* ]]; then
+            extensions="\${maybe_ext:5}"
+            unset 'lines[count-1]'
+        fi
     fi
 
     local cur="\${COMP_WORDS[COMP_CWORD]}"
@@ -48,6 +59,29 @@ _${programName}_completions() {
     if (( directive & 16 )); then
         COMPREPLY=($(compgen -f -- "$cur"))
         compopt -o filenames
+        return 0
+    fi
+
+    # Extension-filtered file completion: keep matching files + directories
+    if [[ -n "$extensions" ]]; then
+        local -a all_entries=($(compgen -f -- "$cur"))
+        local IFS=','
+        local -a ext_arr=($extensions)
+        IFS=$'\\n'
+        for f in "\${all_entries[@]}"; do
+            if [[ -d "$f" ]]; then
+                COMPREPLY+=("$f")
+            else
+                for ext in "\${ext_arr[@]}"; do
+                    if [[ "$f" == *".$ext" ]]; then
+                        COMPREPLY+=("$f")
+                        break
+                    fi
+                done
+            fi
+        done
+        compopt -o filenames
+        compopt +o default 2>/dev/null
         return 0
     fi
 
@@ -60,6 +94,12 @@ _${programName}_completions() {
     if (( directive & 32 )); then
         COMPREPLY+=($(compgen -d -- "$cur"))
         compopt -o filenames
+    fi
+
+    # 2 = NoFileCompletion, 32 = DirectoryCompletion:
+    # suppress -o default file fallback when completions are restricted
+    if (( directive & 2 )) || (( directive & 32 )); then
+        compopt +o default 2>/dev/null
     fi
 
     return 0
