@@ -1,8 +1,16 @@
-<!-- politty:command::start -->
+<!-- politty:heading::start -->
 
 # greet
 
+<!-- politty:heading::end -->
+
+<!-- politty:description::start -->
+
 A CLI tool that displays greetings
+
+<!-- politty:description::end -->
+
+<!-- politty:usage::start -->
 
 **Usage**
 
@@ -10,11 +18,19 @@ A CLI tool that displays greetings
 greet [options] <name>
 ```
 
+<!-- politty:usage::end -->
+
+<!-- politty:arguments::start -->
+
 **Arguments**
 
 | Argument | Description           | Required |
 | -------- | --------------------- | -------- |
 | `name`   | Name of the recipient | Yes      |
+
+<!-- politty:arguments::end -->
+
+<!-- politty:options::start -->
 
 **Options**
 
@@ -23,4 +39,4 @@ greet [options] <name>
 | `--greeting <GREETING>` | `-g`  | Greeting phrase  | No       | `"Hello"` |
 | `--loud`                | `-l`  | Output uppercase | No       | `false`   |
 
-<!-- politty:command::end -->
+<!-- politty:options::end -->

@@ -1,8 +1,16 @@
-<!-- politty:command::start -->
+<!-- politty:heading::start -->
 
 # greet-meta
 
+<!-- politty:heading::end -->
+
+<!-- politty:description::start -->
+
 Test for Zod .meta() support
+
+<!-- politty:description::end -->
+
+<!-- politty:usage::start -->
 
 **Usage**
 
@@ -10,11 +18,19 @@ Test for Zod .meta() support
 greet-meta [options] <name>
 ```
 
+<!-- politty:usage::end -->
+
+<!-- politty:arguments::start -->
+
 **Arguments**
 
 | Argument | Description              | Required |
 | -------- | ------------------------ | -------- |
 | `name`   | Name to greet (via meta) | Yes      |
+
+<!-- politty:arguments::end -->
+
+<!-- politty:options::start -->
 
 **Options**
 
@@ -22,4 +38,4 @@ greet-meta [options] <name>
 | ----------------------- | ----- | -------------------------- | -------- | --------- |
 | `--greeting <GREETING>` | `-g`  | Greeting phrase (via meta) | No       | `"Hello"` |
 
-<!-- politty:command::end -->
+<!-- politty:options::end -->

@@ -92,9 +92,9 @@ describe("golden-test", () => {
       expect(content).toContain("# test-cli");
       expect(content).toContain("A test CLI for documentation generation");
 
-      // Verify markers are included
-      expect(content).toContain("<!-- politty:command::start -->");
-      expect(content).toContain("<!-- politty:command::end -->");
+      // Verify section markers are included
+      expect(content).toContain("<!-- politty:heading::start -->");
+      expect(content).toContain("<!-- politty:heading::end -->");
     });
 
     it("should report match when content is identical", async () => {
@@ -1022,8 +1022,8 @@ describe("golden-test", () => {
       expect(content).toContain("## alpha one");
       expect(content).toContain("## beta one");
       // "two" subcommands should be excluded (check for section markers)
-      expect(content).not.toContain("<!-- politty:command:alpha two:start -->");
-      expect(content).not.toContain("<!-- politty:command:beta two:start -->");
+      expect(content).not.toContain("<!-- politty:heading:alpha two:start -->");
+      expect(content).not.toContain("<!-- politty:heading:beta two:start -->");
     });
 
     // Combined: ignores parent command while files specifies different commands
@@ -1436,13 +1436,13 @@ describe("golden-test", () => {
 
       // Read original content
       const originalContent = fs.readFileSync(filePath, "utf-8");
-      expect(originalContent).toContain("<!-- politty:command:greet:start -->");
+      expect(originalContent).toContain("<!-- politty:heading:greet:start -->");
 
-      // Manually modify the greet section in the file
+      // Manually modify the greet heading section in the file
       // greet is depth=2 (subcommand), so it gets ## heading
       const modifiedContent = originalContent.replace(
-        /<!-- politty:command:greet:start -->\n## greet/,
-        "<!-- politty:command:greet:start -->\n## MODIFIED greet",
+        /<!-- politty:heading:greet:start -->\n## greet/,
+        "<!-- politty:heading:greet:start -->\n## MODIFIED greet",
       );
       fs.writeFileSync(filePath, modifiedContent, "utf-8");
 
@@ -1456,7 +1456,7 @@ describe("golden-test", () => {
       // Verify greet section was restored but other sections remain
       const updatedContent = fs.readFileSync(filePath, "utf-8");
       // greet is depth=2 (subcommand), so it gets ## heading
-      expect(updatedContent).toContain("<!-- politty:command:greet:start -->\n## greet");
+      expect(updatedContent).toContain("<!-- politty:heading:greet:start -->\n## greet");
       expect(updatedContent).not.toContain("## MODIFIED greet");
     });
 
@@ -1510,15 +1510,15 @@ describe("golden-test", () => {
       // Read original content
       const originalContent = fs.readFileSync(filePath, "utf-8");
 
-      // Manually modify both greet and config sections in the file
+      // Manually modify both greet and config heading sections in the file
       // greet and config are depth=2 (subcommands), so they get ## heading
       let modifiedContent = originalContent.replace(
-        /<!-- politty:command:greet:start -->\n## greet/,
-        "<!-- politty:command:greet:start -->\n## MODIFIED greet",
+        /<!-- politty:heading:greet:start -->\n## greet/,
+        "<!-- politty:heading:greet:start -->\n## MODIFIED greet",
       );
       modifiedContent = modifiedContent.replace(
-        /<!-- politty:command:config:start -->\n## config/,
-        "<!-- politty:command:config:start -->\n## MODIFIED config",
+        /<!-- politty:heading:config:start -->\n## config/,
+        "<!-- politty:heading:config:start -->\n## MODIFIED config",
       );
       fs.writeFileSync(filePath, modifiedContent, "utf-8");
 
@@ -1531,8 +1531,8 @@ describe("golden-test", () => {
 
       // Verify both sections were restored
       const updatedContent = fs.readFileSync(filePath, "utf-8");
-      expect(updatedContent).toContain("<!-- politty:command:greet:start -->\n## greet");
-      expect(updatedContent).toContain("<!-- politty:command:config:start -->\n## config");
+      expect(updatedContent).toContain("<!-- politty:heading:greet:start -->\n## greet");
+      expect(updatedContent).toContain("<!-- politty:heading:config:start -->\n## config");
       expect(updatedContent).not.toContain("## MODIFIED greet");
       expect(updatedContent).not.toContain("## MODIFIED config");
     });
@@ -2021,9 +2021,9 @@ A test CLI for documentation generation
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${rootDocPath}:start -->
 ${indexContent}
-<!-- politty:index:end -->
+<!-- politty:index:${rootDocPath}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2064,9 +2064,9 @@ A test CLI for documentation generation
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${rootDocPath}:start -->
 ${indexContent}
-<!-- politty:index:end -->
+<!-- politty:index:${rootDocPath}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2097,7 +2097,7 @@ A test CLI for documentation generation
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${rootDocPath}:start -->
 ### [Old Category](./old.md)
 
 Old description.
@@ -2105,7 +2105,7 @@ Old description.
 | Command | Description |
 |---------|-------------|
 | [old](./old.md#old) | Old command |
-<!-- politty:index:end -->
+<!-- politty:index:${rootDocPath}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2185,7 +2185,7 @@ A test CLI for documentation generation
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${rootDocPath}:start -->
 ### Broken section without end marker
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
@@ -2218,11 +2218,11 @@ A test CLI for documentation generation
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${rootDocPath}:start -->
 ### [Old Category](./old.md)
 
 Old description.
-<!-- politty:index:end -->
+<!-- politty:index:${rootDocPath}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2254,11 +2254,11 @@ A test CLI for documentation generation
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${rootDocPath}:start -->
 ### [Old Category](./old.md)
 
 Old description.
-<!-- politty:index:end -->
+<!-- politty:index:${rootDocPath}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2315,9 +2315,9 @@ ${argsContent}
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${rootDocPath}:start -->
 ${indexContent}
-<!-- politty:index:end -->
+<!-- politty:index:${rootDocPath}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2359,9 +2359,9 @@ outdated args
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${rootDocPath}:start -->
 outdated index
-<!-- politty:index:end -->
+<!-- politty:index:${rootDocPath}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2506,7 +2506,7 @@ ${argsContent}
       expect(updatedContent).toContain("A test CLI for documentation generation");
     });
 
-    it("should detect unexpected command markers in rootDoc", async () => {
+    it("should detect unexpected section markers in rootDoc", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "");
 
       const rootDocPath = path.join(testDir, "rootdoc-unexpected-cmd.md");
@@ -2517,9 +2517,9 @@ ${argsContent}
 
 A test CLI for documentation generation
 
-<!-- politty:command:config:start -->
+<!-- politty:heading:config:start -->
 ## stale config
-<!-- politty:command:config:end -->
+<!-- politty:heading:config:end -->
 `,
         "utf-8",
       );
@@ -2532,7 +2532,7 @@ A test CLI for documentation generation
 
       expect(result.success).toBe(false);
       expect(result.files[0]?.status).toBe("diff");
-      expect(result.files[0]?.diff).toContain("unexpected command marker sections in rootDoc");
+      expect(result.files[0]?.diff).toContain("unexpected section markers in rootDoc");
       expect(result.files[0]?.diff).toContain("config");
     });
   });
@@ -2568,8 +2568,8 @@ A test CLI for documentation generation
 
 A test CLI for documentation generation
 
-<!-- politty:index:start -->
-<!-- politty:index:end -->
+<!-- politty:index:${rootDocPath}:start -->
+<!-- politty:index:${rootDocPath}:end -->
 `,
         "utf-8",
       );
@@ -2600,8 +2600,8 @@ A test CLI for documentation generation
 
 A test CLI for documentation generation
 
-<!-- politty:index:start -->
-<!-- politty:index:end -->
+<!-- politty:index:${rootDocPath}:start -->
+<!-- politty:index:${rootDocPath}:end -->
 `,
         "utf-8",
       );
@@ -2632,8 +2632,8 @@ A test CLI for documentation generation
 
 A test CLI for documentation generation
 
-<!-- politty:index:start -->
-<!-- politty:index:end -->
+<!-- politty:index:${rootDocPath}:start -->
+<!-- politty:index:${rootDocPath}:end -->
 `,
         "utf-8",
       );

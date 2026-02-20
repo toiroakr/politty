@@ -33,15 +33,15 @@ export type { ArgsShape, ArgsTableOptions } from "./render-args.js";
 export { renderCommandIndex } from "./render-index.js";
 export type { CommandCategory } from "./render-index.js";
 export {
-  commandEndMarker,
-  commandStartMarker,
-  COMMAND_MARKER_PREFIX,
   globalOptionsEndMarker,
   globalOptionsStartMarker,
   GLOBAL_OPTIONS_MARKER_PREFIX,
   indexEndMarker,
   indexStartMarker,
   INDEX_MARKER_PREFIX,
+  sectionEndMarker,
+  sectionStartMarker,
+  SECTION_MARKER_PREFIX,
   UPDATE_GOLDEN_ENV,
 } from "./types.js";
 // Types
@@ -69,6 +69,7 @@ export type {
   RenderFunction,
   RootDocConfig,
   SectionRenderFunction,
+  SectionType,
   SimpleRenderContext,
   SimpleRenderFunction,
   SubCommandInfo,

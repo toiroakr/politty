@@ -1,14 +1,26 @@
-<!-- politty:command::start -->
+<!-- politty:heading::start -->
 
 # db-query
 
+<!-- politty:heading::end -->
+
+<!-- politty:description::start -->
+
 Execute database query (lifecycle hooks demo)
+
+<!-- politty:description::end -->
+
+<!-- politty:usage::start -->
 
 **Usage**
 
 ```
 db-query [options]
 ```
+
+<!-- politty:usage::end -->
+
+<!-- politty:options::start -->
 
 **Options**
 
@@ -17,6 +29,10 @@ db-query [options]
 | `--database <DATABASE>` | `-d`  | Database connection string | Yes      | -       |
 | `--query <QUERY>`       | `-q`  | SQL query                  | Yes      | -       |
 | `--simulate_error`      | `-e`  | Simulate an error          | No       | `false` |
+
+<!-- politty:options::end -->
+
+<!-- politty:notes::start -->
 
 **Notes**
 
@@ -30,4 +46,4 @@ db-query [options]
 > When `--simulate-error` is set, an error is thrown during `run`.
 > The `cleanup` hook is still called to release resources.
 
-<!-- politty:command::end -->
+<!-- politty:notes::end -->

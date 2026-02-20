@@ -1,8 +1,16 @@
-<!-- politty:command::start -->
+<!-- politty:heading::start -->
 
 # my-tool
 
+<!-- politty:heading::end -->
+
+<!-- politty:description::start -->
+
 Complete CLI tool example
+
+<!-- politty:description::end -->
+
+<!-- politty:usage::start -->
 
 **Usage**
 
@@ -10,11 +18,19 @@ Complete CLI tool example
 my-tool [options] [command] <input>
 ```
 
+<!-- politty:usage::end -->
+
+<!-- politty:arguments::start -->
+
 **Arguments**
 
 | Argument | Description | Required |
 | -------- | ----------- | -------- |
 | `input`  | Input file  | Yes      |
+
+<!-- politty:arguments::end -->
+
+<!-- politty:options::start -->
 
 **Options**
 
@@ -24,28 +40,49 @@ my-tool [options] [command] <input>
 | `--verbose`         | `-v`  | Enable verbose output | No       | `false`  |
 | `--format <FORMAT>` | `-f`  | Output format         | No       | `"json"` |
 
+<!-- politty:options::end -->
+
+<!-- politty:subcommands::start -->
+
 **Commands**
 
 | Command         | Description              |
 | --------------- | ------------------------ |
 | [`init`](#init) | Initialize a new project |
 
+<!-- politty:subcommands::end -->
+
+<!-- politty:notes::start -->
+
 **Notes**
 
 Supports subcommands, lifecycle hooks, and multiple output formats.
 
-<!-- politty:command::end -->
-<!-- politty:command:init:start -->
+<!-- politty:notes::end -->
+
+<!-- politty:heading:init:start -->
 
 ## init
 
+<!-- politty:heading:init:end -->
+
+<!-- politty:description:init:start -->
+
 Initialize a new project
+
+<!-- politty:description:init:end -->
+
+<!-- politty:usage:init:start -->
 
 **Usage**
 
 ```
 my-tool init [options]
 ```
+
+<!-- politty:usage:init:end -->
+
+<!-- politty:options:init:start -->
 
 **Options**
 
@@ -54,4 +91,4 @@ my-tool init [options]
 | `--template <TEMPLATE>` | `-t`  | Template to use | No       | `"default"` |
 | `--name <NAME>`         | `-n`  | Project name    | No       | -           |
 
-<!-- politty:command:init:end -->
+<!-- politty:options:init:end -->

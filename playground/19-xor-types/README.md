@@ -1,14 +1,26 @@
-<!-- politty:command::start -->
+<!-- politty:heading::start -->
 
 # auth-demo
 
+<!-- politty:heading::end -->
+
+<!-- politty:description::start -->
+
 Demo of xor (exclusive union) help with auth methods
+
+<!-- politty:description::end -->
+
+<!-- politty:usage::start -->
 
 **Usage**
 
 ```
 auth-demo [options]
 ```
+
+<!-- politty:usage::end -->
+
+<!-- politty:options::start -->
 
 **Options**
 
@@ -18,4 +30,4 @@ auth-demo [options]
 | `--username <USERNAME>` | -     | Username    | Yes      | -       |
 | `--password <PASSWORD>` | -     | Password    | Yes      | -       |
 
-<!-- politty:command::end -->
+<!-- politty:options::end -->

@@ -1,14 +1,26 @@
-<!-- politty:command::start -->
+<!-- politty:heading::start -->
 
 # server
 
+<!-- politty:heading::end -->
+
+<!-- politty:description::start -->
+
 Server configuration example (type coercion and validation)
+
+<!-- politty:description::end -->
+
+<!-- politty:usage::start -->
 
 **Usage**
 
 ```
 server [options]
 ```
+
+<!-- politty:usage::end -->
+
+<!-- politty:options::start -->
 
 **Options**
 
@@ -18,4 +30,4 @@ server [options]
 | `--count <COUNT>` | `-n`  | Repeat count          | No       | `1`           |
 | `--host <HOST>`   | `-h`  | Hostname              | No       | `"localhost"` |
 
-<!-- politty:command::end -->
+<!-- politty:options::end -->

@@ -1,14 +1,26 @@
-<!-- politty:command::start -->
+<!-- politty:heading::start -->
 
 # my-cli
 
+<!-- politty:heading::end -->
+
+<!-- politty:description::start -->
+
 CLI example with subcommands
+
+<!-- politty:description::end -->
+
+<!-- politty:usage::start -->
 
 **Usage**
 
 ```
 my-cli [command]
 ```
+
+<!-- politty:usage::end -->
+
+<!-- politty:subcommands::start -->
 
 **Commands**
 
@@ -17,18 +29,31 @@ my-cli [command]
 | [`init`](#init)   | Initialize project |
 | [`build`](#build) | Build project      |
 
-<!-- politty:command::end -->
-<!-- politty:command:build:start -->
+<!-- politty:subcommands::end -->
+
+<!-- politty:heading:build:start -->
 
 ## build
 
+<!-- politty:heading:build:end -->
+
+<!-- politty:description:build:start -->
+
 Build project
+
+<!-- politty:description:build:end -->
+
+<!-- politty:usage:build:start -->
 
 **Usage**
 
 ```
 my-cli build [options]
 ```
+
+<!-- politty:usage:build:end -->
+
+<!-- politty:options:build:start -->
 
 **Options**
 
@@ -38,18 +63,31 @@ my-cli build [options]
 | `--minify`          | `-m`  | Minify output      | No       | `false`  |
 | `--watch`           | `-w`  | Watch file changes | No       | `false`  |
 
-<!-- politty:command:build:end -->
-<!-- politty:command:init:start -->
+<!-- politty:options:build:end -->
+
+<!-- politty:heading:init:start -->
 
 ## init
 
+<!-- politty:heading:init:end -->
+
+<!-- politty:description:init:start -->
+
 Initialize project
+
+<!-- politty:description:init:end -->
+
+<!-- politty:usage:init:start -->
 
 **Usage**
 
 ```
 my-cli init [options]
 ```
+
+<!-- politty:usage:init:end -->
+
+<!-- politty:options:init:start -->
 
 **Options**
 
@@ -58,4 +96,4 @@ my-cli init [options]
 | `--template <TEMPLATE>` | `-t`  | Template name            | No       | `"default"` |
 | `--force`               | `-f`  | Overwrite existing files | No       | `false`     |
 
-<!-- politty:command:init:end -->
+<!-- politty:options:init:end -->

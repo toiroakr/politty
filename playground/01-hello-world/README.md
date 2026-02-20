@@ -1,8 +1,16 @@
-<!-- politty:command::start -->
+<!-- politty:heading::start -->
 
 # hello
 
+<!-- politty:heading::end -->
+
+<!-- politty:description::start -->
+
 A simple command that displays Hello World
+
+<!-- politty:description::end -->
+
+<!-- politty:usage::start -->
 
 **Usage**
 
@@ -10,4 +18,4 @@ A simple command that displays Hello World
 hello
 ```
 
-<!-- politty:command::end -->
+<!-- politty:usage::end -->

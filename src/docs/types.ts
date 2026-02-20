@@ -368,23 +368,36 @@ export type FormatterFunction = (content: string) => string | Promise<string>;
 export const UPDATE_GOLDEN_ENV = "POLITTY_DOCS_UPDATE";
 
 /**
- * Marker prefix for command sections in generated documentation
- * Format: <!-- politty:command:<path>:start --> ... <!-- politty:command:<path>:end -->
+ * Section types for command documentation markers
  */
-export const COMMAND_MARKER_PREFIX = "politty:command";
+export type SectionType =
+  | "heading"
+  | "description"
+  | "usage"
+  | "arguments"
+  | "options"
+  | "subcommands"
+  | "examples"
+  | "notes";
 
 /**
- * Generate start marker for a command section
+ * Marker prefix for section markers in generated documentation
+ * Format: <!-- politty:<type>:<scope>:start --> ... <!-- politty:<type>:<scope>:end -->
  */
-export function commandStartMarker(commandPath: string): string {
-  return `<!-- ${COMMAND_MARKER_PREFIX}:${commandPath}:start -->`;
+export const SECTION_MARKER_PREFIX = "politty";
+
+/**
+ * Generate start marker for a section
+ */
+export function sectionStartMarker(type: SectionType, scope: string): string {
+  return `<!-- ${SECTION_MARKER_PREFIX}:${type}:${scope}:start -->`;
 }
 
 /**
- * Generate end marker for a command section
+ * Generate end marker for a section
  */
-export function commandEndMarker(commandPath: string): string {
-  return `<!-- ${COMMAND_MARKER_PREFIX}:${commandPath}:end -->`;
+export function sectionEndMarker(type: SectionType, scope: string): string {
+  return `<!-- ${SECTION_MARKER_PREFIX}:${type}:${scope}:end -->`;
 }
 
 /**
@@ -409,20 +422,20 @@ export function globalOptionsEndMarker(): string {
 
 /**
  * Marker prefix for index sections in generated documentation
- * Format: <!-- politty:index:start --> ... <!-- politty:index:end -->
+ * Format: <!-- politty:index:<scope>:start --> ... <!-- politty:index:<scope>:end -->
  */
 export const INDEX_MARKER_PREFIX = "politty:index";
 
 /**
  * Generate start marker for an index section
  */
-export function indexStartMarker(): string {
-  return `<!-- ${INDEX_MARKER_PREFIX}:start -->`;
+export function indexStartMarker(scope: string): string {
+  return `<!-- ${INDEX_MARKER_PREFIX}:${scope}:start -->`;
 }
 
 /**
  * Generate end marker for an index section
  */
-export function indexEndMarker(): string {
-  return `<!-- ${INDEX_MARKER_PREFIX}:end -->`;
+export function indexEndMarker(scope: string): string {
+  return `<!-- ${INDEX_MARKER_PREFIX}:${scope}:end -->`;
 }
