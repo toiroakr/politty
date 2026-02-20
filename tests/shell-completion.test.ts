@@ -66,6 +66,11 @@ beforeAll(() => {
   fs.writeFileSync(path.join(testFilesDir, "configs", "notes.txt"), "");
   // Empty directory
   fs.mkdirSync(path.join(testFilesDir, "empty"));
+  // Directory with only non-matching files (no .json/.yaml/.yml)
+  fs.mkdirSync(path.join(testFilesDir, "nomatch"));
+  fs.writeFileSync(path.join(testFilesDir, "nomatch", "index.js"), "");
+  fs.writeFileSync(path.join(testFilesDir, "nomatch", "index.js.map"), "");
+  fs.writeFileSync(path.join(testFilesDir, "nomatch", "index.d.ts"), "");
 });
 
 afterAll(() => {
@@ -321,6 +326,17 @@ describe.each(shells)("%s completion", (_shell, available, complete) => {
     expect(values.filter((v) => v.startsWith("empty/"))).toHaveLength(0);
   });
 
+  it.skipIf(!available)(
+    "does not show non-matching files in directory with no extension matches",
+    () => {
+      const values = complete(["deploy", "--config", "nomatch/"], { cwd: testFilesDir });
+      // Directory has only .js, .js.map, .d.ts files — none match .json/.yaml/.yml
+      expect(values).not.toContain("nomatch/index.js");
+      expect(values).not.toContain("nomatch/index.js.map");
+      expect(values).not.toContain("nomatch/index.d.ts");
+    },
+  );
+
   it.skipIf(!available)("completes options after boolean flag (no value consumed)", () => {
     const values = complete(["deploy", "--dry-run", "--"]);
     // --dry-run is boolean and should NOT consume the next word as its value
@@ -564,6 +580,15 @@ describe.skipIf(!hasZsh)("zsh-specific completion", () => {
     expect(values).toContain("configs/prod.json");
     expect(values).toContain("configs/dev.yaml");
     expect(values).not.toContain("configs/notes.txt");
+  });
+
+  it("does not fall back to default file completion when no extensions match", () => {
+    const values = zshComplete(["deploy", "--config", "nomatch/"], { cwd: testFilesDir });
+    // nomatch/ has only .js, .js.map, .d.ts — none match .json/.yaml/.yml
+    // return 0 should prevent zsh from falling back to default file completion
+    expect(values).not.toContain("nomatch/index.js");
+    expect(values).not.toContain("nomatch/index.js.map");
+    expect(values).not.toContain("nomatch/index.d.ts");
   });
 });
 
