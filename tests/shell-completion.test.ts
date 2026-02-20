@@ -436,14 +436,31 @@ describe.each(shells)("%s completion", (_shell, available, complete) => {
 
   // ─── Options interleaved with positionals ──────────────────────────────────
 
-  it.skipIf(!available)("completes positional after interleaved option", () => {
-    const values = complete(["migrate", "--dry-run", "local", ""]);
-    expect(values).toContain("dev");
-    expect(values).toContain("qa");
-    expect(values).toContain("prod");
-    // First positional choices should not appear
-    expect(values).not.toContain("local");
-  });
+  it.skipIf(!available)(
+    "completes positional after interleaved option (option before positional)",
+    () => {
+      const values = complete(["migrate", "--dry-run", "local", ""]);
+      expect(values).toContain("dev");
+      expect(values).toContain("qa");
+      expect(values).toContain("prod");
+      // First positional choices should not appear
+      expect(values).not.toContain("local");
+    },
+  );
+
+  it.skipIf(!available)(
+    "completes positional after trailing boolean flag (positional before option)",
+    () => {
+      const values = complete(["migrate", "local", "--dry-run", ""]);
+      expect(values).toContain("dev");
+      expect(values).toContain("qa");
+      expect(values).toContain("prod");
+      // First positional choices should not appear
+      expect(values).not.toContain("local");
+      expect(values).not.toContain("staging");
+      expect(values).not.toContain("production");
+    },
+  );
 
   it.skipIf(!available)("completes variadic positional after interleaved option", () => {
     const values = complete(["tag", "--force", "stable", ""]);

@@ -259,6 +259,9 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
         positionals,
         positionalCount,
       );
+      if (completionType === "positional") {
+        positionalIndex = positionalCount;
+      }
     }
   }
   // Case 2: Current word is an option with inline value (--foo=)
