@@ -565,6 +565,41 @@ describe.skipIf(!hasBash)("bash-specific completion", () => {
     expect(values).toContain("--config=app.yaml");
     expect(values).not.toContain("--config=readme.md");
   });
+
+  it("does not leak stale COMPREPLY across invocations", () => {
+    // Call the completion function twice in the same bash session:
+    // 1st: subcommand completion (returns build, deploy, etc.)
+    // 2nd: extension-filtered file completion
+    // The 2nd call should NOT contain subcommand entries from the 1st call
+    const script = `
+eval "$(myapp completion bash)"
+COMP_WORDS=('myapp' '')
+COMP_CWORD=1
+COMP_LINE='myapp '
+COMP_POINT=\${#COMP_LINE}
+_myapp_completions 2>/dev/null
+COMP_WORDS=('myapp' 'deploy' '--config' '')
+COMP_CWORD=3
+COMP_LINE='myapp deploy --config '
+COMP_POINT=\${#COMP_LINE}
+_myapp_completions 2>/dev/null
+printf '%s\\n' "\${COMPREPLY[@]}"
+`;
+    const result = execSync(`bash -c '${script.replace(/'/g, "'\\''")}'`, {
+      env: testEnv,
+      encoding: "utf-8",
+      timeout: 15000,
+      cwd: testFilesDir,
+    });
+    const values = result
+      .trim()
+      .split("\n")
+      .filter((l) => l.length > 0);
+    // Should only have file-related completions, not subcommands from 1st call
+    expect(values).not.toContain("build");
+    expect(values).not.toContain("deploy");
+    expect(values).toContain("app.json");
+  });
 });
 
 // ─── Zsh-specific tests ──────────────────────────────────────────────────────
