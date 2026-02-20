@@ -368,17 +368,23 @@ export type FormatterFunction = (content: string) => string | Promise<string>;
 export const UPDATE_GOLDEN_ENV = "POLITTY_DOCS_UPDATE";
 
 /**
+ * All section types in rendering order
+ */
+export const SECTION_TYPES = [
+  "heading",
+  "description",
+  "usage",
+  "arguments",
+  "options",
+  "subcommands",
+  "examples",
+  "notes",
+] as const;
+
+/**
  * Section types for command documentation markers
  */
-export type SectionType =
-  | "heading"
-  | "description"
-  | "usage"
-  | "arguments"
-  | "options"
-  | "subcommands"
-  | "examples"
-  | "notes";
+export type SectionType = (typeof SECTION_TYPES)[number];
 
 /**
  * Marker prefix for command section markers in generated documentation

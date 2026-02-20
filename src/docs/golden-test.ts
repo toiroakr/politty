@@ -36,21 +36,10 @@ import {
   indexStartMarker,
   sectionEndMarker,
   sectionStartMarker,
+  SECTION_TYPES,
   UPDATE_GOLDEN_ENV,
   type SectionType,
 } from "./types.js";
-
-/** All section types in rendering order */
-const SECTION_TYPES: SectionType[] = [
-  "heading",
-  "description",
-  "usage",
-  "arguments",
-  "options",
-  "subcommands",
-  "examples",
-  "notes",
-];
 
 /**
  * Apply formatter to content if provided

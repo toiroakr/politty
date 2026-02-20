@@ -42,6 +42,7 @@ export {
   sectionEndMarker,
   sectionStartMarker,
   SECTION_MARKER_PREFIX,
+  SECTION_TYPES,
   UPDATE_GOLDEN_ENV,
 } from "./types.js";
 // Types
