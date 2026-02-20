@@ -29,6 +29,7 @@ function __fish_${programName}_complete
     set -l args (commandline -opc)
     set -e args[1]
     set -l directive 0
+    set -l extensions ""
 
     # When cursor is after a space (new word), add empty arg
     # so __complete knows we are completing a new value, not the previous token
@@ -39,17 +40,35 @@ function __fish_${programName}_complete
     for line in (${programName} __complete --shell fish -- $args 2>/dev/null)
         if string match -q ':*' -- $line
             set directive (string sub -s 2 -- $line)
+        else if string match -q '@ext:*' -- $line
+            set extensions (string sub -s 6 -- $line)
         else if test -n "$line"
             echo $line
         end
     end
 
-    # 16 = FileCompletion, 32 = DirectoryCompletion
+    # 16 = FileCompletion
     if test (math "bitand($directive, 16)") -ne 0
         __fish_complete_path
     end
+    # 32 = DirectoryCompletion
     if test (math "bitand($directive, 32)") -ne 0
         __fish_complete_directories
+    end
+
+    # Extension-filtered file completion
+    if test -n "$extensions"
+        set -l cur (commandline -ct)
+        # Ensure cur is at least an empty string (commandline may output nothing)
+        test (count $cur) -eq 0; and set cur ""
+        __fish_complete_directories "$cur"
+        for ext in (string split "," -- $extensions)
+            for f in "$cur"*.$ext
+                if test -f "$f"
+                    echo $f
+                end
+            end
+        end
     end
 end
 
