@@ -47,18 +47,16 @@ _${programName}() {
     # 16 = FileCompletion: delegate entirely to native file completion
     if (( directive & 16 )); then
         _files
-        return
+        return 0
     fi
 
-    # Extension-filtered file completion using native _files -g
+    # Extension-filtered file completion: call _files -g per extension
     if [[ -n "$extensions" ]]; then
-        local ext_list="\${extensions//,/|}"
-        if [[ "$ext_list" == *"|"* ]]; then
-            _files -g "*.(\${ext_list})"
-        else
-            _files -g "*.$ext_list"
-        fi
-        return
+        local ext
+        for ext in \${(s:,:)extensions}; do
+            _files -g "*.$ext"
+        done
+        return 0
     fi
 
     if (( \${#candidates[@]} > 0 )); then
@@ -73,7 +71,7 @@ _${programName}() {
     # 2 = NoFileCompletion, 32 = DirectoryCompletion:
     # prevent fallback to default completers (e.g. file completion)
     if (( directive & 2 )) || (( directive & 32 )); then
-        return
+        return 0
     fi
 }
 
