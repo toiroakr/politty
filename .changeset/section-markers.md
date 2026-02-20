@@ -4,7 +4,7 @@
 
 Replace command-level markers with section-level markers
 
-Markers have changed from `<!-- politty:command:<path>:start/end -->` to per-section markers like `<!-- politty:heading:<scope>:start/end -->`, `<!-- politty:description:<scope>:start/end -->`, etc.
+Markers have changed from `<!-- politty:command:<path>:start/end -->` to per-section markers like `<!-- politty:command:<scope>:heading:start/end -->`, `<!-- politty:command:<scope>:description:start/end -->`, etc.
 
 Index markers now include a scope parameter: `<!-- politty:index:<scope>:start/end -->`.
 
