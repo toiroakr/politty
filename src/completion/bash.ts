@@ -28,7 +28,9 @@ export function generateBashCompletion(
 _${programName}_completions() {
     local IFS=$'\\n'
     local lines
+    set -f
     lines=($(${programName} __complete --shell bash -- "\${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))
+    set +f
 
     local count=\${#lines[@]}
     if (( count == 0 )); then
@@ -55,9 +57,23 @@ _${programName}_completions() {
 
     local cur="\${COMP_WORDS[COMP_CWORD]}"
 
+    # Strip --opt= prefix for native file/directory completion
+    local inline_prefix=""
+    if [[ "$cur" == --*=* ]]; then
+        inline_prefix="\${cur%%=*}="
+        cur="\${cur#*=}"
+    fi
+
     # 16 = FileCompletion: delegate entirely to native file completion
     if (( directive & 16 )); then
-        COMPREPLY=($(compgen -f -- "$cur"))
+        local -a entries=($(compgen -f -- "$cur"))
+        if [[ -n "$inline_prefix" ]]; then
+            local i
+            for (( i=0; i<\${#entries[@]}; i++ )); do
+                entries[$i]="\${inline_prefix}\${entries[$i]}"
+            done
+        fi
+        COMPREPLY=("\${entries[@]}")
         compopt -o filenames
         return 0
     fi
@@ -70,11 +86,11 @@ _${programName}_completions() {
         IFS=$'\\n'
         for f in "\${all_entries[@]}"; do
             if [[ -d "$f" ]]; then
-                COMPREPLY+=("$f")
+                COMPREPLY+=("\${inline_prefix}$f")
             else
                 for ext in "\${ext_arr[@]}"; do
                     if [[ "$f" == *".$ext" ]]; then
-                        COMPREPLY+=("$f")
+                        COMPREPLY+=("\${inline_prefix}$f")
                         break
                     fi
                 done
@@ -92,7 +108,14 @@ _${programName}_completions() {
 
     # 32 = DirectoryCompletion: merge native directory matches
     if (( directive & 32 )); then
-        COMPREPLY+=($(compgen -d -- "$cur"))
+        local -a dirs=($(compgen -d -- "$cur"))
+        if [[ -n "$inline_prefix" ]]; then
+            local i
+            for (( i=0; i<\${#dirs[@]}; i++ )); do
+                dirs[$i]="\${inline_prefix}\${dirs[$i]}"
+            done
+        fi
+        COMPREPLY+=("\${dirs[@]}")
         compopt -o filenames
     fi
 

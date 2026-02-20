@@ -551,6 +551,20 @@ describe.skipIf(!hasBash)("bash-specific completion", () => {
     expect(values).not.toContain("scripts");
     expect(values).not.toContain("empty");
   });
+
+  it("handles inline directory completion (--output=con)", () => {
+    const values = bashComplete(["build", "--output=con"], { cwd: testFilesDir });
+    expect(values).toContain("--output=configs");
+    expect(values).not.toContain("--output=scripts");
+    expect(values).not.toContain("--output=empty");
+  });
+
+  it("handles inline file extension completion (--config=app)", () => {
+    const values = bashComplete(["deploy", "--config=app"], { cwd: testFilesDir });
+    expect(values).toContain("--config=app.json");
+    expect(values).toContain("--config=app.yaml");
+    expect(values).not.toContain("--config=readme.md");
+  });
 });
 
 // ─── Zsh-specific tests ──────────────────────────────────────────────────────
