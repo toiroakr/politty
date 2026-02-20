@@ -1,6 +1,7 @@
+// Main API
+// Default renderers
 // Re-export from subcommand-router for convenience
 export { resolveLazyCommand } from "../executor/subcommand-router.js";
-// Default renderers
 export {
   createCommandRenderer,
   defaultRenderers,
