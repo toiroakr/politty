@@ -76,7 +76,7 @@ _${programName}() {
 }
 
 # Prevent _files -g from falling back to showing all files when no pattern matches
-zstyle ':completion:*:*:${programName}:*' file-patterns '%p:globbed-files' '*(-/):directories'
+zstyle ':completion:*:*:${programName}:*' file-patterns '%p:globbed-files *(-/):directories'
 
 compdef _${programName} ${programName}
 `,

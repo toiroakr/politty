@@ -71,6 +71,11 @@ beforeAll(() => {
   fs.writeFileSync(path.join(testFilesDir, "nomatch", "index.js"), "");
   fs.writeFileSync(path.join(testFilesDir, "nomatch", "index.js.map"), "");
   fs.writeFileSync(path.join(testFilesDir, "nomatch", "index.d.ts"), "");
+  // Nested directory for subdirectory navigation tests
+  fs.mkdirSync(path.join(testFilesDir, "nested", "sub"), { recursive: true });
+  fs.writeFileSync(path.join(testFilesDir, "nested", "base.json"), "{}");
+  fs.writeFileSync(path.join(testFilesDir, "nested", "sub", "deep.json"), "{}");
+  fs.writeFileSync(path.join(testFilesDir, "nested", "sub", "deep.txt"), "");
 });
 
 afterAll(() => {
@@ -778,9 +783,43 @@ zpty -d tp 2>/dev/null
     expect(nmatches).toBe(0);
   }, 30000);
 
-  it("shows matching files when extensions match", () => {
-    // Root testFilesDir has app.json, app.yaml, deploy.yml + directories
+  it("shows matching files and directories at root level", () => {
+    // Root has app.json, app.yaml, deploy.yml (3 files) + dirs (configs, scripts, empty, nomatch, nested)
+    // Must show BOTH matching files AND directories for navigation
     const nmatches = zshInteractiveComplete(["deploy", "--config", ""], {
+      cwd: testFilesDir,
+    });
+    // 3 matching files + 5 directories = 8
+    expect(nmatches).toBeGreaterThanOrEqual(8);
+  }, 30000);
+
+  it("filters non-matching files in mixed directory", () => {
+    // configs/ has prod.json, dev.yaml (match) + notes.txt (no match)
+    const nmatches = zshInteractiveComplete(["deploy", "--config", "configs/"], {
+      cwd: testFilesDir,
+    });
+    expect(nmatches).toBe(2);
+  }, 30000);
+
+  it("shows subdirectories for navigation alongside matching files", () => {
+    // nested/ has base.json (match) + sub/ (directory)
+    const nmatches = zshInteractiveComplete(["deploy", "--config", "nested/"], {
+      cwd: testFilesDir,
+    });
+    expect(nmatches).toBe(2);
+  }, 30000);
+
+  it("filters in deeply nested directories", () => {
+    // nested/sub/ has deep.json (match) + deep.txt (no match)
+    const nmatches = zshInteractiveComplete(["deploy", "--config", "nested/sub/"], {
+      cwd: testFilesDir,
+    });
+    expect(nmatches).toBe(1);
+  }, 30000);
+
+  it("does not break DirectoryCompletion (build --output)", () => {
+    // build --output uses DirectoryCompletion — should still show directories
+    const nmatches = zshInteractiveComplete(["build", "--output", ""], {
       cwd: testFilesDir,
     });
     expect(nmatches).toBeGreaterThan(0);
