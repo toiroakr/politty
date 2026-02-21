@@ -28,8 +28,8 @@ importers:
         specifier: 4.0.18
         version: 4.0.18(vitest@4.0.18(@types/node@25.2.3)(jiti@2.6.1))
       knip:
-        specifier: 5.84.0
-        version: 5.84.0(@types/node@25.2.3)(typescript@5.9.3)
+        specifier: 5.84.1
+        version: 5.84.1(@types/node@25.2.3)(typescript@5.9.3)
       lefthook:
         specifier: 2.1.1
         version: 2.1.1
@@ -1355,8 +1355,8 @@ packages:
   jsonfile@4.0.0:
     resolution: {integrity: sha512-m6F1R3z8jjlf2imQHS2Qez5sjKWQzbuuhuJ/FKYFRZvPE3PuHcSMVZzfsLhGVOkfd20obL5SWEBew5ShlquNxg==}
 
-  knip@5.84.0:
-    resolution: {integrity: sha512-gWXgr9HxRvghijn9t+7AueEwp3vy7uPIV+Ckl72xqBRw+tK2nNI9H0oknVE9J/NSk1jE5WuShzTp4A+40PjYhg==}
+  knip@5.84.1:
+    resolution: {integrity: sha512-F1+yACEsSapAwmQLzfD4i9uPsnI82P4p5ABpNQ9pcc4fpQtjHEX34XDtNl5863I4O6SCECpymylcWDHI3ouhQQ==}
     engines: {node: '>=18.18.0'}
     hasBin: true
     peerDependencies:
@@ -2917,7 +2917,7 @@ snapshots:
     optionalDependencies:
       graceful-fs: 4.2.11
 
-  knip@5.84.0(@types/node@25.2.3)(typescript@5.9.3):
+  knip@5.84.1(@types/node@25.2.3)(typescript@5.9.3):
     dependencies:
       '@nodelib/fs.walk': 1.2.8
       '@types/node': 25.2.3
