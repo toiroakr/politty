@@ -436,14 +436,31 @@ describe.each(shells)("%s completion", (_shell, available, complete) => {
 
   // ─── Options interleaved with positionals ──────────────────────────────────
 
-  it.skipIf(!available)("completes positional after interleaved option", () => {
-    const values = complete(["migrate", "--dry-run", "local", ""]);
-    expect(values).toContain("dev");
-    expect(values).toContain("qa");
-    expect(values).toContain("prod");
-    // First positional choices should not appear
-    expect(values).not.toContain("local");
-  });
+  it.skipIf(!available)(
+    "completes positional after interleaved option (option before positional)",
+    () => {
+      const values = complete(["migrate", "--dry-run", "local", ""]);
+      expect(values).toContain("dev");
+      expect(values).toContain("qa");
+      expect(values).toContain("prod");
+      // First positional choices should not appear
+      expect(values).not.toContain("local");
+    },
+  );
+
+  it.skipIf(!available)(
+    "completes positional after trailing boolean flag (positional before option)",
+    () => {
+      const values = complete(["migrate", "local", "--dry-run", ""]);
+      expect(values).toContain("dev");
+      expect(values).toContain("qa");
+      expect(values).toContain("prod");
+      // First positional choices should not appear
+      expect(values).not.toContain("local");
+      expect(values).not.toContain("staging");
+      expect(values).not.toContain("production");
+    },
+  );
 
   it.skipIf(!available)("completes variadic positional after interleaved option", () => {
     const values = complete(["tag", "--force", "stable", ""]);
@@ -550,6 +567,55 @@ describe.skipIf(!hasBash)("bash-specific completion", () => {
     expect(values).toContain("configs");
     expect(values).not.toContain("scripts");
     expect(values).not.toContain("empty");
+  });
+
+  it("handles inline directory completion (--output=con)", () => {
+    const values = bashComplete(["build", "--output=con"], { cwd: testFilesDir });
+    expect(values).toContain("--output=configs");
+    expect(values).not.toContain("--output=scripts");
+    expect(values).not.toContain("--output=empty");
+  });
+
+  it("handles inline file extension completion (--config=app)", () => {
+    const values = bashComplete(["deploy", "--config=app"], { cwd: testFilesDir });
+    expect(values).toContain("--config=app.json");
+    expect(values).toContain("--config=app.yaml");
+    expect(values).not.toContain("--config=readme.md");
+  });
+
+  it("does not leak stale COMPREPLY across invocations", () => {
+    // Call the completion function twice in the same bash session:
+    // 1st: subcommand completion (returns build, deploy, etc.)
+    // 2nd: extension-filtered file completion
+    // The 2nd call should NOT contain subcommand entries from the 1st call
+    const script = `
+eval "$(myapp completion bash)"
+COMP_WORDS=('myapp' '')
+COMP_CWORD=1
+COMP_LINE='myapp '
+COMP_POINT=\${#COMP_LINE}
+_myapp_completions 2>/dev/null
+COMP_WORDS=('myapp' 'deploy' '--config' '')
+COMP_CWORD=3
+COMP_LINE='myapp deploy --config '
+COMP_POINT=\${#COMP_LINE}
+_myapp_completions 2>/dev/null
+printf '%s\\n' "\${COMPREPLY[@]}"
+`;
+    const result = execSync(`bash -c '${script.replace(/'/g, "'\\''")}'`, {
+      env: testEnv,
+      encoding: "utf-8",
+      timeout: 15000,
+      cwd: testFilesDir,
+    });
+    const values = result
+      .trim()
+      .split("\n")
+      .filter((l) => l.length > 0);
+    // Should only have file-related completions, not subcommands from 1st call
+    expect(values).not.toContain("build");
+    expect(values).not.toContain("deploy");
+    expect(values).toContain("app.json");
   });
 });
 

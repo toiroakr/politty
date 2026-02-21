@@ -796,6 +796,30 @@ describe("Completion", () => {
         expect(optionCandidates.some((c) => c.value === "--tags")).toBe(true);
       });
 
+      it("should set NoFileCompletion for enum value completion", () => {
+        const ctx = parseCompletionContext(["--format", ""], testCmd);
+        const result = generateCandidates(ctx);
+
+        expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
+      });
+
+      it("should set NoFileCompletion for custom choices completion", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            env: arg(z.string(), {
+              completion: { custom: { choices: ["dev", "staging", "prod"] } },
+            }),
+          }),
+          run: () => {},
+        });
+
+        const ctx = parseCompletionContext(["--env", ""], cmd);
+        const result = generateCandidates(ctx);
+
+        expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
+      });
+
       it("should resolve shellCommand in JS instead of using markers", () => {
         const cmd = defineCommand({
           name: "mycli",
