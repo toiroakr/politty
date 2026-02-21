@@ -254,6 +254,14 @@ export function extractEnumValues(schema: z.ZodType): string[] | undefined {
     }
   }
 
+  // Handle array types: extract enum values from the element type
+  if (typeName === "array") {
+    const element = (def as { element?: z.ZodType })?.element;
+    if (element) {
+      return extractEnumValues(element);
+    }
+  }
+
   // Also handle literal union patterns (z.literal("a").or(z.literal("b")))
   if (typeName === "union") {
     const options = def?.options;

@@ -108,6 +108,52 @@ export const testCommand = defineCommand({
   },
 });
 
+// Subcommand: migrate (multiple positionals with different types)
+export const migrateCommand = defineCommand({
+  name: "migrate",
+  description: "Migrate data between environments",
+  args: z.object({
+    source: arg(z.enum(["local", "staging", "production"]), {
+      positional: true,
+      description: "Source environment",
+    }),
+    target: arg(z.enum(["dev", "qa", "prod"]), {
+      positional: true,
+      description: "Target environment",
+    }),
+    dryRun: arg(z.boolean().default(false), {
+      alias: "n",
+      description: "Dry run mode",
+    }),
+    verbose: arg(z.boolean().default(false), {
+      alias: "v",
+      description: "Verbose output",
+    }),
+  }),
+  run: (args) => {
+    console.log(`Migrating from ${args.source} to ${args.target}`);
+  },
+});
+
+// Subcommand: tag (variadic/array positional)
+export const tagCommand = defineCommand({
+  name: "tag",
+  description: "Tag resources",
+  args: z.object({
+    tags: arg(z.array(z.enum(["stable", "beta", "nightly", "rc"])), {
+      positional: true,
+      description: "Tags to apply",
+    }),
+    force: arg(z.boolean().default(false), {
+      alias: "f",
+      description: "Force overwrite existing tags",
+    }),
+  }),
+  run: (args) => {
+    console.log(`Tagging with: ${args.tags.join(", ")}`);
+  },
+});
+
 // Main CLI with completion support
 export const cli = withCompletionCommand(
   defineCommand({
@@ -123,6 +169,8 @@ export const cli = withCompletionCommand(
       build: buildCommand,
       deploy: deployCommand,
       test: testCommand,
+      migrate: migrateCommand,
+      tag: tagCommand,
     },
   }),
 );
