@@ -30,13 +30,15 @@ import type {
   RootDocConfig,
 } from "./types.js";
 import {
-  commandEndMarker,
-  commandStartMarker,
   globalOptionsEndMarker,
   globalOptionsStartMarker,
   indexEndMarker,
   indexStartMarker,
+  sectionEndMarker,
+  sectionStartMarker,
+  SECTION_TYPES,
   UPDATE_GOLDEN_ENV,
+  type SectionType,
 } from "./types.js";
 
 /**
@@ -178,29 +180,16 @@ function expandCommandPaths(
 ): string[] {
   const expanded = new Set<string>();
 
-  for (const cmdPath of commandPaths) {
-    if (containsWildcard(cmdPath)) {
-      // Expand wildcard pattern to matching commands
-      const matches = expandWildcardPattern(cmdPath, allCommands);
-      for (const match of matches) {
-        expanded.add(match);
-        // Also add subcommands of matched commands
-        for (const path of allCommands.keys()) {
-          if (isSubcommandOf(path, match)) {
-            expanded.add(path);
-          }
-        }
-      }
-    } else {
-      // Add the command itself
-      if (allCommands.has(cmdPath)) {
-        expanded.add(cmdPath);
-      }
-      // Add all subcommands
-      for (const path of allCommands.keys()) {
-        if (isSubcommandOf(path, cmdPath)) {
-          expanded.add(path);
-        }
+  // Resolve wildcards to concrete command paths
+  const resolved = commandPaths.flatMap((cmdPath) =>
+    containsWildcard(cmdPath) ? expandWildcardPattern(cmdPath, allCommands) : [cmdPath],
+  );
+
+  // Add each resolved command and its subcommands
+  for (const cmdPath of resolved) {
+    for (const existingPath of allCommands.keys()) {
+      if (isSubcommandOf(existingPath, cmdPath)) {
+        expanded.add(existingPath);
       }
     }
   }
@@ -497,102 +486,93 @@ function processFileHeader(
   };
 }
 
-/**
- * Extract a command section from content using markers
- * Returns the content between start and end markers (including markers)
- */
-function extractCommandSection(content: string, commandPath: string): string | null {
-  const startMarker = commandStartMarker(commandPath);
-  const endMarker = commandEndMarker(commandPath);
-
-  const startIndex = content.indexOf(startMarker);
-  if (startIndex === -1) {
-    return null;
-  }
-
-  const endIndex = content.indexOf(endMarker, startIndex);
-  if (endIndex === -1) {
-    return null;
-  }
-
-  return content.slice(startIndex, endIndex + endMarker.length);
-}
-
-/**
- * Collect command paths from command start markers in content.
- */
-function collectCommandMarkerPaths(content: string): string[] {
-  const markerPattern = /<!--\s*politty:command:(.*?):start\s*-->/g;
-  const paths: string[] = [];
-
-  for (const match of content.matchAll(markerPattern)) {
-    paths.push(match[1] ?? "");
-  }
-
-  return paths;
-}
-
 function formatCommandPath(commandPath: string): string {
   return commandPath === "" ? "<root>" : commandPath;
 }
 
 /**
- * Replace a command section in content using markers
- * Returns the updated content with the new section
+ * Extract a section marker's content from document content.
+ * Returns the content between start and end markers (including markers).
  */
-function replaceCommandSection(
-  content: string,
-  commandPath: string,
-  newSection: string,
-): string | null {
-  const startMarker = commandStartMarker(commandPath);
-  const endMarker = commandEndMarker(commandPath);
-
-  const startIndex = content.indexOf(startMarker);
-  if (startIndex === -1) {
-    return null;
-  }
-
-  const endIndex = content.indexOf(endMarker, startIndex);
-  if (endIndex === -1) {
-    return null;
-  }
-
-  return content.slice(0, startIndex) + newSection + content.slice(endIndex + endMarker.length);
+function extractSectionMarker(content: string, type: SectionType, scope: string): string | null {
+  const start = sectionStartMarker(type, scope);
+  const end = sectionEndMarker(type, scope);
+  return extractMarkerSection(content, start, end);
 }
 
 /**
- * Insert a command section at the correct position based on specified order
- * Returns the updated content with the section inserted at the right position
+ * Replace a section marker's content in document content.
+ * Returns updated content, or null if marker not found.
  */
-function insertCommandSection(
+function replaceSectionMarker(
+  content: string,
+  type: SectionType,
+  scope: string,
+  newContent: string,
+): string | null {
+  const start = sectionStartMarker(type, scope);
+  const end = sectionEndMarker(type, scope);
+  return replaceMarkerSection(content, start, end, newContent);
+}
+
+/**
+ * Collect all section types that have markers for a given command path.
+ */
+function collectSectionMarkers(content: string, commandPath: string): SectionType[] {
+  const found: SectionType[] = [];
+  for (const type of SECTION_TYPES) {
+    if (extractSectionMarker(content, type, commandPath) !== null) {
+      found.push(type);
+    }
+  }
+  return found;
+}
+
+/**
+ * Collect all command paths that have any section markers in the content.
+ */
+function collectSectionMarkerPaths(content: string): string[] {
+  // Match any section marker: <!-- politty:command:<scope>:<type>:start -->
+  const sectionTypes = SECTION_TYPES.join("|");
+  const markerPattern = new RegExp(
+    `<!--\\s*politty:command:(.*?):(?:${sectionTypes}):start\\s*-->`,
+    "g",
+  );
+  const paths = new Set<string>();
+
+  for (const match of content.matchAll(markerPattern)) {
+    paths.add(match[1] ?? "");
+  }
+
+  return Array.from(paths);
+}
+
+/**
+ * Insert command section markers at the correct position based on specified order.
+ * Uses the heading marker of adjacent commands as reference points.
+ */
+function insertCommandSections(
   content: string,
   commandPath: string,
   newSection: string,
   specifiedOrder: string[],
 ): string {
-  // Find the index of the target command in the specified order
   const targetIndex = specifiedOrder.indexOf(commandPath);
   if (targetIndex === -1) {
-    // If not in order, append to end
     return content.trimEnd() + "\n\n" + newSection + "\n";
   }
 
-  // Find the next command in the order that exists in the content
+  // Find the next command's heading marker in the content
   for (let i = targetIndex + 1; i < specifiedOrder.length; i++) {
     const nextCmd = specifiedOrder[i];
     if (nextCmd === undefined) continue;
-    const nextMarker = commandStartMarker(nextCmd);
+    const nextMarker = sectionStartMarker("heading", nextCmd);
     const nextIndex = content.indexOf(nextMarker);
     if (nextIndex !== -1) {
-      // Insert before the next section
-      // Find the start of the line (after previous section's newlines)
       let insertPos = nextIndex;
-      // Go back to find proper insertion point (skip leading newlines)
       while (insertPos > 0 && content[insertPos - 1] === "\n") {
         insertPos--;
       }
-      // Keep one newline as separator
       if (insertPos < nextIndex) {
         insertPos++;
       }
@@ -600,20 +580,23 @@ function insertCommandSection(
     }
   }
 
-  // Find the previous command in the order that exists in the content
+  // Find the previous command's last marker in the content
   for (let i = targetIndex - 1; i >= 0; i--) {
     const prevCmd = specifiedOrder[i];
     if (prevCmd === undefined) continue;
-    const prevEndMarker = commandEndMarker(prevCmd);
-    const prevEndIndex = content.indexOf(prevEndMarker);
-    if (prevEndIndex !== -1) {
-      // Insert after the previous section
-      const insertPos = prevEndIndex + prevEndMarker.length;
-      return content.slice(0, insertPos) + "\n" + newSection + content.slice(insertPos);
+    // Find the last section marker for the previous command
+    const prevMarkers = collectSectionMarkers(content, prevCmd);
+    if (prevMarkers.length > 0) {
+      const lastType = prevMarkers[prevMarkers.length - 1]!;
+      const prevEndMarker = sectionEndMarker(lastType, prevCmd);
+      const prevEndIndex = content.indexOf(prevEndMarker);
+      if (prevEndIndex !== -1) {
+        const insertPos = prevEndIndex + prevEndMarker.length;
+        return content.slice(0, insertPos) + "\n" + newSection + content.slice(insertPos);
+      }
     }
   }
 
-  // No reference point found, append to end
   return content.trimEnd() + "\n" + newSection + "\n";
 }
 
@@ -875,10 +858,11 @@ function generateGlobalOptionsSection(config: {
 async function generateIndexSection(
   categories: CommandCategory[],
   command: AnyCommand,
+  scope: string,
   options?: CommandIndexOptions,
 ): Promise<string> {
-  const startMarker = indexStartMarker();
-  const endMarker = indexEndMarker();
+  const startMarker = indexStartMarker(scope);
+  const endMarker = indexEndMarker(scope);
 
   const indexContent = await renderCommandIndex(command, categories, options);
 
@@ -959,6 +943,7 @@ async function processIndexMarker(
   existingContent: string,
   categories: CommandCategory[],
   command: AnyCommand,
+  scope: string,
   updateMode: boolean,
   formatter: FormatterFunction | undefined,
   indexOptions?: CommandIndexOptions,
@@ -973,8 +958,8 @@ async function processIndexMarker(
   let hasError = false;
   let wasUpdated = false;
 
-  const startMarker = indexStartMarker();
-  const endMarker = indexEndMarker();
+  const startMarker = indexStartMarker(scope);
+  const endMarker = indexEndMarker(scope);
 
   const hasStartMarker = content.includes(startMarker);
   const hasEndMarker = content.includes(endMarker);
@@ -1000,7 +985,7 @@ async function processIndexMarker(
   }
 
   // Generate new section
-  const rawSection = await generateIndexSection(categories, command, indexOptions);
+  const rawSection = await generateIndexSection(categories, command, scope, indexOptions);
   const generatedSection = await applyFormatter(rawSection, formatter);
 
   // Compare sections
@@ -1083,7 +1068,7 @@ function findTargetCommandsInFile(
 }
 
 /**
- * Generate a single command section with markers
+ * Generate a single command section (already contains section markers from renderer)
  */
 function generateCommandSection(
   cmdPath: string,
@@ -1102,10 +1087,7 @@ function generateCommandSection(
     fileMap,
   };
 
-  const renderedSection = render(infoWithFileContext);
-
-  // Wrap section with markers for partial validation
-  return [commandStartMarker(cmdPath), renderedSection, commandEndMarker(cmdPath)].join("\n");
+  return render(infoWithFileContext);
 }
 
 /**
@@ -1336,19 +1318,18 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           throw new Error(`Target command "${targetCommand}" not found in commands`);
         }
 
-        // For root command, include file header if configured
-        const isRootCommand = targetCommand === "";
-        const header = isRootCommand && fileConfig ? generateFileHeader(fileConfig) : null;
-        const rawContent = header ? `${header}\n${rawSection}` : rawSection;
-
         // Apply formatter to the section
-        const generatedSection = await applyFormatter(rawContent, formatter);
+        const generatedSection = await applyFormatter(rawSection, formatter);
 
         if (!existingContent) {
           // File doesn't exist yet, create it with the section only
           if (updateMode) {
-            writeFile(filePath, generatedSection);
-            existingContent = generatedSection;
+            // For root command, include file header if configured
+            const isRootCommand = targetCommand === "";
+            const header = isRootCommand && fileConfig ? generateFileHeader(fileConfig) : null;
+            const fullContent = header ? `${header}\n${generatedSection}` : generatedSection;
+            writeFile(filePath, fullContent);
+            existingContent = fullContent;
             fileStatus = "created";
           } else {
             hasError = true;
@@ -1360,25 +1341,16 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           continue;
         }
 
-        // Extract existing section for comparison
-        const existingSection = extractCommandSection(existingContent, targetCommand);
+        // Check which section markers exist for this command in the existing content
+        const existingMarkers = collectSectionMarkers(existingContent, targetCommand);
 
-        // For comparison, extract just the section from generated content (without header)
-        const generatedSectionOnly = extractCommandSection(generatedSection, targetCommand);
-
-        if (!generatedSectionOnly) {
-          throw new Error(
-            `Generated content does not contain section for command "${targetCommand}"`,
-          );
-        }
-
-        if (!existingSection) {
-          // Section doesn't exist in existing file - insert at correct position
+        if (existingMarkers.length === 0) {
+          // No markers found — insert full template
           if (updateMode) {
-            existingContent = insertCommandSection(
+            existingContent = insertCommandSections(
               existingContent,
               targetCommand,
-              generatedSectionOnly,
+              generatedSection,
               specifiedCommands,
             );
             writeFile(filePath, existingContent);
@@ -1388,33 +1360,50 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           } else {
             hasError = true;
             fileStatus = "diff";
-            diffs.push(`Existing file does not contain section for command "${targetCommand}"`);
+            diffs.push(
+              `Existing file does not contain section markers for command "${targetCommand}"`,
+            );
           }
           continue;
         }
 
-        // Compare sections
-        if (existingSection !== generatedSectionOnly) {
-          if (updateMode) {
-            // Replace only the target command section in the existing file
-            const updatedContent = replaceCommandSection(
-              existingContent,
-              targetCommand,
-              generatedSectionOnly,
-            );
-            if (updatedContent) {
-              existingContent = updatedContent;
-              writeFile(filePath, existingContent);
-              if (fileStatus !== "created") {
-                fileStatus = "updated";
+        // Validate/update only existing section markers
+        for (const sectionType of existingMarkers) {
+          const existingSection = extractSectionMarker(existingContent, sectionType, targetCommand);
+          const generatedSectionPart = extractSectionMarker(
+            generatedSection,
+            sectionType,
+            targetCommand,
+          );
+
+          if (!existingSection || !generatedSectionPart) {
+            continue;
+          }
+
+          if (existingSection !== generatedSectionPart) {
+            if (updateMode) {
+              const updated = replaceSectionMarker(
+                existingContent,
+                sectionType,
+                targetCommand,
+                generatedSectionPart,
+              );
+              if (updated) {
+                existingContent = updated;
+                writeFile(filePath, existingContent);
+                if (fileStatus !== "created") {
+                  fileStatus = "updated";
+                }
+              } else {
+                throw new Error(
+                  `Failed to replace ${sectionType} section for command "${targetCommand}"`,
+                );
               }
             } else {
-              throw new Error(`Failed to replace section for command "${targetCommand}"`);
+              hasError = true;
+              fileStatus = "diff";
+              diffs.push(formatDiff(existingSection, generatedSectionPart));
             }
-          } else {
-            hasError = true;
-            fileStatus = "diff";
-            diffs.push(formatDiff(existingSection, generatedSectionOnly));
           }
         }
       }
@@ -1496,12 +1485,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         markerUpdated = true;
       }
 
-      // Detect unexpected command markers in rootDoc
-      const unexpectedCommandMarkers = Array.from(new Set(collectCommandMarkerPaths(content)));
-      if (unexpectedCommandMarkers.length > 0) {
+      // Detect unexpected section markers in rootDoc
+      const unexpectedSectionPaths = Array.from(new Set(collectSectionMarkerPaths(content)));
+      if (unexpectedSectionPaths.length > 0) {
         hasError = true;
         rootDocDiffs.push(
-          `Found unexpected command marker sections in rootDoc: ${unexpectedCommandMarkers
+          `Found unexpected section markers in rootDoc: ${unexpectedSectionPaths
             .map((commandPath) => `"${formatCommandPath(commandPath)}"`)
             .join(", ")}.`,
         );
@@ -1528,10 +1517,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
       // Process index marker (auto-derived from files)
       const derivedCategories = deriveIndexFromFiles(files, rootDocFilePath, allCommands, ignores);
+      const indexScope = path.relative(process.cwd(), rootDocFilePath);
       const indexResult = await processIndexMarker(
         content,
         derivedCategories,
         command,
+        indexScope,
         updateMode,
         formatter,
         rootDoc.index,

@@ -10,11 +10,13 @@ import type {
   OptionsRenderContext,
   RenderContentOptions,
   RenderFunction,
+  SectionType,
   SimpleRenderContext,
   SubCommandInfo,
   SubcommandsRenderContext,
   SubcommandsRenderOptions,
 } from "./types.js";
+import { sectionEndMarker, sectionStartMarker } from "./types.js";
 
 /**
  * Escape markdown special characters in table cells
@@ -107,23 +109,43 @@ function formatEnvInfo(env: string | string[] | undefined): string {
 }
 
 /**
- * Format option flags (uses kebab-case cliName)
+ * Resolve placeholder for an option (uses kebab-case cliName)
+ */
+function resolvePlaceholder(opt: ResolvedFieldMeta): string {
+  return opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
+}
+
+/**
+ * Format option name for table display (e.g., `--dry-run` or `--port <PORT>`)
+ */
+function formatOptionName(opt: ResolvedFieldMeta): string {
+  const placeholder = resolvePlaceholder(opt);
+  return opt.type === "boolean" ? `\`--${opt.cliName}\`` : `\`--${opt.cliName} <${placeholder}>\``;
+}
+
+/**
+ * Format option flags for list display (uses kebab-case cliName)
  */
 function formatOptionFlags(opt: ResolvedFieldMeta): string {
-  const parts: string[] = [];
-
-  // Use cliName (kebab-case) for CLI display
-  const placeholder = opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
+  const placeholder = resolvePlaceholder(opt);
   const longFlag =
     opt.type === "boolean" ? `--${opt.cliName}` : `--${opt.cliName} <${placeholder}>`;
 
   if (opt.alias) {
-    parts.push(`\`-${opt.alias}\`, \`${longFlag}\``);
-  } else {
-    parts.push(`\`${longFlag}\``);
+    return `\`-${opt.alias}\`, \`${longFlag}\``;
   }
+  return `\`${longFlag}\``;
+}
 
-  return parts.join("");
+/**
+ * Format env variable names for table display
+ */
+function formatEnvNames(env: string | string[] | undefined): string {
+  if (!env) return "-";
+  if (Array.isArray(env)) {
+    return env.map((e) => `\`${e}\``).join(", ");
+  }
+  return `\`${env}\``;
 }
 
 /**
@@ -158,21 +180,14 @@ export function renderOptionsTable(info: CommandInfo): string {
   }
 
   for (const opt of info.options) {
-    // Use cliName (kebab-case) for CLI display
-    const placeholder = opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
-    const optionName =
-      opt.type === "boolean" ? `\`--${opt.cliName}\`` : `\`--${opt.cliName} <${placeholder}>\``;
+    const optionName = formatOptionName(opt);
     const alias = opt.alias ? `\`-${opt.alias}\`` : "-";
     const desc = escapeTableCell(opt.description ?? "");
     const required = opt.required ? "Yes" : "No";
     const defaultVal = formatDefaultValue(opt.defaultValue);
 
     if (hasEnv) {
-      const envNames = opt.env
-        ? Array.isArray(opt.env)
-          ? opt.env.map((e) => `\`${e}\``).join(", ")
-          : `\`${opt.env}\``
-        : "-";
+      const envNames = formatEnvNames(opt.env);
       lines.push(
         `| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} | ${envNames} |`,
       );
@@ -306,20 +321,14 @@ export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): strin
   }
 
   for (const opt of options) {
-    const placeholder = opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
-    const optionName =
-      opt.type === "boolean" ? `\`--${opt.cliName}\`` : `\`--${opt.cliName} <${placeholder}>\``;
+    const optionName = formatOptionName(opt);
     const alias = opt.alias ? `\`-${opt.alias}\`` : "-";
     const desc = escapeTableCell(opt.description ?? "");
     const required = opt.required ? "Yes" : "No";
     const defaultVal = formatDefaultValue(opt.defaultValue);
 
     if (hasEnv) {
-      const envNames = opt.env
-        ? Array.isArray(opt.env)
-          ? opt.env.map((e) => `\`${e}\``).join(", ")
-          : `\`${opt.env}\``
-        : "-";
+      const envNames = formatEnvNames(opt.env);
       lines.push(
         `| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} | ${envNames} |`,
       );
@@ -507,6 +516,13 @@ export function renderExamplesDefault(
 }
 
 /**
+ * Wrap content with section markers
+ */
+function wrapWithMarker(type: SectionType, scope: string, content: string): string {
+  return `${sectionStartMarker(type, scope)}\n${content}\n${sectionEndMarker(type, scope)}`;
+}
+
+/**
  * Create command renderer with options
  */
 export function createCommandRenderer(options: DefaultRendererOptions = {}): RenderFunction {
@@ -526,7 +542,8 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
   } = options;
 
   return (info: CommandInfo): string => {
-    const lines: string[] = [];
+    const sections: string[] = [];
+    const scope = info.commandPath;
     // Calculate effective heading level based on command depth
     // depth=1 → headingLevel, depth=2 → headingLevel+1, etc.
     const effectiveLevel = Math.min(headingLevel + (info.depth - 1), 6);
@@ -534,8 +551,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
 
     // Title - use commandPath for subcommands, name for root
     const title = info.commandPath || info.name;
-    lines.push(`${h} ${title}`);
-    lines.push("");
+    sections.push(wrapWithMarker("heading", scope, `${h} ${title}`));
 
     // Description
     if (info.description) {
@@ -546,8 +562,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       };
       const content = customRenderDescription ? customRenderDescription(context) : context.content;
       if (content) {
-        lines.push(content);
-        lines.push("");
+        sections.push(wrapWithMarker("description", scope, content));
       }
     }
 
@@ -561,8 +576,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       };
       const content = customRenderUsage ? customRenderUsage(context) : context.content;
       if (content) {
-        lines.push(content);
-        lines.push("");
+        sections.push(wrapWithMarker("usage", scope, content));
       }
     }
 
@@ -589,8 +603,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         ? customRenderArguments(context)
         : renderArgs(context.args);
       if (content) {
-        lines.push(content);
-        lines.push("");
+        sections.push(wrapWithMarker("arguments", scope, content));
       }
     }
 
@@ -615,8 +628,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         ? customRenderOptions(context)
         : renderOpts(context.options);
       if (content) {
-        lines.push(content);
-        lines.push("");
+        sections.push(wrapWithMarker("options", scope, content));
       }
     }
 
@@ -642,8 +654,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         ? customRenderSubcommands(context)
         : renderSubs(context.subcommands);
       if (content) {
-        lines.push(content);
-        lines.push("");
+        sections.push(wrapWithMarker("subcommands", scope, content));
       }
     }
 
@@ -675,8 +686,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         ? customRenderExamples(context)
         : renderEx(context.examples, context.results);
       if (content) {
-        lines.push(content);
-        lines.push("");
+        sections.push(wrapWithMarker("examples", scope, content));
       }
     }
 
@@ -689,12 +699,11 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       };
       const content = customRenderNotes ? customRenderNotes(context) : context.content;
       if (content) {
-        lines.push(content);
-        lines.push("");
+        sections.push(wrapWithMarker("notes", scope, content));
       }
     }
 
-    // Footer (default is empty)
+    // Footer (default is empty, not wrapped with markers)
     {
       const context: SimpleRenderContext = {
         content: "",
@@ -703,18 +712,11 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       };
       const content = customRenderFooter ? customRenderFooter(context) : context.content;
       if (content) {
-        lines.push(content);
-        lines.push("");
+        sections.push(content);
       }
     }
 
-    // Remove trailing empty lines and ensure single newline at end
-    while (lines.length > 0 && lines[lines.length - 1] === "") {
-      lines.pop();
-    }
-    lines.push("");
-
-    return lines.join("\n");
+    return sections.join("\n\n") + "\n";
   };
 }
 
