@@ -602,3 +602,121 @@ describe.skipIf(!hasFish)("fish-specific completion", () => {
     expect(values).not.toContain("configs/notes.txt");
   });
 });
+
+// ─── Zsh interactive completion (zpty) ───────────────────────────────────────
+//
+// These tests use zpty (pseudo-terminal) to exercise the REAL zsh completion
+// system, including the completer chain and file-patterns fallback behavior.
+// Stub-based tests above cannot catch fallback bugs where _files -g shows
+// all files when no pattern matches.
+
+describe.skipIf(!hasZsh)("zsh interactive completion (zpty)", () => {
+  /**
+   * Run zsh completion interactively via zpty and return the number of matches.
+   *
+   * Sets up a realistic completer chain (`_complete _files`) to simulate
+   * real-world shell configuration where _files acts as a fallback completer.
+   */
+  function zshInteractiveComplete(args: string[], opts: { cwd: string }): number {
+    const ts = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const resultFile = path.join(tmpDir, `zpty-result-${ts}`);
+    const setupFile = path.join(tmpDir, `zpty-setup-${ts}.zsh`);
+    const mainFile = path.join(tmpDir, `zpty-main-${ts}.zsh`);
+    const command = ["myapp", ...args].join(" ");
+
+    // Setup script sourced inside the zpty interactive shell
+    const setupContent = [
+      `export TERM=dumb`,
+      `export PATH="${tmpDir}:$PATH"`,
+      `autoload -Uz compinit && compinit -u 2>/dev/null`,
+      // Simulate common real-world completer chain with _files fallback
+      `zstyle ':completion:*' completer _complete _files`,
+      `eval "$(myapp completion zsh)" 2>/dev/null`,
+      `comppostfuncs+=( _test_cap )`,
+      `_test_cap() { echo $compstate[nmatches] > "${resultFile}" }`,
+      `cd "${opts.cwd}"`,
+    ].join("\n");
+    fs.writeFileSync(setupFile, setupContent);
+
+    // Main zpty driver script
+    const mainContent = `#!/usr/bin/env zsh -f
+zmodload zsh/zpty || { echo "FAIL:zpty_unavailable"; exit 1 }
+
+wait_output() {
+  local pattern="$1" timeout="\${2:-10}"
+  local out="" chunk=""
+  local deadline=$((SECONDS + timeout))
+  while (( SECONDS < deadline )); do
+    zpty -r tp chunk 2>/dev/null
+    out+="$chunk"
+    [[ "$out" == *\${~pattern}* ]] && return 0
+    sleep 0.05
+  done
+  return 1
+}
+
+zpty -b tp zsh -f -i
+wait_output '%' 5 || { echo "FAIL:no_prompt"; exit 1 }
+zpty -w tp "source ${setupFile} && echo __DONE__"
+wait_output '__DONE__' 15 || { echo "FAIL:setup_timeout"; exit 1 }
+wait_output '%' 5
+
+zpty -w -n tp "${command}"
+sleep 0.5
+zpty -w -n tp $'\\t'
+
+local tries=50
+while (( tries > 0 )); do
+  [[ -f "${resultFile}" ]] && break
+  sleep 0.2
+  (( tries-- ))
+done
+
+if [[ -f "${resultFile}" ]]; then
+  echo "NMATCHES:$(cat ${resultFile})"
+else
+  echo "NMATCHES:-1"
+fi
+
+zpty -d tp 2>/dev/null
+`;
+    fs.writeFileSync(mainFile, mainContent, { mode: 0o755 });
+
+    try {
+      const output = execSync(`zsh ${mainFile}`, {
+        encoding: "utf-8",
+        timeout: 30000,
+      });
+
+      const nmatchLine = output
+        .trim()
+        .split("\n")
+        .find((l) => l.startsWith("NMATCHES:"));
+      if (!nmatchLine) return -1;
+      return Number.parseInt(nmatchLine.split(":")[1]!, 10);
+    } finally {
+      for (const f of [resultFile, setupFile, mainFile]) {
+        try {
+          fs.unlinkSync(f);
+        } catch {}
+      }
+    }
+  }
+
+  it("does not fall back to showing all files when no extensions match", () => {
+    // nomatch/ has only .js, .js.map, .d.ts — none match .json/.yaml/.yml
+    // Without file-patterns fix, _files -g falls back to *:all-files and shows 3 matches
+    const nmatches = zshInteractiveComplete(["deploy", "--config", "nomatch/"], {
+      cwd: testFilesDir,
+    });
+    expect(nmatches).toBe(0);
+  }, 30000);
+
+  it("shows matching files when extensions match", () => {
+    // Root testFilesDir has app.json, app.yaml, deploy.yml + directories
+    const nmatches = zshInteractiveComplete(["deploy", "--config", ""], {
+      cwd: testFilesDir,
+    });
+    expect(nmatches).toBeGreaterThan(0);
+  }, 30000);
+});
