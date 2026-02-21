@@ -2,4 +2,12 @@
 "politty": patch
 ---
 
-Refactor shell completion to move all logic from shell scripts to JS/TS. Shell scripts (bash/zsh/fish) are now thin wrappers that delegate to `__complete --shell={bash,zsh,fish}`. Eliminates `__command:` and `__extensions:` protocol markers by resolving shellCommand execution and file extension filtering directly in JS.
+Refactor shell completion to thin shell wrappers with `__complete` delegation and fix extension filtering
+
+- Refactor shell scripts (bash/zsh/fish) to thin wrappers that delegate to `__complete --shell={shell}`
+- Resolve shellCommand execution and file extension filtering in JS via `@ext:` metadata protocol
+- Fix zsh `_files -g` fallback showing all files when no extensions match (file-patterns zstyle)
+- Fix bash inline `--opt=value` completion, glob expansion, and stale COMPREPLY
+- Add `NoFileCompletion` directive for enum/choices value completions
+- Add zpty-based integration tests for real zsh completion system behavior
+- Add comprehensive shell completion E2E tests across bash/zsh/fish
