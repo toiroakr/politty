@@ -28,9 +28,23 @@ export function generateBashCompletion(
 _${programName}_completions() {
     COMPREPLY=()
     local IFS=$'\\n'
+
+    # Rejoin words split by '=' in COMP_WORDBREAKS (e.g. --opt=value)
+    local -a _words=()
+    local _i=1
+    while (( _i <= COMP_CWORD )); do
+        if [[ "\${COMP_WORDS[_i]}" == "=" && \${#_words[@]} -gt 0 ]]; then
+            _words[\${#_words[@]}-1]+="=\${COMP_WORDS[_i+1]:-}"
+            (( _i += 2 ))
+        else
+            _words+=("\${COMP_WORDS[_i]}")
+            (( _i++ ))
+        fi
+    done
+
     local lines prev_opts="$-"
     set -f
-    lines=($(${programName} __complete --shell bash -- "\${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))
+    lines=($(${programName} __complete --shell bash -- "\${_words[@]}" 2>/dev/null))
     [[ "$prev_opts" != *f* ]] && set +f
 
     local count=\${#lines[@]}
@@ -56,7 +70,8 @@ _${programName}_completions() {
         fi
     fi
 
-    local cur="\${COMP_WORDS[COMP_CWORD]}"
+    local cur=""
+    (( \${#_words[@]} > 0 )) && cur="\${_words[\${#_words[@]}-1]}"
 
     # Strip --opt= prefix for native file/directory completion
     local inline_prefix=""

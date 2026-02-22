@@ -33,6 +33,7 @@ function shellExists(shell: string): boolean {
 const hasBash = shellExists("bash");
 const hasZsh = shellExists("zsh");
 const hasFish = shellExists("fish");
+const hasExpect = shellExists("expect");
 
 let tmpDir: string;
 let testEnv: NodeJS.ProcessEnv;
@@ -187,9 +188,9 @@ _myapp 2>/dev/null
  * behaviour of `complete --do-complete` + `commandline -opc`.
  */
 function fishComplete(args: string[], opts?: ExecOptions): string[] {
-  // -opc returns all tokens up to cursor, excluding an empty trailing token
+  // -opc returns all tokens before the current token (excludes it)
   const allTokens = ["myapp", ...args];
-  const opcTokens = allTokens.filter((_, i) => i < allTokens.length - 1 || allTokens[i] !== "");
+  const opcTokens = allTokens.slice(0, -1);
   const currentToken = args[args.length - 1] ?? "";
 
   // Use printf instead of echo: fish's echo interprets -e/-n/-- as flags
@@ -683,6 +684,17 @@ describe.skipIf(!hasFish)("fish-specific completion", () => {
 
 describe.skipIf(!hasZsh)("zsh interactive completion (zpty)", () => {
   /**
+   * Assert nmatches for _describe-based completions.
+   * _describe may internally call compadd -E1, adding an extra empty match
+   * to compstate[nmatches]. This behavior is non-deterministic across runs,
+   * so we accept either N or N+1 as valid.
+   */
+  function expectDescribeMatches(nmatches: number, expected: number) {
+    expect(nmatches).toBeGreaterThanOrEqual(expected);
+    expect(nmatches).toBeLessThanOrEqual(expected + 1);
+  }
+
+  /**
    * Run zsh completion interactively via zpty and return the number of matches.
    *
    * Sets up a realistic completer chain (`_complete _files`) to simulate
@@ -824,4 +836,542 @@ zpty -d tp 2>/dev/null
     });
     expect(nmatches).toBeGreaterThan(0);
   }, 30000);
+
+  // ─── A.6: Prefix filter ────────────────────────────────────────────────────
+  it("filters extension matches by filename prefix", () => {
+    const nmatches = zshInteractiveComplete(["deploy", "--config", "app"], {
+      cwd: testFilesDir,
+    });
+    expect(nmatches).toBeGreaterThanOrEqual(2);
+  }, 30000);
+
+  // ─── A.7: File completion after multiple options ────────────────────────────
+  it("completes files after multiple options", () => {
+    const nmatches = zshInteractiveComplete(["deploy", "--env", "staging", "--config", ""], {
+      cwd: testFilesDir,
+    });
+    expect(nmatches).toBeGreaterThanOrEqual(8);
+  }, 30000);
+
+  // ─── B.9: Directory prefix ─────────────────────────────────────────────────
+  it("filters directories by prefix", () => {
+    const nmatches = zshInteractiveComplete(["build", "--output", "con"], {
+      cwd: testFilesDir,
+    });
+    expect(nmatches).toBeGreaterThanOrEqual(1);
+  }, 30000);
+
+  // ─── C. Enum / Choices ────────────────────────────────────────────────────
+
+  it("completes enum values without file fallback", () => {
+    const nmatches = zshInteractiveComplete(["build", "--format", ""], {
+      cwd: testFilesDir,
+    });
+    expectDescribeMatches(nmatches, 3);
+  }, 30000);
+
+  it("filters enum values by prefix", () => {
+    const nmatches = zshInteractiveComplete(["build", "--format", "y"], {
+      cwd: testFilesDir,
+    });
+    expectDescribeMatches(nmatches, 1);
+  }, 30000);
+
+  it("completes custom choices without file fallback", () => {
+    const nmatches = zshInteractiveComplete(["deploy", "--env", ""], {
+      cwd: testFilesDir,
+    });
+    expectDescribeMatches(nmatches, 3);
+  }, 30000);
+
+  it("filters custom choices by prefix", () => {
+    const nmatches = zshInteractiveComplete(["deploy", "--env", "dev"], {
+      cwd: testFilesDir,
+    });
+    expectDescribeMatches(nmatches, 1);
+  }, 30000);
+
+  it("completes shell names for completion subcommand", () => {
+    const nmatches = zshInteractiveComplete(["completion", ""], {
+      cwd: testFilesDir,
+    });
+    expectDescribeMatches(nmatches, 3);
+  }, 30000);
+
+  it("completes choices via short alias", () => {
+    const nmatches = zshInteractiveComplete(["deploy", "-e", ""], {
+      cwd: testFilesDir,
+    });
+    expectDescribeMatches(nmatches, 3);
+  }, 30000);
+
+  // ─── D. Positional completion ─────────────────────────────────────────────
+
+  it("completes positional enum values without file fallback", () => {
+    const nmatches = zshInteractiveComplete(["test", ""], {
+      cwd: testFilesDir,
+    });
+    expectDescribeMatches(nmatches, 3);
+  }, 30000);
+
+  it("completes first positional choices", () => {
+    const nmatches = zshInteractiveComplete(["migrate", ""], {
+      cwd: testFilesDir,
+    });
+    expectDescribeMatches(nmatches, 3);
+  }, 30000);
+
+  it("completes second positional with different choices", () => {
+    const nmatches = zshInteractiveComplete(["migrate", "local", ""], {
+      cwd: testFilesDir,
+    });
+    expectDescribeMatches(nmatches, 3);
+  }, 30000);
+
+  it("continues completing variadic positional", () => {
+    const nmatches = zshInteractiveComplete(["tag", "stable", ""], {
+      cwd: testFilesDir,
+    });
+    expectDescribeMatches(nmatches, 4);
+  }, 30000);
+
+  // ─── E.20: Subcommands (NoFileCompletion) ─────────────────────────────────
+  it("completes subcommands without file fallback", () => {
+    const nmatches = zshInteractiveComplete([""], {
+      cwd: testFilesDir,
+    });
+    expect(nmatches).toBeGreaterThanOrEqual(6);
+  }, 30000);
+
+  // ─── E.21: Options for subcommand ─────────────────────────────────────────
+  it("completes options for subcommand", () => {
+    const nmatches = zshInteractiveComplete(["build", "--"], {
+      cwd: testFilesDir,
+    });
+    expect(nmatches).toBeGreaterThanOrEqual(3);
+  }, 30000);
+
+  // ─── E.22: Options after boolean flag ─────────────────────────────────────
+  it("completes options after boolean flag", () => {
+    const nmatches = zshInteractiveComplete(["deploy", "--dry-run", "--"], {
+      cwd: testFilesDir,
+    });
+    expect(nmatches).toBeGreaterThanOrEqual(2);
+  }, 30000);
+
+  // ─── F.23: -- separator (no positionals) ──────────────────────────────────
+  it("shows nothing after -- separator for command without positionals", () => {
+    const nmatches = zshInteractiveComplete(["deploy", "--", ""], {
+      cwd: testFilesDir,
+    });
+    expect(nmatches).toBe(0);
+  }, 30000);
+
+  it("completes positionals after -- separator", () => {
+    const nmatches = zshInteractiveComplete(["test", "--", ""], {
+      cwd: testFilesDir,
+    });
+    expectDescribeMatches(nmatches, 3);
+  }, 30000);
+
+  it("completes positional after interleaved option", () => {
+    const nmatches = zshInteractiveComplete(["migrate", "--dry-run", "local", ""], {
+      cwd: testFilesDir,
+    });
+    expectDescribeMatches(nmatches, 3);
+  }, 30000);
+});
+
+// ─── Bash interactive completion (expect) ─────────────────────────────────────
+//
+// Uses expect to drive a real interactive bash session with readline.
+// This is critical for testing compopt +o default which only works in
+// a readline completion context (stubs swallow it with 2>/dev/null).
+
+describe.skipIf(!hasBash || !hasExpect)("bash interactive completion (expect)", () => {
+  function bashInteractiveComplete(args: string[], opts: { cwd: string }): number {
+    const ts = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const resultFile = path.join(tmpDir, `bash-result-${ts}`);
+    const setupFile = path.join(tmpDir, `bash-setup-${ts}.sh`);
+    const expectFile = path.join(tmpDir, `bash-expect-${ts}.exp`);
+    const command = ["myapp", ...args].join(" ");
+
+    // Bash setup script (plain bash, no Tcl escaping needed)
+    const setupContent = [
+      `export PS1='READY> '`,
+      `export PATH="${tmpDir}:$PATH"`,
+      `eval "$(myapp completion bash)"`,
+      `_myapp_wrapper() { _myapp_completions; echo \${#COMPREPLY[@]} > "${resultFile}"; }`,
+      `complete -o default -F _myapp_wrapper myapp`,
+      `cd "${opts.cwd}"`,
+    ].join("\n");
+    fs.writeFileSync(setupFile, setupContent);
+
+    // Expect script — spawn bash, source setup, send command+TAB, capture result
+    const expectContent = [
+      `#!/usr/bin/expect -f`,
+      `set timeout 15`,
+      `spawn bash --norc --noprofile`,
+      `expect "$ "`,
+      `send "source ${setupFile}\\r"`,
+      `expect "READY> "`,
+      `send "${command}\\t"`,
+      `after 2000`,
+      `send "\\x03"`,
+      `expect "READY> "`,
+      `send "exit\\r"`,
+      `expect eof`,
+    ].join("\n");
+    fs.writeFileSync(expectFile, expectContent, { mode: 0o755 });
+
+    try {
+      execSync(`expect ${expectFile}`, {
+        env: testEnv,
+        encoding: "utf-8",
+        timeout: 30000,
+        stdio: "pipe",
+      });
+      if (fs.existsSync(resultFile)) {
+        return Number.parseInt(fs.readFileSync(resultFile, "utf-8").trim(), 10);
+      }
+      return -1;
+    } finally {
+      for (const f of [resultFile, setupFile, expectFile]) {
+        try {
+          fs.unlinkSync(f);
+        } catch {}
+      }
+    }
+  }
+
+  // ─── A. File extension filtering ──────────────────────────────────────────
+
+  it("shows matching files and directories at root level", () => {
+    const n = bashInteractiveComplete(["deploy", "--config", ""], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(8);
+  }, 30000);
+
+  it("filters files in subdirectory", () => {
+    const n = bashInteractiveComplete(["deploy", "--config", "configs/"], { cwd: testFilesDir });
+    expect(n).toBe(2);
+  }, 30000);
+
+  it("does not fall back when no extensions match", () => {
+    const n = bashInteractiveComplete(["deploy", "--config", "nomatch/"], { cwd: testFilesDir });
+    expect(n).toBe(0);
+  }, 30000);
+
+  it("shows subdirectories for navigation", () => {
+    const n = bashInteractiveComplete(["deploy", "--config", "nested/"], { cwd: testFilesDir });
+    expect(n).toBe(2);
+  }, 30000);
+
+  it("filters in deeply nested directories", () => {
+    const n = bashInteractiveComplete(["deploy", "--config", "nested/sub/"], {
+      cwd: testFilesDir,
+    });
+    expect(n).toBe(1);
+  }, 30000);
+
+  it("filters extension matches by filename prefix", () => {
+    const n = bashInteractiveComplete(["deploy", "--config", "app"], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(2);
+  }, 30000);
+
+  it("completes files after multiple options", () => {
+    const n = bashInteractiveComplete(["deploy", "--env", "staging", "--config", ""], {
+      cwd: testFilesDir,
+    });
+    expect(n).toBeGreaterThanOrEqual(8);
+  }, 30000);
+
+  // ─── B. Directory completion ──────────────────────────────────────────────
+
+  it("shows only directories for directory completion", () => {
+    const n = bashInteractiveComplete(["build", "--output", ""], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(3);
+  }, 30000);
+
+  it("filters directories by prefix", () => {
+    const n = bashInteractiveComplete(["build", "--output", "con"], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(1);
+  }, 30000);
+
+  // ─── C. Enum / Choices ────────────────────────────────────────────────────
+
+  it("completes enum values without file fallback", () => {
+    const n = bashInteractiveComplete(["build", "--format", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  }, 30000);
+
+  it("filters enum values by prefix", () => {
+    const n = bashInteractiveComplete(["build", "--format", "y"], { cwd: testFilesDir });
+    expect(n).toBe(1);
+  }, 30000);
+
+  it("completes custom choices without file fallback", () => {
+    const n = bashInteractiveComplete(["deploy", "--env", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  }, 30000);
+
+  it("filters custom choices by prefix", () => {
+    const n = bashInteractiveComplete(["deploy", "--env", "dev"], { cwd: testFilesDir });
+    expect(n).toBe(1);
+  }, 30000);
+
+  it("completes shell names for completion subcommand", () => {
+    const n = bashInteractiveComplete(["completion", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  }, 30000);
+
+  it("completes choices via short alias", () => {
+    const n = bashInteractiveComplete(["deploy", "-e", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  }, 30000);
+
+  // ─── D. Positional completion ─────────────────────────────────────────────
+
+  it("completes positional enum values without file fallback", () => {
+    const n = bashInteractiveComplete(["test", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  }, 30000);
+
+  it("completes first positional choices", () => {
+    const n = bashInteractiveComplete(["migrate", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  }, 30000);
+
+  it("completes second positional with different choices", () => {
+    const n = bashInteractiveComplete(["migrate", "local", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  }, 30000);
+
+  it("continues completing variadic positional", () => {
+    const n = bashInteractiveComplete(["tag", "stable", ""], { cwd: testFilesDir });
+    expect(n).toBe(4);
+  }, 30000);
+
+  // ─── E. Subcommand / Option completion ────────────────────────────────────
+
+  it("completes subcommands without file fallback", () => {
+    const n = bashInteractiveComplete([""], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(6);
+  }, 30000);
+
+  it("completes options for subcommand", () => {
+    const n = bashInteractiveComplete(["build", "--"], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(3);
+  }, 30000);
+
+  it("completes options after boolean flag", () => {
+    const n = bashInteractiveComplete(["deploy", "--dry-run", "--"], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(2);
+  }, 30000);
+
+  // ─── F. Edge cases ────────────────────────────────────────────────────────
+
+  it("shows nothing after -- separator for command without positionals", () => {
+    const n = bashInteractiveComplete(["deploy", "--", ""], { cwd: testFilesDir });
+    expect(n).toBe(0);
+  }, 30000);
+
+  it("completes positionals after -- separator", () => {
+    const n = bashInteractiveComplete(["test", "--", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  }, 30000);
+
+  it("completes positional after interleaved option", () => {
+    const n = bashInteractiveComplete(["migrate", "--dry-run", "local", ""], {
+      cwd: testFilesDir,
+    });
+    expect(n).toBe(3);
+  }, 30000);
+
+  // ─── Bash-specific: inline --opt=value ────────────────────────────────────
+
+  it("completes inline enum values (--format=)", () => {
+    const n = bashInteractiveComplete(["build", "--format="], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  }, 30000);
+
+  it("filters inline enum by prefix (--format=j)", () => {
+    const n = bashInteractiveComplete(["build", "--format=j"], { cwd: testFilesDir });
+    expect(n).toBe(1);
+  }, 30000);
+
+  it("completes inline file extension (--config=app)", () => {
+    const n = bashInteractiveComplete(["deploy", "--config=app"], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(2);
+  }, 30000);
+});
+
+// ─── Fish interactive completion (complete --do-complete) ─────────────────────
+//
+// Uses fish's `complete --do-complete` to exercise the full completion pipeline
+// including the -f flag that suppresses file fallback.
+
+describe.skipIf(!hasFish)("fish interactive completion (complete --do-complete)", () => {
+  function fishInteractiveComplete(args: string[], opts: { cwd: string }): number {
+    const commandLine = ["myapp", ...args].join(" ");
+
+    const script = [
+      `set -x PATH "${tmpDir}" $PATH`,
+      `source (myapp completion fish | psub)`,
+      `cd "${opts.cwd}"`,
+      `complete --do-complete "${commandLine}"`,
+    ].join("\n");
+
+    const result = execSync(`fish --no-config -c '${script.replace(/'/g, "'\\''")}'`, {
+      env: testEnv,
+      encoding: "utf-8",
+      timeout: 15000,
+    });
+
+    const output = result.trim();
+    if (output.length === 0) return 0;
+    return output.split("\n").filter((l) => l.length > 0).length;
+  }
+
+  // ─── A. File extension filtering ──────────────────────────────────────────
+
+  it("shows matching files and directories at root level", () => {
+    const n = fishInteractiveComplete(["deploy", "--config", ""], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(8);
+  });
+
+  it("filters files in subdirectory", () => {
+    const n = fishInteractiveComplete(["deploy", "--config", "configs/"], { cwd: testFilesDir });
+    expect(n).toBe(2);
+  });
+
+  it("does not fall back when no extensions match", () => {
+    const n = fishInteractiveComplete(["deploy", "--config", "nomatch/"], { cwd: testFilesDir });
+    expect(n).toBe(0);
+  });
+
+  it("shows subdirectories for navigation", () => {
+    const n = fishInteractiveComplete(["deploy", "--config", "nested/"], { cwd: testFilesDir });
+    expect(n).toBe(2);
+  });
+
+  it("filters in deeply nested directories", () => {
+    const n = fishInteractiveComplete(["deploy", "--config", "nested/sub/"], {
+      cwd: testFilesDir,
+    });
+    expect(n).toBe(1);
+  });
+
+  it("filters extension matches by filename prefix", () => {
+    const n = fishInteractiveComplete(["deploy", "--config", "app"], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(2);
+  });
+
+  it("completes files after multiple options", () => {
+    const n = fishInteractiveComplete(["deploy", "--env", "staging", "--config", ""], {
+      cwd: testFilesDir,
+    });
+    expect(n).toBeGreaterThanOrEqual(8);
+  });
+
+  // ─── B. Directory completion ──────────────────────────────────────────────
+
+  it("shows only directories for directory completion", () => {
+    const n = fishInteractiveComplete(["build", "--output", ""], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(3);
+  });
+
+  it("filters directories by prefix", () => {
+    const n = fishInteractiveComplete(["build", "--output", "con"], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(1);
+  });
+
+  // ─── C. Enum / Choices ────────────────────────────────────────────────────
+
+  it("completes enum values without file fallback", () => {
+    const n = fishInteractiveComplete(["build", "--format", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  });
+
+  it("filters enum values by prefix", () => {
+    const n = fishInteractiveComplete(["build", "--format", "y"], { cwd: testFilesDir });
+    expect(n).toBe(1);
+  });
+
+  it("completes custom choices without file fallback", () => {
+    const n = fishInteractiveComplete(["deploy", "--env", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  });
+
+  it("filters custom choices by prefix", () => {
+    const n = fishInteractiveComplete(["deploy", "--env", "dev"], { cwd: testFilesDir });
+    expect(n).toBe(1);
+  });
+
+  it("completes shell names for completion subcommand", () => {
+    const n = fishInteractiveComplete(["completion", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  });
+
+  it("completes choices via short alias", () => {
+    const n = fishInteractiveComplete(["deploy", "-e", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  });
+
+  // ─── D. Positional completion ─────────────────────────────────────────────
+
+  it("completes positional enum values without file fallback", () => {
+    const n = fishInteractiveComplete(["test", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  });
+
+  it("completes first positional choices", () => {
+    const n = fishInteractiveComplete(["migrate", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  });
+
+  it("completes second positional with different choices", () => {
+    const n = fishInteractiveComplete(["migrate", "local", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  });
+
+  it("continues completing variadic positional", () => {
+    const n = fishInteractiveComplete(["tag", "stable", ""], { cwd: testFilesDir });
+    expect(n).toBe(4);
+  });
+
+  // ─── E. Subcommand / Option completion ────────────────────────────────────
+
+  it("completes subcommands without file fallback", () => {
+    const n = fishInteractiveComplete([""], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(6);
+  });
+
+  it("completes options for subcommand", () => {
+    const n = fishInteractiveComplete(["build", "--"], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(3);
+  });
+
+  it("completes options after boolean flag", () => {
+    const n = fishInteractiveComplete(["deploy", "--dry-run", "--"], { cwd: testFilesDir });
+    expect(n).toBeGreaterThanOrEqual(2);
+  });
+
+  // ─── F. Edge cases ────────────────────────────────────────────────────────
+
+  it("shows nothing after -- separator for command without positionals", () => {
+    const n = fishInteractiveComplete(["deploy", "--", ""], { cwd: testFilesDir });
+    expect(n).toBe(0);
+  });
+
+  it("completes positionals after -- separator", () => {
+    const n = fishInteractiveComplete(["test", "--", ""], { cwd: testFilesDir });
+    expect(n).toBe(3);
+  });
+
+  it("completes positional after interleaved option", () => {
+    const n = fishInteractiveComplete(["migrate", "--dry-run", "local", ""], {
+      cwd: testFilesDir,
+    });
+    expect(n).toBe(3);
+  });
 });

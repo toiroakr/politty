@@ -31,10 +31,12 @@ function __fish_${programName}_complete
     set -l directive 0
     set -l extensions ""
 
-    # When cursor is after a space (new word), add empty arg
-    # so __complete knows we are completing a new value, not the previous token
-    if test -z (commandline -ct)
+    # commandline -opc excludes the current token; always include it
+    set -l ct (commandline -ct)
+    if test (count $ct) -eq 0
         set -a args ""
+    else
+        set -a args $ct
     end
 
     for line in (${programName} __complete --shell fish -- $args 2>/dev/null)
