@@ -49,19 +49,15 @@ function __fish_${programName}_complete
         end
     end
 
-    # 16 = FileCompletion
+    # 16 = FileCompletion: delegate entirely to native file completion
     if test (math "bitand($directive, 16)") -ne 0
         __fish_complete_path
-    end
-    # 32 = DirectoryCompletion
-    if test (math "bitand($directive, 32)") -ne 0
-        __fish_complete_directories
+        return
     end
 
-    # Extension-filtered file completion
+    # Extension-filtered file completion: keep matching files + directories
     if test -n "$extensions"
         set -l cur (commandline -ct)
-        # Ensure cur is at least an empty string (commandline may output nothing)
         test (count $cur) -eq 0; and set cur ""
         __fish_complete_directories "$cur"
         for ext in (string split "," -- $extensions)
@@ -71,6 +67,12 @@ function __fish_${programName}_complete
                 end
             end
         end
+        return
+    end
+
+    # 32 = DirectoryCompletion: add native directory matches
+    if test (math "bitand($directive, 32)") -ne 0
+        __fish_complete_directories
     end
 end
 
