@@ -7,7 +7,12 @@ import { arg, defineCommand } from "../index.js";
 import { assertDocMatch, generateDoc } from "./golden-test.js";
 import { renderArgsTable } from "./render-args.js";
 import { renderCommandIndex } from "./render-index.js";
-import { UPDATE_GOLDEN_ENV } from "./types.js";
+import { SECTION_TYPES, UPDATE_GOLDEN_ENV, type SectionType } from "./types.js";
+
+/** Get relative path from CWD (for index marker scope) */
+function relPath(absPath: string): string {
+  return path.relative(process.cwd(), absPath);
+}
 
 describe("golden-test", () => {
   const testDir = path.join(import.meta.dirname ?? __dirname, ".test-golden");
@@ -92,9 +97,24 @@ describe("golden-test", () => {
       expect(content).toContain("# test-cli");
       expect(content).toContain("A test CLI for documentation generation");
 
-      // Verify markers are included
-      expect(content).toContain("<!-- politty:command::start -->");
-      expect(content).toContain("<!-- politty:command::end -->");
+      // Verify all expected section markers are included
+      const expectedSections: SectionType[] = [
+        "heading",
+        "description",
+        "usage",
+        "options",
+        "subcommands",
+      ];
+      for (const section of expectedSections) {
+        expect(content).toContain(`<!-- politty:command::${section}:start -->`);
+        expect(content).toContain(`<!-- politty:command::${section}:end -->`);
+      }
+
+      // Verify sections without data are not included
+      const absentSections = SECTION_TYPES.filter((s) => !expectedSections.includes(s));
+      for (const section of absentSections) {
+        expect(content).not.toContain(`<!-- politty:command::${section}:start -->`);
+      }
     });
 
     it("should report match when content is identical", async () => {
@@ -1022,8 +1042,8 @@ describe("golden-test", () => {
       expect(content).toContain("## alpha one");
       expect(content).toContain("## beta one");
       // "two" subcommands should be excluded (check for section markers)
-      expect(content).not.toContain("<!-- politty:command:alpha two:start -->");
-      expect(content).not.toContain("<!-- politty:command:beta two:start -->");
+      expect(content).not.toContain("<!-- politty:command:alpha two:heading:start -->");
+      expect(content).not.toContain("<!-- politty:command:beta two:heading:start -->");
     });
 
     // Combined: ignores parent command while files specifies different commands
@@ -1436,13 +1456,13 @@ describe("golden-test", () => {
 
       // Read original content
       const originalContent = fs.readFileSync(filePath, "utf-8");
-      expect(originalContent).toContain("<!-- politty:command:greet:start -->");
+      expect(originalContent).toContain("<!-- politty:command:greet:heading:start -->");
 
-      // Manually modify the greet section in the file
+      // Manually modify the greet heading section in the file
       // greet is depth=2 (subcommand), so it gets ## heading
       const modifiedContent = originalContent.replace(
-        /<!-- politty:command:greet:start -->\n## greet/,
-        "<!-- politty:command:greet:start -->\n## MODIFIED greet",
+        /<!-- politty:command:greet:heading:start -->\n## greet/,
+        "<!-- politty:command:greet:heading:start -->\n## MODIFIED greet",
       );
       fs.writeFileSync(filePath, modifiedContent, "utf-8");
 
@@ -1456,7 +1476,7 @@ describe("golden-test", () => {
       // Verify greet section was restored but other sections remain
       const updatedContent = fs.readFileSync(filePath, "utf-8");
       // greet is depth=2 (subcommand), so it gets ## heading
-      expect(updatedContent).toContain("<!-- politty:command:greet:start -->\n## greet");
+      expect(updatedContent).toContain("<!-- politty:command:greet:heading:start -->\n## greet");
       expect(updatedContent).not.toContain("## MODIFIED greet");
     });
 
@@ -1510,15 +1530,15 @@ describe("golden-test", () => {
       // Read original content
       const originalContent = fs.readFileSync(filePath, "utf-8");
 
-      // Manually modify both greet and config sections in the file
+      // Manually modify both greet and config heading sections in the file
       // greet and config are depth=2 (subcommands), so they get ## heading
       let modifiedContent = originalContent.replace(
-        /<!-- politty:command:greet:start -->\n## greet/,
-        "<!-- politty:command:greet:start -->\n## MODIFIED greet",
+        /<!-- politty:command:greet:heading:start -->\n## greet/,
+        "<!-- politty:command:greet:heading:start -->\n## MODIFIED greet",
       );
       modifiedContent = modifiedContent.replace(
-        /<!-- politty:command:config:start -->\n## config/,
-        "<!-- politty:command:config:start -->\n## MODIFIED config",
+        /<!-- politty:command:config:heading:start -->\n## config/,
+        "<!-- politty:command:config:heading:start -->\n## MODIFIED config",
       );
       fs.writeFileSync(filePath, modifiedContent, "utf-8");
 
@@ -1531,8 +1551,8 @@ describe("golden-test", () => {
 
       // Verify both sections were restored
       const updatedContent = fs.readFileSync(filePath, "utf-8");
-      expect(updatedContent).toContain("<!-- politty:command:greet:start -->\n## greet");
-      expect(updatedContent).toContain("<!-- politty:command:config:start -->\n## config");
+      expect(updatedContent).toContain("<!-- politty:command:greet:heading:start -->\n## greet");
+      expect(updatedContent).toContain("<!-- politty:command:config:heading:start -->\n## config");
       expect(updatedContent).not.toContain("## MODIFIED greet");
       expect(updatedContent).not.toContain("## MODIFIED config");
     });
@@ -1601,6 +1621,82 @@ describe("golden-test", () => {
       expect(result.success).toBe(true);
       expect(result.files).toHaveLength(1);
       expect(result.files[0]?.path).toBe(targetPath);
+      expect(result.files[0]?.status).toBe("match");
+    });
+
+    it("should respect section opt-out by not re-inserting removed markers", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "opt-out.md");
+
+      // Create initial file with all sections
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      // Read the generated content and remove the description marker for greet
+      const originalContent = fs.readFileSync(filePath, "utf-8");
+      expect(originalContent).toContain("<!-- politty:command:greet:description:start -->");
+
+      // Remove the description section marker block for greet (opt-out)
+      const descStart = "<!-- politty:command:greet:description:start -->";
+      const descEnd = "<!-- politty:command:greet:description:end -->";
+      const startIdx = originalContent.indexOf(descStart);
+      const endIdx = originalContent.indexOf(descEnd) + descEnd.length;
+      const optedOutContent =
+        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      fs.writeFileSync(filePath, optedOutContent, "utf-8");
+
+      // Run update targeting greet
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet"],
+      });
+
+      // Verify: the description marker was NOT re-inserted (opt-out respected)
+      const updatedContent = fs.readFileSync(filePath, "utf-8");
+      expect(updatedContent).not.toContain("<!-- politty:command:greet:description:start -->");
+      expect(updatedContent).not.toContain("<!-- politty:command:greet:description:end -->");
+
+      // Other sections for greet should still be present
+      expect(updatedContent).toContain("<!-- politty:command:greet:heading:start -->");
+      expect(updatedContent).toContain("<!-- politty:command:greet:usage:start -->");
+    });
+
+    it("should report success in read-only mode when sections are opted out", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "opt-out-readonly.md");
+
+      // Create initial file with all sections
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      // Remove the description section marker block for greet (opt-out)
+      const originalContent = fs.readFileSync(filePath, "utf-8");
+      const descStart = "<!-- politty:command:greet:description:start -->";
+      const descEnd = "<!-- politty:command:greet:description:end -->";
+      const startIdx = originalContent.indexOf(descStart);
+      const endIdx = originalContent.indexOf(descEnd) + descEnd.length;
+      const optedOutContent =
+        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      fs.writeFileSync(filePath, optedOutContent, "utf-8");
+
+      // Switch to read-only mode
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      // Validate targeting greet — should succeed (opted-out sections should not cause diff)
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet"],
+      });
+
+      expect(result.success).toBe(true);
       expect(result.files[0]?.status).toBe("match");
     });
   });
@@ -2021,9 +2117,9 @@ A test CLI for documentation generation
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${relPath(rootDocPath)}:start -->
 ${indexContent}
-<!-- politty:index:end -->
+<!-- politty:index:${relPath(rootDocPath)}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2064,9 +2160,9 @@ A test CLI for documentation generation
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${relPath(rootDocPath)}:start -->
 ${indexContent}
-<!-- politty:index:end -->
+<!-- politty:index:${relPath(rootDocPath)}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2097,7 +2193,7 @@ A test CLI for documentation generation
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${relPath(rootDocPath)}:start -->
 ### [Old Category](./old.md)
 
 Old description.
@@ -2105,7 +2201,7 @@ Old description.
 | Command | Description |
 |---------|-------------|
 | [old](./old.md#old) | Old command |
-<!-- politty:index:end -->
+<!-- politty:index:${relPath(rootDocPath)}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2185,7 +2281,7 @@ A test CLI for documentation generation
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${relPath(rootDocPath)}:start -->
 ### Broken section without end marker
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
@@ -2218,11 +2314,11 @@ A test CLI for documentation generation
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${relPath(rootDocPath)}:start -->
 ### [Old Category](./old.md)
 
 Old description.
-<!-- politty:index:end -->
+<!-- politty:index:${relPath(rootDocPath)}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2254,11 +2350,11 @@ A test CLI for documentation generation
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${relPath(rootDocPath)}:start -->
 ### [Old Category](./old.md)
 
 Old description.
-<!-- politty:index:end -->
+<!-- politty:index:${relPath(rootDocPath)}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2315,9 +2411,9 @@ ${argsContent}
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${relPath(rootDocPath)}:start -->
 ${indexContent}
-<!-- politty:index:end -->
+<!-- politty:index:${relPath(rootDocPath)}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2359,9 +2455,9 @@ outdated args
 
 ## Commands
 
-<!-- politty:index:start -->
+<!-- politty:index:${relPath(rootDocPath)}:start -->
 outdated index
-<!-- politty:index:end -->
+<!-- politty:index:${relPath(rootDocPath)}:end -->
 `;
       fs.writeFileSync(rootDocPath, initialContent, "utf-8");
 
@@ -2506,7 +2602,7 @@ ${argsContent}
       expect(updatedContent).toContain("A test CLI for documentation generation");
     });
 
-    it("should detect unexpected command markers in rootDoc", async () => {
+    it("should detect unexpected section markers in rootDoc", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "");
 
       const rootDocPath = path.join(testDir, "rootdoc-unexpected-cmd.md");
@@ -2517,9 +2613,9 @@ ${argsContent}
 
 A test CLI for documentation generation
 
-<!-- politty:command:config:start -->
+<!-- politty:command:config:heading:start -->
 ## stale config
-<!-- politty:command:config:end -->
+<!-- politty:command:config:heading:end -->
 `,
         "utf-8",
       );
@@ -2532,7 +2628,7 @@ A test CLI for documentation generation
 
       expect(result.success).toBe(false);
       expect(result.files[0]?.status).toBe("diff");
-      expect(result.files[0]?.diff).toContain("unexpected command marker sections in rootDoc");
+      expect(result.files[0]?.diff).toContain("unexpected section markers in rootDoc");
       expect(result.files[0]?.diff).toContain("config");
     });
   });
@@ -2568,8 +2664,8 @@ A test CLI for documentation generation
 
 A test CLI for documentation generation
 
-<!-- politty:index:start -->
-<!-- politty:index:end -->
+<!-- politty:index:${relPath(rootDocPath)}:start -->
+<!-- politty:index:${relPath(rootDocPath)}:end -->
 `,
         "utf-8",
       );
@@ -2600,8 +2696,8 @@ A test CLI for documentation generation
 
 A test CLI for documentation generation
 
-<!-- politty:index:start -->
-<!-- politty:index:end -->
+<!-- politty:index:${relPath(rootDocPath)}:start -->
+<!-- politty:index:${relPath(rootDocPath)}:end -->
 `,
         "utf-8",
       );
@@ -2632,8 +2728,8 @@ A test CLI for documentation generation
 
 A test CLI for documentation generation
 
-<!-- politty:index:start -->
-<!-- politty:index:end -->
+<!-- politty:index:${relPath(rootDocPath)}:start -->
+<!-- politty:index:${relPath(rootDocPath)}:end -->
 `,
         "utf-8",
       );
