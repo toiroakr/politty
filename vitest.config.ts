@@ -19,18 +19,21 @@ export default defineConfig({
         test: {
           name: "shell-bash",
           include: ["tests/shell-completion/bash.test.ts"],
+          testTimeout: 10000,
         },
       },
       {
         test: {
           name: "shell-zsh",
           include: ["tests/shell-completion/zsh.test.ts"],
+          testTimeout: 10000,
         },
       },
       {
         test: {
           name: "shell-fish",
           include: ["tests/shell-completion/fish.test.ts"],
+          testTimeout: 10000,
         },
       },
     ],

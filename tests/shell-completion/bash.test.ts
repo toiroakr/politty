@@ -201,164 +201,164 @@ describe.skipIf(!hasBash || !hasExpect)("bash interactive completion (expect)", 
   it("shows matching files and directories at root level", () => {
     const n = bashInteractiveComplete(["deploy", "--config", ""], { cwd: ctx.testFilesDir });
     expect(n).toBeGreaterThanOrEqual(8);
-  }, 30000);
+  });
 
   it("filters files in subdirectory", () => {
     const n = bashInteractiveComplete(["deploy", "--config", "configs/"], {
       cwd: ctx.testFilesDir,
     });
     expect(n).toBe(2);
-  }, 30000);
+  });
 
   it("does not fall back when no extensions match", () => {
     const n = bashInteractiveComplete(["deploy", "--config", "nomatch/"], {
       cwd: ctx.testFilesDir,
     });
     expect(n).toBe(0);
-  }, 30000);
+  });
 
   it("shows subdirectories for navigation", () => {
     const n = bashInteractiveComplete(["deploy", "--config", "nested/"], {
       cwd: ctx.testFilesDir,
     });
     expect(n).toBe(2);
-  }, 30000);
+  });
 
   it("filters in deeply nested directories", () => {
     const n = bashInteractiveComplete(["deploy", "--config", "nested/sub/"], {
       cwd: ctx.testFilesDir,
     });
     expect(n).toBe(1);
-  }, 30000);
+  });
 
   it("filters extension matches by filename prefix", () => {
     const n = bashInteractiveComplete(["deploy", "--config", "app"], { cwd: ctx.testFilesDir });
     expect(n).toBeGreaterThanOrEqual(2);
-  }, 30000);
+  });
 
   it("completes files after multiple options", () => {
     const n = bashInteractiveComplete(["deploy", "--env", "staging", "--config", ""], {
       cwd: ctx.testFilesDir,
     });
     expect(n).toBeGreaterThanOrEqual(8);
-  }, 30000);
+  });
 
   // ─── B. Directory completion ──────────────────────────────────────────────
 
   it("shows only directories for directory completion", () => {
     const n = bashInteractiveComplete(["build", "--output", ""], { cwd: ctx.testFilesDir });
     expect(n).toBeGreaterThanOrEqual(3);
-  }, 30000);
+  });
 
   it("filters directories by prefix", () => {
     const n = bashInteractiveComplete(["build", "--output", "con"], { cwd: ctx.testFilesDir });
     expect(n).toBeGreaterThanOrEqual(1);
-  }, 30000);
+  });
 
   // ─── C. Enum / Choices ────────────────────────────────────────────────────
 
   it("completes enum values without file fallback", () => {
     const n = bashInteractiveComplete(["build", "--format", ""], { cwd: ctx.testFilesDir });
     expect(n).toBe(3);
-  }, 30000);
+  });
 
   it("filters enum values by prefix", () => {
     const n = bashInteractiveComplete(["build", "--format", "y"], { cwd: ctx.testFilesDir });
     expect(n).toBe(1);
-  }, 30000);
+  });
 
   it("completes custom choices without file fallback", () => {
     const n = bashInteractiveComplete(["deploy", "--env", ""], { cwd: ctx.testFilesDir });
     expect(n).toBe(3);
-  }, 30000);
+  });
 
   it("filters custom choices by prefix", () => {
     const n = bashInteractiveComplete(["deploy", "--env", "dev"], { cwd: ctx.testFilesDir });
     expect(n).toBe(1);
-  }, 30000);
+  });
 
   it("completes shell names for completion subcommand", () => {
     const n = bashInteractiveComplete(["completion", ""], { cwd: ctx.testFilesDir });
     expect(n).toBe(3);
-  }, 30000);
+  });
 
   it("completes choices via short alias", () => {
     const n = bashInteractiveComplete(["deploy", "-e", ""], { cwd: ctx.testFilesDir });
     expect(n).toBe(3);
-  }, 30000);
+  });
 
   // ─── D. Positional completion ─────────────────────────────────────────────
 
   it("completes positional enum values without file fallback", () => {
     const n = bashInteractiveComplete(["test", ""], { cwd: ctx.testFilesDir });
     expect(n).toBe(3);
-  }, 30000);
+  });
 
   it("completes first positional choices", () => {
     const n = bashInteractiveComplete(["migrate", ""], { cwd: ctx.testFilesDir });
     expect(n).toBe(3);
-  }, 30000);
+  });
 
   it("completes second positional with different choices", () => {
     const n = bashInteractiveComplete(["migrate", "local", ""], { cwd: ctx.testFilesDir });
     expect(n).toBe(3);
-  }, 30000);
+  });
 
   it("continues completing variadic positional", () => {
     const n = bashInteractiveComplete(["tag", "stable", ""], { cwd: ctx.testFilesDir });
     expect(n).toBe(4);
-  }, 30000);
+  });
 
   // ─── E. Subcommand / Option completion ────────────────────────────────────
 
   it("completes subcommands without file fallback", () => {
     const n = bashInteractiveComplete([""], { cwd: ctx.testFilesDir });
     expect(n).toBeGreaterThanOrEqual(6);
-  }, 30000);
+  });
 
   it("completes options for subcommand", () => {
     const n = bashInteractiveComplete(["build", "--"], { cwd: ctx.testFilesDir });
     expect(n).toBeGreaterThanOrEqual(3);
-  }, 30000);
+  });
 
   it("completes options after boolean flag", () => {
     const n = bashInteractiveComplete(["deploy", "--dry-run", "--"], { cwd: ctx.testFilesDir });
     expect(n).toBeGreaterThanOrEqual(2);
-  }, 30000);
+  });
 
   // ─── F. Edge cases ────────────────────────────────────────────────────────
 
   it("shows nothing after -- separator for command without positionals", () => {
     const n = bashInteractiveComplete(["deploy", "--", ""], { cwd: ctx.testFilesDir });
     expect(n).toBe(0);
-  }, 30000);
+  });
 
   it("completes positionals after -- separator", () => {
     const n = bashInteractiveComplete(["test", "--", ""], { cwd: ctx.testFilesDir });
     expect(n).toBe(3);
-  }, 30000);
+  });
 
   it("completes positional after interleaved option", () => {
     const n = bashInteractiveComplete(["migrate", "--dry-run", "local", ""], {
       cwd: ctx.testFilesDir,
     });
     expect(n).toBe(3);
-  }, 30000);
+  });
 
   // ─── Bash-specific: inline --opt=value ────────────────────────────────────
 
   it("completes inline enum values (--format=)", () => {
     const n = bashInteractiveComplete(["build", "--format="], { cwd: ctx.testFilesDir });
     expect(n).toBe(3);
-  }, 30000);
+  });
 
   it("filters inline enum by prefix (--format=j)", () => {
     const n = bashInteractiveComplete(["build", "--format=j"], { cwd: ctx.testFilesDir });
     expect(n).toBe(1);
-  }, 30000);
+  });
 
   it("completes inline file extension (--config=app)", () => {
     const n = bashInteractiveComplete(["deploy", "--config=app"], { cwd: ctx.testFilesDir });
     expect(n).toBeGreaterThanOrEqual(2);
-  }, 30000);
+  });
 });

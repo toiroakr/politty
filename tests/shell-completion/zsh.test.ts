@@ -179,63 +179,63 @@ zpty -d tp 2>/dev/null
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBe(0);
-  }, 30000);
+  });
 
   it("shows matching files and directories at root level", () => {
     const nmatches = zshInteractiveComplete(["deploy", "--config", ""], {
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBeGreaterThanOrEqual(8);
-  }, 30000);
+  });
 
   it("filters non-matching files in mixed directory", () => {
     const nmatches = zshInteractiveComplete(["deploy", "--config", "configs/"], {
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBe(2);
-  }, 30000);
+  });
 
   it("shows subdirectories for navigation alongside matching files", () => {
     const nmatches = zshInteractiveComplete(["deploy", "--config", "nested/"], {
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBe(2);
-  }, 30000);
+  });
 
   it("filters in deeply nested directories", () => {
     const nmatches = zshInteractiveComplete(["deploy", "--config", "nested/sub/"], {
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBe(1);
-  }, 30000);
+  });
 
   it("does not break DirectoryCompletion (build --output)", () => {
     const nmatches = zshInteractiveComplete(["build", "--output", ""], {
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBeGreaterThan(0);
-  }, 30000);
+  });
 
   it("filters extension matches by filename prefix", () => {
     const nmatches = zshInteractiveComplete(["deploy", "--config", "app"], {
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBeGreaterThanOrEqual(2);
-  }, 30000);
+  });
 
   it("completes files after multiple options", () => {
     const nmatches = zshInteractiveComplete(["deploy", "--env", "staging", "--config", ""], {
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBeGreaterThanOrEqual(8);
-  }, 30000);
+  });
 
   it("filters directories by prefix", () => {
     const nmatches = zshInteractiveComplete(["build", "--output", "con"], {
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBeGreaterThanOrEqual(1);
-  }, 30000);
+  });
 
   // ─── C. Enum / Choices ────────────────────────────────────────────────────
 
@@ -244,42 +244,42 @@ zpty -d tp 2>/dev/null
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 3);
-  }, 30000);
+  });
 
   it("filters enum values by prefix", () => {
     const nmatches = zshInteractiveComplete(["build", "--format", "y"], {
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 1);
-  }, 30000);
+  });
 
   it("completes custom choices without file fallback", () => {
     const nmatches = zshInteractiveComplete(["deploy", "--env", ""], {
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 3);
-  }, 30000);
+  });
 
   it("filters custom choices by prefix", () => {
     const nmatches = zshInteractiveComplete(["deploy", "--env", "dev"], {
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 1);
-  }, 30000);
+  });
 
   it("completes shell names for completion subcommand", () => {
     const nmatches = zshInteractiveComplete(["completion", ""], {
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 3);
-  }, 30000);
+  });
 
   it("completes choices via short alias", () => {
     const nmatches = zshInteractiveComplete(["deploy", "-e", ""], {
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 3);
-  }, 30000);
+  });
 
   // ─── D. Positional completion ─────────────────────────────────────────────
 
@@ -288,28 +288,28 @@ zpty -d tp 2>/dev/null
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 3);
-  }, 30000);
+  });
 
   it("completes first positional choices", () => {
     const nmatches = zshInteractiveComplete(["migrate", ""], {
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 3);
-  }, 30000);
+  });
 
   it("completes second positional with different choices", () => {
     const nmatches = zshInteractiveComplete(["migrate", "local", ""], {
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 3);
-  }, 30000);
+  });
 
   it("continues completing variadic positional", () => {
     const nmatches = zshInteractiveComplete(["tag", "stable", ""], {
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 4);
-  }, 30000);
+  });
 
   // ─── E. Subcommand / Option completion ────────────────────────────────────
 
@@ -318,21 +318,21 @@ zpty -d tp 2>/dev/null
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBeGreaterThanOrEqual(6);
-  }, 30000);
+  });
 
   it("completes options for subcommand", () => {
     const nmatches = zshInteractiveComplete(["build", "--"], {
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBeGreaterThanOrEqual(3);
-  }, 30000);
+  });
 
   it("completes options after boolean flag", () => {
     const nmatches = zshInteractiveComplete(["deploy", "--dry-run", "--"], {
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBeGreaterThanOrEqual(2);
-  }, 30000);
+  });
 
   // ─── F. Edge cases ────────────────────────────────────────────────────────
 
@@ -341,19 +341,19 @@ zpty -d tp 2>/dev/null
       cwd: ctx.testFilesDir,
     });
     expect(nmatches).toBe(0);
-  }, 30000);
+  });
 
   it("completes positionals after -- separator", () => {
     const nmatches = zshInteractiveComplete(["test", "--", ""], {
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 3);
-  }, 30000);
+  });
 
   it("completes positional after interleaved option", () => {
     const nmatches = zshInteractiveComplete(["migrate", "--dry-run", "local", ""], {
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 3);
-  }, 30000);
+  });
 });
