@@ -20,8 +20,6 @@ jobs:
       actions: write
       pull-requests: write
     steps:
-      - name: Install shells for completion tests
-        run: sudo apt-get update && sudo apt-get install -y zsh fish expect
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
@@ -44,6 +42,42 @@ jobs:
       - name: Knip
         run: pnpm knip
       - name: Test with coverage
-        run: pnpm test:coverage
+        run: pnpm test:coverage -- --project unit
       - name: Run octocov
         uses: k1LoW/octocov-action@73d561f65d59e66899ed5c87e4621a913b5d5c20 # v1.5.0
+
+  shell-completion:
+    name: Shell Completion (${{ matrix.shell }})
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [bash, zsh, fish]
+        include:
+          - shell: bash
+            install: expect
+          - shell: zsh
+            install: zsh
+          - shell: fish
+            install: fish
+    steps:
+      - name: Install shell tools
+        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.install }}
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
+        name: Install pnpm
+        with:
+          standalone: true
+          run_install: false
+      - name: Install Node.js
+        run: pnpm env use --global 24
+        shell: bash
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run shell completion tests
+        run: pnpm test -- --project shell-${{ matrix.shell }}
