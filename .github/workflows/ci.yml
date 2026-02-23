@@ -42,7 +42,7 @@ jobs:
       - name: Knip
         run: pnpm knip
       - name: Test with coverage
-        run: pnpm test:coverage -- --project unit
+        run: npx vitest run --coverage --project unit
       - name: Run octocov
         uses: k1LoW/octocov-action@73d561f65d59e66899ed5c87e4621a913b5d5c20 # v1.5.0
 
@@ -80,4 +80,4 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Run shell completion tests
-        run: pnpm test -- --project shell-${{ matrix.shell }}
+        run: npx vitest run --project shell-${{ matrix.shell }}
