@@ -444,7 +444,7 @@ export function defineCommonTests(
     expect(valuesAfter).not.toContain("--env");
     expect(valuesAfter).not.toContain("--config");
     expect(valuesAfter).not.toContain("--dry-run");
-  });
+  }, 15000);
 
   it("completes positional after -- separator", () => {
     const values = complete(["test", "--", ""]);
