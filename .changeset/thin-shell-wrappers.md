@@ -12,3 +12,4 @@ Refactor shell completion to thin shell wrappers with `__complete` delegation an
 - Add `NoFileCompletion` directive for enum/choices value completions
 - Add comprehensive shell completion E2E tests across bash/zsh/fish (zpty, expect, complete --do-complete)
 - Split shell completion tests into per-shell vitest projects with CI matrix parallelization
+- Add shell completion guide documentation (`docs/shell-completion.md`)
