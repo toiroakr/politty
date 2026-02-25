@@ -196,7 +196,7 @@ Fish loads completions from `~/.config/fish/completions/` automatically in new s
 Reload your shell or start a new session. Verify the binary is in PATH with `which mycli`. Test the completion engine directly:
 
 ```bash
-mycli __complete -- ""
+mycli __complete --shell bash -- ""
 ```
 
 If this prints subcommand names, the engine is working and the issue is in your shell configuration.
@@ -226,16 +226,16 @@ You can test the completion engine directly from the terminal without pressing T
 
 ```bash
 # Subcommand completions
-mycli __complete -- ""
+mycli __complete --shell bash -- ""
 
 # Option completions for a subcommand
-mycli __complete -- build --
+mycli __complete --shell bash -- build --
 
 # Value completions for an option
-mycli __complete -- build --format ""
+mycli __complete --shell bash -- build --format ""
 
 # Positional completions
-mycli __complete -- test ""
+mycli __complete --shell bash -- test ""
 ```
 
 The output format is one candidate per line, with the last line being a directive (`:N`). Common directives:
@@ -243,6 +243,6 @@ The output format is one candidate per line, with the last line being a directiv
 - `:4` — Filter candidates by the prefix the user has typed
 - `:16` — Merge with native file completion
 - `:32` — Merge with native directory completion
-- `:64` — Suppress file completion fallback
+- `:2` — Suppress file completion fallback
 
 For interactive testing, see `playground/24-shell-completion/try-completion.sh` and `try-completion.fish`.
