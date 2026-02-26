@@ -92,9 +92,9 @@
     "@changesets/cli": "2.29.8",
     "@quansync/fs": "1.0.0",
     "@types/node": "25.3.0",
-    "@typescript/native-preview": "7.0.0-dev.20260219.1",
+    "@typescript/native-preview": "7.0.0-dev.20260223.1",
     "@vitest/coverage-v8": "4.0.18",
-    "knip": "5.84.1",
+    "knip": "5.85.0",
     "lefthook": "2.1.1",
     "organize-imports-cli": "0.10.0",
     "oxfmt": "0.34.0",
@@ -112,5 +112,5 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@10.30.0"
+  "packageManager": "pnpm@10.30.1"
 }
