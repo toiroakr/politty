@@ -49,7 +49,7 @@ importers:
         specifier: 0.20.3
         version: 0.20.3(@typescript/native-preview@7.0.0-dev.20260223.1)(oxc-resolver@11.17.1)(typescript@5.9.3)
       tsx:
-        specifier: ^4.21.0
+        specifier: 4.21.0
         version: 4.21.0
       typescript:
         specifier: 5.9.3
