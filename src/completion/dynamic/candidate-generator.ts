@@ -2,6 +2,7 @@
  * Generate completion candidates based on context
  */
 
+import { execSync } from "node:child_process";
 import type { CompletionContext } from "./context-parser.js";
 
 /**
@@ -46,6 +47,8 @@ export interface CandidateResult {
   candidates: CompletionCandidate[];
   /** Directive flags for shell behavior */
   directive: number;
+  /** File extensions for shell-native filtering (e.g., ["json", "yaml"]) */
+  fileExtensions?: string[] | undefined;
 }
 
 /**
@@ -73,26 +76,95 @@ export function generateCandidates(context: CompletionContext): CandidateResult 
   }
 }
 
-function addFileExtensionMetadata(
+/**
+ * Execute a shell command and return results as candidates
+ */
+function executeShellCommand(command: string): CompletionCandidate[] {
+  try {
+    const output = execSync(command, { encoding: "utf-8", timeout: 5000 });
+    return output
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => ({ value: line, type: "value" as const }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Result of resolving value candidates
+ */
+interface ValueResolutionResult {
+  directive: number;
+  fileExtensions?: string[] | undefined;
+}
+
+/**
+ * Resolve value completion, executing shell commands and file lookups in JS
+ */
+function resolveValueCandidates(
+  vc: { type: string; choices?: string[]; shellCommand?: string; extensions?: string[] },
   candidates: CompletionCandidate[],
-  extensions: string[] | undefined,
-): void {
-  if (!extensions || extensions.length === 0) {
-    return;
+  _currentWord: string,
+  description?: string,
+): ValueResolutionResult {
+  let directive = CompletionDirective.FilterPrefix;
+  let fileExtensions: string[] | undefined;
+
+  switch (vc.type) {
+    case "choices":
+      if (vc.choices) {
+        for (const choice of vc.choices) {
+          candidates.push({
+            value: choice,
+            description,
+            type: "value",
+          });
+        }
+      }
+      directive |= CompletionDirective.NoFileCompletion;
+      break;
+
+    case "file":
+      if (vc.extensions && vc.extensions.length > 0) {
+        // Delegate to shell with extension filter metadata
+        fileExtensions = Array.from(
+          new Set(
+            vc.extensions
+              .map((ext) => ext.trim().replace(/^\./, ""))
+              .filter((ext) => ext.length > 0),
+          ),
+        );
+        if (fileExtensions.length === 0) {
+          // All extensions were invalid → treat as unfiltered file completion
+          fileExtensions = undefined;
+          directive |= CompletionDirective.FileCompletion;
+        }
+      } else {
+        // No extensions: let shell handle native file completion
+        directive |= CompletionDirective.FileCompletion;
+      }
+      break;
+
+    case "directory":
+      directive |= CompletionDirective.DirectoryCompletion;
+      break;
+
+    case "command":
+      // Execute shell command in JS and add results as candidates
+      if (vc.shellCommand) {
+        candidates.push(...executeShellCommand(vc.shellCommand));
+      }
+      directive |= CompletionDirective.NoFileCompletion;
+      break;
+
+    case "none":
+      directive |= CompletionDirective.NoFileCompletion;
+      break;
   }
 
-  const normalized = Array.from(
-    new Set(extensions.map((ext) => ext.trim().replace(/^\./, "")).filter((ext) => ext.length > 0)),
-  );
-
-  if (normalized.length === 0) {
-    return;
-  }
-
-  candidates.push({
-    value: `__extensions:${normalized.join(",")}`,
-    type: "value",
-  });
+  return { directive, fileExtensions };
 }
 
 /**
@@ -171,58 +243,18 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
  */
 function generateOptionValueCandidates(context: CompletionContext): CandidateResult {
   const candidates: CompletionCandidate[] = [];
-  let directive = CompletionDirective.FilterPrefix;
 
   if (!context.targetOption) {
-    return { candidates, directive };
+    return { candidates, directive: CompletionDirective.FilterPrefix };
   }
 
   const vc = context.targetOption.valueCompletion;
   if (!vc) {
-    // No specific completion, return empty
-    return { candidates, directive };
+    return { candidates, directive: CompletionDirective.FilterPrefix };
   }
 
-  switch (vc.type) {
-    case "choices":
-      if (vc.choices) {
-        for (const choice of vc.choices) {
-          candidates.push({
-            value: choice,
-            type: "value",
-          });
-        }
-      }
-      break;
-
-    case "file":
-      directive |= CompletionDirective.FileCompletion;
-      addFileExtensionMetadata(candidates, vc.extensions);
-      break;
-
-    case "directory":
-      directive |= CompletionDirective.DirectoryCompletion;
-      break;
-
-    case "command":
-      // Shell command completion - the shell script will execute the command
-      // We return empty candidates and let the shell handle it
-      if (vc.shellCommand) {
-        // Return the shell command as a special candidate
-        candidates.push({
-          value: `__command:${vc.shellCommand}`,
-          type: "value",
-        });
-      }
-      break;
-
-    case "none":
-      // No completion
-      directive |= CompletionDirective.NoFileCompletion;
-      break;
-  }
-
-  return { candidates, directive };
+  const { directive, fileExtensions } = resolveValueCandidates(vc, candidates, context.currentWord);
+  return { candidates, directive, fileExtensions };
 }
 
 /**
@@ -230,81 +262,27 @@ function generateOptionValueCandidates(context: CompletionContext): CandidateRes
  */
 function generatePositionalCandidates(context: CompletionContext): CandidateResult {
   const candidates: CompletionCandidate[] = [];
-  let directive = CompletionDirective.FilterPrefix;
 
-  // Get the positional at current index
+  // Get the positional at current index, clamping to last (variadic) positional
   const positionalIndex = context.positionalIndex ?? 0;
-  const positional = context.positionals[positionalIndex];
+  const positional =
+    context.positionals[positionalIndex] ??
+    (context.positionals.at(-1)?.variadic ? context.positionals.at(-1) : undefined);
 
   if (!positional) {
-    // No more positionals expected, maybe return subcommands?
-    return { candidates, directive };
+    return { candidates, directive: CompletionDirective.FilterPrefix };
   }
 
   const vc = positional.valueCompletion;
   if (!vc) {
-    // No specific completion
-    return { candidates, directive };
+    return { candidates, directive: CompletionDirective.FilterPrefix };
   }
 
-  switch (vc.type) {
-    case "choices":
-      if (vc.choices) {
-        for (const choice of vc.choices) {
-          candidates.push({
-            value: choice,
-            description: positional.description,
-            type: "value",
-          });
-        }
-      }
-      break;
-
-    case "file":
-      directive |= CompletionDirective.FileCompletion;
-      addFileExtensionMetadata(candidates, vc.extensions);
-      break;
-
-    case "directory":
-      directive |= CompletionDirective.DirectoryCompletion;
-      break;
-
-    case "command":
-      if (vc.shellCommand) {
-        candidates.push({
-          value: `__command:${vc.shellCommand}`,
-          type: "value",
-        });
-      }
-      break;
-
-    case "none":
-      directive |= CompletionDirective.NoFileCompletion;
-      break;
-  }
-
-  return { candidates, directive };
-}
-
-/**
- * Format candidates as shell completion output
- *
- * Format: value\tdescription (tab-separated)
- * Last line: :directive_code
- */
-export function formatOutput(result: CandidateResult): string {
-  const lines: string[] = [];
-
-  for (const candidate of result.candidates) {
-    if (candidate.description) {
-      lines.push(`${candidate.value}\t${candidate.description}`);
-    } else {
-      lines.push(candidate.value);
-    }
-  }
-
-  // Add directive as last line
-  lines.push(`:${result.directive}`);
-
-  return lines.join("\n");
+  const { directive, fileExtensions } = resolveValueCandidates(
+    vc,
+    candidates,
+    context.currentWord,
+    positional.description,
+  );
+  return { candidates, directive, fileExtensions };
 }

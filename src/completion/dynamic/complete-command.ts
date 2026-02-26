@@ -4,30 +4,41 @@
  * This creates a hidden `__complete` command that outputs completion candidates
  * for shell scripts to consume. Usage:
  *
- *   mycli __complete -- build --fo
- *   mycli __complete -- plugin add
+ *   mycli __complete --shell bash -- build --fo
+ *   mycli __complete --shell zsh -- plugin add
  *
- * Output format:
- *   value\tdescription
- *   ...
- *   :directive_code
+ * Output format depends on the target shell:
+ *   bash: plain values (pre-filtered by prefix), last line :directive
+ *   zsh:  value:description pairs, last line :directive
+ *   fish: value\tdescription pairs, last line :directive
  */
 
 import { z } from "zod";
 import { arg } from "../../core/arg-registry.js";
 import { defineCommand } from "../../core/command.js";
 import type { AnyCommand, Command } from "../../types.js";
-import { formatOutput, generateCandidates } from "./candidate-generator.js";
+import { generateCandidates } from "./candidate-generator.js";
 import { parseCompletionContext } from "./context-parser.js";
+import { formatForShell } from "./shell-formatter.js";
+
+/**
+ * Detect inline option-value prefix (e.g., "--format=" from "--format=json")
+ */
+function detectInlinePrefix(currentWord: string): string | undefined {
+  if (currentWord.startsWith("--") && currentWord.includes("=")) {
+    return currentWord.slice(0, currentWord.indexOf("=") + 1);
+  }
+  return undefined;
+}
 
 /**
  * Schema for the __complete command
- *
- * Arguments after -- are collected as the completion arguments
  */
 const completeArgsSchema = z.object({
+  shell: arg(z.enum(["bash", "zsh", "fish"]), {
+    description: "Target shell for output formatting",
+  }),
   // The arguments to complete are passed after --
-  // We use rest args to capture them
   args: arg(z.array(z.string()).default([]), {
     positional: true,
     description: "Arguments to complete",
@@ -57,11 +68,22 @@ export function createDynamicCompleteCommand(
       // Parse the completion context
       const context = parseCompletionContext(args.args, rootCommand);
 
-      // Generate candidates
+      // Generate candidates (shellCommand/file extensions resolved in JS)
       const result = generateCandidates(context);
 
-      // Output in shell-consumable format
-      console.log(formatOutput(result));
+      // Detect bash inline option-value prefix
+      const inlinePrefix = detectInlinePrefix(context.currentWord);
+
+      // Format for the target shell
+      const output = formatForShell(result, {
+        shell: args.shell,
+        currentWord: inlinePrefix
+          ? context.currentWord.slice(inlinePrefix.length)
+          : context.currentWord,
+        inlinePrefix,
+      });
+
+      console.log(output);
     },
   });
 }

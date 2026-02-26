@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   CompletionDirective,
-  formatOutput,
+  formatForShell,
   generateCandidates,
   generateCompletion,
   parseCompletionContext,
@@ -96,7 +96,7 @@ describe("24-shell-completion", () => {
     }
 
     it("completes subcommands at root level", async () => {
-      await runCommand(cli, ["__complete", "--", ""]);
+      await runCommand(cli, ["__complete", "--shell", "fish", "--", ""]);
       const values = getCompletionValues(console);
 
       expect(values).toContain("build");
@@ -106,7 +106,7 @@ describe("24-shell-completion", () => {
     });
 
     it("does not show options alongside subcommands at root level", async () => {
-      await runCommand(cli, ["__complete", "--", ""]);
+      await runCommand(cli, ["__complete", "--shell", "fish", "--", ""]);
       const values = getCompletionValues(console);
 
       expect(values).not.toContain("--verbose");
@@ -114,7 +114,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes options for subcommand", async () => {
-      await runCommand(cli, ["__complete", "--", "build", ""]);
+      await runCommand(cli, ["__complete", "--shell", "fish", "--", "build", ""]);
       const values = getCompletionValues(console);
 
       expect(values).toContain("--format");
@@ -125,7 +125,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes options with -- prefix for subcommand", async () => {
-      await runCommand(cli, ["__complete", "--", "deploy", "--"]);
+      await runCommand(cli, ["__complete", "--shell", "fish", "--", "deploy", "--"]);
       const values = getCompletionValues(console);
 
       expect(values).toContain("--env");
@@ -134,7 +134,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes enum values for option", async () => {
-      await runCommand(cli, ["__complete", "--", "build", "--format", ""]);
+      await runCommand(cli, ["__complete", "--shell", "fish", "--", "build", "--format", ""]);
       const values = getCompletionValues(console);
 
       expect(values).toContain("json");
@@ -143,7 +143,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes custom choices for option", async () => {
-      await runCommand(cli, ["__complete", "--", "deploy", "--env", ""]);
+      await runCommand(cli, ["__complete", "--shell", "fish", "--", "deploy", "--env", ""]);
       const values = getCompletionValues(console);
 
       expect(values).toContain("development");
@@ -152,7 +152,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes positional enum values", async () => {
-      await runCommand(cli, ["__complete", "--", "test", ""]);
+      await runCommand(cli, ["__complete", "--shell", "fish", "--", "test", ""]);
       const values = getCompletionValues(console);
 
       expect(values).toContain("unit");
@@ -161,7 +161,16 @@ describe("24-shell-completion", () => {
     });
 
     it("filters out used options", async () => {
-      await runCommand(cli, ["__complete", "--", "deploy", "--env", "staging", "--"]);
+      await runCommand(cli, [
+        "__complete",
+        "--shell",
+        "fish",
+        "--",
+        "deploy",
+        "--env",
+        "staging",
+        "--",
+      ]);
       const values = getCompletionValues(console);
 
       expect(values).not.toContain("--env");
@@ -169,15 +178,19 @@ describe("24-shell-completion", () => {
       expect(values).toContain("--dry-run");
     });
 
-    it("returns file directive for file completion", async () => {
-      await runCommand(cli, ["__complete", "--", "deploy", "--config", ""]);
+    it("passes file extensions to shell via @ext: metadata (no FileCompletion directive)", async () => {
+      await runCommand(cli, ["__complete", "--shell", "fish", "--", "deploy", "--config", ""]);
       const output = console.getLogs().join("\n");
 
-      expect(output).toContain(":20"); // FilterPrefix(4) | FileCompletion(16)
+      // deploy --config has extensions specified, so extensions are passed to shell via @ext: metadata
+      // Directive should be FilterPrefix(4) only — shell handles file completion natively
+      expect(output).toContain("@ext:json,yaml,yml");
+      expect(output).toContain(":4");
+      expect(output).not.toContain(":20"); // NOT FileCompletion(16) | FilterPrefix(4)
     });
 
     it("returns directory directive for directory completion", async () => {
-      await runCommand(cli, ["__complete", "--", "build", "--output", ""]);
+      await runCommand(cli, ["__complete", "--shell", "fish", "--", "build", "--output", ""]);
       const output = console.getLogs().join("\n");
 
       expect(output).toContain(":36"); // FilterPrefix(4) | DirectoryCompletion(32)
@@ -225,11 +238,14 @@ describe("24-shell-completion", () => {
       expect(values).toContain("production");
     });
 
-    it("returns file directive for deploy --config", () => {
+    it("resolves file completion with extensions in JS for deploy --config", () => {
       const ctx = parseCompletionContext(["deploy", "--config", ""], cli);
       const result = generateCandidates(ctx);
 
-      expect(result.directive & CompletionDirective.FileCompletion).toBeTruthy();
+      // deploy --config has extensions, so resolved in JS (no FileCompletion directive)
+      expect(result.directive & CompletionDirective.FileCompletion).toBeFalsy();
+      // Candidates may include matching files from the current directory
+      expect(result.candidates.every((c) => !c.value.startsWith("__extensions:"))).toBe(true);
     });
 
     it("returns directory directive for build --output", () => {
@@ -262,12 +278,12 @@ describe("24-shell-completion", () => {
     it("formats output for shell consumption", () => {
       const ctx = parseCompletionContext(["deploy", "--env", ""], cli);
       const result = generateCandidates(ctx);
-      const output = formatOutput(result);
+      const output = formatForShell(result, { shell: "fish", currentWord: "" });
       const lines = output.split("\n");
 
-      expect(lines.some((l) => l.startsWith("development"))).toBe(true);
-      expect(lines.some((l) => l.startsWith("staging"))).toBe(true);
-      expect(lines.some((l) => l.startsWith("production"))).toBe(true);
+      expect(lines.some((l: string) => l.startsWith("development"))).toBe(true);
+      expect(lines.some((l: string) => l.startsWith("staging"))).toBe(true);
+      expect(lines.some((l: string) => l.startsWith("production"))).toBe(true);
       // Last line is directive
       expect(lines[lines.length - 1]).toMatch(/^:\d+$/);
     });

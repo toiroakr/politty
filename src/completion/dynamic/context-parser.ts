@@ -4,7 +4,8 @@
 
 import { extractFields } from "../../core/schema-extractor.js";
 import type { AnyCommand } from "../../types.js";
-import type { CompletableOption, CompletablePositional, ValueCompletion } from "../types.js";
+import type { CompletableOption, CompletablePositional } from "../types.js";
+import { resolveValueCompletion } from "../value-completion-resolver.js";
 
 /**
  * Completion type indicates what kind of completion is expected
@@ -43,52 +44,6 @@ export interface CompletionContext {
   usedOptions: Set<string>;
   /** Number of positional arguments already provided */
   providedPositionalCount: number;
-}
-
-/**
- * Resolve value completion from field metadata
- */
-function resolveValueCompletion(field: {
-  completion?:
-    | {
-        type?: string;
-        custom?: { choices?: string[]; shellCommand?: string };
-        extensions?: string[];
-      }
-    | undefined;
-  enumValues?: string[] | undefined;
-}): ValueCompletion | undefined {
-  const meta = field.completion;
-
-  // Priority 1: Explicit custom completion
-  if (meta?.custom) {
-    if (meta.custom.choices && meta.custom.choices.length > 0) {
-      return { type: "choices", choices: meta.custom.choices };
-    }
-    if (meta.custom.shellCommand) {
-      return { type: "command", shellCommand: meta.custom.shellCommand };
-    }
-  }
-
-  // Priority 2: Explicit completion type
-  if (meta?.type) {
-    if (meta.type === "file") {
-      return meta.extensions ? { type: "file", extensions: meta.extensions } : { type: "file" };
-    }
-    if (meta.type === "directory") {
-      return { type: "directory" };
-    }
-    if (meta.type === "none") {
-      return { type: "none" };
-    }
-  }
-
-  // Priority 3: Auto-detect from enum schema
-  if (field.enumValues && field.enumValues.length > 0) {
-    return { type: "choices", choices: field.enumValues };
-  }
-
-  return undefined;
 }
 
 /**
@@ -131,6 +86,7 @@ function extractPositionalsForContext(command: AnyCommand): CompletablePositiona
       position: index,
       description: field.description,
       required: field.required,
+      variadic: field.type === "array",
       valueCompletion: resolveValueCompletion(field),
     }));
 }
@@ -293,6 +249,9 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     if (opt && opt.takesValue) {
       completionType = "option-value";
       targetOption = opt;
+    } else if (currentWord.startsWith("-")) {
+      // Previous word is boolean flag, current word starts with - → option name
+      completionType = "option-name";
     } else {
       completionType = determineDefaultCompletionType(
         currentWord,
@@ -300,6 +259,9 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
         positionals,
         positionalCount,
       );
+      if (completionType === "positional") {
+        positionalIndex = positionalCount;
+      }
     }
   }
   // Case 2: Current word is an option with inline value (--foo=)
@@ -324,6 +286,7 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
       subcommands,
       positionals,
       positionalCount,
+      afterDoubleDash,
     );
     if (completionType === "positional") {
       positionalIndex = positionalCount;
@@ -354,7 +317,13 @@ function determineDefaultCompletionType(
   subcommands: string[],
   positionals: CompletablePositional[],
   positionalCount: number,
+  afterDoubleDash?: boolean,
 ): CompletionType {
+  // After --, everything is positional — never suggest subcommands or options
+  if (afterDoubleDash) {
+    return "positional";
+  }
+
   // If there are subcommands and current word might match one, suggest subcommands
   if (subcommands.length > 0) {
     // Check if any subcommand starts with current word
@@ -370,8 +339,7 @@ function determineDefaultCompletionType(
   }
 
   // If the last positional is variadic (array), continue with positional
-  if (positionals.length > 0) {
-    // TODO: Check if last positional is variadic
+  if (positionals.length > 0 && positionals[positionals.length - 1]!.variadic) {
     return "positional";
   }
 

@@ -12,3 +12,4 @@ dist/
 coverage/
 tests/temp-*.ts
 .tmp-bin/
+.claude/tmp/

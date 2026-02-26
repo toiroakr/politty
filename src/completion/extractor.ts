@@ -9,50 +9,8 @@ import type {
   CompletablePositional,
   CompletableSubcommand,
   CompletionData,
-  ValueCompletion,
 } from "./types.js";
-
-/**
- * Resolve value completion from field metadata
- *
- * Priority:
- * 1. Explicit custom completion (choices or shellCommand)
- * 2. Explicit completion type (file, directory, none)
- * 3. Auto-detected enum values from schema
- */
-function resolveValueCompletion(field: ResolvedFieldMeta): ValueCompletion | undefined {
-  const meta = field.completion;
-
-  // Priority 1: Explicit custom completion
-  if (meta?.custom) {
-    if (meta.custom.choices && meta.custom.choices.length > 0) {
-      return { type: "choices", choices: meta.custom.choices };
-    }
-    if (meta.custom.shellCommand) {
-      return { type: "command", shellCommand: meta.custom.shellCommand };
-    }
-  }
-
-  // Priority 2: Explicit completion type
-  if (meta?.type) {
-    if (meta.type === "file") {
-      return meta.extensions ? { type: "file", extensions: meta.extensions } : { type: "file" };
-    }
-    if (meta.type === "directory") {
-      return { type: "directory" };
-    }
-    if (meta.type === "none") {
-      return { type: "none" };
-    }
-  }
-
-  // Priority 3: Auto-detect from enum schema
-  if (field.enumValues && field.enumValues.length > 0) {
-    return { type: "choices", choices: field.enumValues };
-  }
-
-  return undefined;
-}
+import { resolveValueCompletion } from "./value-completion-resolver.js";
 
 /**
  * Convert a resolved field to a completable option
