@@ -1,6 +1,6 @@
 {
   "name": "politty",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "A lightweight CLI framework inspired by citty with zod v4 registry integration for type-safe metadata management",
   "keywords": [
     "argument-parser",
