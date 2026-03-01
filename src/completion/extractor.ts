@@ -3,6 +3,7 @@
  */
 
 import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
+import { isLazyCommand } from "../lazy.js";
 import type { AnyCommand } from "../types.js";
 import type {
   CompletableOption,
@@ -72,6 +73,7 @@ function extractCompletablePositionals(command: AnyCommand): CompletablePosition
       position: index,
       description: field.description,
       required: field.required,
+      variadic: field.type === "array",
       valueCompletion: resolveValueCompletion(field),
     }));
 }
@@ -85,9 +87,11 @@ function extractSubcommand(name: string, command: AnyCommand): CompletableSubcom
   // Extract subcommands recursively (only sync subcommands for now)
   if (command.subCommands) {
     for (const [subName, subCommand] of Object.entries(command.subCommands)) {
-      // Skip async subcommands as we can't inspect them statically
-      if (typeof subCommand === "function") {
-        // For async subcommands, add a placeholder
+      if (isLazyCommand(subCommand)) {
+        // LazyCommand: extract full metadata from meta
+        subcommands.push(extractSubcommand(subName, subCommand.meta));
+      } else if (typeof subCommand === "function") {
+        // Legacy async subcommands: placeholder only
         subcommands.push({
           name: subName,
           description: "(lazy loaded)",

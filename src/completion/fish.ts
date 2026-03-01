@@ -1,87 +1,334 @@
 /**
- * Fish completion script generator (dynamic)
+ * Fish completion script generator (static)
+ *
+ * Generates a self-contained fish completion script that embeds all
+ * completion metadata. No Node.js process is spawned on TAB.
  */
 
 import type { AnyCommand } from "../types.js";
-import type { CompletionOptions, CompletionResult } from "./types.js";
+import { extractCompletionData } from "./extractor.js";
+import type {
+  CompletableOption,
+  CompletablePositional,
+  CompletableSubcommand,
+  CompletionOptions,
+  CompletionResult,
+  ValueCompletion,
+} from "./types.js";
+
+function sanitize(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_]/g, "_");
+}
 
 /**
- * Generate fish completion script for a command
- *
- * Generates a minimal script that delegates all logic to the CLI's __complete command.
- * The shell script only handles:
- * - Getting current command line tokens
- * - Calling __complete with --shell fish
- * - Echoing output as completions
- * - Falling back to native file/directory completion when directed
+ * Generate fish value completion lines for a ValueCompletion spec.
+ * Each line outputs candidates via echo (tab-separated value\tdescription).
  */
+function fishValueLines(vc: ValueCompletion | undefined): string[] {
+  if (!vc) return [];
+  switch (vc.type) {
+    case "choices":
+      return vc.choices!.map((c) => `echo "${c}"`);
+    case "file": {
+      if (vc.extensions?.length) {
+        return fishExtensionLines(vc.extensions);
+      }
+      return [`__fish_complete_path "$_cur"`];
+    }
+    case "directory":
+      return [`__fish_complete_directories "$_cur"`];
+    case "command":
+      return [`for _v in (${vc.shellCommand!})`, `    echo "$_v"`, `end`];
+    case "none":
+      return [];
+  }
+}
+
+/** Generate fish extension-filtered file completion */
+function fishExtensionLines(extensions: string[]): string[] {
+  const lines: string[] = [];
+  lines.push(`__fish_complete_directories "$_cur"`);
+  for (const ext of extensions) {
+    lines.push(`for _f in "$_cur"*.${ext}`);
+    lines.push(`    test -f "$_f"; and echo "$_f"`);
+    lines.push(`end`);
+  }
+  return lines;
+}
+
+/** Generate option-value switch cases for fish */
+function optionValueCases(options: CompletableOption[]): string[] {
+  const lines: string[] = [];
+  for (const opt of options) {
+    if (!opt.takesValue || !opt.valueCompletion) continue;
+    const valLines = fishValueLines(opt.valueCompletion);
+    if (valLines.length === 0) continue;
+
+    const conditions: string[] = [`test "$_prev" = "--${opt.cliName}"`];
+    if (opt.alias) {
+      conditions.push(`test "$_prev" = "-${opt.alias}"`);
+    }
+    const cond = conditions.join("; or ");
+
+    lines.push(`    if ${cond}`);
+    for (const vl of valLines) {
+      lines.push(`        ${vl}`);
+    }
+    lines.push(`        return`);
+    lines.push(`    end`);
+  }
+  return lines;
+}
+
+/** Generate positional completion block for fish */
+function positionalBlock(positionals: CompletablePositional[]): string[] {
+  if (positionals.length === 0) return [];
+  const lines: string[] = [];
+  for (const pos of positionals) {
+    const valLines = fishValueLines(pos.valueCompletion);
+    if (valLines.length === 0) continue;
+
+    if (pos.variadic) {
+      lines.push(`    if test $_pos_count -ge ${pos.position}`);
+    } else {
+      lines.push(`    if test $_pos_count -eq ${pos.position}`);
+    }
+    for (const vl of valLines) {
+      lines.push(`        ${vl}`);
+    }
+    lines.push(`        return`);
+    lines.push(`    end`);
+  }
+  return lines;
+}
+
+/**
+ * Generate a per-subcommand completion function for fish.
+ * Recursively generates functions for nested subcommands.
+ */
+function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string[]): string[] {
+  const fullPath = [...path, sub.name];
+  const funcName = `__${fn}_complete_${fullPath.map(sanitize).join("_")}`;
+  const visibleSubs = sub.subcommands.filter((s) => !s.name.startsWith("__"));
+  const valueTakingOpts = sub.options.filter((o) => o.takesValue && o.valueCompletion);
+
+  const lines: string[] = [];
+
+  // Recursively generate handlers for child subcommands
+  for (const child of visibleSubs) {
+    lines.push(...generateSubHandler(child, fn, fullPath));
+  }
+
+  lines.push(`function ${funcName}`);
+
+  // 1. Option value completion
+  if (valueTakingOpts.length > 0) {
+    lines.push(...optionValueCases(sub.options));
+  }
+
+  // 2. After -- separator
+  if (sub.positionals.length > 0) {
+    lines.push(`    if test $_after_dd -eq 1`);
+    lines.push(...positionalBlock(sub.positionals).map((l) => `    ${l}`));
+    lines.push(`        return`);
+    lines.push(`    end`);
+  } else {
+    lines.push(`    if test $_after_dd -eq 1; return; end`);
+  }
+
+  // 3. Option name completion
+  lines.push(`    if string match -q -- '-*' "$_cur"`);
+  for (const opt of sub.options) {
+    const checks: string[] = [`"--${opt.cliName}"`];
+    if (opt.alias) checks.push(`"-${opt.alias}"`);
+    const desc = opt.description ?? "";
+    lines.push(
+      `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
+    );
+  }
+  lines.push(`        __${fn}_not_used "--help"; and echo "--help\tShow help"`);
+  lines.push(`        return`);
+  lines.push(`    end`);
+
+  // 4. Subcommand or positional completion
+  if (visibleSubs.length > 0) {
+    for (const s of visibleSubs) {
+      const desc = s.description ?? "";
+      lines.push(`    echo "${s.name}\t${desc}"`);
+    }
+  } else if (sub.positionals.length > 0) {
+    lines.push(...positionalBlock(sub.positionals));
+  }
+
+  lines.push(`end`);
+  lines.push(``);
+  return lines;
+}
+
+/** Generate opt-takes-value entries for fish switch cases */
+function optTakesValueCases(sub: CompletableSubcommand, subcmdName: string): string[] {
+  const lines: string[] = [];
+  for (const opt of sub.options) {
+    if (opt.takesValue) {
+      const patterns: string[] = [`"${subcmdName}:--${opt.cliName}"`];
+      if (opt.alias) patterns.push(`"${subcmdName}:-${opt.alias}"`);
+      lines.push(`        case ${patterns.join(" ")}`);
+      lines.push(`            return 0`);
+    }
+  }
+  for (const child of sub.subcommands) {
+    if (!child.name.startsWith("__")) {
+      lines.push(...optTakesValueCases(child, child.name));
+    }
+  }
+  return lines;
+}
+
 export function generateFishCompletion(
-  _command: AnyCommand,
+  command: AnyCommand,
   options: CompletionOptions,
 ): CompletionResult {
+  const data = extractCompletionData(command, options.programName);
+  const fn = sanitize(options.programName);
+  const root = data.command;
+  const visibleSubs = root.subcommands.filter((s) => !s.name.startsWith("__"));
+
+  const lines: string[] = [];
+  lines.push(`# Fish completion for ${options.programName}`);
+  lines.push(`# Generated by politty`);
+  lines.push(``);
+
+  // Helper: check if option is already used
+  lines.push(`function __${fn}_not_used`);
+  lines.push(`    for _chk in $argv`);
+  lines.push(`        if contains -- "$_chk" $_used_opts`);
+  lines.push(`            return 1`);
+  lines.push(`        end`);
+  lines.push(`    end`);
+  lines.push(`    return 0`);
+  lines.push(`end`);
+  lines.push(``);
+
+  // Helper: check if option takes a value
+  lines.push(`function __${fn}_opt_takes_value`);
+  lines.push(`    switch "$argv[1]:$argv[2]"`);
+  lines.push(...optTakesValueCases(root, ""));
+  for (const sub of visibleSubs) {
+    lines.push(...optTakesValueCases(sub, sub.name));
+  }
+  lines.push(`    end`);
+  lines.push(`    return 1`);
+  lines.push(`end`);
+  lines.push(``);
+
+  // Per-subcommand completion functions
+  for (const sub of visibleSubs) {
+    lines.push(...generateSubHandler(sub, fn, []));
+  }
+
+  // Root handler
+  const rootValueOpts = root.options.filter((o) => o.takesValue && o.valueCompletion);
+  lines.push(`function __${fn}_complete_root`);
+  if (rootValueOpts.length > 0) {
+    lines.push(...optionValueCases(root.options));
+  }
+  lines.push(`    if test $_after_dd -eq 1; return; end`);
+  lines.push(`    if string match -q -- '-*' "$_cur"`);
+  for (const opt of root.options) {
+    const checks: string[] = [`"--${opt.cliName}"`];
+    if (opt.alias) checks.push(`"-${opt.alias}"`);
+    const desc = opt.description ?? "";
+    lines.push(
+      `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
+    );
+  }
+  lines.push(`        __${fn}_not_used "--help"; and echo "--help\tShow help"`);
+  lines.push(`    else`);
+  if (visibleSubs.length > 0) {
+    for (const s of visibleSubs) {
+      const desc = s.description ?? "";
+      lines.push(`        echo "${s.name}\t${desc}"`);
+    }
+  }
+  lines.push(`    end`);
+  lines.push(`end`);
+  lines.push(``);
+
+  // Main completion function
+  lines.push(`function __fish_${fn}_complete`);
+  lines.push(`    set -l _args (commandline -opc)`);
+  lines.push(`    set -e _args[1]`);
+  lines.push(``);
+  lines.push(`    set -l _ct (commandline -ct)`);
+  lines.push(`    if test (count $_ct) -eq 0`);
+  lines.push(`        set -a _args ""`);
+  lines.push(`    else`);
+  lines.push(`        set -a _args $_ct`);
+  lines.push(`    end`);
+  lines.push(``);
+  lines.push(`    set -l _cur ""`);
+  lines.push(`    if test (count $_args) -gt 0`);
+  lines.push(`        set _cur "$_args[(count $_args)]"`);
+  lines.push(`    end`);
+  lines.push(``);
+  lines.push(`    set -l _prev ""`);
+  lines.push(`    if test (count $_args) -gt 1`);
+  lines.push(`        set _prev "$_args[(math (count $_args) - 1)]"`);
+  lines.push(`    end`);
+  lines.push(``);
+  lines.push(
+    `    set -l _subcmd "" ; set -l _after_dd 0 ; set -l _pos_count 0 ; set -l _skip_next 0`,
+  );
+  lines.push(`    set -l _used_opts`);
+  lines.push(``);
+  lines.push(`    set -l _j 1`);
+  lines.push(`    set -l _limit (math (count $_args) - 1)`);
+  lines.push(`    while test $_j -le $_limit`);
+  lines.push(`        set -l _w "$_args[$_j]"`);
+  lines.push(
+    `        if test $_skip_next -eq 1; set _skip_next 0; set _j (math $_j + 1); continue; end`,
+  );
+  lines.push(`        if test "$_w" = "--"; set _after_dd 1; set _j (math $_j + 1); continue; end`);
+  lines.push(
+    `        if test $_after_dd -eq 1; set _pos_count (math $_pos_count + 1); set _j (math $_j + 1); continue; end`,
+  );
+  lines.push(
+    `        if string match -q -- '--*=*' "$_w"; set -a _used_opts (string replace -r '=.*' '' -- "$_w"); set _j (math $_j + 1); continue; end`,
+  );
+  lines.push(`        if string match -q -- '-*' "$_w"`);
+  lines.push(`            set -a _used_opts "$_w"`);
+  lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w"; and set _skip_next 1`);
+  lines.push(`            set _j (math $_j + 1); continue`);
+  lines.push(`        end`);
+  lines.push(
+    `        if test -z "$_subcmd"; set _subcmd "$_w"; else; set _pos_count (math $_pos_count + 1); end`,
+  );
+  lines.push(`        set _j (math $_j + 1)`);
+  lines.push(`    end`);
+  lines.push(``);
+
+  // Route to subcommand handler
+  lines.push(`    switch "$_subcmd"`);
+  for (const s of visibleSubs) {
+    lines.push(`        case "${s.name}"; __${fn}_complete_${sanitize(s.name)}`);
+  }
+  lines.push(`        case '*'; __${fn}_complete_root`);
+  lines.push(`    end`);
+  lines.push(`end`);
+  lines.push(``);
+
+  // Register completion
+  lines.push(`# Clear existing completions`);
+  lines.push(`complete -e -c ${options.programName}`);
+  lines.push(``);
+  lines.push(`# Register completion`);
+  lines.push(`complete -c ${options.programName} -f -a '(__fish_${fn}_complete)'`);
+  lines.push(``);
+
   const programName = options.programName;
 
   return {
-    script: `# Fish completion for ${programName}
-# Generated by politty
-
-function __fish_${programName}_complete
-    set -l args (commandline -opc)
-    set -e args[1]
-    set -l directive 0
-    set -l extensions ""
-
-    # commandline -opc excludes the current token; always include it
-    set -l ct (commandline -ct)
-    if test (count $ct) -eq 0
-        set -a args ""
-    else
-        set -a args $ct
-    end
-
-    for line in (${programName} __complete --shell fish -- $args 2>/dev/null)
-        if string match -q ':*' -- $line
-            set directive (string sub -s 2 -- $line)
-        else if string match -q '@ext:*' -- $line
-            set extensions (string sub -s 6 -- $line)
-        else if test -n "$line"
-            echo $line
-        end
-    end
-
-    # 16 = FileCompletion: delegate entirely to native file completion
-    if test (math "bitand($directive, 16)") -ne 0
-        __fish_complete_path
-        return
-    end
-
-    # Extension-filtered file completion: keep matching files + directories
-    if test -n "$extensions"
-        set -l cur (commandline -ct)
-        test (count $cur) -eq 0; and set cur ""
-        __fish_complete_directories "$cur"
-        for ext in (string split "," -- $extensions)
-            for f in "$cur"*.$ext
-                if test -f "$f"
-                    echo $f
-                end
-            end
-        end
-        return
-    end
-
-    # 32 = DirectoryCompletion: add native directory matches
-    if test (math "bitand($directive, 32)") -ne 0
-        __fish_complete_directories
-    end
-end
-
-# Clear existing completions
-complete -e -c ${programName}
-
-# Register completion
-complete -c ${programName} -f -a '(__fish_${programName}_complete)'
-`,
+    script: lines.join("\n"),
     shell: "fish",
     installInstructions: `# To enable completions, run one of the following:
 

@@ -12,7 +12,7 @@ import {
   parseCompletionContext,
   withCompletionCommand,
 } from "../src/completion/index.js";
-import { arg, defineCommand, runCommand } from "../src/index.js";
+import { arg, defineCommand, isLazyCommand, lazy, runCommand } from "../src/index.js";
 
 describe("Completion", () => {
   describe("extractCompletionData", () => {
@@ -288,6 +288,54 @@ describe("Completion", () => {
       expect(actionPos?.valueCompletion?.type).toBe("choices");
       expect(actionPos?.valueCompletion?.choices).toEqual(["start", "stop", "restart"]);
     });
+
+    it("should extract full metadata from lazy() subcommands", () => {
+      const lazyCmd = lazy(
+        defineCommand({
+          name: "deploy",
+          description: "Deploy the application",
+          args: z.object({
+            env: arg(z.enum(["dev", "staging", "prod"]), {
+              description: "Target environment",
+            }),
+          }),
+        }),
+        async () => defineCommand({ name: "deploy", run: () => {} }),
+      );
+
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: { deploy: lazyCmd },
+      });
+
+      const data = extractCompletionData(cmd, "mycli");
+
+      expect(data.command.subcommands).toHaveLength(1);
+      const deploySub = data.command.subcommands[0];
+      expect(deploySub?.name).toBe("deploy");
+      expect(deploySub?.description).toBe("Deploy the application");
+      expect(deploySub?.options).toHaveLength(1);
+      expect(deploySub?.options[0]?.name).toBe("env");
+      expect(deploySub?.options[0]?.valueCompletion?.type).toBe("choices");
+      expect(deploySub?.options[0]?.valueCompletion?.choices).toEqual(["dev", "staging", "prod"]);
+    });
+
+    it("should still produce placeholder for legacy async subcommands", () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: {
+          legacy: async () => defineCommand({ name: "legacy", description: "Legacy command" }),
+        },
+      });
+
+      const data = extractCompletionData(cmd, "mycli");
+
+      expect(data.command.subcommands).toHaveLength(1);
+      const legacySub = data.command.subcommands[0];
+      expect(legacySub?.name).toBe("legacy");
+      expect(legacySub?.description).toBe("(lazy loaded)");
+      expect(legacySub?.options).toHaveLength(0);
+    });
   });
 
   describe("generateCompletion", () => {
@@ -335,7 +383,6 @@ describe("Completion", () => {
         expect(result.script).toContain("# Bash completion for mycli");
         expect(result.script).toContain("_mycli_completions()");
         expect(result.script).toContain("complete -o default -F _mycli_completions mycli");
-        expect(result.script).toContain("mycli __complete --shell bash");
       });
 
       it("should include installation instructions", () => {
@@ -371,7 +418,7 @@ describe("Completion", () => {
         expect(result.script).toContain("#compdef mycli");
         expect(result.script).toContain("# Zsh completion for mycli");
         expect(result.script).toContain("_mycli()");
-        expect(result.script).toContain("mycli __complete --shell zsh");
+        expect(result.script).toContain("compdef _mycli mycli");
       });
     });
 
@@ -386,7 +433,7 @@ describe("Completion", () => {
         expect(result.script).toContain("# Fish completion for mycli");
         expect(result.script).toContain("complete -c mycli");
         expect(result.script).toContain("__fish_mycli_complete");
-        expect(result.script).toContain("mycli __complete --shell fish");
+        expect(result.script).toContain("complete -c mycli -f");
       });
     });
 
@@ -511,7 +558,7 @@ describe("Completion", () => {
 
       const completionCmd = wrapped.subCommands?.completion;
       expect(typeof completionCmd).toBe("object");
-      if (typeof completionCmd === "object") {
+      if (typeof completionCmd === "object" && !isLazyCommand(completionCmd)) {
         expect(completionCmd.name).toBe("completion");
       }
     });
@@ -561,7 +608,11 @@ describe("Completion", () => {
 
       const completionSubcommand = wrapped.subCommands?.completion;
       expect(completionSubcommand).toBeDefined();
-      if (!completionSubcommand || typeof completionSubcommand === "function") {
+      if (
+        !completionSubcommand ||
+        typeof completionSubcommand === "function" ||
+        isLazyCommand(completionSubcommand)
+      ) {
         throw new Error("Expected completion to be a command object");
       }
 
@@ -573,8 +624,7 @@ describe("Completion", () => {
         .map((args) => args.map((value) => String(value)).join(" "))
         .join("\n");
       consoleSpy.mockRestore();
-      // Dynamic script calls __complete at runtime, so it contains the program name and __complete
-      expect(output).toContain("mycli __complete");
+      // Static script embeds completion metadata
       expect(output).toContain("_mycli_completions");
     });
 
@@ -1003,7 +1053,7 @@ describe("Completion", () => {
     });
 
     describe("completion scripts", () => {
-      it("should generate bash script that calls __complete with --shell", () => {
+      it("should generate static bash completion script", () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -1018,11 +1068,11 @@ describe("Completion", () => {
         });
 
         expect(result.script).toContain("# Bash completion for mycli");
-        expect(result.script).toContain("mycli __complete --shell bash");
         expect(result.script).toContain("_mycli_completions");
+        expect(result.script).toContain("complete -o default -F _mycli_completions mycli");
       });
 
-      it("should generate zsh script that calls __complete with --shell", () => {
+      it("should generate static zsh completion script", () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -1037,11 +1087,11 @@ describe("Completion", () => {
         });
 
         expect(result.script).toContain("# Zsh completion for mycli");
-        expect(result.script).toContain("mycli __complete --shell zsh");
         expect(result.script).toContain("#compdef mycli");
+        expect(result.script).toContain("compdef _mycli mycli");
       });
 
-      it("should generate fish script that calls __complete with --shell", () => {
+      it("should generate static fish completion script", () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -1056,8 +1106,8 @@ describe("Completion", () => {
         });
 
         expect(result.script).toContain("# Fish completion for mycli");
-        expect(result.script).toContain("mycli __complete --shell fish");
         expect(result.script).toContain("__fish_mycli_complete");
+        expect(result.script).toContain("complete -c mycli -f");
       });
 
       it("should not include __command or __extensions handling in any shell script", () => {
