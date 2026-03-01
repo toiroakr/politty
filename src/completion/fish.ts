@@ -119,7 +119,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
     lines.push(...generateSubHandler(child, fn, fullPath));
   }
 
-  lines.push(`function ${funcName}`);
+  lines.push(`function ${funcName} --no-scope-shadowing`);
 
   // 1. Option value completion
   if (valueTakingOpts.length > 0) {
@@ -199,7 +199,7 @@ export function generateFishCompletion(
   lines.push(``);
 
   // Helper: check if option is already used
-  lines.push(`function __${fn}_not_used`);
+  lines.push(`function __${fn}_not_used --no-scope-shadowing`);
   lines.push(`    for _chk in $argv`);
   lines.push(`        if contains -- "$_chk" $_used_opts`);
   lines.push(`            return 1`);
@@ -228,7 +228,7 @@ export function generateFishCompletion(
 
   // Root handler
   const rootValueOpts = root.options.filter((o) => o.takesValue && o.valueCompletion);
-  lines.push(`function __${fn}_complete_root`);
+  lines.push(`function __${fn}_complete_root --no-scope-shadowing`);
   if (rootValueOpts.length > 0) {
     lines.push(...optionValueCases(root.options));
   }
@@ -268,12 +268,12 @@ export function generateFishCompletion(
   lines.push(``);
   lines.push(`    set -l _cur ""`);
   lines.push(`    if test (count $_args) -gt 0`);
-  lines.push(`        set _cur "$_args[(count $_args)]"`);
+  lines.push(`        set _cur "$_args[-1]"`);
   lines.push(`    end`);
   lines.push(``);
   lines.push(`    set -l _prev ""`);
   lines.push(`    if test (count $_args) -gt 1`);
-  lines.push(`        set _prev "$_args[(math (count $_args) - 1)]"`);
+  lines.push(`        set _prev "$_args[-2]"`);
   lines.push(`    end`);
   lines.push(``);
   lines.push(
