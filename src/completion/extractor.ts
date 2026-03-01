@@ -14,6 +14,14 @@ import type {
 import { resolveValueCompletion } from "./value-completion-resolver.js";
 
 /**
+ * Sanitize a name for use as a shell function/variable identifier.
+ * Replaces any character that is not alphanumeric or underscore with underscore.
+ */
+export function sanitize(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_]/g, "_");
+}
+
+/**
  * Convert a resolved field to a completable option
  */
 function fieldToOption(field: ResolvedFieldMeta): CompletableOption {

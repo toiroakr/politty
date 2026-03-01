@@ -6,7 +6,7 @@
  */
 
 import type { AnyCommand } from "../types.js";
-import { extractCompletionData } from "./extractor.js";
+import { extractCompletionData, sanitize } from "./extractor.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -15,10 +15,6 @@ import type {
   CompletionResult,
   ValueCompletion,
 } from "./types.js";
-
-function sanitize(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_]/g, "_");
-}
 
 /** Escape a string for use inside bash double-quotes */
 function escapeBashDQ(s: string): string {
@@ -147,6 +143,48 @@ function positionalBlock(positionals: CompletablePositional[]): string[] {
   return lines;
 }
 
+/** Generate prev/inline value completion blocks for options */
+function valueCompletionBlocks(options: CompletableOption[]): string[] {
+  const valueTakingOpts = options.filter((o) => o.takesValue && o.valueCompletion);
+  if (valueTakingOpts.length === 0) return [];
+
+  const lines: string[] = [];
+  const prevCases = optionValueCases(options, false);
+  if (prevCases.length > 0) {
+    lines.push(`    if [[ -z "$_inline_prefix" ]]; then`);
+    lines.push(`        case "$_prev" in`);
+    lines.push(...prevCases);
+    lines.push(`        esac`);
+    lines.push(`    fi`);
+  }
+  const inlineCases = optionValueCases(options, true);
+  if (inlineCases.length > 0) {
+    lines.push(`    if [[ -n "$_inline_prefix" ]]; then`);
+    lines.push(`        case "\${_inline_prefix%=}" in`);
+    lines.push(...inlineCases);
+    lines.push(`        esac`);
+    lines.push(`    fi`);
+  }
+  return lines;
+}
+
+/** Generate available-options list lines */
+function availableOptionLines(options: CompletableOption[], fn: string): string[] {
+  const lines: string[] = [];
+  for (const opt of options) {
+    if (opt.valueType === "array") {
+      // Array options can be specified multiple times — always keep available
+      lines.push(`        _avail+=(--${opt.cliName})`);
+    } else {
+      const patterns: string[] = [`"--${opt.cliName}"`];
+      if (opt.alias) patterns.push(`"-${opt.alias}"`);
+      lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.cliName})`);
+    }
+  }
+  lines.push(`        __${fn}_not_used "--help" && _avail+=(--help)`);
+  return lines;
+}
+
 /**
  * Generate a per-subcommand completion function.
  * Recursively generates functions for nested subcommands.
@@ -155,7 +193,6 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   const fullPath = [...path, sub.name];
   const funcName = `__${fn}_complete_${fullPath.map(sanitize).join("_")}`;
   const visibleSubs = sub.subcommands.filter((s) => !s.name.startsWith("__"));
-  const valueTakingOpts = sub.options.filter((o) => o.takesValue && o.valueCompletion);
 
   const lines: string[] = [];
 
@@ -167,26 +204,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`${funcName}() {`);
 
   // 1. Option value completion (prev is value-taking option)
-  if (valueTakingOpts.length > 0) {
-    const prevCases = optionValueCases(sub.options, false);
-    if (prevCases.length > 0) {
-      lines.push(`    if [[ -z "$_inline_prefix" ]]; then`);
-      lines.push(`        case "$_prev" in`);
-      lines.push(...prevCases);
-      lines.push(`        esac`);
-      lines.push(`    fi`);
-    }
-
-    // 2. Inline value completion (--opt=val)
-    const inlineCases = optionValueCases(sub.options, true);
-    if (inlineCases.length > 0) {
-      lines.push(`    if [[ -n "$_inline_prefix" ]]; then`);
-      lines.push(`        case "\${_inline_prefix%=}" in`);
-      lines.push(...inlineCases);
-      lines.push(`        esac`);
-      lines.push(`    fi`);
-    }
-  }
+  lines.push(...valueCompletionBlocks(sub.options));
 
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(
@@ -196,7 +214,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
     `    if [[ -n "$_inline_prefix" ]] && __${fn}_opt_takes_value "${sub.name}" "\${_inline_prefix%=}"; then return; fi`,
   );
 
-  // 3. After -- separator
+  // 2. After -- separator
   if (sub.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
     lines.push(...positionalBlock(sub.positionals).map((l) => `    ${l}`));
@@ -206,26 +224,16 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
     lines.push(`    if (( _after_dd )); then return; fi`);
   }
 
-  // 4. Option name completion
+  // 3. Option name completion
   lines.push(`    if [[ "$_cur" == -* ]]; then`);
   lines.push(`        local -a _avail=()`);
-  for (const opt of sub.options) {
-    if (opt.valueType === "array") {
-      // Array options can be specified multiple times — always keep available
-      lines.push(`        _avail+=(--${opt.cliName})`);
-    } else {
-      const patterns: string[] = [`"--${opt.cliName}"`];
-      if (opt.alias) patterns.push(`"-${opt.alias}"`);
-      lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.cliName})`);
-    }
-  }
-  lines.push(`        __${fn}_not_used "--help" && _avail+=(--help)`);
+  lines.push(...availableOptionLines(sub.options, fn));
   lines.push(`        COMPREPLY=($(compgen -W "\${_avail[*]}" -- "$_cur"))`);
   lines.push(`        compopt +o default 2>/dev/null`);
   lines.push(`        return`);
   lines.push(`    fi`);
 
-  // 5. Subcommand or positional completion
+  // 4. Subcommand or positional completion
   if (visibleSubs.length > 0) {
     const subNames = visibleSubs.map((s) => s.name).join(" ");
     lines.push(`    COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
@@ -298,26 +306,8 @@ export function generateBashCompletion(
   }
 
   // Root handler
-  const rootValueOpts = root.options.filter((o) => o.takesValue && o.valueCompletion);
   lines.push(`__${fn}_complete_root() {`);
-  if (rootValueOpts.length > 0) {
-    const prevCases = optionValueCases(root.options, false);
-    if (prevCases.length > 0) {
-      lines.push(`    if [[ -z "$_inline_prefix" ]]; then`);
-      lines.push(`        case "$_prev" in`);
-      lines.push(...prevCases);
-      lines.push(`        esac`);
-      lines.push(`    fi`);
-    }
-    const inlineCases = optionValueCases(root.options, true);
-    if (inlineCases.length > 0) {
-      lines.push(`    if [[ -n "$_inline_prefix" ]]; then`);
-      lines.push(`        case "\${_inline_prefix%=}" in`);
-      lines.push(...inlineCases);
-      lines.push(`        esac`);
-      lines.push(`    fi`);
-    }
-  }
+  lines.push(...valueCompletionBlocks(root.options));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(
     `    if [[ -z "$_inline_prefix" ]] && __${fn}_opt_takes_value "" "$_prev"; then return; fi`,
@@ -335,16 +325,7 @@ export function generateBashCompletion(
   }
   lines.push(`    if [[ "$_cur" == -* ]]; then`);
   lines.push(`        local -a _avail=()`);
-  for (const opt of root.options) {
-    if (opt.valueType === "array") {
-      lines.push(`        _avail+=(--${opt.cliName})`);
-    } else {
-      const patterns: string[] = [`"--${opt.cliName}"`];
-      if (opt.alias) patterns.push(`"-${opt.alias}"`);
-      lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.cliName})`);
-    }
-  }
-  lines.push(`        __${fn}_not_used "--help" && _avail+=(--help)`);
+  lines.push(...availableOptionLines(root.options, fn));
   lines.push(`        COMPREPLY=($(compgen -W "\${_avail[*]}" -- "$_cur"))`);
   lines.push(`        compopt +o default 2>/dev/null`);
   if (visibleSubs.length > 0) {

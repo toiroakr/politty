@@ -6,7 +6,7 @@
  */
 
 import type { AnyCommand } from "../types.js";
-import { extractCompletionData } from "./extractor.js";
+import { extractCompletionData, sanitize } from "./extractor.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -15,10 +15,6 @@ import type {
   CompletionResult,
   ValueCompletion,
 } from "./types.js";
-
-function sanitize(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_]/g, "_");
-}
 
 /** Escape shell-special characters for fish double-quoted strings */
 function escapeDesc(s: string): string {
@@ -107,6 +103,32 @@ function positionalBlock(positionals: CompletablePositional[]): string[] {
   return lines;
 }
 
+/** Generate available-option echo lines for fish */
+function availableOptionLines(options: CompletableOption[], fn: string): string[] {
+  const lines: string[] = [];
+  for (const opt of options) {
+    const desc = escapeDesc(opt.description ?? "");
+    if (opt.valueType === "array") {
+      lines.push(`        echo "--${opt.cliName}\t${desc}"`);
+    } else {
+      const checks: string[] = [`"--${opt.cliName}"`];
+      if (opt.alias) checks.push(`"-${opt.alias}"`);
+      lines.push(
+        `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
+      );
+    }
+  }
+  lines.push(`        __${fn}_not_used "--help"; and echo "--help\tShow help"`);
+  return lines;
+}
+
+/** Generate value-option completion block if any value-taking options exist */
+function valueCompletionBlock(options: CompletableOption[]): string[] {
+  const valueTakingOpts = options.filter((o) => o.takesValue && o.valueCompletion);
+  if (valueTakingOpts.length === 0) return [];
+  return optionValueCases(options);
+}
+
 /**
  * Generate a per-subcommand completion function for fish.
  * Recursively generates functions for nested subcommands.
@@ -115,7 +137,6 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   const fullPath = [...path, sub.name];
   const funcName = `__${fn}_complete_${fullPath.map(sanitize).join("_")}`;
   const visibleSubs = sub.subcommands.filter((s) => !s.name.startsWith("__"));
-  const valueTakingOpts = sub.options.filter((o) => o.takesValue && o.valueCompletion);
 
   const lines: string[] = [];
 
@@ -127,9 +148,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`function ${funcName} --no-scope-shadowing`);
 
   // 1. Option value completion
-  if (valueTakingOpts.length > 0) {
-    lines.push(...optionValueCases(sub.options));
-  }
+  lines.push(...valueCompletionBlock(sub.options));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(`    if __${fn}_opt_takes_value "${sub.name}" "$_prev"; return; end`);
 
@@ -145,19 +164,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
 
   // 3. Option name completion
   lines.push(`    if string match -q -- '-*' "$_cur"`);
-  for (const opt of sub.options) {
-    const desc = escapeDesc(opt.description ?? "");
-    if (opt.valueType === "array") {
-      lines.push(`        echo "--${opt.cliName}\t${desc}"`);
-    } else {
-      const checks: string[] = [`"--${opt.cliName}"`];
-      if (opt.alias) checks.push(`"-${opt.alias}"`);
-      lines.push(
-        `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
-      );
-    }
-  }
-  lines.push(`        __${fn}_not_used "--help"; and echo "--help\tShow help"`);
+  lines.push(...availableOptionLines(sub.options, fn));
   lines.push(`        return`);
   lines.push(`    end`);
 
@@ -238,11 +245,8 @@ export function generateFishCompletion(
   // NOTE: Inline --opt=value completion is not yet supported in fish; only
   // separate-word value completion (--opt <value>) is handled. Bash supports
   // inline via _inline_prefix parsing.
-  const rootValueOpts = root.options.filter((o) => o.takesValue && o.valueCompletion);
   lines.push(`function __${fn}_complete_root --no-scope-shadowing`);
-  if (rootValueOpts.length > 0) {
-    lines.push(...optionValueCases(root.options));
-  }
+  lines.push(...valueCompletionBlock(root.options));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(`    if __${fn}_opt_takes_value "" "$_prev"; return; end`);
   if (root.positionals.length > 0) {
@@ -254,19 +258,7 @@ export function generateFishCompletion(
     lines.push(`    if test $_after_dd -eq 1; return; end`);
   }
   lines.push(`    if string match -q -- '-*' "$_cur"`);
-  for (const opt of root.options) {
-    const desc = escapeDesc(opt.description ?? "");
-    if (opt.valueType === "array") {
-      lines.push(`        echo "--${opt.cliName}\t${desc}"`);
-    } else {
-      const checks: string[] = [`"--${opt.cliName}"`];
-      if (opt.alias) checks.push(`"-${opt.alias}"`);
-      lines.push(
-        `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
-      );
-    }
-  }
-  lines.push(`        __${fn}_not_used "--help"; and echo "--help\tShow help"`);
+  lines.push(...availableOptionLines(root.options, fn));
   if (visibleSubs.length > 0) {
     lines.push(`    else`);
     for (const s of visibleSubs) {
