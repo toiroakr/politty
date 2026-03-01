@@ -33,7 +33,7 @@ function fishValueLines(vc: ValueCompletion | undefined): string[] {
   if (!vc) return [];
   switch (vc.type) {
     case "choices":
-      return vc.choices!.map((c) => `echo "${c}"`);
+      return vc.choices!.map((c) => `echo "${escapeDesc(c)}"`);
     case "file": {
       if (vc.extensions?.length) {
         return fishExtensionLines(vc.extensions);

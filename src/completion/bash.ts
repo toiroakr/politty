@@ -20,6 +20,11 @@ function sanitize(name: string): string {
   return name.replace(/[^a-zA-Z0-9_]/g, "_");
 }
 
+/** Escape a string for use inside bash double-quotes */
+function escapeBashDQ(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$").replace(/`/g, "\\`");
+}
+
 /**
  * Generate bash value completion code for a ValueCompletion spec.
  * Returns an array of bash lines.
@@ -29,15 +34,22 @@ function bashValueLines(vc: ValueCompletion | undefined, inline: boolean): strin
 
   switch (vc.type) {
     case "choices": {
-      const words = vc.choices!.join(" ");
+      const items = vc.choices!.map((c) => `"${escapeBashDQ(c)}"`).join(" ");
       if (inline) {
         return [
-          `COMPREPLY=($(compgen -P "$_inline_prefix" -W "${words}" -- "$_cur"))`,
+          `local -a _choices=(${items})`,
+          `COMPREPLY=()`,
+          `local _c; for _c in "\${_choices[@]}"; do [[ "$_c" == "$_cur"* ]] && COMPREPLY+=("\${_inline_prefix}\${_c}"); done`,
           `compopt -o nospace`,
           `compopt +o default 2>/dev/null`,
         ];
       }
-      return [`COMPREPLY=($(compgen -W "${words}" -- "$_cur"))`, `compopt +o default 2>/dev/null`];
+      return [
+        `local -a _choices=(${items})`,
+        `COMPREPLY=()`,
+        `local _c; for _c in "\${_choices[@]}"; do [[ "$_c" == "$_cur"* ]] && COMPREPLY+=("$_c"); done`,
+        `compopt +o default 2>/dev/null`,
+      ];
     }
     case "file": {
       if (vc.extensions?.length) {

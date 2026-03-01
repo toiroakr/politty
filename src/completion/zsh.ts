@@ -37,7 +37,7 @@ function zshValueLines(vc: ValueCompletion | undefined, fn: string): string[] {
   if (!vc) return [];
   switch (vc.type) {
     case "choices": {
-      const items = vc.choices!.map((c) => `"${c}"`).join(" ");
+      const items = vc.choices!.map((c) => `"${escapeDesc(c)}"`).join(" ");
       return [`_vals=(${items})`, `__${fn}_cdescribe 'completions' _vals`];
     }
     case "file": {
