@@ -1110,6 +1110,94 @@ describe("Completion", () => {
         expect(result.script).toContain("complete -c mycli -f");
       });
 
+      it("should generate valid script for command with no subcommands", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            verbose: arg(z.boolean().default(false), { alias: "v" }),
+            output: arg(z.string().optional(), { alias: "o" }),
+          }),
+          run: () => {},
+        });
+
+        for (const shell of ["bash", "zsh", "fish"] as const) {
+          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+
+          // Should not contain empty else branch (bash/zsh syntax error)
+          expect(result.script).not.toMatch(/else\s*\n\s*(fi|end)/);
+
+          // Should still contain option completion
+          expect(result.script).toContain("--verbose");
+          expect(result.script).toContain("--output");
+        }
+      });
+
+      it("should include opt_takes_value fallback for value-taking options without completion", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            config: arg(z.string().optional(), { alias: "c" }),
+          }),
+          subCommands: {
+            build: defineCommand({ name: "build", run: () => {} }),
+          },
+        });
+
+        for (const shell of ["bash", "zsh", "fish"] as const) {
+          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+
+          // Should contain opt_takes_value fallback check
+          expect(result.script).toContain("opt_takes_value");
+        }
+      });
+
+      it("should include root positional completion when no subcommands", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            file: arg(z.enum(["a.txt", "b.txt"]), {
+              positional: true,
+              description: "Input file",
+            }),
+          }),
+          run: () => {},
+        });
+
+        for (const shell of ["bash", "zsh", "fish"] as const) {
+          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+
+          // Should contain positional value candidates in the root handler
+          expect(result.script).toContain("a.txt");
+          expect(result.script).toContain("b.txt");
+        }
+      });
+
+      it("should escape shell-special characters in descriptions", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          subCommands: {
+            build: defineCommand({
+              name: "build",
+              description: 'Build "the" project ($var)',
+              run: () => {},
+            }),
+          },
+        });
+
+        for (const shell of ["zsh", "fish"] as const) {
+          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+
+          // Should not contain unescaped double quotes inside description strings
+          // The raw description 'Build "the" project ($var)' should be escaped
+          expect(result.script).not.toContain('Build "the"');
+          expect(result.script).toContain('\\"the\\"');
+
+          // Dollar sign should be escaped
+          expect(result.script).not.toMatch(/\(\$var\)/);
+          expect(result.script).toContain("\\$var");
+        }
+      });
+
       it("should not include __command or __extensions handling in any shell script", () => {
         const cmd = defineCommand({
           name: "mycli",
