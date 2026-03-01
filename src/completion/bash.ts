@@ -6,7 +6,12 @@
  */
 
 import type { AnyCommand } from "../types.js";
-import { extractCompletionData, getVisibleSubs, sanitize } from "./extractor.js";
+import {
+  extractCompletionData,
+  getVisibleSubs,
+  optTakesValueEntries,
+  sanitize,
+} from "./extractor.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -243,22 +248,6 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
 
   lines.push(`}`);
   lines.push(``);
-  return lines;
-}
-
-/** Generate opt-takes-value helper entries for a subcommand tree */
-function optTakesValueEntries(sub: CompletableSubcommand, subcmdName: string): string[] {
-  const lines: string[] = [];
-  for (const opt of sub.options) {
-    if (opt.takesValue) {
-      const patterns: string[] = [`${subcmdName}:--${opt.cliName}`];
-      if (opt.alias) patterns.push(`${subcmdName}:-${opt.alias}`);
-      lines.push(`        ${patterns.join("|")}) return 0 ;;`);
-    }
-  }
-  for (const child of getVisibleSubs(sub.subcommands)) {
-    lines.push(...optTakesValueEntries(child, child.name));
-  }
   return lines;
 }
 

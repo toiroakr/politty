@@ -129,6 +129,25 @@ function extractSubcommand(name: string, command: AnyCommand): CompletableSubcom
 }
 
 /**
+ * Collect opt-takes-value case entries for a subcommand tree.
+ * Used by bash and zsh generators (identical case syntax: `subcmd:--opt) return 0 ;;`).
+ */
+export function optTakesValueEntries(sub: CompletableSubcommand, subcmdName: string): string[] {
+  const lines: string[] = [];
+  for (const opt of sub.options) {
+    if (opt.takesValue) {
+      const patterns: string[] = [`${subcmdName}:--${opt.cliName}`];
+      if (opt.alias) patterns.push(`${subcmdName}:-${opt.alias}`);
+      lines.push(`        ${patterns.join("|")}) return 0 ;;`);
+    }
+  }
+  for (const child of getVisibleSubs(sub.subcommands)) {
+    lines.push(...optTakesValueEntries(child, child.name));
+  }
+  return lines;
+}
+
+/**
  * Extract completion data from a command tree
  */
 export function extractCompletionData(command: AnyCommand, programName: string): CompletionData {
