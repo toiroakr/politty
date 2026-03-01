@@ -1198,6 +1198,84 @@ describe("Completion", () => {
         }
       });
 
+      it("should keep array options always available in generated scripts", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            tags: arg(z.array(z.string()).default([]), {
+              description: "Tags",
+            }),
+            name: arg(z.string().optional()),
+          }),
+          run: () => {},
+        });
+
+        for (const shell of ["bash", "zsh", "fish"] as const) {
+          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+
+          // Array option --tags should NOT go through not_used filter
+          expect(result.script).not.toMatch(/not_used.*"--tags"/);
+
+          // Non-array option --name should still use not_used filter
+          expect(result.script).toMatch(/not_used.*"--name"/);
+        }
+      });
+
+      it("should reset used-options tracking when entering subcommand scope", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            verbose: arg(z.boolean().default(false)),
+          }),
+          subCommands: {
+            build: defineCommand({
+              name: "build",
+              args: z.object({
+                target: arg(z.string().optional()),
+              }),
+              run: () => {},
+            }),
+          },
+        });
+
+        const bashResult = generateCompletion(cmd, { shell: "bash", programName: "mycli" });
+        // _used_opts should be reset when _subcmd is assigned
+        expect(bashResult.script).toContain('_subcmd="$_w"; _used_opts=()');
+
+        const zshResult = generateCompletion(cmd, { shell: "zsh", programName: "mycli" });
+        expect(zshResult.script).toContain('_subcmd="$_w"; _used_opts=()');
+
+        const fishResult = generateCompletion(cmd, { shell: "fish", programName: "mycli" });
+        expect(fishResult.script).toContain('set _subcmd "$_w"; set _used_opts');
+      });
+
+      it("should escape special characters in choice values", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            mode: arg(z.enum(["normal", 'say "hi"', "cost$5"]), {
+              positional: true,
+            }),
+          }),
+          run: () => {},
+        });
+
+        // Bash: choice values should be escaped in array literals
+        const bashResult = generateCompletion(cmd, { shell: "bash", programName: "mycli" });
+        expect(bashResult.script).toContain('say \\"hi\\"');
+        expect(bashResult.script).toContain("cost\\$5");
+
+        // Zsh: choice values should be escaped via escapeDesc
+        const zshResult = generateCompletion(cmd, { shell: "zsh", programName: "mycli" });
+        expect(zshResult.script).toContain('\\"hi\\"');
+        expect(zshResult.script).toContain("\\$5");
+
+        // Fish: choice values should be escaped via escapeDesc
+        const fishResult = generateCompletion(cmd, { shell: "fish", programName: "mycli" });
+        expect(fishResult.script).toContain('\\"hi\\"');
+        expect(fishResult.script).toContain("\\$5");
+      });
+
       it("should not include __command or __extensions handling in any shell script", () => {
         const cmd = defineCommand({
           name: "mycli",
