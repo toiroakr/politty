@@ -198,9 +198,14 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`    if [[ "$_cur" == -* ]]; then`);
   lines.push(`        local -a _avail=()`);
   for (const opt of sub.options) {
-    const patterns: string[] = [`"--${opt.cliName}"`];
-    if (opt.alias) patterns.push(`"-${opt.alias}"`);
-    lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.cliName})`);
+    if (opt.valueType === "array") {
+      // Array options can be specified multiple times — always keep available
+      lines.push(`        _avail+=(--${opt.cliName})`);
+    } else {
+      const patterns: string[] = [`"--${opt.cliName}"`];
+      if (opt.alias) patterns.push(`"-${opt.alias}"`);
+      lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.cliName})`);
+    }
   }
   lines.push(`        __${fn}_not_used "--help" && _avail+=(--help)`);
   lines.push(`        COMPREPLY=($(compgen -W "\${_avail[*]}" -- "$_cur"))`);
@@ -319,9 +324,13 @@ export function generateBashCompletion(
   lines.push(`    if [[ "$_cur" == -* ]]; then`);
   lines.push(`        local -a _avail=()`);
   for (const opt of root.options) {
-    const patterns: string[] = [`"--${opt.cliName}"`];
-    if (opt.alias) patterns.push(`"-${opt.alias}"`);
-    lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.cliName})`);
+    if (opt.valueType === "array") {
+      lines.push(`        _avail+=(--${opt.cliName})`);
+    } else {
+      const patterns: string[] = [`"--${opt.cliName}"`];
+      if (opt.alias) patterns.push(`"-${opt.alias}"`);
+      lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.cliName})`);
+    }
   }
   lines.push(`        __${fn}_not_used "--help" && _avail+=(--help)`);
   lines.push(`        COMPREPLY=($(compgen -W "\${_avail[*]}" -- "$_cur"))`);

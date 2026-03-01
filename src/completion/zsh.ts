@@ -144,12 +144,16 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`    if [[ "\${words[CURRENT]}" == -* ]]; then`);
   lines.push(`        local -a _opts=()`);
   for (const opt of sub.options) {
-    const patterns: string[] = [`"--${opt.cliName}"`];
-    if (opt.alias) patterns.push(`"-${opt.alias}"`);
     const desc = opt.description ? `:${escapeDesc(opt.description)}` : "";
-    lines.push(
-      `        __${fn}_not_used ${patterns.join(" ")} && _opts+=("--${opt.cliName}${desc}")`,
-    );
+    if (opt.valueType === "array") {
+      lines.push(`        _opts+=("--${opt.cliName}${desc}")`);
+    } else {
+      const patterns: string[] = [`"--${opt.cliName}"`];
+      if (opt.alias) patterns.push(`"-${opt.alias}"`);
+      lines.push(
+        `        __${fn}_not_used ${patterns.join(" ")} && _opts+=("--${opt.cliName}${desc}")`,
+      );
+    }
   }
   lines.push(`        __${fn}_not_used "--help" && _opts+=("--help:Show help")`);
   lines.push(`        __${fn}_cdescribe 'options' _opts`);
@@ -274,12 +278,16 @@ export function generateZshCompletion(
   lines.push(`    if [[ "\${words[CURRENT]}" == -* ]]; then`);
   lines.push(`        local -a _opts=()`);
   for (const opt of root.options) {
-    const patterns: string[] = [`"--${opt.cliName}"`];
-    if (opt.alias) patterns.push(`"-${opt.alias}"`);
     const desc = opt.description ? `:${escapeDesc(opt.description)}` : "";
-    lines.push(
-      `        __${fn}_not_used ${patterns.join(" ")} && _opts+=("--${opt.cliName}${desc}")`,
-    );
+    if (opt.valueType === "array") {
+      lines.push(`        _opts+=("--${opt.cliName}${desc}")`);
+    } else {
+      const patterns: string[] = [`"--${opt.cliName}"`];
+      if (opt.alias) patterns.push(`"-${opt.alias}"`);
+      lines.push(
+        `        __${fn}_not_used ${patterns.join(" ")} && _opts+=("--${opt.cliName}${desc}")`,
+      );
+    }
   }
   lines.push(`        __${fn}_not_used "--help" && _opts+=("--help:Show help")`);
   lines.push(`        __${fn}_cdescribe 'options' _opts`);

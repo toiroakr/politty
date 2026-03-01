@@ -146,12 +146,16 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 3. Option name completion
   lines.push(`    if string match -q -- '-*' "$_cur"`);
   for (const opt of sub.options) {
-    const checks: string[] = [`"--${opt.cliName}"`];
-    if (opt.alias) checks.push(`"-${opt.alias}"`);
     const desc = escapeDesc(opt.description ?? "");
-    lines.push(
-      `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
-    );
+    if (opt.valueType === "array") {
+      lines.push(`        echo "--${opt.cliName}\t${desc}"`);
+    } else {
+      const checks: string[] = [`"--${opt.cliName}"`];
+      if (opt.alias) checks.push(`"-${opt.alias}"`);
+      lines.push(
+        `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
+      );
+    }
   }
   lines.push(`        __${fn}_not_used "--help"; and echo "--help\tShow help"`);
   lines.push(`        return`);
@@ -251,12 +255,16 @@ export function generateFishCompletion(
   }
   lines.push(`    if string match -q -- '-*' "$_cur"`);
   for (const opt of root.options) {
-    const checks: string[] = [`"--${opt.cliName}"`];
-    if (opt.alias) checks.push(`"-${opt.alias}"`);
     const desc = escapeDesc(opt.description ?? "");
-    lines.push(
-      `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
-    );
+    if (opt.valueType === "array") {
+      lines.push(`        echo "--${opt.cliName}\t${desc}"`);
+    } else {
+      const checks: string[] = [`"--${opt.cliName}"`];
+      if (opt.alias) checks.push(`"-${opt.alias}"`);
+      lines.push(
+        `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
+      );
+    }
   }
   lines.push(`        __${fn}_not_used "--help"; and echo "--help\tShow help"`);
   if (visibleSubs.length > 0) {
