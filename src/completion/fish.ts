@@ -20,6 +20,11 @@ function sanitize(name: string): string {
   return name.replace(/[^a-zA-Z0-9_]/g, "_");
 }
 
+/** Escape shell-special characters for fish double-quoted strings */
+function escapeDesc(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$");
+}
+
 /**
  * Generate fish value completion lines for a ValueCompletion spec.
  * Each line outputs candidates via echo (tab-separated value\tdescription).
@@ -143,7 +148,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   for (const opt of sub.options) {
     const checks: string[] = [`"--${opt.cliName}"`];
     if (opt.alias) checks.push(`"-${opt.alias}"`);
-    const desc = opt.description ?? "";
+    const desc = escapeDesc(opt.description ?? "");
     lines.push(
       `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
     );
@@ -155,7 +160,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 4. Subcommand or positional completion
   if (visibleSubs.length > 0) {
     for (const s of visibleSubs) {
-      const desc = s.description ?? "";
+      const desc = escapeDesc(s.description ?? "");
       lines.push(`    echo "${s.name}\t${desc}"`);
     }
   } else if (sub.positionals.length > 0) {
@@ -229,6 +234,9 @@ export function generateFishCompletion(
   }
 
   // Root handler
+  // NOTE: Inline --opt=value completion is not yet supported in fish; only
+  // separate-word value completion (--opt <value>) is handled. Bash supports
+  // inline via _inline_prefix parsing.
   const rootValueOpts = root.options.filter((o) => o.takesValue && o.valueCompletion);
   lines.push(`function __${fn}_complete_root --no-scope-shadowing`);
   if (rootValueOpts.length > 0) {
@@ -236,12 +244,19 @@ export function generateFishCompletion(
   }
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(`    if __${fn}_opt_takes_value "" "$_prev"; return; end`);
-  lines.push(`    if test $_after_dd -eq 1; return; end`);
+  if (root.positionals.length > 0) {
+    lines.push(`    if test $_after_dd -eq 1`);
+    lines.push(...positionalBlock(root.positionals).map((l) => `    ${l}`));
+    lines.push(`        return`);
+    lines.push(`    end`);
+  } else {
+    lines.push(`    if test $_after_dd -eq 1; return; end`);
+  }
   lines.push(`    if string match -q -- '-*' "$_cur"`);
   for (const opt of root.options) {
     const checks: string[] = [`"--${opt.cliName}"`];
     if (opt.alias) checks.push(`"-${opt.alias}"`);
-    const desc = opt.description ?? "";
+    const desc = escapeDesc(opt.description ?? "");
     lines.push(
       `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
     );
@@ -250,9 +265,12 @@ export function generateFishCompletion(
   if (visibleSubs.length > 0) {
     lines.push(`    else`);
     for (const s of visibleSubs) {
-      const desc = s.description ?? "";
+      const desc = escapeDesc(s.description ?? "");
       lines.push(`        echo "${s.name}\t${desc}"`);
     }
+  } else if (root.positionals.length > 0) {
+    lines.push(`    else`);
+    lines.push(...positionalBlock(root.positionals));
   }
   lines.push(`    end`);
   lines.push(`end`);
@@ -306,9 +324,13 @@ export function generateFishCompletion(
   lines.push(`        end`);
   // NOTE: Only first-level subcommand dispatch is supported. Nested subcommand
   // handlers are generated but not yet dispatched (requires multi-level word parsing).
-  lines.push(
-    `        if test -z "$_subcmd"; set _subcmd "$_w"; else; set _pos_count (math $_pos_count + 1); end`,
-  );
+  if (visibleSubs.length > 0) {
+    lines.push(
+      `        if test -z "$_subcmd"; set _subcmd "$_w"; else; set _pos_count (math $_pos_count + 1); end`,
+    );
+  } else {
+    lines.push(`        set _pos_count (math $_pos_count + 1)`);
+  }
   lines.push(`        set _j (math $_j + 1)`);
   lines.push(`    end`);
   lines.push(``);

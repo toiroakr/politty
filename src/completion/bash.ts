@@ -316,7 +316,14 @@ export function generateBashCompletion(
   lines.push(
     `    if [[ -n "$_inline_prefix" ]] && __${fn}_opt_takes_value "" "\${_inline_prefix%=}"; then return; fi`,
   );
-  lines.push(`    if (( _after_dd )); then return; fi`);
+  if (root.positionals.length > 0) {
+    lines.push(`    if (( _after_dd )); then`);
+    lines.push(...positionalBlock(root.positionals).map((l) => `    ${l}`));
+    lines.push(`        return`);
+    lines.push(`    fi`);
+  } else {
+    lines.push(`    if (( _after_dd )); then return; fi`);
+  }
   lines.push(`    if [[ "$_cur" == -* ]]; then`);
   lines.push(`        local -a _avail=()`);
   for (const opt of root.options) {
@@ -332,6 +339,9 @@ export function generateBashCompletion(
     const subNames = visibleSubs.map((s) => s.name).join(" ");
     lines.push(`        COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
     lines.push(`        compopt +o default 2>/dev/null`);
+  } else if (root.positionals.length > 0) {
+    lines.push(`    else`);
+    lines.push(...positionalBlock(root.positionals).map((l) => `    ${l}`));
   }
   lines.push(`    fi`);
   lines.push(`}`);
@@ -389,7 +399,11 @@ export function generateBashCompletion(
   lines.push(`        fi`);
   // NOTE: Only first-level subcommand dispatch is supported. Nested subcommand
   // handlers are generated but not yet dispatched (requires multi-level word parsing).
-  lines.push(`        if [[ -z "$_subcmd" ]]; then _subcmd="$_w"; else (( _pos_count++ )); fi`);
+  if (visibleSubs.length > 0) {
+    lines.push(`        if [[ -z "$_subcmd" ]]; then _subcmd="$_w"; else (( _pos_count++ )); fi`);
+  } else {
+    lines.push(`        (( _pos_count++ ))`);
+  }
   lines.push(`        (( _j++ ))`);
   lines.push(`    done`);
   lines.push(``);

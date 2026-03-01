@@ -21,7 +21,12 @@ function sanitize(name: string): string {
 }
 
 function escapeDesc(s: string): string {
-  return s.replace(/:/g, "\\:");
+  return s
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\$/g, "\\$")
+    .replace(/`/g, "\\`")
+    .replace(/:/g, "\\:");
 }
 
 /**
@@ -242,6 +247,9 @@ export function generateZshCompletion(
   }
 
   // Root handler
+  // NOTE: Inline --opt=value completion is not yet supported in zsh; only
+  // separate-word value completion (--opt <value>) is handled. Bash supports
+  // inline via _inline_prefix parsing.
   const rootValueOpts = root.options.filter((o) => o.takesValue && o.valueCompletion);
   lines.push(`__${fn}_complete_root() {`);
   lines.push(`    local -a _vals=()`);
@@ -255,7 +263,14 @@ export function generateZshCompletion(
   }
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(`    if __${fn}_opt_takes_value "" "\${words[CURRENT-1]}"; then return 0; fi`);
-  lines.push(`    if (( _after_dd )); then return 0; fi`);
+  if (root.positionals.length > 0) {
+    lines.push(`    if (( _after_dd )); then`);
+    lines.push(...positionalBlock(root.positionals, fn).map((l) => `    ${l}`));
+    lines.push(`        return 0`);
+    lines.push(`    fi`);
+  } else {
+    lines.push(`    if (( _after_dd )); then return 0; fi`);
+  }
   lines.push(`    if [[ "\${words[CURRENT]}" == -* ]]; then`);
   lines.push(`        local -a _opts=()`);
   for (const opt of root.options) {
@@ -278,6 +293,9 @@ export function generateZshCompletion(
       .join(" ");
     lines.push(`        local -a _subs=(${subItems})`);
     lines.push(`        __${fn}_cdescribe 'subcommands' _subs`);
+  } else if (root.positionals.length > 0) {
+    lines.push(`    else`);
+    lines.push(...positionalBlock(root.positionals, fn).map((l) => `    ${l}`));
   }
   lines.push(`    fi`);
   lines.push(`}`);
@@ -310,7 +328,11 @@ export function generateZshCompletion(
   lines.push(`        fi`);
   // NOTE: Only first-level subcommand dispatch is supported. Nested subcommand
   // handlers are generated but not yet dispatched (requires multi-level word parsing).
-  lines.push(`        if [[ -z "$_subcmd" ]]; then _subcmd="$_w"; else (( _pos_count++ )); fi`);
+  if (visibleSubs.length > 0) {
+    lines.push(`        if [[ -z "$_subcmd" ]]; then _subcmd="$_w"; else (( _pos_count++ )); fi`);
+  } else {
+    lines.push(`        (( _pos_count++ ))`);
+  }
   lines.push(`        (( _j++ ))`);
   lines.push(`    done`);
   lines.push(``);
