@@ -3,7 +3,7 @@ import {
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
-import { isLazyCommand } from "../lazy.js";
+import { resolveSubCommandMeta } from "../lazy.js";
 import type { AnyCommand, Example, SubCommandsRecord, SubCommandValue } from "../types.js";
 import { styles } from "./logger.js";
 import { renderMarkdown } from "./markdown-renderer.js";
@@ -66,16 +66,6 @@ function getVisibleSubcommandEntries(
   subCommands: SubCommandsRecord,
 ): Array<[string, SubCommandValue]> {
   return Object.entries(subCommands).filter(([name]) => isVisibleSubcommand(name));
-}
-
-/**
- * Resolve synchronous metadata from a SubCommandValue.
- * Returns null for legacy async subcommands whose metadata is unavailable.
- */
-function resolveSubCommandMeta(subCmd: SubCommandValue): AnyCommand | null {
-  if (isLazyCommand(subCmd)) return subCmd.meta;
-  if (typeof subCmd === "function") return null;
-  return subCmd;
 }
 
 /**

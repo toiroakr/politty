@@ -3,7 +3,7 @@
  */
 
 import { extractFields } from "../../core/schema-extractor.js";
-import { isLazyCommand } from "../../lazy.js";
+import { resolveSubCommandMeta } from "../../lazy.js";
 import type { AnyCommand } from "../../types.js";
 import type { CompletableOption, CompletablePositional } from "../types.js";
 import { resolveValueCompletion } from "../value-completion-resolver.js";
@@ -116,17 +116,7 @@ function resolveSubcommand(command: AnyCommand, name: string): AnyCommand | null
     return null;
   }
 
-  // LazyCommand: return metadata for sync inspection
-  if (isLazyCommand(sub)) {
-    return sub.meta;
-  }
-
-  // Skip legacy async subcommands (can't inspect statically)
-  if (typeof sub === "function") {
-    return null;
-  }
-
-  return sub;
+  return resolveSubCommandMeta(sub);
 }
 
 /**

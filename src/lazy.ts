@@ -2,7 +2,7 @@
  * Lazy-loaded subcommand with synchronous metadata
  */
 
-import type { AnyCommand } from "./types.js";
+import type { AnyCommand, SubCommandValue } from "./types.js";
 
 /**
  * Marker property for LazyCommand identification
@@ -69,4 +69,14 @@ export function lazy<T extends AnyCommand>(
     meta,
     load,
   };
+}
+
+/**
+ * Resolve synchronous metadata from a SubCommandValue.
+ * Returns null for legacy async subcommands whose metadata is unavailable.
+ */
+export function resolveSubCommandMeta(subCmd: SubCommandValue): AnyCommand | null {
+  if (isLazyCommand(subCmd)) return subCmd.meta;
+  if (typeof subCmd === "function") return null;
+  return subCmd;
 }
