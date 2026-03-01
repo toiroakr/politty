@@ -103,12 +103,7 @@ function optionValueCases(options: CompletableOption[], inline: boolean): string
     if (opt.alias) patterns.push(`-${opt.alias}`);
     const patternStr = patterns.join("|");
 
-    if (inline) {
-      // For inline, match against the prefix before =
-      lines.push(`            ${patternStr})`);
-    } else {
-      lines.push(`            ${patternStr})`);
-    }
+    lines.push(`            ${patternStr})`);
     for (const vl of valLines) {
       lines.push(`                ${vl}`);
     }
@@ -130,11 +125,8 @@ function positionalBlock(positionals: CompletablePositional[]): string[] {
     } else {
       lines.push(`        ${pos.position})`);
     }
-    const valLines = bashValueLines(pos.valueCompletion, false);
-    if (valLines.length > 0) {
-      for (const vl of valLines) {
-        lines.push(`            ${vl}`);
-      }
+    for (const vl of bashValueLines(pos.valueCompletion, false)) {
+      lines.push(`            ${vl}`);
     }
     lines.push(`            ;;`);
   }
@@ -416,7 +408,7 @@ export function generateBashCompletion(
   lines.push(`complete -o default -F _${fn}_completions ${options.programName}`);
   lines.push(``);
 
-  const programName = options.programName;
+  const { programName } = options;
 
   return {
     script: lines.join("\n"),

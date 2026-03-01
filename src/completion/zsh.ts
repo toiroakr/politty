@@ -349,7 +349,7 @@ export function generateZshCompletion(
   lines.push(`compdef _${fn} ${options.programName}`);
   lines.push(``);
 
-  const programName = options.programName;
+  const { programName } = options;
 
   return {
     script: lines.join("\n"),

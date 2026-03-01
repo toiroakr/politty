@@ -220,9 +220,6 @@ export function generateFishCompletion(
   lines.push(`function __${fn}_opt_takes_value`);
   lines.push(`    switch "$argv[1]:$argv[2]"`);
   lines.push(...optTakesValueCases(root, ""));
-  for (const sub of visibleSubs) {
-    lines.push(...optTakesValueCases(sub, sub.name));
-  }
   lines.push(`    end`);
   lines.push(`    return 1`);
   lines.push(`end`);
@@ -353,7 +350,7 @@ export function generateFishCompletion(
   lines.push(`complete -c ${options.programName} -f -a '(__fish_${fn}_complete)'`);
   lines.push(``);
 
-  const programName = options.programName;
+  const { programName } = options;
 
   return {
     script: lines.join("\n"),

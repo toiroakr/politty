@@ -177,18 +177,14 @@ function generateSubcommandCandidates(context: CompletionContext): CandidateResu
 
   // Add subcommands
   for (const name of context.subcommands) {
-    // Get description from the subcommand if possible
-    let description: string | undefined;
-    if (context.currentCommand.subCommands) {
-      const sub = context.currentCommand.subCommands[name];
-      if (sub) {
-        if (isLazyCommand(sub)) {
-          description = sub.meta.description;
-        } else if (typeof sub !== "function") {
-          description = sub.description;
-        }
-      }
-    }
+    const sub = context.currentCommand.subCommands?.[name];
+    const description = sub
+      ? isLazyCommand(sub)
+        ? sub.meta.description
+        : typeof sub !== "function"
+          ? sub.description
+          : undefined
+      : undefined;
 
     candidates.push({
       value: name,

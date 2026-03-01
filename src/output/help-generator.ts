@@ -69,6 +69,16 @@ function getVisibleSubcommandEntries(
 }
 
 /**
+ * Resolve synchronous metadata from a SubCommandValue.
+ * Returns null for legacy async subcommands whose metadata is unavailable.
+ */
+function resolveSubCommandMeta(subCmd: SubCommandValue): AnyCommand | null {
+  if (isLazyCommand(subCmd)) return subCmd.meta;
+  if (typeof subCmd === "function") return null;
+  return subCmd;
+}
+
+/**
  * Build full command name from context
  */
 function buildFullCommandName(command: AnyCommand, context?: CommandContext): string {
@@ -509,8 +519,7 @@ function renderSubcommandsWithOptions(
   const lines: string[] = [];
 
   for (const [name, subCmd] of getVisibleSubcommandEntries(subCommands)) {
-    // Handle sync, async, and lazy commands
-    const cmd = isLazyCommand(subCmd) ? subCmd.meta : typeof subCmd === "function" ? null : subCmd;
+    const cmd = resolveSubCommandMeta(subCmd);
     const fullPath = parentPath ? `${parentPath} ${name}` : name;
     const desc = cmd?.description ?? "";
 
@@ -603,13 +612,8 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
       // Show only subcommand names and descriptions
       const subLines: string[] = [];
       for (const [name, subCmd] of Object.entries(visibleSubCommands)) {
-        // Handle sync, async, and lazy commands
-        const cmd = isLazyCommand(subCmd)
-          ? subCmd.meta
-          : typeof subCmd === "function"
-            ? { description: undefined }
-            : subCmd;
-        const desc = cmd.description ?? "";
+        const cmd = resolveSubCommandMeta(subCmd);
+        const desc = cmd?.description ?? "";
         // Include parent path in subcommand name
         const fullName = currentPath ? `${currentPath} ${name}` : name;
         subLines.push(formatOption(styles.command(fullName), desc));
