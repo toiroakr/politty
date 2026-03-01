@@ -392,7 +392,9 @@ export function generateBashCompletion(
   // NOTE: Only first-level subcommand dispatch is supported. Nested subcommand
   // handlers are generated but not yet dispatched (requires multi-level word parsing).
   if (visibleSubs.length > 0) {
-    lines.push(`        if [[ -z "$_subcmd" ]]; then _subcmd="$_w"; else (( _pos_count++ )); fi`);
+    lines.push(
+      `        if [[ -z "$_subcmd" ]]; then _subcmd="$_w"; _used_opts=(); else (( _pos_count++ )); fi`,
+    );
   } else {
     lines.push(`        (( _pos_count++ ))`);
   }

@@ -323,7 +323,7 @@ export function generateFishCompletion(
   // handlers are generated but not yet dispatched (requires multi-level word parsing).
   if (visibleSubs.length > 0) {
     lines.push(
-      `        if test -z "$_subcmd"; set _subcmd "$_w"; else; set _pos_count (math $_pos_count + 1); end`,
+      `        if test -z "$_subcmd"; set _subcmd "$_w"; set _used_opts; else; set _pos_count (math $_pos_count + 1); end`,
     );
   } else {
     lines.push(`        set _pos_count (math $_pos_count + 1)`);
