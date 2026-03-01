@@ -120,6 +120,10 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
       lines.push(`    esac`);
     }
   }
+  // Fallback: value-taking option without explicit completion → default file completion
+  lines.push(
+    `    if __${fn}_opt_takes_value "${sub.name}" "\${words[CURRENT-1]}"; then return 0; fi`,
+  );
 
   // 2. After -- separator
   if (sub.positionals.length > 0) {
@@ -249,6 +253,8 @@ export function generateZshCompletion(
       lines.push(`    esac`);
     }
   }
+  // Fallback: value-taking option without explicit completion → default file completion
+  lines.push(`    if __${fn}_opt_takes_value "" "\${words[CURRENT-1]}"; then return 0; fi`);
   lines.push(`    if (( _after_dd )); then return 0; fi`);
   lines.push(`    if [[ "\${words[CURRENT]}" == -* ]]; then`);
   lines.push(`        local -a _opts=()`);
@@ -262,8 +268,8 @@ export function generateZshCompletion(
   }
   lines.push(`        __${fn}_not_used "--help" && _opts+=("--help:Show help")`);
   lines.push(`        __${fn}_cdescribe 'options' _opts`);
-  lines.push(`    else`);
   if (visibleSubs.length > 0) {
+    lines.push(`    else`);
     const subItems = visibleSubs
       .map((s) => {
         const desc = s.description ? `:${escapeDesc(s.description)}` : "";
@@ -302,6 +308,8 @@ export function generateZshCompletion(
   lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
   lines.push(`            (( _j++ )); continue`);
   lines.push(`        fi`);
+  // NOTE: Only first-level subcommand dispatch is supported. Nested subcommand
+  // handlers are generated but not yet dispatched (requires multi-level word parsing).
   lines.push(`        if [[ -z "$_subcmd" ]]; then _subcmd="$_w"; else (( _pos_count++ )); fi`);
   lines.push(`        (( _j++ ))`);
   lines.push(`    done`);

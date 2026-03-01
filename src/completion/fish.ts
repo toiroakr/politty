@@ -125,6 +125,8 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   if (valueTakingOpts.length > 0) {
     lines.push(...optionValueCases(sub.options));
   }
+  // Fallback: value-taking option without explicit completion → default file completion
+  lines.push(`    if __${fn}_opt_takes_value "${sub.name}" "$_prev"; return; end`);
 
   // 2. After -- separator
   if (sub.positionals.length > 0) {
@@ -232,6 +234,8 @@ export function generateFishCompletion(
   if (rootValueOpts.length > 0) {
     lines.push(...optionValueCases(root.options));
   }
+  // Fallback: value-taking option without explicit completion → default file completion
+  lines.push(`    if __${fn}_opt_takes_value "" "$_prev"; return; end`);
   lines.push(`    if test $_after_dd -eq 1; return; end`);
   lines.push(`    if string match -q -- '-*' "$_cur"`);
   for (const opt of root.options) {
@@ -243,8 +247,8 @@ export function generateFishCompletion(
     );
   }
   lines.push(`        __${fn}_not_used "--help"; and echo "--help\tShow help"`);
-  lines.push(`    else`);
   if (visibleSubs.length > 0) {
+    lines.push(`    else`);
     for (const s of visibleSubs) {
       const desc = s.description ?? "";
       lines.push(`        echo "${s.name}\t${desc}"`);
@@ -300,6 +304,8 @@ export function generateFishCompletion(
   lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w"; and set _skip_next 1`);
   lines.push(`            set _j (math $_j + 1); continue`);
   lines.push(`        end`);
+  // NOTE: Only first-level subcommand dispatch is supported. Nested subcommand
+  // handlers are generated but not yet dispatched (requires multi-level word parsing).
   lines.push(
     `        if test -z "$_subcmd"; set _subcmd "$_w"; else; set _pos_count (math $_pos_count + 1); end`,
   );

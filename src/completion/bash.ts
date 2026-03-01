@@ -184,6 +184,14 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
     }
   }
 
+  // Fallback: value-taking option without explicit completion → default file completion
+  lines.push(
+    `    if [[ -z "$_inline_prefix" ]] && __${fn}_opt_takes_value "${sub.name}" "$_prev"; then return; fi`,
+  );
+  lines.push(
+    `    if [[ -n "$_inline_prefix" ]] && __${fn}_opt_takes_value "${sub.name}" "\${_inline_prefix%=}"; then return; fi`,
+  );
+
   // 3. After -- separator
   if (sub.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
@@ -301,6 +309,13 @@ export function generateBashCompletion(
       lines.push(`    fi`);
     }
   }
+  // Fallback: value-taking option without explicit completion → default file completion
+  lines.push(
+    `    if [[ -z "$_inline_prefix" ]] && __${fn}_opt_takes_value "" "$_prev"; then return; fi`,
+  );
+  lines.push(
+    `    if [[ -n "$_inline_prefix" ]] && __${fn}_opt_takes_value "" "\${_inline_prefix%=}"; then return; fi`,
+  );
   lines.push(`    if (( _after_dd )); then return; fi`);
   lines.push(`    if [[ "$_cur" == -* ]]; then`);
   lines.push(`        local -a _avail=()`);
@@ -312,8 +327,8 @@ export function generateBashCompletion(
   lines.push(`        __${fn}_not_used "--help" && _avail+=(--help)`);
   lines.push(`        COMPREPLY=($(compgen -W "\${_avail[*]}" -- "$_cur"))`);
   lines.push(`        compopt +o default 2>/dev/null`);
-  lines.push(`    else`);
   if (visibleSubs.length > 0) {
+    lines.push(`    else`);
     const subNames = visibleSubs.map((s) => s.name).join(" ");
     lines.push(`        COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
     lines.push(`        compopt +o default 2>/dev/null`);
@@ -372,6 +387,8 @@ export function generateBashCompletion(
   lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
   lines.push(`            (( _j++ )); continue`);
   lines.push(`        fi`);
+  // NOTE: Only first-level subcommand dispatch is supported. Nested subcommand
+  // handlers are generated but not yet dispatched (requires multi-level word parsing).
   lines.push(`        if [[ -z "$_subcmd" ]]; then _subcmd="$_w"; else (( _pos_count++ )); fi`);
   lines.push(`        (( _j++ ))`);
   lines.push(`    done`);
