@@ -22,6 +22,14 @@ export function sanitize(name: string): string {
 }
 
 /**
+ * Filter subcommands to only visible (non-internal) ones.
+ * Internal subcommands start with "__" and are hidden from completion/help.
+ */
+export function getVisibleSubs(subs: CompletableSubcommand[]): CompletableSubcommand[] {
+  return subs.filter((s) => !s.name.startsWith("__"));
+}
+
+/**
  * Convert a resolved field to a completable option
  */
 function fieldToOption(field: ResolvedFieldMeta): CompletableOption {

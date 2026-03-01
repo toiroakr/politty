@@ -25,10 +25,7 @@ export interface LazyCommand<T extends AnyCommand = AnyCommand> {
  */
 export function isLazyCommand(value: unknown): value is LazyCommand {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    LAZY_BRAND in value &&
-    (value as Record<string, unknown>)[LAZY_BRAND] === true
+    typeof value === "object" && value !== null && LAZY_BRAND in value && value[LAZY_BRAND] === true
   );
 }
 
