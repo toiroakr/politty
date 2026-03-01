@@ -17,6 +17,7 @@ export interface ValueCompletionField {
         type?: string;
         custom?: { choices?: string[]; shellCommand?: string };
         extensions?: string[];
+        matcher?: string[];
       }
     | undefined;
   enumValues?: string[] | undefined;
@@ -46,6 +47,9 @@ export function resolveValueCompletion(field: ValueCompletionField): ValueComple
   // Priority 2: Explicit completion type
   if (meta?.type) {
     if (meta.type === "file") {
+      if (meta.matcher) {
+        return { type: "file", matcher: meta.matcher };
+      }
       return meta.extensions ? { type: "file", extensions: meta.extensions } : { type: "file" };
     }
     if (meta.type === "directory") {

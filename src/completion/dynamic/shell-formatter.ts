@@ -62,6 +62,9 @@ function appendMetadata(lines: string[], result: CandidateResult): void {
   if (result.fileExtensions && result.fileExtensions.length > 0) {
     lines.push(`@ext:${result.fileExtensions.join(",")}`);
   }
+  if (result.fileMatchers && result.fileMatchers.length > 0) {
+    lines.push(`@matcher:${result.fileMatchers.join(",")}`);
+  }
   lines.push(`:${result.directive}`);
 }
 

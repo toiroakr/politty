@@ -35,6 +35,8 @@ export interface ValueCompletion {
   shellCommand?: string;
   /** File extension filters (for "file" type) */
   extensions?: string[];
+  /** Glob patterns for file matching (for "file" type). Takes precedence over extensions. */
+  matcher?: string[];
 }
 
 /**
