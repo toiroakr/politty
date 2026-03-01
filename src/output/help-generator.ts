@@ -3,7 +3,8 @@ import {
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
-import type { AnyCommand, Example } from "../types.js";
+import { isLazyCommand } from "../lazy.js";
+import type { AnyCommand, Example, SubCommandsRecord, SubCommandValue } from "../types.js";
 import { styles } from "./logger.js";
 import { renderMarkdown } from "./markdown-renderer.js";
 
@@ -62,8 +63,8 @@ function isVisibleSubcommand(name: string): boolean {
 }
 
 function getVisibleSubcommandEntries(
-  subCommands: Record<string, AnyCommand | (() => Promise<AnyCommand>)>,
-): Array<[string, AnyCommand | (() => Promise<AnyCommand>)]> {
+  subCommands: SubCommandsRecord,
+): Array<[string, SubCommandValue]> {
   return Object.entries(subCommands).filter(([name]) => isVisibleSubcommand(name));
 }
 
@@ -501,15 +502,15 @@ function renderSubcommandOptionsCompact(command: AnyCommand, indent: number): st
  * Render subcommands recursively with their options (flat style)
  */
 function renderSubcommandsWithOptions(
-  subCommands: Record<string, AnyCommand | (() => Promise<AnyCommand>)>,
+  subCommands: SubCommandsRecord,
   parentPath: string,
   baseIndent: number,
 ): string[] {
   const lines: string[] = [];
 
   for (const [name, subCmd] of getVisibleSubcommandEntries(subCommands)) {
-    // Handle both sync and async commands
-    const cmd = typeof subCmd === "function" ? null : subCmd;
+    // Handle sync, async, and lazy commands
+    const cmd = isLazyCommand(subCmd) ? subCmd.meta : typeof subCmd === "function" ? null : subCmd;
     const fullPath = parentPath ? `${parentPath} ${name}` : name;
     const desc = cmd?.description ?? "";
 
@@ -602,8 +603,12 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
       // Show only subcommand names and descriptions
       const subLines: string[] = [];
       for (const [name, subCmd] of Object.entries(visibleSubCommands)) {
-        // Handle both sync and async commands
-        const cmd = typeof subCmd === "function" ? { description: undefined } : subCmd;
+        // Handle sync, async, and lazy commands
+        const cmd = isLazyCommand(subCmd)
+          ? subCmd.meta
+          : typeof subCmd === "function"
+            ? { description: undefined }
+            : subCmd;
         const desc = cmd.description ?? "";
         // Include parent path in subcommand name
         const fullName = currentPath ? `${currentPath} ${name}` : name;

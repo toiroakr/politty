@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defineCommand } from "../core/command.js";
-import { listSubCommands, resolveSubcommand } from "./subcommand-router.js";
+import { lazy } from "../lazy.js";
+import { listSubCommands, resolveLazyCommand, resolveSubcommand } from "./subcommand-router.js";
 
 /**
  * Task 7.1: Subcommand router tests
@@ -63,6 +64,60 @@ describe("SubcommandRouter", () => {
       const result = await resolveSubcommand(cmd, "anything");
 
       expect(result).toBeUndefined();
+    });
+
+    it("should resolve LazyCommand subcommand via load()", async () => {
+      const fullCommand = defineCommand({
+        name: "deploy",
+        description: "Deploy the application",
+        run: () => "deployed",
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          deploy: lazy(
+            defineCommand({
+              name: "deploy",
+              description: "Deploy the application",
+            }),
+            async () => fullCommand,
+          ),
+        },
+      });
+
+      const result = await resolveSubcommand(cmd, "deploy");
+
+      expect(result).toBe(fullCommand);
+      expect(result?.name).toBe("deploy");
+    });
+  });
+
+  describe("resolveLazyCommand", () => {
+    it("should resolve LazyCommand via load()", async () => {
+      const fullCommand = defineCommand({ name: "test", run: () => {} });
+      const cmd = lazy(defineCommand({ name: "test" }), async () => fullCommand);
+
+      const result = await resolveLazyCommand(cmd);
+
+      expect(result).toBe(fullCommand);
+    });
+
+    it("should resolve async function", async () => {
+      const fullCommand = defineCommand({ name: "test" });
+      const fn = async () => fullCommand;
+
+      const result = await resolveLazyCommand(fn);
+
+      expect(result).toBe(fullCommand);
+    });
+
+    it("should return sync command as-is", async () => {
+      const cmd = defineCommand({ name: "test" });
+
+      const result = await resolveLazyCommand(cmd);
+
+      expect(result).toBe(cmd);
     });
   });
 

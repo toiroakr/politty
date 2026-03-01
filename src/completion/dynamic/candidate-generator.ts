@@ -3,6 +3,7 @@
  */
 
 import { execSync } from "node:child_process";
+import { isLazyCommand } from "../../lazy.js";
 import type { CompletionContext } from "./context-parser.js";
 
 /**
@@ -180,8 +181,12 @@ function generateSubcommandCandidates(context: CompletionContext): CandidateResu
     let description: string | undefined;
     if (context.currentCommand.subCommands) {
       const sub = context.currentCommand.subCommands[name];
-      if (sub && typeof sub !== "function") {
-        description = sub.description;
+      if (sub) {
+        if (isLazyCommand(sub)) {
+          description = sub.meta.description;
+        } else if (typeof sub !== "function") {
+          description = sub.description;
+        }
       }
     }
 

@@ -1,5 +1,7 @@
 import type { z } from "zod";
 
+import type { LazyCommand } from "./lazy.js";
+
 /**
  * Example definition for a command
  */
@@ -136,7 +138,7 @@ export type AnyCommand = Command<ArgsSchema | undefined, AnyArgs, AnyResult>;
 /**
  * Subcommand value type (either a command or a lazy-loaded command)
  */
-export type SubCommandValue = AnyCommand | (() => Promise<AnyCommand>);
+export type SubCommandValue = AnyCommand | (() => Promise<AnyCommand>) | LazyCommand;
 
 /**
  * Record of subcommands indexed by name
