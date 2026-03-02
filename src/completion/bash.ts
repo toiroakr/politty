@@ -10,6 +10,7 @@ import {
   collectRouteEntries,
   extractCompletionData,
   getVisibleSubs,
+  isSubcmdCaseLines,
   optTakesValueEntries,
   sanitize,
 } from "./extractor.js";
@@ -299,9 +300,7 @@ export function generateBashCompletion(
   if (routeEntries.length > 0) {
     lines.push(`__${fn}_is_subcmd() {`);
     lines.push(`    case "$1:$2" in`);
-    for (const r of routeEntries) {
-      lines.push(`        ${r.lookupPattern}) return 0 ;;`);
-    }
+    lines.push(...isSubcmdCaseLines(routeEntries));
     lines.push(`    esac`);
     lines.push(`    return 1`);
     lines.push(`}`);

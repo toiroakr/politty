@@ -135,6 +135,11 @@ function extractSubcommand(name: string, command: AnyCommand): CompletableSubcom
   };
 }
 
+/** Join parent and child with a separator, omitting separator when parent is empty. */
+function joinPrefix(parent: string, child: string, sep: string): string {
+  return parent ? `${parent}${sep}${child}` : child;
+}
+
 /**
  * Collect opt-takes-value case entries for a subcommand tree.
  * Used by bash and zsh generators (identical case syntax: `path:--opt) return 0 ;;`).
@@ -150,8 +155,7 @@ export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: str
     }
   }
   for (const child of getVisibleSubs(sub.subcommands)) {
-    const childPath = parentPath ? `${parentPath}:${child.name}` : child.name;
-    lines.push(...optTakesValueEntries(child, childPath));
+    lines.push(...optTakesValueEntries(child, joinPrefix(parentPath, child.name, ":")));
   }
   return lines;
 }
@@ -180,8 +184,8 @@ export function collectRouteEntries(
 ): RouteEntry[] {
   const entries: RouteEntry[] = [];
   for (const child of getVisibleSubs(sub.subcommands)) {
-    const pathStr = parentPath ? `${parentPath}:${child.name}` : child.name;
-    const funcSuffix = parentFunc ? `${parentFunc}_${sanitize(child.name)}` : sanitize(child.name);
+    const pathStr = joinPrefix(parentPath, child.name, ":");
+    const funcSuffix = joinPrefix(parentFunc, sanitize(child.name), "_");
     entries.push(...collectRouteEntries(child, pathStr, funcSuffix));
     entries.push({
       pathStr,
@@ -190,6 +194,14 @@ export function collectRouteEntries(
     });
   }
   return entries;
+}
+
+/**
+ * Generate is_subcmd case/switch body lines (bash/zsh case syntax).
+ * Returns lines for the case statement body only (caller wraps in function).
+ */
+export function isSubcmdCaseLines(routeEntries: RouteEntry[]): string[] {
+  return routeEntries.map((r) => `        ${r.lookupPattern}) return 0 ;;`);
 }
 
 /**
