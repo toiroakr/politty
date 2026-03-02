@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
 import {
   CompletionDirective,
@@ -12,7 +12,14 @@ import {
   parseCompletionContext,
   withCompletionCommand,
 } from "../src/completion/index.js";
-import { arg, defineCommand, isLazyCommand, lazy, runCommand } from "../src/index.js";
+import {
+  arg,
+  defineCommand,
+  isLazyCommand,
+  lazy,
+  runCommand,
+  type CompletionMeta,
+} from "../src/index.js";
 
 describe("Completion", () => {
   describe("extractCompletionData", () => {
@@ -204,6 +211,26 @@ describe("Completion", () => {
       expect(configOpt?.valueCompletion).toBeDefined();
       expect(configOpt?.valueCompletion?.type).toBe("file");
       expect(configOpt?.valueCompletion?.extensions).toEqual(["json", "yaml"]);
+    });
+
+    it("should extract file completion metadata with matcher", () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          envFile: arg(z.string(), {
+            completion: { type: "file", matcher: [".env.*"] },
+          }),
+        }),
+        run: () => {},
+      });
+
+      const data = extractCompletionData(cmd, "test");
+
+      const envFileOpt = data.command.options.find((o) => o.name === "envFile");
+      expect(envFileOpt?.valueCompletion).toBeDefined();
+      expect(envFileOpt?.valueCompletion?.type).toBe("file");
+      expect(envFileOpt?.valueCompletion?.matcher).toEqual([".env.*"]);
+      expect(envFileOpt?.valueCompletion?.extensions).toBeUndefined();
     });
 
     it("should extract directory completion metadata", () => {
@@ -434,6 +461,43 @@ describe("Completion", () => {
         expect(result.script).toContain("complete -c mycli");
         expect(result.script).toContain("__fish_mycli_complete");
         expect(result.script).toContain("complete -c mycli -f");
+      });
+    });
+
+    describe("matcher in static scripts", () => {
+      const matcherCmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          envFile: arg(z.string().optional(), {
+            alias: "e",
+            completion: { type: "file", matcher: [".env.*"] },
+          }),
+        }),
+        run: () => {},
+      });
+
+      it("should generate bash glob pattern filter for matcher", () => {
+        const result = generateCompletion(matcherCmd, {
+          shell: "bash",
+          programName: "mycli",
+        });
+        expect(result.script).toContain('[[ "${_f##*/}" == .env.* ]]');
+      });
+
+      it("should generate zsh _files -g for matcher", () => {
+        const result = generateCompletion(matcherCmd, {
+          shell: "zsh",
+          programName: "mycli",
+        });
+        expect(result.script).toContain('_files -g ".env.*"');
+      });
+
+      it("should generate fish glob expansion for matcher", () => {
+        const result = generateCompletion(matcherCmd, {
+          shell: "fish",
+          programName: "mycli",
+        });
+        expect(result.script).toContain('"$_dir".env.*');
       });
     });
 
@@ -823,6 +887,30 @@ describe("Completion", () => {
         expect(result.fileExtensions).toEqual(["json", "yaml"]);
       });
 
+      it("should pass file matchers to shell via metadata instead of resolving in JS", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            envFile: arg(z.string().optional(), {
+              completion: { type: "file", matcher: [".env.*"] },
+            }),
+          }),
+          run: () => {},
+        });
+
+        const ctx = parseCompletionContext(["--env-file", ""], cmd);
+        const result = generateCandidates(ctx);
+
+        // Should NOT have any file candidates resolved in JS
+        expect(result.candidates).toHaveLength(0);
+        // Should NOT have FileCompletion directive (shell uses @matcher: metadata instead)
+        expect(result.directive & CompletionDirective.FileCompletion).toBeFalsy();
+        // Should have fileMatchers metadata for shell-native completion
+        expect(result.fileMatchers).toEqual([".env.*"]);
+        // Should NOT have fileExtensions
+        expect(result.fileExtensions).toBeUndefined();
+      });
+
       it("should set directory directive for directory completion", () => {
         const ctx = parseCompletionContext(["--dir", ""], testCmd);
         const result = generateCandidates(ctx);
@@ -1009,6 +1097,29 @@ describe("Completion", () => {
 
         expect(lines[0]).toBe("--format=json");
         expect(lines[1]).toBe("--format=yaml");
+      });
+
+      it("should include @matcher: metadata for file matchers", () => {
+        const result: Parameters<typeof formatForShell>[0] = {
+          candidates: [],
+          directive: CompletionDirective.FilterPrefix,
+          fileMatchers: [".env.*"],
+        };
+
+        const output = formatForShell(result, { shell: "bash", currentWord: "" });
+        const lines = output.split("\n");
+
+        expect(lines).toContain("@matcher:.env.*");
+      });
+
+      it("should not include @matcher: when fileMatchers is empty", () => {
+        const result: Parameters<typeof formatForShell>[0] = {
+          candidates: [],
+          directive: CompletionDirective.FilterPrefix,
+        };
+
+        const output = formatForShell(result, { shell: "bash", currentWord: "" });
+        expect(output).not.toContain("@matcher:");
       });
     });
 
@@ -1300,6 +1411,24 @@ describe("Completion", () => {
           expect(result.script).not.toContain("command_completion");
         }
       });
+    });
+  });
+
+  describe("CompletionMeta type constraints", () => {
+    it("should accept extensions without matcher", () => {
+      expectTypeOf<{ type: "file"; extensions: string[] }>().toMatchTypeOf<CompletionMeta>();
+    });
+
+    it("should accept matcher without extensions", () => {
+      expectTypeOf<{ type: "file"; matcher: string[] }>().toMatchTypeOf<CompletionMeta>();
+    });
+
+    it("should reject both matcher and extensions", () => {
+      expectTypeOf<{
+        type: "file";
+        matcher: string[];
+        extensions: string[];
+      }>().not.toMatchTypeOf<CompletionMeta>();
     });
   });
 });

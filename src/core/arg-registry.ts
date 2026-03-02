@@ -39,16 +39,28 @@ export interface CustomCompletion {
  * branch: arg(z.string(), {
  *   completion: { custom: { shellCommand: "git branch --format='%(refname:short)'" } }
  * })
+ *
+ * // File completion with glob pattern matcher
+ * envFile: arg(z.string(), {
+ *   completion: { type: "file", matcher: [".env.*"] }
+ * })
  * ```
  */
-export interface CompletionMeta {
+export type CompletionMeta = {
   /** Built-in completion type */
   type?: CompletionType;
   /** Custom completion (takes precedence over type if both specified) */
   custom?: CustomCompletion;
-  /** File extension filter (only applies when type is "file") */
-  extensions?: string[];
-}
+} & (
+  | {
+      /** File extension filter (only applies when type is "file") */ extensions?: string[];
+      matcher?: never;
+    }
+  | {
+      /** Glob patterns for file matching (only applies when type is "file") */ matcher?: string[];
+      extensions?: never;
+    }
+);
 
 /**
  * Base metadata shared by all argument types

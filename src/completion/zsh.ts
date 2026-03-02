@@ -42,6 +42,9 @@ function zshValueLines(vc: ValueCompletion | undefined, fn: string): string[] {
       return [`_vals=(${items})`, `__${fn}_cdescribe 'completions' _vals`];
     }
     case "file": {
+      if (vc.matcher?.length) {
+        return vc.matcher.map((p) => `_files -g "${p}"`);
+      }
       if (vc.extensions?.length) {
         return vc.extensions.map((ext) => `_files -g "*.${ext}"`);
       }

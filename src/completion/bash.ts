@@ -53,8 +53,13 @@ function bashValueLines(vc: ValueCompletion | undefined, inline: boolean): strin
       ];
     }
     case "file": {
+      if (vc.matcher?.length) {
+        const checks = vc.matcher.map((p) => `[[ "\${_f##*/}" == ${p} ]]`).join(" || ");
+        return bashFileFilter(checks, inline);
+      }
       if (vc.extensions?.length) {
-        return bashExtensionFilter(vc.extensions, inline);
+        const checks = vc.extensions.map((ext) => `[[ "$_f" == *".${ext}" ]]`).join(" || ");
+        return bashFileFilter(checks, inline);
       }
       if (inline) {
         return [
@@ -87,8 +92,7 @@ function bashValueLines(vc: ValueCompletion | undefined, inline: boolean): strin
   }
 }
 
-function bashExtensionFilter(extensions: string[], inline: boolean): string[] {
-  const checks = extensions.map((ext) => `[[ "$_f" == *".${ext}" ]]`).join(" || ");
+function bashFileFilter(checks: string, inline: boolean): string[] {
   const prefix = inline ? `"\${_inline_prefix}$_f"` : `"$_f"`;
   return [
     `local -a _all_entries=($(compgen -f -- "$_cur"))`,

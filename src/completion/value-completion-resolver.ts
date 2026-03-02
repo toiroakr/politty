@@ -13,11 +13,10 @@ import type { ValueCompletion } from "./types.js";
  */
 export interface ValueCompletionField {
   completion?:
-    | {
+    | ({
         type?: string;
         custom?: { choices?: string[]; shellCommand?: string };
-        extensions?: string[];
-      }
+      } & ({ extensions?: string[]; matcher?: never } | { matcher?: string[]; extensions?: never }))
     | undefined;
   enumValues?: string[] | undefined;
 }
@@ -46,7 +45,9 @@ export function resolveValueCompletion(field: ValueCompletionField): ValueComple
   // Priority 2: Explicit completion type
   if (meta?.type) {
     if (meta.type === "file") {
-      return meta.extensions ? { type: "file", extensions: meta.extensions } : { type: "file" };
+      if (meta.matcher) return { type: "file", matcher: meta.matcher };
+      if (meta.extensions) return { type: "file", extensions: meta.extensions };
+      return { type: "file" };
     }
     if (meta.type === "directory") {
       return { type: "directory" };

@@ -4,6 +4,7 @@
 
 import { execSync } from "node:child_process";
 import { resolveSubCommandMeta } from "../../lazy.js";
+import type { ValueCompletion } from "../types.js";
 import type { CompletionContext } from "./context-parser.js";
 
 /**
@@ -50,6 +51,8 @@ export interface CandidateResult {
   directive: number;
   /** File extensions for shell-native filtering (e.g., ["json", "yaml"]) */
   fileExtensions?: string[] | undefined;
+  /** Glob patterns for shell-native file matching (e.g., [".env.*"]) */
+  fileMatchers?: string[] | undefined;
 }
 
 /**
@@ -96,22 +99,20 @@ function executeShellCommand(command: string): CompletionCandidate[] {
 /**
  * Result of resolving value candidates
  */
-interface ValueResolutionResult {
-  directive: number;
-  fileExtensions?: string[] | undefined;
-}
+type ValueResolutionResult = Pick<CandidateResult, "directive" | "fileExtensions" | "fileMatchers">;
 
 /**
  * Resolve value completion, executing shell commands and file lookups in JS
  */
 function resolveValueCandidates(
-  vc: { type: string; choices?: string[]; shellCommand?: string; extensions?: string[] },
+  vc: ValueCompletion,
   candidates: CompletionCandidate[],
   _currentWord: string,
   description?: string,
 ): ValueResolutionResult {
   let directive = CompletionDirective.FilterPrefix;
   let fileExtensions: string[] | undefined;
+  let fileMatchers: string[] | undefined;
 
   switch (vc.type) {
     case "choices":
@@ -128,7 +129,14 @@ function resolveValueCandidates(
       break;
 
     case "file":
-      if (vc.extensions && vc.extensions.length > 0) {
+      if (vc.matcher && vc.matcher.length > 0) {
+        // Delegate to shell with glob matcher metadata
+        fileMatchers = vc.matcher.filter((m) => m.trim().length > 0);
+        if (fileMatchers.length === 0) {
+          fileMatchers = undefined;
+          directive |= CompletionDirective.FileCompletion;
+        }
+      } else if (vc.extensions && vc.extensions.length > 0) {
         // Delegate to shell with extension filter metadata
         fileExtensions = Array.from(
           new Set(
@@ -143,7 +151,7 @@ function resolveValueCandidates(
           directive |= CompletionDirective.FileCompletion;
         }
       } else {
-        // No extensions: let shell handle native file completion
+        // No extensions or matchers: let shell handle native file completion
         directive |= CompletionDirective.FileCompletion;
       }
       break;
@@ -165,7 +173,7 @@ function resolveValueCandidates(
       break;
   }
 
-  return { directive, fileExtensions };
+  return { directive, fileExtensions, fileMatchers };
 }
 
 /**
@@ -248,8 +256,7 @@ function generateOptionValueCandidates(context: CompletionContext): CandidateRes
     return { candidates, directive: CompletionDirective.FilterPrefix };
   }
 
-  const { directive, fileExtensions } = resolveValueCandidates(vc, candidates, context.currentWord);
-  return { candidates, directive, fileExtensions };
+  return { candidates, ...resolveValueCandidates(vc, candidates, context.currentWord) };
 }
 
 /**
@@ -273,11 +280,8 @@ function generatePositionalCandidates(context: CompletionContext): CandidateResu
     return { candidates, directive: CompletionDirective.FilterPrefix };
   }
 
-  const { directive, fileExtensions } = resolveValueCandidates(
-    vc,
+  return {
     candidates,
-    context.currentWord,
-    positional.description,
-  );
-  return { candidates, directive, fileExtensions };
+    ...resolveValueCandidates(vc, candidates, context.currentWord, positional.description),
+  };
 }

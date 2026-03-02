@@ -31,6 +31,9 @@ function fishValueLines(vc: ValueCompletion | undefined): string[] {
     case "choices":
       return vc.choices!.map((c) => `echo "${escapeDesc(c)}"`);
     case "file": {
+      if (vc.matcher?.length) {
+        return fishMatcherLines(vc.matcher);
+      }
       if (vc.extensions?.length) {
         return fishExtensionLines(vc.extensions);
       }
@@ -43,6 +46,23 @@ function fishValueLines(vc: ValueCompletion | undefined): string[] {
     case "none":
       return [];
   }
+}
+
+/** Generate fish matcher-filtered file completion */
+function fishMatcherLines(patterns: string[]): string[] {
+  return [
+    `__fish_complete_directories "$_cur"`,
+    // Extract directory prefix from $_cur for correct subdirectory matching
+    `set -l _dir ""`,
+    `if string match -q '*/*' "$_cur"`,
+    `    set _dir (string replace -r '[^/]*$' '' "$_cur")`,
+    `end`,
+    ...patterns.flatMap((p) => [
+      `for _f in "$_dir"${p}`,
+      `    test -f "$_f"; and string match -q "$_cur*" "$_f"; and echo "$_f"`,
+      `end`,
+    ]),
+  ];
 }
 
 /** Generate fish extension-filtered file completion */
