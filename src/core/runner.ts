@@ -115,6 +115,14 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     },
   });
 
+  // Flush stdout before exit to prevent truncated output when piped.
+  // When stdout is a pipe (e.g., eval "$(cli completion zsh)"), writes are
+  // buffered asynchronously. Calling process.exit() before the buffer is
+  // drained causes data loss.
+  if (process.stdout.writableLength > 0) {
+    await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
+  }
+
   process.exit(result.exitCode);
 }
 
