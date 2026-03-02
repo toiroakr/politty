@@ -3,6 +3,7 @@
  */
 
 import { execSync } from "node:child_process";
+import { resolveSubCommandMeta } from "../../lazy.js";
 import type { CompletionContext } from "./context-parser.js";
 
 /**
@@ -193,14 +194,8 @@ function generateSubcommandCandidates(context: CompletionContext): CandidateResu
 
   // Add subcommands
   for (const name of context.subcommands) {
-    // Get description from the subcommand if possible
-    let description: string | undefined;
-    if (context.currentCommand.subCommands) {
-      const sub = context.currentCommand.subCommands[name];
-      if (sub && typeof sub !== "function") {
-        description = sub.description;
-      }
-    }
+    const sub = context.currentCommand.subCommands?.[name];
+    const description = sub ? resolveSubCommandMeta(sub)?.description : undefined;
 
     candidates.push({
       value: name,

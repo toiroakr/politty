@@ -30,6 +30,7 @@ export {
   type ResolvedFieldMeta,
   type UnknownKeysMode,
 } from "./core/schema-extractor.js";
+export { isLazyCommand, lazy, type LazyCommand } from "./lazy.js";
 // Utility exports
 export {
   generateHelp,

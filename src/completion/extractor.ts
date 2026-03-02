@@ -3,6 +3,7 @@
  */
 
 import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
+import { resolveSubCommandMeta } from "../lazy.js";
 import type { AnyCommand } from "../types.js";
 import type {
   CompletableOption,
@@ -11,6 +12,22 @@ import type {
   CompletionData,
 } from "./types.js";
 import { resolveValueCompletion } from "./value-completion-resolver.js";
+
+/**
+ * Sanitize a name for use as a shell function/variable identifier.
+ * Replaces any character that is not alphanumeric or underscore with underscore.
+ */
+export function sanitize(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_]/g, "_");
+}
+
+/**
+ * Filter subcommands to only visible (non-internal) ones.
+ * Internal subcommands start with "__" and are hidden from completion/help.
+ */
+export function getVisibleSubs(subs: CompletableSubcommand[]): CompletableSubcommand[] {
+  return subs.filter((s) => !s.name.startsWith("__"));
+}
 
 /**
  * Convert a resolved field to a completable option
@@ -72,6 +89,7 @@ function extractCompletablePositionals(command: AnyCommand): CompletablePosition
       position: index,
       description: field.description,
       required: field.required,
+      variadic: field.type === "array",
       valueCompletion: resolveValueCompletion(field),
     }));
 }
@@ -85,9 +103,11 @@ function extractSubcommand(name: string, command: AnyCommand): CompletableSubcom
   // Extract subcommands recursively (only sync subcommands for now)
   if (command.subCommands) {
     for (const [subName, subCommand] of Object.entries(command.subCommands)) {
-      // Skip async subcommands as we can't inspect them statically
-      if (typeof subCommand === "function") {
-        // For async subcommands, add a placeholder
+      const resolved = resolveSubCommandMeta(subCommand);
+      if (resolved) {
+        subcommands.push(extractSubcommand(subName, resolved));
+      } else {
+        // Legacy async subcommands: placeholder only
         subcommands.push({
           name: subName,
           description: "(lazy loaded)",
@@ -95,8 +115,6 @@ function extractSubcommand(name: string, command: AnyCommand): CompletableSubcom
           options: [],
           positionals: [],
         });
-      } else {
-        subcommands.push(extractSubcommand(subName, subCommand));
       }
     }
   }
@@ -108,6 +126,25 @@ function extractSubcommand(name: string, command: AnyCommand): CompletableSubcom
     options: extractOptions(command),
     positionals: extractCompletablePositionals(command),
   };
+}
+
+/**
+ * Collect opt-takes-value case entries for a subcommand tree.
+ * Used by bash and zsh generators (identical case syntax: `subcmd:--opt) return 0 ;;`).
+ */
+export function optTakesValueEntries(sub: CompletableSubcommand, subcmdName: string): string[] {
+  const lines: string[] = [];
+  for (const opt of sub.options) {
+    if (opt.takesValue) {
+      const patterns: string[] = [`${subcmdName}:--${opt.cliName}`];
+      if (opt.alias) patterns.push(`${subcmdName}:-${opt.alias}`);
+      lines.push(`        ${patterns.join("|")}) return 0 ;;`);
+    }
+  }
+  for (const child of getVisibleSubs(sub.subcommands)) {
+    lines.push(...optTakesValueEntries(child, child.name));
+  }
+  return lines;
 }
 
 /**
