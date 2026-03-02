@@ -1,5 +1,11 @@
 # politty
 
+## 0.4.2
+
+### Patch Changes
+
+- f2145f2: feat(completion): add `matcher` glob pattern support for file filtering (e.g., `.env.*`)
+
 ## 0.4.1
 
 ### Patch Changes
