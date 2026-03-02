@@ -46,16 +46,21 @@ export interface CustomCompletion {
  * })
  * ```
  */
-export interface CompletionMeta {
+export type CompletionMeta = {
   /** Built-in completion type */
   type?: CompletionType;
   /** Custom completion (takes precedence over type if both specified) */
   custom?: CustomCompletion;
-  /** File extension filter (only applies when type is "file") */
-  extensions?: string[];
-  /** Glob patterns for file matching (only applies when type is "file"). Takes precedence over extensions. */
-  matcher?: string[];
-}
+} & (
+  | {
+      /** File extension filter (only applies when type is "file") */ extensions?: string[];
+      matcher?: never;
+    }
+  | {
+      /** Glob patterns for file matching (only applies when type is "file") */ matcher?: string[];
+      extensions?: never;
+    }
+);
 
 /**
  * Base metadata shared by all argument types

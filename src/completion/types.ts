@@ -26,18 +26,20 @@ export interface CompletionOptions {
 /**
  * Value completion specification for shell scripts
  */
-export interface ValueCompletion {
+export type ValueCompletion = {
   /** Completion type */
   type: "choices" | "file" | "directory" | "command" | "none";
   /** List of valid choices (for "choices" type) */
   choices?: string[];
   /** Shell command for dynamic completion (for "command" type) */
   shellCommand?: string;
-  /** File extension filters (for "file" type) */
-  extensions?: string[];
-  /** Glob patterns for file matching (for "file" type). Takes precedence over extensions. */
-  matcher?: string[];
-}
+} & (
+  | { /** File extension filters (for "file" type) */ extensions?: string[]; matcher?: never }
+  | {
+      /** Glob patterns for file matching (for "file" type) */ matcher?: string[];
+      extensions?: never;
+    }
+);
 
 /**
  * Information about a completable option

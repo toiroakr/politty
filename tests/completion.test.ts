@@ -904,24 +904,6 @@ describe("Completion", () => {
         expect(result.fileExtensions).toBeUndefined();
       });
 
-      it("should prefer matcher over extensions when both are specified", () => {
-        const cmd = defineCommand({
-          name: "mycli",
-          args: z.object({
-            config: arg(z.string().optional(), {
-              completion: { type: "file", matcher: [".env.*"], extensions: ["json"] },
-            }),
-          }),
-          run: () => {},
-        });
-
-        const ctx = parseCompletionContext(["--config", ""], cmd);
-        const result = generateCandidates(ctx);
-
-        expect(result.fileMatchers).toEqual([".env.*"]);
-        expect(result.fileExtensions).toBeUndefined();
-      });
-
       it("should set directory directive for directory completion", () => {
         const ctx = parseCompletionContext(["--dir", ""], testCmd);
         const result = generateCandidates(ctx);
