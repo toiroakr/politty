@@ -1,5 +1,13 @@
 # politty
 
+## 0.4.3
+
+### Patch Changes
+
+- 2082857: Fix stdout truncation when piped (e.g., `eval "$(cli completion zsh)"`)
+
+  Drain stdout buffer before calling `process.exit()` in `runMain`. When stdout is a pipe, Node.js buffers writes asynchronously. Without draining, large outputs (such as shell completion scripts) could be truncated, causing shell syntax errors like `zsh: unmatched "`.
+
 ## 0.4.2
 
 ### Patch Changes
