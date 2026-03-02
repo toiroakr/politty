@@ -11,6 +11,7 @@ import {
   getVisibleSubs,
   optTakesValueEntries,
   sanitize,
+  subLookupEntries,
 } from "./extractor.js";
 import type {
   CompletableOption,
@@ -151,8 +152,9 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 1. Option value completion (prev word is value-taking option)
   lines.push(...valueCompletionBlock(sub.options, fn));
   // Fallback: value-taking option without explicit completion → default file completion
+  const fullPathStr = fullPath.join(":");
   lines.push(
-    `    if __${fn}_opt_takes_value "${sub.name}" "\${words[CURRENT-1]}"; then return 0; fi`,
+    `    if __${fn}_opt_takes_value "${fullPathStr}" "\${words[CURRENT-1]}"; then return 0; fi`,
   );
 
   // 2. After -- separator
@@ -190,6 +192,23 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`}`);
   lines.push(``);
   return lines;
+}
+
+/** Recursively collect all subcommand routing entries (zsh case syntax) */
+function collectAllRoutes(
+  sub: CompletableSubcommand,
+  fn: string,
+  parentPath: string[] = [],
+): string[] {
+  const routes: string[] = [];
+  for (const child of getVisibleSubs(sub.subcommands)) {
+    const fullPath = [...parentPath, child.name];
+    const pathStr = fullPath.join(":");
+    const funcSuffix = fullPath.map(sanitize).join("_");
+    routes.push(...collectAllRoutes(child, fn, fullPath));
+    routes.push(`        ${pathStr}) __${fn}_complete_${funcSuffix} ;;`);
+  }
+  return routes;
 }
 
 export function generateZshCompletion(
@@ -241,6 +260,18 @@ export function generateZshCompletion(
   lines.push(`}`);
   lines.push(``);
 
+  // Helper: check if a word is a known subcommand at the current path level
+  const subEntries = subLookupEntries(root);
+  if (subEntries.length > 0) {
+    lines.push(`__${fn}_is_subcmd() {`);
+    lines.push(`    case "$1:$2" in`);
+    lines.push(...subEntries);
+    lines.push(`    esac`);
+    lines.push(`    return 1`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
   // Per-subcommand completion functions
   for (const sub of visibleSubs) {
     lines.push(...generateSubHandler(sub, fn, []));
@@ -285,10 +316,9 @@ export function generateZshCompletion(
   lines.push(`}`);
   lines.push(``);
 
-  // Main completion function
-  const subRouting = visibleSubs
-    .map((s) => `        ${s.name}) __${fn}_complete_${sanitize(s.name)} ;;`)
-    .join("\n");
+  // Main completion function — collect all nested subcommand routes
+  const allRoutes = collectAllRoutes(root, fn);
+  const subRouting = allRoutes.join("\n");
 
   lines.push(`_${fn}() {`);
   lines.push(`    (( CURRENT )) || CURRENT=\${#words}`);
@@ -310,11 +340,9 @@ export function generateZshCompletion(
   lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
   lines.push(`            (( _j++ )); continue`);
   lines.push(`        fi`);
-  // NOTE: Only first-level subcommand dispatch is supported. Nested subcommand
-  // handlers are generated but not yet dispatched (requires multi-level word parsing).
-  if (visibleSubs.length > 0) {
+  if (subEntries.length > 0) {
     lines.push(
-      `        if [[ -z "$_subcmd" ]]; then _subcmd="$_w"; _used_opts=(); else (( _pos_count++ )); fi`,
+      `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else (( _pos_count++ )); fi`,
     );
   } else {
     lines.push(`        (( _pos_count++ ))`);

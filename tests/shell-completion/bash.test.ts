@@ -4,10 +4,13 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   bashComplete as bashCompleteRaw,
+  bashCompleteNested,
   defineCommonTests,
+  defineNestedTests,
   hasBash,
   hasExpect,
   isCI,
+  setupNestedTestContext,
   setupTestContext,
   teardownTestContext,
   type ExecOptions,
@@ -15,13 +18,16 @@ import {
 } from "./helpers.js";
 
 let ctx: TestContext;
+let nestedCtx: TestContext;
 
 beforeAll(() => {
   ctx = setupTestContext();
+  nestedCtx = setupNestedTestContext();
 });
 
 afterAll(() => {
   teardownTestContext(ctx);
+  teardownTestContext(nestedCtx);
 });
 
 describe.runIf(isCI)("CI: required tools are available", () => {
@@ -35,6 +41,14 @@ const complete = (args: string[], opts?: ExecOptions) => bashCompleteRaw(ctx.tes
 
 describe.skipIf(!hasBash)("bash completion", () => {
   defineCommonTests(complete, () => ctx.testFilesDir);
+});
+
+// ─── Nested subcommand tests ──────────────────────────────────────────────────
+
+describe.skipIf(!hasBash)("bash nested subcommand completion", () => {
+  const completeNested = (args: string[], opts?: ExecOptions) =>
+    bashCompleteNested(nestedCtx.testEnv, args, opts);
+  defineNestedTests(completeNested);
 });
 
 // ─── Bash-specific tests ──────────────────────────────────────────────────────

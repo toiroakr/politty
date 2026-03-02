@@ -169,7 +169,8 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 1. Option value completion
   lines.push(...valueCompletionBlock(sub.options));
   // Fallback: value-taking option without explicit completion → default file completion
-  lines.push(`    if __${fn}_opt_takes_value "${sub.name}" "$_prev"; return; end`);
+  const fullPathStr = fullPath.join(":");
+  lines.push(`    if __${fn}_opt_takes_value "${fullPathStr}" "$_prev"; return; end`);
 
   // 2. After -- separator
   if (sub.positionals.length > 0) {
@@ -203,20 +204,50 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
 }
 
 /** Generate opt-takes-value entries for fish switch cases */
-function optTakesValueCases(sub: CompletableSubcommand, subcmdName: string): string[] {
+function optTakesValueCases(sub: CompletableSubcommand, parentPath: string): string[] {
   const lines: string[] = [];
   for (const opt of sub.options) {
     if (opt.takesValue) {
-      const patterns: string[] = [`"${subcmdName}:--${opt.cliName}"`];
-      if (opt.alias) patterns.push(`"${subcmdName}:-${opt.alias}"`);
+      const patterns: string[] = [`"${parentPath}:--${opt.cliName}"`];
+      if (opt.alias) patterns.push(`"${parentPath}:-${opt.alias}"`);
       lines.push(`        case ${patterns.join(" ")}`);
       lines.push(`            return 0`);
     }
   }
   for (const child of getVisibleSubs(sub.subcommands)) {
-    lines.push(...optTakesValueCases(child, child.name));
+    const childPath = parentPath ? `${parentPath}:${child.name}` : child.name;
+    lines.push(...optTakesValueCases(child, childPath));
   }
   return lines;
+}
+
+/** Generate subcommand lookup entries for fish switch cases */
+function fishSubLookupCases(sub: CompletableSubcommand, parentPath: string = ""): string[] {
+  const lines: string[] = [];
+  for (const child of getVisibleSubs(sub.subcommands)) {
+    const childPath = parentPath ? `${parentPath}:${child.name}` : child.name;
+    lines.push(`        case "${parentPath}:${child.name}"`);
+    lines.push(`            return 0`);
+    lines.push(...fishSubLookupCases(child, childPath));
+  }
+  return lines;
+}
+
+/** Recursively collect all subcommand routing entries (fish switch syntax) */
+function collectAllRoutes(
+  sub: CompletableSubcommand,
+  fn: string,
+  parentPath: string[] = [],
+): string[] {
+  const routes: string[] = [];
+  for (const child of getVisibleSubs(sub.subcommands)) {
+    const fullPath = [...parentPath, child.name];
+    const pathStr = fullPath.join(":");
+    const funcSuffix = fullPath.map(sanitize).join("_");
+    routes.push(...collectAllRoutes(child, fn, fullPath));
+    routes.push(`        case "${pathStr}"; __${fn}_complete_${funcSuffix}`);
+  }
+  return routes;
 }
 
 export function generateFishCompletion(
@@ -253,6 +284,18 @@ export function generateFishCompletion(
   lines.push(`    return 1`);
   lines.push(`end`);
   lines.push(``);
+
+  // Helper: check if a word is a known subcommand at the current path level
+  const subEntries = fishSubLookupCases(root);
+  if (subEntries.length > 0) {
+    lines.push(`function __${fn}_is_subcmd`);
+    lines.push(`    switch "$argv[1]:$argv[2]"`);
+    lines.push(...subEntries);
+    lines.push(`    end`);
+    lines.push(`    return 1`);
+    lines.push(`end`);
+    lines.push(``);
+  }
 
   // Per-subcommand completion functions
   for (const sub of visibleSubs) {
@@ -337,11 +380,9 @@ export function generateFishCompletion(
   lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w"; and set _skip_next 1`);
   lines.push(`            set _j (math $_j + 1); continue`);
   lines.push(`        end`);
-  // NOTE: Only first-level subcommand dispatch is supported. Nested subcommand
-  // handlers are generated but not yet dispatched (requires multi-level word parsing).
-  if (visibleSubs.length > 0) {
+  if (subEntries.length > 0) {
     lines.push(
-      `        if test -z "$_subcmd"; set _subcmd "$_w"; set _used_opts; else; set _pos_count (math $_pos_count + 1); end`,
+      `        if __${fn}_is_subcmd "$_subcmd" "$_w"; test -n "$_subcmd"; and set _subcmd "$_subcmd:$_w"; or set _subcmd "$_w"; set _used_opts; set _pos_count 0; else; set _pos_count (math $_pos_count + 1); end`,
     );
   } else {
     lines.push(`        set _pos_count (math $_pos_count + 1)`);
@@ -350,11 +391,10 @@ export function generateFishCompletion(
   lines.push(`    end`);
   lines.push(``);
 
-  // Route to subcommand handler
+  // Route to subcommand handler (all nested paths)
+  const allRoutes = collectAllRoutes(root, fn);
   lines.push(`    switch "$_subcmd"`);
-  for (const s of visibleSubs) {
-    lines.push(`        case "${s.name}"; __${fn}_complete_${sanitize(s.name)}`);
-  }
+  lines.push(...allRoutes);
   lines.push(`        case '*'; __${fn}_complete_root`);
   lines.push(`    end`);
   lines.push(`end`);

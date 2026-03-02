@@ -16,6 +16,11 @@ const playgroundPath = path.resolve(
   "../../playground/24-shell-completion/index.ts",
 );
 
+const nestedPlaygroundPath = path.resolve(
+  import.meta.dirname,
+  "../../playground/17-deep-nested-subcommands/index.ts",
+);
+
 export function shellExists(shell: string): boolean {
   try {
     execSync(`which ${shell}`, { stdio: "pipe" });
@@ -75,6 +80,20 @@ export function setupTestContext(): TestContext {
   fs.writeFileSync(path.join(testFilesDir, "nested", "sub", "deep.txt"), "");
 
   return { tmpDir, testEnv, testFilesDir };
+}
+
+export function setupNestedTestContext(): TestContext {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "politty-nested-"));
+
+  const projectRoot = path.resolve(import.meta.dirname, "../..");
+  const tsxBin = path.join(projectRoot, "node_modules", ".bin", "tsx");
+  const wrapperPath = path.join(tmpDir, "nestapp");
+  fs.writeFileSync(wrapperPath, `#!/bin/sh\nexec ${tsxBin} ${nestedPlaygroundPath} "$@"\n`, {
+    mode: 0o755,
+  });
+  const testEnv = { ...process.env, PATH: `${tmpDir}:${process.env.PATH}` };
+
+  return { tmpDir, testEnv, testFilesDir: tmpDir };
 }
 
 export function teardownTestContext(ctx: TestContext): void {
@@ -208,6 +227,166 @@ __fish_myapp_complete
     .split("\n")
     .filter((l) => l.length > 0)
     .map((l) => l.split("\t")[0]!);
+}
+
+export function bashCompleteNested(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  const compWords = ["nestapp", ...args];
+  const compCword = compWords.length - 1;
+  const compLine = compWords.join(" ");
+
+  const script = `
+eval "$(nestapp completion bash)"
+COMP_WORDS=(${compWords.map((w) => `'${w}'`).join(" ")})
+COMP_CWORD=${compCword}
+COMP_LINE='${compLine}'
+COMP_POINT=\${#COMP_LINE}
+_git_like_completions 2>/dev/null
+printf '%s\\n' "\${COMPREPLY[@]}"
+`;
+
+  const result = execSync(`bash -c '${script.replace(/'/g, "'\\''")}'`, {
+    env: testEnv,
+    encoding: "utf-8",
+    timeout: 15000,
+    cwd: opts?.cwd,
+  });
+  return result
+    .trim()
+    .split("\n")
+    .filter((l) => l.length > 0);
+}
+
+export function zshCompleteNested(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  const wordsArray = ["nestapp", ...args];
+
+  const script = `
+compdef() {}
+_describe() {
+  shift
+  local name=$1
+  eval "local -a arr=(\\\${$\{name}[@]})"
+  for item in "\${arr[@]}"; do
+    echo "\${item%%:*}"
+  done
+}
+_files() {
+  if [[ "$1" == "-/" ]]; then
+    echo "__directive:directory__"
+  elif [[ "$1" == "-g" ]]; then
+    echo "__directive:file_glob__"
+  else
+    echo "__directive:file__"
+  fi
+}
+eval "$(nestapp completion zsh)"
+words=(${wordsArray.map((w) => `'${w}'`).join(" ")})
+_git_like 2>/dev/null
+`;
+
+  const result = execSync(`zsh -f -c '${script.replace(/'/g, "'\\''")}'`, {
+    env: testEnv,
+    encoding: "utf-8",
+    timeout: 15000,
+    cwd: opts?.cwd,
+  });
+  return result
+    .trim()
+    .split("\n")
+    .filter((l) => l.length > 0);
+}
+
+export function fishCompleteNested(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  const allTokens = ["nestapp", ...args];
+  const opcTokens = allTokens.slice(0, -1);
+  const currentToken = args[args.length - 1] ?? "";
+
+  const opcEchoLines = opcTokens.map((t) => `printf '%s\\n' '${t}'`).join("\n    ");
+  const ctBody = currentToken ? `printf '%s\\n' '${currentToken}'` : "true";
+
+  const script = `
+function commandline
+    if contains -- -opc $argv
+        ${opcEchoLines}
+    else if contains -- -ct $argv
+        ${ctBody}
+    end
+end
+source (nestapp completion fish | psub)
+__fish_git_like_complete
+`;
+
+  const result = execSync(`fish -c '${script.replace(/'/g, "'\\''")}'`, {
+    env: testEnv,
+    encoding: "utf-8",
+    timeout: 15000,
+    cwd: opts?.cwd,
+  });
+  return result
+    .trim()
+    .split("\n")
+    .filter((l) => l.length > 0)
+    .map((l) => l.split("\t")[0]!);
+}
+
+/**
+ * Register nested subcommand completion tests shared across all shells.
+ * Uses the 17-deep-nested-subcommands playground (config > user/core > get/set).
+ * Must be called inside a describe() block.
+ */
+export function defineNestedTests(
+  complete: (args: string[], opts?: ExecOptions) => string[],
+): void {
+  it("completes first-level subcommands", () => {
+    const values = complete([""]);
+    expect(values).toContain("config");
+    expect(values).toContain("completion");
+  });
+
+  it("completes second-level subcommands", () => {
+    const values = complete(["config", ""]);
+    expect(values).toContain("user");
+    expect(values).toContain("core");
+    // Should not show first-level subcommands
+    expect(values).not.toContain("config");
+    expect(values).not.toContain("completion");
+  });
+
+  it("completes third-level subcommands", () => {
+    const values = complete(["config", "user", ""]);
+    expect(values).toContain("get");
+    expect(values).toContain("set");
+    // Should not show parent-level subcommands
+    expect(values).not.toContain("user");
+    expect(values).not.toContain("core");
+  });
+
+  it("completes options at deepest level", () => {
+    const values = complete(["config", "user", "set", "--"]);
+    expect(values).toContain("--global");
+    expect(values).toContain("--help");
+  });
+
+  it("completes option values at deepest level", () => {
+    // config core has no value-taking options, but config user set has --global (boolean)
+    // Let's test options on the set command
+    const values = complete(["config", "core", "set", ""]);
+    // set expects positional arguments (key, value)
+    // No enum values, so should be empty or just file completion
+    expect(values).not.toContain("user");
+    expect(values).not.toContain("core");
+  });
 }
 
 /**

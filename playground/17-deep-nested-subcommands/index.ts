@@ -21,7 +21,7 @@
  */
 
 import { z } from "zod";
-import { arg, defineCommand, runMain } from "../../src/index.js";
+import { arg, defineCommand, runMain, withCompletionCommand } from "../../src/index.js";
 
 // config user get command
 export const configUserGetCommand = defineCommand({
@@ -135,13 +135,15 @@ export const configCommand = defineCommand({
 });
 
 // Main command
-export const cli = defineCommand({
-  name: "git-like",
-  description: "Example of 3-level nested subcommands",
-  subCommands: {
-    config: configCommand,
-  },
-});
+export const cli = withCompletionCommand(
+  defineCommand({
+    name: "git-like",
+    description: "Example of 3-level nested subcommands",
+    subCommands: {
+      config: configCommand,
+    },
+  }),
+);
 
 if (process.argv[1]?.includes("17-deep-nested-subcommands")) {
   runMain(cli, { version: "1.0.0" });

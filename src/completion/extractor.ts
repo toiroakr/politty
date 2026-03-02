@@ -130,19 +130,35 @@ function extractSubcommand(name: string, command: AnyCommand): CompletableSubcom
 
 /**
  * Collect opt-takes-value case entries for a subcommand tree.
- * Used by bash and zsh generators (identical case syntax: `subcmd:--opt) return 0 ;;`).
+ * Used by bash and zsh generators (identical case syntax: `path:--opt) return 0 ;;`).
+ * parentPath is a colon-delimited path (e.g., "" for root, "workspace:user" for nested).
  */
-export function optTakesValueEntries(sub: CompletableSubcommand, subcmdName: string): string[] {
+export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: string): string[] {
   const lines: string[] = [];
   for (const opt of sub.options) {
     if (opt.takesValue) {
-      const patterns: string[] = [`${subcmdName}:--${opt.cliName}`];
-      if (opt.alias) patterns.push(`${subcmdName}:-${opt.alias}`);
+      const patterns: string[] = [`${parentPath}:--${opt.cliName}`];
+      if (opt.alias) patterns.push(`${parentPath}:-${opt.alias}`);
       lines.push(`        ${patterns.join("|")}) return 0 ;;`);
     }
   }
   for (const child of getVisibleSubs(sub.subcommands)) {
-    lines.push(...optTakesValueEntries(child, child.name));
+    const childPath = parentPath ? `${parentPath}:${child.name}` : child.name;
+    lines.push(...optTakesValueEntries(child, childPath));
+  }
+  return lines;
+}
+
+/**
+ * Collect subcommand lookup case entries for nested dispatch.
+ * Used by bash and zsh generators: `parentPath:childName) return 0 ;;`.
+ */
+export function subLookupEntries(sub: CompletableSubcommand, parentPath: string = ""): string[] {
+  const lines: string[] = [];
+  for (const child of getVisibleSubs(sub.subcommands)) {
+    const childPath = parentPath ? `${parentPath}:${child.name}` : child.name;
+    lines.push(`        ${parentPath}:${child.name}) return 0 ;;`);
+    lines.push(...subLookupEntries(child, childPath));
   }
   return lines;
 }

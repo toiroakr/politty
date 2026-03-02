@@ -1350,14 +1350,17 @@ describe("Completion", () => {
         });
 
         const bashResult = generateCompletion(cmd, { shell: "bash", programName: "mycli" });
-        // _used_opts should be reset when _subcmd is assigned
-        expect(bashResult.script).toContain('_subcmd="$_w"; _used_opts=()');
+        // _used_opts should be reset when entering a subcommand via is_subcmd
+        expect(bashResult.script).toContain("_used_opts=(); _pos_count=0");
+        expect(bashResult.script).toContain("__mycli_is_subcmd");
 
         const zshResult = generateCompletion(cmd, { shell: "zsh", programName: "mycli" });
-        expect(zshResult.script).toContain('_subcmd="$_w"; _used_opts=()');
+        expect(zshResult.script).toContain("_used_opts=(); _pos_count=0");
+        expect(zshResult.script).toContain("__mycli_is_subcmd");
 
         const fishResult = generateCompletion(cmd, { shell: "fish", programName: "mycli" });
-        expect(fishResult.script).toContain('set _subcmd "$_w"; set _used_opts');
+        expect(fishResult.script).toContain("set _used_opts; set _pos_count 0");
+        expect(fishResult.script).toContain("__mycli_is_subcmd");
       });
 
       it("should escape special characters in choice values", () => {
