@@ -336,12 +336,8 @@ export function defineNestedTests(
     expect(values).toContain("--help");
   });
 
-  it("completes option values at deepest level", () => {
-    // config core has no value-taking options, but config user set has --global (boolean)
-    // Let's test options on the set command
+  it("does not leak parent subcommands at deepest level", () => {
     const values = complete(["config", "core", "set", ""]);
-    // set expects positional arguments (key, value)
-    // No enum values, so should be empty or just file completion
     expect(values).not.toContain("user");
     expect(values).not.toContain("core");
   });

@@ -175,17 +175,18 @@ export interface RouteEntry {
  */
 export function collectRouteEntries(
   sub: CompletableSubcommand,
-  parentPath: string[] = [],
+  parentPath = "",
+  parentFunc = "",
 ): RouteEntry[] {
   const entries: RouteEntry[] = [];
-  const parentStr = parentPath.join(":");
   for (const child of getVisibleSubs(sub.subcommands)) {
-    const fullPath = [...parentPath, child.name];
-    entries.push(...collectRouteEntries(child, fullPath));
+    const pathStr = parentPath ? `${parentPath}:${child.name}` : child.name;
+    const funcSuffix = parentFunc ? `${parentFunc}_${sanitize(child.name)}` : sanitize(child.name);
+    entries.push(...collectRouteEntries(child, pathStr, funcSuffix));
     entries.push({
-      pathStr: fullPath.join(":"),
-      funcSuffix: fullPath.map(sanitize).join("_"),
-      lookupPattern: `${parentStr}:${child.name}`,
+      pathStr,
+      funcSuffix,
+      lookupPattern: `${parentPath}:${child.name}`,
     });
   }
   return entries;
