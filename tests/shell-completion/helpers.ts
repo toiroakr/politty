@@ -16,10 +16,7 @@ const playgroundPath = path.resolve(
   "../../playground/24-shell-completion/index.ts",
 );
 
-const nestedPlaygroundPath = path.resolve(
-  import.meta.dirname,
-  "../../playground/17-deep-nested-subcommands/index.ts",
-);
+const nestedCommandPath = path.resolve(import.meta.dirname, "nested-command.ts");
 
 export function shellExists(shell: string): boolean {
   try {
@@ -88,7 +85,7 @@ export function setupNestedTestContext(): TestContext {
   const projectRoot = path.resolve(import.meta.dirname, "../..");
   const tsxBin = path.join(projectRoot, "node_modules", ".bin", "tsx");
   const wrapperPath = path.join(tmpDir, "nestapp");
-  fs.writeFileSync(wrapperPath, `#!/bin/sh\nexec ${tsxBin} ${nestedPlaygroundPath} "$@"\n`, {
+  fs.writeFileSync(wrapperPath, `#!/bin/sh\nexec ${tsxBin} ${nestedCommandPath} "$@"\n`, {
     mode: 0o755,
   });
   const testEnv = { ...process.env, PATH: `${tmpDir}:${process.env.PATH}` };
@@ -244,7 +241,7 @@ COMP_WORDS=(${compWords.map((w) => `'${w}'`).join(" ")})
 COMP_CWORD=${compCword}
 COMP_LINE='${compLine}'
 COMP_POINT=\${#COMP_LINE}
-_git_like_completions 2>/dev/null
+_nested_test_completions 2>/dev/null
 printf '%s\\n' "\${COMPREPLY[@]}"
 `;
 
@@ -288,7 +285,7 @@ _files() {
 }
 eval "$(nestapp completion zsh)"
 words=(${wordsArray.map((w) => `'${w}'`).join(" ")})
-_git_like 2>/dev/null
+_nested_test 2>/dev/null
 `;
 
   const result = execSync(`zsh -f -c '${script.replace(/'/g, "'\\''")}'`, {
@@ -324,7 +321,7 @@ function commandline
     end
 end
 source (nestapp completion fish | psub)
-__fish_git_like_complete
+__fish_nested_test_complete
 `;
 
   const result = execSync(`fish -c '${script.replace(/'/g, "'\\''")}'`, {
@@ -342,7 +339,7 @@ __fish_git_like_complete
 
 /**
  * Register nested subcommand completion tests shared across all shells.
- * Uses the 17-deep-nested-subcommands playground (config > user/core > get/set).
+ * Uses the nested-command test fixture (config > user/core > get/set).
  * Must be called inside a describe() block.
  */
 export function defineNestedTests(
