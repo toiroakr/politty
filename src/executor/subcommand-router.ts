@@ -1,4 +1,5 @@
-import type { AnyCommand } from "../types.js";
+import { isLazyCommand } from "../lazy.js";
+import type { AnyCommand, SubCommandValue } from "../types.js";
 
 /**
  * Resolve a lazy-loaded command (sync or async)
@@ -6,9 +7,10 @@ import type { AnyCommand } from "../types.js";
  * @param cmd - The command or lazy loader function
  * @returns The resolved command
  */
-export async function resolveLazyCommand(
-  cmd: AnyCommand | (() => Promise<AnyCommand>),
-): Promise<AnyCommand> {
+export async function resolveLazyCommand(cmd: SubCommandValue): Promise<AnyCommand> {
+  if (isLazyCommand(cmd)) {
+    return await cmd.load();
+  }
   if (typeof cmd === "function") {
     return await cmd();
   }

@@ -50,8 +50,8 @@ describe("24-shell-completion", () => {
 
       expect(result.exitCode).toBe(0);
       const output = console.getLogs().join("\n");
-      expect(output).toContain("myapp __complete");
       expect(output).toContain("_myapp_completions");
+      expect(output).toContain("complete -o default -F _myapp_completions myapp");
     });
 
     it("generates zsh completion script", async () => {
@@ -60,7 +60,7 @@ describe("24-shell-completion", () => {
       expect(result.exitCode).toBe(0);
       const output = console.getLogs().join("\n");
       expect(output).toContain("#compdef myapp");
-      expect(output).toContain("myapp __complete");
+      expect(output).toContain("compdef _myapp myapp");
     });
 
     it("generates fish completion script", async () => {
@@ -69,7 +69,7 @@ describe("24-shell-completion", () => {
       expect(result.exitCode).toBe(0);
       const output = console.getLogs().join("\n");
       expect(output).toContain("__fish_myapp_complete");
-      expect(output).toContain("myapp __complete");
+      expect(output).toContain("complete -c myapp -f");
     });
 
     it("shows install instructions with -i", async () => {
@@ -297,7 +297,7 @@ describe("24-shell-completion", () => {
       });
 
       expect(result.shell).toBe("bash");
-      expect(result.script).toContain("myapp __complete");
+      expect(result.script).toContain("_myapp_completions");
     });
   });
 });
