@@ -50,19 +50,19 @@ function fishValueLines(vc: ValueCompletion | undefined): string[] {
 
 /** Generate fish matcher-filtered file completion */
 function fishMatcherLines(patterns: string[]): string[] {
-  const lines: string[] = [];
-  lines.push(`__fish_complete_directories "$_cur"`);
-  // Extract directory prefix from $_cur for correct subdirectory matching
-  lines.push(`set -l _dir ""`);
-  lines.push(`if string match -q '*/*' "$_cur"`);
-  lines.push(`    set _dir (string replace -r '[^/]*$' '' "$_cur")`);
-  lines.push(`end`);
-  for (const p of patterns) {
-    lines.push(`for _f in "$_dir"${p}`);
-    lines.push(`    test -f "$_f"; and string match -q "$_cur*" "$_f"; and echo "$_f"`);
-    lines.push(`end`);
-  }
-  return lines;
+  return [
+    `__fish_complete_directories "$_cur"`,
+    // Extract directory prefix from $_cur for correct subdirectory matching
+    `set -l _dir ""`,
+    `if string match -q '*/*' "$_cur"`,
+    `    set _dir (string replace -r '[^/]*$' '' "$_cur")`,
+    `end`,
+    ...patterns.flatMap((p) => [
+      `for _f in "$_dir"${p}`,
+      `    test -f "$_f"; and string match -q "$_cur*" "$_f"; and echo "$_f"`,
+      `end`,
+    ]),
+  ];
 }
 
 /** Generate fish extension-filtered file completion */
