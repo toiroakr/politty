@@ -481,7 +481,7 @@ describe("Completion", () => {
           shell: "bash",
           programName: "mycli",
         });
-        expect(result.script).toContain('[[ "$_f" == .env.* ]]');
+        expect(result.script).toContain('[[ "${_f##*/}" == .env.* ]]');
       });
 
       it("should generate zsh _files -g for matcher", () => {
@@ -497,7 +497,7 @@ describe("Completion", () => {
           shell: "fish",
           programName: "mycli",
         });
-        expect(result.script).toContain('"$_cur".env.*');
+        expect(result.script).toContain('"$_dir".env.*');
       });
     });
 
