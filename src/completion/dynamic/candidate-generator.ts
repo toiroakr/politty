@@ -139,7 +139,7 @@ function resolveValueCandidates(
 
     case "file":
       if (vc.matcher && vc.matcher.length > 0) {
-        // Delegate to shell with glob matcher metadata (takes precedence over extensions)
+        // Delegate to shell with glob matcher metadata
         fileMatchers = vc.matcher.filter((m) => m.trim().length > 0);
         if (fileMatchers.length === 0) {
           fileMatchers = undefined;
