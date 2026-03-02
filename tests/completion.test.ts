@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
 import {
   CompletionDirective,
@@ -12,7 +12,14 @@ import {
   parseCompletionContext,
   withCompletionCommand,
 } from "../src/completion/index.js";
-import { arg, defineCommand, isLazyCommand, lazy, runCommand } from "../src/index.js";
+import {
+  arg,
+  defineCommand,
+  isLazyCommand,
+  lazy,
+  runCommand,
+  type CompletionMeta,
+} from "../src/index.js";
 
 describe("Completion", () => {
   describe("extractCompletionData", () => {
@@ -1404,6 +1411,24 @@ describe("Completion", () => {
           expect(result.script).not.toContain("command_completion");
         }
       });
+    });
+  });
+
+  describe("CompletionMeta type constraints", () => {
+    it("should accept extensions without matcher", () => {
+      expectTypeOf<{ type: "file"; extensions: string[] }>().toMatchTypeOf<CompletionMeta>();
+    });
+
+    it("should accept matcher without extensions", () => {
+      expectTypeOf<{ type: "file"; matcher: string[] }>().toMatchTypeOf<CompletionMeta>();
+    });
+
+    it("should reject both matcher and extensions", () => {
+      expectTypeOf<{
+        type: "file";
+        matcher: string[];
+        extensions: string[];
+      }>().not.toMatchTypeOf<CompletionMeta>();
     });
   });
 });
