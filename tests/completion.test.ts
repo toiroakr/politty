@@ -457,6 +457,43 @@ describe("Completion", () => {
       });
     });
 
+    describe("matcher in static scripts", () => {
+      const matcherCmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          envFile: arg(z.string().optional(), {
+            alias: "e",
+            completion: { type: "file", matcher: [".env.*"] },
+          }),
+        }),
+        run: () => {},
+      });
+
+      it("should generate bash glob pattern filter for matcher", () => {
+        const result = generateCompletion(matcherCmd, {
+          shell: "bash",
+          programName: "mycli",
+        });
+        expect(result.script).toContain('[[ "$_f" == .env.* ]]');
+      });
+
+      it("should generate zsh _files -g for matcher", () => {
+        const result = generateCompletion(matcherCmd, {
+          shell: "zsh",
+          programName: "mycli",
+        });
+        expect(result.script).toContain('_files -g ".env.*"');
+      });
+
+      it("should generate fish glob expansion for matcher", () => {
+        const result = generateCompletion(matcherCmd, {
+          shell: "fish",
+          programName: "mycli",
+        });
+        expect(result.script).toContain('"$_cur".env.*');
+      });
+    });
+
     it("should throw error for unsupported shell", () => {
       expect(() =>
         generateCompletion(testCommand, {

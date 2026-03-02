@@ -31,6 +31,9 @@ function fishValueLines(vc: ValueCompletion | undefined): string[] {
     case "choices":
       return vc.choices!.map((c) => `echo "${escapeDesc(c)}"`);
     case "file": {
+      if (vc.matcher?.length) {
+        return fishMatcherLines(vc.matcher);
+      }
       if (vc.extensions?.length) {
         return fishExtensionLines(vc.extensions);
       }
@@ -43,6 +46,18 @@ function fishValueLines(vc: ValueCompletion | undefined): string[] {
     case "none":
       return [];
   }
+}
+
+/** Generate fish matcher-filtered file completion */
+function fishMatcherLines(patterns: string[]): string[] {
+  const lines: string[] = [];
+  lines.push(`__fish_complete_directories "$_cur"`);
+  for (const p of patterns) {
+    lines.push(`for _f in "$_cur"${p}`);
+    lines.push(`    test -f "$_f"; and echo "$_f"`);
+    lines.push(`end`);
+  }
+  return lines;
 }
 
 /** Generate fish extension-filtered file completion */

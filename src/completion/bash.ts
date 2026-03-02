@@ -53,6 +53,9 @@ function bashValueLines(vc: ValueCompletion | undefined, inline: boolean): strin
       ];
     }
     case "file": {
+      if (vc.matcher?.length) {
+        return bashMatcherFilter(vc.matcher, inline);
+      }
       if (vc.extensions?.length) {
         return bashExtensionFilter(vc.extensions, inline);
       }
@@ -85,6 +88,23 @@ function bashValueLines(vc: ValueCompletion | undefined, inline: boolean): strin
     case "none":
       return [`compopt +o default 2>/dev/null`];
   }
+}
+
+function bashMatcherFilter(patterns: string[], inline: boolean): string[] {
+  const checks = patterns.map((p) => `[[ "$_f" == ${p} ]]`).join(" || ");
+  const prefix = inline ? `"\${_inline_prefix}$_f"` : `"$_f"`;
+  return [
+    `local -a _all_entries=($(compgen -f -- "$_cur"))`,
+    `for _f in "\${_all_entries[@]}"; do`,
+    `    if [[ -d "$_f" ]]; then`,
+    `        COMPREPLY+=(${prefix})`,
+    `    elif ${checks}; then`,
+    `        COMPREPLY+=(${prefix})`,
+    `    fi`,
+    `done`,
+    `compopt -o filenames`,
+    `compopt +o default 2>/dev/null`,
+  ];
 }
 
 function bashExtensionFilter(extensions: string[], inline: boolean): string[] {
