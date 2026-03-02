@@ -7,11 +7,12 @@
 
 import type { AnyCommand } from "../types.js";
 import {
+  collectRouteEntries,
+  collectSubLookupPatterns,
   extractCompletionData,
   getVisibleSubs,
   optTakesValueEntries,
   sanitize,
-  subLookupEntries,
 } from "./extractor.js";
 import type {
   CompletableOption,
@@ -194,23 +195,6 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   return lines;
 }
 
-/** Recursively collect all subcommand routing entries (zsh case syntax) */
-function collectAllRoutes(
-  sub: CompletableSubcommand,
-  fn: string,
-  parentPath: string[] = [],
-): string[] {
-  const routes: string[] = [];
-  for (const child of getVisibleSubs(sub.subcommands)) {
-    const fullPath = [...parentPath, child.name];
-    const pathStr = fullPath.join(":");
-    const funcSuffix = fullPath.map(sanitize).join("_");
-    routes.push(...collectAllRoutes(child, fn, fullPath));
-    routes.push(`        ${pathStr}) __${fn}_complete_${funcSuffix} ;;`);
-  }
-  return routes;
-}
-
 export function generateZshCompletion(
   command: AnyCommand,
   options: CompletionOptions,
@@ -261,11 +245,13 @@ export function generateZshCompletion(
   lines.push(``);
 
   // Helper: check if a word is a known subcommand at the current path level
-  const subEntries = subLookupEntries(root);
-  if (subEntries.length > 0) {
+  const subLookupPatterns = collectSubLookupPatterns(root);
+  if (subLookupPatterns.length > 0) {
     lines.push(`__${fn}_is_subcmd() {`);
     lines.push(`    case "$1:$2" in`);
-    lines.push(...subEntries);
+    for (const pattern of subLookupPatterns) {
+      lines.push(`        ${pattern}) return 0 ;;`);
+    }
     lines.push(`    esac`);
     lines.push(`    return 1`);
     lines.push(`}`);
@@ -316,9 +302,11 @@ export function generateZshCompletion(
   lines.push(`}`);
   lines.push(``);
 
-  // Main completion function — collect all nested subcommand routes
-  const allRoutes = collectAllRoutes(root, fn);
-  const subRouting = allRoutes.join("\n");
+  // Main completion function -- collect all nested subcommand routes
+  const routeEntries = collectRouteEntries(root);
+  const subRouting = routeEntries
+    .map((r) => `        ${r.pathStr}) __${fn}_complete_${r.funcSuffix} ;;`)
+    .join("\n");
 
   lines.push(`_${fn}() {`);
   lines.push(`    (( CURRENT )) || CURRENT=\${#words}`);
@@ -340,7 +328,7 @@ export function generateZshCompletion(
   lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
   lines.push(`            (( _j++ )); continue`);
   lines.push(`        fi`);
-  if (subEntries.length > 0) {
+  if (subLookupPatterns.length > 0) {
     lines.push(
       `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else (( _pos_count++ )); fi`,
     );

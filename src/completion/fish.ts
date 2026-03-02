@@ -6,7 +6,13 @@
  */
 
 import type { AnyCommand } from "../types.js";
-import { extractCompletionData, getVisibleSubs, sanitize } from "./extractor.js";
+import {
+  collectRouteEntries,
+  collectSubLookupPatterns,
+  extractCompletionData,
+  getVisibleSubs,
+  sanitize,
+} from "./extractor.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -221,35 +227,6 @@ function optTakesValueCases(sub: CompletableSubcommand, parentPath: string): str
   return lines;
 }
 
-/** Generate subcommand lookup entries for fish switch cases */
-function fishSubLookupCases(sub: CompletableSubcommand, parentPath: string = ""): string[] {
-  const lines: string[] = [];
-  for (const child of getVisibleSubs(sub.subcommands)) {
-    const childPath = parentPath ? `${parentPath}:${child.name}` : child.name;
-    lines.push(`        case "${parentPath}:${child.name}"`);
-    lines.push(`            return 0`);
-    lines.push(...fishSubLookupCases(child, childPath));
-  }
-  return lines;
-}
-
-/** Recursively collect all subcommand routing entries (fish switch syntax) */
-function collectAllRoutes(
-  sub: CompletableSubcommand,
-  fn: string,
-  parentPath: string[] = [],
-): string[] {
-  const routes: string[] = [];
-  for (const child of getVisibleSubs(sub.subcommands)) {
-    const fullPath = [...parentPath, child.name];
-    const pathStr = fullPath.join(":");
-    const funcSuffix = fullPath.map(sanitize).join("_");
-    routes.push(...collectAllRoutes(child, fn, fullPath));
-    routes.push(`        case "${pathStr}"; __${fn}_complete_${funcSuffix}`);
-  }
-  return routes;
-}
-
 export function generateFishCompletion(
   command: AnyCommand,
   options: CompletionOptions,
@@ -286,11 +263,14 @@ export function generateFishCompletion(
   lines.push(``);
 
   // Helper: check if a word is a known subcommand at the current path level
-  const subEntries = fishSubLookupCases(root);
-  if (subEntries.length > 0) {
+  const subLookupPatterns = collectSubLookupPatterns(root);
+  if (subLookupPatterns.length > 0) {
     lines.push(`function __${fn}_is_subcmd`);
     lines.push(`    switch "$argv[1]:$argv[2]"`);
-    lines.push(...subEntries);
+    for (const pattern of subLookupPatterns) {
+      lines.push(`        case "${pattern}"`);
+      lines.push(`            return 0`);
+    }
     lines.push(`    end`);
     lines.push(`    return 1`);
     lines.push(`end`);
@@ -380,7 +360,7 @@ export function generateFishCompletion(
   lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w"; and set _skip_next 1`);
   lines.push(`            set _j (math $_j + 1); continue`);
   lines.push(`        end`);
-  if (subEntries.length > 0) {
+  if (subLookupPatterns.length > 0) {
     lines.push(
       `        if __${fn}_is_subcmd "$_subcmd" "$_w"; test -n "$_subcmd"; and set _subcmd "$_subcmd:$_w"; or set _subcmd "$_w"; set _used_opts; set _pos_count 0; else; set _pos_count (math $_pos_count + 1); end`,
     );
@@ -392,9 +372,11 @@ export function generateFishCompletion(
   lines.push(``);
 
   // Route to subcommand handler (all nested paths)
-  const allRoutes = collectAllRoutes(root, fn);
+  const routeEntries = collectRouteEntries(root);
   lines.push(`    switch "$_subcmd"`);
-  lines.push(...allRoutes);
+  for (const r of routeEntries) {
+    lines.push(`        case "${r.pathStr}"; __${fn}_complete_${r.funcSuffix}`);
+  }
   lines.push(`        case '*'; __${fn}_complete_root`);
   lines.push(`    end`);
   lines.push(`end`);
