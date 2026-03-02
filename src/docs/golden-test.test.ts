@@ -1665,6 +1665,104 @@ describe("golden-test", () => {
       expect(updatedContent).toContain("<!-- politty:command:greet:usage:start -->");
     });
 
+    it("should insert new subcommand at correct position when parent is in targetCommands", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "config.md");
+
+      // Step 1: Generate initial doc with config command (has get & set subcommands)
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["config"] },
+      });
+
+      const initialContent = fs.readFileSync(filePath, "utf-8");
+      expect(initialContent).toContain("<!-- politty:command:config get:heading:start -->");
+      expect(initialContent).toContain("<!-- politty:command:config set:heading:start -->");
+
+      // Step 2: Create an extended command with a new "delete" subcommand
+      const extendedCommand = defineCommand({
+        name: "test-cli",
+        description: "A test CLI for documentation generation",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            alias: "v",
+            description: "Enable verbose output",
+          }),
+        }),
+        subCommands: {
+          greet: defineCommand({
+            name: "greet",
+            description: "Greet someone",
+            args: z.object({
+              name: arg(z.string(), {
+                positional: true,
+                description: "Name to greet",
+              }),
+            }),
+            run: () => {},
+          }),
+          config: defineCommand({
+            name: "config",
+            description: "Manage configuration",
+            subCommands: {
+              get: defineCommand({
+                name: "get",
+                description: "Get a config value",
+                args: z.object({
+                  key: arg(z.string(), {
+                    positional: true,
+                    description: "Config key",
+                  }),
+                }),
+                run: () => {},
+              }),
+              set: defineCommand({
+                name: "set",
+                description: "Set a config value",
+                args: z.object({
+                  key: arg(z.string(), { positional: true, description: "Config key" }),
+                  value: arg(z.string(), { positional: true, description: "Config value" }),
+                }),
+                run: () => {},
+              }),
+              delete: defineCommand({
+                name: "delete",
+                description: "Delete a config value",
+                args: z.object({
+                  key: arg(z.string(), { positional: true, description: "Config key to delete" }),
+                }),
+                run: () => {},
+              }),
+            },
+          }),
+        },
+      });
+
+      // Step 3: Run generateDoc with targetCommands pointing to parent "config"
+      // This should auto-expand to include "config delete" as a new subcommand
+      await generateDoc({
+        command: extendedCommand,
+        files: { [filePath]: ["config"] },
+        targetCommands: ["config"],
+      });
+
+      const updatedContent = fs.readFileSync(filePath, "utf-8");
+
+      // Step 4: Verify the new subcommand section was inserted
+      expect(updatedContent).toContain("<!-- politty:command:config delete:heading:start -->");
+
+      // Step 5: Verify correct ordering — alphabetical: delete < get < set
+      const deletePos = updatedContent.indexOf(
+        "<!-- politty:command:config delete:heading:start -->",
+      );
+      const getPos = updatedContent.indexOf("<!-- politty:command:config get:heading:start -->");
+      const setPos = updatedContent.indexOf("<!-- politty:command:config set:heading:start -->");
+
+      expect(deletePos).toBeLessThan(getPos);
+      expect(getPos).toBeLessThan(setPos);
+    });
+
     it("should report success in read-only mode when sections are opted out", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
 

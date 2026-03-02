@@ -1351,7 +1351,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
               existingContent,
               targetCommand,
               generatedSection,
-              specifiedCommands,
+              sortDepthFirst(commandPaths, specifiedCommands),
             );
             writeFile(filePath, existingContent);
             if (fileStatus !== "created") {
