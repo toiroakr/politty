@@ -91,7 +91,7 @@ function bashValueLines(vc: ValueCompletion | undefined, inline: boolean): strin
 }
 
 function bashMatcherFilter(patterns: string[], inline: boolean): string[] {
-  const checks = patterns.map((p) => `[[ "$_f" == ${p} ]]`).join(" || ");
+  const checks = patterns.map((p) => `[[ "\${_f##*/}" == ${p} ]]`).join(" || ");
   const prefix = inline ? `"\${_inline_prefix}$_f"` : `"$_f"`;
   return [
     `local -a _all_entries=($(compgen -f -- "$_cur"))`,
