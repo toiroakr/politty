@@ -15,58 +15,56 @@
 import { z } from "zod";
 import { arg, defineCommand, runMain, withCompletionCommand } from "../../src/index.js";
 
-const configUserGetCommand = defineCommand({
-  name: "get",
-  description: "Get user config value",
-  args: z.object({
-    key: arg(z.string(), { positional: true, description: "Config key" }),
-  }),
-  run: () => {},
+const getArgs = z.object({
+  key: arg(z.string(), { positional: true, description: "Config key" }),
 });
 
-const configUserSetCommand = defineCommand({
-  name: "set",
-  description: "Set user config value",
-  args: z.object({
-    key: arg(z.string(), { positional: true, description: "Config key" }),
-    value: arg(z.string(), { positional: true, description: "Config value" }),
-    global: arg(z.boolean().default(false), {
-      alias: "g",
-      description: "Save as global configuration",
-    }),
-  }),
-  run: () => {},
+const setArgs = z.object({
+  key: arg(z.string(), { positional: true, description: "Config key" }),
+  value: arg(z.string(), { positional: true, description: "Config value" }),
 });
 
 const configUserCommand = defineCommand({
   name: "user",
   description: "Manage user settings",
-  subCommands: { get: configUserGetCommand, set: configUserSetCommand },
-});
-
-const configCoreGetCommand = defineCommand({
-  name: "get",
-  description: "Get core config value",
-  args: z.object({
-    key: arg(z.string(), { positional: true, description: "Config key" }),
-  }),
-  run: () => {},
-});
-
-const configCoreSetCommand = defineCommand({
-  name: "set",
-  description: "Set core config value",
-  args: z.object({
-    key: arg(z.string(), { positional: true, description: "Config key" }),
-    value: arg(z.string(), { positional: true, description: "Config value" }),
-  }),
-  run: () => {},
+  subCommands: {
+    get: defineCommand({
+      name: "get",
+      description: "Get user config value",
+      args: getArgs,
+      run: () => {},
+    }),
+    set: defineCommand({
+      name: "set",
+      description: "Set user config value",
+      args: setArgs.extend({
+        global: arg(z.boolean().default(false), {
+          alias: "g",
+          description: "Save as global configuration",
+        }),
+      }),
+      run: () => {},
+    }),
+  },
 });
 
 const configCoreCommand = defineCommand({
   name: "core",
   description: "Manage core settings",
-  subCommands: { get: configCoreGetCommand, set: configCoreSetCommand },
+  subCommands: {
+    get: defineCommand({
+      name: "get",
+      description: "Get core config value",
+      args: getArgs,
+      run: () => {},
+    }),
+    set: defineCommand({
+      name: "set",
+      description: "Set core config value",
+      args: setArgs,
+      run: () => {},
+    }),
+  },
 });
 
 const configCommand = defineCommand({

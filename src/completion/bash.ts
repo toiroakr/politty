@@ -294,14 +294,13 @@ export function generateBashCompletion(
 
   // Collect all nested subcommand routes (used for both is_subcmd and dispatch)
   const routeEntries = collectRouteEntries(root);
-  const subLookupPatterns = routeEntries.map((r) => r.lookupPattern);
 
   // Helper: check if a word is a known subcommand at the current path level
-  if (subLookupPatterns.length > 0) {
+  if (routeEntries.length > 0) {
     lines.push(`__${fn}_is_subcmd() {`);
     lines.push(`    case "$1:$2" in`);
-    for (const pattern of subLookupPatterns) {
-      lines.push(`        ${pattern}) return 0 ;;`);
+    for (const r of routeEntries) {
+      lines.push(`        ${r.lookupPattern}) return 0 ;;`);
     }
     lines.push(`    esac`);
     lines.push(`    return 1`);
@@ -400,7 +399,7 @@ export function generateBashCompletion(
   lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
   lines.push(`            (( _j++ )); continue`);
   lines.push(`        fi`);
-  if (subLookupPatterns.length > 0) {
+  if (routeEntries.length > 0) {
     lines.push(
       `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else (( _pos_count++ )); fi`,
     );

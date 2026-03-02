@@ -263,14 +263,13 @@ export function generateFishCompletion(
 
   // Collect all nested subcommand routes (used for both is_subcmd and dispatch)
   const routeEntries = collectRouteEntries(root);
-  const subLookupPatterns = routeEntries.map((r) => r.lookupPattern);
 
   // Helper: check if a word is a known subcommand at the current path level
-  if (subLookupPatterns.length > 0) {
+  if (routeEntries.length > 0) {
     lines.push(`function __${fn}_is_subcmd`);
     lines.push(`    switch "$argv[1]:$argv[2]"`);
-    for (const pattern of subLookupPatterns) {
-      lines.push(`        case "${pattern}"`);
+    for (const r of routeEntries) {
+      lines.push(`        case "${r.lookupPattern}"`);
       lines.push(`            return 0`);
     }
     lines.push(`    end`);
@@ -362,7 +361,7 @@ export function generateFishCompletion(
   lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w"; and set _skip_next 1`);
   lines.push(`            set _j (math $_j + 1); continue`);
   lines.push(`        end`);
-  if (subLookupPatterns.length > 0) {
+  if (routeEntries.length > 0) {
     lines.push(
       `        if __${fn}_is_subcmd "$_subcmd" "$_w"; test -n "$_subcmd"; and set _subcmd "$_subcmd:$_w"; or set _subcmd "$_w"; set _used_opts; set _pos_count 0; else; set _pos_count (math $_pos_count + 1); end`,
     );
