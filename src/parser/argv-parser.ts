@@ -1,4 +1,4 @@
-import type { ExtractedFields } from "../core/schema-extractor.js";
+import { toCamelCase, type ExtractedFields } from "../core/schema-extractor.js";
 
 /**
  * Parsed arguments result
@@ -90,14 +90,36 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     if (arg.startsWith("--")) {
       const withoutDashes = arg.slice(2);
 
-      // Handle --no-flag for boolean negation
+      // Handle --no-flag for boolean negation (kebab-case only)
       if (withoutDashes.startsWith("no-")) {
         const flagName = withoutDashes.slice(3);
-        const resolvedName = aliasMap.get(flagName) ?? flagName;
+        // Block mixed form: --no-dryRun (kebab prefix + camelCase)
+        if (flagName === flagName.toLowerCase()) {
+          const resolvedName = aliasMap.get(flagName) ?? flagName;
+          if (booleanFlags.has(resolvedName)) {
+            setOption(flagName, false);
+            i++;
+            continue;
+          }
+        }
+      }
+
+      // Handle camelCase negation: --noDryRun -> dryRun = false
+      if (
+        withoutDashes.length > 2 &&
+        withoutDashes.startsWith("no") &&
+        /[A-Z]/.test(withoutDashes[2]!)
+      ) {
+        const camelFlagName = withoutDashes[2]!.toLowerCase() + withoutDashes.slice(3);
+        const resolvedName = aliasMap.get(camelFlagName) ?? camelFlagName;
         if (booleanFlags.has(resolvedName)) {
-          setOption(flagName, false);
-          i++;
-          continue;
+          // "noDryRun" itself is a defined field → treat as that field, not negation
+          const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
+          if (!booleanFlags.has(asIsResolved) && !arrayFlags.has(asIsResolved)) {
+            setOption(camelFlagName, false);
+            i++;
+            continue;
+          }
         }
       }
 
@@ -195,6 +217,13 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
     // e.g., "dry-run" → "dryRun"
     if (field.cliName !== field.name) {
       aliasMap.set(field.cliName, field.name);
+    }
+
+    // Map camelCase variant to field name for kebab-case field names
+    // e.g., field "dry-run" → aliasMap("dryRun", "dry-run")
+    const camelVariant = toCamelCase(field.name);
+    if (camelVariant !== field.name) {
+      aliasMap.set(camelVariant, field.name);
     }
 
     if (field.alias) {

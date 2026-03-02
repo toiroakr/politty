@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { extractFields, getUnknownKeysMode } from "./schema-extractor.js";
+import { extractFields, getUnknownKeysMode, toCamelCase } from "./schema-extractor.js";
 
 describe("schema-extractor", () => {
   describe("getUnknownKeysMode", () => {
@@ -47,6 +47,28 @@ describe("schema-extractor", () => {
       const schema = z.looseObject({ name: z.string() });
       const extracted = extractFields(schema);
       expect(extracted.unknownKeysMode).toBe("passthrough");
+    });
+  });
+
+  describe("toCamelCase", () => {
+    it("should convert kebab-case to camelCase", () => {
+      expect(toCamelCase("dry-run")).toBe("dryRun");
+    });
+
+    it("should convert multi-word kebab-case", () => {
+      expect(toCamelCase("output-dir")).toBe("outputDir");
+    });
+
+    it("should handle multiple hyphens", () => {
+      expect(toCamelCase("my-long-option-name")).toBe("myLongOptionName");
+    });
+
+    it("should return single words unchanged", () => {
+      expect(toCamelCase("verbose")).toBe("verbose");
+    });
+
+    it("should return camelCase unchanged", () => {
+      expect(toCamelCase("dryRun")).toBe("dryRun");
     });
   });
 });
