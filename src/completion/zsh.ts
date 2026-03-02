@@ -8,7 +8,6 @@
 import type { AnyCommand } from "../types.js";
 import {
   collectRouteEntries,
-  collectSubLookupPatterns,
   extractCompletionData,
   getVisibleSubs,
   optTakesValueEntries,
@@ -244,8 +243,11 @@ export function generateZshCompletion(
   lines.push(`}`);
   lines.push(``);
 
+  // Collect all nested subcommand routes (used for both is_subcmd and dispatch)
+  const routeEntries = collectRouteEntries(root);
+  const subLookupPatterns = routeEntries.map((r) => r.lookupPattern);
+
   // Helper: check if a word is a known subcommand at the current path level
-  const subLookupPatterns = collectSubLookupPatterns(root);
   if (subLookupPatterns.length > 0) {
     lines.push(`__${fn}_is_subcmd() {`);
     lines.push(`    case "$1:$2" in`);
@@ -302,8 +304,7 @@ export function generateZshCompletion(
   lines.push(`}`);
   lines.push(``);
 
-  // Main completion function -- collect all nested subcommand routes
-  const routeEntries = collectRouteEntries(root);
+  // Main completion function -- subcommand dispatch routing
   const subRouting = routeEntries
     .map((r) => `        ${r.pathStr}) __${fn}_complete_${r.funcSuffix} ;;`)
     .join("\n");

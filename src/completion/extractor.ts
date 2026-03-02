@@ -157,44 +157,35 @@ export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: str
 }
 
 /**
- * Collect subcommand lookup patterns for nested dispatch.
- * Returns `"parentPath:childName"` strings used by all shell generators.
+ * Route entry for subcommand dispatch.
+ * - pathStr: colon-delimited path (e.g., "config:user:get")
+ * - funcSuffix: sanitized function suffix (e.g., "config_user_get")
+ * - lookupPattern: "parentPath:childName" for is_subcmd matching (e.g., "config:user:get", or ":config" for root-level)
  */
-export function collectSubLookupPatterns(
-  sub: CompletableSubcommand,
-  parentPath: string = "",
-): string[] {
-  const patterns: string[] = [];
-  for (const child of getVisibleSubs(sub.subcommands)) {
-    const childPath = parentPath ? `${parentPath}:${child.name}` : child.name;
-    patterns.push(`${parentPath}:${child.name}`);
-    patterns.push(...collectSubLookupPatterns(child, childPath));
-  }
-  return patterns;
-}
-
-/** Route entry for subcommand dispatch: colon-delimited path and sanitized function suffix */
 export interface RouteEntry {
   pathStr: string;
   funcSuffix: string;
+  lookupPattern: string;
 }
 
 /**
  * Recursively collect all subcommand route entries.
- * Returns `{ pathStr, funcSuffix }` pairs used by all shell generators
- * to build case/switch routing tables.
+ * Returns entries used by all shell generators for both dispatch routing
+ * and subcommand lookup (is_subcmd) tables.
  */
 export function collectRouteEntries(
   sub: CompletableSubcommand,
   parentPath: string[] = [],
 ): RouteEntry[] {
   const entries: RouteEntry[] = [];
+  const parentStr = parentPath.join(":");
   for (const child of getVisibleSubs(sub.subcommands)) {
     const fullPath = [...parentPath, child.name];
     entries.push(...collectRouteEntries(child, fullPath));
     entries.push({
       pathStr: fullPath.join(":"),
       funcSuffix: fullPath.map(sanitize).join("_"),
+      lookupPattern: `${parentStr}:${child.name}`,
     });
   }
   return entries;

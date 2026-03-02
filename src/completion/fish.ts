@@ -8,7 +8,6 @@
 import type { AnyCommand } from "../types.js";
 import {
   collectRouteEntries,
-  collectSubLookupPatterns,
   extractCompletionData,
   getVisibleSubs,
   sanitize,
@@ -262,8 +261,11 @@ export function generateFishCompletion(
   lines.push(`end`);
   lines.push(``);
 
+  // Collect all nested subcommand routes (used for both is_subcmd and dispatch)
+  const routeEntries = collectRouteEntries(root);
+  const subLookupPatterns = routeEntries.map((r) => r.lookupPattern);
+
   // Helper: check if a word is a known subcommand at the current path level
-  const subLookupPatterns = collectSubLookupPatterns(root);
   if (subLookupPatterns.length > 0) {
     lines.push(`function __${fn}_is_subcmd`);
     lines.push(`    switch "$argv[1]:$argv[2]"`);
@@ -372,7 +374,6 @@ export function generateFishCompletion(
   lines.push(``);
 
   // Route to subcommand handler (all nested paths)
-  const routeEntries = collectRouteEntries(root);
   lines.push(`    switch "$_subcmd"`);
   for (const r of routeEntries) {
     lines.push(`        case "${r.pathStr}"; __${fn}_complete_${r.funcSuffix}`);
