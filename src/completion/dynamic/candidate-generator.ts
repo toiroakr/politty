@@ -4,6 +4,7 @@
 
 import { execSync } from "node:child_process";
 import { resolveSubCommandMeta } from "../../lazy.js";
+import type { ValueCompletion } from "../types.js";
 import type { CompletionContext } from "./context-parser.js";
 
 /**
@@ -98,23 +99,13 @@ function executeShellCommand(command: string): CompletionCandidate[] {
 /**
  * Result of resolving value candidates
  */
-interface ValueResolutionResult {
-  directive: number;
-  fileExtensions?: string[] | undefined;
-  fileMatchers?: string[] | undefined;
-}
+type ValueResolutionResult = Pick<CandidateResult, "directive" | "fileExtensions" | "fileMatchers">;
 
 /**
  * Resolve value completion, executing shell commands and file lookups in JS
  */
 function resolveValueCandidates(
-  vc: {
-    type: string;
-    choices?: string[];
-    shellCommand?: string;
-    extensions?: string[];
-    matcher?: string[];
-  },
+  vc: ValueCompletion,
   candidates: CompletionCandidate[],
   _currentWord: string,
   description?: string,
