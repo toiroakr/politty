@@ -16,6 +16,13 @@ import { resolveValueCompletion } from "./value-completion-resolver.js";
 /**
  * Sanitize a name for use as a shell function/variable identifier.
  * Replaces any character that is not alphanumeric or underscore with underscore.
+ *
+ * Note: This is not injective -- distinct names may produce the same output
+ * (e.g., "foo-bar" and "foo_bar" both become "foo_bar"). When used for nested
+ * path encoding (`path.map(sanitize).join("_")`), cross-level collisions are
+ * theoretically possible (e.g., "foo-bar:baz" vs "foo:bar-baz") but extremely
+ * unlikely in real CLI designs. If collision-safety is needed, sanitize must be
+ * replaced with an injective encoding.
  */
 export function sanitize(name: string): string {
   return name.replace(/[^a-zA-Z0-9_]/g, "_");
