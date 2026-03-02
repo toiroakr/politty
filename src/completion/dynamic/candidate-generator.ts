@@ -256,12 +256,7 @@ function generateOptionValueCandidates(context: CompletionContext): CandidateRes
     return { candidates, directive: CompletionDirective.FilterPrefix };
   }
 
-  const { directive, fileExtensions, fileMatchers } = resolveValueCandidates(
-    vc,
-    candidates,
-    context.currentWord,
-  );
-  return { candidates, directive, fileExtensions, fileMatchers };
+  return { candidates, ...resolveValueCandidates(vc, candidates, context.currentWord) };
 }
 
 /**
@@ -285,11 +280,8 @@ function generatePositionalCandidates(context: CompletionContext): CandidateResu
     return { candidates, directive: CompletionDirective.FilterPrefix };
   }
 
-  const { directive, fileExtensions, fileMatchers } = resolveValueCandidates(
-    vc,
+  return {
     candidates,
-    context.currentWord,
-    positional.description,
-  );
-  return { candidates, directive, fileExtensions, fileMatchers };
+    ...resolveValueCandidates(vc, candidates, context.currentWord, positional.description),
+  };
 }
