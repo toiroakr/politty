@@ -1,5 +1,11 @@
 # politty
 
+## 0.4.4
+
+### Patch Changes
+
+- 0799021: Fix new subcommand insertion position in targetCommands mode. Previously, auto-expanded subcommands were appended to the end of the file instead of being inserted at the correct alphabetical position among siblings.
+
 ## 0.4.3
 
 ### Patch Changes
