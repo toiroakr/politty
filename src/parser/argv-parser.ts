@@ -22,6 +22,8 @@ export interface ParserOptions {
   booleanFlags?: Set<string>;
   /** Array flags (can be repeated) */
   arrayFlags?: Set<string>;
+  /** All known canonical option names */
+  knownOptions?: Set<string>;
 }
 
 /**
@@ -39,7 +41,12 @@ export interface ParserOptions {
  * @returns Parsed arguments
  */
 export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedArgv {
-  const { aliasMap = new Map(), booleanFlags = new Set(), arrayFlags = new Set() } = options;
+  const {
+    aliasMap = new Map(),
+    booleanFlags = new Set(),
+    arrayFlags = new Set(),
+    knownOptions = new Set(),
+  } = options;
 
   const result: ParsedArgv = {
     options: {},
@@ -115,7 +122,7 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         if (booleanFlags.has(resolvedName)) {
           // "noDryRun" itself is a defined field → treat as that field, not negation
           const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
-          if (!booleanFlags.has(asIsResolved) && !arrayFlags.has(asIsResolved)) {
+          if (!knownOptions.has(asIsResolved)) {
             setOption(camelFlagName, false);
             i++;
             continue;
@@ -211,6 +218,12 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
   const aliasMap = new Map<string, string>();
   const booleanFlags = new Set<string>();
   const arrayFlags = new Set<string>();
+  const knownOptions = new Set<string>();
+
+  // First pass: collect all canonical field names
+  for (const field of extracted.fields) {
+    knownOptions.add(field.name);
+  }
 
   for (const field of extracted.fields) {
     // Map kebab-case CLI name to camelCase field name
@@ -219,15 +232,20 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
       aliasMap.set(field.cliName, field.name);
     }
 
-    // Map camelCase variant to field name for kebab-case field names
-    // e.g., field "dry-run" → aliasMap("dryRun", "dry-run")
-    const camelVariant = toCamelCase(field.name);
-    if (camelVariant !== field.name) {
-      aliasMap.set(camelVariant, field.name);
-    }
-
     if (field.alias) {
       aliasMap.set(field.alias, field.name);
+    }
+
+    // Map camelCase variant to field name for kebab-case field names
+    // e.g., field "dry-run" → aliasMap("dryRun", "dry-run")
+    // Only add if it doesn't collide with any existing field name or already-registered alias
+    const camelVariant = toCamelCase(field.name);
+    if (
+      camelVariant !== field.name &&
+      !knownOptions.has(camelVariant) &&
+      !aliasMap.has(camelVariant)
+    ) {
+      aliasMap.set(camelVariant, field.name);
     }
 
     if (field.type === "boolean") {
@@ -239,7 +257,7 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
     }
   }
 
-  return { aliasMap, booleanFlags, arrayFlags };
+  return { aliasMap, booleanFlags, arrayFlags, knownOptions };
 }
 
 /**

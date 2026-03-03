@@ -986,6 +986,39 @@ describe("ArgParser", () => {
         expect(result.rawArgs.noDryRun).toBe(true);
         expect(result.rawArgs.dryRun).toBeUndefined();
       });
+
+      it("should treat --noDryRun as field value when noDryRun is a string field (not just boolean/array)", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            noDryRun: arg(z.string(), { description: "Some string option" }),
+            dryRun: arg(z.boolean().default(false)),
+          }),
+        });
+
+        const result = parseArgs(["--noDryRun", "someValue"], cmd);
+
+        // noDryRun is a defined string field, so --noDryRun should NOT negate dryRun
+        expect(result.rawArgs.noDryRun).toBe("someValue");
+        expect(result.rawArgs.dryRun).toBeUndefined();
+      });
+    });
+
+    describe("alias collision avoidance", () => {
+      it("should not add camelCase alias when it collides with another field name", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "log-level": arg(z.string().optional()),
+            logLevel: arg(z.number().optional()),
+          }),
+        });
+
+        // --logLevel should resolve to the "logLevel" field (its own canonical name),
+        // not be aliased to "log-level"
+        const result = parseArgs(["--logLevel", "5"], cmd);
+        expect(result.rawArgs.logLevel).toBe("5");
+      });
     });
   });
 });
