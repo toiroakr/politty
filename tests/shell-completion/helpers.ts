@@ -16,6 +16,8 @@ const playgroundPath = path.resolve(
   "../../playground/24-shell-completion/index.ts",
 );
 
+const nestedCommandPath = path.resolve(import.meta.dirname, "nested-command.ts");
+
 export function shellExists(shell: string): boolean {
   try {
     execSync(`which ${shell}`, { stdio: "pipe" });
@@ -41,16 +43,25 @@ export interface TestContext {
   testFilesDir: string;
 }
 
-export function setupTestContext(): TestContext {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "politty-completion-"));
-
+/** Create a temp dir with a wrapper script and PATH-augmented env */
+function createWrapperContext(
+  prefix: string,
+  appName: string,
+  commandPath: string,
+): { tmpDir: string; testEnv: NodeJS.ProcessEnv } {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   const projectRoot = path.resolve(import.meta.dirname, "../..");
   const tsxBin = path.join(projectRoot, "node_modules", ".bin", "tsx");
-  const wrapperPath = path.join(tmpDir, "myapp");
-  fs.writeFileSync(wrapperPath, `#!/bin/sh\nexec ${tsxBin} ${playgroundPath} "$@"\n`, {
+  const wrapperPath = path.join(tmpDir, appName);
+  fs.writeFileSync(wrapperPath, `#!/bin/sh\nexec ${tsxBin} ${commandPath} "$@"\n`, {
     mode: 0o755,
   });
   const testEnv = { ...process.env, PATH: `${tmpDir}:${process.env.PATH}` };
+  return { tmpDir, testEnv };
+}
+
+export function setupTestContext(): TestContext {
+  const { tmpDir, testEnv } = createWrapperContext("politty-completion-", "myapp", playgroundPath);
 
   const testFilesDir = path.join(tmpDir, "testfiles");
   fs.mkdirSync(testFilesDir);
@@ -77,28 +88,35 @@ export function setupTestContext(): TestContext {
   return { tmpDir, testEnv, testFilesDir };
 }
 
+export function setupNestedTestContext(): TestContext {
+  const { tmpDir, testEnv } = createWrapperContext("politty-nested-", "nestapp", nestedCommandPath);
+  return { tmpDir, testEnv, testFilesDir: tmpDir };
+}
+
 export function teardownTestContext(ctx: TestContext): void {
   if (ctx.tmpDir) {
     fs.rmSync(ctx.tmpDir, { recursive: true, force: true });
   }
 }
 
-export function bashComplete(
+function bashCompleteWith(
+  appName: string,
+  fnName: string,
   testEnv: NodeJS.ProcessEnv,
   args: string[],
   opts?: ExecOptions,
 ): string[] {
-  const compWords = ["myapp", ...args];
+  const compWords = [appName, ...args];
   const compCword = compWords.length - 1;
   const compLine = compWords.join(" ");
 
   const script = `
-eval "$(myapp completion bash)"
+eval "$(${appName} completion bash)"
 COMP_WORDS=(${compWords.map((w) => `'${w}'`).join(" ")})
 COMP_CWORD=${compCword}
 COMP_LINE='${compLine}'
 COMP_POINT=\${#COMP_LINE}
-_myapp_completions 2>/dev/null
+_${fnName}_completions 2>/dev/null
 printf '%s\\n' "\${COMPREPLY[@]}"
 `;
 
@@ -114,24 +132,16 @@ printf '%s\\n' "\${COMPREPLY[@]}"
     .filter((l) => l.length > 0);
 }
 
-export function zshComplete(
+export function bashComplete(
   testEnv: NodeJS.ProcessEnv,
   args: string[],
   opts?: ExecOptions,
 ): string[] {
-  const wordsArray = ["myapp", ...args];
-
-  const script = `
-compdef() {}
-_describe() {
-  shift
-  local name=$1
-  eval "local -a arr=(\\\${$\{name}[@]})"
-  for item in "\${arr[@]}"; do
-    echo "\${item%%:*}"
-  done
+  return bashCompleteWith("myapp", "myapp", testEnv, args, opts);
 }
-_files() {
+
+/** Full _files stub with glob/directory matching for file-completion tests */
+const zshFilesStubFull = `_files() {
   if [[ "$1" == "-/" ]]; then
     echo "__directive:directory__"
   elif [[ "$1" == "-g" ]]; then
@@ -155,10 +165,43 @@ _files() {
   else
     echo "__directive:file__"
   fi
+}`;
+
+/** Minimal _files stub for tests that don't exercise file completion */
+const zshFilesStubSimple = `_files() {
+  if [[ "$1" == "-/" ]]; then
+    echo "__directive:directory__"
+  elif [[ "$1" == "-g" ]]; then
+    echo "__directive:file_glob__"
+  else
+    echo "__directive:file__"
+  fi
+}`;
+
+function zshCompleteWith(
+  appName: string,
+  fnName: string,
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions & { filesStub?: string },
+): string[] {
+  const wordsArray = [appName, ...args];
+  const filesStub = opts?.filesStub ?? zshFilesStubFull;
+
+  const script = `
+compdef() {}
+_describe() {
+  shift
+  local name=$1
+  eval "local -a arr=(\\\${$\{name}[@]})"
+  for item in "\${arr[@]}"; do
+    echo "\${item%%:*}"
+  done
 }
-eval "$(myapp completion zsh)"
+${filesStub}
+eval "$(${appName} completion zsh)"
 words=(${wordsArray.map((w) => `'${w}'`).join(" ")})
-_myapp 2>/dev/null
+_${fnName} 2>/dev/null
 `;
 
   const result = execSync(`zsh -f -c '${script.replace(/'/g, "'\\''")}'`, {
@@ -173,12 +216,22 @@ _myapp 2>/dev/null
     .filter((l) => l.length > 0);
 }
 
-export function fishComplete(
+export function zshComplete(
   testEnv: NodeJS.ProcessEnv,
   args: string[],
   opts?: ExecOptions,
 ): string[] {
-  const allTokens = ["myapp", ...args];
+  return zshCompleteWith("myapp", "myapp", testEnv, args, opts);
+}
+
+function fishCompleteWith(
+  appName: string,
+  fnName: string,
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  const allTokens = [appName, ...args];
   const opcTokens = allTokens.slice(0, -1);
   const currentToken = args[args.length - 1] ?? "";
 
@@ -193,8 +246,8 @@ function commandline
         ${ctBody}
     end
 end
-source (myapp completion fish | psub)
-__fish_myapp_complete
+source (${appName} completion fish | psub)
+__fish_${fnName}_complete
 `;
 
   const result = execSync(`fish -c '${script.replace(/'/g, "'\\''")}'`, {
@@ -208,6 +261,86 @@ __fish_myapp_complete
     .split("\n")
     .filter((l) => l.length > 0)
     .map((l) => l.split("\t")[0]!);
+}
+
+export function fishComplete(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  return fishCompleteWith("myapp", "myapp", testEnv, args, opts);
+}
+
+export function bashCompleteNested(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  return bashCompleteWith("nestapp", "nested_test", testEnv, args, opts);
+}
+
+export function zshCompleteNested(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  return zshCompleteWith("nestapp", "nested_test", testEnv, args, {
+    ...opts,
+    filesStub: zshFilesStubSimple,
+  });
+}
+
+export function fishCompleteNested(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  return fishCompleteWith("nestapp", "nested_test", testEnv, args, opts);
+}
+
+/**
+ * Register nested subcommand completion tests shared across all shells.
+ * Uses the nested-command test fixture (config > user/core > get/set).
+ * Must be called inside a describe() block.
+ */
+export function defineNestedTests(
+  complete: (args: string[], opts?: ExecOptions) => string[],
+): void {
+  it("completes first-level subcommands", () => {
+    const values = complete([""]);
+    expect(values).toContain("config");
+    expect(values).toContain("completion");
+  });
+
+  it("completes second-level subcommands", () => {
+    const values = complete(["config", ""]);
+    expect(values).toContain("user");
+    expect(values).toContain("core");
+    // Should not show first-level subcommands
+    expect(values).not.toContain("config");
+    expect(values).not.toContain("completion");
+  });
+
+  it("completes third-level subcommands", () => {
+    const values = complete(["config", "user", ""]);
+    expect(values).toContain("get");
+    expect(values).toContain("set");
+    // Should not show parent-level subcommands
+    expect(values).not.toContain("user");
+    expect(values).not.toContain("core");
+  });
+
+  it("completes options at deepest level", () => {
+    const values = complete(["config", "user", "set", "--"]);
+    expect(values).toContain("--global");
+    expect(values).toContain("--help");
+  });
+
+  it("does not leak parent subcommands at deepest level", () => {
+    const values = complete(["config", "core", "set", ""]);
+    expect(values).not.toContain("user");
+    expect(values).not.toContain("core");
+  });
 }
 
 /**

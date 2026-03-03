@@ -4,23 +4,29 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   defineCommonTests,
+  defineNestedTests,
   hasZsh,
   isCI,
+  setupNestedTestContext,
   setupTestContext,
   teardownTestContext,
   zshComplete as zshCompleteRaw,
+  zshCompleteNested,
   type ExecOptions,
   type TestContext,
 } from "./helpers.js";
 
 let ctx: TestContext;
+let nestedCtx: TestContext;
 
 beforeAll(() => {
   ctx = setupTestContext();
+  nestedCtx = setupNestedTestContext();
 });
 
 afterAll(() => {
   teardownTestContext(ctx);
+  teardownTestContext(nestedCtx);
 });
 
 describe.runIf(isCI)("CI: required tools are available", () => {
@@ -33,6 +39,14 @@ const complete = (args: string[], opts?: ExecOptions) => zshCompleteRaw(ctx.test
 
 describe.skipIf(!hasZsh)("zsh completion", () => {
   defineCommonTests(complete, () => ctx.testFilesDir);
+});
+
+// ─── Nested subcommand tests ──────────────────────────────────────────────────
+
+describe.skipIf(!hasZsh)("zsh nested subcommand completion", () => {
+  const completeNested = (args: string[], opts?: ExecOptions) =>
+    zshCompleteNested(nestedCtx.testEnv, args, opts);
+  defineNestedTests(completeNested);
 });
 
 // ─── Zsh-specific tests ──────────────────────────────────────────────────────

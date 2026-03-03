@@ -16,6 +16,13 @@ import { resolveValueCompletion } from "./value-completion-resolver.js";
 /**
  * Sanitize a name for use as a shell function/variable identifier.
  * Replaces any character that is not alphanumeric or underscore with underscore.
+ *
+ * Note: This is not injective -- distinct names may produce the same output
+ * (e.g., "foo-bar" and "foo_bar" both become "foo_bar"). When used for nested
+ * path encoding (`path.map(sanitize).join("_")`), cross-level collisions are
+ * theoretically possible (e.g., "foo-bar:baz" vs "foo:bar-baz") but extremely
+ * unlikely in real CLI designs. If collision-safety is needed, sanitize must be
+ * replaced with an injective encoding.
  */
 export function sanitize(name: string): string {
   return name.replace(/[^a-zA-Z0-9_]/g, "_");
@@ -128,23 +135,73 @@ function extractSubcommand(name: string, command: AnyCommand): CompletableSubcom
   };
 }
 
+/** Join parent and child with a separator, omitting separator when parent is empty. */
+function joinPrefix(parent: string, child: string, sep: string): string {
+  return parent ? `${parent}${sep}${child}` : child;
+}
+
 /**
  * Collect opt-takes-value case entries for a subcommand tree.
- * Used by bash and zsh generators (identical case syntax: `subcmd:--opt) return 0 ;;`).
+ * Used by bash and zsh generators (identical case syntax: `path:--opt) return 0 ;;`).
+ * parentPath is a colon-delimited path (e.g., "" for root, "workspace:user" for nested).
  */
-export function optTakesValueEntries(sub: CompletableSubcommand, subcmdName: string): string[] {
+export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: string): string[] {
   const lines: string[] = [];
   for (const opt of sub.options) {
     if (opt.takesValue) {
-      const patterns: string[] = [`${subcmdName}:--${opt.cliName}`];
-      if (opt.alias) patterns.push(`${subcmdName}:-${opt.alias}`);
+      const patterns: string[] = [`${parentPath}:--${opt.cliName}`];
+      if (opt.alias) patterns.push(`${parentPath}:-${opt.alias}`);
       lines.push(`        ${patterns.join("|")}) return 0 ;;`);
     }
   }
   for (const child of getVisibleSubs(sub.subcommands)) {
-    lines.push(...optTakesValueEntries(child, child.name));
+    lines.push(...optTakesValueEntries(child, joinPrefix(parentPath, child.name, ":")));
   }
   return lines;
+}
+
+/**
+ * Route entry for subcommand dispatch.
+ * - pathStr: colon-delimited path (e.g., "config:user:get")
+ * - funcSuffix: sanitized function suffix (e.g., "config_user_get")
+ * - lookupPattern: "parentPath:childName" for is_subcmd matching (e.g., "config:user:get", or ":config" for root-level)
+ */
+export interface RouteEntry {
+  pathStr: string;
+  funcSuffix: string;
+  lookupPattern: string;
+}
+
+/**
+ * Recursively collect all subcommand route entries.
+ * Returns entries used by all shell generators for both dispatch routing
+ * and subcommand lookup (is_subcmd) tables.
+ */
+export function collectRouteEntries(
+  sub: CompletableSubcommand,
+  parentPath = "",
+  parentFunc = "",
+): RouteEntry[] {
+  const entries: RouteEntry[] = [];
+  for (const child of getVisibleSubs(sub.subcommands)) {
+    const pathStr = joinPrefix(parentPath, child.name, ":");
+    const funcSuffix = joinPrefix(parentFunc, sanitize(child.name), "_");
+    entries.push(...collectRouteEntries(child, pathStr, funcSuffix));
+    entries.push({
+      pathStr,
+      funcSuffix,
+      lookupPattern: `${parentPath}:${child.name}`,
+    });
+  }
+  return entries;
+}
+
+/**
+ * Generate is_subcmd case/switch body lines (bash/zsh case syntax).
+ * Returns lines for the case statement body only (caller wraps in function).
+ */
+export function isSubcmdCaseLines(routeEntries: RouteEntry[]): string[] {
+  return routeEntries.map((r) => `        ${r.lookupPattern}) return 0 ;;`);
 }
 
 /**

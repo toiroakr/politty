@@ -7,8 +7,10 @@
 
 import type { AnyCommand } from "../types.js";
 import {
+  collectRouteEntries,
   extractCompletionData,
   getVisibleSubs,
+  isSubcmdCaseLines,
   optTakesValueEntries,
   sanitize,
 } from "./extractor.js";
@@ -215,11 +217,12 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(...valueCompletionBlocks(sub.options));
 
   // Fallback: value-taking option without explicit completion → default file completion
+  const fullPathStr = fullPath.join(":");
   lines.push(
-    `    if [[ -z "$_inline_prefix" ]] && __${fn}_opt_takes_value "${sub.name}" "$_prev"; then return; fi`,
+    `    if [[ -z "$_inline_prefix" ]] && __${fn}_opt_takes_value "${fullPathStr}" "$_prev"; then return; fi`,
   );
   lines.push(
-    `    if [[ -n "$_inline_prefix" ]] && __${fn}_opt_takes_value "${sub.name}" "\${_inline_prefix%=}"; then return; fi`,
+    `    if [[ -n "$_inline_prefix" ]] && __${fn}_opt_takes_value "${fullPathStr}" "\${_inline_prefix%=}"; then return; fi`,
   );
 
   // 2. After -- separator
@@ -290,6 +293,20 @@ export function generateBashCompletion(
   lines.push(`}`);
   lines.push(``);
 
+  // Collect all nested subcommand routes (used for both is_subcmd and dispatch)
+  const routeEntries = collectRouteEntries(root);
+
+  // Helper: check if a word is a known subcommand at the current path level
+  if (routeEntries.length > 0) {
+    lines.push(`__${fn}_is_subcmd() {`);
+    lines.push(`    case "$1:$2" in`);
+    lines.push(...isSubcmdCaseLines(routeEntries));
+    lines.push(`    esac`);
+    lines.push(`    return 1`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
   // Per-subcommand completion functions
   for (const sub of visibleSubs) {
     lines.push(...generateSubHandler(sub, fn, []));
@@ -331,9 +348,9 @@ export function generateBashCompletion(
   lines.push(`}`);
   lines.push(``);
 
-  // Main completion function
-  const subRouting = visibleSubs
-    .map((s) => `        ${s.name}) __${fn}_complete_${sanitize(s.name)} ;;`)
+  // Main completion function -- subcommand dispatch routing
+  const subRouting = routeEntries
+    .map((r) => `        ${r.pathStr}) __${fn}_complete_${r.funcSuffix} ;;`)
     .join("\n");
 
   lines.push(`_${fn}_completions() {`);
@@ -381,11 +398,9 @@ export function generateBashCompletion(
   lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
   lines.push(`            (( _j++ )); continue`);
   lines.push(`        fi`);
-  // NOTE: Only first-level subcommand dispatch is supported. Nested subcommand
-  // handlers are generated but not yet dispatched (requires multi-level word parsing).
-  if (visibleSubs.length > 0) {
+  if (routeEntries.length > 0) {
     lines.push(
-      `        if [[ -z "$_subcmd" ]]; then _subcmd="$_w"; _used_opts=(); else (( _pos_count++ )); fi`,
+      `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else (( _pos_count++ )); fi`,
     );
   } else {
     lines.push(`        (( _pos_count++ ))`);

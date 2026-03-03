@@ -2,9 +2,12 @@ import { execSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   defineCommonTests,
+  defineNestedTests,
   fishComplete as fishCompleteRaw,
+  fishCompleteNested,
   hasFish,
   isCI,
+  setupNestedTestContext,
   setupTestContext,
   teardownTestContext,
   type ExecOptions,
@@ -12,13 +15,16 @@ import {
 } from "./helpers.js";
 
 let ctx: TestContext;
+let nestedCtx: TestContext;
 
 beforeAll(() => {
   ctx = setupTestContext();
+  nestedCtx = setupNestedTestContext();
 });
 
 afterAll(() => {
   teardownTestContext(ctx);
+  teardownTestContext(nestedCtx);
 });
 
 describe.runIf(isCI)("CI: required tools are available", () => {
@@ -31,6 +37,14 @@ const complete = (args: string[], opts?: ExecOptions) => fishCompleteRaw(ctx.tes
 
 describe.skipIf(!hasFish)("fish completion", () => {
   defineCommonTests(complete, () => ctx.testFilesDir);
+});
+
+// ─── Nested subcommand tests ──────────────────────────────────────────────────
+
+describe.skipIf(!hasFish)("fish nested subcommand completion", () => {
+  const completeNested = (args: string[], opts?: ExecOptions) =>
+    fishCompleteNested(nestedCtx.testEnv, args, opts);
+  defineNestedTests(completeNested);
 });
 
 // ─── Fish-specific tests ─────────────────────────────────────────────────────
