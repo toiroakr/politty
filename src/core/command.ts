@@ -3,6 +3,7 @@ import type {
   ArgsSchema,
   Command,
   Example,
+  GlobalArgs,
   NonRunnableCommand,
   RunnableCommand,
   SubCommandsRecord,
@@ -16,19 +17,34 @@ type InferArgs<TArgsSchema> = TArgsSchema extends z.ZodType
   : Record<string, never>;
 
 /**
+ * Merge command args and global args without polluting with empty intersections.
+ */
+type MergedArgs<TArgs, TGlobalArgs> = keyof TGlobalArgs extends never
+  ? TArgs
+  : [TArgs] extends [Record<string, never>]
+    ? TGlobalArgs
+    : TArgs & TGlobalArgs;
+
+/**
  * Config for defining a command
  * @template TArgsSchema - The Zod schema type for arguments
  * @template TResult - The return type of run function (void if no run)
  */
-interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResult> {
+interface DefineCommandConfig<
+  TArgsSchema extends ArgsSchema | undefined,
+  TResult,
+  TGlobalArgs = GlobalArgs,
+> {
   name: string;
   description?: string;
   args?: TArgsSchema;
   subCommands?: SubCommandsRecord;
-  setup?: (context: { args: InferArgs<TArgsSchema> }) => void | Promise<void>;
-  run?: (args: InferArgs<TArgsSchema>) => TResult;
+  setup?: (context: {
+    args: MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>;
+  }) => void | Promise<void>;
+  run?: (args: MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>) => TResult;
   cleanup?: (context: {
-    args: InferArgs<TArgsSchema>;
+    args: MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>;
     error?: Error | undefined;
   }) => void | Promise<void>;
   notes?: string;
@@ -41,17 +57,18 @@ interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResul
 interface RunnableConfig<
   TArgsSchema extends ArgsSchema | undefined,
   TResult,
-> extends DefineCommandConfig<TArgsSchema, TResult> {
-  run: (args: InferArgs<TArgsSchema>) => TResult;
+  TGlobalArgs = GlobalArgs,
+> extends DefineCommandConfig<TArgsSchema, TResult, TGlobalArgs> {
+  run: (args: MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>) => TResult;
 }
 
 /**
  * Config without run function (non-runnable command)
  */
-interface NonRunnableConfig<TArgsSchema extends ArgsSchema | undefined> extends Omit<
-  DefineCommandConfig<TArgsSchema, void>,
-  "run"
-> {
+interface NonRunnableConfig<
+  TArgsSchema extends ArgsSchema | undefined,
+  TGlobalArgs = GlobalArgs,
+> extends Omit<DefineCommandConfig<TArgsSchema, void, TGlobalArgs>, "run"> {
   run?: undefined;
 }
 
@@ -111,22 +128,29 @@ interface NonRunnableConfig<TArgsSchema extends ArgsSchema | undefined> extends 
 export function defineCommand<
   TArgsSchema extends ArgsSchema | undefined = undefined,
   TResult = void,
+  TGlobalArgs = GlobalArgs,
 >(
-  config: RunnableConfig<TArgsSchema, TResult>,
-): RunnableCommand<TArgsSchema, InferArgs<TArgsSchema>, TResult>;
+  config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
+): RunnableCommand<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>, TResult>;
 
 // Overload 2: without run function - returns NonRunnableCommand with preserved schema type
-export function defineCommand<TArgsSchema extends ArgsSchema | undefined = undefined>(
-  config: NonRunnableConfig<TArgsSchema>,
-): NonRunnableCommand<TArgsSchema, InferArgs<TArgsSchema>>;
+export function defineCommand<
+  TArgsSchema extends ArgsSchema | undefined = undefined,
+  TGlobalArgs = GlobalArgs,
+>(
+  config: NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+): NonRunnableCommand<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>>;
 
 // Implementation
 export function defineCommand<
   TArgsSchema extends ArgsSchema | undefined = undefined,
   TResult = void,
+  TGlobalArgs = GlobalArgs,
 >(
-  config: RunnableConfig<TArgsSchema, TResult> | NonRunnableConfig<TArgsSchema>,
-): Command<TArgsSchema, InferArgs<TArgsSchema>, TResult> {
+  config:
+    | RunnableConfig<TArgsSchema, TResult, TGlobalArgs>
+    | NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+): Command<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>, TResult> {
   return {
     name: config.name,
     description: config.description,
@@ -137,5 +161,23 @@ export function defineCommand<
     cleanup: config.cleanup,
     notes: config.notes,
     examples: config.examples,
-  } as Command<TArgsSchema, InferArgs<TArgsSchema>, TResult>;
+  } as Command<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>, TResult>;
+}
+
+/**
+ * Create a project-scoped defineCommand with pre-applied global args type.
+ */
+export function createDefineCommand<TGlobalArgs = GlobalArgs>() {
+  return function defineCommandWithGlobalArgs<
+    TArgsSchema extends ArgsSchema | undefined = undefined,
+    TResult = void,
+  >(
+    config:
+      | RunnableConfig<TArgsSchema, TResult, TGlobalArgs>
+      | NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+  ): Command<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>, TResult> {
+    return defineCommand<TArgsSchema, TResult, TGlobalArgs>(
+      config as RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
+    );
+  };
 }

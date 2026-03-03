@@ -1,7 +1,13 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { z } from "zod";
 import { arg } from "./arg-registry.js";
-import { defineCommand } from "./command.js";
+import { createDefineCommand, defineCommand } from "./command.js";
+
+declare module "../types.js" {
+  interface GlobalArgs {
+    locale: string;
+  }
+}
 
 /**
  * Task 2.2: Command definition API tests
@@ -260,7 +266,7 @@ describe("defineCommand", () => {
       });
 
       // cmd.run is not optional - can be called directly
-      const result = cmd.run({});
+      const result = cmd.run({ locale: "en" });
       expectTypeOf(result).toEqualTypeOf<number>();
     });
 
@@ -280,7 +286,7 @@ describe("defineCommand", () => {
         run: async () => ({ success: true }),
       });
 
-      const result = cmd.run({});
+      const result = cmd.run({ locale: "en" });
       expectTypeOf(result).toEqualTypeOf<Promise<{ success: boolean }>>();
     });
 
@@ -296,7 +302,7 @@ describe("defineCommand", () => {
       });
 
       // No context argument needed since original function doesn't use it
-      const result = cmd.run({ name: "World" });
+      const result = cmd.run({ name: "World", locale: "en" });
       expectTypeOf(result).toEqualTypeOf<string>();
     });
 
@@ -330,8 +336,60 @@ describe("defineCommand", () => {
         },
       });
 
-      const result = cmd.run({ name: "test", count: 5, verbose: true });
+      const result = cmd.run({ name: "test", count: 5, verbose: true, locale: "en" });
       expect(result).toBe("test: 5");
+    });
+  });
+
+  describe("Global args typing", () => {
+    it("should support createDefineCommand factory", () => {
+      const defineAppCommand = createDefineCommand<{ verbose: boolean; config?: string }>();
+
+      const cmd = defineAppCommand({
+        name: "build",
+        args: z.object({
+          output: arg(z.string()),
+        }),
+        run: (args) => {
+          expectTypeOf(args.output).toEqualTypeOf<string>();
+          expectTypeOf(args.verbose).toEqualTypeOf<boolean>();
+          expectTypeOf(args.config).toEqualTypeOf<string | undefined>();
+        },
+      });
+
+      expect(cmd.name).toBe("build");
+    });
+
+    it("should support explicit global args type parameter", () => {
+      const argsSchema = z.object({
+        output: arg(z.string()),
+      });
+
+      const cmd = defineCommand<typeof argsSchema, void, { verbose: boolean }>({
+        name: "build",
+        args: argsSchema,
+        run: (args) => {
+          expectTypeOf(args.output).toEqualTypeOf<string>();
+          expectTypeOf(args.verbose).toEqualTypeOf<boolean>();
+        },
+      });
+
+      expect(cmd.name).toBe("build");
+    });
+
+    it("should support declaration merging with GlobalArgs", () => {
+      const cmd = defineCommand({
+        name: "build",
+        args: z.object({
+          output: arg(z.string()),
+        }),
+        run: (args) => {
+          expectTypeOf(args.output).toEqualTypeOf<string>();
+          expectTypeOf(args.locale).toEqualTypeOf<string>();
+        },
+      });
+
+      expect(cmd.name).toBe("build");
     });
   });
 });

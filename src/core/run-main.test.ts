@@ -256,6 +256,147 @@ describe("runCommand", () => {
       expect(console).toHaveBeenCalled();
       console.mockRestore();
     });
+
+    it("should merge global args from before subcommand", async () => {
+      const buildFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              output: arg(z.string()),
+            }),
+            run: buildFn,
+          }),
+        },
+      });
+
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      await runCommand(cmd, ["--verbose", "build", "--output", "dist"], {
+        globalArgs: globalArgsSchema,
+      } as any);
+
+      expect(buildFn).toHaveBeenCalledWith({ verbose: true, output: "dist" });
+    });
+
+    it("should merge global args from after subcommand", async () => {
+      const buildFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              output: arg(z.string()),
+            }),
+            run: buildFn,
+          }),
+        },
+      });
+
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      await runCommand(cmd, ["build", "--verbose", "--output", "dist"], {
+        globalArgs: globalArgsSchema,
+      } as any);
+
+      expect(buildFn).toHaveBeenCalledWith({ verbose: true, output: "dist" });
+    });
+
+    it("should prioritize command args over global args on key collision", async () => {
+      const buildFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              verbose: arg(z.boolean().default(false)),
+            }),
+            run: buildFn,
+          }),
+        },
+      });
+
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false)),
+      });
+
+      await runCommand(cmd, ["--verbose", "build", "--no-verbose"], {
+        globalArgs: globalArgsSchema,
+      } as any);
+
+      expect(buildFn).toHaveBeenCalledWith({ verbose: false });
+    });
+
+    it("should return validation error when global args are invalid", async () => {
+      const buildFn = vi.fn();
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            run: buildFn,
+          }),
+        },
+      });
+
+      const globalArgsSchema = z.object({
+        retries: arg(z.coerce.number().int().min(0)),
+      });
+
+      const result = await runCommand(cmd, ["build", "--retries", "oops"], {
+        globalArgs: globalArgsSchema,
+      } as any);
+
+      expect(result.exitCode).toBe(1);
+      expect(buildFn).not.toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+
+    it("should apply env fallback for global args", async () => {
+      const buildFn = vi.fn();
+      const previousConfig = process.env.MY_APP_CONFIG;
+      process.env.MY_APP_CONFIG = "/tmp/config.toml";
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              output: arg(z.string()),
+            }),
+            run: buildFn,
+          }),
+        },
+      });
+
+      const globalArgsSchema = z.object({
+        config: arg(z.string().optional(), { env: "MY_APP_CONFIG" }),
+      });
+
+      await runCommand(cmd, ["build", "--output", "dist"], { globalArgs: globalArgsSchema } as any);
+
+      expect(buildFn).toHaveBeenCalledWith({ config: "/tmp/config.toml", output: "dist" });
+
+      if (previousConfig === undefined) {
+        delete process.env.MY_APP_CONFIG;
+      } else {
+        process.env.MY_APP_CONFIG = previousConfig;
+      }
+    });
   });
 
   describe("Unknown flags", () => {

@@ -20,10 +20,11 @@ export {
   type CompletionType,
   type CustomCompletion,
 } from "./core/arg-registry.js";
-export { defineCommand } from "./core/command.js";
+export { createDefineCommand, defineCommand } from "./core/command.js";
 export { runCommand, runMain } from "./core/runner.js";
 export {
   extractFields,
+  extractFieldsCached,
   getUnknownKeysMode,
   toKebabCase,
   type ExtractedFields,
@@ -54,6 +55,8 @@ export type {
   CommandBase,
   // Example types
   Example,
+  GlobalArgs,
+  GlobalArgsContext,
   LogEntry,
   // Logger type
   Logger,

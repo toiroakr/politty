@@ -1,5 +1,6 @@
 import type { z } from "zod";
 
+import type { ExtractedFields } from "./core/schema-extractor.js";
 import type { LazyCommand } from "./lazy.js";
 
 /**
@@ -30,6 +31,32 @@ export interface Logger {
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ArgsSchema = z.ZodType<Record<string, any>>;
+
+/**
+ * Global argument type for declaration merging.
+ *
+ * @example
+ * ```ts
+ * declare module "politty" {
+ *   interface GlobalArgs {
+ *     verbose: boolean;
+ *   }
+ * }
+ * ```
+ */
+export interface GlobalArgs {}
+
+/**
+ * Runtime context for global arguments.
+ */
+export interface GlobalArgsContext {
+  /** Global args schema */
+  schema: ArgsSchema;
+  /** Cached extracted fields for global schema */
+  extractedFields: ExtractedFields;
+  /** Cached validated values */
+  values?: Record<string, unknown>;
+}
 
 /**
  * Context provided to setup function
@@ -159,6 +186,8 @@ export interface MainOptions {
   skipValidation?: boolean;
   /** Custom logger for output (default: console) */
   logger?: Logger;
+  /** Global argument schema available to all subcommands */
+  globalArgs?: ArgsSchema;
 }
 
 /**
@@ -173,6 +202,8 @@ export interface RunCommandOptions {
   skipValidation?: boolean;
   /** Custom logger for output (default: console) */
   logger?: Logger;
+  /** Global argument schema available to all subcommands */
+  globalArgs?: ArgsSchema;
 }
 
 /**
@@ -196,6 +227,8 @@ export interface InternalRunOptions {
   skipValidation?: boolean | undefined;
   /** Custom logger for output */
   logger?: Logger | undefined;
+  /** Global argument schema available to all subcommands */
+  globalArgs?: ArgsSchema | undefined;
 }
 
 /**

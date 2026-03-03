@@ -1,3 +1,4 @@
+import { extractFieldsCached } from "../core/schema-extractor.js";
 import { executeLifecycle } from "../executor/command-runner.js";
 import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collector.js";
 import { listSubCommands, resolveSubcommand } from "../executor/subcommand-router.js";
@@ -6,6 +7,7 @@ import { parseArgs } from "../parser/arg-parser.js";
 import type {
   AnyCommand,
   CollectedLogs,
+  GlobalArgsContext,
   InternalRunOptions,
   Logger,
   MainOptions,
@@ -37,6 +39,57 @@ interface InternalCommandOptions extends InternalRunOptions {
   _context?: CommandContext;
   /** Existing logs to include (for subcommand routing) */
   _existingLogs?: CollectedLogs;
+  /** Runtime global args context */
+  _globalArgsContext?: GlobalArgsContext;
+}
+
+function createGlobalArgsContext(options: InternalCommandOptions): GlobalArgsContext | undefined {
+  if (options._globalArgsContext) {
+    return options._globalArgsContext;
+  }
+
+  if (!options.globalArgs) {
+    return undefined;
+  }
+
+  return {
+    schema: options.globalArgs,
+    extractedFields: extractFieldsCached(options.globalArgs),
+  };
+}
+
+function validateAndMergeGlobalArgs(
+  globalArgsContext: GlobalArgsContext | undefined,
+  rawGlobalArgs: Record<string, unknown>,
+): { context: GlobalArgsContext | undefined; errorMessage?: string } {
+  if (!globalArgsContext) {
+    return { context: undefined };
+  }
+
+  const hasRawGlobalArgs = Object.keys(rawGlobalArgs).length > 0;
+  if (!hasRawGlobalArgs && globalArgsContext.values !== undefined) {
+    return { context: globalArgsContext };
+  }
+
+  const mergedRawGlobalArgs = {
+    ...globalArgsContext.values,
+    ...rawGlobalArgs,
+  };
+
+  const globalValidationResult = validateArgs(mergedRawGlobalArgs, globalArgsContext.schema);
+  if (!globalValidationResult.success) {
+    return {
+      context: globalArgsContext,
+      errorMessage: formatValidationErrors(globalValidationResult.errors),
+    };
+  }
+
+  return {
+    context: {
+      ...globalArgsContext,
+      values: globalValidationResult.data as Record<string, unknown>,
+    },
+  };
 }
 
 /**
@@ -108,6 +161,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     skipValidation: options.skipValidation,
     handleSignals: true,
     logger: options.logger,
+    globalArgs: options.globalArgs,
     _context: {
       commandPath: [],
       rootName: command.name,
@@ -142,6 +196,7 @@ async function runCommandInternal<TResult = unknown>(
     commandPath: [],
     rootName: command.name,
   };
+  const globalArgsContext = createGlobalArgsContext(options);
 
   // Start log collection if enabled
   const shouldCaptureLogs = options.captureLogs ?? false;
@@ -157,7 +212,10 @@ async function runCommandInternal<TResult = unknown>(
 
   try {
     // Parse arguments
-    const parseResult = parseArgs(argv, command, { skipValidation: options.skipValidation });
+    const parseResult = parseArgs(argv, command, {
+      skipValidation: options.skipValidation,
+      globalArgsContext,
+    });
 
     // Handle --help or --help-all
     if (parseResult.helpRequested || parseResult.helpAllRequested) {
@@ -178,6 +236,7 @@ async function runCommandInternal<TResult = unknown>(
         showSubcommands: options.showSubcommands ?? true,
         showSubcommandOptions: parseResult.helpAllRequested || options.showSubcommandOptions,
         context,
+        globalArgs: globalArgsContext?.schema,
       });
       logger.log(help);
       collector?.stop();
@@ -203,6 +262,18 @@ async function runCommandInternal<TResult = unknown>(
       return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
     }
 
+    const mergedGlobal = validateAndMergeGlobalArgs(globalArgsContext, parseResult.rawGlobalArgs);
+    if (mergedGlobal.errorMessage) {
+      logger.error(mergedGlobal.errorMessage);
+      collector?.stop();
+      return {
+        success: false,
+        error: new Error(mergedGlobal.errorMessage),
+        exitCode: 1,
+        logs: getCurrentLogs(),
+      };
+    }
+
     // Handle subcommand
     if (parseResult.subCommand) {
       const subCmd = await resolveSubcommand(command, parseResult.subCommand);
@@ -219,6 +290,7 @@ async function runCommandInternal<TResult = unknown>(
           ...options,
           _context: subContext,
           _existingLogs: getCurrentLogs(),
+          ...(mergedGlobal.context ? { _globalArgsContext: mergedGlobal.context } : {}),
         });
       }
     }
@@ -229,6 +301,7 @@ async function runCommandInternal<TResult = unknown>(
       const help = generateHelp(command, {
         showSubcommands: options.showSubcommands ?? true,
         context,
+        globalArgs: globalArgsContext?.schema,
       });
       logger.log(help);
       collector?.stop();
@@ -238,7 +311,10 @@ async function runCommandInternal<TResult = unknown>(
     // Handle unknown flags based on schema's unknownKeysMode
     if (parseResult.unknownFlags.length > 0) {
       const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
-      const knownFlags = parseResult.extractedFields?.fields.map((f) => f.name) ?? [];
+      const knownFlags = [
+        ...(parseResult.extractedFields?.fields.map((f) => f.name) ?? []),
+        ...(mergedGlobal.context?.extractedFields.fields.map((f) => f.name) ?? []),
+      ];
 
       if (unknownKeysMode === "strict") {
         // strict mode: treat unknown flags as errors
@@ -264,10 +340,10 @@ async function runCommandInternal<TResult = unknown>(
 
     // Validate arguments
     if (!command.args) {
-      // No schema, run with empty args
+      const mergedArgs = mergedGlobal.context?.values ?? {};
       // Stop this collector and pass logs to executeLifecycle
       collector?.stop();
-      const result = await executeLifecycle(command, {} as Record<string, never>, {
+      const result = await executeLifecycle(command, mergedArgs, {
         handleSignals: options.handleSignals,
         captureLogs: options.captureLogs,
         existingLogs: getCurrentLogs(),
@@ -275,23 +351,28 @@ async function runCommandInternal<TResult = unknown>(
       return result as RunResult<TResult>;
     }
 
-    const validationResult = validateArgs(parseResult.rawArgs, command.args);
+    const commandValidationResult = validateArgs(parseResult.rawArgs, command.args);
 
-    if (!validationResult.success) {
-      logger.error(formatValidationErrors(validationResult.errors));
+    if (!commandValidationResult.success) {
+      logger.error(formatValidationErrors(commandValidationResult.errors));
       collector?.stop();
       return {
         success: false,
-        error: new Error(formatValidationErrors(validationResult.errors)),
+        error: new Error(formatValidationErrors(commandValidationResult.errors)),
         exitCode: 1,
         logs: getCurrentLogs(),
       };
     }
 
+    const mergedArgs = {
+      ...mergedGlobal.context?.values,
+      ...commandValidationResult.data,
+    };
+
     // Run the command
     // Stop this collector and pass logs to executeLifecycle
     collector?.stop();
-    const result = await executeLifecycle(command, validationResult.data, {
+    const result = await executeLifecycle(command, mergedArgs, {
       handleSignals: options.handleSignals,
       captureLogs: options.captureLogs,
       existingLogs: getCurrentLogs(),
