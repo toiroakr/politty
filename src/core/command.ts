@@ -168,7 +168,18 @@ export function defineCommand<
  * Create a project-scoped defineCommand with pre-applied global args type.
  */
 export function createDefineCommand<TGlobalArgs = GlobalArgs>() {
-  return function defineCommandWithGlobalArgs<
+  function defineCommandWithGlobalArgs<
+    TArgsSchema extends ArgsSchema | undefined = undefined,
+    TResult = void,
+  >(
+    config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
+  ): RunnableCommand<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>, TResult>;
+
+  function defineCommandWithGlobalArgs<TArgsSchema extends ArgsSchema | undefined = undefined>(
+    config: NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+  ): NonRunnableCommand<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>>;
+
+  function defineCommandWithGlobalArgs<
     TArgsSchema extends ArgsSchema | undefined = undefined,
     TResult = void,
   >(
@@ -176,8 +187,11 @@ export function createDefineCommand<TGlobalArgs = GlobalArgs>() {
       | RunnableConfig<TArgsSchema, TResult, TGlobalArgs>
       | NonRunnableConfig<TArgsSchema, TGlobalArgs>,
   ): Command<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>, TResult> {
-    return defineCommand<TArgsSchema, TResult, TGlobalArgs>(
-      config as RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
-    );
-  };
+    if (typeof config.run === "function") {
+      return defineCommand(config);
+    }
+    return defineCommand(config);
+  }
+
+  return defineCommandWithGlobalArgs;
 }

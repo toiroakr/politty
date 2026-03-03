@@ -15,6 +15,12 @@ import type {
   RunResult,
 } from "../types.js";
 import {
+  validateDuplicateAliases,
+  validateDuplicateFields,
+  validatePositionalConfig,
+  validateReservedAliases,
+} from "../validator/command-validator.js";
+import {
   formatRuntimeError,
   formatUnknownFlag,
   formatUnknownFlagWarning,
@@ -52,9 +58,17 @@ function createGlobalArgsContext(options: InternalCommandOptions): GlobalArgsCon
     return undefined;
   }
 
+  const extractedFields = extractFieldsCached(options.globalArgs);
+  if (!options.skipValidation) {
+    validateDuplicateFields(extractedFields);
+    validateDuplicateAliases(extractedFields);
+    validatePositionalConfig(extractedFields);
+    validateReservedAliases(extractedFields, false);
+  }
+
   return {
     schema: options.globalArgs,
-    extractedFields: extractFieldsCached(options.globalArgs),
+    extractedFields,
   };
 }
 
@@ -196,7 +210,6 @@ async function runCommandInternal<TResult = unknown>(
     commandPath: [],
     rootName: command.name,
   };
-  const globalArgsContext = createGlobalArgsContext(options);
 
   // Start log collection if enabled
   const shouldCaptureLogs = options.captureLogs ?? false;
@@ -211,6 +224,8 @@ async function runCommandInternal<TResult = unknown>(
   };
 
   try {
+    const globalArgsContext = createGlobalArgsContext(options);
+
     // Parse arguments
     const parseResult = parseArgs(argv, command, {
       skipValidation: options.skipValidation,
@@ -274,6 +289,36 @@ async function runCommandInternal<TResult = unknown>(
       };
     }
 
+    // Handle unknown flags based on schema's unknownKeysMode
+    if (parseResult.unknownFlags.length > 0) {
+      const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
+      const knownFlags = [
+        ...(parseResult.extractedFields?.fields.map((f) => f.name) ?? []),
+        ...(mergedGlobal.context?.extractedFields.fields.map((f) => f.name) ?? []),
+      ];
+
+      if (unknownKeysMode === "strict") {
+        // strict mode: treat unknown flags as errors
+        for (const flag of parseResult.unknownFlags) {
+          logger.error(formatUnknownFlag(flag, knownFlags));
+        }
+        collector?.stop();
+        return {
+          success: false,
+          error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
+          exitCode: 1,
+          logs: getCurrentLogs(),
+        };
+      } else if (unknownKeysMode === "strip") {
+        // strip mode (default): warn about unknown flags but continue
+        for (const flag of parseResult.unknownFlags) {
+          logger.error(formatUnknownFlagWarning(flag, knownFlags));
+        }
+        // Continue execution - don't return error
+      }
+      // passthrough mode: silently ignore unknown flags
+    }
+
     // Handle subcommand
     if (parseResult.subCommand) {
       const subCmd = await resolveSubcommand(command, parseResult.subCommand);
@@ -306,36 +351,6 @@ async function runCommandInternal<TResult = unknown>(
       logger.log(help);
       collector?.stop();
       return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
-    }
-
-    // Handle unknown flags based on schema's unknownKeysMode
-    if (parseResult.unknownFlags.length > 0) {
-      const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
-      const knownFlags = [
-        ...(parseResult.extractedFields?.fields.map((f) => f.name) ?? []),
-        ...(mergedGlobal.context?.extractedFields.fields.map((f) => f.name) ?? []),
-      ];
-
-      if (unknownKeysMode === "strict") {
-        // strict mode: treat unknown flags as errors
-        for (const flag of parseResult.unknownFlags) {
-          logger.error(formatUnknownFlag(flag, knownFlags));
-        }
-        collector?.stop();
-        return {
-          success: false,
-          error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
-          exitCode: 1,
-          logs: getCurrentLogs(),
-        };
-      } else if (unknownKeysMode === "strip") {
-        // strip mode (default): warn about unknown flags but continue
-        for (const flag of parseResult.unknownFlags) {
-          logger.error(formatUnknownFlagWarning(flag, knownFlags));
-        }
-        // Continue execution - don't return error
-      }
-      // passthrough mode: silently ignore unknown flags
     }
 
     // Validate arguments

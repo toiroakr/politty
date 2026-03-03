@@ -397,6 +397,61 @@ describe("runCommand", () => {
         process.env.MY_APP_CONFIG = previousConfig;
       }
     });
+
+    it("should fail when global args schema has duplicate aliases", async () => {
+      const runFn = vi.fn();
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const cmd = defineCommand({
+        name: "cli",
+        run: runFn,
+      });
+
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+        version: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const result = await runCommand(cmd, [], { globalArgs: globalArgsSchema } as any);
+
+      expect(result.exitCode).toBe(1);
+      expect(runFn).not.toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalled();
+      const message = consoleSpy.mock.calls[0]?.[0] ?? "";
+      expect(message).toContain("Duplicate alias");
+      consoleSpy.mockRestore();
+    });
+
+    it("should warn and continue when unknown global flag appears before subcommand", async () => {
+      const buildFn = vi.fn();
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            run: buildFn,
+          }),
+        },
+      });
+
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const result = await runCommand(cmd, ["--unknown-flag", "build"], {
+        globalArgs: globalArgsSchema,
+      } as any);
+
+      expect(result.exitCode).toBe(0);
+      expect(buildFn).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalled();
+      const warning = consoleSpy.mock.calls[0]?.[0] ?? "";
+      expect(warning).toContain("unknown-flag");
+      expect(warning).toContain("Warning");
+      consoleSpy.mockRestore();
+    });
   });
 
   describe("Unknown flags", () => {

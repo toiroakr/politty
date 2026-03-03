@@ -110,10 +110,21 @@ function combineForLeafParsing(
     return undefined;
   }
 
-  const commandFieldNames = new Set(extracted.fields.map((field) => field.name));
-  const extraGlobalFields = globalExtracted.fields.filter(
-    (field) => !commandFieldNames.has(field.name),
-  );
+  const commandParserKeys = new Set<string>();
+  for (const field of extracted.fields) {
+    commandParserKeys.add(field.name);
+    commandParserKeys.add(field.cliName);
+    if (field.alias) {
+      commandParserKeys.add(field.alias);
+    }
+  }
+
+  const extraGlobalFields = globalExtracted.fields.filter((field) => {
+    const keys = [field.name, field.cliName, field.alias].filter(
+      (key): key is string => key !== undefined,
+    );
+    return !keys.some((key) => commandParserKeys.has(key));
+  });
 
   return {
     ...extracted,
@@ -216,7 +227,17 @@ function findSubCommandPosition(
       const name = eqIndex === -1 ? withoutDashes : withoutDashes.slice(0, eqIndex);
       const info = globalLongFlags.get(name);
       if (!info) {
-        return undefined;
+        if (eqIndex === -1) {
+          const nextToken = argv[i + 1];
+          if (
+            nextToken !== undefined &&
+            !nextToken.startsWith("-") &&
+            !subCommandNames.includes(nextToken)
+          ) {
+            i++;
+          }
+        }
+        continue;
       }
 
       if (!info.boolean && eqIndex === -1) {
@@ -247,7 +268,15 @@ function findSubCommandPosition(
       if (withoutDash.length === 1) {
         const info = globalShortFlags.get(withoutDash);
         if (!info) {
-          return undefined;
+          const nextToken = argv[i + 1];
+          if (
+            nextToken !== undefined &&
+            !nextToken.startsWith("-") &&
+            !subCommandNames.includes(nextToken)
+          ) {
+            i++;
+          }
+          continue;
         }
 
         if (!info.boolean) {
@@ -314,8 +343,9 @@ export function parseArgs(
           remainingArgs: argv.slice(subCommandIndex + 1),
           rawArgs: {},
           rawGlobalArgs: parsedGlobal.rawArgs,
-          positionals: [],
-          unknownFlags: [],
+          positionals: parsedGlobal.positionals,
+          unknownFlags: parsedGlobal.unknownFlags,
+          extractedFields: globalExtracted,
         };
       }
     } else {

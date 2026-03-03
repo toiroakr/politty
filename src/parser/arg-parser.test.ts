@@ -808,6 +808,52 @@ describe("ArgParser", () => {
       expect(result.rawArgs).toEqual({ output: "dist" });
       expect((result as any).rawGlobalArgs).toEqual({ verbose: true });
     });
+
+    it("should keep unknown global flags before subcommand", () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({ name: "build" }),
+        },
+      });
+
+      const result = parseArgs(["--unknown-flag", "build"], cmd, {
+        globalArgsContext: {
+          schema: globalArgsSchema,
+          extractedFields: extractFields(globalArgsSchema),
+        },
+      } as any);
+
+      expect(result.subCommand).toBe("build");
+      expect(result.unknownFlags).toContain("unknown-flag");
+    });
+
+    it("should prioritize command alias over global alias on leaf commands", () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "o" }),
+      });
+
+      const cmd = defineCommand({
+        name: "build",
+        args: z.object({
+          output: arg(z.string(), { alias: "o" }),
+        }),
+      });
+
+      const result = parseArgs(["-o", "dist"], cmd, {
+        globalArgsContext: {
+          schema: globalArgsSchema,
+          extractedFields: extractFields(globalArgsSchema),
+        },
+      } as any);
+
+      expect(result.rawArgs).toEqual({ output: "dist" });
+      expect((result as any).rawGlobalArgs).toEqual({});
+    });
   });
 
   describe("Environment variable fallback", () => {

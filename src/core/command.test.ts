@@ -391,5 +391,31 @@ describe("defineCommand", () => {
 
       expect(cmd.name).toBe("build");
     });
+
+    it("should infer runnable command from createDefineCommand", () => {
+      const defineAppCommand = createDefineCommand<{ verbose: boolean }>();
+
+      const cmd = defineAppCommand({
+        name: "build",
+        run: (args) => {
+          expectTypeOf(args.verbose).toEqualTypeOf<boolean>();
+          return 42;
+        },
+      });
+
+      const result = cmd.run({ verbose: true });
+      expectTypeOf(result).toEqualTypeOf<number>();
+    });
+
+    it("should infer non-runnable command from createDefineCommand", () => {
+      const defineAppCommand = createDefineCommand<{ verbose: boolean }>();
+
+      const cmd = defineAppCommand({
+        name: "build",
+        subCommands: {},
+      });
+
+      expectTypeOf(cmd.run).toEqualTypeOf<undefined>();
+    });
   });
 });
