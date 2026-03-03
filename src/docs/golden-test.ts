@@ -1303,6 +1303,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     if (hasTargetCommands) {
       // Read existing content once for all target commands in this file
       let existingContent = readFile(filePath);
+      // Pre-compute sorted order once per file for insertCommandSections
+      const sortedCommandPaths = sortDepthFirst(commandPaths, specifiedCommands);
 
       for (const targetCommand of fileTargetCommands) {
         // Generate only the target command's section
@@ -1351,7 +1353,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
               existingContent,
               targetCommand,
               generatedSection,
-              specifiedCommands,
+              sortedCommandPaths,
             );
             writeFile(filePath, existingContent);
             if (fileStatus !== "created") {
