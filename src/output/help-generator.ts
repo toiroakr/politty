@@ -178,6 +178,7 @@ export function renderOptions(
   command: AnyCommand,
   descriptions: BuiltinOptionDescriptions = {},
   context?: CommandContext,
+  globalArgs?: ArgsSchema | ExtractedFields,
 ): string {
   const lines: string[] = [];
   const desc: Required<BuiltinOptionDescriptions> = {
@@ -187,12 +188,12 @@ export function renderOptions(
   };
 
   const extracted = getExtractedFields(command);
+  const globalExtracted = resolveGlobalExtracted(globalArgs);
+  const allFields = [...(extracted?.fields ?? []), ...(globalExtracted?.fields ?? [])];
 
   // Check if user has overridden built-in aliases
-  const hasUserDefinedh =
-    extracted?.fields.some((f) => f.alias === "h" && f.overrideBuiltinAlias === true) ?? false;
-  const hasUserDefinedH =
-    extracted?.fields.some((f) => f.alias === "H" && f.overrideBuiltinAlias === true) ?? false;
+  const hasUserDefinedh = allFields.some((f) => f.alias === "h" && f.overrideBuiltinAlias === true);
+  const hasUserDefinedH = allFields.some((f) => f.alias === "H" && f.overrideBuiltinAlias === true);
 
   // Add built-in options
   if (hasUserDefinedh) {
@@ -657,7 +658,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   );
 
   // Options
-  const optionsText = renderOptions(command, options.descriptions, context);
+  const optionsText = renderOptions(command, options.descriptions, context, options.globalArgs);
   if (optionsText) {
     sections.push(`${styles.sectionHeader("Options:")}\n${optionsText}`);
   }

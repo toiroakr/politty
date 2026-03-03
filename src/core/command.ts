@@ -72,6 +72,28 @@ interface NonRunnableConfig<
   run?: undefined;
 }
 
+function createCommandFromConfig<
+  TArgsSchema extends ArgsSchema | undefined = undefined,
+  TResult = void,
+  TGlobalArgs = GlobalArgs,
+>(
+  config:
+    | RunnableConfig<TArgsSchema, TResult, TGlobalArgs>
+    | NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+): Command<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>, TResult> {
+  return {
+    name: config.name,
+    description: config.description,
+    args: config.args as TArgsSchema,
+    subCommands: config.subCommands,
+    setup: config.setup,
+    run: config.run,
+    cleanup: config.cleanup,
+    notes: config.notes,
+    examples: config.examples,
+  } as Command<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>, TResult>;
+}
+
 /**
  * Define a CLI command with type-safe arguments
  *
@@ -151,17 +173,7 @@ export function defineCommand<
     | RunnableConfig<TArgsSchema, TResult, TGlobalArgs>
     | NonRunnableConfig<TArgsSchema, TGlobalArgs>,
 ): Command<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>, TResult> {
-  return {
-    name: config.name,
-    description: config.description,
-    args: config.args as TArgsSchema,
-    subCommands: config.subCommands,
-    setup: config.setup,
-    run: config.run,
-    cleanup: config.cleanup,
-    notes: config.notes,
-    examples: config.examples,
-  } as Command<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>, TResult>;
+  return createCommandFromConfig(config);
 }
 
 /**
@@ -187,10 +199,7 @@ export function createDefineCommand<TGlobalArgs = GlobalArgs>() {
       | RunnableConfig<TArgsSchema, TResult, TGlobalArgs>
       | NonRunnableConfig<TArgsSchema, TGlobalArgs>,
   ): Command<TArgsSchema, MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>, TResult> {
-    if (typeof config.run === "function") {
-      return defineCommand(config);
-    }
-    return defineCommand(config);
+    return createCommandFromConfig(config);
   }
 
   return defineCommandWithGlobalArgs;

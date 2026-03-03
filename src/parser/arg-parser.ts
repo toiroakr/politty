@@ -111,7 +111,11 @@ function combineForLeafParsing(
   }
 
   const commandParserKeys = new Set<string>();
+  const commandFieldNames = new Set<string>();
+  const commandCliNames = new Set<string>();
   for (const field of extracted.fields) {
+    commandFieldNames.add(field.name);
+    commandCliNames.add(field.cliName);
     commandParserKeys.add(field.name);
     commandParserKeys.add(field.cliName);
     if (field.alias) {
@@ -119,11 +123,23 @@ function combineForLeafParsing(
     }
   }
 
-  const extraGlobalFields = globalExtracted.fields.filter((field) => {
-    const keys = [field.name, field.cliName, field.alias].filter(
-      (key): key is string => key !== undefined,
-    );
-    return !keys.some((key) => commandParserKeys.has(key));
+  const extraGlobalFields = globalExtracted.fields.flatMap((field) => {
+    // Command fields always take precedence on exact name collisions.
+    if (commandFieldNames.has(field.name)) {
+      return [];
+    }
+
+    // If long option names collide, prefer command behavior and skip this global field.
+    if (commandCliNames.has(field.cliName)) {
+      return [];
+    }
+
+    // Keep global long option parsing even if only alias collides.
+    if (field.alias && commandParserKeys.has(field.alias)) {
+      return [{ ...field, alias: undefined }];
+    }
+
+    return [field];
   });
 
   return {
@@ -191,6 +207,22 @@ function buildGlobalShortFlagMap(extracted: ExtractedFields): Map<string, { bool
   return map;
 }
 
+function getOverriddenBuiltinShortAliases(extracted: ExtractedFields): Set<string> {
+  const aliases = new Set<string>();
+
+  for (const field of extracted.fields) {
+    if (
+      field.overrideBuiltinAlias === true &&
+      field.alias !== undefined &&
+      (field.alias === "h" || field.alias === "H")
+    ) {
+      aliases.add(field.alias);
+    }
+  }
+
+  return aliases;
+}
+
 function findSubCommandPosition(
   argv: string[],
   subCommandNames: string[],
@@ -198,13 +230,21 @@ function findSubCommandPosition(
 ): number | undefined {
   const globalLongFlags = buildGlobalLongFlagMap(globalExtracted);
   const globalShortFlags = buildGlobalShortFlagMap(globalExtracted);
+  const overriddenBuiltinShortAliases = getOverriddenBuiltinShortAliases(globalExtracted);
 
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
     if (!token) continue;
 
-    if (BUILTIN_LONG_FLAGS.has(token) || BUILTIN_SHORT_FLAGS.has(token)) {
+    if (BUILTIN_LONG_FLAGS.has(token)) {
       return undefined;
+    }
+
+    if (BUILTIN_SHORT_FLAGS.has(token)) {
+      const shortAlias = token.slice(1);
+      if (!overriddenBuiltinShortAliases.has(shortAlias)) {
+        return undefined;
+      }
     }
 
     if (token === "--") {

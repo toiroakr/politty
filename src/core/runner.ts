@@ -1,4 +1,4 @@
-import { extractFieldsCached } from "../core/schema-extractor.js";
+import { extractFieldsCached, type ExtractedFields } from "../core/schema-extractor.js";
 import { executeLifecycle } from "../executor/command-runner.js";
 import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collector.js";
 import { listSubCommands, resolveSubcommand } from "../executor/subcommand-router.js";
@@ -48,6 +48,8 @@ interface InternalCommandOptions extends InternalRunOptions {
   /** Runtime global args context */
   _globalArgsContext?: GlobalArgsContext;
 }
+
+const BUILTIN_HELP_FLAGS = new Set(["--help", "--help-all", "-h", "-H"]);
 
 function createGlobalArgsContext(options: InternalCommandOptions): GlobalArgsContext | undefined {
   if (options._globalArgsContext) {
@@ -104,6 +106,112 @@ function validateAndMergeGlobalArgs(
       values: globalValidationResult.data as Record<string, unknown>,
     },
   };
+}
+
+function shouldConsumeNextValue(nextToken: string | undefined): boolean {
+  return nextToken !== undefined && !nextToken.startsWith("-");
+}
+
+function buildLongFlagMap(
+  globalExtracted: ExtractedFields | undefined,
+  commandExtracted: ExtractedFields | undefined,
+): Map<string, { boolean: boolean }> {
+  const map = new Map<string, { boolean: boolean }>();
+
+  // Set global first, then command to preserve command precedence.
+  for (const extracted of [globalExtracted, commandExtracted]) {
+    if (!extracted) continue;
+    for (const field of extracted.fields) {
+      const info = { boolean: field.type === "boolean" };
+      map.set(field.name, info);
+      map.set(field.cliName, info);
+    }
+  }
+
+  return map;
+}
+
+function buildShortFlagMap(
+  globalExtracted: ExtractedFields | undefined,
+  commandExtracted: ExtractedFields | undefined,
+): Map<string, { boolean: boolean }> {
+  const map = new Map<string, { boolean: boolean }>();
+
+  // Set global first, then command to preserve command precedence.
+  for (const extracted of [globalExtracted, commandExtracted]) {
+    if (!extracted) continue;
+    for (const field of extracted.fields) {
+      if (!field.alias) continue;
+      map.set(field.alias, { boolean: field.type === "boolean" });
+    }
+  }
+
+  return map;
+}
+
+function findPotentialSubcommandOnHelp(
+  argv: string[],
+  globalExtracted: ExtractedFields | undefined,
+  commandExtracted: ExtractedFields | undefined,
+): string | undefined {
+  const longFlags = buildLongFlagMap(globalExtracted, commandExtracted);
+  const shortFlags = buildShortFlagMap(globalExtracted, commandExtracted);
+
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i];
+    if (!token) continue;
+
+    if (token === "--" || BUILTIN_HELP_FLAGS.has(token)) {
+      return undefined;
+    }
+
+    if (token.startsWith("--")) {
+      const withoutDashes = token.slice(2);
+
+      if (withoutDashes.startsWith("no-")) {
+        continue;
+      }
+
+      const eqIndex = withoutDashes.indexOf("=");
+      if (eqIndex !== -1) {
+        continue;
+      }
+
+      const info = longFlags.get(withoutDashes);
+      if (!info || !info.boolean) {
+        const nextToken = argv[i + 1];
+        if (shouldConsumeNextValue(nextToken)) {
+          i++;
+        }
+      }
+      continue;
+    }
+
+    if (token.startsWith("-") && token.length > 1) {
+      const withoutDash = token.slice(1);
+      const eqIndex = withoutDash.indexOf("=");
+
+      if (eqIndex !== -1) {
+        continue;
+      }
+
+      if (withoutDash.length === 1) {
+        const info = shortFlags.get(withoutDash);
+        if (!info || !info.boolean) {
+          const nextToken = argv[i + 1];
+          if (shouldConsumeNextValue(nextToken)) {
+            i++;
+          }
+        }
+      }
+
+      continue;
+    }
+
+    return token;
+  }
+
+  return undefined;
 }
 
 /**
@@ -236,14 +344,20 @@ async function runCommandInternal<TResult = unknown>(
     if (parseResult.helpRequested || parseResult.helpAllRequested) {
       // Check if there's an unknown subcommand specified
       let hasUnknownSubcommand = false;
+      let unknownSubcommand: string | undefined;
       const subCmdNames = listSubCommands(command);
       if (subCmdNames.length > 0) {
-        // Find first positional argument (potential subcommand)
-        const potentialSubCmd = argv.find((arg) => !arg.startsWith("-"));
+        const commandExtracted = command.args ? extractFieldsCached(command.args) : undefined;
+        const potentialSubCmd = findPotentialSubcommandOnHelp(
+          argv,
+          globalArgsContext?.extractedFields,
+          commandExtracted,
+        );
         if (potentialSubCmd && !subCmdNames.includes(potentialSubCmd)) {
           logger.error(formatUnknownSubcommand(potentialSubCmd, subCmdNames));
           logger.error("");
           hasUnknownSubcommand = true;
+          unknownSubcommand = potentialSubCmd;
         }
       }
 
@@ -258,7 +372,7 @@ async function runCommandInternal<TResult = unknown>(
       if (hasUnknownSubcommand) {
         return {
           success: false,
-          error: new Error(`Unknown subcommand: ${argv.find((arg) => !arg.startsWith("-"))}`),
+          error: new Error(`Unknown subcommand: ${unknownSubcommand}`),
           exitCode: 1,
           logs: getCurrentLogs(),
         };

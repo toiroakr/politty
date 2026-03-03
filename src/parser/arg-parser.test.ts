@@ -733,11 +733,11 @@ describe("ArgParser", () => {
           schema: globalArgsSchema,
           extractedFields: extractFields(globalArgsSchema),
         },
-      } as any);
+      });
 
       expect(result.subCommand).toBe("build");
       expect(result.remainingArgs).toEqual(["--output", "dist"]);
-      expect((result as any).rawGlobalArgs).toEqual({ verbose: true });
+      expect(result.rawGlobalArgs).toEqual({ verbose: true });
     });
 
     it("should recognize --no-* boolean negation in subcommand scanner", () => {
@@ -757,10 +757,10 @@ describe("ArgParser", () => {
           schema: globalArgsSchema,
           extractedFields: extractFields(globalArgsSchema),
         },
-      } as any);
+      });
 
       expect(result.subCommand).toBe("build");
-      expect((result as any).rawGlobalArgs).toEqual({ verbose: false });
+      expect(result.rawGlobalArgs).toEqual({ verbose: false });
     });
 
     it("should stop scanning when built-in help flags are found", () => {
@@ -780,7 +780,7 @@ describe("ArgParser", () => {
           schema: globalArgsSchema,
           extractedFields: extractFields(globalArgsSchema),
         },
-      } as any);
+      });
 
       expect(result.helpRequested).toBe(true);
       expect(result.subCommand).toBeUndefined();
@@ -803,10 +803,10 @@ describe("ArgParser", () => {
           schema: globalArgsSchema,
           extractedFields: extractFields(globalArgsSchema),
         },
-      } as any);
+      });
 
       expect(result.rawArgs).toEqual({ output: "dist" });
-      expect((result as any).rawGlobalArgs).toEqual({ verbose: true });
+      expect(result.rawGlobalArgs).toEqual({ verbose: true });
     });
 
     it("should keep unknown global flags before subcommand", () => {
@@ -826,7 +826,7 @@ describe("ArgParser", () => {
           schema: globalArgsSchema,
           extractedFields: extractFields(globalArgsSchema),
         },
-      } as any);
+      });
 
       expect(result.subCommand).toBe("build");
       expect(result.unknownFlags).toContain("unknown-flag");
@@ -849,10 +849,58 @@ describe("ArgParser", () => {
           schema: globalArgsSchema,
           extractedFields: extractFields(globalArgsSchema),
         },
-      } as any);
+      });
 
       expect(result.rawArgs).toEqual({ output: "dist" });
-      expect((result as any).rawGlobalArgs).toEqual({});
+      expect(result.rawGlobalArgs).toEqual({});
+    });
+
+    it("should keep global long option parsing when only alias collides", () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(true), { alias: "o" }),
+      });
+
+      const cmd = defineCommand({
+        name: "build",
+        args: z.object({
+          output: arg(z.string(), { alias: "o" }),
+        }),
+      });
+
+      const result = parseArgs(["--no-verbose", "--output", "dist"], cmd, {
+        globalArgsContext: {
+          schema: globalArgsSchema,
+          extractedFields: extractFields(globalArgsSchema),
+        },
+      });
+
+      expect(result.rawArgs).toEqual({ output: "dist" });
+      expect(result.rawGlobalArgs).toEqual({ verbose: false });
+      expect(result.unknownFlags).toEqual([]);
+    });
+
+    it("should detect subcommand when global -h alias overrides builtin help", () => {
+      const globalArgsSchema = z.object({
+        header: arg(z.string(), { alias: "h", overrideBuiltinAlias: true }),
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({ name: "build" }),
+        },
+      });
+
+      const result = parseArgs(["-h", "token", "build"], cmd, {
+        globalArgsContext: {
+          schema: globalArgsSchema,
+          extractedFields: extractFields(globalArgsSchema),
+        },
+      });
+
+      expect(result.helpRequested).toBe(false);
+      expect(result.subCommand).toBe("build");
+      expect(result.rawGlobalArgs).toEqual({ header: "token" });
     });
   });
 

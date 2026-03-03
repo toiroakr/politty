@@ -130,6 +130,12 @@ $ my-cli build --output out --verbose
 ```
 
 When command args and global args use the same key, command args take precedence.
+If only a short alias collides, the command alias takes precedence and the global long option
+(`--flag` / `--no-flag`) remains available.
+
+If a global option overrides `-h`/`-H` with `overrideBuiltinAlias: true`, those short aliases are
+treated as user-defined options (not built-in help aliases). Built-in help remains available via
+`--help` and `--help-all`.
 
 ### Type-safe Global Args with `createDefineCommand`
 
