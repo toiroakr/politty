@@ -1104,6 +1104,37 @@ describe("ArgParser", () => {
         expect(result.rawArgs.noDryRun).toBe("someValue");
         expect(result.rawArgs.dryRun).toBeUndefined();
       });
+
+      it("should treat --no-dry-run as field value when no-dry-run is a defined string field", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "no-dry-run": arg(z.string(), {
+              description: "Some string option",
+            }),
+            "dry-run": arg(z.boolean().default(false)),
+          }),
+        });
+
+        const result = parseArgs(["--no-dry-run", "someValue"], cmd);
+
+        // no-dry-run is a defined string field, so --no-dry-run should NOT negate dry-run
+        expect(result.rawArgs["no-dry-run"]).toBe("someValue");
+        expect(result.rawArgs["dry-run"]).toBeUndefined();
+      });
+
+      it("should still negate --no-dry-run when no-dry-run is NOT a defined field", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "dry-run": arg(z.boolean().default(true)),
+          }),
+        });
+
+        const result = parseArgs(["--no-dry-run"], cmd);
+
+        expect(result.rawArgs["dry-run"]).toBe(false);
+      });
     });
 
     describe("alias collision avoidance", () => {

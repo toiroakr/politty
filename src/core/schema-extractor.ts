@@ -303,7 +303,12 @@ export function toKebabCase(str: string): string {
 }
 
 /**
- * Convert kebab-case to camelCase
+ * Convert kebab-case to camelCase.
+ *
+ * Expects kebab-case (all-lowercase) input. Uppercase letters after hyphens
+ * (e.g., "output-Dir") are NOT converted.
+ *
+ * @param str - A kebab-case string (all-lowercase with hyphens)
  * @example toCamelCase("dry-run") => "dryRun"
  * @example toCamelCase("output-dir") => "outputDir"
  */

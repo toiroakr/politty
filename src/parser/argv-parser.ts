@@ -22,8 +22,13 @@ export interface ParserOptions {
   booleanFlags?: Set<string>;
   /** Array flags (can be repeated) */
   arrayFlags?: Set<string>;
-  /** All known canonical option names */
-  knownOptions?: Set<string>;
+  /**
+   * All known canonical option names (as defined in the schema).
+   * Used to disambiguate negation: when `--no-flag` or `--noFlag` matches
+   * a name in this set, it is treated as a regular option rather than
+   * boolean negation of `flag`.
+   */
+  definedNames?: Set<string>;
 }
 
 /**
@@ -35,6 +40,13 @@ export interface ParserOptions {
  * - Combined short options: -abc (treated as -a -b -c if all are boolean)
  * - Positional arguments
  * - -- to stop parsing options
+ * - Boolean negation: --no-flag, --noFlag (requires `booleanFlags`)
+ *
+ * **Note:** When using negation detection (`--noFlag` / `--no-flag`),
+ * supply `definedNames` so that options whose names happen to start with
+ * "no" (e.g. `noDryRun`) are not mistaken for negation of another flag.
+ * Without `definedNames`, all `--noX` forms matching a boolean flag will
+ * be treated as negation.
  *
  * @param argv - Command line arguments
  * @param options - Parser options
@@ -45,7 +57,7 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     aliasMap = new Map(),
     booleanFlags = new Set(),
     arrayFlags = new Set(),
-    knownOptions = new Set(),
+    definedNames = new Set(),
   } = options;
 
   const result: ParsedArgv = {
@@ -104,9 +116,13 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         if (flagName === flagName.toLowerCase()) {
           const resolvedName = aliasMap.get(flagName) ?? flagName;
           if (booleanFlags.has(resolvedName)) {
-            setOption(flagName, false);
-            i++;
-            continue;
+            // "no-dry-run" itself is a defined field → treat as that field, not negation
+            const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
+            if (!definedNames.has(asIsResolved)) {
+              setOption(flagName, false);
+              i++;
+              continue;
+            }
           }
         }
       }
@@ -122,7 +138,7 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         if (booleanFlags.has(resolvedName)) {
           // "noDryRun" itself is a defined field → treat as that field, not negation
           const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
-          if (!knownOptions.has(asIsResolved)) {
+          if (!definedNames.has(asIsResolved)) {
             setOption(camelFlagName, false);
             i++;
             continue;
@@ -218,11 +234,11 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
   const aliasMap = new Map<string, string>();
   const booleanFlags = new Set<string>();
   const arrayFlags = new Set<string>();
-  const knownOptions = new Set<string>();
+  const definedNames = new Set<string>();
 
   // First pass: collect all canonical field names
   for (const field of extracted.fields) {
-    knownOptions.add(field.name);
+    definedNames.add(field.name);
   }
 
   for (const field of extracted.fields) {
@@ -242,7 +258,7 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
     const camelVariant = toCamelCase(field.name);
     if (
       camelVariant !== field.name &&
-      !knownOptions.has(camelVariant) &&
+      !definedNames.has(camelVariant) &&
       !aliasMap.has(camelVariant)
     ) {
       aliasMap.set(camelVariant, field.name);
@@ -257,7 +273,7 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
     }
   }
 
-  return { aliasMap, booleanFlags, arrayFlags, knownOptions };
+  return { aliasMap, booleanFlags, arrayFlags, definedNames };
 }
 
 /**
