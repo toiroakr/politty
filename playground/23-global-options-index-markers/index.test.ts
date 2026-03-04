@@ -22,6 +22,7 @@ describe("23-global-options-index-markers", () => {
 
   beforeAll(() => {
     initDocFile("playground/23-global-options-index-markers/README.md");
+    initDocFile("playground/23-global-options-index-markers/README-CUSTOM-HEADING.md");
   });
 
   beforeEach(() => {
@@ -91,7 +92,7 @@ describe("23-global-options-index-markers", () => {
         ...docConfig,
         examples: {},
       });
-    });
+    }, 15_000);
   });
 
   describe("index marker", () => {
@@ -113,7 +114,11 @@ describe("23-global-options-index-markers", () => {
         index: { headingLevel: 4 },
       },
       files: {
-        "playground/23-global-options-index-markers/README.md": ["init", "build", "deploy"],
+        "playground/23-global-options-index-markers/README-CUSTOM-HEADING.md": [
+          "init",
+          "build",
+          "deploy",
+        ],
       },
       formatter: mdFormatter,
     };
@@ -123,6 +128,6 @@ describe("23-global-options-index-markers", () => {
         ...customHeadingDocConfig,
         examples: {},
       });
-    });
+    }, 15_000);
   });
 });

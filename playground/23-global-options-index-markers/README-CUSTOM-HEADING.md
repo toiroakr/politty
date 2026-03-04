@@ -38,7 +38,7 @@ project-cli init [options] <name>
 | ----------------------- | ----- | ----------------------- | -------- | ----------- |
 | `--template <TEMPLATE>` | `-t`  | Project template to use | No       | `"default"` |
 
-Shared options: [Global Options](REFERENCE.md#global-options).
+Shared options: [Global Options](REFERENCE-CUSTOM-HEADING.md#global-options).
 
 <!-- politty:command:init:options:end -->
 
@@ -72,7 +72,7 @@ project-cli build [options]
 | --------- | ----- | ----------------- | -------- | ------- |
 | `--watch` | `-w`  | Watch for changes | No       | `false` |
 
-Shared options: [Global Options](REFERENCE.md#global-options).
+Shared options: [Global Options](REFERENCE-CUSTOM-HEADING.md#global-options).
 
 <!-- politty:command:build:options:end -->
 
@@ -106,6 +106,6 @@ project-cli deploy [options]
 | --------- | ----- | ------------------------------------- | -------- | ------- |
 | `--force` | `-f`  | Force deployment without confirmation | No       | `false` |
 
-Shared options: [Global Options](REFERENCE.md#global-options).
+Shared options: [Global Options](REFERENCE-CUSTOM-HEADING.md#global-options).
 
 <!-- politty:command:deploy:options:end -->
