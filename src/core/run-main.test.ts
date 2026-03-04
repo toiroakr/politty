@@ -279,7 +279,7 @@ describe("runCommand", () => {
 
       await runCommand(cmd, ["--verbose", "build", "--output", "dist"], {
         globalArgs: globalArgsSchema,
-      } as any);
+      });
 
       expect(buildFn).toHaveBeenCalledWith({ verbose: true, output: "dist" });
     });
@@ -306,7 +306,7 @@ describe("runCommand", () => {
 
       await runCommand(cmd, ["build", "--verbose", "--output", "dist"], {
         globalArgs: globalArgsSchema,
-      } as any);
+      });
 
       expect(buildFn).toHaveBeenCalledWith({ verbose: true, output: "dist" });
     });
@@ -333,7 +333,7 @@ describe("runCommand", () => {
 
       await runCommand(cmd, ["--verbose", "build", "--no-verbose"], {
         globalArgs: globalArgsSchema,
-      } as any);
+      });
 
       expect(buildFn).toHaveBeenCalledWith({ verbose: false });
     });
@@ -358,7 +358,7 @@ describe("runCommand", () => {
 
       const result = await runCommand(cmd, ["build", "--retries", "oops"], {
         globalArgs: globalArgsSchema,
-      } as any);
+      });
 
       expect(result.exitCode).toBe(1);
       expect(buildFn).not.toHaveBeenCalled();
@@ -387,7 +387,7 @@ describe("runCommand", () => {
         config: arg(z.string().optional(), { env: "MY_APP_CONFIG" }),
       });
 
-      await runCommand(cmd, ["build", "--output", "dist"], { globalArgs: globalArgsSchema } as any);
+      await runCommand(cmd, ["build", "--output", "dist"], { globalArgs: globalArgsSchema });
 
       expect(buildFn).toHaveBeenCalledWith({ config: "/tmp/config.toml", output: "dist" });
 
@@ -412,7 +412,7 @@ describe("runCommand", () => {
         version: arg(z.boolean().default(false), { alias: "v" }),
       });
 
-      const result = await runCommand(cmd, [], { globalArgs: globalArgsSchema } as any);
+      const result = await runCommand(cmd, [], { globalArgs: globalArgsSchema });
 
       expect(result.exitCode).toBe(1);
       expect(runFn).not.toHaveBeenCalled();
@@ -442,7 +442,7 @@ describe("runCommand", () => {
 
       const result = await runCommand(cmd, ["--unknown-flag", "build"], {
         globalArgs: globalArgsSchema,
-      } as any);
+      });
 
       expect(result.exitCode).toBe(0);
       expect(buildFn).toHaveBeenCalled();
@@ -470,7 +470,7 @@ describe("runCommand", () => {
 
       const result = await runCommand(cmd, ["--config", "app.toml", "--help"], {
         globalArgs: globalArgsSchema,
-      } as any);
+      });
 
       expect(result.exitCode).toBe(0);
       const errorOutput = consoleErrorSpy.mock.calls.map((c) => String(c[0] ?? "")).join("\n");
@@ -597,6 +597,36 @@ describe("runCommand", () => {
       expect(consoleSpy).not.toHaveBeenCalled(); // No warning
       expect(runFn).toHaveBeenCalled(); // Command should run
       expect(result.success).toBe(true);
+      consoleSpy.mockRestore();
+    });
+
+    it("should error on unknown global flags when global schema is strict", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          verbose: z.boolean().default(false),
+        }),
+        run: runFn,
+      });
+
+      const globalArgsSchema = z.strictObject({
+        config: arg(z.string().optional(), { alias: "c" }),
+      });
+
+      const result = await runCommand(cmd, ["--unknown-global"], {
+        globalArgs: globalArgsSchema,
+      });
+
+      expect(consoleSpy).toHaveBeenCalled();
+      const output = consoleSpy.mock.calls[0]?.[0] ?? "";
+      expect(output).toContain("Unknown option");
+      expect(output).toContain("unknown-global");
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
       consoleSpy.mockRestore();
     });
 

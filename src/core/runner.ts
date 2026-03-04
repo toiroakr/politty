@@ -1,4 +1,8 @@
-import { extractFieldsCached, type ExtractedFields } from "../core/schema-extractor.js";
+import {
+  extractFieldsCached,
+  type ExtractedFields,
+  type UnknownKeysMode,
+} from "../core/schema-extractor.js";
 import { executeLifecycle } from "../executor/command-runner.js";
 import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collector.js";
 import { listSubCommands, resolveSubcommand } from "../executor/subcommand-router.js";
@@ -110,6 +114,20 @@ function validateAndMergeGlobalArgs(
 
 function shouldConsumeNextValue(nextToken: string | undefined): boolean {
   return nextToken !== undefined && !nextToken.startsWith("-");
+}
+
+function resolveUnknownKeysMode(...sources: Array<ExtractedFields | undefined>): UnknownKeysMode {
+  const modes = sources.flatMap((source) => (source ? [source.unknownKeysMode] : []));
+
+  if (modes.includes("strict")) {
+    return "strict";
+  }
+
+  if (modes.length > 0 && modes.every((mode) => mode === "passthrough")) {
+    return "passthrough";
+  }
+
+  return "strip";
 }
 
 function buildLongFlagMap(
@@ -405,7 +423,10 @@ async function runCommandInternal<TResult = unknown>(
 
     // Handle unknown flags based on schema's unknownKeysMode
     if (parseResult.unknownFlags.length > 0) {
-      const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
+      const unknownKeysMode = resolveUnknownKeysMode(
+        parseResult.extractedFields,
+        mergedGlobal.context?.extractedFields,
+      );
       const knownFlags = [
         ...(parseResult.extractedFields?.fields.map((f) => f.name) ?? []),
         ...(mergedGlobal.context?.extractedFields.fields.map((f) => f.name) ?? []),
