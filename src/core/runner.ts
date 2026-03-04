@@ -53,7 +53,8 @@ interface InternalCommandOptions extends InternalRunOptions {
   _globalArgsContext?: GlobalArgsContext;
 }
 
-const BUILTIN_HELP_FLAGS = new Set(["--help", "--help-all", "-h", "-H"]);
+const BUILTIN_HELP_LONG_FLAGS = new Set(["--help", "--help-all"]);
+const BUILTIN_HELP_SHORT_FLAGS = new Set(["-h", "-H"]);
 
 function createGlobalArgsContext(options: InternalCommandOptions): GlobalArgsContext | undefined {
   if (options._globalArgsContext) {
@@ -167,6 +168,27 @@ function buildShortFlagMap(
   return map;
 }
 
+function getOverriddenBuiltinShortAliases(
+  ...sources: Array<ExtractedFields | undefined>
+): Set<string> {
+  const aliases = new Set<string>();
+
+  for (const source of sources) {
+    if (!source) continue;
+    for (const field of source.fields) {
+      if (
+        field.overrideBuiltinAlias === true &&
+        field.alias !== undefined &&
+        (field.alias === "h" || field.alias === "H")
+      ) {
+        aliases.add(field.alias);
+      }
+    }
+  }
+
+  return aliases;
+}
+
 function findPotentialSubcommandOnHelp(
   argv: string[],
   globalExtracted: ExtractedFields | undefined,
@@ -174,13 +196,24 @@ function findPotentialSubcommandOnHelp(
 ): string | undefined {
   const longFlags = buildLongFlagMap(globalExtracted, commandExtracted);
   const shortFlags = buildShortFlagMap(globalExtracted, commandExtracted);
+  const overriddenBuiltinShortAliases = getOverriddenBuiltinShortAliases(
+    globalExtracted,
+    commandExtracted,
+  );
 
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
     if (!token) continue;
 
-    if (token === "--" || BUILTIN_HELP_FLAGS.has(token)) {
+    if (token === "--" || BUILTIN_HELP_LONG_FLAGS.has(token)) {
       return undefined;
+    }
+
+    if (BUILTIN_HELP_SHORT_FLAGS.has(token)) {
+      const shortAlias = token.slice(1);
+      if (!overriddenBuiltinShortAliases.has(shortAlias)) {
+        return undefined;
+      }
     }
 
     if (token.startsWith("--")) {

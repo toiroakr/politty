@@ -480,6 +480,38 @@ describe("runCommand", () => {
       consoleLogSpy.mockRestore();
       consoleErrorSpy.mockRestore();
     });
+
+    it("should respect overridden -h alias while checking unknown subcommands on help", async () => {
+      const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({ name: "build" }),
+        },
+      });
+
+      const globalArgsSchema = z.object({
+        host: arg(z.string().optional(), {
+          alias: "h",
+          overrideBuiltinAlias: true,
+        }),
+      });
+
+      const result = await runCommand(cmd, ["-h", "localhost", "unknown", "--help"], {
+        globalArgs: globalArgsSchema,
+      });
+
+      expect(result.exitCode).toBe(1);
+      const errorOutput = consoleErrorSpy.mock.calls.map((c) => String(c[0] ?? "")).join("\n");
+      expect(errorOutput).toContain("Unknown command");
+      expect(errorOutput).toContain("unknown");
+      expect(consoleLogSpy).toHaveBeenCalled();
+
+      consoleLogSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    });
   });
 
   describe("Unknown flags", () => {

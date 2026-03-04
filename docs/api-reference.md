@@ -72,11 +72,12 @@ const command = defineCommand({
 Creates a project-scoped `defineCommand`-like function with pre-applied global args type.
 
 ```typescript
-function createDefineCommand<TGlobalArgs = GlobalArgs>(): DefineCommandLike<TGlobalArgs>;
+function createDefineCommand<TGlobalArgs = GlobalArgs>(): (
+  ...args: Parameters<typeof defineCommand>
+) => ReturnType<typeof defineCommand>;
 ```
 
-`DefineCommandLike<TGlobalArgs>` has the same callable overload shape as `defineCommand`,
-but with the global args type fixed to `TGlobalArgs`.
+The returned function is `defineCommand`-like and carries `TGlobalArgs` into command arg typing.
 
 #### Example
 
