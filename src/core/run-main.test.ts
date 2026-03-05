@@ -481,6 +481,34 @@ describe("runCommand", () => {
       consoleErrorSpy.mockRestore();
     });
 
+    it("should not treat values after unknown --no-* flags as unknown subcommands on help", async () => {
+      const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({ name: "build" }),
+        },
+      });
+
+      const globalArgsSchema = z.object({
+        config: arg(z.string().optional(), { alias: "c" }),
+      });
+
+      const result = await runCommand(cmd, ["--no-config", "app.toml", "--help"], {
+        globalArgs: globalArgsSchema,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const errorOutput = consoleErrorSpy.mock.calls.map((c) => String(c[0] ?? "")).join("\n");
+      expect(errorOutput).not.toContain("Unknown command");
+      expect(consoleLogSpy).toHaveBeenCalled();
+
+      consoleLogSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    });
+
     it("should respect overridden -h alias while checking unknown subcommands on help", async () => {
       const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
       const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});

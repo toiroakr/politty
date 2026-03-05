@@ -220,6 +220,21 @@ function findPotentialSubcommandOnHelp(
       const withoutDashes = token.slice(2);
 
       if (withoutDashes.startsWith("no-")) {
+        const negatedName = withoutDashes.slice(3);
+        const negatedInfo = longFlags.get(negatedName);
+        if (negatedInfo?.boolean) {
+          continue;
+        }
+
+        const eqIndex = withoutDashes.indexOf("=");
+        if (eqIndex !== -1) {
+          continue;
+        }
+
+        const nextToken = argv[i + 1];
+        if (shouldConsumeNextValue(nextToken)) {
+          i++;
+        }
         continue;
       }
 
