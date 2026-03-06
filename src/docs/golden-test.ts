@@ -1076,6 +1076,7 @@ function generateCommandSection(
   render: RenderFunction,
   filePath?: string,
   fileMap?: Record<string, string>,
+  rootDocPath?: string,
 ): string | null {
   const info = allCommands.get(cmdPath);
   if (!info) return null;
@@ -1085,6 +1086,7 @@ function generateCommandSection(
     ...info,
     filePath,
     fileMap,
+    rootDocPath,
   };
 
   return render(infoWithFileContext);
@@ -1102,6 +1104,7 @@ function generateFileMarkdown(
   fileMap?: Record<string, string>,
   specifiedOrder?: string[],
   fileConfig?: FileConfig,
+  rootDocPath?: string,
 ): string {
   const sections: string[] = [];
 
@@ -1115,7 +1118,14 @@ function generateFileMarkdown(
   const sortedPaths = sortDepthFirst(commandPaths, specifiedOrder ?? []);
 
   for (const cmdPath of sortedPaths) {
-    const section = generateCommandSection(cmdPath, allCommands, render, filePath, fileMap);
+    const section = generateCommandSection(
+      cmdPath,
+      allCommands,
+      render,
+      filePath,
+      fileMap,
+      rootDocPath,
+    );
     if (section) {
       sections.push(section);
     }
@@ -1233,6 +1243,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       info.options = info.options.filter((opt) => !globalOptionDefinitions.has(opt.name));
     }
   }
+  const globalOptionsRootDocPath =
+    rootDoc && globalOptionDefinitions.size > 0 ? rootDoc.path : undefined;
 
   // Collect all explicitly specified commands from files
   const allFilesCommands: string[] = [];
@@ -1314,6 +1326,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           render,
           filePath,
           fileMap,
+          globalOptionsRootDocPath,
         );
 
         if (!rawSection) {
@@ -1419,6 +1432,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         fileMap,
         specifiedCommands,
         fileConfig,
+        globalOptionsRootDocPath,
       );
 
       // Apply formatter if provided

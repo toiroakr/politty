@@ -1,10 +1,17 @@
 import {
+  extractFieldsCached,
   getExtractedFields,
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../lazy.js";
-import type { AnyCommand, Example, SubCommandsRecord, SubCommandValue } from "../types.js";
+import type {
+  AnyCommand,
+  ArgsSchema,
+  Example,
+  SubCommandsRecord,
+  SubCommandValue,
+} from "../types.js";
 import { styles } from "./logger.js";
 import { renderMarkdown } from "./markdown-renderer.js";
 
@@ -53,6 +60,22 @@ export interface HelpOptions {
   descriptions?: BuiltinOptionDescriptions | undefined;
   /** Command hierarchy context */
   context?: CommandContext | undefined;
+  /** Runtime global args schema or extracted fields */
+  globalArgs?: ArgsSchema | ExtractedFields | undefined;
+}
+
+function resolveGlobalExtracted(
+  globalArgs?: ArgsSchema | ExtractedFields,
+): ExtractedFields | undefined {
+  if (!globalArgs) {
+    return undefined;
+  }
+
+  if ("fields" in globalArgs) {
+    return globalArgs;
+  }
+
+  return extractFieldsCached(globalArgs);
 }
 
 /**
@@ -93,16 +116,27 @@ function buildUsageCommandName(command: AnyCommand, context?: CommandContext): s
 /**
  * Render the usage line for a command
  */
-export function renderUsageLine(command: AnyCommand, context?: CommandContext): string {
+export function renderUsageLine(
+  command: AnyCommand,
+  context?: CommandContext,
+  globalArgs?: ArgsSchema | ExtractedFields,
+): string {
   const parts: string[] = [];
   const name = buildUsageCommandName(command, context);
+  const globalExtracted = resolveGlobalExtracted(globalArgs);
 
   parts.push(styles.commandName(name));
 
   const extracted = getExtractedFields(command);
+  const globalOptions = globalExtracted?.fields.filter((a) => !a.positional) ?? [];
   if (extracted) {
     const positionals = extracted.fields.filter((a) => a.positional);
     const options = extracted.fields.filter((a) => !a.positional);
+
+    // Add [global options] if runtime global options are available
+    if (globalOptions.length > 0) {
+      parts.push(styles.placeholder("[global options]"));
+    }
 
     // Add [options] if there are options
     if (options.length > 0) {
@@ -123,6 +157,11 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
       }
     }
   } else {
+    // Add [global options] if runtime global options are available
+    if (globalOptions.length > 0) {
+      parts.push(styles.placeholder("[global options]"));
+    }
+
     // Add [command] if there are subcommands
     if (command.subCommands && getVisibleSubcommandEntries(command.subCommands).length > 0) {
       parts.push(styles.placeholder("[command]"));
@@ -139,6 +178,7 @@ export function renderOptions(
   command: AnyCommand,
   descriptions: BuiltinOptionDescriptions = {},
   context?: CommandContext,
+  globalArgs?: ArgsSchema | ExtractedFields,
 ): string {
   const lines: string[] = [];
   const desc: Required<BuiltinOptionDescriptions> = {
@@ -148,12 +188,12 @@ export function renderOptions(
   };
 
   const extracted = getExtractedFields(command);
+  const globalExtracted = resolveGlobalExtracted(globalArgs);
+  const allFields = [...(extracted?.fields ?? []), ...(globalExtracted?.fields ?? [])];
 
   // Check if user has overridden built-in aliases
-  const hasUserDefinedh =
-    extracted?.fields.some((f) => f.alias === "h" && f.overrideBuiltinAlias === true) ?? false;
-  const hasUserDefinedH =
-    extracted?.fields.some((f) => f.alias === "H" && f.overrideBuiltinAlias === true) ?? false;
+  const hasUserDefinedh = allFields.some((f) => f.alias === "h" && f.overrideBuiltinAlias === true);
+  const hasUserDefinedH = allFields.some((f) => f.alias === "H" && f.overrideBuiltinAlias === true);
 
   // Add built-in options
   if (hasUserDefinedh) {
@@ -213,6 +253,44 @@ export function renderOptions(
     }
 
     // Add environment variable info
+    const envInfo = formatEnvInfo(opt.env);
+    if (envInfo) {
+      desc += ` ${envInfo}`;
+    }
+
+    lines.push(formatOption(flags, desc));
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render the global options section.
+ */
+export function renderGlobalOptions(globalArgs?: ArgsSchema | ExtractedFields): string {
+  const extracted = resolveGlobalExtracted(globalArgs);
+  if (!extracted) {
+    return "";
+  }
+
+  const options = extracted.fields.filter((field) => !field.positional);
+  if (options.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  for (const opt of options) {
+    const flags = formatFlags(opt);
+    let desc = opt.description ?? "";
+
+    if (opt.defaultValue !== undefined) {
+      desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(opt.defaultValue)})`)}`;
+    }
+
+    if (opt.required) {
+      desc += ` ${styles.required("(required)")}`;
+    }
+
     const envInfo = formatEnvInfo(opt.env);
     if (envInfo) {
       desc += ` ${envInfo}`;
@@ -575,12 +653,19 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   }
 
   // Usage
-  sections.push(`${styles.sectionHeader("Usage:")} ${renderUsageLine(command, context)}`);
+  sections.push(
+    `${styles.sectionHeader("Usage:")} ${renderUsageLine(command, context, options.globalArgs)}`,
+  );
 
   // Options
-  const optionsText = renderOptions(command, options.descriptions, context);
+  const optionsText = renderOptions(command, options.descriptions, context, options.globalArgs);
   if (optionsText) {
     sections.push(`${styles.sectionHeader("Options:")}\n${optionsText}`);
+  }
+
+  const globalOptionsText = renderGlobalOptions(options.globalArgs);
+  if (globalOptionsText) {
+    sections.push(`${styles.sectionHeader("Global Options:")}\n${globalOptionsText}`);
   }
 
   // Subcommands

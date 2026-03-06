@@ -1,3 +1,8 @@
+import {
+  extractFieldsCached,
+  type ExtractedFields,
+  type UnknownKeysMode,
+} from "../core/schema-extractor.js";
 import { executeLifecycle } from "../executor/command-runner.js";
 import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collector.js";
 import { listSubCommands, resolveSubcommand } from "../executor/subcommand-router.js";
@@ -6,12 +11,19 @@ import { parseArgs } from "../parser/arg-parser.js";
 import type {
   AnyCommand,
   CollectedLogs,
+  GlobalArgsContext,
   InternalRunOptions,
   Logger,
   MainOptions,
   RunCommandOptions,
   RunResult,
 } from "../types.js";
+import {
+  validateDuplicateAliases,
+  validateDuplicateFields,
+  validatePositionalConfig,
+  validateReservedAliases,
+} from "../validator/command-validator.js";
 import {
   formatRuntimeError,
   formatUnknownFlag,
@@ -37,6 +49,235 @@ interface InternalCommandOptions extends InternalRunOptions {
   _context?: CommandContext;
   /** Existing logs to include (for subcommand routing) */
   _existingLogs?: CollectedLogs;
+  /** Runtime global args context */
+  _globalArgsContext?: GlobalArgsContext;
+}
+
+const BUILTIN_HELP_LONG_FLAGS = new Set(["--help", "--help-all"]);
+const BUILTIN_HELP_SHORT_FLAGS = new Set(["-h", "-H"]);
+
+function createGlobalArgsContext(options: InternalCommandOptions): GlobalArgsContext | undefined {
+  if (options._globalArgsContext) {
+    return options._globalArgsContext;
+  }
+
+  if (!options.globalArgs) {
+    return undefined;
+  }
+
+  const extractedFields = extractFieldsCached(options.globalArgs);
+  if (!options.skipValidation) {
+    validateDuplicateFields(extractedFields);
+    validateDuplicateAliases(extractedFields);
+    validatePositionalConfig(extractedFields);
+    validateReservedAliases(extractedFields, false);
+  }
+
+  return {
+    schema: options.globalArgs,
+    extractedFields,
+  };
+}
+
+function validateAndMergeGlobalArgs(
+  globalArgsContext: GlobalArgsContext | undefined,
+  rawGlobalArgs: Record<string, unknown>,
+): { context: GlobalArgsContext | undefined; errorMessage?: string } {
+  if (!globalArgsContext) {
+    return { context: undefined };
+  }
+
+  const hasRawGlobalArgs = Object.keys(rawGlobalArgs).length > 0;
+  if (!hasRawGlobalArgs && globalArgsContext.values !== undefined) {
+    return { context: globalArgsContext };
+  }
+
+  const mergedRawGlobalArgs = {
+    ...globalArgsContext.values,
+    ...rawGlobalArgs,
+  };
+
+  const globalValidationResult = validateArgs(mergedRawGlobalArgs, globalArgsContext.schema);
+  if (!globalValidationResult.success) {
+    return {
+      context: globalArgsContext,
+      errorMessage: formatValidationErrors(globalValidationResult.errors),
+    };
+  }
+
+  return {
+    context: {
+      ...globalArgsContext,
+      values: globalValidationResult.data as Record<string, unknown>,
+    },
+  };
+}
+
+function shouldConsumeNextValue(nextToken: string | undefined): boolean {
+  return nextToken !== undefined && !nextToken.startsWith("-");
+}
+
+function resolveUnknownKeysMode(...sources: Array<ExtractedFields | undefined>): UnknownKeysMode {
+  const modes = sources.flatMap((source) => (source ? [source.unknownKeysMode] : []));
+
+  if (modes.includes("strict")) {
+    return "strict";
+  }
+
+  if (modes.length > 0 && modes.every((mode) => mode === "passthrough")) {
+    return "passthrough";
+  }
+
+  return "strip";
+}
+
+function buildLongFlagMap(
+  globalExtracted: ExtractedFields | undefined,
+  commandExtracted: ExtractedFields | undefined,
+): Map<string, { boolean: boolean }> {
+  const map = new Map<string, { boolean: boolean }>();
+
+  // Set global first, then command to preserve command precedence.
+  for (const extracted of [globalExtracted, commandExtracted]) {
+    if (!extracted) continue;
+    for (const field of extracted.fields) {
+      const info = { boolean: field.type === "boolean" };
+      map.set(field.name, info);
+      map.set(field.cliName, info);
+    }
+  }
+
+  return map;
+}
+
+function buildShortFlagMap(
+  globalExtracted: ExtractedFields | undefined,
+  commandExtracted: ExtractedFields | undefined,
+): Map<string, { boolean: boolean }> {
+  const map = new Map<string, { boolean: boolean }>();
+
+  // Set global first, then command to preserve command precedence.
+  for (const extracted of [globalExtracted, commandExtracted]) {
+    if (!extracted) continue;
+    for (const field of extracted.fields) {
+      if (!field.alias) continue;
+      map.set(field.alias, { boolean: field.type === "boolean" });
+    }
+  }
+
+  return map;
+}
+
+function getOverriddenBuiltinShortAliases(
+  ...sources: Array<ExtractedFields | undefined>
+): Set<string> {
+  const aliases = new Set<string>();
+
+  for (const source of sources) {
+    if (!source) continue;
+    for (const field of source.fields) {
+      if (
+        field.overrideBuiltinAlias === true &&
+        field.alias !== undefined &&
+        (field.alias === "h" || field.alias === "H")
+      ) {
+        aliases.add(field.alias);
+      }
+    }
+  }
+
+  return aliases;
+}
+
+function findPotentialSubcommandOnHelp(
+  argv: string[],
+  globalExtracted: ExtractedFields | undefined,
+  commandExtracted: ExtractedFields | undefined,
+): string | undefined {
+  const longFlags = buildLongFlagMap(globalExtracted, commandExtracted);
+  const shortFlags = buildShortFlagMap(globalExtracted, commandExtracted);
+  const overriddenBuiltinShortAliases = getOverriddenBuiltinShortAliases(
+    globalExtracted,
+    commandExtracted,
+  );
+
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i];
+    if (!token) continue;
+
+    if (token === "--" || BUILTIN_HELP_LONG_FLAGS.has(token)) {
+      return undefined;
+    }
+
+    if (BUILTIN_HELP_SHORT_FLAGS.has(token)) {
+      const shortAlias = token.slice(1);
+      if (!overriddenBuiltinShortAliases.has(shortAlias)) {
+        return undefined;
+      }
+    }
+
+    if (token.startsWith("--")) {
+      const withoutDashes = token.slice(2);
+
+      if (withoutDashes.startsWith("no-")) {
+        const negatedName = withoutDashes.slice(3);
+        const negatedInfo = longFlags.get(negatedName);
+        if (negatedInfo?.boolean) {
+          continue;
+        }
+
+        const eqIndex = withoutDashes.indexOf("=");
+        if (eqIndex !== -1) {
+          continue;
+        }
+
+        const nextToken = argv[i + 1];
+        if (shouldConsumeNextValue(nextToken)) {
+          i++;
+        }
+        continue;
+      }
+
+      const eqIndex = withoutDashes.indexOf("=");
+      if (eqIndex !== -1) {
+        continue;
+      }
+
+      const info = longFlags.get(withoutDashes);
+      if (!info || !info.boolean) {
+        const nextToken = argv[i + 1];
+        if (shouldConsumeNextValue(nextToken)) {
+          i++;
+        }
+      }
+      continue;
+    }
+
+    if (token.startsWith("-") && token.length > 1) {
+      const withoutDash = token.slice(1);
+      const eqIndex = withoutDash.indexOf("=");
+
+      if (eqIndex !== -1) {
+        continue;
+      }
+
+      if (withoutDash.length === 1) {
+        const info = shortFlags.get(withoutDash);
+        if (!info || !info.boolean) {
+          const nextToken = argv[i + 1];
+          if (shouldConsumeNextValue(nextToken)) {
+            i++;
+          }
+        }
+      }
+
+      continue;
+    }
+
+    return token;
+  }
+
+  return undefined;
 }
 
 /**
@@ -108,6 +349,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     skipValidation: options.skipValidation,
     handleSignals: true,
     logger: options.logger,
+    globalArgs: options.globalArgs,
     _context: {
       commandPath: [],
       rootName: command.name,
@@ -156,21 +398,32 @@ async function runCommandInternal<TResult = unknown>(
   };
 
   try {
+    const globalArgsContext = createGlobalArgsContext(options);
+
     // Parse arguments
-    const parseResult = parseArgs(argv, command, { skipValidation: options.skipValidation });
+    const parseResult = parseArgs(argv, command, {
+      skipValidation: options.skipValidation,
+      globalArgsContext,
+    });
 
     // Handle --help or --help-all
     if (parseResult.helpRequested || parseResult.helpAllRequested) {
       // Check if there's an unknown subcommand specified
       let hasUnknownSubcommand = false;
+      let unknownSubcommand: string | undefined;
       const subCmdNames = listSubCommands(command);
       if (subCmdNames.length > 0) {
-        // Find first positional argument (potential subcommand)
-        const potentialSubCmd = argv.find((arg) => !arg.startsWith("-"));
+        const commandExtracted = command.args ? extractFieldsCached(command.args) : undefined;
+        const potentialSubCmd = findPotentialSubcommandOnHelp(
+          argv,
+          globalArgsContext?.extractedFields,
+          commandExtracted,
+        );
         if (potentialSubCmd && !subCmdNames.includes(potentialSubCmd)) {
           logger.error(formatUnknownSubcommand(potentialSubCmd, subCmdNames));
           logger.error("");
           hasUnknownSubcommand = true;
+          unknownSubcommand = potentialSubCmd;
         }
       }
 
@@ -178,13 +431,14 @@ async function runCommandInternal<TResult = unknown>(
         showSubcommands: options.showSubcommands ?? true,
         showSubcommandOptions: parseResult.helpAllRequested || options.showSubcommandOptions,
         context,
+        globalArgs: globalArgsContext?.schema,
       });
       logger.log(help);
       collector?.stop();
       if (hasUnknownSubcommand) {
         return {
           success: false,
-          error: new Error(`Unknown subcommand: ${argv.find((arg) => !arg.startsWith("-"))}`),
+          error: new Error(`Unknown subcommand: ${unknownSubcommand}`),
           exitCode: 1,
           logs: getCurrentLogs(),
         };
@@ -203,42 +457,28 @@ async function runCommandInternal<TResult = unknown>(
       return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
     }
 
-    // Handle subcommand
-    if (parseResult.subCommand) {
-      const subCmd = await resolveSubcommand(command, parseResult.subCommand);
-      if (subCmd) {
-        // Build new context for subcommand
-        const subContext: CommandContext = {
-          commandPath: [...(context.commandPath ?? []), parseResult.subCommand],
-          rootName: context.rootName,
-          rootVersion: context.rootVersion,
-        };
-        // Stop this collector and pass logs to subcommand
-        collector?.stop();
-        return runCommandInternal<TResult>(subCmd, parseResult.remainingArgs, {
-          ...options,
-          _context: subContext,
-          _existingLogs: getCurrentLogs(),
-        });
-      }
-    }
-
-    // If command has subcommands but none specified, show help
-    const subCmds = listSubCommands(command);
-    if (subCmds.length > 0 && !parseResult.subCommand && !command.run) {
-      const help = generateHelp(command, {
-        showSubcommands: options.showSubcommands ?? true,
-        context,
-      });
-      logger.log(help);
+    const mergedGlobal = validateAndMergeGlobalArgs(globalArgsContext, parseResult.rawGlobalArgs);
+    if (mergedGlobal.errorMessage) {
+      logger.error(mergedGlobal.errorMessage);
       collector?.stop();
-      return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
+      return {
+        success: false,
+        error: new Error(mergedGlobal.errorMessage),
+        exitCode: 1,
+        logs: getCurrentLogs(),
+      };
     }
 
     // Handle unknown flags based on schema's unknownKeysMode
     if (parseResult.unknownFlags.length > 0) {
-      const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
-      const knownFlags = parseResult.extractedFields?.fields.map((f) => f.name) ?? [];
+      const unknownKeysMode = resolveUnknownKeysMode(
+        parseResult.extractedFields,
+        mergedGlobal.context?.extractedFields,
+      );
+      const knownFlags = [
+        ...(parseResult.extractedFields?.fields.map((f) => f.name) ?? []),
+        ...(mergedGlobal.context?.extractedFields.fields.map((f) => f.name) ?? []),
+      ];
 
       if (unknownKeysMode === "strict") {
         // strict mode: treat unknown flags as errors
@@ -262,12 +502,46 @@ async function runCommandInternal<TResult = unknown>(
       // passthrough mode: silently ignore unknown flags
     }
 
+    // Handle subcommand
+    if (parseResult.subCommand) {
+      const subCmd = await resolveSubcommand(command, parseResult.subCommand);
+      if (subCmd) {
+        // Build new context for subcommand
+        const subContext: CommandContext = {
+          commandPath: [...(context.commandPath ?? []), parseResult.subCommand],
+          rootName: context.rootName,
+          rootVersion: context.rootVersion,
+        };
+        // Stop this collector and pass logs to subcommand
+        collector?.stop();
+        return runCommandInternal<TResult>(subCmd, parseResult.remainingArgs, {
+          ...options,
+          _context: subContext,
+          _existingLogs: getCurrentLogs(),
+          ...(mergedGlobal.context ? { _globalArgsContext: mergedGlobal.context } : {}),
+        });
+      }
+    }
+
+    // If command has subcommands but none specified, show help
+    const subCmds = listSubCommands(command);
+    if (subCmds.length > 0 && !parseResult.subCommand && !command.run) {
+      const help = generateHelp(command, {
+        showSubcommands: options.showSubcommands ?? true,
+        context,
+        globalArgs: globalArgsContext?.schema,
+      });
+      logger.log(help);
+      collector?.stop();
+      return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
+    }
+
     // Validate arguments
     if (!command.args) {
-      // No schema, run with empty args
+      const mergedArgs = mergedGlobal.context?.values ?? {};
       // Stop this collector and pass logs to executeLifecycle
       collector?.stop();
-      const result = await executeLifecycle(command, {} as Record<string, never>, {
+      const result = await executeLifecycle(command, mergedArgs, {
         handleSignals: options.handleSignals,
         captureLogs: options.captureLogs,
         existingLogs: getCurrentLogs(),
@@ -275,23 +549,28 @@ async function runCommandInternal<TResult = unknown>(
       return result as RunResult<TResult>;
     }
 
-    const validationResult = validateArgs(parseResult.rawArgs, command.args);
+    const commandValidationResult = validateArgs(parseResult.rawArgs, command.args);
 
-    if (!validationResult.success) {
-      logger.error(formatValidationErrors(validationResult.errors));
+    if (!commandValidationResult.success) {
+      logger.error(formatValidationErrors(commandValidationResult.errors));
       collector?.stop();
       return {
         success: false,
-        error: new Error(formatValidationErrors(validationResult.errors)),
+        error: new Error(formatValidationErrors(commandValidationResult.errors)),
         exitCode: 1,
         logs: getCurrentLogs(),
       };
     }
 
+    const mergedArgs = {
+      ...mergedGlobal.context?.values,
+      ...commandValidationResult.data,
+    };
+
     // Run the command
     // Stop this collector and pass logs to executeLifecycle
     collector?.stop();
-    const result = await executeLifecycle(command, validationResult.data, {
+    const result = await executeLifecycle(command, mergedArgs, {
       handleSignals: options.handleSignals,
       captureLogs: options.captureLogs,
       existingLogs: getCurrentLogs(),

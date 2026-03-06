@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { extractFields, getUnknownKeysMode } from "./schema-extractor.js";
+import { extractFields, extractFieldsCached, getUnknownKeysMode } from "./schema-extractor.js";
 
 describe("schema-extractor", () => {
   describe("getUnknownKeysMode", () => {
@@ -47,6 +47,19 @@ describe("schema-extractor", () => {
       const schema = z.looseObject({ name: z.string() });
       const extracted = extractFields(schema);
       expect(extracted.unknownKeysMode).toBe("passthrough");
+    });
+  });
+
+  describe("extractFieldsCached", () => {
+    it("should return cached object for the same schema reference", () => {
+      const schema = z.object({
+        name: z.string(),
+      });
+
+      const first = extractFieldsCached(schema);
+      const second = extractFieldsCached(schema);
+
+      expect(first).toBe(second);
     });
   });
 });

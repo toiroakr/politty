@@ -132,6 +132,11 @@ interface ZodV4Def {
 type ZodSchemaWithDef = z.ZodType & { def?: ZodV4Def; _def?: ZodV4Def; type?: string; shape?: any };
 
 /**
+ * Cache extracted fields by schema reference.
+ */
+const extractedFieldsCache = new WeakMap<ArgsSchema, ExtractedFields>();
+
+/**
  * Get the type name from a zod schema (v4 compatible)
  */
 function getTypeName(schema: z.ZodType): string | undefined {
@@ -611,6 +616,23 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
 }
 
 /**
+ * Extract fields with WeakMap-based caching by schema reference.
+ *
+ * @param schema - The args schema
+ * @returns Cached extracted field information
+ */
+export function extractFieldsCached(schema: ArgsSchema): ExtractedFields {
+  const cached = extractedFieldsCache.get(schema);
+  if (cached) {
+    return cached;
+  }
+
+  const extracted = extractFields(schema);
+  extractedFieldsCache.set(schema, extracted);
+  return extracted;
+}
+
+/**
  * Get extracted fields from a command
  *
  * @param command - The command to extract fields from
@@ -620,5 +642,5 @@ export function getExtractedFields(command: AnyCommand): ExtractedFields | null 
   if (!command.args) {
     return null;
   }
-  return extractFields(command.args);
+  return extractFieldsCached(command.args);
 }

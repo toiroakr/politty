@@ -74,6 +74,20 @@ describe("Help Generator", () => {
 
       expect(result).toContain("[command]");
     });
+
+    it("should render [global options] when global args are provided", () => {
+      const cmd = defineCommand({
+        name: "cli",
+      });
+
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const result = renderUsageLine(cmd, undefined, globalArgsSchema);
+
+      expect(result).toContain("[global options]");
+    });
   });
 
   describe("renderOptions", () => {
@@ -226,6 +240,45 @@ describe("Help Generator", () => {
 
       expect(result).toContain("Options:");
       expect(result).toContain("--verbose");
+    });
+
+    it("should include global options section when global args are provided", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.object({
+          output: arg(z.string().default("dist"), { alias: "o" }),
+        }),
+      });
+
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const result = generateHelp(cmd, {
+        globalArgs: globalArgsSchema,
+      });
+
+      expect(result).toContain("Global Options:");
+      expect(result).toContain("--verbose");
+      expect(result).toContain("--output");
+    });
+
+    it("should hide built-in -h when global args override alias h", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+      });
+
+      const globalArgsSchema = z.object({
+        header: arg(z.string(), { alias: "h", overrideBuiltinAlias: true }),
+      });
+
+      const result = generateHelp(cmd, {
+        globalArgs: globalArgsSchema,
+      });
+
+      expect(result).toContain("--help");
+      expect(result).not.toContain("-h, --help");
+      expect(result).toContain("-h, --header");
     });
 
     it("should include subcommands when showSubcommands is true", () => {

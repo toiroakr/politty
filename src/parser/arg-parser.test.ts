@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
+import { extractFields } from "../core/schema-extractor.js";
 import { DuplicateAliasError, PositionalConfigError } from "../validator/command-validator.js";
 import { parseArgs } from "./arg-parser.js";
 
@@ -706,6 +707,200 @@ describe("ArgParser", () => {
       const result = parseArgs(["--no-dry-run"], cmd);
 
       expect(result.rawArgs.dryRun).toBe(false);
+    });
+  });
+
+  describe("Global args parsing", () => {
+    it("should parse global flags before subcommand", () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              output: arg(z.string()),
+            }),
+          }),
+        },
+      });
+
+      const result = parseArgs(["--verbose", "build", "--output", "dist"], cmd, {
+        globalArgsContext: {
+          schema: globalArgsSchema,
+          extractedFields: extractFields(globalArgsSchema),
+        },
+      });
+
+      expect(result.subCommand).toBe("build");
+      expect(result.remainingArgs).toEqual(["--output", "dist"]);
+      expect(result.rawGlobalArgs).toEqual({ verbose: true });
+    });
+
+    it("should recognize --no-* boolean negation in subcommand scanner", () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(true), { alias: "v" }),
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({ name: "build" }),
+        },
+      });
+
+      const result = parseArgs(["--no-verbose", "build"], cmd, {
+        globalArgsContext: {
+          schema: globalArgsSchema,
+          extractedFields: extractFields(globalArgsSchema),
+        },
+      });
+
+      expect(result.subCommand).toBe("build");
+      expect(result.rawGlobalArgs).toEqual({ verbose: false });
+    });
+
+    it("should stop scanning when built-in help flags are found", () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({ name: "build" }),
+        },
+      });
+
+      const result = parseArgs(["--help", "build"], cmd, {
+        globalArgsContext: {
+          schema: globalArgsSchema,
+          extractedFields: extractFields(globalArgsSchema),
+        },
+      });
+
+      expect(result.helpRequested).toBe(true);
+      expect(result.subCommand).toBeUndefined();
+    });
+
+    it("should split command args and global args on leaf commands", () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const cmd = defineCommand({
+        name: "build",
+        args: z.object({
+          output: arg(z.string()),
+        }),
+      });
+
+      const result = parseArgs(["--verbose", "--output", "dist"], cmd, {
+        globalArgsContext: {
+          schema: globalArgsSchema,
+          extractedFields: extractFields(globalArgsSchema),
+        },
+      });
+
+      expect(result.rawArgs).toEqual({ output: "dist" });
+      expect(result.rawGlobalArgs).toEqual({ verbose: true });
+    });
+
+    it("should keep unknown global flags before subcommand", () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({ name: "build" }),
+        },
+      });
+
+      const result = parseArgs(["--unknown-flag", "build"], cmd, {
+        globalArgsContext: {
+          schema: globalArgsSchema,
+          extractedFields: extractFields(globalArgsSchema),
+        },
+      });
+
+      expect(result.subCommand).toBe("build");
+      expect(result.unknownFlags).toContain("unknown-flag");
+    });
+
+    it("should prioritize command alias over global alias on leaf commands", () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "o" }),
+      });
+
+      const cmd = defineCommand({
+        name: "build",
+        args: z.object({
+          output: arg(z.string(), { alias: "o" }),
+        }),
+      });
+
+      const result = parseArgs(["-o", "dist"], cmd, {
+        globalArgsContext: {
+          schema: globalArgsSchema,
+          extractedFields: extractFields(globalArgsSchema),
+        },
+      });
+
+      expect(result.rawArgs).toEqual({ output: "dist" });
+      expect(result.rawGlobalArgs).toEqual({});
+    });
+
+    it("should keep global long option parsing when only alias collides", () => {
+      const globalArgsSchema = z.object({
+        verbose: arg(z.boolean().default(true), { alias: "o" }),
+      });
+
+      const cmd = defineCommand({
+        name: "build",
+        args: z.object({
+          output: arg(z.string(), { alias: "o" }),
+        }),
+      });
+
+      const result = parseArgs(["--no-verbose", "--output", "dist"], cmd, {
+        globalArgsContext: {
+          schema: globalArgsSchema,
+          extractedFields: extractFields(globalArgsSchema),
+        },
+      });
+
+      expect(result.rawArgs).toEqual({ output: "dist" });
+      expect(result.rawGlobalArgs).toEqual({ verbose: false });
+      expect(result.unknownFlags).toEqual([]);
+    });
+
+    it("should detect subcommand when global -h alias overrides builtin help", () => {
+      const globalArgsSchema = z.object({
+        header: arg(z.string(), { alias: "h", overrideBuiltinAlias: true }),
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({ name: "build" }),
+        },
+      });
+
+      const result = parseArgs(["-h", "token", "build"], cmd, {
+        globalArgsContext: {
+          schema: globalArgsSchema,
+          extractedFields: extractFields(globalArgsSchema),
+        },
+      });
+
+      expect(result.helpRequested).toBe(false);
+      expect(result.subCommand).toBe("build");
+      expect(result.rawGlobalArgs).toEqual({ header: "token" });
     });
   });
 

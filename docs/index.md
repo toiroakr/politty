@@ -10,6 +10,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **Type Safety**: Full TypeScript support with automatic type inference for parsed arguments
 - **Flexible Argument Definition**: Support for positional arguments, flags, aliases, arrays, and environment variable fallbacks
 - **Nested Commands**: Build Git-style subcommands (with lazy loading support)
+- **Global Options**: Define options shared across all subcommands
 - **Lifecycle Management**: Guaranteed `setup` → `run` → `cleanup` execution order
 - **Signal Handling**: Proper SIGINT/SIGTERM handling with guaranteed cleanup execution
 
@@ -17,7 +18,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 
 - **[Getting Started](./getting-started.md)**: Installation and creating your first command
 - **[Essentials](./essentials.md)**: Core concepts (arguments, validation, lifecycle) explained
-- **[Advanced Features](./advanced-features.md)**: Subcommands, Discriminated Union, advanced features
+- **[Advanced Features](./advanced-features.md)**: Subcommands, Global Options, Discriminated Union, advanced features
 - **[Shell Completion](./shell-completion.md)**: Completion types, shell-specific setup, and troubleshooting
 - **[Recipes](./recipes.md)**: Practical examples for testing, configuration, error handling
 - **[API Reference](./api-reference.md)**: Detailed API reference

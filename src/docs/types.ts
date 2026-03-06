@@ -45,6 +45,8 @@ export interface CommandInfo {
   filePath?: string | undefined;
   /** Map of command path to file path (for cross-file links) */
   fileMap?: Record<string, string> | undefined;
+  /** Root document path containing global options marker */
+  rootDocPath?: string | undefined;
   /** Example definitions from command */
   examples?: Example[] | undefined;
   /** Example execution results (populated when examples are executed) */

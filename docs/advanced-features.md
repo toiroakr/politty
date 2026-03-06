@@ -23,8 +23,8 @@ const cli = defineCommand({
   name: "app",
   subCommands: {
     init,
-    build
-  }
+    build,
+  },
 });
 ```
 
@@ -43,7 +43,7 @@ const cli = defineCommand({
   subCommands: {
     // heavyCommand is already loaded
     heavy: async () => heavyCommand,
-  }
+  },
 });
 ```
 
@@ -54,8 +54,8 @@ const cli = defineCommand({
     heavy: async () => {
       const { heavyCommand } = await import("./commands/heavy.js");
       return heavyCommand;
-    }
-  }
+    },
+  },
 });
 ```
 
@@ -66,24 +66,98 @@ See `playground/21-lazy-subcommands.ts` for a complete example.
 Subcommands can have their own `subCommands`.
 
 ```typescript
-const remoteAdd = defineCommand({ name: "add", /* ... */ });
-const remoteRemove = defineCommand({ name: "remove", /* ... */ });
+const remoteAdd = defineCommand({ name: "add" /* ... */ });
+const remoteRemove = defineCommand({ name: "remove" /* ... */ });
 
 const remote = defineCommand({
   name: "remote",
   subCommands: {
     add: remoteAdd,
-    rm: remoteRemove
-  }
+    rm: remoteRemove,
+  },
 });
 
 const cli = defineCommand({
-  subCommands: { remote }
+  subCommands: { remote },
 });
 ```
 
 ```bash
 $ my-cli remote add origin https://github.com/...
+```
+
+## Global Options
+
+Use `globalArgs` to define options shared across all subcommands.
+
+```typescript
+import { z } from "zod";
+import { arg, defineCommand, runMain } from "politty";
+
+const cli = defineCommand({
+  name: "my-cli",
+  subCommands: {
+    build: defineCommand({
+      name: "build",
+      args: z.object({
+        output: arg(z.string().default("dist"), { alias: "o" }),
+      }),
+      run: (args) => {
+        // args includes output + global options
+        console.log(args.output, args.verbose);
+      },
+    }),
+  },
+});
+
+const globalArgs = z.object({
+  verbose: arg(z.boolean().default(false), { alias: "v" }),
+  config: arg(z.string().optional(), { alias: "c", env: "MY_CLI_CONFIG" }),
+});
+
+runMain(cli, { globalArgs, version: "1.0.0" });
+```
+
+Global options are:
+
+- Available before and after subcommands
+- Rendered in help as a separate `Global Options` section
+- Merged into command args at runtime
+
+```bash
+$ my-cli --verbose build --output out
+$ my-cli build --output out --verbose
+```
+
+When command args and global args use the same key, command args take precedence.
+If only a short alias collides, the command alias takes precedence and the global long option
+(`--flag` / `--no-flag`) remains available.
+
+If a global option overrides `-h`/`-H` with `overrideBuiltinAlias: true`, those short aliases are
+treated as user-defined options (not built-in help aliases). Built-in help remains available via
+`--help` and `--help-all`.
+
+### Type-safe Global Args with `createDefineCommand`
+
+For stronger typing across a large CLI, create a scoped `defineCommand`:
+
+```typescript
+import { createDefineCommand } from "politty";
+
+type AppGlobalArgs = {
+  verbose: boolean;
+  config?: string;
+};
+
+const defineAppCommand = createDefineCommand<AppGlobalArgs>();
+
+const build = defineAppCommand({
+  name: "build",
+  run: (args) => {
+    // args.verbose and args.config are strongly typed
+    console.log(args.verbose, args.config);
+  },
+});
 ```
 
 ## Complex Schemas
@@ -93,19 +167,25 @@ $ my-cli remote add origin https://github.com/...
 Use `z.discriminatedUnion` to create mutually exclusive argument sets. This is ideal for commands where a "mode" argument determines which other arguments are valid (and required).
 
 ```typescript
-const args = z.discriminatedUnion("mode", [
-  // Mode 1: File input
-  z.object({
-    mode: z.literal("file"),
-    path: arg(z.string(), { description: "Input file path" }),
-  }).describe("Input from file"),
-  // Mode 2: URL input
-  z.object({
-    mode: z.literal("url"),
-    url: arg(z.string().url(), { description: "Input URL" }),
-    method: arg(z.enum(["GET", "POST"]).default("GET")),
-  }).describe("Input from URL"),
-]).describe("Input mode");
+const args = z
+  .discriminatedUnion("mode", [
+    // Mode 1: File input
+    z
+      .object({
+        mode: z.literal("file"),
+        path: arg(z.string(), { description: "Input file path" }),
+      })
+      .describe("Input from file"),
+    // Mode 2: URL input
+    z
+      .object({
+        mode: z.literal("url"),
+        url: arg(z.string().url(), { description: "Input URL" }),
+        method: arg(z.enum(["GET", "POST"]).default("GET")),
+      })
+      .describe("Input from URL"),
+  ])
+  .describe("Input mode");
 
 const command = defineCommand({
   args,
@@ -117,7 +197,7 @@ const command = defineCommand({
       // args.url is valid here
       console.log("Fetching URL:", args.url);
     }
-  }
+  },
 });
 ```
 
@@ -151,12 +231,14 @@ const sharedOptions = z.object({
 });
 
 const command = defineCommand({
-  args: sharedOptions.and(z.object({
-    input: arg(z.string(), { positional: true })
-  })),
+  args: sharedOptions.and(
+    z.object({
+      input: arg(z.string(), { positional: true }),
+    }),
+  ),
   run: (args) => {
     // args has verbose, json, and input
-  }
+  },
 });
 ```
 
@@ -168,10 +250,10 @@ Use Zod's `transform` to process arguments before they reach the handler.
 args: z.object({
   // Convert comma-separated string to array
   tags: arg(
-    z.string().transform(val => val.split(",")),
-    { description: "Comma-separated tags" }
-  )
-})
+    z.string().transform((val) => val.split(",")),
+    { description: "Comma-separated tags" },
+  ),
+});
 ```
 
 ## Appendix: Extending Zod Global Registry
@@ -195,12 +277,12 @@ const command = defineCommand({
     }),
     verbose: z.boolean().meta({
       alias: "v",
-      description: "Verbose mode"
+      description: "Verbose mode",
     }),
   }),
   run: (args) => {
     // ...
-  }
+  },
 });
 ```
 

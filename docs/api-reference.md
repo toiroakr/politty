@@ -67,6 +67,45 @@ const command = defineCommand({
 
 ---
 
+### `createDefineCommand`
+
+Creates a project-scoped `defineCommand`-like function with pre-applied global args type.
+
+```typescript
+function createDefineCommand<TGlobalArgs = GlobalArgs>(): (
+  ...args: Parameters<typeof defineCommand>
+) => ReturnType<typeof defineCommand>;
+```
+
+The returned function is `defineCommand`-like and carries `TGlobalArgs` into command arg typing.
+
+#### Example
+
+```typescript
+import { z } from "zod";
+import { arg, createDefineCommand } from "politty";
+
+type AppGlobalArgs = {
+  verbose: boolean;
+  config?: string;
+};
+
+const defineAppCommand = createDefineCommand<AppGlobalArgs>();
+
+const build = defineAppCommand({
+  name: "build",
+  args: z.object({
+    output: arg(z.string().default("dist"), { alias: "o" }),
+  }),
+  run: (args) => {
+    // args includes both command args and AppGlobalArgs
+    console.log(args.output, args.verbose, args.config);
+  },
+});
+```
+
+---
+
 ### `runMain`
 
 Executes a command as the CLI entry point. Signal handling (SIGINT, SIGTERM) is automatically enabled, and `process.exit` is called on termination.
@@ -89,7 +128,8 @@ async function runMain(command: Command, options?: MainOptions): Promise<never>;
 #### Example
 
 ```typescript
-import { defineCommand, runMain } from "politty";
+import { z } from "zod";
+import { arg, defineCommand, runMain } from "politty";
 
 const command = defineCommand({
   name: "my-cli",
@@ -104,6 +144,14 @@ runMain(command, { version: "1.0.0" });
 
 // Debug mode
 runMain(command, { version: "1.0.0", debug: true });
+
+// With global options shared by all subcommands
+runMain(command, {
+  version: "1.0.0",
+  globalArgs: z.object({
+    verbose: arg(z.boolean().default(false), { alias: "v" }),
+  }),
+});
 ```
 
 ---
@@ -135,7 +183,8 @@ async function runCommand<TResult>(
 #### Example
 
 ```typescript
-import { defineCommand, runCommand } from "politty";
+import { z } from "zod";
+import { arg, defineCommand, runCommand } from "politty";
 
 const command = defineCommand({
   name: "my-cli",
@@ -146,6 +195,14 @@ const command = defineCommand({
 const result = await runCommand(command, ["--verbose", "input.txt"]);
 console.log(result.exitCode);
 console.log(result.result);
+
+// With global options
+const resultWithGlobal = await runCommand(command, ["build", "--verbose"], {
+  globalArgs: z.object({
+    verbose: arg(z.boolean().default(false), { alias: "v" }),
+  }),
+});
+console.log(resultWithGlobal.exitCode);
 ```
 
 ---
@@ -548,6 +605,41 @@ interface Example {
 
 ---
 
+### `GlobalArgs`
+
+Declaration-merging target for global args typing.
+
+```typescript
+interface GlobalArgs {}
+```
+
+#### Example
+
+```typescript
+declare module "politty" {
+  interface GlobalArgs {
+    verbose: boolean;
+    config?: string;
+  }
+}
+```
+
+---
+
+### `GlobalArgsContext`
+
+Runtime context for parsing and validating global args.
+
+```typescript
+interface GlobalArgsContext {
+  schema: ArgsSchema;
+  extractedFields: ExtractedFields;
+  values?: Record<string, unknown>;
+}
+```
+
+---
+
 ### `ArgMeta`
 
 Type for argument metadata (union type).
@@ -640,6 +732,8 @@ interface MainOptions {
   skipValidation?: boolean;
   /** Custom logger (default: console) */
   logger?: Logger;
+  /** Global argument schema available to all subcommands */
+  globalArgs?: ArgsSchema;
 }
 ```
 
@@ -659,6 +753,8 @@ interface RunCommandOptions {
   skipValidation?: boolean;
   /** Custom logger (default: console) */
   logger?: Logger;
+  /** Global argument schema available to all subcommands */
+  globalArgs?: ArgsSchema;
 }
 ```
 
@@ -1021,11 +1117,12 @@ type CommandValidationResult =
 
 ```typescript
 // Core
-export { defineCommand } from "./core/command.js";
+export { createDefineCommand, defineCommand } from "./core/command.js";
 export { runMain, runCommand } from "./core/runner.js";
 export { arg, type ArgMeta } from "./core/arg-registry.js";
 export {
   extractFields,
+  extractFieldsCached,
   getUnknownKeysMode,
   toKebabCase,
   type ExtractedFields,
@@ -1051,6 +1148,8 @@ export type {
   Command,
   CommandBase,
   Example,
+  GlobalArgs,
+  GlobalArgsContext,
   LogEntry,
   Logger,
   LogLevel,

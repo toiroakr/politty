@@ -261,6 +261,22 @@ function getRelativePath(from: string, to: string): string {
 }
 
 /**
+ * Build a link to the root document Global Options section.
+ */
+function getGlobalOptionsLink(info: CommandInfo): string | undefined {
+  if (!info.rootDocPath || !info.filePath) {
+    return undefined;
+  }
+
+  if (info.filePath === info.rootDocPath) {
+    return "#global-options";
+  }
+
+  const relativePath = getRelativePath(info.filePath, info.rootDocPath);
+  return `${relativePath}#global-options`;
+}
+
+/**
  * Render subcommands as table
  */
 export function renderSubcommandsTable(info: CommandInfo, generateAnchors = true): string {
@@ -608,7 +624,11 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     }
 
     // Options
-    if (info.options.length > 0) {
+    const globalOptionsLink = info.depth > 1 ? getGlobalOptionsLink(info) : undefined;
+    const globalOptionsHint = globalOptionsLink
+      ? `Shared options: [Global Options](${globalOptionsLink}).`
+      : undefined;
+    if (info.options.length > 0 || (!customRenderOptions && globalOptionsHint)) {
       const renderOpts = (opts: ResolvedFieldMeta[], renderOpts?: RenderContentOptions): string => {
         const style = renderOpts?.style ?? optionStyle;
         const withHeading = renderOpts?.withHeading ?? true;
@@ -624,9 +644,16 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         info,
       };
 
-      const content = customRenderOptions
+      let content = customRenderOptions
         ? customRenderOptions(context)
         : renderOpts(context.options);
+      if (globalOptionsHint) {
+        if (content) {
+          content = `${content}\n\n${globalOptionsHint}`;
+        } else if (!customRenderOptions) {
+          content = `**Options**\n\n${globalOptionsHint}`;
+        }
+      }
       if (content) {
         sections.push(wrapWithMarker("options", scope, content));
       }

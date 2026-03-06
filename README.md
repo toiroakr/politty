@@ -10,6 +10,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **Type Safety**: Full TypeScript support with automatic type inference for parsed arguments
 - **Flexible Argument Definition**: Support for positional arguments, flags, aliases, arrays, and environment variable fallbacks
 - **Subcommands**: Build Git-style nested subcommands (with lazy loading support)
+- **Global Options**: Define options shared across all subcommands
 - **Lifecycle Management**: Guaranteed `setup` → `run` → `cleanup` execution order
 - **Signal Handling**: Proper SIGINT/SIGTERM handling with guaranteed cleanup execution
 - **Auto Help Generation**: Automatically generate help text from definitions
@@ -197,6 +198,70 @@ $ my-cli build -o out -m
 $ my-cli --help
 ```
 
+### Global Options (Across Subcommands)
+
+Define a global options schema once and pass it via `runMain`/`runCommand`.
+Global options can be placed both before and after subcommands.
+
+```typescript
+import { z } from "zod";
+import { arg, createDefineCommand, defineCommand, runMain } from "politty";
+
+type AppGlobalArgs = {
+  verbose: boolean;
+  config?: string;
+};
+
+const defineAppCommand = createDefineCommand<AppGlobalArgs>();
+
+const buildCommand = defineAppCommand({
+  name: "build",
+  args: z.object({
+    output: arg(z.string().default("dist"), { alias: "o" }),
+  }),
+  run: (args) => {
+    // args includes command args + global args
+    console.log({
+      output: args.output,
+      verbose: args.verbose,
+      config: args.config,
+    });
+  },
+});
+
+const cli = defineCommand({
+  name: "my-cli",
+  subCommands: {
+    build: buildCommand,
+  },
+});
+
+const globalArgs = z.object({
+  verbose: arg(z.boolean().default(false), { alias: "v" }),
+  config: arg(z.string().optional(), { alias: "c", env: "MY_CLI_CONFIG" }),
+});
+
+runMain(cli, { version: "1.0.0", globalArgs });
+```
+
+Example usage:
+
+```bash
+# Global options before subcommand
+$ my-cli --verbose build --output out
+
+# Global options after subcommand
+$ my-cli build --output out --verbose
+```
+
+When command args and global args use the same key, command args take precedence.
+If only a short alias collides, the command alias takes precedence and the global long option
+(`--flag` / `--no-flag`) remains available.
+
+If a global option overrides `-h`/`-H` with `overrideBuiltinAlias: true`, those short aliases are
+treated as user-defined options (not built-in help aliases). Built-in help remains available via
+`--help` and `--help-all`.
+
 ### Lifecycle Hooks
 
 Execute hooks in `setup` → `run` → `cleanup` order. The `cleanup` hook is always executed, even if an error occurs:
@@ -250,6 +315,21 @@ Define a command.
 | `run`         | `(args) => T?`                | Run function        |
 | `cleanup`     | `(context) => Promise<void>?` | Cleanup hook        |
 
+### `createDefineCommand<TGlobalArgs>()`
+
+Create a project-scoped `defineCommand` with pre-applied global args type.
+
+```typescript
+const defineAppCommand = createDefineCommand<{ verbose: boolean; config?: string }>();
+
+const cmd = defineAppCommand({
+  name: "build",
+  run: (args) => {
+    // args.verbose and args.config are strongly typed
+  },
+});
+```
+
 ### `runMain(command, options?)`
 
 CLI entry point. Handles signals and calls `process.exit()`.
@@ -257,7 +337,9 @@ CLI entry point. Handles signals and calls `process.exit()`.
 ```typescript
 runMain(command, {
   version: "1.0.0", // Displayed with --version flag
-  argv: process.argv, // Custom argv
+  globalArgs: z.object({
+    verbose: arg(z.boolean().default(false), { alias: "v" }),
+  }), // Shared options available in all subcommands
 });
 ```
 
@@ -266,7 +348,11 @@ runMain(command, {
 Programmatic/testing entry point. Does not call `process.exit()` and returns a result object.
 
 ```typescript
-const result = await runCommand(command, ["arg1", "--flag"]);
+const result = await runCommand(command, ["build", "--verbose"], {
+  globalArgs: z.object({
+    verbose: arg(z.boolean().default(false), { alias: "v" }),
+  }),
+});
 if (result.success) {
   console.log(result.result);
 } else {
@@ -374,7 +460,7 @@ For detailed documentation, see the `docs/` directory:
 
 - [Getting Started](./docs/getting-started.md) - Installation and creating your first command
 - [Essentials](./docs/essentials.md) - Core concepts explained
-- [Advanced Features](./docs/advanced-features.md) - Subcommands, Discriminated Union
+- [Advanced Features](./docs/advanced-features.md) - Subcommands, Global Options, Discriminated Union
 - [Recipes](./docs/recipes.md) - Testing, configuration, error handling
 - [API Reference](./docs/api-reference.md) - Detailed API reference
 - [Doc Generation](./docs/doc-generation.md) - Automatic documentation generation
@@ -390,6 +476,7 @@ The `playground/` directory contains many examples:
 - `10-subcommands` - Subcommands
 - `12-discriminated-union` - Discriminated Union
 - `21-lazy-subcommands` - Lazy loading
+- `23-global-options-index-markers` - Global options and documentation index markers
 
 ## License
 
