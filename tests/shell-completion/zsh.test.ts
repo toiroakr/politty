@@ -33,7 +33,8 @@ describe.runIf(isCI)("CI: required tools are available", () => {
   it("zsh", () => expect(hasZsh).toBe(true));
 });
 
-const complete = (args: string[], opts?: ExecOptions) => zshCompleteRaw(ctx.testEnv, args, opts);
+const complete = (args: string[], opts?: ExecOptions) =>
+  zshCompleteRaw(ctx.testEnv, args, { ...opts, scriptPath: ctx.completionScripts.zsh });
 
 // ─── Common tests ─────────────────────────────────────────────────────────────
 
@@ -45,7 +46,10 @@ describe.skipIf(!hasZsh)("zsh completion", () => {
 
 describe.skipIf(!hasZsh)("zsh nested subcommand completion", () => {
   const completeNested = (args: string[], opts?: ExecOptions) =>
-    zshCompleteNested(nestedCtx.testEnv, args, opts);
+    zshCompleteNested(nestedCtx.testEnv, args, {
+      ...opts,
+      scriptPath: nestedCtx.completionScripts.zsh,
+    });
   defineNestedTests(completeNested);
 });
 
@@ -117,7 +121,7 @@ describe.skipIf(!hasZsh)("zsh interactive completion (zpty)", () => {
       `export PATH="${ctx.tmpDir}:$PATH"`,
       `autoload -Uz compinit && compinit -u 2>/dev/null`,
       `zstyle ':completion:*' completer _complete _files`,
-      `eval "$(myapp completion zsh)" 2>/dev/null`,
+      `source '${ctx.completionScripts.zsh}' 2>/dev/null`,
       `comppostfuncs+=( _test_cap )`,
       `_test_cap() { echo $compstate[nmatches] > "${resultFile}" }`,
       `cd "${opts.cwd}"`,
