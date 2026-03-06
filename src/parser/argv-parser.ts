@@ -1,4 +1,4 @@
-import type { ExtractedFields } from "../core/schema-extractor.js";
+import { toCamelCase, type ExtractedFields } from "../core/schema-extractor.js";
 
 /**
  * Parsed arguments result
@@ -22,6 +22,13 @@ export interface ParserOptions {
   booleanFlags?: Set<string>;
   /** Array flags (can be repeated) */
   arrayFlags?: Set<string>;
+  /**
+   * All known canonical option names (as defined in the schema).
+   * Used to disambiguate negation: when `--no-flag` or `--noFlag` matches
+   * a name in this set, it is treated as a regular option rather than
+   * boolean negation of `flag`.
+   */
+  definedNames?: Set<string>;
 }
 
 /**
@@ -33,13 +40,25 @@ export interface ParserOptions {
  * - Combined short options: -abc (treated as -a -b -c if all are boolean)
  * - Positional arguments
  * - -- to stop parsing options
+ * - Boolean negation: --no-flag, --noFlag (requires `booleanFlags`)
+ *
+ * **Note:** When using negation detection (`--noFlag` / `--no-flag`),
+ * supply `definedNames` so that options whose names happen to start with
+ * "no" (e.g. `noDryRun`) are not mistaken for negation of another flag.
+ * Without `definedNames`, all `--noX` forms matching a boolean flag will
+ * be treated as negation.
  *
  * @param argv - Command line arguments
  * @param options - Parser options
  * @returns Parsed arguments
  */
 export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedArgv {
-  const { aliasMap = new Map(), booleanFlags = new Set(), arrayFlags = new Set() } = options;
+  const {
+    aliasMap = new Map(),
+    booleanFlags = new Set(),
+    arrayFlags = new Set(),
+    definedNames = new Set(),
+  } = options;
 
   const result: ParsedArgv = {
     options: {},
@@ -90,14 +109,40 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     if (arg.startsWith("--")) {
       const withoutDashes = arg.slice(2);
 
-      // Handle --no-flag for boolean negation
+      // Handle --no-flag for boolean negation (kebab-case only)
       if (withoutDashes.startsWith("no-")) {
         const flagName = withoutDashes.slice(3);
-        const resolvedName = aliasMap.get(flagName) ?? flagName;
+        // Block mixed form: --no-dryRun (kebab prefix + camelCase)
+        if (flagName === flagName.toLowerCase()) {
+          const resolvedName = aliasMap.get(flagName) ?? flagName;
+          if (booleanFlags.has(resolvedName)) {
+            // "no-dry-run" itself is a defined field → treat as that field, not negation
+            const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
+            if (!definedNames.has(asIsResolved)) {
+              setOption(flagName, false);
+              i++;
+              continue;
+            }
+          }
+        }
+      }
+
+      // Handle camelCase negation: --noDryRun -> dryRun = false
+      if (
+        withoutDashes.length > 2 &&
+        withoutDashes.startsWith("no") &&
+        /[A-Z]/.test(withoutDashes[2]!)
+      ) {
+        const camelFlagName = withoutDashes[2]!.toLowerCase() + withoutDashes.slice(3);
+        const resolvedName = aliasMap.get(camelFlagName) ?? camelFlagName;
         if (booleanFlags.has(resolvedName)) {
-          setOption(flagName, false);
-          i++;
-          continue;
+          // "noDryRun" itself is a defined field → treat as that field, not negation
+          const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
+          if (!definedNames.has(asIsResolved)) {
+            setOption(camelFlagName, false);
+            i++;
+            continue;
+          }
         }
       }
 
@@ -189,6 +234,12 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
   const aliasMap = new Map<string, string>();
   const booleanFlags = new Set<string>();
   const arrayFlags = new Set<string>();
+  const definedNames = new Set<string>();
+
+  // First pass: collect all canonical field names
+  for (const field of extracted.fields) {
+    definedNames.add(field.name);
+  }
 
   for (const field of extracted.fields) {
     // Map kebab-case CLI name to camelCase field name
@@ -201,6 +252,18 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
       aliasMap.set(field.alias, field.name);
     }
 
+    // Map camelCase variant to field name for kebab-case field names
+    // e.g., field "dry-run" → aliasMap("dryRun", "dry-run")
+    // Only add if it doesn't collide with any existing field name or already-registered alias
+    const camelVariant = toCamelCase(field.name);
+    if (
+      camelVariant !== field.name &&
+      !definedNames.has(camelVariant) &&
+      !aliasMap.has(camelVariant)
+    ) {
+      aliasMap.set(camelVariant, field.name);
+    }
+
     if (field.type === "boolean") {
       booleanFlags.add(field.name);
     }
@@ -210,7 +273,7 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
     }
   }
 
-  return { aliasMap, booleanFlags, arrayFlags };
+  return { aliasMap, booleanFlags, arrayFlags, definedNames };
 }
 
 /**
