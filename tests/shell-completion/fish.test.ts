@@ -31,7 +31,8 @@ describe.runIf(isCI)("CI: required tools are available", () => {
   it("fish", () => expect(hasFish).toBe(true));
 });
 
-const complete = (args: string[], opts?: ExecOptions) => fishCompleteRaw(ctx.testEnv, args, opts);
+const complete = (args: string[], opts?: ExecOptions) =>
+  fishCompleteRaw(ctx.testEnv, args, { ...opts, scriptPath: ctx.completionScripts.fish });
 
 // ─── Common tests ─────────────────────────────────────────────────────────────
 
@@ -43,7 +44,10 @@ describe.skipIf(!hasFish)("fish completion", () => {
 
 describe.skipIf(!hasFish)("fish nested subcommand completion", () => {
   const completeNested = (args: string[], opts?: ExecOptions) =>
-    fishCompleteNested(nestedCtx.testEnv, args, opts);
+    fishCompleteNested(nestedCtx.testEnv, args, {
+      ...opts,
+      scriptPath: nestedCtx.completionScripts.fish,
+    });
   defineNestedTests(completeNested);
 });
 
@@ -69,7 +73,7 @@ describe.skipIf(!hasFish)("fish interactive completion (complete --do-complete)"
 
     const script = [
       `set -x PATH "${ctx.tmpDir}" $PATH`,
-      `source (myapp completion fish | psub)`,
+      `source '${ctx.completionScripts.fish}'`,
       `cd "${opts.cwd}"`,
       `complete --do-complete "${commandLine}"`,
     ].join("\n");

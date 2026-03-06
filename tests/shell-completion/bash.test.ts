@@ -35,7 +35,8 @@ describe.runIf(isCI)("CI: required tools are available", () => {
   it("expect", () => expect(hasExpect).toBe(true));
 });
 
-const complete = (args: string[], opts?: ExecOptions) => bashCompleteRaw(ctx.testEnv, args, opts);
+const complete = (args: string[], opts?: ExecOptions) =>
+  bashCompleteRaw(ctx.testEnv, args, { ...opts, scriptPath: ctx.completionScripts.bash });
 
 // ─── Common tests ─────────────────────────────────────────────────────────────
 
@@ -47,7 +48,10 @@ describe.skipIf(!hasBash)("bash completion", () => {
 
 describe.skipIf(!hasBash)("bash nested subcommand completion", () => {
   const completeNested = (args: string[], opts?: ExecOptions) =>
-    bashCompleteNested(nestedCtx.testEnv, args, opts);
+    bashCompleteNested(nestedCtx.testEnv, args, {
+      ...opts,
+      scriptPath: nestedCtx.completionScripts.bash,
+    });
   defineNestedTests(completeNested);
 });
 
@@ -121,7 +125,7 @@ describe.skipIf(!hasBash)("bash-specific completion", () => {
 
   it("does not leak stale COMPREPLY across invocations", () => {
     const script = `
-eval "$(myapp completion bash)"
+source '${ctx.completionScripts.bash}'
 COMP_WORDS=('myapp' '')
 COMP_CWORD=1
 COMP_LINE='myapp '
@@ -167,7 +171,7 @@ describe.skipIf(!hasBash || !hasExpect)("bash interactive completion (expect)", 
     const setupContent = [
       `export PS1='READY> '`,
       `export PATH="${ctx.tmpDir}:$PATH"`,
-      `eval "$(myapp completion bash)"`,
+      `source '${ctx.completionScripts.bash}'`,
       `_myapp_wrapper() { _myapp_completions; echo \${#COMPREPLY[@]} > "${resultFile}"; }`,
       `complete -o default -F _myapp_wrapper myapp`,
       `cd "${opts.cwd}"`,
