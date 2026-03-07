@@ -20,6 +20,14 @@ export interface ScanResult {
  * `my-cli --verbose build --output dist` correctly identifies `build` as
  * the subcommand (index 1) rather than treating `--verbose` as the subcommand.
  *
+ * Limitation: flags appearing before the subcommand name are matched only
+ * against the global schema. If a flag is defined in both global and a
+ * subcommand's local schema, the pre-subcommand occurrence is always treated
+ * as global because the local schema is not available until the subcommand is
+ * identified (lazy-loaded commands make eager checking infeasible). Place
+ * colliding flags after the subcommand name so that `separateGlobalArgs` can
+ * apply local-precedence logic.
+ *
  * @param argv - Command line arguments
  * @param subCommandNames - Valid subcommand names
  * @param globalExtracted - Extracted fields from global args schema
