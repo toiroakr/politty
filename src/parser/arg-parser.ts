@@ -7,7 +7,12 @@ import {
   validateReservedAliases,
 } from "../validator/command-validator.js";
 import { buildParserOptions, mergeWithPositionals, parseArgv } from "./argv-parser.js";
-import { scanForSubcommand } from "./subcommand-scanner.js";
+import {
+  buildGlobalFlagLookup,
+  resolveGlobalLongOption,
+  scanForSubcommand,
+  shouldConsumeValue,
+} from "./subcommand-scanner.js";
 
 /**
  * Result of parsing CLI arguments
@@ -266,13 +271,7 @@ function separateGlobalArgs(
   globalExtracted: ExtractedFields,
   localExtracted?: ExtractedFields,
 ): { separated: string[]; globalParsed: Record<string, unknown> } {
-  const { aliasMap = new Map(), booleanFlags = new Set() } = buildParserOptions(globalExtracted);
-
-  const knownGlobalFlags = new Set(globalExtracted.fields.map((f) => f.name));
-  const knownGlobalCliNames = new Set(globalExtracted.fields.map((f) => f.cliName));
-  const knownGlobalAliases = new Set(
-    globalExtracted.fields.filter((f) => f.alias).map((f) => f.alias!),
-  );
+  const lookup = buildGlobalFlagLookup(globalExtracted);
 
   // Local schema fields for collision detection: local takes precedence
   const localCliNames = new Set(localExtracted?.fields.map((f) => f.cliName) ?? []);
@@ -294,30 +293,21 @@ function separateGlobalArgs(
 
     // Long option
     if (arg.startsWith("--")) {
-      const withoutDashes = arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : arg.slice(2);
-      const flagName = withoutDashes.startsWith("no-") ? withoutDashes.slice(3) : withoutDashes;
-      const resolvedName = aliasMap.get(flagName) ?? flagName;
-      const isKnownGlobal =
-        knownGlobalFlags.has(resolvedName) ||
-        knownGlobalCliNames.has(withoutDashes) ||
-        knownGlobalCliNames.has(flagName);
+      const { resolvedName, withoutDashes, isNegated, isGlobal } = resolveGlobalLongOption(
+        arg,
+        lookup,
+      );
+      const flagName = isNegated ? withoutDashes.slice(3) : withoutDashes;
 
       // If also defined locally, let the local parser handle it
       const isLocalCollision = localCliNames.has(withoutDashes) || localCliNames.has(flagName);
 
-      if (isKnownGlobal && !isLocalCollision) {
+      if (isGlobal && !isLocalCollision) {
         globalTokens.push(arg);
-        if (
-          !arg.includes("=") &&
-          !booleanFlags.has(resolvedName) &&
-          !withoutDashes.startsWith("no-")
-        ) {
-          const nextArg = argv[i + 1];
-          if (nextArg !== undefined && !nextArg.startsWith("-")) {
-            globalTokens.push(nextArg);
-            i += 2;
-            continue;
-          }
+        if (shouldConsumeValue(arg, resolvedName, isNegated, argv[i + 1], lookup.booleanFlags)) {
+          globalTokens.push(argv[i + 1]!);
+          i += 2;
+          continue;
         }
         i++;
         continue;
@@ -342,20 +332,16 @@ function separateGlobalArgs(
       const withoutDash = arg.includes("=") ? arg.slice(1, arg.indexOf("=")) : arg.slice(1);
 
       if (withoutDash.length === 1) {
-        const resolvedName = aliasMap.get(withoutDash) ?? withoutDash;
-        const isKnownGlobal =
-          knownGlobalAliases.has(withoutDash) || knownGlobalFlags.has(resolvedName);
+        const resolvedName = lookup.aliasMap.get(withoutDash) ?? withoutDash;
+        const isKnownGlobal = lookup.aliases.has(withoutDash) || lookup.flagNames.has(resolvedName);
 
         // If also defined locally, let the local parser handle it
         if (isKnownGlobal && !localAliases.has(withoutDash)) {
           globalTokens.push(arg);
-          if (!arg.includes("=") && !booleanFlags.has(resolvedName)) {
-            const nextArg = argv[i + 1];
-            if (nextArg !== undefined && !nextArg.startsWith("-")) {
-              globalTokens.push(nextArg);
-              i += 2;
-              continue;
-            }
+          if (shouldConsumeValue(arg, resolvedName, false, argv[i + 1], lookup.booleanFlags)) {
+            globalTokens.push(argv[i + 1]!);
+            i += 2;
+            continue;
           }
           i++;
           continue;

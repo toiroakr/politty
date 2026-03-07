@@ -3,9 +3,14 @@ import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collec
 import { listSubCommands, resolveSubcommand } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
-import { buildParserOptions } from "../parser/argv-parser.js";
+import {
+  buildGlobalFlagLookup,
+  resolveGlobalLongOption,
+  shouldConsumeValue,
+} from "../parser/subcommand-scanner.js";
 import type {
   AnyCommand,
+  ArgsSchema,
   CollectedLogs,
   InternalRunOptions,
   Logger,
@@ -80,11 +85,7 @@ export async function runCommand<TResult = unknown>(
   argv: string[],
   options: RunCommandOptions = {},
 ): Promise<RunResult<TResult>> {
-  // Extract global fields once if globalArgs is provided
-  const globalExtracted = options.globalArgs ? extractFields(options.globalArgs) : undefined;
-  if (globalExtracted && !options.skipValidation) {
-    validateGlobalSchema(globalExtracted);
-  }
+  const globalExtracted = extractAndValidateGlobal(options);
 
   return runCommandInternal(command, argv, {
     ...options,
@@ -117,11 +118,7 @@ export async function runCommand<TResult = unknown>(
  * ```
  */
 export async function runMain(command: AnyCommand, options: MainOptions = {}): Promise<never> {
-  // Extract global fields once if globalArgs is provided
-  const globalExtracted = options.globalArgs ? extractFields(options.globalArgs) : undefined;
-  if (globalExtracted && !options.skipValidation) {
-    validateGlobalSchema(globalExtracted);
-  }
+  const globalExtracted = extractAndValidateGlobal(options);
 
   const result = await runCommandInternal(command, process.argv.slice(2), {
     debug: options.debug,
@@ -386,6 +383,22 @@ async function runCommandInternal<TResult = unknown>(
 }
 
 /**
+ * Extract global fields from options.globalArgs and validate the schema upfront.
+ * Returns undefined when no globalArgs is provided.
+ */
+function extractAndValidateGlobal(options: {
+  globalArgs?: ArgsSchema;
+  skipValidation?: boolean;
+}): ExtractedFields | undefined {
+  if (!options.globalArgs) return undefined;
+  const extracted = extractFields(options.globalArgs);
+  if (!options.skipValidation) {
+    validateGlobalSchema(extracted);
+  }
+  return extracted;
+}
+
+/**
  * Validate global args schema upfront (mirrors the per-command validation in parseArgs).
  * Rejects positional fields since global options must be flags.
  */
@@ -412,33 +425,34 @@ function findFirstPositional(
     return argv.find((arg) => !arg.startsWith("-"));
   }
 
-  const { booleanFlags = new Set(), aliasMap = new Map() } = buildParserOptions(globalExtracted);
-  const cliNames = new Set(globalExtracted.fields.map((f) => f.cliName));
-  const aliases = new Set(globalExtracted.fields.filter((f) => f.alias).map((f) => f.alias!));
+  const lookup = buildGlobalFlagLookup(globalExtracted);
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (!arg.startsWith("-")) return arg;
     if (arg === "--") return undefined;
 
-    // Check if this is a known global flag that takes a value
-    let resolvedName: string | undefined;
-    if (arg.startsWith("--") && !arg.includes("=")) {
-      const name = arg.slice(2);
-      const baseName = name.startsWith("no-") ? name.slice(3) : name;
-      if (cliNames.has(name) || cliNames.has(baseName)) {
-        resolvedName = aliasMap.get(baseName) ?? baseName;
+    // Long option
+    if (arg.startsWith("--")) {
+      const { resolvedName, isNegated, isGlobal } = resolveGlobalLongOption(arg, lookup);
+      if (
+        isGlobal &&
+        shouldConsumeValue(arg, resolvedName, isNegated, argv[i + 1], lookup.booleanFlags)
+      ) {
+        i++;
       }
-    } else if (arg.startsWith("-") && arg.length === 2) {
-      const ch = arg[1]!;
-      if (aliases.has(ch)) {
-        resolvedName = aliasMap.get(ch) ?? ch;
-      }
+      continue;
     }
 
-    // Skip next token if this is a non-boolean global flag without = value
-    if (resolvedName && !booleanFlags.has(resolvedName) && !arg.slice(2).startsWith("no-")) {
-      i++;
+    // Short option (-f)
+    if (arg.length === 2) {
+      const ch = arg[1]!;
+      if (lookup.aliases.has(ch)) {
+        const resolvedName = lookup.aliasMap.get(ch) ?? ch;
+        if (shouldConsumeValue(arg, resolvedName, false, argv[i + 1], lookup.booleanFlags)) {
+          i++;
+        }
+      }
     }
   }
   return undefined;

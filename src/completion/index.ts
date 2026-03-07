@@ -176,12 +176,15 @@ export function createCompletionCommand(
         return;
       }
 
-      const result = generateCompletion(rootCommand, {
+      const completionOpts: CompletionOptions = {
         shell: shellType,
         programName: resolvedProgramName,
         includeDescriptions: true,
-        ...(globalArgsSchema ? { globalArgsSchema } : {}),
-      });
+      };
+      if (globalArgsSchema) {
+        completionOpts.globalArgsSchema = globalArgsSchema;
+      }
+      const result = generateCompletion(rootCommand, completionOpts);
 
       if (args.instructions) {
         console.log(result.installInstructions);
