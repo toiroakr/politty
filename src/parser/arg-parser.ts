@@ -149,11 +149,9 @@ export function parseArgs(
   let commandArgv = argv;
   let rawGlobalArgs: Record<string, unknown> | undefined;
   if (options.globalExtracted) {
-    const globalParserOptions = buildParserOptions(options.globalExtracted);
     const { separated, globalParsed } = separateGlobalArgs(
       argv,
       options.globalExtracted,
-      globalParserOptions,
       extracted,
     );
     commandArgv = separated;
@@ -238,7 +236,8 @@ export function parseArgs(
 }
 
 /**
- * Parse global args from a list of tokens (e.g., tokens before the subcommand)
+ * Parse global args from a list of tokens (e.g., tokens before the subcommand).
+ * Env fallbacks are applied later in the runner on the accumulated global args.
  */
 function parseGlobalArgs(
   tokens: string[],
@@ -248,23 +247,7 @@ function parseGlobalArgs(
 
   const parserOptions = buildParserOptions(globalExtracted);
   const parsed = parseArgv(tokens, parserOptions);
-  const rawArgs = mergeWithPositionals(parsed, globalExtracted);
-
-  // Apply env fallbacks for global args
-  for (const field of globalExtracted.fields) {
-    if (field.env && rawArgs[field.name] === undefined) {
-      const envNames = Array.isArray(field.env) ? field.env : [field.env];
-      for (const envName of envNames) {
-        const envValue = process.env[envName];
-        if (envValue !== undefined) {
-          rawArgs[field.name] = envValue;
-          break;
-        }
-      }
-    }
-  }
-
-  return rawArgs;
+  return mergeWithPositionals(parsed, globalExtracted);
 }
 
 /**
@@ -281,10 +264,9 @@ function parseGlobalArgs(
 function separateGlobalArgs(
   argv: string[],
   globalExtracted: ExtractedFields,
-  globalParserOptions: ReturnType<typeof buildParserOptions>,
   localExtracted?: ExtractedFields,
 ): { separated: string[]; globalParsed: Record<string, unknown> } {
-  const { aliasMap = new Map(), booleanFlags = new Set() } = globalParserOptions;
+  const { aliasMap = new Map(), booleanFlags = new Set() } = buildParserOptions(globalExtracted);
 
   const knownGlobalFlags = new Set(globalExtracted.fields.map((f) => f.name));
   const knownGlobalCliNames = new Set(globalExtracted.fields.map((f) => f.cliName));

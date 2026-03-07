@@ -89,9 +89,6 @@ export async function runCommand<TResult = unknown>(
   return runCommandInternal(command, argv, {
     ...options,
     handleSignals: false,
-    skipValidation: options.skipValidation,
-    logger: options.logger,
-    globalArgs: options.globalArgs,
     _globalExtracted: globalExtracted,
   });
 }
@@ -305,7 +302,7 @@ async function runCommandInternal<TResult = unknown>(
 
     // Validate global args at the leaf command level
     let validatedGlobalArgs: Record<string, unknown> = {};
-    if (options.globalArgs && Object.keys(accumulatedGlobalArgs).length > 0) {
+    if (options.globalArgs) {
       // Apply env fallbacks for global args
       if (options._globalExtracted) {
         for (const field of options._globalExtracted.fields) {
@@ -323,20 +320,6 @@ async function runCommandInternal<TResult = unknown>(
       }
 
       const globalValidation = validateArgs(accumulatedGlobalArgs, options.globalArgs);
-      if (!globalValidation.success) {
-        logger.error(formatValidationErrors(globalValidation.errors));
-        collector?.stop();
-        return {
-          success: false,
-          error: new Error(formatValidationErrors(globalValidation.errors)),
-          exitCode: 1,
-          logs: getCurrentLogs(),
-        };
-      }
-      validatedGlobalArgs = globalValidation.data as Record<string, unknown>;
-    } else if (options.globalArgs) {
-      // No global args provided, validate with empty object for defaults
-      const globalValidation = validateArgs({}, options.globalArgs);
       if (!globalValidation.success) {
         logger.error(formatValidationErrors(globalValidation.errors));
         collector?.stop();

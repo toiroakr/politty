@@ -1192,12 +1192,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   let rootDoc = config.rootDoc;
   if (globalArgs && rootDoc && !rootDoc.globalOptions) {
     const globalExtracted = extractFields(globalArgs);
-    const globalShape: ArgsShape = {};
-    for (const f of globalExtracted.fields) {
-      if (!f.positional) {
-        globalShape[f.name] = f.schema;
-      }
-    }
+    const globalShape: ArgsShape = Object.fromEntries(
+      globalExtracted.fields.filter((f) => !f.positional).map((f) => [f.name, f.schema]),
+    );
     if (Object.keys(globalShape).length > 0) {
       rootDoc = { ...rootDoc, globalOptions: globalShape };
     }
