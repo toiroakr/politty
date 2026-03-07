@@ -39,6 +39,8 @@ export interface CommandContext {
   rootName?: string | undefined;
   /** Root command version */
   rootVersion?: string | undefined;
+  /** Extracted fields from global args schema */
+  globalExtracted?: ExtractedFields | undefined;
 }
 
 /**
@@ -98,6 +100,11 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
   const name = buildUsageCommandName(command, context);
 
   parts.push(styles.commandName(name));
+
+  // Add [global options] if global args are defined
+  if (context?.globalExtracted && context.globalExtracted.fields.length > 0) {
+    parts.push(styles.placeholder("[global options]"));
+  }
 
   const extracted = getExtractedFields(command);
   if (extracted) {
@@ -473,6 +480,36 @@ function formatOption(
 }
 
 /**
+ * Render global options section
+ */
+function renderGlobalOptions(globalExtracted: ExtractedFields): string {
+  const lines: string[] = [];
+  const options = globalExtracted.fields.filter((a) => !a.positional);
+
+  for (const opt of options) {
+    const flags = formatFlags(opt);
+    let desc = opt.description ?? "";
+
+    if (opt.defaultValue !== undefined) {
+      desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(opt.defaultValue)})`)}`;
+    }
+
+    if (opt.required) {
+      desc += ` ${styles.required("(required)")}`;
+    }
+
+    const envInfo = formatEnvInfo(opt.env);
+    if (envInfo) {
+      desc += ` ${envInfo}`;
+    }
+
+    lines.push(formatOption(flags, desc));
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * Render options for a subcommand (used by showSubcommandOptions)
  */
 function renderSubcommandOptionsCompact(command: AnyCommand, indent: number): string[] {
@@ -581,6 +618,14 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   const optionsText = renderOptions(command, options.descriptions, context);
   if (optionsText) {
     sections.push(`${styles.sectionHeader("Options:")}\n${optionsText}`);
+  }
+
+  // Global Options
+  if (context?.globalExtracted && context.globalExtracted.fields.length > 0) {
+    const globalOptionsText = renderGlobalOptions(context.globalExtracted);
+    if (globalOptionsText) {
+      sections.push(`${styles.sectionHeader("Global Options:")}\n${globalOptionsText}`);
+    }
   }
 
   // Subcommands

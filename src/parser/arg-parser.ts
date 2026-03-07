@@ -7,6 +7,7 @@ import {
   validateReservedAliases,
 } from "../validator/command-validator.js";
 import { buildParserOptions, mergeWithPositionals, parseArgv } from "./argv-parser.js";
+import { scanForSubcommand } from "./subcommand-scanner.js";
 
 /**
  * Result of parsing CLI arguments
@@ -30,6 +31,8 @@ export interface ParseResult {
   unknownFlags: string[];
   /** Extracted fields from schema (for internal use) */
   extractedFields?: ExtractedFields | undefined;
+  /** Raw parsed global args (before validation) */
+  rawGlobalArgs?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -38,6 +41,8 @@ export interface ParseResult {
 export interface ParseArgsOptions {
   /** Skip command definition validation (useful in production where tests already verified) */
   skipValidation?: boolean | undefined;
+  /** Extracted fields from global args schema */
+  globalExtracted?: ExtractedFields | undefined;
 }
 
 /**
@@ -59,19 +64,44 @@ export function parseArgs(
   const hasSubCommands = subCommandNames.length > 0;
 
   if (hasSubCommands && argv.length > 0) {
-    const firstArg = argv[0];
-    // Only treat as subcommand if it doesn't start with '-' (not a flag)
-    if (firstArg && !firstArg.startsWith("-") && subCommandNames.includes(firstArg)) {
-      return {
-        helpRequested: false,
-        helpAllRequested: false,
-        versionRequested: false,
-        subCommand: firstArg,
-        remainingArgs: argv.slice(1),
-        rawArgs: {},
-        positionals: [],
-        unknownFlags: [],
-      };
+    // When global args schema is provided, use the scanner to skip over global flags
+    if (options.globalExtracted) {
+      const scanResult = scanForSubcommand(argv, subCommandNames, options.globalExtracted);
+      if (scanResult.subCommandIndex >= 0) {
+        // Parse global args from tokens before the subcommand
+        const rawGlobalArgs = parseGlobalArgs(
+          scanResult.globalTokensBefore,
+          options.globalExtracted,
+        );
+        // Remaining args = global tokens after subcommand + tokens after subcommand
+        // Global flags after subcommand will be parsed when the leaf command is reached
+        return {
+          helpRequested: false,
+          helpAllRequested: false,
+          versionRequested: false,
+          subCommand: argv[scanResult.subCommandIndex],
+          remainingArgs: scanResult.tokensAfterSubcommand,
+          rawArgs: {},
+          positionals: [],
+          unknownFlags: [],
+          rawGlobalArgs,
+        };
+      }
+    } else {
+      const firstArg = argv[0];
+      // Only treat as subcommand if it doesn't start with '-' (not a flag)
+      if (firstArg && !firstArg.startsWith("-") && subCommandNames.includes(firstArg)) {
+        return {
+          helpRequested: false,
+          helpAllRequested: false,
+          versionRequested: false,
+          subCommand: firstArg,
+          remainingArgs: argv.slice(1),
+          rawArgs: {},
+          positionals: [],
+          unknownFlags: [],
+        };
+      }
     }
   }
 
@@ -127,11 +157,25 @@ export function parseArgs(
     };
   }
 
+  // When global args are defined, separate global flags from command-local args
+  let commandArgv = argv;
+  let rawGlobalArgs: Record<string, unknown> | undefined;
+  if (options.globalExtracted) {
+    const globalParserOptions = buildParserOptions(options.globalExtracted);
+    const { separated, globalParsed } = separateGlobalArgs(
+      argv,
+      options.globalExtracted,
+      globalParserOptions,
+    );
+    commandArgv = separated;
+    rawGlobalArgs = globalParsed;
+  }
+
   // Build parser options from extracted fields
   const parserOptions = buildParserOptions(extracted);
 
   // Parse argv
-  const parsed = parseArgv(argv, parserOptions);
+  const parsed = parseArgv(commandArgv, parserOptions);
 
   // Merge with positionals
   const rawArgs = mergeWithPositionals(parsed, extracted);
@@ -157,6 +201,16 @@ export function parseArgs(
   const knownFlags = new Set(extracted.fields.map((f) => f.name));
   const knownCliNames = new Set(extracted.fields.map((f) => f.cliName));
   const knownAliases = new Set(extracted.fields.filter((f) => f.alias).map((f) => f.alias!));
+
+  // Also consider global flags as known
+  if (options.globalExtracted) {
+    for (const f of options.globalExtracted.fields) {
+      knownFlags.add(f.name);
+      knownCliNames.add(f.cliName);
+      if (f.alias) knownAliases.add(f.alias);
+    }
+  }
+
   const unknownFlags: string[] = [];
 
   for (const key of Object.keys(parsed.options)) {
@@ -175,5 +229,147 @@ export function parseArgs(
     positionals: parsed.positionals,
     unknownFlags,
     extractedFields: extracted,
+    rawGlobalArgs,
   };
+}
+
+/**
+ * Parse global args from a list of tokens (e.g., tokens before the subcommand)
+ */
+function parseGlobalArgs(
+  tokens: string[],
+  globalExtracted: ExtractedFields,
+): Record<string, unknown> {
+  if (tokens.length === 0) return {};
+
+  const parserOptions = buildParserOptions(globalExtracted);
+  const parsed = parseArgv(tokens, parserOptions);
+  const rawArgs = mergeWithPositionals(parsed, globalExtracted);
+
+  // Apply env fallbacks for global args
+  for (const field of globalExtracted.fields) {
+    if (field.env && rawArgs[field.name] === undefined) {
+      const envNames = Array.isArray(field.env) ? field.env : [field.env];
+      for (const envName of envNames) {
+        const envValue = process.env[envName];
+        if (envValue !== undefined) {
+          rawArgs[field.name] = envValue;
+          break;
+        }
+      }
+    }
+  }
+
+  return rawArgs;
+}
+
+/**
+ * Separate global flags from command-local args in argv.
+ * Global flags mixed with command args (e.g., `build --verbose --output dist`)
+ * are extracted and returned separately.
+ */
+function separateGlobalArgs(
+  argv: string[],
+  globalExtracted: ExtractedFields,
+  globalParserOptions: ReturnType<typeof buildParserOptions>,
+): { separated: string[]; globalParsed: Record<string, unknown> } {
+  const { aliasMap = new Map(), booleanFlags = new Set() } = globalParserOptions;
+
+  const knownGlobalFlags = new Set(globalExtracted.fields.map((f) => f.name));
+  const knownGlobalCliNames = new Set(globalExtracted.fields.map((f) => f.cliName));
+  const knownGlobalAliases = new Set(
+    globalExtracted.fields.filter((f) => f.alias).map((f) => f.alias!),
+  );
+
+  const globalTokens: string[] = [];
+  const commandTokens: string[] = [];
+  let stopParsing = false;
+
+  let i = 0;
+  while (i < argv.length) {
+    const arg = argv[i]!;
+
+    if (stopParsing || arg === "--") {
+      commandTokens.push(...argv.slice(i));
+      break;
+    }
+
+    // Long option
+    if (arg.startsWith("--")) {
+      const withoutDashes = arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : arg.slice(2);
+      const flagName = withoutDashes.startsWith("no-") ? withoutDashes.slice(3) : withoutDashes;
+      const resolvedName = aliasMap.get(flagName) ?? flagName;
+      const isKnownGlobal =
+        knownGlobalFlags.has(resolvedName) ||
+        knownGlobalCliNames.has(withoutDashes) ||
+        knownGlobalCliNames.has(flagName);
+
+      if (isKnownGlobal) {
+        globalTokens.push(arg);
+        if (
+          !arg.includes("=") &&
+          !booleanFlags.has(resolvedName) &&
+          !withoutDashes.startsWith("no-")
+        ) {
+          const nextArg = argv[i + 1];
+          if (nextArg !== undefined && !nextArg.startsWith("-")) {
+            globalTokens.push(nextArg);
+            i += 2;
+            continue;
+          }
+        }
+        i++;
+        continue;
+      }
+
+      commandTokens.push(arg);
+      // Consume value for non-boolean unknown flags
+      if (!arg.includes("=")) {
+        const nextArg = argv[i + 1];
+        if (nextArg !== undefined && !nextArg.startsWith("-")) {
+          commandTokens.push(nextArg);
+          i += 2;
+          continue;
+        }
+      }
+      i++;
+      continue;
+    }
+
+    // Short option
+    if (arg.startsWith("-") && arg.length > 1) {
+      const withoutDash = arg.includes("=") ? arg.slice(1, arg.indexOf("=")) : arg.slice(1);
+
+      if (withoutDash.length === 1) {
+        const resolvedName = aliasMap.get(withoutDash) ?? withoutDash;
+        const isKnownGlobal =
+          knownGlobalAliases.has(withoutDash) || knownGlobalFlags.has(resolvedName);
+
+        if (isKnownGlobal) {
+          globalTokens.push(arg);
+          if (!arg.includes("=") && !booleanFlags.has(resolvedName)) {
+            const nextArg = argv[i + 1];
+            if (nextArg !== undefined && !nextArg.startsWith("-")) {
+              globalTokens.push(nextArg);
+              i += 2;
+              continue;
+            }
+          }
+          i++;
+          continue;
+        }
+      }
+
+      commandTokens.push(arg);
+      i++;
+      continue;
+    }
+
+    // Positional
+    commandTokens.push(arg);
+    i++;
+  }
+
+  const globalParsed = parseGlobalArgs(globalTokens, globalExtracted);
+  return { separated: commandTokens, globalParsed };
 }

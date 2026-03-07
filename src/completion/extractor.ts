@@ -4,7 +4,7 @@
 
 import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../lazy.js";
-import type { AnyCommand } from "../types.js";
+import type { AnyCommand, ArgsSchema } from "../types.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -206,14 +206,32 @@ export function isSubcmdCaseLines(routeEntries: RouteEntry[]): string[] {
 
 /**
  * Extract completion data from a command tree
+ *
+ * @param command - The root command
+ * @param programName - Program name for completion scripts
+ * @param globalArgsSchema - Optional global args schema. When provided, global options
+ *   are derived from this schema instead of the root command's options.
  */
-export function extractCompletionData(command: AnyCommand, programName: string): CompletionData {
+export function extractCompletionData(
+  command: AnyCommand,
+  programName: string,
+  globalArgsSchema?: ArgsSchema,
+): CompletionData {
   const rootSubcommand = extractSubcommand(programName, command);
+
+  // When globalArgsSchema is provided, derive global options from it
+  let globalOptions: CompletableOption[];
+  if (globalArgsSchema) {
+    const globalExtracted = extractFields(globalArgsSchema);
+    globalOptions = globalExtracted.fields.filter((field) => !field.positional).map(fieldToOption);
+  } else {
+    // Default: global options are the options defined on the root command
+    globalOptions = rootSubcommand.options;
+  }
 
   return {
     command: rootSubcommand,
     programName,
-    // Global options are the options defined on the root command
-    globalOptions: rootSubcommand.options,
+    globalOptions,
   };
 }

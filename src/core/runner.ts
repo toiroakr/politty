@@ -20,6 +20,7 @@ import {
   formatValidationErrors,
 } from "../validator/error-formatter.js";
 import { validateArgs } from "../validator/zod-validator.js";
+import { extractFields, type ExtractedFields } from "./schema-extractor.js";
 
 /**
  * Default logger using console
@@ -34,9 +35,13 @@ const defaultLogger: Logger = {
  */
 interface InternalCommandOptions extends InternalRunOptions {
   /** Command hierarchy context (internal use) */
-  _context?: CommandContext;
+  _context?: CommandContext | undefined;
   /** Existing logs to include (for subcommand routing) */
-  _existingLogs?: CollectedLogs;
+  _existingLogs?: CollectedLogs | undefined;
+  /** Extracted fields from global args schema */
+  _globalExtracted?: ExtractedFields | undefined;
+  /** Already parsed global args (accumulated from parent levels) */
+  _parsedGlobalArgs?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -70,11 +75,16 @@ export async function runCommand<TResult = unknown>(
   argv: string[],
   options: RunCommandOptions = {},
 ): Promise<RunResult<TResult>> {
+  // Extract global fields once if globalArgs is provided
+  const globalExtracted = options.globalArgs ? extractFields(options.globalArgs) : undefined;
+
   return runCommandInternal(command, argv, {
     ...options,
     handleSignals: false,
     skipValidation: options.skipValidation,
     logger: options.logger,
+    globalArgs: options.globalArgs,
+    _globalExtracted: globalExtracted,
   });
 }
 
@@ -102,16 +112,22 @@ export async function runCommand<TResult = unknown>(
  * ```
  */
 export async function runMain(command: AnyCommand, options: MainOptions = {}): Promise<never> {
+  // Extract global fields once if globalArgs is provided
+  const globalExtracted = options.globalArgs ? extractFields(options.globalArgs) : undefined;
+
   const result = await runCommandInternal(command, process.argv.slice(2), {
     debug: options.debug,
     captureLogs: options.captureLogs,
     skipValidation: options.skipValidation,
     handleSignals: true,
     logger: options.logger,
+    globalArgs: options.globalArgs,
+    _globalExtracted: globalExtracted,
     _context: {
       commandPath: [],
       rootName: command.name,
       rootVersion: options.version,
+      globalExtracted,
     },
   });
 
@@ -141,6 +157,7 @@ async function runCommandInternal<TResult = unknown>(
   const context: CommandContext = options._context ?? {
     commandPath: [],
     rootName: command.name,
+    globalExtracted: options._globalExtracted,
   };
 
   // Start log collection if enabled
@@ -157,7 +174,16 @@ async function runCommandInternal<TResult = unknown>(
 
   try {
     // Parse arguments
-    const parseResult = parseArgs(argv, command, { skipValidation: options.skipValidation });
+    const parseResult = parseArgs(argv, command, {
+      skipValidation: options.skipValidation,
+      globalExtracted: options._globalExtracted,
+    });
+
+    // Accumulate global args from this parse level
+    const accumulatedGlobalArgs = {
+      ...options._parsedGlobalArgs,
+      ...parseResult.rawGlobalArgs,
+    };
 
     // Handle --help or --help-all
     if (parseResult.helpRequested || parseResult.helpAllRequested) {
@@ -212,6 +238,7 @@ async function runCommandInternal<TResult = unknown>(
           commandPath: [...(context.commandPath ?? []), parseResult.subCommand],
           rootName: context.rootName,
           rootVersion: context.rootVersion,
+          globalExtracted: context.globalExtracted,
         };
         // Stop this collector and pass logs to subcommand
         collector?.stop();
@@ -219,6 +246,7 @@ async function runCommandInternal<TResult = unknown>(
           ...options,
           _context: subContext,
           _existingLogs: getCurrentLogs(),
+          _parsedGlobalArgs: accumulatedGlobalArgs,
         });
       }
     }
@@ -262,12 +290,59 @@ async function runCommandInternal<TResult = unknown>(
       // passthrough mode: silently ignore unknown flags
     }
 
+    // Validate global args at the leaf command level
+    let validatedGlobalArgs: Record<string, unknown> = {};
+    if (options.globalArgs && Object.keys(accumulatedGlobalArgs).length > 0) {
+      // Apply env fallbacks for global args
+      if (options._globalExtracted) {
+        for (const field of options._globalExtracted.fields) {
+          if (field.env && accumulatedGlobalArgs[field.name] === undefined) {
+            const envNames = Array.isArray(field.env) ? field.env : [field.env];
+            for (const envName of envNames) {
+              const envValue = process.env[envName];
+              if (envValue !== undefined) {
+                accumulatedGlobalArgs[field.name] = envValue;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      const globalValidation = validateArgs(accumulatedGlobalArgs, options.globalArgs);
+      if (!globalValidation.success) {
+        logger.error(formatValidationErrors(globalValidation.errors));
+        collector?.stop();
+        return {
+          success: false,
+          error: new Error(formatValidationErrors(globalValidation.errors)),
+          exitCode: 1,
+          logs: getCurrentLogs(),
+        };
+      }
+      validatedGlobalArgs = globalValidation.data as Record<string, unknown>;
+    } else if (options.globalArgs) {
+      // No global args provided, validate with empty object for defaults
+      const globalValidation = validateArgs({}, options.globalArgs);
+      if (!globalValidation.success) {
+        logger.error(formatValidationErrors(globalValidation.errors));
+        collector?.stop();
+        return {
+          success: false,
+          error: new Error(formatValidationErrors(globalValidation.errors)),
+          exitCode: 1,
+          logs: getCurrentLogs(),
+        };
+      }
+      validatedGlobalArgs = globalValidation.data as Record<string, unknown>;
+    }
+
     // Validate arguments
     if (!command.args) {
-      // No schema, run with empty args
-      // Stop this collector and pass logs to executeLifecycle
+      // No schema, run with global args (or empty args)
       collector?.stop();
-      const result = await executeLifecycle(command, {} as Record<string, never>, {
+      const mergedArgs = { ...validatedGlobalArgs } as Record<string, never>;
+      const result = await executeLifecycle(command, mergedArgs, {
         handleSignals: options.handleSignals,
         captureLogs: options.captureLogs,
         existingLogs: getCurrentLogs(),
@@ -288,10 +363,13 @@ async function runCommandInternal<TResult = unknown>(
       };
     }
 
+    // Merge global args with command args (command args take precedence on collision)
+    const mergedArgs = { ...validatedGlobalArgs, ...validationResult.data };
+
     // Run the command
     // Stop this collector and pass logs to executeLifecycle
     collector?.stop();
-    const result = await executeLifecycle(command, validationResult.data, {
+    const result = await executeLifecycle(command, mergedArgs, {
       handleSignals: options.handleSignals,
       captureLogs: options.captureLogs,
       existingLogs: getCurrentLogs(),
