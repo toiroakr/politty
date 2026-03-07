@@ -143,20 +143,6 @@ export function parseArgs(
     };
   }
 
-  // If no schema, return minimal result
-  if (!extracted) {
-    return {
-      helpRequested: false,
-      helpAllRequested: false,
-      versionRequested: false,
-      subCommand: undefined,
-      remainingArgs: [],
-      rawArgs: {},
-      positionals: [],
-      unknownFlags: [],
-    };
-  }
-
   // When global args are defined, separate global flags from command-local args
   let commandArgv = argv;
   let rawGlobalArgs: Record<string, unknown> | undefined;
@@ -169,6 +155,21 @@ export function parseArgs(
     );
     commandArgv = separated;
     rawGlobalArgs = globalParsed;
+  }
+
+  // If no schema, return minimal result (but include any parsed global args)
+  if (!extracted) {
+    return {
+      helpRequested: false,
+      helpAllRequested: false,
+      versionRequested: false,
+      subCommand: undefined,
+      remainingArgs: [],
+      rawArgs: {},
+      positionals: [],
+      unknownFlags: [],
+      rawGlobalArgs,
+    };
   }
 
   // Build parser options from extracted fields

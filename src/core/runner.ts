@@ -3,6 +3,7 @@ import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collec
 import { listSubCommands, resolveSubcommand } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
+import { buildParserOptions } from "../parser/argv-parser.js";
 import type {
   AnyCommand,
   CollectedLogs,
@@ -191,8 +192,8 @@ async function runCommandInternal<TResult = unknown>(
       let hasUnknownSubcommand = false;
       const subCmdNames = listSubCommands(command);
       if (subCmdNames.length > 0) {
-        // Find first positional argument (potential subcommand)
-        const potentialSubCmd = argv.find((arg) => !arg.startsWith("-"));
+        // Find first positional argument (potential subcommand), skipping global option values
+        const potentialSubCmd = findFirstPositional(argv, context.globalExtracted);
         if (potentialSubCmd && !subCmdNames.includes(potentialSubCmd)) {
           logger.error(formatUnknownSubcommand(potentialSubCmd, subCmdNames));
           logger.error("");
@@ -387,4 +388,48 @@ async function runCommandInternal<TResult = unknown>(
       logs: getCurrentLogs(),
     };
   }
+}
+
+/**
+ * Find the first positional argument in argv, properly skipping global flag values.
+ * Without globalExtracted, falls back to the first non-flag token.
+ */
+function findFirstPositional(
+  argv: string[],
+  globalExtracted?: ExtractedFields,
+): string | undefined {
+  if (!globalExtracted) {
+    return argv.find((arg) => !arg.startsWith("-"));
+  }
+
+  const { booleanFlags = new Set(), aliasMap = new Map() } = buildParserOptions(globalExtracted);
+  const cliNames = new Set(globalExtracted.fields.map((f) => f.cliName));
+  const aliases = new Set(globalExtracted.fields.filter((f) => f.alias).map((f) => f.alias!));
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]!;
+    if (!arg.startsWith("-")) return arg;
+    if (arg === "--") return undefined;
+
+    // Check if this is a known global flag that takes a value
+    let resolvedName: string | undefined;
+    if (arg.startsWith("--") && !arg.includes("=")) {
+      const name = arg.slice(2);
+      const baseName = name.startsWith("no-") ? name.slice(3) : name;
+      if (cliNames.has(name) || cliNames.has(baseName)) {
+        resolvedName = aliasMap.get(baseName) ?? baseName;
+      }
+    } else if (arg.startsWith("-") && arg.length === 2) {
+      const ch = arg[1]!;
+      if (aliases.has(ch)) {
+        resolvedName = aliasMap.get(ch) ?? ch;
+      }
+    }
+
+    // Skip next token if this is a non-boolean global flag without = value
+    if (resolvedName && !booleanFlags.has(resolvedName) && !arg.slice(2).startsWith("no-")) {
+      i++;
+    }
+  }
+  return undefined;
 }
