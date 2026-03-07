@@ -1,5 +1,5 @@
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
-import type { AnyCommand, Example } from "../types.js";
+import type { AnyCommand, ArgsSchema, Example } from "../types.js";
 import type { ArgsShape, ArgsTableOptions } from "./render-args.js";
 
 /** Heading level for markdown headings (1-6) */
@@ -335,6 +335,11 @@ export interface GenerateDocConfig {
    * The full document structure is used to maintain cross-file links.
    */
   targetCommands?: string[];
+  /**
+   * Global args schema (runtime schema alternative).
+   * When provided, automatically derives `rootDoc.globalOptions` from this schema.
+   */
+  globalArgs?: ArgsSchema;
 }
 
 /**

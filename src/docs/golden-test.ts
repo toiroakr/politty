@@ -1179,14 +1179,29 @@ async function executeConfiguredExamples(
 export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDocResult> {
   const {
     command,
-    rootDoc,
     files,
     ignores = [],
     format = {},
     formatter,
     examples: examplesConfig,
     targetCommands,
+    globalArgs,
   } = config;
+
+  // Auto-derive rootDoc.globalOptions from globalArgs schema if provided
+  let rootDoc = config.rootDoc;
+  if (globalArgs && rootDoc && !rootDoc.globalOptions) {
+    const globalExtracted = extractFields(globalArgs);
+    const globalShape: ArgsShape = {};
+    for (const f of globalExtracted.fields) {
+      if (!f.positional) {
+        globalShape[f.name] = f.schema;
+      }
+    }
+    if (Object.keys(globalShape).length > 0) {
+      rootDoc = { ...rootDoc, globalOptions: globalShape };
+    }
+  }
   const updateMode = isUpdateMode();
 
   // Validate rootDoc.path does not overlap with files keys

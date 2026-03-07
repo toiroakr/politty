@@ -2,7 +2,7 @@
  * Types for shell completion generation
  */
 
-import type { AnyCommand } from "../types.js";
+import type { AnyCommand, ArgsSchema } from "../types.js";
 
 /**
  * Supported shell types for completion
@@ -21,6 +21,8 @@ export interface CompletionOptions {
   includeSubcommands?: boolean;
   /** Include description in completions where supported (default: true) */
   includeDescriptions?: boolean;
+  /** Global args schema for deriving global options in completion */
+  globalArgsSchema?: ArgsSchema;
 }
 
 /**
