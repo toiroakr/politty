@@ -480,33 +480,36 @@ function formatOption(
 }
 
 /**
+ * Format a single option field as a help line
+ */
+function formatFieldLine(opt: ResolvedFieldMeta, indent = 0, extraDescPadding = 0): string {
+  const flags = formatFlags(opt);
+  let desc = opt.description ?? "";
+
+  if (opt.defaultValue !== undefined) {
+    desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(opt.defaultValue)})`)}`;
+  }
+
+  if (opt.required) {
+    desc += ` ${styles.required("(required)")}`;
+  }
+
+  const envInfo = formatEnvInfo(opt.env);
+  if (envInfo) {
+    desc += ` ${envInfo}`;
+  }
+
+  return formatOption(flags, desc, indent, extraDescPadding);
+}
+
+/**
  * Render global options section
  */
 function renderGlobalOptions(globalExtracted: ExtractedFields): string {
-  const lines: string[] = [];
-  const options = globalExtracted.fields.filter((a) => !a.positional);
-
-  for (const opt of options) {
-    const flags = formatFlags(opt);
-    let desc = opt.description ?? "";
-
-    if (opt.defaultValue !== undefined) {
-      desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(opt.defaultValue)})`)}`;
-    }
-
-    if (opt.required) {
-      desc += ` ${styles.required("(required)")}`;
-    }
-
-    const envInfo = formatEnvInfo(opt.env);
-    if (envInfo) {
-      desc += ` ${envInfo}`;
-    }
-
-    lines.push(formatOption(flags, desc));
-  }
-
-  return lines.join("\n");
+  return globalExtracted.fields
+    .filter((a) => !a.positional)
+    .map((opt) => formatFieldLine(opt))
+    .join("\n");
 }
 
 /**
@@ -622,10 +625,9 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
 
   // Global Options
   if (context?.globalExtracted && context.globalExtracted.fields.length > 0) {
-    const globalOptionsText = renderGlobalOptions(context.globalExtracted);
-    if (globalOptionsText) {
-      sections.push(`${styles.sectionHeader("Global Options:")}\n${globalOptionsText}`);
-    }
+    sections.push(
+      `${styles.sectionHeader("Global Options:")}\n${renderGlobalOptions(context.globalExtracted)}`,
+    );
   }
 
   // Subcommands

@@ -71,6 +71,27 @@ export function shouldConsumeValue(
 }
 
 /**
+ * Collect a recognized global flag (and its value if applicable) into `dest`,
+ * returning how many argv positions were consumed (1 or 2).
+ */
+export function collectGlobalFlag(
+  argv: string[],
+  i: number,
+  resolvedName: string,
+  isNegated: boolean,
+  booleanFlags: Set<string>,
+  dest: string[],
+): number {
+  const arg = argv[i]!;
+  dest.push(arg);
+  if (shouldConsumeValue(arg, resolvedName, isNegated, argv[i + 1], booleanFlags)) {
+    dest.push(argv[i + 1]!);
+    return 2;
+  }
+  return 1;
+}
+
+/**
  * Result of scanning argv for subcommand position
  */
 export interface ScanResult {
@@ -134,13 +155,14 @@ export function scanForSubcommand(
       const { resolvedName, isNegated, isGlobal } = resolveGlobalLongOption(arg, lookup);
 
       if (isGlobal) {
-        globalTokensBefore.push(arg);
-        if (shouldConsumeValue(arg, resolvedName, isNegated, argv[i + 1], lookup.booleanFlags)) {
-          globalTokensBefore.push(argv[i + 1]!);
-          i += 2;
-          continue;
-        }
-        i++;
+        i += collectGlobalFlag(
+          argv,
+          i,
+          resolvedName,
+          isNegated,
+          lookup.booleanFlags,
+          globalTokensBefore,
+        );
         continue;
       }
 
@@ -157,13 +179,14 @@ export function scanForSubcommand(
         const isKnownGlobal = lookup.aliases.has(withoutDash) || lookup.flagNames.has(resolvedName);
 
         if (isKnownGlobal) {
-          globalTokensBefore.push(arg);
-          if (shouldConsumeValue(arg, resolvedName, false, argv[i + 1], lookup.booleanFlags)) {
-            globalTokensBefore.push(argv[i + 1]!);
-            i += 2;
-            continue;
-          }
-          i++;
+          i += collectGlobalFlag(
+            argv,
+            i,
+            resolvedName,
+            false,
+            lookup.booleanFlags,
+            globalTokensBefore,
+          );
           continue;
         }
       }

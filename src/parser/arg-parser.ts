@@ -9,9 +9,9 @@ import {
 import { buildParserOptions, mergeWithPositionals, parseArgv } from "./argv-parser.js";
 import {
   buildGlobalFlagLookup,
+  collectGlobalFlag,
   resolveGlobalLongOption,
   scanForSubcommand,
-  shouldConsumeValue,
 } from "./subcommand-scanner.js";
 
 /**
@@ -303,13 +303,7 @@ function separateGlobalArgs(
       const isLocalCollision = localCliNames.has(withoutDashes) || localCliNames.has(flagName);
 
       if (isGlobal && !isLocalCollision) {
-        globalTokens.push(arg);
-        if (shouldConsumeValue(arg, resolvedName, isNegated, argv[i + 1], lookup.booleanFlags)) {
-          globalTokens.push(argv[i + 1]!);
-          i += 2;
-          continue;
-        }
-        i++;
+        i += collectGlobalFlag(argv, i, resolvedName, isNegated, lookup.booleanFlags, globalTokens);
         continue;
       }
 
@@ -330,13 +324,7 @@ function separateGlobalArgs(
 
         // If also defined locally, let the local parser handle it
         if (isKnownGlobal && !localAliases.has(withoutDash)) {
-          globalTokens.push(arg);
-          if (shouldConsumeValue(arg, resolvedName, false, argv[i + 1], lookup.booleanFlags)) {
-            globalTokens.push(argv[i + 1]!);
-            i += 2;
-            continue;
-          }
-          i++;
+          i += collectGlobalFlag(argv, i, resolvedName, false, lookup.booleanFlags, globalTokens);
           continue;
         }
       }
