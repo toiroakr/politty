@@ -121,6 +121,8 @@ export function parseArgs(
 
   // Check for help/version flags only when no subcommand is detected
   // -h/-H are treated as --help/--help-all unless explicitly overridden by user
+  // Note: only the current command's overrideBuiltinAlias is checked here.
+  // Global options with alias 'h'/'H' do not participate in this override check.
   const hasUserDefinedH =
     extracted?.fields.some((f) => f.alias === "H" && f.overrideBuiltinAlias === true) ?? false;
   const hasUserDefinedh =
@@ -152,6 +154,7 @@ export function parseArgs(
       argv,
       options.globalExtracted,
       globalParserOptions,
+      extracted,
     );
     commandArgv = separated;
     rawGlobalArgs = globalParsed;
@@ -268,11 +271,18 @@ function parseGlobalArgs(
  * Separate global flags from command-local args in argv.
  * Global flags mixed with command args (e.g., `build --verbose --output dist`)
  * are extracted and returned separately.
+ * When a flag is defined in both global and local schemas, the local definition
+ * takes precedence (the flag stays in the command tokens).
+ *
+ * Note: Combined short flags (e.g., `-vq`) are not decomposed here; only
+ * single-character short options are recognized as global. The underlying
+ * `parseArgv` handles combined shorts for command-local parsing.
  */
 function separateGlobalArgs(
   argv: string[],
   globalExtracted: ExtractedFields,
   globalParserOptions: ReturnType<typeof buildParserOptions>,
+  localExtracted?: ExtractedFields,
 ): { separated: string[]; globalParsed: Record<string, unknown> } {
   const { aliasMap = new Map(), booleanFlags = new Set() } = globalParserOptions;
 
@@ -282,15 +292,20 @@ function separateGlobalArgs(
     globalExtracted.fields.filter((f) => f.alias).map((f) => f.alias!),
   );
 
+  // Local schema fields for collision detection: local takes precedence
+  const localCliNames = new Set(localExtracted?.fields.map((f) => f.cliName) ?? []);
+  const localAliases = new Set(
+    localExtracted?.fields.filter((f) => f.alias).map((f) => f.alias!) ?? [],
+  );
+
   const globalTokens: string[] = [];
   const commandTokens: string[] = [];
-  let stopParsing = false;
 
   let i = 0;
   while (i < argv.length) {
     const arg = argv[i]!;
 
-    if (stopParsing || arg === "--") {
+    if (arg === "--") {
       commandTokens.push(...argv.slice(i));
       break;
     }
@@ -305,7 +320,10 @@ function separateGlobalArgs(
         knownGlobalCliNames.has(withoutDashes) ||
         knownGlobalCliNames.has(flagName);
 
-      if (isKnownGlobal) {
+      // If also defined locally, let the local parser handle it
+      const isLocalCollision = localCliNames.has(withoutDashes) || localCliNames.has(flagName);
+
+      if (isKnownGlobal && !isLocalCollision) {
         globalTokens.push(arg);
         if (
           !arg.includes("=") &&
@@ -346,7 +364,8 @@ function separateGlobalArgs(
         const isKnownGlobal =
           knownGlobalAliases.has(withoutDash) || knownGlobalFlags.has(resolvedName);
 
-        if (isKnownGlobal) {
+        // If also defined locally, let the local parser handle it
+        if (isKnownGlobal && !localAliases.has(withoutDash)) {
           globalTokens.push(arg);
           if (!arg.includes("=") && !booleanFlags.has(resolvedName)) {
             const nextArg = argv[i + 1];

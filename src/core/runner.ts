@@ -14,6 +14,10 @@ import type {
   RunResult,
 } from "../types.js";
 import {
+  validateDuplicateAliases,
+  validateDuplicateFields,
+} from "../validator/command-validator.js";
+import {
   formatRuntimeError,
   formatUnknownFlag,
   formatUnknownFlagWarning,
@@ -78,6 +82,9 @@ export async function runCommand<TResult = unknown>(
 ): Promise<RunResult<TResult>> {
   // Extract global fields once if globalArgs is provided
   const globalExtracted = options.globalArgs ? extractFields(options.globalArgs) : undefined;
+  if (globalExtracted && !options.skipValidation) {
+    validateGlobalSchema(globalExtracted);
+  }
 
   return runCommandInternal(command, argv, {
     ...options,
@@ -115,6 +122,9 @@ export async function runCommand<TResult = unknown>(
 export async function runMain(command: AnyCommand, options: MainOptions = {}): Promise<never> {
   // Extract global fields once if globalArgs is provided
   const globalExtracted = options.globalArgs ? extractFields(options.globalArgs) : undefined;
+  if (globalExtracted && !options.skipValidation) {
+    validateGlobalSchema(globalExtracted);
+  }
 
   const result = await runCommandInternal(command, process.argv.slice(2), {
     debug: options.debug,
@@ -387,6 +397,21 @@ async function runCommandInternal<TResult = unknown>(
       exitCode: 1,
       logs: getCurrentLogs(),
     };
+  }
+}
+
+/**
+ * Validate global args schema upfront (mirrors the per-command validation in parseArgs).
+ * Rejects positional fields since global options must be flags.
+ */
+function validateGlobalSchema(globalExtracted: ExtractedFields): void {
+  validateDuplicateFields(globalExtracted);
+  validateDuplicateAliases(globalExtracted);
+  const positionals = globalExtracted.fields.filter((f) => f.positional);
+  if (positionals.length > 0) {
+    throw new Error(
+      `Global options schema must not contain positional arguments. Found: ${positionals.map((p) => p.name).join(", ")}`,
+    );
   }
 }
 
