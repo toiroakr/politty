@@ -3,11 +3,7 @@ import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collec
 import { listSubCommands, resolveSubcommand } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
-import {
-  buildGlobalFlagLookup,
-  resolveGlobalLongOption,
-  shouldConsumeValue,
-} from "../parser/subcommand-scanner.js";
+import { findFirstPositional } from "../parser/subcommand-scanner.js";
 import type {
   AnyCommand,
   ArgsSchema,
@@ -402,49 +398,4 @@ function extractAndValidateGlobal(options: {
     }
   }
   return extracted;
-}
-
-/**
- * Find the first positional argument in argv, properly skipping global flag values.
- * Without globalExtracted, falls back to the first non-flag token.
- */
-function findFirstPositional(
-  argv: string[],
-  globalExtracted?: ExtractedFields,
-): string | undefined {
-  if (!globalExtracted) {
-    return argv.find((arg) => !arg.startsWith("-"));
-  }
-
-  const lookup = buildGlobalFlagLookup(globalExtracted);
-
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]!;
-    if (!arg.startsWith("-")) return arg;
-    if (arg === "--") return undefined;
-
-    // Long option
-    if (arg.startsWith("--")) {
-      const { resolvedName, isNegated, isGlobal } = resolveGlobalLongOption(arg, lookup);
-      if (
-        isGlobal &&
-        shouldConsumeValue(arg, resolvedName, isNegated, argv[i + 1], lookup.booleanFlags)
-      ) {
-        i++;
-      }
-      continue;
-    }
-
-    // Short option (-f)
-    if (arg.length === 2) {
-      const ch = arg[1]!;
-      if (lookup.aliases.has(ch)) {
-        const resolvedName = lookup.aliasMap.get(ch) ?? ch;
-        if (shouldConsumeValue(arg, resolvedName, false, argv[i + 1], lookup.booleanFlags)) {
-          i++;
-        }
-      }
-    }
-  }
-  return undefined;
 }

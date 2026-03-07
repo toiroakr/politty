@@ -313,16 +313,9 @@ function separateGlobalArgs(
         continue;
       }
 
+      // Local/unknown flag: leave in command tokens.
+      // Value tokens (non-flag) will naturally land in commandTokens on the next iteration.
       commandTokens.push(arg);
-      // Consume value for non-boolean unknown flags
-      if (!arg.includes("=")) {
-        const nextArg = argv[i + 1];
-        if (nextArg !== undefined && !nextArg.startsWith("-")) {
-          commandTokens.push(nextArg);
-          i += 2;
-          continue;
-        }
-      }
       i++;
       continue;
     }
