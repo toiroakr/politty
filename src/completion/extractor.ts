@@ -220,10 +220,15 @@ export function extractCompletionData(
   const rootSubcommand = extractSubcommand(programName, command);
 
   // When globalArgsSchema is provided, derive global options from it
+  // and merge them into root command's options so shell generators include them
   let globalOptions: CompletableOption[];
   if (globalArgsSchema) {
     const globalExtracted = extractFields(globalArgsSchema);
     globalOptions = globalExtracted.fields.filter((field) => !field.positional).map(fieldToOption);
+    // Merge global options into root's options so shell generators emit them
+    const existingNames = new Set(rootSubcommand.options.map((o) => o.name));
+    const newGlobalOpts = globalOptions.filter((o) => !existingNames.has(o.name));
+    rootSubcommand.options = [...rootSubcommand.options, ...newGlobalOpts];
   } else {
     // Default: global options are the options defined on the root command
     globalOptions = rootSubcommand.options;
