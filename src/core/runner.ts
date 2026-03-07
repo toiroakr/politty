@@ -190,7 +190,9 @@ async function runCommandInternal<TResult = unknown>(
       globalExtracted: options._globalExtracted,
     });
 
-    // Accumulate global args from this parse level
+    // Accumulate global args from this parse level.
+    // Note: uses shallow spread, so array-valued globals split across a subcommand
+    // boundary (e.g., `cli --tag a sub --tag b`) will only keep the later value.
     const accumulatedGlobalArgs = {
       ...options._parsedGlobalArgs,
       ...parseResult.rawGlobalArgs,

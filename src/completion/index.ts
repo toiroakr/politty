@@ -242,6 +242,8 @@ export function withCompletionCommand<T extends AnyCommand>(
   wrappedCommand.subCommands = {
     ...command.subCommands,
     completion: createCompletionCommand(wrappedCommand, programName, globalArgsSchema),
+    // Note: __complete (dynamic completion) does not yet receive globalArgsSchema.
+    // Static completion scripts (bash/zsh/fish) already include global options.
     __complete: createDynamicCompleteCommand(wrappedCommand, programName),
   };
 
