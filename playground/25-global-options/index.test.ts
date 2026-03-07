@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { runCommand } from "../../src/index.js";
+import { z } from "zod";
+import { arg, defineCommand, generateCompletion, runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
 import { buildCommand, cli, globalArgsSchema } from "./index.js";
 
@@ -119,6 +120,112 @@ describe("25-global-options", () => {
 
       expect(result.exitCode).toBe(0);
       expect(console).toHaveBeenCalledWith("Building to custom");
+    });
+  });
+
+  describe("command with no local args schema", () => {
+    it("receives global args even without own args schema", async () => {
+      const noArgsCmd = defineCommand({
+        name: "no-args",
+        description: "Command without args",
+        run: (args: Record<string, unknown>) => {
+          console.log(`verbose=${args.verbose}`);
+        },
+      });
+
+      const root = defineCommand({
+        name: "test-cli",
+        subCommands: { "no-args": noArgsCmd },
+      });
+
+      const result = await runCommand(root, ["no-args", "--verbose"], {
+        globalArgs: globalArgsSchema,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(console).toHaveBeenCalledWith("verbose=true");
+    });
+  });
+
+  describe("help with valued global option", () => {
+    it("does not treat option value as unknown subcommand", async () => {
+      const result = await runCommand(cli, ["--config", "custom.json", "--help"], {
+        globalArgs: globalArgsSchema,
+      });
+
+      expect(result.exitCode).toBe(0);
+      const output = console.getLogs().join("\n");
+      expect(output).not.toContain("Unknown command");
+      expect(output).toContain("Global Options:");
+    });
+  });
+
+  describe("global/local flag collision", () => {
+    it("local flag takes precedence over global when both define same name", async () => {
+      // Both global and local define --output
+      const globalSchema = z.object({
+        output: arg(z.string().default("global-default"), {
+          description: "Global output",
+        }),
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Verbose",
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        description: "Test command",
+        args: z.object({
+          output: arg(z.string().default("local-default"), {
+            alias: "o",
+            description: "Local output",
+          }),
+        }),
+        run: (args) => {
+          console.log(`output=${args.output}`);
+        },
+      });
+
+      const root = defineCommand({
+        name: "test-cli",
+        subCommands: { cmd },
+      });
+
+      const result = await runCommand(root, ["cmd", "--output", "mine"], {
+        globalArgs: globalSchema,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(console).toHaveBeenCalledWith("output=mine");
+    });
+  });
+
+  describe("global schema validation", () => {
+    it("rejects positional arguments in global schema", async () => {
+      const badGlobal = z.object({
+        file: arg(z.string(), { positional: true, description: "A file" }),
+      });
+
+      await expect(runCommand(cli, ["build"], { globalArgs: badGlobal })).rejects.toThrow(
+        /positional/i,
+      );
+    });
+  });
+
+  describe("completion with global options", () => {
+    it("includes global options in subcommand completions", () => {
+      const result = generateCompletion(cli, {
+        shell: "bash",
+        programName: "my-app",
+        globalArgsSchema,
+      });
+
+      // Global options should appear in the completion script
+      expect(result.script).toContain("verbose");
+      expect(result.script).toContain("config");
+      // Should also be in subcommand sections (propagated)
+      expect(result.script).toMatch(/build.*verbose|verbose.*build/s);
     });
   });
 });
