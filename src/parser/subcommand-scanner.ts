@@ -78,7 +78,7 @@ export interface ScanResult {
   subCommandIndex: number;
   /** Global arg tokens found before the subcommand */
   globalTokensBefore: string[];
-  /** All tokens after the subcommand (including the subcommand itself is excluded) */
+  /** All tokens after the subcommand (the subcommand itself is excluded) */
   tokensAfterSubcommand: string[];
 }
 

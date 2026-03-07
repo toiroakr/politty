@@ -299,18 +299,16 @@ async function runCommandInternal<TResult = unknown>(
 
     // Validate global args at the leaf command level
     let validatedGlobalArgs: Record<string, unknown> = {};
-    if (options.globalArgs) {
+    if (options.globalArgs && options._globalExtracted) {
       // Apply env fallbacks for global args
-      if (options._globalExtracted) {
-        for (const field of options._globalExtracted.fields) {
-          if (field.env && accumulatedGlobalArgs[field.name] === undefined) {
-            const envNames = Array.isArray(field.env) ? field.env : [field.env];
-            for (const envName of envNames) {
-              const envValue = process.env[envName];
-              if (envValue !== undefined) {
-                accumulatedGlobalArgs[field.name] = envValue;
-                break;
-              }
+      for (const field of options._globalExtracted.fields) {
+        if (field.env && accumulatedGlobalArgs[field.name] === undefined) {
+          const envNames = Array.isArray(field.env) ? field.env : [field.env];
+          for (const envName of envNames) {
+            const envValue = process.env[envName];
+            if (envValue !== undefined) {
+              accumulatedGlobalArgs[field.name] = envValue;
+              break;
             }
           }
         }
@@ -384,6 +382,7 @@ async function runCommandInternal<TResult = unknown>(
 
 /**
  * Extract global fields from options.globalArgs and validate the schema upfront.
+ * Rejects positional fields since global options must be flags.
  * Returns undefined when no globalArgs is provided.
  */
 function extractAndValidateGlobal(options: {
@@ -393,24 +392,16 @@ function extractAndValidateGlobal(options: {
   if (!options.globalArgs) return undefined;
   const extracted = extractFields(options.globalArgs);
   if (!options.skipValidation) {
-    validateGlobalSchema(extracted);
+    validateDuplicateFields(extracted);
+    validateDuplicateAliases(extracted);
+    const positionals = extracted.fields.filter((f) => f.positional);
+    if (positionals.length > 0) {
+      throw new Error(
+        `Global options schema must not contain positional arguments. Found: ${positionals.map((p) => p.name).join(", ")}`,
+      );
+    }
   }
   return extracted;
-}
-
-/**
- * Validate global args schema upfront (mirrors the per-command validation in parseArgs).
- * Rejects positional fields since global options must be flags.
- */
-function validateGlobalSchema(globalExtracted: ExtractedFields): void {
-  validateDuplicateFields(globalExtracted);
-  validateDuplicateAliases(globalExtracted);
-  const positionals = globalExtracted.fields.filter((f) => f.positional);
-  if (positionals.length > 0) {
-    throw new Error(
-      `Global options schema must not contain positional arguments. Found: ${positionals.map((p) => p.name).join(", ")}`,
-    );
-  }
 }
 
 /**
