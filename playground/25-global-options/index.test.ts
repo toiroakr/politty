@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
+import { assertDocMatch } from "../../src/docs/index.js";
 import { arg, defineCommand, generateCompletion, runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { mdFormatter } from "../../tests/utils/formatter.js";
 import { buildCommand, cli, globalArgsSchema } from "./index.js";
 
 describe("25-global-options", () => {
@@ -226,6 +228,16 @@ describe("25-global-options", () => {
       expect(result.script).toContain("config");
       // Should also be in subcommand sections (propagated)
       expect(result.script).toMatch(/build.*verbose|verbose.*build/s);
+    });
+  });
+
+  it("documentation", async () => {
+    await assertDocMatch({
+      command: cli,
+      files: {
+        "playground/25-global-options/README.md": ["", "build", "deploy"],
+      },
+      formatter: mdFormatter,
     });
   });
 });
