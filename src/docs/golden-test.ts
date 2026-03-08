@@ -1188,7 +1188,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     globalArgs,
   } = config;
 
-  // Auto-derive rootDoc.globalOptions from globalArgs schema if provided
+  // Auto-derive rootDoc.globalOptions from globalArgs schema if provided.
+  // Note: this only populates the global options table in rootDoc; per-command usage
+  // lines in generated docs do not yet include "[global options]" (runtime help does).
   let rootDoc = config.rootDoc;
   if (globalArgs && rootDoc && !rootDoc.globalOptions) {
     const globalExtracted = extractFields(globalArgs);
