@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { arg, defineCommand, generateCompletion, runCommand } from "../../src/index.js";
@@ -234,6 +234,75 @@ describe("25-global-options", () => {
       await expect(runCommand(cli, ["build"], { globalArgs: badGlobal })).rejects.toThrow(
         /reserved/i,
       );
+    });
+  });
+
+  describe("env fallback for global args", () => {
+    it("uses env var when CLI arg not provided", async () => {
+      vi.stubEnv("MY_APP_CONFIG", "from-env.json");
+
+      const globalSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v", description: "Verbose" }),
+        config: arg(z.string().optional(), {
+          alias: "c",
+          description: "Config",
+          env: "MY_APP_CONFIG",
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        description: "Test",
+        run: (args: Record<string, unknown>) => {
+          console.log(`config=${args.config}`);
+        },
+      });
+
+      const root = defineCommand({
+        name: "test-cli",
+        subCommands: { cmd },
+      });
+
+      const result = await runCommand(root, ["cmd"], { globalArgs: globalSchema });
+
+      expect(result.exitCode).toBe(0);
+      expect(console).toHaveBeenCalledWith("config=from-env.json");
+
+      vi.unstubAllEnvs();
+    });
+
+    it("CLI arg takes precedence over env var", async () => {
+      vi.stubEnv("MY_APP_CONFIG", "from-env.json");
+
+      const globalSchema = z.object({
+        config: arg(z.string().optional(), {
+          alias: "c",
+          description: "Config",
+          env: "MY_APP_CONFIG",
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        description: "Test",
+        run: (args: Record<string, unknown>) => {
+          console.log(`config=${args.config}`);
+        },
+      });
+
+      const root = defineCommand({
+        name: "test-cli",
+        subCommands: { cmd },
+      });
+
+      const result = await runCommand(root, ["cmd", "--config", "from-cli.json"], {
+        globalArgs: globalSchema,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(console).toHaveBeenCalledWith("config=from-cli.json");
+
+      vi.unstubAllEnvs();
     });
   });
 
