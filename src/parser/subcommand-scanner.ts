@@ -54,7 +54,7 @@ export function resolveGlobalLongOption(
  * Returns true when the next token exists, is not a flag, and the current flag
  * is not boolean / negated / using = syntax.
  */
-export function shouldConsumeValue(
+function shouldConsumeValue(
   arg: string,
   resolvedName: string,
   isNegated: boolean,
