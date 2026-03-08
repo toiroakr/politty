@@ -213,6 +213,28 @@ describe("25-global-options", () => {
         /positional/i,
       );
     });
+
+    it("rejects reserved alias -h in global schema", async () => {
+      const badGlobal = z.object({
+        // @ts-expect-error -- intentionally using reserved alias to test runtime validation
+        help: arg(z.boolean().default(false), { alias: "h", description: "Help" }),
+      });
+
+      await expect(runCommand(cli, ["build"], { globalArgs: badGlobal })).rejects.toThrow(
+        /reserved/i,
+      );
+    });
+
+    it("rejects reserved alias -H in global schema", async () => {
+      const badGlobal = z.object({
+        // @ts-expect-error -- intentionally using reserved alias to test runtime validation
+        helpAll: arg(z.boolean().default(false), { alias: "H", description: "Help all" }),
+      });
+
+      await expect(runCommand(cli, ["build"], { globalArgs: badGlobal })).rejects.toThrow(
+        /reserved/i,
+      );
+    });
   });
 
   describe("completion with global options", () => {

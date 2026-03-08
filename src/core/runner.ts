@@ -17,6 +17,7 @@ import type {
 import {
   validateDuplicateAliases,
   validateDuplicateFields,
+  validateReservedAliases,
 } from "../validator/command-validator.js";
 import {
   formatRuntimeError,
@@ -390,6 +391,7 @@ function extractAndValidateGlobal(options: {
   if (!options.skipValidation) {
     validateDuplicateFields(extracted);
     validateDuplicateAliases(extracted);
+    validateReservedAliases(extracted, true);
     const positionals = extracted.fields.filter((f) => f.positional);
     if (positionals.length > 0) {
       throw new Error(
