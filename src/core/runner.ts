@@ -313,11 +313,12 @@ async function runCommandInternal<TResult = unknown>(
 
       const globalValidation = validateArgs(accumulatedGlobalArgs, options.globalArgs);
       if (!globalValidation.success) {
-        logger.error(formatValidationErrors(globalValidation.errors));
+        const errorMessage = formatValidationErrors(globalValidation.errors);
+        logger.error(errorMessage);
         collector?.stop();
         return {
           success: false,
-          error: new Error(formatValidationErrors(globalValidation.errors)),
+          error: new Error(errorMessage),
           exitCode: 1,
           logs: getCurrentLogs(),
         };

@@ -181,7 +181,7 @@ export function createCompletionCommand(
         programName: resolvedProgramName,
         includeDescriptions: true,
       };
-      if (globalArgsSchema) {
+      if (globalArgsSchema !== undefined) {
         completionOpts.globalArgsSchema = globalArgsSchema;
       }
       const result = generateCompletion(rootCommand, completionOpts);
