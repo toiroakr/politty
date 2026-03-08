@@ -1193,11 +1193,11 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // lines in generated docs do not yet include "[global options]" (runtime help does).
   let rootDoc = config.rootDoc;
   if (globalArgs && rootDoc && !rootDoc.globalOptions) {
-    const globalExtracted = extractFields(globalArgs);
-    const globalShape: ArgsShape = Object.fromEntries(
-      globalExtracted.fields.filter((f) => !f.positional).map((f) => [f.name, f.schema]),
-    );
-    if (Object.keys(globalShape).length > 0) {
+    const optionFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
+    if (optionFields.length > 0) {
+      const globalShape: ArgsShape = Object.fromEntries(
+        optionFields.map((f) => [f.name, f.schema]),
+      );
       rootDoc = { ...rootDoc, globalOptions: globalShape };
     }
   }

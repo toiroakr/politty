@@ -282,8 +282,7 @@ function separateGlobalArgs(
   const globalTokens: string[] = [];
   const commandTokens: string[] = [];
 
-  let i = 0;
-  while (i < argv.length) {
+  for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
 
     if (arg === "--") {
@@ -303,19 +302,14 @@ function separateGlobalArgs(
       const isLocalCollision = localCliNames.has(withoutDashes) || localCliNames.has(flagName);
 
       if (isGlobal && !isLocalCollision) {
-        i += collectGlobalFlag(argv, i, resolvedName, isNegated, lookup.booleanFlags, globalTokens);
+        // collectGlobalFlag returns 1 or 2; subtract 1 because the for-loop increments
+        i +=
+          collectGlobalFlag(argv, i, resolvedName, isNegated, lookup.booleanFlags, globalTokens) -
+          1;
         continue;
       }
-
-      // Local/unknown flag: leave in command tokens.
-      // Value tokens (non-flag) will naturally land in commandTokens on the next iteration.
-      commandTokens.push(arg);
-      i++;
-      continue;
-    }
-
-    // Short option
-    if (arg.startsWith("-") && arg.length > 1) {
+    } else if (arg.startsWith("-") && arg.length > 1) {
+      // Short option
       const withoutDash = arg.includes("=") ? arg.slice(1, arg.indexOf("=")) : arg.slice(1);
 
       if (withoutDash.length === 1) {
@@ -324,19 +318,15 @@ function separateGlobalArgs(
 
         // If also defined locally, let the local parser handle it
         if (isKnownGlobal && !localAliases.has(withoutDash)) {
-          i += collectGlobalFlag(argv, i, resolvedName, false, lookup.booleanFlags, globalTokens);
+          i +=
+            collectGlobalFlag(argv, i, resolvedName, false, lookup.booleanFlags, globalTokens) - 1;
           continue;
         }
       }
-
-      commandTokens.push(arg);
-      i++;
-      continue;
     }
 
-    // Positional
+    // Positional, local flag, or unknown flag: leave in command tokens
     commandTokens.push(arg);
-    i++;
   }
 
   const globalParsed = parseGlobalArgs(globalTokens, globalExtracted);

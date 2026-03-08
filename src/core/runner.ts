@@ -393,10 +393,10 @@ function extractAndValidateGlobal(options: {
     validateDuplicateFields(extracted);
     validateDuplicateAliases(extracted);
     validateReservedAliases(extracted, true);
-    const positionals = extracted.fields.filter((f) => f.positional);
-    if (positionals.length > 0) {
+    const positionalNames = extracted.fields.filter((f) => f.positional).map((f) => f.name);
+    if (positionalNames.length > 0) {
       throw new Error(
-        `Global options schema must not contain positional arguments. Found: ${positionals.map((p) => p.name).join(", ")}`,
+        `Global options schema must not contain positional arguments. Found: ${positionalNames.join(", ")}`,
       );
     }
   }
