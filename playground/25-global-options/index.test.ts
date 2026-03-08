@@ -234,9 +234,13 @@ describe("25-global-options", () => {
   it("documentation", async () => {
     await assertDocMatch({
       command: cli,
+      rootDoc: {
+        path: "playground/25-global-options/REFERENCE.md",
+      },
       files: {
         "playground/25-global-options/README.md": ["", "build", "deploy"],
       },
+      globalArgs: globalArgsSchema,
       formatter: mdFormatter,
     });
   });
