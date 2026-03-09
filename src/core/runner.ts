@@ -334,7 +334,7 @@ async function runCommandInternal<TResult = unknown>(
     if (!command.args) {
       // No schema, run with global args (or empty args)
       collector?.stop();
-      const mergedArgs = { ...validatedGlobalArgs } as Record<string, never>;
+      const mergedArgs = validatedGlobalArgs as Record<string, never>;
       const result = await executeLifecycle(command, mergedArgs, {
         handleSignals: options.handleSignals,
         captureLogs: options.captureLogs,

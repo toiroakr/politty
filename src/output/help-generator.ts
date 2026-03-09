@@ -102,7 +102,7 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
   parts.push(styles.commandName(name));
 
   // Add [global options] if global args are defined
-  if (context?.globalExtracted && context.globalExtracted.fields.length > 0) {
+  if (context?.globalExtracted?.fields.length) {
     parts.push(styles.placeholder("[global options]"));
   }
 
@@ -624,7 +624,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   }
 
   // Global Options
-  if (context?.globalExtracted && context.globalExtracted.fields.length > 0) {
+  if (context?.globalExtracted?.fields.length) {
     sections.push(
       `${styles.sectionHeader("Global Options:")}\n${renderGlobalOptions(context.globalExtracted)}`,
     );
