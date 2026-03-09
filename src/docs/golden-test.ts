@@ -962,7 +962,6 @@ async function processStaticMarker(
   updateMode: boolean,
   formatter: FormatterFunction | undefined,
   autoInsertIfMissing: boolean,
-  insertPosition: "after-header" | "end",
 ): Promise<{
   content: string;
   diffs: string[];
@@ -981,12 +980,7 @@ async function processStaticMarker(
 
   if (!existingSection) {
     if (updateMode && autoInsertIfMissing) {
-      if (insertPosition === "end") {
-        content = content.trimEnd() + "\n\n" + generatedSection + "\n";
-      } else {
-        // Insert after the file header (first non-empty line block)
-        content = content.trimEnd() + "\n\n" + generatedSection + "\n";
-      }
+      content = content.trimEnd() + "\n\n" + generatedSection + "\n";
       wasUpdated = true;
       return { content, diffs, hasError, wasUpdated };
     }
@@ -1166,17 +1160,13 @@ function generateCommandSection(
   if (!info) return null;
 
   // Add file context to CommandInfo for cross-file link generation
-  const infoWithFileContext: CommandInfo = {
+  return render({
     ...info,
     filePath,
     fileMap,
     rootDocPath,
-  };
-  if (hasGlobalOptions !== undefined) {
-    infoWithFileContext.hasGlobalOptions = hasGlobalOptions;
-  }
-
-  return render(infoWithFileContext);
+    ...(hasGlobalOptions !== undefined && { hasGlobalOptions }),
+  });
 }
 
 /**
@@ -1348,12 +1338,14 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // Resolve files from PathConfig or direct FileMapping
   let files: FileMapping;
   let usingPathConfig = false;
+  let resolvedRootDocPath: string | undefined;
   if (config.path !== undefined) {
     if (config.files !== undefined) {
       throw new Error('Cannot specify both "path" and "files". Use one or the other.');
     }
     const converted = pathToFiles(config.path, allCommands);
     files = converted.files;
+    resolvedRootDocPath = converted.rootDocPath;
     usingPathConfig = true;
   } else if (config.files !== undefined) {
     files = config.files;
@@ -1363,10 +1355,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
   // Auto-derive rootDoc from PathConfig or globalArgs
   let rootDoc = config.rootDoc;
-  if (!rootDoc && usingPathConfig && (globalArgs || config.rootInfo)) {
-    const rootDocPath =
-      typeof config.path === "string" ? config.path : (config.path as { root: string }).root;
-    rootDoc = { path: rootDocPath };
+  if (!rootDoc && usingPathConfig && resolvedRootDocPath && (globalArgs || config.rootInfo)) {
+    rootDoc = { path: resolvedRootDocPath };
   }
 
   // Auto-derive rootDoc.globalOptions from globalArgs schema if provided
@@ -1706,7 +1696,6 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           updateMode,
           formatter,
           usingPathConfig,
-          "after-header",
         );
         content = headerMarkerResult.content;
         rootDocDiffs.push(...headerMarkerResult.diffs);
@@ -1784,7 +1773,6 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           updateMode,
           formatter,
           usingPathConfig,
-          "end",
         );
         content = footerMarkerResult.content;
         rootDocDiffs.push(...footerMarkerResult.diffs);

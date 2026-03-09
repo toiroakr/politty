@@ -523,9 +523,6 @@ function wrapWithMarker(type: SectionType, scope: string, content: string): stri
 }
 
 /**
- * Create command renderer with options
- */
-/**
  * Generate a "See Global Options" link for subcommand documentation.
  * Returns null for root command or when no global options exist.
  */
