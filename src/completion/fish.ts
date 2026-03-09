@@ -231,7 +231,7 @@ export function generateFishCompletion(
   options: CompletionOptions,
 ): CompletionResult {
   const { programName } = options;
-  const data = extractCompletionData(command, programName);
+  const data = extractCompletionData(command, programName, options.globalArgsSchema);
   const fn = sanitize(programName);
   const root = data.command;
   const visibleSubs = getVisibleSubs(root.subcommands);

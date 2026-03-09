@@ -3,6 +3,19 @@ import type { z } from "zod";
 import type { LazyCommand } from "./lazy.js";
 
 /**
+ * Global args interface for declaration merging (Pattern 3).
+ * Users can extend this interface to add global options to all commands:
+ *
+ * ```ts
+ * declare module "politty" {
+ *   interface GlobalArgs { verbose: boolean; config?: string; }
+ * }
+ * ```
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- intentionally empty for declaration merging
+export interface GlobalArgs {}
+
+/**
  * Example definition for a command
  */
 export interface Example {
@@ -159,6 +172,8 @@ export interface MainOptions {
   skipValidation?: boolean;
   /** Custom logger for output (default: console) */
   logger?: Logger;
+  /** Global args schema (shared across all subcommands) */
+  globalArgs?: ArgsSchema;
 }
 
 /**
@@ -173,6 +188,8 @@ export interface RunCommandOptions {
   skipValidation?: boolean;
   /** Custom logger for output (default: console) */
   logger?: Logger;
+  /** Global args schema (shared across all subcommands) */
+  globalArgs?: ArgsSchema;
 }
 
 /**
@@ -196,6 +213,8 @@ export interface InternalRunOptions {
   skipValidation?: boolean | undefined;
   /** Custom logger for output */
   logger?: Logger | undefined;
+  /** Global args schema (shared across all subcommands) */
+  globalArgs?: ArgsSchema | undefined;
 }
 
 /**

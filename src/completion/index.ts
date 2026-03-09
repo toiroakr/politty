@@ -27,7 +27,7 @@
 import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
-import type { AnyCommand, Command } from "../types.js";
+import type { AnyCommand, ArgsSchema, Command } from "../types.js";
 import { generateBashCompletion } from "./bash.js";
 import { createDynamicCompleteCommand } from "./dynamic/index.js";
 import { generateFishCompletion } from "./fish.js";
@@ -150,6 +150,7 @@ type CompletionArgs = z.infer<typeof completionArgsSchema>;
 export function createCompletionCommand(
   rootCommand: AnyCommand,
   programName?: string,
+  globalArgsSchema?: ArgsSchema,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Command<typeof completionArgsSchema, CompletionArgs, any> {
   const resolvedProgramName = programName ?? rootCommand.name;
@@ -179,6 +180,7 @@ export function createCompletionCommand(
         shell: shellType,
         programName: resolvedProgramName,
         includeDescriptions: true,
+        ...(globalArgsSchema !== undefined && { globalArgsSchema }),
       });
 
       if (args.instructions) {
@@ -196,6 +198,8 @@ export function createCompletionCommand(
 export interface WithCompletionOptions {
   /** Override the program name (defaults to command.name) */
   programName?: string;
+  /** Global args schema for deriving global options in completion */
+  globalArgsSchema?: ArgsSchema;
 }
 
 /**
@@ -226,7 +230,7 @@ export function withCompletionCommand<T extends AnyCommand>(
   const opts: WithCompletionOptions =
     typeof options === "string" ? { programName: options } : (options ?? {});
 
-  const { programName } = opts;
+  const { programName, globalArgsSchema } = opts;
 
   const wrappedCommand = {
     ...command,
@@ -234,7 +238,9 @@ export function withCompletionCommand<T extends AnyCommand>(
 
   wrappedCommand.subCommands = {
     ...command.subCommands,
-    completion: createCompletionCommand(wrappedCommand, programName),
+    completion: createCompletionCommand(wrappedCommand, programName, globalArgsSchema),
+    // Note: __complete (dynamic completion) does not yet receive globalArgsSchema.
+    // Static completion scripts (bash/zsh/fish) already include global options.
     __complete: createDynamicCompleteCommand(wrappedCommand, programName),
   };
 

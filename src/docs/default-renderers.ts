@@ -523,8 +523,21 @@ function wrapWithMarker(type: SectionType, scope: string, content: string): stri
 }
 
 /**
- * Create command renderer with options
+ * Generate a "See Global Options" link for subcommand documentation.
+ * Returns null for root command or when no global options exist.
  */
+function getGlobalOptionsLink(info: CommandInfo): string | null {
+  if (!info.hasGlobalOptions || info.commandPath === "") {
+    return null;
+  }
+
+  const isCrossFile = info.rootDocPath && info.filePath && info.filePath !== info.rootDocPath;
+  const href = isCrossFile
+    ? `${getRelativePath(info.filePath!, info.rootDocPath!)}#global-options`
+    : "#global-options";
+  return `See [Global Options](${href}) for options available to all commands.`;
+}
+
 export function createCommandRenderer(options: DefaultRendererOptions = {}): RenderFunction {
   const {
     headingLevel = 1,
@@ -629,6 +642,14 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         : renderOpts(context.options);
       if (content) {
         sections.push(wrapWithMarker("options", scope, content));
+      }
+    }
+
+    // Global Options link (for subcommands when global options exist)
+    {
+      const globalLink = getGlobalOptionsLink(info);
+      if (globalLink) {
+        sections.push(globalLink);
       }
     }
 

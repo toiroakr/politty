@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
+import { extractFields } from "../core/schema-extractor.js";
 import { DuplicateAliasError, PositionalConfigError } from "../validator/command-validator.js";
 import { parseArgs } from "./arg-parser.js";
 
@@ -826,6 +827,107 @@ describe("ArgParser", () => {
       const result = parseArgs(["--output-dir", "./local"], cmd);
 
       expect(result.rawArgs.outputDir).toBe("./local");
+    });
+  });
+
+  describe("global args", () => {
+    const globalSchema = z.object({
+      verbose: arg(z.boolean().default(false), { alias: "v", description: "Verbose" }),
+      config: arg(z.string().optional(), { description: "Config file" }),
+    });
+    const globalExtracted = extractFields(globalSchema);
+
+    it("separates global flags from local args after subcommand", () => {
+      const cmd = defineCommand({
+        name: "root",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              output: arg(z.string().default("dist"), { description: "Output dir" }),
+            }),
+          }),
+        },
+      });
+
+      const result = parseArgs(["build", "--verbose", "--output", "out"], cmd, {
+        globalExtracted,
+      });
+
+      expect(result.subCommand).toBe("build");
+      expect(result.remainingArgs).toEqual(["--verbose", "--output", "out"]);
+    });
+
+    it("parses global flags before subcommand", () => {
+      const cmd = defineCommand({
+        name: "root",
+        subCommands: {
+          build: defineCommand({ name: "build" }),
+        },
+      });
+
+      const result = parseArgs(["--verbose", "--config", "app.json", "build"], cmd, {
+        globalExtracted,
+      });
+
+      expect(result.subCommand).toBe("build");
+      expect(result.rawGlobalArgs).toEqual({ verbose: true, config: "app.json" });
+    });
+
+    it("separates global from local on leaf command (no subcommands)", () => {
+      const cmd = defineCommand({
+        name: "leaf",
+        args: z.object({
+          output: arg(z.string().default("dist"), { description: "Output" }),
+        }),
+        run: () => {},
+      });
+
+      const result = parseArgs(["--verbose", "--output", "out"], cmd, {
+        globalExtracted,
+      });
+
+      expect(result.rawArgs.output).toBe("out");
+      expect(result.rawGlobalArgs).toEqual({ verbose: true });
+    });
+
+    it("local flag takes precedence over global on collision", () => {
+      const collisionGlobal = z.object({
+        output: arg(z.string().default("global-default"), { description: "Global output" }),
+        verbose: arg(z.boolean().default(false), { alias: "v", description: "Verbose" }),
+      });
+      const collisionExtracted = extractFields(collisionGlobal);
+
+      const cmd = defineCommand({
+        name: "leaf",
+        args: z.object({
+          output: arg(z.string().default("local-default"), { description: "Local output" }),
+        }),
+        run: () => {},
+      });
+
+      const result = parseArgs(["--output", "mine", "--verbose"], cmd, {
+        globalExtracted: collisionExtracted,
+      });
+
+      expect(result.rawArgs.output).toBe("mine");
+      // verbose should be in global args, output should NOT be (local takes precedence)
+      expect(result.rawGlobalArgs?.verbose).toBe(true);
+      expect(result.rawGlobalArgs?.output).toBeUndefined();
+    });
+
+    it("returns empty rawGlobalArgs when no global flags provided", () => {
+      const cmd = defineCommand({
+        name: "leaf",
+        args: z.object({
+          output: arg(z.string().default("dist"), { description: "Output" }),
+        }),
+        run: () => {},
+      });
+
+      const result = parseArgs(["--output", "out"], cmd, { globalExtracted });
+
+      expect(result.rawGlobalArgs).toEqual({});
     });
   });
 });

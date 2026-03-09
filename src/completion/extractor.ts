@@ -4,7 +4,7 @@
 
 import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../lazy.js";
-import type { AnyCommand } from "../types.js";
+import type { AnyCommand, ArgsSchema } from "../types.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -205,15 +205,52 @@ export function isSubcmdCaseLines(routeEntries: RouteEntry[]): string[] {
 }
 
 /**
- * Extract completion data from a command tree
+ * Recursively merge global options into a subcommand and all its descendants.
+ * Avoids duplicates by checking existing option names.
  */
-export function extractCompletionData(command: AnyCommand, programName: string): CompletionData {
+function propagateGlobalOptions(
+  sub: CompletableSubcommand,
+  globalOptions: CompletableOption[],
+): void {
+  const existingNames = new Set(sub.options.map((o) => o.name));
+  const newOpts = globalOptions.filter((o) => !existingNames.has(o.name));
+  sub.options = [...sub.options, ...newOpts];
+  for (const child of sub.subcommands) {
+    propagateGlobalOptions(child, globalOptions);
+  }
+}
+
+/**
+ * Extract completion data from a command tree
+ *
+ * @param command - The root command
+ * @param programName - Program name for completion scripts
+ * @param globalArgsSchema - Optional global args schema. When provided, global options
+ *   are derived from this schema instead of the root command's options.
+ */
+export function extractCompletionData(
+  command: AnyCommand,
+  programName: string,
+  globalArgsSchema?: ArgsSchema,
+): CompletionData {
   const rootSubcommand = extractSubcommand(programName, command);
+
+  // When globalArgsSchema is provided, derive global options from it
+  // and merge them into all subcommands so shell generators include them at every level
+  let globalOptions: CompletableOption[];
+  if (globalArgsSchema) {
+    const globalExtracted = extractFields(globalArgsSchema);
+    globalOptions = globalExtracted.fields.filter((field) => !field.positional).map(fieldToOption);
+    // Merge global options into all subcommands recursively
+    propagateGlobalOptions(rootSubcommand, globalOptions);
+  } else {
+    // Default: global options are the options defined on the root command
+    globalOptions = rootSubcommand.options;
+  }
 
   return {
     command: rootSubcommand,
     programName,
-    // Global options are the options defined on the root command
-    globalOptions: rootSubcommand.options,
+    globalOptions,
   };
 }

@@ -561,12 +561,21 @@ function extractFromIntersection(schema: z.ZodType): ExtractedFields {
 }
 
 /**
+ * Cache for extractFields results to avoid redundant schema extraction
+ */
+const extractFieldsCache = new WeakMap<ArgsSchema, ExtractedFields>();
+
+/**
  * Extract all fields from a schema
  *
  * @param schema - The args schema (ZodObject, ZodDiscriminatedUnion, etc.)
  * @returns Extracted field information
  */
 export function extractFields(schema: ArgsSchema): ExtractedFields {
+  const cached = extractFieldsCache.get(schema);
+  if (cached) return cached;
+
+  let result: ExtractedFields;
   const typeName = getTypeName(schema);
   const s = schema as ZodSchemaWithDef;
   const def = s.def ?? s._def;
@@ -574,40 +583,49 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
   switch (typeName) {
     case "object": {
       const description = extractDescription(schema);
-      return {
+      result = {
         fields: extractFromObject(schema),
         schema,
         schemaType: "object",
         unknownKeysMode: getUnknownKeysMode(schema),
         ...(description ? { description } : {}),
       };
+      break;
     }
 
     case "union":
       // In Zod v4, discriminatedUnion has type "union" with a discriminator property
       if (def?.discriminator) {
-        return extractFromDiscriminatedUnion(schema);
+        result = extractFromDiscriminatedUnion(schema);
+      } else {
+        result = extractFromUnionLike(schema, "union");
       }
-      return extractFromUnionLike(schema, "union");
+      break;
 
     case "xor":
-      return extractFromUnionLike(schema, "xor");
+      result = extractFromUnionLike(schema, "xor");
+      break;
 
     case "intersection":
-      return extractFromIntersection(schema);
+      result = extractFromIntersection(schema);
+      break;
 
     default: {
       const description = extractDescription(schema);
       // Fallback: try to treat as object
-      return {
+      result = {
         fields: [],
         schema,
         schemaType: "object",
         unknownKeysMode: getUnknownKeysMode(schema),
         ...(description ? { description } : {}),
       };
+      break;
     }
   }
+
+  extractFieldsCache.set(schema, result);
+  return result;
 }
 
 /**

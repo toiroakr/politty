@@ -22,6 +22,7 @@ describe("23-global-options-index-markers", () => {
 
   beforeAll(() => {
     initDocFile("playground/23-global-options-index-markers/README.md");
+    initDocFile("playground/23-global-options-index-markers/README-CUSTOM-HEADING.md");
   });
 
   beforeEach(() => {
@@ -113,7 +114,11 @@ describe("23-global-options-index-markers", () => {
         index: { headingLevel: 4 },
       },
       files: {
-        "playground/23-global-options-index-markers/README.md": ["init", "build", "deploy"],
+        "playground/23-global-options-index-markers/README-CUSTOM-HEADING.md": [
+          "init",
+          "build",
+          "deploy",
+        ],
       },
       formatter: mdFormatter,
     };

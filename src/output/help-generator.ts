@@ -39,6 +39,8 @@ export interface CommandContext {
   rootName?: string | undefined;
   /** Root command version */
   rootVersion?: string | undefined;
+  /** Extracted fields from global args schema */
+  globalExtracted?: ExtractedFields | undefined;
 }
 
 /**
@@ -98,6 +100,11 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
   const name = buildUsageCommandName(command, context);
 
   parts.push(styles.commandName(name));
+
+  // Add [global options] if global args are defined
+  if (context?.globalExtracted?.fields.length) {
+    parts.push(styles.placeholder("[global options]"));
+  }
 
   const extracted = getExtractedFields(command);
   if (extracted) {
@@ -473,6 +480,39 @@ function formatOption(
 }
 
 /**
+ * Format a single option field as a help line
+ */
+function formatFieldLine(opt: ResolvedFieldMeta, indent = 0, extraDescPadding = 0): string {
+  const flags = formatFlags(opt);
+  let desc = opt.description ?? "";
+
+  if (opt.defaultValue !== undefined) {
+    desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(opt.defaultValue)})`)}`;
+  }
+
+  if (opt.required) {
+    desc += ` ${styles.required("(required)")}`;
+  }
+
+  const envInfo = formatEnvInfo(opt.env);
+  if (envInfo) {
+    desc += ` ${envInfo}`;
+  }
+
+  return formatOption(flags, desc, indent, extraDescPadding);
+}
+
+/**
+ * Render global options section
+ */
+function renderGlobalOptions(globalExtracted: ExtractedFields): string {
+  return globalExtracted.fields
+    .filter((a) => !a.positional)
+    .map((opt) => formatFieldLine(opt))
+    .join("\n");
+}
+
+/**
  * Render options for a subcommand (used by showSubcommandOptions)
  */
 function renderSubcommandOptionsCompact(command: AnyCommand, indent: number): string[] {
@@ -581,6 +621,13 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   const optionsText = renderOptions(command, options.descriptions, context);
   if (optionsText) {
     sections.push(`${styles.sectionHeader("Options:")}\n${optionsText}`);
+  }
+
+  // Global Options
+  if (context?.globalExtracted?.fields.length) {
+    sections.push(
+      `${styles.sectionHeader("Global Options:")}\n${renderGlobalOptions(context.globalExtracted)}`,
+    );
   }
 
   // Subcommands

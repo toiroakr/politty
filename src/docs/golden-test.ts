@@ -26,6 +26,7 @@ import type {
   GenerateDocConfig,
   GenerateDocResult,
   HeadingLevel,
+  PathConfig,
   RenderFunction,
   RootDocConfig,
 } from "./types.js";
@@ -34,6 +35,10 @@ import {
   globalOptionsStartMarker,
   indexEndMarker,
   indexStartMarker,
+  rootFooterEndMarker,
+  rootFooterStartMarker,
+  rootHeaderEndMarker,
+  rootHeaderStartMarker,
   sectionEndMarker,
   sectionStartMarker,
   SECTION_TYPES,
@@ -242,7 +247,9 @@ function resolveConfiguredCommandPaths(
 } {
   const fileConfig = normalizeFileConfig(fileConfigRaw);
   const specifiedCommands = fileConfig.commands;
-  const expandedCommands = expandCommandPaths(specifiedCommands, allCommands);
+  const expandedCommands = fileConfig.noExpand
+    ? specifiedCommands.filter((p) => allCommands.has(p))
+    : expandCommandPaths(specifiedCommands, allCommands);
   const commandPaths = filterIgnoredCommands(expandedCommands, ignores);
   const topLevelCommands = filterIgnoredCommands(
     resolveTopLevelCommands(specifiedCommands, allCommands),
@@ -847,9 +854,10 @@ function generateGlobalOptionsSection(config: {
   const startMarker = globalOptionsStartMarker();
   const endMarker = globalOptionsEndMarker();
 
+  const anchor = '<a id="global-options"></a>';
   const table = renderArgsTable(config.args, config.options);
 
-  return [startMarker, table, endMarker].join("\n");
+  return [startMarker, anchor, table, endMarker].join("\n");
 }
 
 /**
@@ -885,6 +893,7 @@ async function processGlobalOptionsMarker(
   globalOptionsConfig: { args: ArgsShape; options?: ArgsTableOptions },
   updateMode: boolean,
   formatter: FormatterFunction | undefined,
+  autoInsertIfMissing?: boolean,
 ): Promise<{
   content: string;
   diffs: string[];
@@ -907,6 +916,12 @@ async function processGlobalOptionsMarker(
   const existingSection = extractMarkerSection(content, startMarker, endMarker);
 
   if (!existingSection) {
+    if (updateMode && autoInsertIfMissing) {
+      // Auto-insert markers with generated content (generatedSection already includes markers)
+      content = content.trimEnd() + "\n\n" + generatedSection + "\n";
+      wasUpdated = true;
+      return { content, diffs, hasError, wasUpdated };
+    }
     hasError = true;
     diffs.push(
       `Global options marker not found in file. Expected markers:\n${startMarker}\n...\n${endMarker}`,
@@ -924,6 +939,67 @@ async function processGlobalOptionsMarker(
       } else {
         hasError = true;
         diffs.push("Failed to replace global options section");
+      }
+    } else {
+      hasError = true;
+      diffs.push(formatDiff(existingSection, generatedSection));
+    }
+  }
+
+  return { content, diffs, hasError, wasUpdated };
+}
+
+/**
+ * Process a static content marker (root-header or root-footer).
+ * Inserts/updates the marker section with the given content.
+ */
+async function processStaticMarker(
+  existingContent: string,
+  markerLabel: string,
+  startMarker: string,
+  endMarker: string,
+  rawContent: string,
+  updateMode: boolean,
+  formatter: FormatterFunction | undefined,
+  autoInsertIfMissing: boolean,
+): Promise<{
+  content: string;
+  diffs: string[];
+  hasError: boolean;
+  wasUpdated: boolean;
+}> {
+  let content = existingContent;
+  const diffs: string[] = [];
+  let hasError = false;
+  let wasUpdated = false;
+
+  const generatedInner = await applyFormatter(rawContent, formatter);
+  const generatedSection = [startMarker, generatedInner, endMarker].join("\n");
+
+  const existingSection = extractMarkerSection(content, startMarker, endMarker);
+
+  if (!existingSection) {
+    if (updateMode && autoInsertIfMissing) {
+      content = content.trimEnd() + "\n\n" + generatedSection + "\n";
+      wasUpdated = true;
+      return { content, diffs, hasError, wasUpdated };
+    }
+    hasError = true;
+    diffs.push(
+      `${markerLabel} marker not found in file. Expected markers:\n${startMarker}\n...\n${endMarker}`,
+    );
+    return { content, diffs, hasError, wasUpdated };
+  }
+
+  if (existingSection !== generatedSection) {
+    if (updateMode) {
+      const updated = replaceMarkerSection(content, startMarker, endMarker, generatedSection);
+      if (updated) {
+        content = updated;
+        wasUpdated = true;
+      } else {
+        hasError = true;
+        diffs.push(`Failed to replace ${markerLabel} section`);
       }
     } else {
       hasError = true;
@@ -1013,7 +1089,7 @@ async function processIndexMarker(
  */
 function findFileForCommand(
   commandPath: string,
-  files: GenerateDocConfig["files"],
+  files: FileMapping,
   allCommands: Map<string, CommandInfo>,
   ignores: string[],
 ): string | null {
@@ -1034,7 +1110,7 @@ function findFileForCommand(
 function findTargetCommandsInFile(
   targetCommands: string[],
   filePath: string,
-  files: GenerateDocConfig["files"],
+  files: FileMapping,
   allCommands: Map<string, CommandInfo>,
   ignores: string[],
 ): string[] {
@@ -1076,18 +1152,18 @@ function generateCommandSection(
   render: RenderFunction,
   filePath?: string,
   fileMap?: Record<string, string>,
+  rootDocPath?: string,
+  hasGlobalOptions?: boolean,
 ): string | null {
   const info = allCommands.get(cmdPath);
   if (!info) return null;
 
   // Add file context to CommandInfo for cross-file link generation
-  const infoWithFileContext: CommandInfo = {
-    ...info,
-    filePath,
-    fileMap,
-  };
-
-  return render(infoWithFileContext);
+  const enriched: CommandInfo = { ...info, filePath, fileMap, rootDocPath };
+  if (hasGlobalOptions !== undefined) {
+    enriched.hasGlobalOptions = hasGlobalOptions;
+  }
+  return render(enriched);
 }
 
 /**
@@ -1102,6 +1178,8 @@ function generateFileMarkdown(
   fileMap?: Record<string, string>,
   specifiedOrder?: string[],
   fileConfig?: FileConfig,
+  rootDocPath?: string,
+  hasGlobalOptions?: boolean,
 ): string {
   const sections: string[] = [];
 
@@ -1115,7 +1193,15 @@ function generateFileMarkdown(
   const sortedPaths = sortDepthFirst(commandPaths, specifiedOrder ?? []);
 
   for (const cmdPath of sortedPaths) {
-    const section = generateCommandSection(cmdPath, allCommands, render, filePath, fileMap);
+    const section = generateCommandSection(
+      cmdPath,
+      allCommands,
+      render,
+      filePath,
+      fileMap,
+      rootDocPath,
+      hasGlobalOptions,
+    );
     if (section) {
       sections.push(section);
     }
@@ -1128,7 +1214,7 @@ function generateFileMarkdown(
  * Build a map of command path to file path
  */
 function buildFileMap(
-  files: GenerateDocConfig["files"],
+  files: FileMapping,
   allCommands: Map<string, CommandInfo>,
   ignores: string[],
 ): Record<string, string> {
@@ -1174,23 +1260,111 @@ async function executeConfiguredExamples(
 }
 
 /**
+ * Convert PathConfig to FileMapping with explicit command paths.
+ * Uses noExpand to prevent subcommand expansion since paths are pre-resolved.
+ */
+function pathToFiles(
+  pathConfig: PathConfig,
+  allCommands: Map<string, CommandInfo>,
+): { files: FileMapping; rootDocPath: string } {
+  if (typeof pathConfig === "string") {
+    // All commands in one file
+    return {
+      files: { [pathConfig]: Array.from(allCommands.keys()) },
+      rootDocPath: pathConfig,
+    };
+  }
+
+  const { root, commands = {} } = pathConfig;
+  const files: FileMapping = {};
+
+  // Collect commands explicitly assigned to other files.
+  // Sort by specificity (most specific first) so that e.g. 'config get' -> 'get.md'
+  // takes priority over 'config' -> 'config.md' for that descendant.
+  const assignedToOtherFiles = new Set<string>();
+  const sortedEntries = Object.entries(commands).sort(
+    ([a], [b]) => b.split(" ").length - a.split(" ").length,
+  );
+
+  for (const [cmdPath, filePath] of sortedEntries) {
+    if (!files[filePath]) {
+      files[filePath] = { commands: [], noExpand: true };
+    }
+    const fc = files[filePath] as FileConfig;
+    // Add the command and all its descendants, skipping already-assigned commands
+    for (const existingPath of allCommands.keys()) {
+      if (
+        (existingPath === cmdPath || existingPath.startsWith(cmdPath + " ")) &&
+        !assignedToOtherFiles.has(existingPath)
+      ) {
+        fc.commands.push(existingPath);
+        assignedToOtherFiles.add(existingPath);
+      }
+    }
+  }
+
+  // Remaining commands go to root file
+  const rootCommands = Array.from(allCommands.keys()).filter((p) => !assignedToOtherFiles.has(p));
+  files[root] = { commands: rootCommands, noExpand: true };
+
+  return { files, rootDocPath: root };
+}
+
+/**
  * Generate documentation from command definition
  */
 export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDocResult> {
   const {
     command,
-    rootDoc,
-    files,
     ignores = [],
     format = {},
     formatter,
     examples: examplesConfig,
     targetCommands,
+    globalArgs,
   } = config;
+
+  // Collect all commands early (needed for PathConfig conversion)
+  const allCommands = await collectAllCommands(command);
+
+  // Resolve files from PathConfig or direct FileMapping
+  let files: FileMapping;
+  let usingPathConfig = false;
+  let resolvedRootDocPath: string | undefined;
+  if (config.path !== undefined) {
+    if (config.files !== undefined) {
+      throw new Error('Cannot specify both "path" and "files". Use one or the other.');
+    }
+    const converted = pathToFiles(config.path, allCommands);
+    files = converted.files;
+    resolvedRootDocPath = converted.rootDocPath;
+    usingPathConfig = true;
+  } else if (config.files !== undefined) {
+    files = config.files;
+  } else {
+    throw new Error('Either "path" or "files" must be specified.');
+  }
+
+  // Auto-derive rootDoc from PathConfig or globalArgs
+  let rootDoc = config.rootDoc;
+  if (!rootDoc && usingPathConfig && (globalArgs || config.rootInfo)) {
+    rootDoc = { path: resolvedRootDocPath! };
+  }
+
+  // Auto-derive rootDoc.globalOptions from globalArgs schema if provided
+  if (globalArgs && rootDoc && !rootDoc.globalOptions) {
+    const optionFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
+    if (optionFields.length > 0) {
+      const globalShape: ArgsShape = Object.fromEntries(
+        optionFields.map((f) => [f.name, f.schema]),
+      );
+      rootDoc = { ...rootDoc, globalOptions: globalShape };
+    }
+  }
   const updateMode = isUpdateMode();
 
-  // Validate rootDoc.path does not overlap with files keys
-  if (rootDoc) {
+  // Validate rootDoc.path does not overlap with files keys (only for explicit files mode)
+  if (rootDoc && !usingPathConfig) {
     const normalizedRootDocPath = normalizeDocPathForComparison(rootDoc.path);
     const hasOverlap = Object.keys(files).some(
       (filePath) => normalizeDocPathForComparison(filePath) === normalizedRootDocPath,
@@ -1199,9 +1373,6 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       throw new Error(`rootDoc.path "${rootDoc.path}" must not also appear as a key in files.`);
     }
   }
-
-  // Collect all commands
-  const allCommands = await collectAllCommands(command);
 
   // Execute examples for all commands specified in examplesConfig
   if (examplesConfig) {
@@ -1299,14 +1470,24 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     // Use custom renderer if provided, otherwise use file-specific renderer
     const render = fileConfig.render ?? fileRenderer;
 
+    // In PathConfig mode, the rootDoc file has extra content (header, global-options)
+    // managed by rootDoc processing. Use marker-based comparison to avoid mismatch.
+    const isRootDocFile =
+      usingPathConfig &&
+      rootDoc &&
+      normalizeDocPathForComparison(filePath) === normalizeDocPathForComparison(rootDoc.path);
+    const useMarkerBasedComparison = hasTargetCommands || isRootDocFile;
+
     // Handle partial validation when targetCommands are specified
-    if (hasTargetCommands) {
+    // or when the file is the rootDoc in PathConfig mode
+    if (useMarkerBasedComparison) {
       // Read existing content once for all target commands in this file
       let existingContent = readFile(filePath);
       // Pre-compute sorted order once per file for insertCommandSections
       const sortedCommandPaths = sortDepthFirst(commandPaths, specifiedCommands);
+      const effectiveTargetCommands = hasTargetCommands ? fileTargetCommands : commandPaths;
 
-      for (const targetCommand of fileTargetCommands) {
+      for (const targetCommand of effectiveTargetCommands) {
         // Generate only the target command's section
         const rawSection = generateCommandSection(
           targetCommand,
@@ -1314,6 +1495,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           render,
           filePath,
           fileMap,
+          rootDoc?.path,
+          globalOptionDefinitions.size > 0,
         );
 
         if (!rawSection) {
@@ -1419,6 +1602,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         fileMap,
         specifiedCommands,
         fileConfig,
+        rootDoc?.path,
+        globalOptionDefinitions.size > 0,
       );
 
       // Apply formatter if provided
@@ -1468,12 +1653,17 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       let markerUpdated = false;
 
       // Validate/update rootDoc file header derived from command.name/description
-      const rootDocFileConfig: FileHeaderConfig = { title: command.name };
+      // rootInfo overrides command defaults
+      const rootInfo = config.rootInfo;
+      const rootDocFileConfig: FileHeaderConfig = {
+        title: rootInfo?.title ?? command.name,
+      };
       if (rootDoc.headingLevel !== undefined) {
         rootDocFileConfig.headingLevel = rootDoc.headingLevel;
       }
-      if (command.description !== undefined) {
-        rootDocFileConfig.description = command.description;
+      const rootDescription = rootInfo?.description ?? command.description;
+      if (rootDescription !== undefined) {
+        rootDocFileConfig.description = rootDescription;
       }
       const headerResult = processFileHeader(content, rootDocFileConfig, updateMode);
       content = headerResult.content;
@@ -1487,15 +1677,40 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         markerUpdated = true;
       }
 
-      // Detect unexpected section markers in rootDoc
-      const unexpectedSectionPaths = Array.from(new Set(collectSectionMarkerPaths(content)));
-      if (unexpectedSectionPaths.length > 0) {
-        hasError = true;
-        rootDocDiffs.push(
-          `Found unexpected section markers in rootDoc: ${unexpectedSectionPaths
-            .map((commandPath) => `"${formatCommandPath(commandPath)}"`)
-            .join(", ")}.`,
+      // Process rootInfo.header marker (after title/description)
+      if (rootInfo?.header) {
+        const headerMarkerResult = await processStaticMarker(
+          content,
+          "Root header",
+          rootHeaderStartMarker(),
+          rootHeaderEndMarker(),
+          rootInfo.header,
+          updateMode,
+          formatter,
+          usingPathConfig,
         );
+        content = headerMarkerResult.content;
+        rootDocDiffs.push(...headerMarkerResult.diffs);
+        if (headerMarkerResult.hasError) {
+          hasError = true;
+        }
+        if (headerMarkerResult.wasUpdated) {
+          markerUpdated = true;
+        }
+      }
+
+      // Detect unexpected section markers in rootDoc
+      // In PathConfig mode, section markers are expected (rootDoc overlaps with files)
+      if (!usingPathConfig) {
+        const unexpectedSectionPaths = Array.from(new Set(collectSectionMarkerPaths(content)));
+        if (unexpectedSectionPaths.length > 0) {
+          hasError = true;
+          rootDocDiffs.push(
+            `Found unexpected section markers in rootDoc: ${unexpectedSectionPaths
+              .map((commandPath) => `"${formatCommandPath(commandPath)}"`)
+              .join(", ")}.`,
+          );
+        }
       }
 
       // Process global options marker
@@ -1506,6 +1721,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           normalizedGlobalOptions,
           updateMode,
           formatter,
+          usingPathConfig,
         );
         content = globalOptionsResult.content;
         rootDocDiffs.push(...globalOptionsResult.diffs);
@@ -1536,6 +1752,28 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       }
       if (indexResult.wasUpdated) {
         markerUpdated = true;
+      }
+
+      // Process rootInfo.footer marker (at end of document)
+      if (rootInfo?.footer) {
+        const footerMarkerResult = await processStaticMarker(
+          content,
+          "Root footer",
+          rootFooterStartMarker(),
+          rootFooterEndMarker(),
+          rootInfo.footer,
+          updateMode,
+          formatter,
+          usingPathConfig,
+        );
+        content = footerMarkerResult.content;
+        rootDocDiffs.push(...footerMarkerResult.diffs);
+        if (footerMarkerResult.hasError) {
+          hasError = true;
+        }
+        if (footerMarkerResult.wasUpdated) {
+          markerUpdated = true;
+        }
       }
 
       // Write updated content if markers were modified
@@ -1611,7 +1849,7 @@ export function initDocFile(
 
   if (typeof config === "string") {
     deleteFile(config, fileSystem);
-  } else {
+  } else if (config.files) {
     // rootDoc is NOT deleted because generateDoc expects it to exist with markers.
     // Only generated files (which are fully regenerated) are deleted.
     for (const filePath of Object.keys(config.files)) {

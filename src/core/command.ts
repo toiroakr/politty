@@ -3,6 +3,7 @@ import type {
   ArgsSchema,
   Command,
   Example,
+  GlobalArgs,
   NonRunnableCommand,
   RunnableCommand,
   SubCommandsRecord,
@@ -16,19 +17,37 @@ type InferArgs<TArgsSchema> = TArgsSchema extends z.ZodType
   : Record<string, never>;
 
 /**
+ * Detect empty interface (used for GlobalArgs declaration merging)
+ */
+type IsEmpty<T> = keyof T extends never ? true : false;
+
+/**
+ * Merge local args with global args.
+ * No-op when TGlobalArgs is empty (default GlobalArgs not extended).
+ */
+export type MergedArgs<TLocalArgs, TGlobalArgs> =
+  IsEmpty<TGlobalArgs> extends true ? TLocalArgs : TLocalArgs & TGlobalArgs;
+
+/**
+ * Resolve merged args from schema and global args type
+ */
+type ResolvedArgs<TArgsSchema, TGlobalArgs> = MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>;
+
+/**
  * Config for defining a command
  * @template TArgsSchema - The Zod schema type for arguments
  * @template TResult - The return type of run function (void if no run)
+ * @template TGlobalArgs - Global args type (from declaration merging or factory)
  */
-interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResult> {
+interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResult, TGlobalArgs> {
   name: string;
   description?: string;
   args?: TArgsSchema;
   subCommands?: SubCommandsRecord;
-  setup?: (context: { args: InferArgs<TArgsSchema> }) => void | Promise<void>;
-  run?: (args: InferArgs<TArgsSchema>) => TResult;
+  setup?: (context: { args: ResolvedArgs<TArgsSchema, TGlobalArgs> }) => void | Promise<void>;
+  run?: (args: ResolvedArgs<TArgsSchema, TGlobalArgs>) => TResult;
   cleanup?: (context: {
-    args: InferArgs<TArgsSchema>;
+    args: ResolvedArgs<TArgsSchema, TGlobalArgs>;
     error?: Error | undefined;
   }) => void | Promise<void>;
   notes?: string;
@@ -38,20 +57,21 @@ interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResul
 /**
  * Config with run function (runnable command)
  */
-interface RunnableConfig<
+export interface RunnableConfig<
   TArgsSchema extends ArgsSchema | undefined,
   TResult,
-> extends DefineCommandConfig<TArgsSchema, TResult> {
-  run: (args: InferArgs<TArgsSchema>) => TResult;
+  TGlobalArgs,
+> extends DefineCommandConfig<TArgsSchema, TResult, TGlobalArgs> {
+  run: (args: ResolvedArgs<TArgsSchema, TGlobalArgs>) => TResult;
 }
 
 /**
  * Config without run function (non-runnable command)
  */
-interface NonRunnableConfig<TArgsSchema extends ArgsSchema | undefined> extends Omit<
-  DefineCommandConfig<TArgsSchema, void>,
-  "run"
-> {
+export interface NonRunnableConfig<
+  TArgsSchema extends ArgsSchema | undefined,
+  TGlobalArgs,
+> extends Omit<DefineCommandConfig<TArgsSchema, void, TGlobalArgs>, "run"> {
   run?: undefined;
 }
 
@@ -111,22 +131,29 @@ interface NonRunnableConfig<TArgsSchema extends ArgsSchema | undefined> extends 
 export function defineCommand<
   TArgsSchema extends ArgsSchema | undefined = undefined,
   TResult = void,
+  TGlobalArgs = GlobalArgs,
 >(
-  config: RunnableConfig<TArgsSchema, TResult>,
-): RunnableCommand<TArgsSchema, InferArgs<TArgsSchema>, TResult>;
+  config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
+): RunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>, TResult>;
 
 // Overload 2: without run function - returns NonRunnableCommand with preserved schema type
-export function defineCommand<TArgsSchema extends ArgsSchema | undefined = undefined>(
-  config: NonRunnableConfig<TArgsSchema>,
-): NonRunnableCommand<TArgsSchema, InferArgs<TArgsSchema>>;
+export function defineCommand<
+  TArgsSchema extends ArgsSchema | undefined = undefined,
+  TGlobalArgs = GlobalArgs,
+>(
+  config: NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+): NonRunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>>;
 
 // Implementation
 export function defineCommand<
   TArgsSchema extends ArgsSchema | undefined = undefined,
   TResult = void,
+  TGlobalArgs = GlobalArgs,
 >(
-  config: RunnableConfig<TArgsSchema, TResult> | NonRunnableConfig<TArgsSchema>,
-): Command<TArgsSchema, InferArgs<TArgsSchema>, TResult> {
+  config:
+    | RunnableConfig<TArgsSchema, TResult, TGlobalArgs>
+    | NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+): Command<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>, TResult> {
   return {
     name: config.name,
     description: config.description,
@@ -137,5 +164,37 @@ export function defineCommand<
     cleanup: config.cleanup,
     notes: config.notes,
     examples: config.examples,
-  } as Command<TArgsSchema, InferArgs<TArgsSchema>, TResult>;
+  } as Command<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>, TResult>;
+}
+
+/**
+ * Create a typed defineCommand factory with pre-bound global args type.
+ * This is the recommended pattern for type-safe global options.
+ *
+ * @example
+ * ```ts
+ * // global-args.ts
+ * type GlobalArgsType = { verbose: boolean; config?: string };
+ * export const defineAppCommand = createDefineCommand<GlobalArgsType>();
+ *
+ * // commands/build.ts
+ * export const buildCommand = defineAppCommand({
+ *   name: "build",
+ *   args: z.object({ output: arg(z.string().default("dist")) }),
+ *   run: (args) => {
+ *     args.verbose; // typed via GlobalArgsType
+ *     args.output;  // typed via local args
+ *   },
+ * });
+ * ```
+ */
+export function createDefineCommand<TGlobalArgs>(): {
+  <TArgsSchema extends ArgsSchema | undefined = undefined, TResult = void>(
+    config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
+  ): RunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>, TResult>;
+  <TArgsSchema extends ArgsSchema | undefined = undefined>(
+    config: NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+  ): NonRunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>>;
+} {
+  return defineCommand as ReturnType<typeof createDefineCommand<TGlobalArgs>>;
 }

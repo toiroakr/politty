@@ -1914,6 +1914,7 @@ A test CLI for documentation generation
 ## Global Options
 
 <!-- politty:global-options:start -->
+<a id="global-options"></a>
 ${argsContent}
 <!-- politty:global-options:end -->
 `;
@@ -2504,6 +2505,7 @@ A test CLI for documentation generation
 ## Global Options
 
 <!-- politty:global-options:start -->
+<a id="global-options"></a>
 ${argsContent}
 <!-- politty:global-options:end -->
 
@@ -3538,6 +3540,59 @@ ${argsContent}
       expect(result.success).toBe(true);
       // Should have results for both target file and rootDoc
       expect(result.files.length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe("PathConfig specificity", () => {
+    it("should not duplicate descendant in ancestor file when descendant has own file", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootPath = path.join(testDir, "root.md");
+      const configPath = path.join(testDir, "config.md");
+      const getPath = path.join(testDir, "get.md");
+
+      // 'config get' is explicitly assigned to get.md,
+      // so it should NOT also appear in config.md (which gets 'config' and its remaining descendants)
+      await generateDoc({
+        command: testCommand,
+        path: {
+          root: rootPath,
+          commands: {
+            config: configPath,
+            "config get": getPath,
+          },
+        },
+      });
+
+      const configContent = fs.readFileSync(configPath, "utf-8");
+      const getContent = fs.readFileSync(getPath, "utf-8");
+
+      // 'config get' heading should only appear in get.md, not config.md
+      expect(getContent).toContain("config get");
+      // config.md should have 'config' and 'config set', but NOT 'config get'
+      expect(configContent).toContain("config set");
+      expect(configContent).not.toMatch(/## config get\b/);
+    });
+  });
+
+  describe("rootInfo without globalArgs", () => {
+    it("should apply rootInfo when path is specified without globalArgs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootPath = path.join(testDir, "root.md");
+
+      await generateDoc({
+        command: testCommand,
+        path: rootPath,
+        rootInfo: {
+          title: "Custom Title",
+          description: "Custom description for the CLI",
+        },
+      });
+
+      const content = fs.readFileSync(rootPath, "utf-8");
+      expect(content).toContain("# Custom Title");
+      expect(content).toContain("Custom description for the CLI");
     });
   });
 });
