@@ -531,15 +531,11 @@ function getGlobalOptionsLink(info: CommandInfo): string | null {
     return null;
   }
 
-  const rootDocPath = info.rootDocPath;
-  const currentFile = info.filePath;
-
-  if (!rootDocPath || !currentFile || currentFile === rootDocPath) {
-    return "See [Global Options](#global-options) for options available to all commands.";
-  }
-
-  const relativePath = getRelativePath(currentFile, rootDocPath);
-  return `See [Global Options](${relativePath}#global-options) for options available to all commands.`;
+  const isCrossFile = info.rootDocPath && info.filePath && info.filePath !== info.rootDocPath;
+  const href = isCrossFile
+    ? `${getRelativePath(info.filePath!, info.rootDocPath!)}#global-options`
+    : "#global-options";
+  return `See [Global Options](${href}) for options available to all commands.`;
 }
 
 export function createCommandRenderer(options: DefaultRendererOptions = {}): RenderFunction {

@@ -1282,30 +1282,25 @@ function pathToFiles(
   // Sort by specificity (most specific first) so that e.g. 'config get' -> 'get.md'
   // takes priority over 'config' -> 'config.md' for that descendant.
   const assignedToOtherFiles = new Set<string>();
-  const fileToCommands = new Map<string, string[]>();
   const sortedEntries = Object.entries(commands).sort(
     ([a], [b]) => b.split(" ").length - a.split(" ").length,
   );
 
   for (const [cmdPath, filePath] of sortedEntries) {
-    if (!fileToCommands.has(filePath)) {
-      fileToCommands.set(filePath, []);
+    if (!files[filePath]) {
+      files[filePath] = { commands: [], noExpand: true };
     }
+    const fc = files[filePath] as FileConfig;
     // Add the command and all its descendants, skipping already-assigned commands
     for (const existingPath of allCommands.keys()) {
       if (
         (existingPath === cmdPath || existingPath.startsWith(cmdPath + " ")) &&
         !assignedToOtherFiles.has(existingPath)
       ) {
-        fileToCommands.get(filePath)!.push(existingPath);
+        fc.commands.push(existingPath);
         assignedToOtherFiles.add(existingPath);
       }
     }
-  }
-
-  // Explicitly assigned files (noExpand since already resolved)
-  for (const [filePath, cmds] of fileToCommands) {
-    files[filePath] = { commands: cmds, noExpand: true };
   }
 
   // Remaining commands go to root file
