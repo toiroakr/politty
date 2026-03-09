@@ -35,12 +35,20 @@ export const isCI = !!process.env.CI;
 
 export interface ExecOptions {
   cwd?: string;
+  /** Path to a pre-generated completion script file to source instead of running the app */
+  scriptPath?: string;
 }
 
 export interface TestContext {
   tmpDir: string;
   testEnv: NodeJS.ProcessEnv;
   testFilesDir: string;
+  /** Pre-generated completion script paths (one per shell) */
+  completionScripts: {
+    bash: string;
+    zsh: string;
+    fish: string;
+  };
 }
 
 /** Create a temp dir with a wrapper script and PATH-augmented env */
@@ -85,12 +93,34 @@ export function setupTestContext(): TestContext {
   fs.writeFileSync(path.join(testFilesDir, "nested", "sub", "deep.json"), "{}");
   fs.writeFileSync(path.join(testFilesDir, "nested", "sub", "deep.txt"), "");
 
-  return { tmpDir, testEnv, testFilesDir };
+  const completionScripts = generateCompletionScripts(tmpDir, "myapp", testEnv);
+  return { tmpDir, testEnv, testFilesDir, completionScripts };
 }
 
 export function setupNestedTestContext(): TestContext {
   const { tmpDir, testEnv } = createWrapperContext("politty-nested-", "nestapp", nestedCommandPath);
-  return { tmpDir, testEnv, testFilesDir: tmpDir };
+  const completionScripts = generateCompletionScripts(tmpDir, "nestapp", testEnv);
+  return { tmpDir, testEnv, testFilesDir: tmpDir, completionScripts };
+}
+
+/** Pre-generate completion scripts once per shell to avoid repeated tsx/Node.js startup */
+function generateCompletionScripts(
+  tmpDir: string,
+  appName: string,
+  testEnv: NodeJS.ProcessEnv,
+): TestContext["completionScripts"] {
+  const completionScripts = { bash: "", zsh: "", fish: "" };
+  for (const shell of ["bash", "zsh", "fish"] as const) {
+    const scriptPath = path.join(tmpDir, `${appName}-completion.${shell}`);
+    const output = execSync(`${appName} completion ${shell}`, {
+      env: testEnv,
+      encoding: "utf-8",
+      timeout: 30000,
+    });
+    fs.writeFileSync(scriptPath, output);
+    completionScripts[shell] = scriptPath;
+  }
+  return completionScripts;
 }
 
 export function teardownTestContext(ctx: TestContext): void {
@@ -109,9 +139,12 @@ function bashCompleteWith(
   const compWords = [appName, ...args];
   const compCword = compWords.length - 1;
   const compLine = compWords.join(" ");
+  const sourceCmd = opts?.scriptPath
+    ? `source '${opts.scriptPath}'`
+    : `eval "$(${appName} completion bash)"`;
 
   const script = `
-eval "$(${appName} completion bash)"
+${sourceCmd}
 COMP_WORDS=(${compWords.map((w) => `'${w}'`).join(" ")})
 COMP_CWORD=${compCword}
 COMP_LINE='${compLine}'
@@ -187,6 +220,9 @@ function zshCompleteWith(
 ): string[] {
   const wordsArray = [appName, ...args];
   const filesStub = opts?.filesStub ?? zshFilesStubFull;
+  const sourceCmd = opts?.scriptPath
+    ? `source '${opts.scriptPath}'`
+    : `eval "$(${appName} completion zsh)"`;
 
   const script = `
 compdef() {}
@@ -199,7 +235,7 @@ _describe() {
   done
 }
 ${filesStub}
-eval "$(${appName} completion zsh)"
+${sourceCmd}
 words=(${wordsArray.map((w) => `'${w}'`).join(" ")})
 _${fnName} 2>/dev/null
 `;
@@ -237,6 +273,9 @@ function fishCompleteWith(
 
   const opcEchoLines = opcTokens.map((t) => `printf '%s\\n' '${t}'`).join("\n    ");
   const ctBody = currentToken ? `printf '%s\\n' '${currentToken}'` : "true";
+  const sourceCmd = opts?.scriptPath
+    ? `source '${opts.scriptPath}'`
+    : `source (${appName} completion fish | psub)`;
 
   const script = `
 function commandline
@@ -246,7 +285,7 @@ function commandline
         ${ctBody}
     end
 end
-source (${appName} completion fish | psub)
+${sourceCmd}
 __fish_${fnName}_complete
 `;
 
