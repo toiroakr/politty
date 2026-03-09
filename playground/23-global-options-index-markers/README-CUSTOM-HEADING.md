@@ -40,7 +40,7 @@ project-cli init [options] <name>
 
 <!-- politty:command:init:options:end -->
 
-See [Global Options](REFERENCE.md#global-options) for options available to all commands.
+See [Global Options](REFERENCE-CUSTOM-HEADING.md#global-options) for options available to all commands.
 
 <!-- politty:command:build:heading:start -->
 
@@ -74,7 +74,7 @@ project-cli build [options]
 
 <!-- politty:command:build:options:end -->
 
-See [Global Options](REFERENCE.md#global-options) for options available to all commands.
+See [Global Options](REFERENCE-CUSTOM-HEADING.md#global-options) for options available to all commands.
 
 <!-- politty:command:deploy:heading:start -->
 
@@ -108,4 +108,4 @@ project-cli deploy [options]
 
 <!-- politty:command:deploy:options:end -->
 
-See [Global Options](REFERENCE.md#global-options) for options available to all commands.
+See [Global Options](REFERENCE-CUSTOM-HEADING.md#global-options) for options available to all commands.
