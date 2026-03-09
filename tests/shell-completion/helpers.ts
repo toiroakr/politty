@@ -35,6 +35,8 @@ export const isCI = !!process.env.CI;
 
 export interface ExecOptions {
   cwd?: string;
+  /** Path to a pre-generated completion script file to source instead of running the app */
+  scriptPath?: string;
 }
 
 export interface TestContext {
@@ -132,7 +134,7 @@ function bashCompleteWith(
   fnName: string,
   testEnv: NodeJS.ProcessEnv,
   args: string[],
-  opts?: ExecOptions & { scriptPath?: string },
+  opts?: ExecOptions,
 ): string[] {
   const compWords = [appName, ...args];
   const compCword = compWords.length - 1;
@@ -166,7 +168,7 @@ printf '%s\\n' "\${COMPREPLY[@]}"
 export function bashComplete(
   testEnv: NodeJS.ProcessEnv,
   args: string[],
-  opts?: ExecOptions & { scriptPath?: string },
+  opts?: ExecOptions,
 ): string[] {
   return bashCompleteWith("myapp", "myapp", testEnv, args, opts);
 }
@@ -214,7 +216,7 @@ function zshCompleteWith(
   fnName: string,
   testEnv: NodeJS.ProcessEnv,
   args: string[],
-  opts?: ExecOptions & { filesStub?: string; scriptPath?: string },
+  opts?: ExecOptions & { filesStub?: string },
 ): string[] {
   const wordsArray = [appName, ...args];
   const filesStub = opts?.filesStub ?? zshFilesStubFull;
@@ -253,7 +255,7 @@ _${fnName} 2>/dev/null
 export function zshComplete(
   testEnv: NodeJS.ProcessEnv,
   args: string[],
-  opts?: ExecOptions & { scriptPath?: string },
+  opts?: ExecOptions,
 ): string[] {
   return zshCompleteWith("myapp", "myapp", testEnv, args, opts);
 }
@@ -263,7 +265,7 @@ function fishCompleteWith(
   fnName: string,
   testEnv: NodeJS.ProcessEnv,
   args: string[],
-  opts?: ExecOptions & { scriptPath?: string },
+  opts?: ExecOptions,
 ): string[] {
   const allTokens = [appName, ...args];
   const opcTokens = allTokens.slice(0, -1);
@@ -303,7 +305,7 @@ __fish_${fnName}_complete
 export function fishComplete(
   testEnv: NodeJS.ProcessEnv,
   args: string[],
-  opts?: ExecOptions & { scriptPath?: string },
+  opts?: ExecOptions,
 ): string[] {
   return fishCompleteWith("myapp", "myapp", testEnv, args, opts);
 }
@@ -311,7 +313,7 @@ export function fishComplete(
 export function bashCompleteNested(
   testEnv: NodeJS.ProcessEnv,
   args: string[],
-  opts?: ExecOptions & { scriptPath?: string },
+  opts?: ExecOptions,
 ): string[] {
   return bashCompleteWith("nestapp", "nested_test", testEnv, args, opts);
 }
@@ -319,7 +321,7 @@ export function bashCompleteNested(
 export function zshCompleteNested(
   testEnv: NodeJS.ProcessEnv,
   args: string[],
-  opts?: ExecOptions & { scriptPath?: string },
+  opts?: ExecOptions,
 ): string[] {
   return zshCompleteWith("nestapp", "nested_test", testEnv, args, {
     ...opts,
@@ -330,7 +332,7 @@ export function zshCompleteNested(
 export function fishCompleteNested(
   testEnv: NodeJS.ProcessEnv,
   args: string[],
-  opts?: ExecOptions & { scriptPath?: string },
+  opts?: ExecOptions,
 ): string[] {
   return fishCompleteWith("nestapp", "nested_test", testEnv, args, opts);
 }
