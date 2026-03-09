@@ -1291,17 +1291,25 @@ function pathToFiles(
   const { root, commands = {} } = pathConfig;
   const files: FileMapping = {};
 
-  // Collect commands explicitly assigned to other files
+  // Collect commands explicitly assigned to other files.
+  // Sort by specificity (most specific first) so that e.g. 'config get' -> 'get.md'
+  // takes priority over 'config' -> 'config.md' for that descendant.
   const assignedToOtherFiles = new Set<string>();
   const fileToCommands = new Map<string, string[]>();
+  const sortedEntries = Object.entries(commands).sort(
+    ([a], [b]) => b.split(" ").length - a.split(" ").length,
+  );
 
-  for (const [cmdPath, filePath] of Object.entries(commands)) {
+  for (const [cmdPath, filePath] of sortedEntries) {
     if (!fileToCommands.has(filePath)) {
       fileToCommands.set(filePath, []);
     }
-    // Add the command and all its descendants
+    // Add the command and all its descendants, skipping already-assigned commands
     for (const existingPath of allCommands.keys()) {
-      if (existingPath === cmdPath || existingPath.startsWith(cmdPath + " ")) {
+      if (
+        (existingPath === cmdPath || existingPath.startsWith(cmdPath + " ")) &&
+        !assignedToOtherFiles.has(existingPath)
+      ) {
         fileToCommands.get(filePath)!.push(existingPath);
         assignedToOtherFiles.add(existingPath);
       }
@@ -1355,7 +1363,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
   // Auto-derive rootDoc from PathConfig or globalArgs
   let rootDoc = config.rootDoc;
-  if (!rootDoc && usingPathConfig && globalArgs) {
+  if (!rootDoc && usingPathConfig && (globalArgs || config.rootInfo)) {
     const rootDocPath =
       typeof config.path === "string" ? config.path : (config.path as { root: string }).root;
     rootDoc = { path: rootDocPath };
