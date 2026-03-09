@@ -49,6 +49,10 @@ export interface CommandInfo {
   examples?: Example[] | undefined;
   /** Example execution results (populated when examples are executed) */
   exampleResults?: ExampleExecutionResult[] | undefined;
+  /** Path to root document file (for global options link generation) */
+  rootDocPath?: string | undefined;
+  /** Whether global options exist (for global options link generation) */
+  hasGlobalOptions?: boolean;
 }
 
 /**
@@ -280,6 +284,34 @@ export interface RootDocConfig {
 }
 
 /**
+ * Root command customization for the root document.
+ * Controls the root document's title, description, header, and footer.
+ */
+export interface RootCommandInfo {
+  /** Title (defaults to command.name) */
+  title?: string;
+  /** Description (defaults to command.description) */
+  description?: string;
+  /** Markdown placed after title/description */
+  header?: string;
+  /** Markdown placed at end of document */
+  footer?: string;
+}
+
+/**
+ * Path configuration for documentation output.
+ * Simpler alternative to FileMapping for common patterns.
+ *
+ * @example
+ * // All commands in one file
+ * path: "docs/CLI.md"
+ *
+ * // Split files: root + specific commands in separate files
+ * path: { root: "docs/CLI.md", commands: { "build": "docs/build.md" } }
+ */
+export type PathConfig = string | { root: string; commands?: Record<string, string> };
+
+/**
  * Per-file configuration with custom renderer
  */
 export interface FileConfig {
@@ -291,6 +323,8 @@ export interface FileConfig {
   title?: string;
   /** File description (added after title) */
   description?: string;
+  /** Skip subcommand expansion (commands are used as-is). @internal */
+  noExpand?: boolean;
 }
 
 /**
@@ -319,8 +353,15 @@ export interface GenerateDocConfig {
    * Title and description are derived from `command.name` and `command.description`.
    */
   rootDoc?: RootDocConfig;
+  /**
+   * Path configuration (simpler alternative to files).
+   * Mutually exclusive with `files`.
+   */
+  path?: PathConfig;
   /** File output configuration (command path -> file mapping) */
-  files: FileMapping;
+  files?: FileMapping;
+  /** Root command customization (title, description, header, footer) */
+  rootInfo?: RootCommandInfo;
   /** Command paths to ignore (including their subcommands) */
   ignores?: string[];
   /** Default renderer options (used when render is not specified per file) */

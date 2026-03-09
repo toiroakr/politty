@@ -25,7 +25,7 @@ type IsEmpty<T> = keyof T extends never ? true : false;
  * Merge local args with global args.
  * No-op when TGlobalArgs is empty (default GlobalArgs not extended).
  */
-type MergedArgs<TLocalArgs, TGlobalArgs> =
+export type MergedArgs<TLocalArgs, TGlobalArgs> =
   IsEmpty<TGlobalArgs> extends true ? TLocalArgs : TLocalArgs & TGlobalArgs;
 
 /**

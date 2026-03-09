@@ -20,7 +20,7 @@ export {
   type CompletionType,
   type CustomCompletion,
 } from "./core/arg-registry.js";
-export { createDefineCommand, defineCommand } from "./core/command.js";
+export { createDefineCommand, defineCommand, type MergedArgs } from "./core/command.js";
 export { runCommand, runMain } from "./core/runner.js";
 export {
   extractFields,
