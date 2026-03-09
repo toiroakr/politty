@@ -311,6 +311,10 @@ async function runCommandInternal<TResult = unknown>(
         }
       }
 
+      // Note: validation only sees recognized global flags. Misspelled globals
+      // (e.g., --verboes) are treated as local flags by the scanner, so a strict
+      // global schema cannot catch them. They are rejected only if the local
+      // command schema is also strict.
       const globalValidation = validateArgs(accumulatedGlobalArgs, options.globalArgs);
       if (!globalValidation.success) {
         const errorMessage = formatValidationErrors(globalValidation.errors);
