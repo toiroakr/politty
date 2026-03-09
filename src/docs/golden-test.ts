@@ -991,10 +991,9 @@ async function processStaticMarker(
     return { content, diffs, hasError, wasUpdated };
   }
 
-  const fullExisting = [startMarker, existingSection, endMarker].join("\n");
-  if (fullExisting !== generatedSection) {
+  if (existingSection !== generatedSection) {
     if (updateMode) {
-      const updated = replaceMarkerSection(content, startMarker, endMarker, generatedInner);
+      const updated = replaceMarkerSection(content, startMarker, endMarker, generatedSection);
       if (updated) {
         content = updated;
         wasUpdated = true;
@@ -1004,7 +1003,7 @@ async function processStaticMarker(
       }
     } else {
       hasError = true;
-      diffs.push(formatDiff(existingSection, generatedInner));
+      diffs.push(formatDiff(existingSection, generatedSection));
     }
   }
 
@@ -1160,13 +1159,11 @@ function generateCommandSection(
   if (!info) return null;
 
   // Add file context to CommandInfo for cross-file link generation
-  return render({
-    ...info,
-    filePath,
-    fileMap,
-    rootDocPath,
-    ...(hasGlobalOptions !== undefined && { hasGlobalOptions }),
-  });
+  const enriched: CommandInfo = { ...info, filePath, fileMap, rootDocPath };
+  if (hasGlobalOptions !== undefined) {
+    enriched.hasGlobalOptions = hasGlobalOptions;
+  }
+  return render(enriched);
 }
 
 /**
@@ -1355,8 +1352,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
   // Auto-derive rootDoc from PathConfig or globalArgs
   let rootDoc = config.rootDoc;
-  if (!rootDoc && usingPathConfig && resolvedRootDocPath && (globalArgs || config.rootInfo)) {
-    rootDoc = { path: resolvedRootDocPath };
+  if (!rootDoc && usingPathConfig && (globalArgs || config.rootInfo)) {
+    rootDoc = { path: resolvedRootDocPath! };
   }
 
   // Auto-derive rootDoc.globalOptions from globalArgs schema if provided
