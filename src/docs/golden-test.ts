@@ -35,6 +35,10 @@ import {
   globalOptionsStartMarker,
   indexEndMarker,
   indexStartMarker,
+  rootFooterEndMarker,
+  rootFooterStartMarker,
+  rootHeaderEndMarker,
+  rootHeaderStartMarker,
   sectionEndMarker,
   sectionStartMarker,
   SECTION_TYPES,
@@ -850,9 +854,10 @@ function generateGlobalOptionsSection(config: {
   const startMarker = globalOptionsStartMarker();
   const endMarker = globalOptionsEndMarker();
 
+  const anchor = '<a id="global-options"></a>';
   const table = renderArgsTable(config.args, config.options);
 
-  return [startMarker, table, endMarker].join("\n");
+  return [startMarker, anchor, table, endMarker].join("\n");
 }
 
 /**
@@ -938,6 +943,74 @@ async function processGlobalOptionsMarker(
     } else {
       hasError = true;
       diffs.push(formatDiff(existingSection, generatedSection));
+    }
+  }
+
+  return { content, diffs, hasError, wasUpdated };
+}
+
+/**
+ * Process a static content marker (root-header or root-footer).
+ * Inserts/updates the marker section with the given content.
+ */
+async function processStaticMarker(
+  existingContent: string,
+  markerLabel: string,
+  startMarker: string,
+  endMarker: string,
+  rawContent: string,
+  updateMode: boolean,
+  formatter: FormatterFunction | undefined,
+  autoInsertIfMissing: boolean,
+  insertPosition: "after-header" | "end",
+): Promise<{
+  content: string;
+  diffs: string[];
+  hasError: boolean;
+  wasUpdated: boolean;
+}> {
+  let content = existingContent;
+  const diffs: string[] = [];
+  let hasError = false;
+  let wasUpdated = false;
+
+  const generatedInner = await applyFormatter(rawContent, formatter);
+  const generatedSection = [startMarker, generatedInner, endMarker].join("\n");
+
+  const existingSection = extractMarkerSection(content, startMarker, endMarker);
+
+  if (!existingSection) {
+    if (updateMode && autoInsertIfMissing) {
+      if (insertPosition === "end") {
+        content = content.trimEnd() + "\n\n" + generatedSection + "\n";
+      } else {
+        // Insert after the file header (first non-empty line block)
+        content = content.trimEnd() + "\n\n" + generatedSection + "\n";
+      }
+      wasUpdated = true;
+      return { content, diffs, hasError, wasUpdated };
+    }
+    hasError = true;
+    diffs.push(
+      `${markerLabel} marker not found in file. Expected markers:\n${startMarker}\n...\n${endMarker}`,
+    );
+    return { content, diffs, hasError, wasUpdated };
+  }
+
+  const fullExisting = [startMarker, existingSection, endMarker].join("\n");
+  if (fullExisting !== generatedSection) {
+    if (updateMode) {
+      const updated = replaceMarkerSection(content, startMarker, endMarker, generatedInner);
+      if (updated) {
+        content = updated;
+        wasUpdated = true;
+      } else {
+        hasError = true;
+        diffs.push(`Failed to replace ${markerLabel} section`);
+      }
+    } else {
+      hasError = true;
+      diffs.push(formatDiff(existingSection, generatedInner));
     }
   }
 
@@ -1614,6 +1687,29 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         markerUpdated = true;
       }
 
+      // Process rootInfo.header marker (after title/description)
+      if (rootInfo?.header) {
+        const headerMarkerResult = await processStaticMarker(
+          content,
+          "Root header",
+          rootHeaderStartMarker(),
+          rootHeaderEndMarker(),
+          rootInfo.header,
+          updateMode,
+          formatter,
+          usingPathConfig,
+          "after-header",
+        );
+        content = headerMarkerResult.content;
+        rootDocDiffs.push(...headerMarkerResult.diffs);
+        if (headerMarkerResult.hasError) {
+          hasError = true;
+        }
+        if (headerMarkerResult.wasUpdated) {
+          markerUpdated = true;
+        }
+      }
+
       // Detect unexpected section markers in rootDoc
       // In PathConfig mode, section markers are expected (rootDoc overlaps with files)
       if (!usingPathConfig) {
@@ -1667,6 +1763,29 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       }
       if (indexResult.wasUpdated) {
         markerUpdated = true;
+      }
+
+      // Process rootInfo.footer marker (at end of document)
+      if (rootInfo?.footer) {
+        const footerMarkerResult = await processStaticMarker(
+          content,
+          "Root footer",
+          rootFooterStartMarker(),
+          rootFooterEndMarker(),
+          rootInfo.footer,
+          updateMode,
+          formatter,
+          usingPathConfig,
+          "end",
+        );
+        content = footerMarkerResult.content;
+        rootDocDiffs.push(...footerMarkerResult.diffs);
+        if (footerMarkerResult.hasError) {
+          hasError = true;
+        }
+        if (footerMarkerResult.wasUpdated) {
+          markerUpdated = true;
+        }
       }
 
       // Write updated content if markers were modified

@@ -1914,6 +1914,7 @@ A test CLI for documentation generation
 ## Global Options
 
 <!-- politty:global-options:start -->
+<a id="global-options"></a>
 ${argsContent}
 <!-- politty:global-options:end -->
 `;
@@ -2504,6 +2505,7 @@ A test CLI for documentation generation
 ## Global Options
 
 <!-- politty:global-options:start -->
+<a id="global-options"></a>
 ${argsContent}
 <!-- politty:global-options:end -->
 

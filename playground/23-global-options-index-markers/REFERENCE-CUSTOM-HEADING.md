@@ -8,10 +8,11 @@ These options are shared across `build` and `deploy` commands.
 
 <!-- politty:global-options:start -->
 
-| Option        | Alias | Description           | Required | Default         |
-| ------------- | ----- | --------------------- | -------- | --------------- |
-| `--verbose`   | `-v`  | Enable verbose output | No       | `false`         |
-| `--env <ENV>` | `-e`  | Target environment    | No       | `"development"` |
+<a id="global-options"></a>
+| Option | Alias | Description | Required | Default |
+|--------|-------|-------------|----------|---------|
+| `--verbose` | `-v` | Enable verbose output | No | `false` |
+| `--env <ENV>` | `-e` | Target environment | No | `"development"` |
 
 <!-- politty:global-options:end -->
 

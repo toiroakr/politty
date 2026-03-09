@@ -473,6 +473,32 @@ export function globalOptionsEndMarker(): string {
 }
 
 /**
+ * Marker prefix for root header sections in generated documentation
+ */
+export const ROOT_HEADER_MARKER_PREFIX = "politty:root-header";
+
+export function rootHeaderStartMarker(): string {
+  return `<!-- ${ROOT_HEADER_MARKER_PREFIX}:start -->`;
+}
+
+export function rootHeaderEndMarker(): string {
+  return `<!-- ${ROOT_HEADER_MARKER_PREFIX}:end -->`;
+}
+
+/**
+ * Marker prefix for root footer sections in generated documentation
+ */
+export const ROOT_FOOTER_MARKER_PREFIX = "politty:root-footer";
+
+export function rootFooterStartMarker(): string {
+  return `<!-- ${ROOT_FOOTER_MARKER_PREFIX}:start -->`;
+}
+
+export function rootFooterEndMarker(): string {
+  return `<!-- ${ROOT_FOOTER_MARKER_PREFIX}:end -->`;
+}
+
+/**
  * Marker prefix for index sections in generated documentation
  * Format: <!-- politty:index:<scope>:start --> ... <!-- politty:index:<scope>:end -->
  */

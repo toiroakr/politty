@@ -37,9 +37,10 @@ my-app [command]
 
 <!-- politty:global-options:start -->
 
-| Option              | Alias | Description                | Required | Default |
-| ------------------- | ----- | -------------------------- | -------- | ------- |
-| `--verbose`         | `-v`  | Enable verbose output      | No       | `false` |
-| `--config <CONFIG>` | `-c`  | Path to configuration file | No       | -       |
+<a id="global-options"></a>
+| Option | Alias | Description | Required | Default |
+|--------|-------|-------------|----------|---------|
+| `--verbose` | `-v` | Enable verbose output | No | `false` |
+| `--config <CONFIG>` | `-c` | Path to configuration file | No | - |
 
 <!-- politty:global-options:end -->
