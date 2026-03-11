@@ -2,4 +2,4 @@
 "politty": patch
 ---
 
-Auto-cleanup orphaned section markers for deleted commands in update mode
+Automatically clean up orphaned section markers for deleted commands in update mode

@@ -616,11 +616,15 @@ function removeCommandSections(content: string, commandPath: string): string {
   for (const type of markers) {
     const start = sectionStartMarker(type, commandPath);
     const end = sectionEndMarker(type, commandPath);
-    const startIndex = content.indexOf(start);
-    if (startIndex === -1) continue;
-    const endIndex = content.indexOf(end, startIndex);
-    if (endIndex === -1) continue;
-    content = content.slice(0, startIndex) + content.slice(endIndex + end.length);
+    let startIndex = content.indexOf(start);
+    while (startIndex !== -1) {
+      const endIndex = content.indexOf(end, startIndex);
+      if (endIndex === -1) {
+        break;
+      }
+      content = content.slice(0, startIndex) + content.slice(endIndex + end.length);
+      startIndex = content.indexOf(start, startIndex);
+    }
   }
   // Clean up excess blank lines (3+ consecutive newlines -> 2)
   content = content.replace(/\n{3,}/g, "\n\n");
@@ -1616,15 +1620,25 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       // Remove orphaned section markers for commands no longer in this file
       if (existingContent) {
         const existingMarkerPaths = collectSectionMarkerPaths(existingContent);
-        for (const markerPath of existingMarkerPaths) {
-          if (!commandPaths.includes(markerPath)) {
-            if (updateMode) {
+        const commandPathSet = new Set(commandPaths);
+
+        if (updateMode) {
+          let removedAny = false;
+          for (const markerPath of existingMarkerPaths) {
+            if (!commandPathSet.has(markerPath)) {
               existingContent = removeCommandSections(existingContent, markerPath);
-              writeFile(filePath, existingContent);
-              if (fileStatus !== "created") {
-                fileStatus = "updated";
-              }
-            } else {
+              removedAny = true;
+            }
+          }
+          if (removedAny) {
+            writeFile(filePath, existingContent);
+            if (fileStatus !== "created") {
+              fileStatus = "updated";
+            }
+          }
+        } else {
+          for (const markerPath of existingMarkerPaths) {
+            if (!commandPathSet.has(markerPath)) {
               hasError = true;
               fileStatus = "diff";
               diffs.push(
@@ -1744,13 +1758,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       // Detect and clean up unexpected section markers in rootDoc
       // In PathConfig mode, section markers are expected (rootDoc overlaps with files)
       if (!usingPathConfig) {
-        const unexpectedSectionPaths = Array.from(new Set(collectSectionMarkerPaths(content)));
+        const unexpectedSectionPaths = collectSectionMarkerPaths(content);
         if (unexpectedSectionPaths.length > 0) {
           if (updateMode) {
             for (const commandPath of unexpectedSectionPaths) {
               content = removeCommandSections(content, commandPath);
             }
-            writeFile(rootDocFilePath, content);
             markerUpdated = true;
           } else {
             hasError = true;
