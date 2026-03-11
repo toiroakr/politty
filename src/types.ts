@@ -16,6 +16,11 @@ import type { LazyCommand } from "./lazy.js";
 export interface GlobalArgs {}
 
 /**
+ * Detect empty interface (used for GlobalArgs declaration merging)
+ */
+export type IsEmpty<T> = keyof T extends never ? true : false;
+
+/**
  * Example definition for a command
  */
 export interface Example {

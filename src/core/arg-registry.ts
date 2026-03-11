@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { GlobalArgs, IsEmpty } from "../types.js";
+
 /**
  * Built-in completion types
  */
@@ -63,9 +65,22 @@ export type CompletionMeta = {
 );
 
 /**
+ * Context provided to effect callbacks.
+ * When GlobalArgs is extended via declaration merging, `globalArgs` is typed accordingly.
+ */
+export type EffectContext = {
+  /** Field name (camelCase) */
+  name: string;
+  /** Validated args for this schema (global args for global effects, command args for command effects) */
+  args: Readonly<Record<string, unknown>>;
+} & (IsEmpty<GlobalArgs> extends true
+  ? { globalArgs?: Readonly<Record<string, unknown>> }
+  : { globalArgs?: Readonly<GlobalArgs> });
+
+/**
  * Base metadata shared by all argument types
  */
-export interface BaseArgMeta {
+export interface BaseArgMeta<TValue = unknown> {
   /** Argument description */
   description?: string;
   /** Treat as positional argument */
@@ -89,12 +104,28 @@ export interface BaseArgMeta {
   env?: string | string[];
   /** Completion configuration for shell tab-completion */
   completion?: CompletionMeta;
+  /**
+   * Side-effect callback executed after argument parsing and validation.
+   * Runs before the command lifecycle (setup/run/cleanup).
+   * Use Zod .transform() for value transformation instead.
+   *
+   * @example
+   * ```ts
+   * verbose: arg(z.boolean().default(false), {
+   *   alias: "v",
+   *   effect: (value) => {
+   *     if (value) logger.setLevel("debug");
+   *   },
+   * })
+   * ```
+   */
+  effect?: (value: TValue, context: EffectContext) => void | PromiseLike<void>;
 }
 
 /**
  * Metadata for regular arguments (non-builtin aliases)
  */
-export interface RegularArgMeta extends BaseArgMeta {
+export interface RegularArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
   /** Short alias (e.g., 'v' for --verbose) */
   alias?: string;
 }
@@ -102,7 +133,7 @@ export interface RegularArgMeta extends BaseArgMeta {
 /**
  * Metadata for overriding built-in aliases (-h, -H)
  */
-export interface BuiltinOverrideArgMeta extends BaseArgMeta {
+export interface BuiltinOverrideArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
   /** Built-in alias to override ('h' or 'H') */
   alias: "h" | "H";
   /** Must be true to override built-in aliases */
@@ -112,7 +143,7 @@ export interface BuiltinOverrideArgMeta extends BaseArgMeta {
 /**
  * Metadata options for argument definition
  */
-export type ArgMeta = RegularArgMeta | BuiltinOverrideArgMeta;
+export type ArgMeta<TValue = unknown> = RegularArgMeta<TValue> | BuiltinOverrideArgMeta<TValue>;
 
 /**
  * Custom registry for politty argument metadata
@@ -158,11 +189,11 @@ type ValidateArgMeta<M> = M extends { alias: "h" | "H" }
   : M;
 
 export function arg<T extends z.ZodType>(schema: T): T;
-export function arg<T extends z.ZodType, M extends ArgMeta>(schema: T, meta: ValidateArgMeta<M>): T;
-export function arg<T extends z.ZodType, M extends ArgMeta>(
+export function arg<T extends z.ZodType, M extends ArgMeta<z.output<T>>>(
   schema: T,
-  meta?: ValidateArgMeta<M>,
-): T {
+  meta: ValidateArgMeta<M>,
+): T;
+export function arg<T extends z.ZodType>(schema: T, meta?: ValidateArgMeta<ArgMeta>): T {
   if (meta) {
     argRegistry.add(schema, meta as ArgMeta);
   }

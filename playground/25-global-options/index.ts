@@ -15,11 +15,6 @@ import { arg, createDefineCommand, defineCommand, runMain } from "../../src/inde
 
 // ─── Pattern 1: createDefineCommand factory (recommended) ───
 
-interface GlobalArgsType {
-  verbose: boolean;
-  config?: string;
-}
-
 export const globalArgsSchema = z.object({
   verbose: arg(z.boolean().default(false), {
     alias: "v",
@@ -31,7 +26,7 @@ export const globalArgsSchema = z.object({
   }),
 });
 
-export const defineAppCommand = createDefineCommand<GlobalArgsType>();
+export const defineAppCommand = createDefineCommand<z.infer<typeof globalArgsSchema>>();
 
 // Subcommand: build
 export const buildCommand = defineAppCommand({

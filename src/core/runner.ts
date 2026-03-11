@@ -28,6 +28,7 @@ import {
   formatValidationErrors,
 } from "../validator/error-formatter.js";
 import { validateArgs } from "../validator/zod-validator.js";
+import { runEffects } from "./effect-runner.js";
 import { extractFields, type ExtractedFields } from "./schema-extractor.js";
 
 /**
@@ -419,6 +420,10 @@ async function runCommandInternal<TResult = unknown>(
     // Validate arguments
     if (!command.args) {
       // No schema, run with global args (or empty args)
+      // Run effects for global args (after all validations succeed)
+      if (options._globalExtracted) {
+        await runEffects(validatedGlobalArgs, options._globalExtracted, validatedGlobalArgs);
+      }
       collector?.stop();
       const mergedArgs = validatedGlobalArgs as Record<string, never>;
       const result = await executeLifecycle(command, mergedArgs, {
@@ -441,6 +446,18 @@ async function runCommandInternal<TResult = unknown>(
         exitCode: 1,
         logs: getCurrentLogs(),
       };
+    }
+
+    // Run effects after all validations succeed (global effects first, then command effects)
+    if (options._globalExtracted) {
+      await runEffects(validatedGlobalArgs, options._globalExtracted, validatedGlobalArgs);
+    }
+    if (parseResult.extractedFields) {
+      await runEffects(
+        validationResult.data as Record<string, unknown>,
+        parseResult.extractedFields,
+        validatedGlobalArgs,
+      );
     }
 
     // Merge global args with command args (command args take precedence on collision)
