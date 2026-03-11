@@ -77,10 +77,10 @@ export type EffectContext = {
   /** Field name (camelCase) */
   name: string;
   /** Validated args for this schema (global args for global effects, command args for command effects) */
-  args: Record<string, unknown>;
+  args: Readonly<Record<string, unknown>>;
 } & (IsEmpty<GlobalArgs> extends true
-  ? { globalArgs?: Record<string, unknown> }
-  : { globalArgs?: GlobalArgs });
+  ? { globalArgs?: Readonly<Record<string, unknown>> }
+  : { globalArgs?: Readonly<GlobalArgs> });
 
 /**
  * Base metadata shared by all argument types
