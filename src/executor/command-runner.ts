@@ -90,6 +90,11 @@ export async function executeLifecycle<TResult = unknown>(
       // Stop log collection before exit
       collector?.stop();
 
+      // Flush stdout before exit to prevent truncated output
+      if (process.stdout.writableLength > 0) {
+        await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
+      }
+
       // Exit
       process.exit(1);
     };
