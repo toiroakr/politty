@@ -228,4 +228,29 @@ describe("global setup/cleanup", () => {
     }
     expect(cleanupFn).toHaveBeenCalledWith({ error: undefined });
   });
+
+  it("should capture logs from global setup and cleanup when captureLogs is enabled", async () => {
+    const cmd = defineCommand({
+      name: "test",
+      run: () => {
+        console.log("run-log");
+      },
+    });
+
+    const result = await runCommand(cmd, [], {
+      captureLogs: true,
+      setup: () => {
+        console.log("setup-log");
+      },
+      cleanup: () => {
+        console.log("cleanup-log");
+      },
+    });
+
+    expect(result.success).toBe(true);
+    const messages = result.logs.entries.map((e) => e.message);
+    expect(messages).toContain("setup-log");
+    expect(messages).toContain("run-log");
+    expect(messages).toContain("cleanup-log");
+  });
 });

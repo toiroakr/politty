@@ -87,8 +87,13 @@ export async function runCommand<TResult = unknown>(
 ): Promise<RunResult<TResult>> {
   const globalExtracted = extractAndValidateGlobal(options);
 
+  // Start log collection for global setup/cleanup if enabled
+  const shouldCaptureLogs = options.captureLogs ?? false;
+  const globalCollector = shouldCaptureLogs ? createLogCollector() : null;
+
   // Global setup
   if (options.setup) {
+    globalCollector?.start();
     try {
       await options.setup({});
     } catch (e) {
@@ -100,8 +105,11 @@ export async function runCommand<TResult = unknown>(
           // Swallow cleanup error when setup already failed
         }
       }
-      return { success: false, error, exitCode: 1, logs: emptyLogs() };
+      globalCollector?.stop();
+      const logs = globalCollector?.getLogs() ?? emptyLogs();
+      return { success: false, error, exitCode: 1, logs };
     }
+    globalCollector?.stop();
   }
 
   const result = await runCommandInternal<TResult>(command, argv, {
@@ -109,10 +117,13 @@ export async function runCommand<TResult = unknown>(
     handleSignals: false,
     _globalExtracted: globalExtracted,
     _globalCleanup: options.cleanup,
+    _existingLogs: globalCollector?.getLogs(),
   });
 
   // Global cleanup (always)
   if (options.cleanup) {
+    const cleanupCollector = shouldCaptureLogs ? createLogCollector() : null;
+    cleanupCollector?.start();
     const cleanupCtx: GlobalCleanupContext = {
       error: !result.success ? result.error : undefined,
     };
@@ -121,8 +132,15 @@ export async function runCommand<TResult = unknown>(
     } catch (e) {
       if (result.success) {
         const error = e instanceof Error ? e : new Error(String(e));
-        return { success: false, error, exitCode: 1, logs: result.logs };
+        cleanupCollector?.stop();
+        const logs = mergeLogs(result.logs, cleanupCollector?.getLogs() ?? emptyLogs());
+        return { success: false, error, exitCode: 1, logs };
       }
+    }
+    cleanupCollector?.stop();
+    const cleanupLogs = cleanupCollector?.getLogs() ?? emptyLogs();
+    if (cleanupLogs.entries.length > 0) {
+      return { ...result, logs: mergeLogs(result.logs, cleanupLogs) } as RunResult<TResult>;
     }
   }
 

@@ -67,6 +67,7 @@ export async function executeLifecycle<TResult = unknown>(
       }
 
       const signalError = new Error("Process interrupted");
+      cleanupContext.error = signalError;
 
       // Run per-command cleanup
       if (command.cleanup) {
