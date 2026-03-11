@@ -24,9 +24,18 @@ auth-demo [options]
 
 **Options**
 
+> One of the following option groups is required:
+
+**Token Auth:**
+
+| Option            | Alias | Description | Required | Default |
+| ----------------- | ----- | ----------- | -------- | ------- |
+| `--token <TOKEN>` | -     | API Token   | Yes      | -       |
+
+**Credentials Auth:**
+
 | Option                  | Alias | Description | Required | Default |
 | ----------------------- | ----- | ----------- | -------- | ------- |
-| `--token <TOKEN>`       | -     | API Token   | Yes      | -       |
 | `--username <USERNAME>` | -     | Username    | Yes      | -       |
 | `--password <PASSWORD>` | -     | Password    | Yes      | -       |
 

@@ -1,4 +1,4 @@
-import type { ResolvedFieldMeta } from "../core/schema-extractor.js";
+import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
 import type { Example } from "../types.js";
 import type {
   ArgumentsRenderContext,
@@ -341,6 +341,142 @@ export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): strin
 }
 
 /**
+ * Render union/xor options as markdown with variant grouping
+ */
+export function renderUnionOptionsMarkdown(
+  extracted: ExtractedFields,
+  style: "table" | "list" = "table",
+): string {
+  const unionOptions = extracted.unionOptions ?? [];
+  if (unionOptions.length === 0) return "";
+
+  const sections: string[] = [];
+
+  // Compute common fields (present in all variants)
+  const allFieldNames = new Set<string>();
+  for (const option of unionOptions) {
+    for (const field of option.fields) {
+      allFieldNames.add(field.name);
+    }
+  }
+  const commonFieldNames = new Set<string>();
+  for (const fieldName of allFieldNames) {
+    if (unionOptions.every((o) => o.fields.some((f) => f.name === fieldName))) {
+      commonFieldNames.add(fieldName);
+    }
+  }
+
+  // Render common fields first
+  const commonFields = extracted.fields.filter(
+    (f) => commonFieldNames.has(f.name) && !f.positional,
+  );
+  if (commonFields.length > 0) {
+    sections.push(
+      style === "table"
+        ? renderOptionsTableFromArray(commonFields)
+        : renderOptionsListFromArray(commonFields),
+    );
+  }
+
+  // Intro note
+  sections.push("> One of the following option groups is required:");
+
+  // Render each variant
+  for (let i = 0; i < unionOptions.length; i++) {
+    const option = unionOptions[i];
+    if (!option) continue;
+
+    const uniqueFields = option.fields.filter(
+      (f) => !commonFieldNames.has(f.name) && !f.positional,
+    );
+    if (uniqueFields.length === 0) continue;
+
+    const label = option.description ?? `Variant ${i + 1}`;
+    const rendered =
+      style === "table"
+        ? renderOptionsTableFromArray(uniqueFields)
+        : renderOptionsListFromArray(uniqueFields);
+    sections.push(`**${label}:**\n\n${rendered}`);
+  }
+
+  return sections.join("\n\n");
+}
+
+/**
+ * Render discriminatedUnion options as markdown with variant grouping
+ */
+export function renderDiscriminatedUnionOptionsMarkdown(
+  extracted: ExtractedFields,
+  style: "table" | "list" = "table",
+): string {
+  const discriminator = extracted.discriminator;
+  const variants = extracted.variants ?? [];
+  if (!discriminator || variants.length === 0) return "";
+
+  const sections: string[] = [];
+
+  // Compute common fields (in all variants, excluding discriminator)
+  const allFieldNames = new Set<string>();
+  for (const variant of variants) {
+    for (const field of variant.fields) {
+      allFieldNames.add(field.name);
+    }
+  }
+  const commonFieldNames = new Set<string>();
+  for (const fieldName of allFieldNames) {
+    if (fieldName === discriminator) continue;
+    if (variants.every((v) => v.fields.some((f) => f.name === fieldName))) {
+      commonFieldNames.add(fieldName);
+    }
+  }
+
+  // Build discriminator field with aggregated values
+  const discriminatorField = extracted.fields.find((f) => f.name === discriminator);
+  const variantValues = variants.map((v) => v.discriminatorValue).join("\\|");
+
+  // Top-level table: discriminator + common fields
+  const topFields: ResolvedFieldMeta[] = [];
+  if (discriminatorField) {
+    topFields.push({
+      ...discriminatorField,
+      placeholder: variantValues,
+    });
+  }
+  for (const fieldName of commonFieldNames) {
+    const field = extracted.fields.find((f) => f.name === fieldName);
+    if (field && !field.positional) {
+      topFields.push(field);
+    }
+  }
+
+  if (topFields.length > 0) {
+    sections.push(
+      style === "table"
+        ? renderOptionsTableFromArray(topFields)
+        : renderOptionsListFromArray(topFields),
+    );
+  }
+
+  // Render each variant's unique fields
+  for (const variant of variants) {
+    const uniqueFields = variant.fields.filter(
+      (f) => f.name !== discriminator && !commonFieldNames.has(f.name) && !f.positional,
+    );
+    if (uniqueFields.length === 0) continue;
+
+    const descSuffix = variant.description ? ` ${variant.description}` : "";
+    const label = `**When \`${discriminator}\` = \`${variant.discriminatorValue}\`:**${descSuffix}`;
+    const rendered =
+      style === "table"
+        ? renderOptionsTableFromArray(uniqueFields)
+        : renderOptionsListFromArray(uniqueFields);
+    sections.push(`${label}\n\n${rendered}`);
+  }
+
+  return sections.join("\n\n");
+}
+
+/**
  * Render options from array as list
  */
 export function renderOptionsListFromArray(options: ResolvedFieldMeta[]): string {
@@ -625,8 +761,27 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       const renderOpts = (opts: ResolvedFieldMeta[], renderOpts?: RenderContentOptions): string => {
         const style = renderOpts?.style ?? optionStyle;
         const withHeading = renderOpts?.withHeading ?? true;
-        const content =
-          style === "table" ? renderOptionsTableFromArray(opts) : renderOptionsListFromArray(opts);
+        const extracted = info.extracted;
+
+        let content: string;
+        if (
+          extracted &&
+          (extracted.schemaType === "union" || extracted.schemaType === "xor") &&
+          extracted.unionOptions
+        ) {
+          content = renderUnionOptionsMarkdown(extracted, style);
+        } else if (
+          extracted &&
+          extracted.schemaType === "discriminatedUnion" &&
+          extracted.discriminator
+        ) {
+          content = renderDiscriminatedUnionOptionsMarkdown(extracted, style);
+        } else {
+          content =
+            style === "table"
+              ? renderOptionsTableFromArray(opts)
+              : renderOptionsListFromArray(opts);
+        }
         return withHeading ? `**Options**\n\n${content}` : content;
       };
 

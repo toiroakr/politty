@@ -24,15 +24,30 @@ resource [options]
 
 **Options**
 
-| Option                  | Alias | Description                 | Required | Default   |
-| ----------------------- | ----- | --------------------------- | -------- | --------- |
-| `--action <ACTION>`     | -     |                             | Yes      | -         |
-| `--name <NAME>`         | -     | Resource name               | Yes      | -         |
-| `--template <TEMPLATE>` | -     | Template                    | No       | -         |
-| `--id <ID>`             | -     | Resource ID                 | Yes      | -         |
-| `--force`               | `-f`  | Delete without confirmation | No       | `false`   |
-| `--format <FORMAT>`     | `-F`  | Output format               | No       | `"table"` |
-| `--limit <LIMIT>`       | `-n`  | Display limit               | No       | `10`      |
+| Option                            | Alias | Description | Required | Default |
+| --------------------------------- | ----- | ----------- | -------- | ------- |
+| `--action <create\|delete\|list>` | -     |             | Yes      | -       |
+
+**When `action` = `create`:** Create a new resource
+
+| Option                  | Alias | Description   | Required | Default |
+| ----------------------- | ----- | ------------- | -------- | ------- |
+| `--name <NAME>`         | -     | Resource name | Yes      | -       |
+| `--template <TEMPLATE>` | -     | Template      | No       | -       |
+
+**When `action` = `delete`:** Delete an existing resource
+
+| Option      | Alias | Description                 | Required | Default |
+| ----------- | ----- | --------------------------- | -------- | ------- |
+| `--id <ID>` | -     | Resource ID                 | Yes      | -       |
+| `--force`   | `-f`  | Delete without confirmation | No       | `false` |
+
+**When `action` = `list`:**
+
+| Option              | Alias | Description   | Required | Default   |
+| ------------------- | ----- | ------------- | -------- | --------- |
+| `--format <FORMAT>` | `-F`  | Output format | No       | `"table"` |
+| `--limit <LIMIT>`   | `-n`  | Display limit | No       | `10`      |
 
 <!-- politty:command::options:end -->
 
