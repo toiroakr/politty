@@ -303,14 +303,15 @@ export function toKebabCase(str: string): string {
 }
 
 /**
- * Convert kebab-case to camelCase.
+ * Convert hyphen-separated sequences to camelCase.
  *
- * Expects kebab-case (all-lowercase) input. Uppercase letters after hyphens
- * (e.g., "output-Dir") are NOT converted.
+ * Replaces `-x` (hyphen followed by a lowercase letter) with the uppercase
+ * variant. Non-hyphenated input (e.g., already camelCase) is returned as-is.
  *
- * @param str - A kebab-case string (all-lowercase with hyphens)
+ * @param str - A string that may contain hyphens
  * @example toCamelCase("dry-run") => "dryRun"
  * @example toCamelCase("output-dir") => "outputDir"
+ * @example toCamelCase("dryRun") => "dryRun"
  */
 export function toCamelCase(str: string): string {
   return str.replace(/-([a-z])/g, (_, char) => char.toUpperCase());
