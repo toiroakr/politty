@@ -930,4 +930,228 @@ describe("ArgParser", () => {
       expect(result.rawGlobalArgs).toEqual({});
     });
   });
+
+  describe("Bidirectional camelCase/kebab-case support", () => {
+    describe("kebab-case field accepts camelCase CLI input", () => {
+      it("should accept --dryRun for kebab-case field 'dry-run'", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "dry-run": arg(z.boolean().default(false)),
+          }),
+        });
+
+        const result = parseArgs(["--dryRun"], cmd);
+
+        expect(result.rawArgs["dry-run"]).toBe(true);
+        expect(result.unknownFlags).toEqual([]);
+      });
+
+      it("should accept --outputDir for kebab-case field 'output-dir'", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "output-dir": arg(z.string()),
+          }),
+        });
+
+        const result = parseArgs(["--outputDir", "./dist"], cmd);
+
+        expect(result.rawArgs["output-dir"]).toBe("./dist");
+        expect(result.unknownFlags).toEqual([]);
+      });
+
+      it("should accept --outputDir=./dist with = syntax", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "output-dir": arg(z.string()),
+          }),
+        });
+
+        const result = parseArgs(["--outputDir=./dist"], cmd);
+
+        expect(result.rawArgs["output-dir"]).toBe("./dist");
+      });
+
+      it("should accept camelCase for array fields", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "include-paths": arg(z.array(z.string())),
+          }),
+        });
+
+        const result = parseArgs(["--includePaths", "src", "--includePaths", "lib"], cmd);
+
+        expect(result.rawArgs["include-paths"]).toEqual(["src", "lib"]);
+        expect(result.unknownFlags).toEqual([]);
+      });
+    });
+
+    describe("camelCase field accepts both camelCase and kebab-case CLI input", () => {
+      it("should accept --dryRun for camelCase field", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            dryRun: arg(z.boolean().default(false)),
+          }),
+        });
+
+        const result = parseArgs(["--dryRun"], cmd);
+
+        expect(result.rawArgs.dryRun).toBe(true);
+        expect(result.unknownFlags).toEqual([]);
+      });
+
+      it("should accept --dry-run for camelCase field (existing behavior)", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            dryRun: arg(z.boolean().default(false)),
+          }),
+        });
+
+        const result = parseArgs(["--dry-run"], cmd);
+
+        expect(result.rawArgs.dryRun).toBe(true);
+        expect(result.unknownFlags).toEqual([]);
+      });
+    });
+
+    describe("boolean negation", () => {
+      it("should support --no-dry-run for kebab-case negation", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "dry-run": arg(z.boolean().default(true)),
+          }),
+        });
+
+        const result = parseArgs(["--no-dry-run"], cmd);
+
+        expect(result.rawArgs["dry-run"]).toBe(false);
+      });
+
+      it("should support --noDryRun for camelCase negation", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            dryRun: arg(z.boolean().default(true)),
+          }),
+        });
+
+        const result = parseArgs(["--noDryRun"], cmd);
+
+        expect(result.rawArgs.dryRun).toBe(false);
+      });
+
+      it("should support --noDryRun for kebab-case field 'dry-run'", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "dry-run": arg(z.boolean().default(true)),
+          }),
+        });
+
+        const result = parseArgs(["--noDryRun"], cmd);
+
+        expect(result.rawArgs["dry-run"]).toBe(false);
+      });
+
+      it("should NOT treat --no-dryRun as negation (mixed form blocked)", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            dryRun: arg(z.boolean().default(true)),
+          }),
+        });
+
+        const result = parseArgs(["--no-dryRun"], cmd);
+
+        // Should NOT set dryRun to false; instead treated as unknown flag
+        expect(result.rawArgs.dryRun).toBeUndefined();
+      });
+
+      it("should treat --noDryRun as field value when noDryRun is a defined field", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            noDryRun: arg(z.boolean().default(false)),
+            dryRun: arg(z.boolean().default(false)),
+          }),
+        });
+
+        const result = parseArgs(["--noDryRun"], cmd);
+
+        // Should set noDryRun=true (as a flag), not dryRun=false (as negation)
+        expect(result.rawArgs.noDryRun).toBe(true);
+        expect(result.rawArgs.dryRun).toBeUndefined();
+      });
+
+      it("should treat --noDryRun as field value when noDryRun is a string field (not just boolean/array)", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            noDryRun: arg(z.string(), { description: "Some string option" }),
+            dryRun: arg(z.boolean().default(false)),
+          }),
+        });
+
+        const result = parseArgs(["--noDryRun", "someValue"], cmd);
+
+        // noDryRun is a defined string field, so --noDryRun should NOT negate dryRun
+        expect(result.rawArgs.noDryRun).toBe("someValue");
+        expect(result.rawArgs.dryRun).toBeUndefined();
+      });
+
+      it("should treat --no-dry-run as field value when no-dry-run is a defined string field", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "no-dry-run": arg(z.string(), {
+              description: "Some string option",
+            }),
+            "dry-run": arg(z.boolean().default(false)),
+          }),
+        });
+
+        const result = parseArgs(["--no-dry-run", "someValue"], cmd);
+
+        // no-dry-run is a defined string field, so --no-dry-run should NOT negate dry-run
+        expect(result.rawArgs["no-dry-run"]).toBe("someValue");
+        expect(result.rawArgs["dry-run"]).toBeUndefined();
+      });
+
+      it("should still negate --no-dry-run when no-dry-run is NOT a defined field", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "dry-run": arg(z.boolean().default(true)),
+          }),
+        });
+
+        const result = parseArgs(["--no-dry-run"], cmd);
+
+        expect(result.rawArgs["dry-run"]).toBe(false);
+      });
+    });
+
+    describe("alias collision avoidance", () => {
+      it("should not add camelCase alias when it collides with another field name", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "log-level": arg(z.string().optional()),
+            logLevel: arg(z.number().optional()),
+          }),
+        });
+
+        // --logLevel should resolve to the "logLevel" field (its own canonical name),
+        // not be aliased to "log-level"
+        const result = parseArgs(["--logLevel", "5"], cmd);
+        expect(result.rawArgs.logLevel).toBe("5");
+      });
+    });
+  });
 });

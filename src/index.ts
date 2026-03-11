@@ -25,6 +25,7 @@ export { runCommand, runMain } from "./core/runner.js";
 export {
   extractFields,
   getUnknownKeysMode,
+  toCamelCase,
   toKebabCase,
   type ExtractedFields,
   type ResolvedFieldMeta,

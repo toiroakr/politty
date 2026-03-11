@@ -303,6 +303,20 @@ export function toKebabCase(str: string): string {
 }
 
 /**
+ * Convert kebab-case to camelCase.
+ *
+ * Expects kebab-case (all-lowercase) input. Uppercase letters after hyphens
+ * (e.g., "output-Dir") are NOT converted.
+ *
+ * @param str - A kebab-case string (all-lowercase with hyphens)
+ * @example toCamelCase("dry-run") => "dryRun"
+ * @example toCamelCase("output-dir") => "outputDir"
+ */
+export function toCamelCase(str: string): string {
+  return str.replace(/-([a-z])/g, (_, char) => char.toUpperCase());
+}
+
+/**
  * Check if a schema is required (not optional or has default)
  *
  * Note: We only check isOptional(), not isNullable(), because CLI arguments
