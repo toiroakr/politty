@@ -50,6 +50,38 @@ describe("schema-extractor", () => {
     });
   });
 
+  describe("extractFields - transform (pipe)", () => {
+    it("should detect field types through field-level transforms", () => {
+      const schema = z.object({
+        verbose: z
+          .boolean()
+          .optional()
+          .transform((v) => !!v),
+        count: z.coerce.number().transform((n) => n * 2),
+      });
+      const extracted = extractFields(schema);
+      const verboseField = extracted.fields.find((f) => f.name === "verbose");
+      const countField = extracted.fields.find((f) => f.name === "count");
+      expect(verboseField?.type).toBe("boolean");
+      expect(countField?.type).toBe("number");
+    });
+
+    it("should extract fields from object schema with transform", () => {
+      const schema = z
+        .object({
+          port: z.coerce.number(),
+          verbose: z.boolean().optional(),
+        })
+        .transform((args) => ({ ...args, computed: true }));
+      const extracted = extractFields(schema);
+      expect(extracted.fields.length).toBe(2);
+      const portField = extracted.fields.find((f) => f.name === "port");
+      const verboseField = extracted.fields.find((f) => f.name === "verbose");
+      expect(portField?.type).toBe("number");
+      expect(verboseField?.type).toBe("boolean");
+    });
+  });
+
   describe("toCamelCase", () => {
     it("should convert kebab-case to camelCase", () => {
       expect(toCamelCase("dry-run")).toBe("dryRun");

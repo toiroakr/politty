@@ -126,6 +126,11 @@ interface ZodV4Def {
   right?: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   catchall?: any;
+  /** Pipe input schema (zod v4 transform/refine) */
+  in?: z.ZodType;
+  /** Pipe output schema (zod v4 transform/refine) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  out?: any;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -190,7 +195,7 @@ function unwrapSchema(schema: z.ZodType): z.ZodType {
 
   // Handle effects (transform, refine, etc.)
   if (typeName === "pipe") {
-    const innerSchema = def?.schema;
+    const innerSchema = def?.in ?? def?.schema;
     if (innerSchema) {
       return unwrapSchema(innerSchema);
     }
@@ -624,6 +629,30 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
     case "intersection":
       result = extractFromIntersection(schema);
       break;
+
+    case "pipe": {
+      // Handle transform/refine on top-level schema (e.g., z.object({...}).transform(...))
+      const pipeInner = def?.in ?? def?.schema;
+      if (pipeInner) {
+        const innerResult = extractFields(pipeInner as ArgsSchema);
+        const pipeDescription = extractDescription(schema);
+        result = {
+          ...innerResult,
+          schema,
+          ...(pipeDescription ? { description: pipeDescription } : {}),
+        };
+        break;
+      }
+      const pipeDescription = extractDescription(schema);
+      result = {
+        fields: [],
+        schema,
+        schemaType: "object",
+        unknownKeysMode: getUnknownKeysMode(schema),
+        ...(pipeDescription ? { description: pipeDescription } : {}),
+      };
+      break;
+    }
 
     default: {
       const description = extractDescription(schema);
