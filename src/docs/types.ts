@@ -422,6 +422,7 @@ export const SECTION_TYPES = [
   "usage",
   "arguments",
   "options",
+  "global-options-link",
   "subcommands",
   "examples",
   "notes",

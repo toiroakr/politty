@@ -32,6 +32,99 @@ file-cli [command]
 | [`delete`](#delete) | Delete a file         |
 
 <!-- politty:command::subcommands:end -->
+<!-- politty:command:check:heading:start -->
+
+## check
+
+<!-- politty:command:check:heading:end -->
+
+<!-- politty:command:check:description:start -->
+
+Check if file exists
+
+<!-- politty:command:check:description:end -->
+
+<!-- politty:command:check:usage:start -->
+
+**Usage**
+
+```
+file-cli check <file>
+```
+
+<!-- politty:command:check:usage:end -->
+
+<!-- politty:command:check:arguments:start -->
+
+**Arguments**
+
+| Argument | Description        | Required |
+| -------- | ------------------ | -------- |
+| `file`   | File path to check | Yes      |
+
+<!-- politty:command:check:arguments:end -->
+
+<!-- politty:command:check:examples:start -->
+
+**Examples**
+
+**Check if config file exists**
+
+```bash
+$ file-cli check config.json
+File exists: config.json
+```
+
+**Check non-existent file**
+
+```bash
+$ file-cli check missing.txt
+File not found: missing.txt
+```
+
+<!-- politty:command:check:examples:end -->
+
+<!-- politty:command:delete:heading:start -->
+
+## delete
+
+<!-- politty:command:delete:heading:end -->
+
+<!-- politty:command:delete:description:start -->
+
+Delete a file
+
+<!-- politty:command:delete:description:end -->
+
+<!-- politty:command:delete:usage:start -->
+
+**Usage**
+
+```
+file-cli delete [options] <file>
+```
+
+<!-- politty:command:delete:usage:end -->
+
+<!-- politty:command:delete:arguments:start -->
+
+**Arguments**
+
+| Argument | Description         | Required |
+| -------- | ------------------- | -------- |
+| `file`   | File path to delete | Yes      |
+
+<!-- politty:command:delete:arguments:end -->
+
+<!-- politty:command:delete:options:start -->
+
+**Options**
+
+| Option    | Alias | Description                         | Required | Default |
+| --------- | ----- | ----------------------------------- | -------- | ------- |
+| `--force` | `-f`  | Force deletion without confirmation | No       | `false` |
+
+<!-- politty:command:delete:options:end -->
 <!-- politty:command:read:heading:start -->
 
 ## read
@@ -158,96 +251,3 @@ Successfully appended to log.txt
 ```
 
 <!-- politty:command:write:examples:end -->
-<!-- politty:command:check:heading:start -->
-
-## check
-
-<!-- politty:command:check:heading:end -->
-
-<!-- politty:command:check:description:start -->
-
-Check if file exists
-
-<!-- politty:command:check:description:end -->
-
-<!-- politty:command:check:usage:start -->
-
-**Usage**
-
-```
-file-cli check <file>
-```
-
-<!-- politty:command:check:usage:end -->
-
-<!-- politty:command:check:arguments:start -->
-
-**Arguments**
-
-| Argument | Description        | Required |
-| -------- | ------------------ | -------- |
-| `file`   | File path to check | Yes      |
-
-<!-- politty:command:check:arguments:end -->
-
-<!-- politty:command:check:examples:start -->
-
-**Examples**
-
-**Check if config file exists**
-
-```bash
-$ file-cli check config.json
-File exists: config.json
-```
-
-**Check non-existent file**
-
-```bash
-$ file-cli check missing.txt
-File not found: missing.txt
-```
-
-<!-- politty:command:check:examples:end -->
-
-<!-- politty:command:delete:heading:start -->
-
-## delete
-
-<!-- politty:command:delete:heading:end -->
-
-<!-- politty:command:delete:description:start -->
-
-Delete a file
-
-<!-- politty:command:delete:description:end -->
-
-<!-- politty:command:delete:usage:start -->
-
-**Usage**
-
-```
-file-cli delete [options] <file>
-```
-
-<!-- politty:command:delete:usage:end -->
-
-<!-- politty:command:delete:arguments:start -->
-
-**Arguments**
-
-| Argument | Description         | Required |
-| -------- | ------------------- | -------- |
-| `file`   | File path to delete | Yes      |
-
-<!-- politty:command:delete:arguments:end -->
-
-<!-- politty:command:delete:options:start -->
-
-**Options**
-
-| Option    | Alias | Description                         | Required | Default |
-| --------- | ----- | ----------------------------------- | -------- | ------- |
-| `--force` | `-f`  | Force deletion without confirmation | No       | `false` |
-
-<!-- politty:command:delete:options:end -->

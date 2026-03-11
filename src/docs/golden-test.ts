@@ -608,6 +608,30 @@ function insertCommandSections(
 }
 
 /**
+ * Remove all section markers for a command from content.
+ * Returns the content with all markers for the command removed and excess blank lines cleaned up.
+ */
+function removeCommandSections(content: string, commandPath: string): string {
+  const markers = collectSectionMarkers(content, commandPath);
+  for (const type of markers) {
+    const start = sectionStartMarker(type, commandPath);
+    const end = sectionEndMarker(type, commandPath);
+    let startIndex = content.indexOf(start);
+    while (startIndex !== -1) {
+      const endIndex = content.indexOf(end, startIndex);
+      if (endIndex === -1) {
+        break;
+      }
+      content = content.slice(0, startIndex) + content.slice(endIndex + end.length);
+      startIndex = content.indexOf(start, startIndex);
+    }
+  }
+  // Clean up excess blank lines (3+ consecutive newlines -> 2)
+  content = content.replace(/\n{3,}/g, "\n\n");
+  return content;
+}
+
+/**
  * Extract a marker section from content
  * Returns the content between start and end markers (including markers)
  */
@@ -1592,6 +1616,38 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           }
         }
       }
+
+      // Remove orphaned section markers for commands no longer in this file
+      if (existingContent) {
+        const existingMarkerPaths = collectSectionMarkerPaths(existingContent);
+        const commandPathSet = new Set(commandPaths);
+
+        if (updateMode) {
+          let removedAny = false;
+          for (const markerPath of existingMarkerPaths) {
+            if (!commandPathSet.has(markerPath)) {
+              existingContent = removeCommandSections(existingContent, markerPath);
+              removedAny = true;
+            }
+          }
+          if (removedAny) {
+            writeFile(filePath, existingContent);
+            if (fileStatus !== "created") {
+              fileStatus = "updated";
+            }
+          }
+        } else {
+          for (const markerPath of existingMarkerPaths) {
+            if (!commandPathSet.has(markerPath)) {
+              hasError = true;
+              fileStatus = "diff";
+              diffs.push(
+                `Found orphaned section markers for deleted command "${formatCommandPath(markerPath)}"`,
+              );
+            }
+          }
+        }
+      }
     } else {
       // Generate markdown with file context (pass specifiedCommands as order hint)
       const rawMarkdown = generateFileMarkdown(
@@ -1699,17 +1755,24 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         }
       }
 
-      // Detect unexpected section markers in rootDoc
+      // Detect and clean up unexpected section markers in rootDoc
       // In PathConfig mode, section markers are expected (rootDoc overlaps with files)
       if (!usingPathConfig) {
-        const unexpectedSectionPaths = Array.from(new Set(collectSectionMarkerPaths(content)));
+        const unexpectedSectionPaths = collectSectionMarkerPaths(content);
         if (unexpectedSectionPaths.length > 0) {
-          hasError = true;
-          rootDocDiffs.push(
-            `Found unexpected section markers in rootDoc: ${unexpectedSectionPaths
-              .map((commandPath) => `"${formatCommandPath(commandPath)}"`)
-              .join(", ")}.`,
-          );
+          if (updateMode) {
+            for (const commandPath of unexpectedSectionPaths) {
+              content = removeCommandSections(content, commandPath);
+            }
+            markerUpdated = true;
+          } else {
+            hasError = true;
+            rootDocDiffs.push(
+              `Found unexpected section markers in rootDoc: ${unexpectedSectionPaths
+                .map((commandPath) => `"${formatCommandPath(commandPath)}"`)
+                .join(", ")}.`,
+            );
+          }
         }
       }
 

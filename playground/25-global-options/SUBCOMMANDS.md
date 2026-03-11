@@ -30,7 +30,11 @@ my-app build [options]
 
 <!-- politty:command:build:options:end -->
 
+<!-- politty:command:build:global-options-link:start -->
+
 See [Global Options](README.md#global-options) for options available to all commands.
+
+<!-- politty:command:build:global-options-link:end -->
 
 <!-- politty:command:deploy:heading:start -->
 
@@ -64,4 +68,8 @@ my-app deploy [options]
 
 <!-- politty:command:deploy:options:end -->
 
+<!-- politty:command:deploy:global-options-link:start -->
+
 See [Global Options](README.md#global-options) for options available to all commands.
+
+<!-- politty:command:deploy:global-options-link:end -->

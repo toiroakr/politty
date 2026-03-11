@@ -804,7 +804,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     {
       const globalLink = getGlobalOptionsLink(info);
       if (globalLink) {
-        sections.push(globalLink);
+        sections.push(wrapWithMarker("global-options-link", scope, globalLink));
       }
     }
 

@@ -2731,6 +2731,122 @@ A test CLI for documentation generation
       expect(result.files[0]?.diff).toContain("unexpected section markers in rootDoc");
       expect(result.files[0]?.diff).toContain("config");
     });
+
+    it("should remove unexpected section markers in rootDoc in update mode", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "rootdoc-remove-stale.md");
+
+      fs.writeFileSync(
+        rootDocPath,
+        `# test-cli
+
+A test CLI for documentation generation
+
+<!-- politty:command:config:heading:start -->
+## stale config
+<!-- politty:command:config:heading:end -->
+
+<!-- politty:command:config:description:start -->
+Stale description
+<!-- politty:command:config:description:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: { path: rootDocPath },
+        files: {},
+      });
+
+      expect(result.success).toBe(true);
+      const updatedContent = fs.readFileSync(rootDocPath, "utf-8");
+      expect(updatedContent).not.toContain("politty:command:config");
+      expect(updatedContent).not.toContain("stale config");
+      expect(updatedContent).toContain("# test-cli");
+    });
+
+    it("should remove orphaned section markers for deleted commands in files", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "file-remove-orphan.md");
+
+      // Write a file with markers for "greet" (exists) and "removed" (doesn't exist)
+      fs.writeFileSync(
+        filePath,
+        `<!-- politty:command:greet:heading:start -->
+## greet
+<!-- politty:command:greet:heading:end -->
+
+<!-- politty:command:removed:heading:start -->
+## removed command
+<!-- politty:command:removed:heading:end -->
+
+<!-- politty:command:removed:description:start -->
+This command was removed
+<!-- politty:command:removed:description:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["greet"] },
+        targetCommands: ["greet"],
+      });
+
+      expect(result.success).toBe(true);
+      const updatedContent = fs.readFileSync(filePath, "utf-8");
+      expect(updatedContent).not.toContain("politty:command:removed");
+      expect(updatedContent).not.toContain("removed command");
+      expect(updatedContent).toContain("politty:command:greet");
+    });
+
+    it("should detect orphaned section markers for deleted commands in validation mode", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const filePath = path.join(testDir, "file-detect-orphan.md");
+
+      fs.writeFileSync(
+        filePath,
+        `<!-- politty:command:greet:heading:start -->
+## \`greet\`
+<!-- politty:command:greet:heading:end -->
+
+<!-- politty:command:greet:description:start -->
+Greet someone
+<!-- politty:command:greet:description:end -->
+
+<!-- politty:command:greet:usage:start -->
+\`\`\`
+test-cli greet <name>
+\`\`\`
+<!-- politty:command:greet:usage:end -->
+
+<!-- politty:command:greet:arguments:start -->
+| Argument | Description |
+| --- | --- |
+| \`name\` | Name to greet |
+<!-- politty:command:greet:arguments:end -->
+
+<!-- politty:command:removed:heading:start -->
+## removed
+<!-- politty:command:removed:heading:end -->
+`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["greet"] },
+        targetCommands: ["greet"],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.diff).toContain("orphaned section markers");
+      expect(result.files[0]?.diff).toContain("removed");
+    });
   });
 
   describe("rootDoc custom heading levels", () => {
