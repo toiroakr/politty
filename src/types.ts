@@ -63,6 +63,20 @@ export interface CleanupContext<TArgs = unknown> {
 }
 
 /**
+ * Context provided to global setup function (runMain/runCommand level)
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- intentionally empty for future extension
+export interface GlobalSetupContext {}
+
+/**
+ * Context provided to global cleanup function (runMain/runCommand level)
+ */
+export interface GlobalCleanupContext {
+  /** Error if command execution failed */
+  error?: Error | undefined;
+}
+
+/**
  * Base command interface (shared properties)
  * @template TArgsSchema - The Zod schema type for arguments
  * @template TArgs - The inferred args type from the schema
@@ -174,6 +188,10 @@ export interface MainOptions {
   logger?: Logger;
   /** Global args schema (shared across all subcommands) */
   globalArgs?: ArgsSchema;
+  /** Global setup hook (runs before command execution) */
+  setup?: ((context: GlobalSetupContext) => void | Promise<void>) | undefined;
+  /** Global cleanup hook (runs after command execution, always executes even on error) */
+  cleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
 }
 
 /**
@@ -190,6 +208,10 @@ export interface RunCommandOptions {
   logger?: Logger;
   /** Global args schema (shared across all subcommands) */
   globalArgs?: ArgsSchema;
+  /** Global setup hook (runs before command execution) */
+  setup?: ((context: GlobalSetupContext) => void | Promise<void>) | undefined;
+  /** Global cleanup hook (runs after command execution, always executes even on error) */
+  cleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
 }
 
 /**

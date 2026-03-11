@@ -2,6 +2,7 @@ import type {
   AnyCommand,
   CleanupContext,
   CollectedLogs,
+  GlobalCleanupContext,
   RunResult,
   SetupContext,
 } from "../types.js";
@@ -17,6 +18,8 @@ export interface ExecuteLifecycleOptions {
   captureLogs?: boolean | undefined;
   /** Existing logs to include in result (from runCommandInternal) */
   existingLogs?: CollectedLogs | undefined;
+  /** Global cleanup hook to run on signal interruption (after per-command cleanup) */
+  globalCleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
 }
 
 /**
@@ -63,20 +66,45 @@ export async function executeLifecycle<TResult = unknown>(
         process.off("SIGTERM", signalHandler);
       }
 
-      // Run cleanup
+      const signalError = new Error("Process interrupted");
+      cleanupContext.error = signalError;
+
+      // Run per-command cleanup
       if (command.cleanup) {
         try {
-          // Update error in context if needed, though usually signal is the cause
-          // We don't set 'error' here because it might overwrite a real error if we were in a catch block?
-          // But here we are interrupting.
           await command.cleanup(cleanupContext);
         } catch (e) {
           console.error("Error during signal cleanup:", e);
         }
       }
 
+      // Run global cleanup
+      if (_options.globalCleanup) {
+        try {
+          await _options.globalCleanup({ error: signalError });
+        } catch (e) {
+          console.error("Error during global signal cleanup:", e);
+        }
+      }
+
       // Stop log collection before exit
       collector?.stop();
+
+      // Flush stdout before exit to prevent truncated output.
+      // Use writableNeedDrain with a timeout to avoid hanging indefinitely.
+      if (process.stdout.writableNeedDrain) {
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => {
+            process.stdout.off("drain", onDrain);
+            resolve();
+          }, 200);
+          const onDrain = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+          process.stdout.once("drain", onDrain);
+        });
+      }
 
       // Exit
       process.exit(1);

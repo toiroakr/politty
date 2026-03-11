@@ -8,6 +8,7 @@ import type {
   AnyCommand,
   ArgsSchema,
   CollectedLogs,
+  GlobalCleanupContext,
   InternalRunOptions,
   Logger,
   MainOptions,
@@ -49,6 +50,8 @@ interface InternalCommandOptions extends InternalRunOptions {
   _globalExtracted?: ExtractedFields | undefined;
   /** Already parsed global args (accumulated from parent levels) */
   _parsedGlobalArgs?: Record<string, unknown> | undefined;
+  /** Global cleanup hook for signal handling */
+  _globalCleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
 }
 
 /**
@@ -84,11 +87,64 @@ export async function runCommand<TResult = unknown>(
 ): Promise<RunResult<TResult>> {
   const globalExtracted = extractAndValidateGlobal(options);
 
-  return runCommandInternal(command, argv, {
+  // Start log collection for global setup/cleanup if enabled
+  const shouldCaptureLogs = options.captureLogs ?? false;
+  const globalCollector = shouldCaptureLogs ? createLogCollector() : null;
+
+  // Global setup
+  if (options.setup) {
+    globalCollector?.start();
+    try {
+      await options.setup({});
+    } catch (e) {
+      const error = e instanceof Error ? e : new Error(String(e));
+      if (options.cleanup) {
+        try {
+          await options.cleanup({ error });
+        } catch {
+          // Swallow cleanup error when setup already failed
+        }
+      }
+      globalCollector?.stop();
+      const logs = globalCollector?.getLogs() ?? emptyLogs();
+      return { success: false, error, exitCode: 1, logs };
+    }
+    globalCollector?.stop();
+  }
+
+  const result = await runCommandInternal<TResult>(command, argv, {
     ...options,
     handleSignals: false,
     _globalExtracted: globalExtracted,
+    _globalCleanup: options.cleanup,
+    _existingLogs: globalCollector?.getLogs(),
   });
+
+  // Global cleanup (always)
+  if (options.cleanup) {
+    const cleanupCollector = shouldCaptureLogs ? createLogCollector() : null;
+    cleanupCollector?.start();
+    const cleanupCtx: GlobalCleanupContext = {
+      error: !result.success ? result.error : undefined,
+    };
+    try {
+      await options.cleanup(cleanupCtx);
+    } catch (e) {
+      if (result.success) {
+        const error = e instanceof Error ? e : new Error(String(e));
+        cleanupCollector?.stop();
+        const logs = mergeLogs(result.logs, cleanupCollector?.getLogs() ?? emptyLogs());
+        return { success: false, error, exitCode: 1, logs };
+      }
+    }
+    cleanupCollector?.stop();
+    const cleanupLogs = cleanupCollector?.getLogs() ?? emptyLogs();
+    if (cleanupLogs.entries.length > 0) {
+      return { ...result, logs: mergeLogs(result.logs, cleanupLogs) } as RunResult<TResult>;
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -117,6 +173,23 @@ export async function runCommand<TResult = unknown>(
 export async function runMain(command: AnyCommand, options: MainOptions = {}): Promise<never> {
   const globalExtracted = extractAndValidateGlobal(options);
 
+  // Global setup
+  if (options.setup) {
+    try {
+      await options.setup({});
+    } catch (e) {
+      const error = e instanceof Error ? e : new Error(String(e));
+      if (options.cleanup) {
+        try {
+          await options.cleanup({ error });
+        } catch {
+          // Swallow cleanup error when setup already failed
+        }
+      }
+      process.exit(1);
+    }
+  }
+
   const result = await runCommandInternal(command, process.argv.slice(2), {
     debug: options.debug,
     captureLogs: options.captureLogs,
@@ -125,6 +198,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     logger: options.logger,
     globalArgs: options.globalArgs,
     _globalExtracted: globalExtracted,
+    _globalCleanup: options.cleanup,
     _context: {
       commandPath: [],
       rootName: command.name,
@@ -132,6 +206,18 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
       globalExtracted,
     },
   });
+
+  // Global cleanup (always)
+  if (options.cleanup) {
+    const cleanupCtx: GlobalCleanupContext = {
+      error: !result.success ? result.error : undefined,
+    };
+    try {
+      await options.cleanup(cleanupCtx);
+    } catch {
+      // Swallow - we're about to exit anyway
+    }
+  }
 
   // Flush stdout before exit to prevent truncated output when piped.
   // When stdout is a pipe (e.g., eval "$(cli completion zsh)"), writes are
@@ -339,6 +425,7 @@ async function runCommandInternal<TResult = unknown>(
         handleSignals: options.handleSignals,
         captureLogs: options.captureLogs,
         existingLogs: getCurrentLogs(),
+        globalCleanup: options._globalCleanup,
       });
       return result as RunResult<TResult>;
     }
@@ -366,6 +453,7 @@ async function runCommandInternal<TResult = unknown>(
       handleSignals: options.handleSignals,
       captureLogs: options.captureLogs,
       existingLogs: getCurrentLogs(),
+      globalCleanup: options._globalCleanup,
     });
 
     return result as RunResult<TResult>;

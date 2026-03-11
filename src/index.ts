@@ -57,6 +57,9 @@ export type {
   Example,
   // Global args
   GlobalArgs,
+  // Global lifecycle context types
+  GlobalCleanupContext,
+  GlobalSetupContext,
   LogEntry,
   // Logger type
   Logger,
