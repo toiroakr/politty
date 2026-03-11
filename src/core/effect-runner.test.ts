@@ -20,7 +20,11 @@ describe("arg effect", () => {
     await runCommand(cmd, ["--verbose"]);
 
     expect(effect).toHaveBeenCalledOnce();
-    expect(effect).toHaveBeenCalledWith(true, { name: "verbose", args: { verbose: true } });
+    expect(effect).toHaveBeenCalledWith(true, {
+      name: "verbose",
+      args: { verbose: true },
+      globalArgs: {},
+    });
   });
 
   it("should receive transformed value from zod", async () => {
@@ -39,7 +43,11 @@ describe("arg effect", () => {
 
     await runCommand(cmd, ["--port", "4000"]);
 
-    expect(effect).toHaveBeenCalledWith(8000, { name: "port", args: { port: 8000 } });
+    expect(effect).toHaveBeenCalledWith(8000, {
+      name: "port",
+      args: { port: 8000 },
+      globalArgs: {},
+    });
   });
 
   it("should execute effects in field definition order", async () => {
@@ -155,6 +163,7 @@ describe("arg effect", () => {
     expect(effect).toHaveBeenCalledWith(true, {
       name: "verbose",
       args: { name: "test", verbose: true },
+      globalArgs: {},
     });
   });
 
@@ -177,7 +186,10 @@ describe("arg effect", () => {
       await runCommand(cmd, ["--verbose", "--name", "test"], { globalArgs: globalSchema });
 
       expect(effect).toHaveBeenCalledOnce();
-      expect(effect).toHaveBeenCalledWith(true, { name: "verbose", args: { verbose: true } });
+      expect(effect).toHaveBeenCalledWith(true, {
+        name: "verbose",
+        args: { verbose: true },
+      });
     });
 
     it("should execute global effects before command effects", async () => {
@@ -229,7 +241,34 @@ describe("arg effect", () => {
       await runCommand(root, ["test", "--verbose"], { globalArgs: globalSchema });
 
       expect(effect).toHaveBeenCalledOnce();
-      expect(effect).toHaveBeenCalledWith(true, { name: "verbose", args: { verbose: true } });
+      expect(effect).toHaveBeenCalledWith(true, {
+        name: "verbose",
+        args: { verbose: true },
+      });
+    });
+
+    it("should pass globalArgs to command effect context", async () => {
+      const commandEffect = vi.fn();
+
+      const globalSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+      });
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          name: arg(z.string(), { effect: commandEffect }),
+        }),
+        run: () => {},
+      });
+
+      await runCommand(cmd, ["--verbose", "--name", "hello"], { globalArgs: globalSchema });
+
+      expect(commandEffect).toHaveBeenCalledWith("hello", {
+        name: "name",
+        args: { name: "hello" },
+        globalArgs: { verbose: true },
+      });
     });
 
     it("should not execute global effects when command validation fails", async () => {

@@ -456,6 +456,7 @@ async function runCommandInternal<TResult = unknown>(
       await runEffects(
         validationResult.data as Record<string, unknown>,
         parseResult.extractedFields,
+        validatedGlobalArgs,
       );
     }
 
