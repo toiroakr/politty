@@ -4,6 +4,7 @@ import type {
   Command,
   Example,
   GlobalArgs,
+  IsEmpty,
   NonRunnableCommand,
   RunnableCommand,
   SubCommandsRecord,
@@ -15,11 +16,6 @@ import type {
 type InferArgs<TArgsSchema> = TArgsSchema extends z.ZodType
   ? z.infer<TArgsSchema>
   : Record<string, never>;
-
-/**
- * Detect empty interface (used for GlobalArgs declaration merging)
- */
-type IsEmpty<T> = keyof T extends never ? true : false;
 
 /**
  * Merge local args with global args.

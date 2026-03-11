@@ -422,7 +422,7 @@ async function runCommandInternal<TResult = unknown>(
       // No schema, run with global args (or empty args)
       // Run effects for global args (after all validations succeed)
       if (options._globalExtracted) {
-        await runEffects(validatedGlobalArgs, options._globalExtracted);
+        await runEffects(validatedGlobalArgs, options._globalExtracted, validatedGlobalArgs);
       }
       collector?.stop();
       const mergedArgs = validatedGlobalArgs as Record<string, never>;
@@ -450,7 +450,7 @@ async function runCommandInternal<TResult = unknown>(
 
     // Run effects after all validations succeed (global effects first, then command effects)
     if (options._globalExtracted) {
-      await runEffects(validatedGlobalArgs, options._globalExtracted);
+      await runEffects(validatedGlobalArgs, options._globalExtracted, validatedGlobalArgs);
     }
     if (parseResult.extractedFields) {
       await runEffects(

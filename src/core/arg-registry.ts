@@ -1,11 +1,6 @@
 import { z } from "zod";
 
-import type { GlobalArgs } from "../types.js";
-
-/**
- * Detect empty interface (used for GlobalArgs declaration merging)
- */
-type IsEmpty<T> = keyof T extends never ? true : false;
+import type { GlobalArgs, IsEmpty } from "../types.js";
 
 /**
  * Built-in completion types

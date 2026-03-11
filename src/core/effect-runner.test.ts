@@ -189,6 +189,7 @@ describe("arg effect", () => {
       expect(effect).toHaveBeenCalledWith(true, {
         name: "verbose",
         args: { verbose: true },
+        globalArgs: { verbose: true },
       });
     });
 
@@ -244,6 +245,7 @@ describe("arg effect", () => {
       expect(effect).toHaveBeenCalledWith(true, {
         name: "verbose",
         args: { verbose: true },
+        globalArgs: { verbose: true },
       });
     });
 
