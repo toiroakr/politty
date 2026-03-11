@@ -90,9 +90,20 @@ export async function executeLifecycle<TResult = unknown>(
       // Stop log collection before exit
       collector?.stop();
 
-      // Flush stdout before exit to prevent truncated output
-      if (process.stdout.writableLength > 0) {
-        await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
+      // Flush stdout before exit to prevent truncated output.
+      // Use writableNeedDrain with a timeout to avoid hanging indefinitely.
+      if (process.stdout.writableNeedDrain) {
+        await new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => {
+            process.stdout.off("drain", onDrain);
+            resolve();
+          }, 200);
+          const onDrain = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+          process.stdout.once("drain", onDrain);
+        });
       }
 
       // Exit
