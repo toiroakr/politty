@@ -231,5 +231,28 @@ describe("arg effect", () => {
       expect(effect).toHaveBeenCalledOnce();
       expect(effect).toHaveBeenCalledWith(true, { name: "verbose", args: { verbose: true } });
     });
+
+    it("should not execute global effects when command validation fails", async () => {
+      const globalEffect = vi.fn();
+
+      const globalSchema = z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v", effect: globalEffect }),
+      });
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          name: arg(z.string()),
+        }),
+        run: () => {},
+      });
+
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const result = await runCommand(cmd, ["--verbose"], { globalArgs: globalSchema });
+      consoleSpy.mockRestore();
+
+      expect(result.success).toBe(false);
+      expect(globalEffect).not.toHaveBeenCalled();
+    });
   });
 });

@@ -415,14 +415,15 @@ async function runCommandInternal<TResult = unknown>(
         };
       }
       validatedGlobalArgs = globalValidation.data as Record<string, unknown>;
-
-      // Run effects for global args
-      await runEffects(validatedGlobalArgs, options._globalExtracted);
     }
 
     // Validate arguments
     if (!command.args) {
       // No schema, run with global args (or empty args)
+      // Run effects for global args (after all validations succeed)
+      if (options._globalExtracted) {
+        await runEffects(validatedGlobalArgs, options._globalExtracted);
+      }
       collector?.stop();
       const mergedArgs = validatedGlobalArgs as Record<string, never>;
       const result = await executeLifecycle(command, mergedArgs, {
@@ -447,7 +448,10 @@ async function runCommandInternal<TResult = unknown>(
       };
     }
 
-    // Run effects for command args
+    // Run effects after all validations succeed (global effects first, then command effects)
+    if (options._globalExtracted) {
+      await runEffects(validatedGlobalArgs, options._globalExtracted);
+    }
     if (parseResult.extractedFields) {
       await runEffects(
         validationResult.data as Record<string, unknown>,

@@ -68,7 +68,7 @@ export type CompletionMeta = {
 export interface EffectContext {
   /** Field name (camelCase) */
   name: string;
-  /** All validated args */
+  /** Validated args for this schema (global args for global effects, command args for command effects) */
   args: Record<string, unknown>;
 }
 
