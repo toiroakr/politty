@@ -632,9 +632,9 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
 
     case "pipe": {
       // Handle transform/refine on top-level schema (e.g., z.object({...}).transform(...))
-      const innerSchema = def?.in ?? def?.schema;
-      if (innerSchema) {
-        result = extractFields(innerSchema as ArgsSchema);
+      const pipeInner = def?.in ?? def?.schema;
+      if (pipeInner) {
+        result = extractFields(pipeInner as ArgsSchema);
         break;
       }
       const pipeDescription = extractDescription(schema);

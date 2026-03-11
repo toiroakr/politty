@@ -74,7 +74,7 @@ describe("schema-extractor", () => {
         })
         .transform((args) => ({ ...args, computed: true }));
       const extracted = extractFields(schema);
-      expect(extracted.fields.length).toBeGreaterThanOrEqual(2);
+      expect(extracted.fields.length).toBe(2);
       const portField = extracted.fields.find((f) => f.name === "port");
       const verboseField = extracted.fields.find((f) => f.name === "verbose");
       expect(portField?.type).toBe("number");
