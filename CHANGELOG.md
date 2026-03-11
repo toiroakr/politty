@@ -1,5 +1,11 @@
 # politty
 
+## 0.4.7
+
+### Patch Changes
+
+- ca62fe5: add global setup/cleanup hooks to runMain and runCommand options
+
 ## 0.4.6
 
 ### Patch Changes
