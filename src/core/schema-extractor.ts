@@ -634,7 +634,13 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
       // Handle transform/refine on top-level schema (e.g., z.object({...}).transform(...))
       const pipeInner = def?.in ?? def?.schema;
       if (pipeInner) {
-        result = extractFields(pipeInner as ArgsSchema);
+        const innerResult = extractFields(pipeInner as ArgsSchema);
+        const pipeDescription = extractDescription(schema);
+        result = {
+          ...innerResult,
+          schema,
+          ...(pipeDescription ? { description: pipeDescription } : {}),
+        };
         break;
       }
       const pipeDescription = extractDescription(schema);
