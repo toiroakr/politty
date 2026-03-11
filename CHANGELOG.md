@@ -1,5 +1,11 @@
 # politty
 
+## 0.4.9
+
+### Patch Changes
+
+- 5406787: Automatically clean up orphaned section markers for deleted commands in update mode. Wrap global options link with section marker so it is not silently dropped in section-level marker mode.
+
 ## 0.4.8
 
 ### Patch Changes
