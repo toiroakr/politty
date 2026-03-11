@@ -19,6 +19,7 @@ export {
   type CompletionMeta,
   type CompletionType,
   type CustomCompletion,
+  type EffectContext,
 } from "./core/arg-registry.js";
 export { createDefineCommand, defineCommand, type MergedArgs } from "./core/command.js";
 export { runCommand, runMain } from "./core/runner.js";

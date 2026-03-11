@@ -28,6 +28,7 @@ import {
   formatValidationErrors,
 } from "../validator/error-formatter.js";
 import { validateArgs } from "../validator/zod-validator.js";
+import { runEffects } from "./effect-runner.js";
 import { extractFields, type ExtractedFields } from "./schema-extractor.js";
 
 /**
@@ -414,6 +415,9 @@ async function runCommandInternal<TResult = unknown>(
         };
       }
       validatedGlobalArgs = globalValidation.data as Record<string, unknown>;
+
+      // Run effects for global args
+      await runEffects(validatedGlobalArgs, options._globalExtracted);
     }
 
     // Validate arguments
@@ -441,6 +445,14 @@ async function runCommandInternal<TResult = unknown>(
         exitCode: 1,
         logs: getCurrentLogs(),
       };
+    }
+
+    // Run effects for command args
+    if (parseResult.extractedFields) {
+      await runEffects(
+        validationResult.data as Record<string, unknown>,
+        parseResult.extractedFields,
+      );
     }
 
     // Merge global args with command args (command args take precedence on collision)

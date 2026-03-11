@@ -63,6 +63,16 @@ export type CompletionMeta = {
 );
 
 /**
+ * Context provided to effect callbacks
+ */
+export interface EffectContext {
+  /** Field name (camelCase) */
+  name: string;
+  /** All validated args */
+  args: Record<string, unknown>;
+}
+
+/**
  * Base metadata shared by all argument types
  */
 export interface BaseArgMeta {
@@ -89,6 +99,22 @@ export interface BaseArgMeta {
   env?: string | string[];
   /** Completion configuration for shell tab-completion */
   completion?: CompletionMeta;
+  /**
+   * Side-effect callback executed after argument parsing and validation.
+   * Runs before the command lifecycle (setup/run/cleanup).
+   * Use Zod .transform() for value transformation instead.
+   *
+   * @example
+   * ```ts
+   * verbose: arg(z.boolean().default(false), {
+   *   alias: "v",
+   *   effect: (value) => {
+   *     if (value) logger.setLevel("debug");
+   *   },
+   * })
+   * ```
+   */
+  effect?: (value: unknown, context: EffectContext) => void | PromiseLike<void>;
 }
 
 /**

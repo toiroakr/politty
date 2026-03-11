@@ -4,6 +4,7 @@ import {
   getArgMeta as getArgMetaFromRegistry,
   type ArgMeta,
   type CompletionMeta,
+  type EffectContext,
 } from "./arg-registry.js";
 
 /**
@@ -68,6 +69,8 @@ export interface ResolvedFieldMeta {
   enumValues?: string[] | undefined;
   /** Completion metadata from arg() */
   completion?: CompletionMeta | undefined;
+  /** Side-effect callback from arg() metadata */
+  effect?: ((value: unknown, context: EffectContext) => void | PromiseLike<void>) | undefined;
 }
 
 /**
@@ -410,6 +413,7 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
     schema,
     enumValues,
     completion: argMeta?.completion,
+    effect: argMeta?.effect,
   };
 
   // Add overrideBuiltinAlias only if it's true
