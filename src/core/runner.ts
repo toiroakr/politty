@@ -16,6 +16,7 @@ import type {
   RunResult,
 } from "../types.js";
 import {
+  validateCaseVariantCollisions,
   validateDuplicateAliases,
   validateDuplicateFields,
   validateReservedAliases,
@@ -504,6 +505,7 @@ function extractAndValidateGlobal(options: {
   const extracted = extractFields(options.globalArgs);
   if (!options.skipValidation) {
     validateDuplicateFields(extracted);
+    validateCaseVariantCollisions(extracted);
     validateDuplicateAliases(extracted);
     validateReservedAliases(extracted, true);
     const positionalNames = extracted.fields.filter((f) => f.positional).map((f) => f.name);

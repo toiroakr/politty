@@ -37,7 +37,11 @@ describe("KebabCase type", () => {
     expectTypeOf<KebabCase<"verbose">>().toEqualTypeOf<"verbose">();
   });
 
-  it("handles consecutive capitals by collapsing them", () => {
+  it("handles trailing uppercase letter", () => {
+    expectTypeOf<KebabCase<"onlyB">>().toEqualTypeOf<"only-b">();
+  });
+
+  it("handles single capital transition", () => {
     expectTypeOf<KebabCase<"xmlParser">>().toEqualTypeOf<"xml-parser">();
   });
 });

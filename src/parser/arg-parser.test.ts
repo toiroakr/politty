@@ -1138,7 +1138,7 @@ describe("ArgParser", () => {
     });
 
     describe("alias collision avoidance", () => {
-      it("should not add camelCase alias when it collides with another field name", () => {
+      it("should reject case-variant collision between kebab and camelCase fields", () => {
         const cmd = defineCommand({
           name: "test-cmd",
           args: z.object({
@@ -1147,9 +1147,21 @@ describe("ArgParser", () => {
           }),
         });
 
-        // --logLevel should resolve to the "logLevel" field (its own canonical name),
-        // not be aliased to "log-level"
-        const result = parseArgs(["--logLevel", "5"], cmd);
+        // Case-variant collision is now detected and throws
+        expect(() => parseArgs(["--logLevel", "5"], cmd)).toThrow(/case variants of each other/);
+      });
+
+      it("should still work when validation is skipped", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            "log-level": arg(z.string().optional()),
+            logLevel: arg(z.number().optional()),
+          }),
+        });
+
+        // With skipValidation, the collision check is bypassed
+        const result = parseArgs(["--logLevel", "5"], cmd, { skipValidation: true });
         expect(result.rawArgs.logLevel).toBe("5");
       });
     });
