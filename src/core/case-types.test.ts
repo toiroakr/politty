@@ -36,6 +36,10 @@ describe("KebabCase type", () => {
   it("leaves single-word unchanged", () => {
     expectTypeOf<KebabCase<"verbose">>().toEqualTypeOf<"verbose">();
   });
+
+  it("handles consecutive capitals by collapsing them", () => {
+    expectTypeOf<KebabCase<"xmlParser">>().toEqualTypeOf<"xml-parser">();
+  });
 });
 
 describe("WithCaseVariants type", () => {
@@ -75,5 +79,15 @@ describe("WithCaseVariants type", () => {
     expectTypeOf<Result>().toMatchTypeOf<
       { action: "create"; name: string } | { action: "delete"; "item-id": number; itemId: number }
     >();
+  });
+
+  it("adds case variants for union-only keys (not just common keys)", () => {
+    type Input = { shared: string; "only-a": boolean } | { shared: string; onlyB: number };
+    type Result = WithCaseVariants<Input>;
+    // Extract each variant and verify case variants are present
+    type VariantA = Extract<Result, { "only-a": boolean }>;
+    type VariantB = Extract<Result, { onlyB: number }>;
+    expectTypeOf<VariantA>().toMatchTypeOf<{ shared: string; "only-a": boolean; onlyA: boolean }>();
+    expectTypeOf<VariantB>().toMatchTypeOf<{ shared: string; onlyB: number; "only-b": number }>();
   });
 });

@@ -421,12 +421,13 @@ async function runCommandInternal<TResult = unknown>(
     // Validate arguments
     if (!command.args) {
       // No schema, run with global args (or empty args)
+      const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
       // Run effects for global args (after all validations succeed)
       if (options._globalExtracted) {
-        await runEffects(validatedGlobalArgs, options._globalExtracted, validatedGlobalArgs);
+        await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
       }
       collector?.stop();
-      const mergedArgs = createDualCaseProxy(validatedGlobalArgs) as Record<string, never>;
+      const mergedArgs = proxiedGlobalArgs as Record<string, never>;
       const result = await executeLifecycle(command, mergedArgs, {
         handleSignals: options.handleSignals,
         captureLogs: options.captureLogs,

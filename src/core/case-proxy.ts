@@ -1,3 +1,4 @@
+import type { WithCaseVariants } from "./case-types.js";
 import { toCamelCase, toKebabCase } from "./schema-extractor.js";
 
 /**
@@ -9,7 +10,9 @@ import { toCamelCase, toKebabCase } from "./schema-extractor.js";
  * - `Object.keys()`, `JSON.stringify()`, and spread return only the original keys.
  * - The `in` operator detects both case variants.
  */
-export function createDualCaseProxy<T extends Record<string, unknown>>(obj: T): T {
+export function createDualCaseProxy<T extends Record<string, unknown>>(
+  obj: T,
+): WithCaseVariants<T> {
   return new Proxy(obj, {
     get(target, prop, receiver) {
       if (typeof prop === "string") {
@@ -31,5 +34,5 @@ export function createDualCaseProxy<T extends Record<string, unknown>>(obj: T): 
       }
       return Reflect.has(target, prop);
     },
-  }) as T;
+  }) as WithCaseVariants<T>;
 }

@@ -92,6 +92,7 @@ export {
   ReservedAliasError,
   validateCaseVariantCollisions,
   validateCommand,
+  validateCrossSchemaCollisions,
   validateDuplicateAliases,
   validateDuplicateFields,
   validatePositionalConfig,

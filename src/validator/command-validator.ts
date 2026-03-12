@@ -320,6 +320,35 @@ export function validateCaseVariantCollisions(extracted: ExtractedFields): void 
   }
 }
 
+/**
+ * Validate that no case-variant collisions exist between two schemas
+ * (e.g., global args and command args).
+ *
+ * @param extractedA - Extracted fields from first schema (e.g., global args)
+ * @param extractedB - Extracted fields from second schema (e.g., command args)
+ * @throws {CaseVariantCollisionError} If cross-schema case-variant collisions are found
+ */
+export function validateCrossSchemaCollisions(
+  extractedA: ExtractedFields,
+  extractedB: ExtractedFields,
+): void {
+  const canonicalMap = new Map<string, string>();
+
+  for (const field of extractedA.fields) {
+    canonicalMap.set(toCamelCase(field.name), field.name);
+  }
+
+  for (const field of extractedB.fields) {
+    const camel = toCamelCase(field.name);
+    const existing = canonicalMap.get(camel);
+    if (existing && existing !== field.name) {
+      throw new CaseVariantCollisionError(
+        `Global field "${existing}" and command field "${field.name}" are case variants of each other and would collide.`,
+      );
+    }
+  }
+}
+
 // ============================================================================
 // Non-throwing validators (for collecting all errors)
 // ============================================================================

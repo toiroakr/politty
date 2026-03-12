@@ -1,6 +1,7 @@
 import { extractFields, type ExtractedFields } from "../core/schema-extractor.js";
 import type { AnyCommand } from "../types.js";
 import {
+  validateCrossSchemaCollisions,
   validateDuplicateAliases,
   validateDuplicateFields,
   validatePositionalConfig,
@@ -121,6 +122,9 @@ export function parseArgs(
       validateDuplicateAliases(extracted);
       validatePositionalConfig(extracted);
       validateReservedAliases(extracted, hasSubCommands);
+      if (options.globalExtracted) {
+        validateCrossSchemaCollisions(options.globalExtracted, extracted);
+      }
     }
   }
 

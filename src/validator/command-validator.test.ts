@@ -8,6 +8,7 @@ import {
   formatCommandValidationErrors,
   validateCaseVariantCollisions,
   validateCommand,
+  validateCrossSchemaCollisions,
 } from "./command-validator.js";
 
 describe("validateCommand", () => {
@@ -267,5 +268,33 @@ describe("validateCaseVariantCollisions", () => {
     });
     const extracted = extractFields(schema);
     expect(() => validateCaseVariantCollisions(extracted)).toThrow(CaseVariantCollisionError);
+  });
+});
+
+describe("validateCrossSchemaCollisions", () => {
+  it("should detect collision between global and command args", () => {
+    const globalSchema = z.object({
+      "log-level": arg(z.string().optional()),
+    });
+    const commandSchema = z.object({
+      logLevel: arg(z.number().optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).toThrow(
+      CaseVariantCollisionError,
+    );
+  });
+
+  it("should not flag unrelated fields across schemas", () => {
+    const globalSchema = z.object({
+      verbose: arg(z.boolean().optional()),
+    });
+    const commandSchema = z.object({
+      "dry-run": arg(z.boolean().optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).not.toThrow();
   });
 });
