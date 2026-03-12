@@ -1,6 +1,8 @@
 import { extractFields, type ExtractedFields } from "../core/schema-extractor.js";
 import type { AnyCommand } from "../types.js";
 import {
+  validateCaseVariantCollisions,
+  validateCrossSchemaCollisions,
   validateDuplicateAliases,
   validateDuplicateFields,
   validatePositionalConfig,
@@ -118,9 +120,13 @@ export function parseArgs(
     // Only validate if not skipped (tests can pre-validate, production can skip)
     if (!options.skipValidation) {
       validateDuplicateFields(extracted);
+      validateCaseVariantCollisions(extracted);
       validateDuplicateAliases(extracted);
       validatePositionalConfig(extracted);
       validateReservedAliases(extracted, hasSubCommands);
+      if (options.globalExtracted) {
+        validateCrossSchemaCollisions(options.globalExtracted, extracted);
+      }
     }
   }
 

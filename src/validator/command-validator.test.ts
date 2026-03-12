@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
-import { formatCommandValidationErrors, validateCommand } from "./command-validator.js";
+import { extractFields } from "../core/schema-extractor.js";
+import {
+  CaseVariantCollisionError,
+  formatCommandValidationErrors,
+  validateCaseVariantCollisions,
+  validateCommand,
+  validateCrossSchemaCollisions,
+} from "./command-validator.js";
 
 describe("validateCommand", () => {
   describe("single command validation", () => {
@@ -221,5 +228,73 @@ describe("formatCommandValidationErrors", () => {
 
     expect(result).toContain("[cli]");
     expect(result).toContain("[cli > sub]");
+  });
+});
+
+describe("validateCaseVariantCollisions", () => {
+  it("should detect collision between kebab-case and camelCase variants", async () => {
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({
+        "my-option": arg(z.string().optional()),
+        myOption: arg(z.number().optional()),
+      }),
+    });
+
+    const result = await validateCommand(cmd);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.type === "case_variant_collision")).toBe(true);
+    }
+  });
+
+  it("should not flag unrelated fields", async () => {
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({
+        "my-option": arg(z.string().optional()),
+        otherField: arg(z.number().optional()),
+      }),
+    });
+
+    const result = await validateCommand(cmd);
+    expect(result.valid).toBe(true);
+  });
+
+  it("should throw CaseVariantCollisionError from throwing validator", () => {
+    const schema = z.object({
+      "log-level": arg(z.string().optional()),
+      logLevel: arg(z.number().optional()),
+    });
+    const extracted = extractFields(schema);
+    expect(() => validateCaseVariantCollisions(extracted)).toThrow(CaseVariantCollisionError);
+  });
+});
+
+describe("validateCrossSchemaCollisions", () => {
+  it("should detect collision between global and command args", () => {
+    const globalSchema = z.object({
+      "log-level": arg(z.string().optional()),
+    });
+    const commandSchema = z.object({
+      logLevel: arg(z.number().optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).toThrow(
+      CaseVariantCollisionError,
+    );
+  });
+
+  it("should not flag unrelated fields across schemas", () => {
+    const globalSchema = z.object({
+      verbose: arg(z.boolean().optional()),
+    });
+    const commandSchema = z.object({
+      "dry-run": arg(z.boolean().optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).not.toThrow();
   });
 });

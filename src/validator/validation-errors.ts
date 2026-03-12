@@ -37,3 +37,13 @@ export class DuplicateAliasError extends Error {
     this.name = "DuplicateAliasError";
   }
 }
+
+/**
+ * Error thrown when fields are case variants of each other (e.g. "my-option" and "myOption")
+ */
+export class CaseVariantCollisionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CaseVariantCollisionError";
+  }
+}

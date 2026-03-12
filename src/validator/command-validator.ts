@@ -1,7 +1,8 @@
-import { extractFields, type ExtractedFields } from "../core/schema-extractor.js";
+import { extractFields, toCamelCase, type ExtractedFields } from "../core/schema-extractor.js";
 import { resolveLazyCommand } from "../executor/subcommand-router.js";
 import type { AnyCommand } from "../types.js";
 import {
+  CaseVariantCollisionError,
   DuplicateAliasError,
   DuplicateFieldError,
   PositionalConfigError,
@@ -9,7 +10,13 @@ import {
 } from "./validation-errors.js";
 
 // Re-export error classes for convenience
-export { DuplicateAliasError, DuplicateFieldError, PositionalConfigError, ReservedAliasError };
+export {
+  CaseVariantCollisionError,
+  DuplicateAliasError,
+  DuplicateFieldError,
+  PositionalConfigError,
+  ReservedAliasError,
+};
 
 /**
  * Error detail for command validation
@@ -18,7 +25,12 @@ export interface CommandValidationError {
   /** Path to the command (e.g., ["cli", "build", "watch"]) */
   commandPath: string[];
   /** Error type */
-  type: "duplicate_field" | "duplicate_alias" | "positional_config" | "reserved_alias";
+  type:
+    | "duplicate_field"
+    | "duplicate_alias"
+    | "positional_config"
+    | "reserved_alias"
+    | "case_variant_collision";
   /** Error message */
   message: string;
   /** Related field name (if applicable) */
@@ -64,6 +76,32 @@ function checkDuplicateFields(
       });
     }
     seenNames.set(field.name, field.name);
+  }
+  return errors;
+}
+
+/**
+ * Check for case-variant collisions (e.g. "my-option" and "myOption" defined simultaneously)
+ */
+function checkCaseVariantCollisions(
+  extracted: ExtractedFields,
+  commandPath: string[],
+): CommandValidationError[] {
+  const errors: CommandValidationError[] = [];
+  const canonicalMap = new Map<string, string>();
+
+  for (const field of extracted.fields) {
+    const camel = toCamelCase(field.name);
+    const existing = canonicalMap.get(camel);
+    if (existing && existing !== field.name) {
+      errors.push({
+        commandPath,
+        type: "case_variant_collision",
+        message: `Fields "${existing}" and "${field.name}" are case variants of each other and would collide.`,
+        field: field.name,
+      });
+    }
+    canonicalMap.set(camel, field.name);
   }
   return errors;
 }
@@ -268,6 +306,49 @@ export function validateReservedAliases(
   }
 }
 
+/**
+ * Validate that no case-variant collisions exist
+ *
+ * @param extracted - Extracted fields from schema
+ * @throws {CaseVariantCollisionError} If case-variant collisions are found
+ */
+export function validateCaseVariantCollisions(extracted: ExtractedFields): void {
+  const errors = checkCaseVariantCollisions(extracted, []);
+  if (errors.length > 0) {
+    const err = errors[0]!;
+    throw new CaseVariantCollisionError(err.message);
+  }
+}
+
+/**
+ * Validate that no case-variant collisions exist between two schemas
+ * (e.g., global args and command args).
+ *
+ * @param extractedA - Extracted fields from first schema (e.g., global args)
+ * @param extractedB - Extracted fields from second schema (e.g., command args)
+ * @throws {CaseVariantCollisionError} If cross-schema case-variant collisions are found
+ */
+export function validateCrossSchemaCollisions(
+  extractedA: ExtractedFields,
+  extractedB: ExtractedFields,
+): void {
+  const canonicalMap = new Map<string, string>();
+
+  for (const field of extractedA.fields) {
+    canonicalMap.set(toCamelCase(field.name), field.name);
+  }
+
+  for (const field of extractedB.fields) {
+    const camel = toCamelCase(field.name);
+    const existing = canonicalMap.get(camel);
+    if (existing && existing !== field.name) {
+      throw new CaseVariantCollisionError(
+        `Global field "${existing}" and command field "${field.name}" are case variants of each other and would collide.`,
+      );
+    }
+  }
+}
+
 // ============================================================================
 // Non-throwing validators (for collecting all errors)
 // ============================================================================
@@ -282,6 +363,7 @@ function collectSchemaErrors(
 ): CommandValidationError[] {
   return [
     ...checkDuplicateFields(extracted, commandPath),
+    ...checkCaseVariantCollisions(extracted, commandPath),
     ...checkDuplicateAliases(extracted, commandPath),
     ...checkPositionalConfig(extracted, commandPath),
     ...checkReservedAliases(extracted, commandPath),

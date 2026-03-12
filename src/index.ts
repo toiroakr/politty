@@ -21,6 +21,8 @@ export {
   type CustomCompletion,
   type EffectContext,
 } from "./core/arg-registry.js";
+export { createDualCaseProxy } from "./core/case-proxy.js";
+export type { CamelCase, KebabCase, WithCaseVariants } from "./core/case-types.js";
 export { createDefineCommand, defineCommand, type MergedArgs } from "./core/command.js";
 export { runCommand, runMain } from "./core/runner.js";
 export {
@@ -82,12 +84,15 @@ export type {
 } from "./types.js";
 // Command definition validation
 export {
+  CaseVariantCollisionError,
   DuplicateAliasError,
   DuplicateFieldError,
   formatCommandValidationErrors,
   PositionalConfigError,
   ReservedAliasError,
+  validateCaseVariantCollisions,
   validateCommand,
+  validateCrossSchemaCollisions,
   validateDuplicateAliases,
   validateDuplicateFields,
   validatePositionalConfig,

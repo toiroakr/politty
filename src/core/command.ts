@@ -9,20 +9,23 @@ import type {
   RunnableCommand,
   SubCommandsRecord,
 } from "../types.js";
+import type { WithCaseVariants } from "./case-types.js";
 
 /**
- * Infer args type from schema, defaults to empty object if undefined
+ * Infer args type from schema, defaults to empty object if undefined.
+ * Wraps with WithCaseVariants so both camelCase and kebab-case access is typed.
  */
 type InferArgs<TArgsSchema> = TArgsSchema extends z.ZodType
-  ? z.infer<TArgsSchema>
+  ? WithCaseVariants<z.infer<TArgsSchema>>
   : Record<string, never>;
 
 /**
  * Merge local args with global args.
  * No-op when TGlobalArgs is empty (default GlobalArgs not extended).
+ * Wraps TGlobalArgs with WithCaseVariants for dual-case access.
  */
 export type MergedArgs<TLocalArgs, TGlobalArgs> =
-  IsEmpty<TGlobalArgs> extends true ? TLocalArgs : TLocalArgs & TGlobalArgs;
+  IsEmpty<TGlobalArgs> extends true ? TLocalArgs : TLocalArgs & WithCaseVariants<TGlobalArgs>;
 
 /**
  * Resolve merged args from schema and global args type
