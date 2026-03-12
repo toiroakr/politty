@@ -28,6 +28,7 @@ import {
   formatValidationErrors,
 } from "../validator/error-formatter.js";
 import { validateArgs } from "../validator/zod-validator.js";
+import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import { extractFields, type ExtractedFields } from "./schema-extractor.js";
 
@@ -425,7 +426,7 @@ async function runCommandInternal<TResult = unknown>(
         await runEffects(validatedGlobalArgs, options._globalExtracted, validatedGlobalArgs);
       }
       collector?.stop();
-      const mergedArgs = validatedGlobalArgs as Record<string, never>;
+      const mergedArgs = createDualCaseProxy(validatedGlobalArgs) as Record<string, never>;
       const result = await executeLifecycle(command, mergedArgs, {
         handleSignals: options.handleSignals,
         captureLogs: options.captureLogs,
@@ -448,20 +449,22 @@ async function runCommandInternal<TResult = unknown>(
       };
     }
 
+    // Wrap validated args with dual-case proxy before effects and execution
+    const proxiedCommandArgs = createDualCaseProxy(
+      validationResult.data as Record<string, unknown>,
+    );
+    const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
+
     // Run effects after all validations succeed (global effects first, then command effects)
     if (options._globalExtracted) {
-      await runEffects(validatedGlobalArgs, options._globalExtracted, validatedGlobalArgs);
+      await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
     }
     if (parseResult.extractedFields) {
-      await runEffects(
-        validationResult.data as Record<string, unknown>,
-        parseResult.extractedFields,
-        validatedGlobalArgs,
-      );
+      await runEffects(proxiedCommandArgs, parseResult.extractedFields, proxiedGlobalArgs);
     }
 
     // Merge global args with command args (command args take precedence on collision)
-    const mergedArgs = { ...validatedGlobalArgs, ...validationResult.data };
+    const mergedArgs = createDualCaseProxy({ ...proxiedGlobalArgs, ...proxiedCommandArgs });
 
     // Run the command
     // Stop this collector and pass logs to executeLifecycle

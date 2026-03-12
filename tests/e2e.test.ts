@@ -713,4 +713,87 @@ describe("E2E Tests", () => {
       console.mockRestore();
     });
   });
+
+  describe("Dual-case args access", () => {
+    it("should allow accessing kebab-case args via camelCase in run()", async () => {
+      const output: string[] = [];
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          "my-option": arg(z.string(), { description: "An option" }),
+        }),
+        run: (args) => {
+          output.push(args["my-option"]);
+          output.push(args.myOption);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--my-option", "hello"]);
+      expect(result.success).toBe(true);
+      expect(output).toEqual(["hello", "hello"]);
+    });
+
+    it("should allow accessing camelCase args via kebab-case in run()", async () => {
+      const output: string[] = [];
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          myOption: arg(z.string(), { description: "An option" }),
+        }),
+        run: (args) => {
+          output.push(args.myOption);
+          output.push(args["my-option"]);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--my-option", "world"]);
+      expect(result.success).toBe(true);
+      expect(output).toEqual(["world", "world"]);
+    });
+
+    it("should provide dual-case access in effect callbacks", async () => {
+      const effectResults: { original: unknown; camel: unknown }[] = [];
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          "dry-run": arg(z.boolean().default(false), {
+            description: "Dry run mode",
+            effect: (_value, ctx) => {
+              effectResults.push({
+                original: ctx.args["dry-run"],
+                camel: (ctx.args as Record<string, unknown>).dryRun,
+              });
+            },
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["--dry-run"]);
+      expect(result.success).toBe(true);
+      expect(effectResults[0]).toEqual({ original: true, camel: true });
+    });
+
+    it("should provide dual-case access for global args", async () => {
+      const output: unknown[] = [];
+      const globalArgs = z.object({
+        "log-level": arg(z.string().default("info"), { description: "Log level" }),
+      });
+
+      const cmd = defineCommand({
+        name: "test",
+        run: (args: Record<string, unknown>) => {
+          output.push(args["log-level"]);
+          output.push(args.logLevel);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--log-level", "debug"], { globalArgs });
+      expect(result.success).toBe(true);
+      expect(output).toEqual(["debug", "debug"]);
+    });
+  });
 });
