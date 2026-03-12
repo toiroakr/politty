@@ -1585,7 +1585,37 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
             targetCommand,
           );
 
-          if (!existingSection || !generatedSectionPart) {
+          if (!existingSection) {
+            continue;
+          }
+
+          // Stale section: exists in document but not in generated output — replace with empty markers
+          if (!generatedSectionPart) {
+            const emptyMarker =
+              sectionStartMarker(sectionType, targetCommand) +
+              "\n" +
+              sectionEndMarker(sectionType, targetCommand);
+            if (existingSection !== emptyMarker) {
+              if (updateMode) {
+                const updated = replaceSectionMarker(
+                  existingContent,
+                  sectionType,
+                  targetCommand,
+                  emptyMarker,
+                );
+                if (updated) {
+                  existingContent = updated.replace(/\n{3,}/g, "\n\n");
+                  writeFile(filePath, existingContent);
+                  if (fileStatus !== "created") {
+                    fileStatus = "updated";
+                  }
+                }
+              } else {
+                hasError = true;
+                fileStatus = "diff";
+                diffs.push(formatDiff(existingSection, emptyMarker));
+              }
+            }
             continue;
           }
 
