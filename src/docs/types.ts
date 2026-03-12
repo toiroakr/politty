@@ -414,6 +414,13 @@ export type FormatterFunction = (content: string) => string | Promise<string>;
 export const UPDATE_GOLDEN_ENV = "POLITTY_DOCS_UPDATE";
 
 /**
+ * Environment variable name for doctor mode.
+ * When enabled, detects and inserts missing section markers
+ * that should exist based on the generated output.
+ */
+export const DOCTOR_ENV = "POLITTY_DOCS_DOCTOR";
+
+/**
  * All section types in rendering order
  */
 export const SECTION_TYPES = [

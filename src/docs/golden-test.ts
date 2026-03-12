@@ -31,6 +31,7 @@ import type {
   RootDocConfig,
 } from "./types.js";
 import {
+  DOCTOR_ENV,
   globalOptionsEndMarker,
   globalOptionsStartMarker,
   indexEndMarker,
@@ -70,6 +71,15 @@ async function applyFormatter(
  */
 function isUpdateMode(): boolean {
   const value = process.env[UPDATE_GOLDEN_ENV];
+  return value === "true" || value === "1";
+}
+
+/**
+ * Check if doctor mode is enabled via environment variable.
+ * Doctor mode detects and inserts missing section markers.
+ */
+function isDoctorMode(): boolean {
+  const value = process.env[DOCTOR_ENV];
   return value === "true" || value === "1";
 }
 
@@ -520,6 +530,51 @@ function replaceSectionMarker(
   const start = sectionStartMarker(type, scope);
   const end = sectionEndMarker(type, scope);
   return replaceMarkerSection(content, start, end, newContent);
+}
+
+/**
+ * Insert a new section marker into existing content at the correct position
+ * relative to other section markers for the same command, based on SECTION_TYPES order.
+ * Returns updated content, or null if insertion point could not be determined.
+ */
+function insertSectionMarkerAtOrder(
+  content: string,
+  type: SectionType,
+  scope: string,
+  newSection: string,
+): string | null {
+  const typeIndex = SECTION_TYPES.indexOf(type);
+
+  // Try to insert after the preceding section marker
+  for (let i = typeIndex - 1; i >= 0; i--) {
+    const prevType = SECTION_TYPES[i]!;
+    const prevEnd = sectionEndMarker(prevType, scope);
+    const prevEndIdx = content.indexOf(prevEnd);
+    if (prevEndIdx !== -1) {
+      const insertPos = prevEndIdx + prevEnd.length;
+      return content.slice(0, insertPos) + "\n\n" + newSection + content.slice(insertPos);
+    }
+  }
+
+  // Try to insert before the following section marker
+  for (let i = typeIndex + 1; i < SECTION_TYPES.length; i++) {
+    const nextType = SECTION_TYPES[i]!;
+    const nextStart = sectionStartMarker(nextType, scope);
+    const nextStartIdx = content.indexOf(nextStart);
+    if (nextStartIdx !== -1) {
+      // Walk back over blank lines
+      let insertPos = nextStartIdx;
+      while (insertPos > 0 && content[insertPos - 1] === "\n") {
+        insertPos--;
+      }
+      if (insertPos < nextStartIdx) {
+        insertPos++;
+      }
+      return content.slice(0, insertPos) + "\n" + newSection + "\n" + content.slice(nextStartIdx);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -1386,6 +1441,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     }
   }
   const updateMode = isUpdateMode();
+  const doctorMode = isDoctorMode();
 
   // Validate rootDoc.path does not overlap with files keys (only for explicit files mode)
   if (rootDoc && !usingPathConfig) {
@@ -1645,6 +1701,49 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
               hasError = true;
               fileStatus = "diff";
               diffs.push(formatDiff(existingSection, generatedSectionPart));
+            }
+          }
+        }
+
+        // Doctor mode: detect and insert missing section markers
+        if (doctorMode) {
+          const generatedMarkers = collectSectionMarkers(generatedSection, targetCommand);
+          const existingMarkerSet = new Set(existingMarkers);
+
+          for (const sectionType of generatedMarkers) {
+            if (existingMarkerSet.has(sectionType)) {
+              continue;
+            }
+
+            const generatedSectionPart = extractSectionMarker(
+              generatedSection,
+              sectionType,
+              targetCommand,
+            );
+            if (!generatedSectionPart) {
+              continue;
+            }
+
+            if (updateMode) {
+              const updated = insertSectionMarkerAtOrder(
+                existingContent,
+                sectionType,
+                targetCommand,
+                generatedSectionPart,
+              );
+              if (updated) {
+                existingContent = updated;
+                writeFile(filePath, existingContent);
+                if (fileStatus !== "created") {
+                  fileStatus = "updated";
+                }
+              }
+            } else {
+              hasError = true;
+              fileStatus = "diff";
+              diffs.push(
+                `[doctor] Missing section marker "${sectionType}" for command "${formatCommandPath(targetCommand)}". Run with ${UPDATE_GOLDEN_ENV}=true to insert.\n${generatedSectionPart}`,
+              );
             }
           }
         }

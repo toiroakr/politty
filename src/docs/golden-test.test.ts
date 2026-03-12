@@ -7,7 +7,7 @@ import { arg, defineCommand } from "../index.js";
 import { assertDocMatch, generateDoc } from "./golden-test.js";
 import { renderArgsTable } from "./render-args.js";
 import { renderCommandIndex } from "./render-index.js";
-import { SECTION_TYPES, UPDATE_GOLDEN_ENV, type SectionType } from "./types.js";
+import { DOCTOR_ENV, SECTION_TYPES, UPDATE_GOLDEN_ENV, type SectionType } from "./types.js";
 
 /** Get relative path from CWD (for index marker scope) */
 function relPath(absPath: string): string {
@@ -1796,6 +1796,130 @@ describe("golden-test", () => {
 
       expect(result.success).toBe(true);
       expect(result.files[0]?.status).toBe("match");
+    });
+  });
+
+  describe("doctor mode", () => {
+    it("should detect missing section markers in read-only mode", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      vi.stubEnv(DOCTOR_ENV, "");
+
+      const filePath = path.join(testDir, "doctor-detect.md");
+
+      // Create initial file with all sections
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      // Remove the description section marker for greet (simulating missing marker)
+      const originalContent = fs.readFileSync(filePath, "utf-8");
+      const descStart = "<!-- politty:command:greet:description:start -->";
+      const descEnd = "<!-- politty:command:greet:description:end -->";
+      const startIdx = originalContent.indexOf(descStart);
+      const endIdx = originalContent.indexOf(descEnd) + descEnd.length;
+      const modifiedContent =
+        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      fs.writeFileSync(filePath, modifiedContent, "utf-8");
+
+      // Without doctor mode: should succeed (opt-out respected)
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+      const resultNormal = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet"],
+      });
+      expect(resultNormal.success).toBe(true);
+
+      // With doctor mode: should report missing marker
+      vi.stubEnv(DOCTOR_ENV, "true");
+      const resultDoctor = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet"],
+      });
+      expect(resultDoctor.success).toBe(false);
+      expect(resultDoctor.files[0]?.diff).toContain("[doctor] Missing section marker");
+      expect(resultDoctor.files[0]?.diff).toContain("description");
+      expect(resultDoctor.files[0]?.diff).toContain("greet");
+    });
+
+    it("should insert missing section markers in update+doctor mode", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      vi.stubEnv(DOCTOR_ENV, "");
+
+      const filePath = path.join(testDir, "doctor-insert.md");
+
+      // Create initial file with all sections
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      // Remove the description section marker for greet
+      const originalContent = fs.readFileSync(filePath, "utf-8");
+      const descStart = "<!-- politty:command:greet:description:start -->";
+      const descEnd = "<!-- politty:command:greet:description:end -->";
+      const startIdx = originalContent.indexOf(descStart);
+      const endIdx = originalContent.indexOf(descEnd) + descEnd.length;
+      const modifiedContent =
+        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      fs.writeFileSync(filePath, modifiedContent, "utf-8");
+
+      // Run with both update and doctor mode
+      vi.stubEnv(DOCTOR_ENV, "true");
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet"],
+      });
+
+      // Verify: the description marker was re-inserted
+      const updatedContent = fs.readFileSync(filePath, "utf-8");
+      expect(updatedContent).toContain("<!-- politty:command:greet:description:start -->");
+      expect(updatedContent).toContain("<!-- politty:command:greet:description:end -->");
+      expect(updatedContent).toContain("Greet someone");
+
+      // Verify marker order: heading < description < usage
+      const headingPos = updatedContent.indexOf("<!-- politty:command:greet:heading:start -->");
+      const descPos = updatedContent.indexOf("<!-- politty:command:greet:description:start -->");
+      const usagePos = updatedContent.indexOf("<!-- politty:command:greet:usage:start -->");
+      expect(headingPos).toBeLessThan(descPos);
+      expect(descPos).toBeLessThan(usagePos);
+    });
+
+    it("should not insert markers without doctor mode (opt-out respected)", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      vi.stubEnv(DOCTOR_ENV, "");
+
+      const filePath = path.join(testDir, "doctor-no-insert.md");
+
+      // Create initial file
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      // Remove the description section marker for greet
+      const originalContent = fs.readFileSync(filePath, "utf-8");
+      const descStart = "<!-- politty:command:greet:description:start -->";
+      const descEnd = "<!-- politty:command:greet:description:end -->";
+      const startIdx = originalContent.indexOf(descStart);
+      const endIdx = originalContent.indexOf(descEnd) + descEnd.length;
+      const modifiedContent =
+        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      fs.writeFileSync(filePath, modifiedContent, "utf-8");
+
+      // Run update WITHOUT doctor mode
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet"],
+      });
+
+      // Verify: opt-out is respected, description marker NOT re-inserted
+      const updatedContent = fs.readFileSync(filePath, "utf-8");
+      expect(updatedContent).not.toContain("<!-- politty:command:greet:description:start -->");
     });
   });
 
