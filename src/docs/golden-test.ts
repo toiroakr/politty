@@ -1603,12 +1603,15 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
                   targetCommand,
                   emptyMarker,
                 );
-                if (updated) {
-                  existingContent = updated.replace(/\n{3,}/g, "\n\n");
-                  writeFile(filePath, existingContent);
-                  if (fileStatus !== "created") {
-                    fileStatus = "updated";
-                  }
+                if (!updated) {
+                  throw new Error(
+                    `Failed to replace stale ${sectionType} section for command "${targetCommand}"`,
+                  );
+                }
+                existingContent = updated.replace(/\n{3,}/g, "\n\n");
+                writeFile(filePath, existingContent);
+                if (fileStatus !== "created") {
+                  fileStatus = "updated";
                 }
               } else {
                 hasError = true;
