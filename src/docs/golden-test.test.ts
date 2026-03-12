@@ -3657,6 +3657,248 @@ ${argsContent}
       // Should have results for both target file and rootDoc
       expect(result.files.length).toBeGreaterThanOrEqual(2);
     });
+
+    describe("stale options markers when globalOptions filtering empties command options", () => {
+      const commandAllGlobal = defineCommand({
+        name: "my-cli",
+        description: "CLI tool",
+        subCommands: {
+          run: defineCommand({
+            name: "run",
+            description: "Run the task",
+            args: z.object({
+              json: arg(z.boolean().default(false), {
+                description: "Output as JSON",
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      const globalOptionsConfig = {
+        json: arg(z.boolean().default(false), {
+          description: "Output as JSON",
+        }),
+      };
+
+      function setupRefFile(refPath: string) {
+        const argsContent = renderArgsTable(globalOptionsConfig);
+        fs.writeFileSync(
+          refPath,
+          `# my-cli\n\nCLI tool\n\n<!-- politty:global-options:start -->\n${argsContent}\n<!-- politty:global-options:end -->\n`,
+          "utf-8",
+        );
+      }
+
+      async function generateWithOptionsMarkers(readmePath: string, refPath: string) {
+        await generateDoc({
+          command: commandAllGlobal,
+          rootDoc: { path: refPath },
+          files: { [readmePath]: ["run"] },
+        });
+      }
+
+      it("should clear options content in update mode", async () => {
+        vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+        const readmePath = path.join(testDir, "readme.md");
+        const refPath = path.join(testDir, "reference.md");
+        setupRefFile(refPath);
+
+        // Generate file WITHOUT globalOptions to create options markers with content
+        await generateWithOptionsMarkers(readmePath, refPath);
+
+        const initialContent = fs.readFileSync(readmePath, "utf-8");
+        expect(initialContent).toContain("<!-- politty:command:run:options:start -->");
+        expect(initialContent).toContain("--json");
+
+        // Run with globalOptions that filter ALL command options
+        await generateDoc({
+          command: commandAllGlobal,
+          rootDoc: { path: refPath, globalOptions: globalOptionsConfig },
+          files: { [readmePath]: ["run"] },
+          targetCommands: ["run"],
+        });
+
+        const updatedContent = fs.readFileSync(readmePath, "utf-8");
+        // Markers remain (empty), but stale content is removed
+        expect(updatedContent).toContain("<!-- politty:command:run:options:start -->");
+        expect(updatedContent).toContain("<!-- politty:command:run:options:end -->");
+        expect(updatedContent).not.toContain("--json");
+      });
+
+      it("should report diff in check mode", async () => {
+        vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+        const readmePath = path.join(testDir, "readme.md");
+        const refPath = path.join(testDir, "reference.md");
+        setupRefFile(refPath);
+
+        // Generate file WITHOUT globalOptions to create options markers with content
+        await generateWithOptionsMarkers(readmePath, refPath);
+
+        // Switch to check mode
+        vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+        const result = await generateDoc({
+          command: commandAllGlobal,
+          rootDoc: { path: refPath, globalOptions: globalOptionsConfig },
+          files: { [readmePath]: ["run"] },
+          targetCommands: ["run"],
+        });
+
+        expect(result.success).toBe(false);
+      });
+
+      it("should restore options content when globalOptions are removed after clearing", async () => {
+        vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+        const readmePath = path.join(testDir, "readme.md");
+        const refPath = path.join(testDir, "reference.md");
+        setupRefFile(refPath);
+
+        // Step 1: Generate file WITHOUT globalOptions (options markers with content)
+        await generateWithOptionsMarkers(readmePath, refPath);
+        expect(fs.readFileSync(readmePath, "utf-8")).toContain("--json");
+
+        // Step 2: Run with globalOptions → options content cleared
+        await generateDoc({
+          command: commandAllGlobal,
+          rootDoc: { path: refPath, globalOptions: globalOptionsConfig },
+          files: { [readmePath]: ["run"] },
+          targetCommands: ["run"],
+        });
+        const clearedContent = fs.readFileSync(readmePath, "utf-8");
+        expect(clearedContent).not.toContain("--json");
+
+        // Step 3: Run WITHOUT globalOptions again → options content restored
+        await generateDoc({
+          command: commandAllGlobal,
+          rootDoc: { path: refPath },
+          files: { [readmePath]: ["run"] },
+          targetCommands: ["run"],
+        });
+        const restoredContent = fs.readFileSync(readmePath, "utf-8");
+        expect(restoredContent).toContain("<!-- politty:command:run:options:start -->");
+        expect(restoredContent).toContain("--json");
+      });
+    });
+
+    describe("stale section markers for non-options sections", () => {
+      it("should clear examples content when examples are removed from command definition", async () => {
+        vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+        const readmePath = path.join(testDir, "readme.md");
+
+        const commandWithExamples = defineCommand({
+          name: "my-cli",
+          description: "CLI tool",
+          subCommands: {
+            run: defineCommand({
+              name: "run",
+              description: "Run the task",
+              examples: [{ cmd: "--verbose", desc: "Run with verbose output" }],
+              run: () => {},
+            }),
+          },
+        });
+
+        const commandWithoutExamples = defineCommand({
+          name: "my-cli",
+          description: "CLI tool",
+          subCommands: {
+            run: defineCommand({
+              name: "run",
+              description: "Run the task",
+              run: () => {},
+            }),
+          },
+        });
+
+        // Step 1: Generate with examples
+        await generateDoc({
+          command: commandWithExamples,
+          files: { [readmePath]: ["run"] },
+        });
+
+        const initialContent = fs.readFileSync(readmePath, "utf-8");
+        expect(initialContent).toContain("<!-- politty:command:run:examples:start -->");
+        expect(initialContent).toContain("Run with verbose output");
+
+        // Step 2: Update with examples removed → content cleared, markers remain
+        await generateDoc({
+          command: commandWithoutExamples,
+          files: { [readmePath]: ["run"] },
+          targetCommands: ["run"],
+        });
+
+        const clearedContent = fs.readFileSync(readmePath, "utf-8");
+        expect(clearedContent).toContain("<!-- politty:command:run:examples:start -->");
+        expect(clearedContent).toContain("<!-- politty:command:run:examples:end -->");
+        expect(clearedContent).not.toContain("Run with verbose output");
+
+        // Step 3: Update with examples restored → content restored
+        await generateDoc({
+          command: commandWithExamples,
+          files: { [readmePath]: ["run"] },
+          targetCommands: ["run"],
+        });
+
+        const restoredContent = fs.readFileSync(readmePath, "utf-8");
+        expect(restoredContent).toContain("<!-- politty:command:run:examples:start -->");
+        expect(restoredContent).toContain("Run with verbose output");
+      });
+
+      it("should report diff in check mode when examples are removed", async () => {
+        vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+        const readmePath = path.join(testDir, "readme.md");
+
+        const commandWithExamples = defineCommand({
+          name: "my-cli",
+          description: "CLI tool",
+          subCommands: {
+            run: defineCommand({
+              name: "run",
+              description: "Run the task",
+              examples: [{ cmd: "--verbose", desc: "Run with verbose output" }],
+              run: () => {},
+            }),
+          },
+        });
+
+        const commandWithoutExamples = defineCommand({
+          name: "my-cli",
+          description: "CLI tool",
+          subCommands: {
+            run: defineCommand({
+              name: "run",
+              description: "Run the task",
+              run: () => {},
+            }),
+          },
+        });
+
+        // Generate with examples
+        await generateDoc({
+          command: commandWithExamples,
+          files: { [readmePath]: ["run"] },
+        });
+
+        // Switch to check mode
+        vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+        // Check with examples removed — should report diff
+        const result = await generateDoc({
+          command: commandWithoutExamples,
+          files: { [readmePath]: ["run"] },
+          targetCommands: ["run"],
+        });
+
+        expect(result.success).toBe(false);
+      });
+    });
   });
 
   describe("PathConfig specificity", () => {
