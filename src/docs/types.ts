@@ -415,8 +415,8 @@ export const UPDATE_GOLDEN_ENV = "POLITTY_DOCS_UPDATE";
 
 /**
  * Environment variable name for doctor mode.
- * When enabled, detects and inserts missing section markers
- * that should exist based on the generated output.
+ * When enabled alone, detects and reports missing section markers (read-only).
+ * When combined with POLITTY_DOCS_UPDATE=true, auto-inserts missing markers.
  */
 export const DOCTOR_ENV = "POLITTY_DOCS_DOCTOR";
 

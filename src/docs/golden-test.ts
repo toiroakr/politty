@@ -1989,9 +1989,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     });
   }
 
-  const errorHint = doctorMode
-    ? `Run with ${DOCTOR_ENV}=true and ${UPDATE_GOLDEN_ENV}=true to fix missing markers.`
-    : `Run with ${UPDATE_GOLDEN_ENV}=true to update.`;
+  const errorHint =
+    doctorMode && updateMode
+      ? "Check diffs above and fix markers manually."
+      : doctorMode
+        ? `Run with ${DOCTOR_ENV}=true and ${UPDATE_GOLDEN_ENV}=true to fix missing markers.`
+        : `Run with ${UPDATE_GOLDEN_ENV}=true to update.`;
 
   return {
     success: !hasError,
