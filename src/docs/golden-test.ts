@@ -66,20 +66,8 @@ async function applyFormatter(
   return formatted;
 }
 
-/**
- * Check if update mode is enabled via environment variable
- */
-function isUpdateMode(): boolean {
-  const value = process.env[UPDATE_GOLDEN_ENV];
-  return value === "true" || value === "1";
-}
-
-/**
- * Check if doctor mode is enabled via environment variable.
- * Doctor mode detects and inserts missing section markers.
- */
-function isDoctorMode(): boolean {
-  const value = process.env[DOCTOR_ENV];
+function isTruthyEnv(envKey: string): boolean {
+  const value = process.env[envKey];
   return value === "true" || value === "1";
 }
 
@@ -1443,8 +1431,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       rootDoc = { ...rootDoc, globalOptions: globalShape };
     }
   }
-  const updateMode = isUpdateMode();
-  const doctorMode = isDoctorMode();
+  const updateMode = isTruthyEnv(UPDATE_GOLDEN_ENV);
+  const doctorMode = isTruthyEnv(DOCTOR_ENV);
 
   // Validate rootDoc.path does not overlap with files keys (only for explicit files mode)
   if (rootDoc && !usingPathConfig) {
@@ -2049,7 +2037,7 @@ export function initDocFile(
   config: Pick<GenerateDocConfig, "files"> | string,
   fileSystem?: DeleteFileFs,
 ): void {
-  if (!isUpdateMode()) {
+  if (!isTruthyEnv(UPDATE_GOLDEN_ENV)) {
     return;
   }
 

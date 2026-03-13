@@ -7,18 +7,23 @@ import { arg, defineCommand } from "../index.js";
 import { assertDocMatch, generateDoc } from "./golden-test.js";
 import { renderArgsTable } from "./render-args.js";
 import { renderCommandIndex } from "./render-index.js";
-import { DOCTOR_ENV, SECTION_TYPES, UPDATE_GOLDEN_ENV, type SectionType } from "./types.js";
+import {
+  DOCTOR_ENV,
+  sectionEndMarker,
+  sectionStartMarker,
+  SECTION_TYPES,
+  UPDATE_GOLDEN_ENV,
+  type SectionType,
+} from "./types.js";
 
 /**
  * Remove a section marker block from content.
- * @param content - Document content
- * @param markerPrefix - Marker prefix, e.g. "politty:command:greet:description"
- * @returns Content with the marker block removed
- * @throws If start or end markers are not found
+ * Uses production marker functions to ensure format consistency.
+ * @throws If markers are not found in the content
  */
-function removeMarkerBlock(content: string, markerPrefix: string): string {
-  const startMarker = `<!-- ${markerPrefix}:start -->`;
-  const endMarker = `<!-- ${markerPrefix}:end -->`;
+function removeSectionBlock(content: string, type: SectionType, scope: string): string {
+  const startMarker = sectionStartMarker(type, scope);
+  const endMarker = sectionEndMarker(type, scope);
   const startIdx = content.indexOf(startMarker);
   const endIdx = content.indexOf(endMarker);
   if (startIdx === -1 || endIdx === -1) {
@@ -27,7 +32,6 @@ function removeMarkerBlock(content: string, markerPrefix: string): string {
     );
   }
   const endPos = endIdx + endMarker.length;
-  // Remove trailing newline if present
   const sliceEnd = content[endPos] === "\n" ? endPos + 1 : endPos;
   return content.slice(0, startIdx) + content.slice(sliceEnd);
 }
@@ -1663,10 +1667,7 @@ describe("golden-test", () => {
       expect(originalContent).toContain("<!-- politty:command:greet:description:start -->");
 
       // Remove the description section marker block for greet (opt-out)
-      const optedOutContent = removeMarkerBlock(
-        originalContent,
-        "politty:command:greet:description",
-      );
+      const optedOutContent = removeSectionBlock(originalContent, "description", "greet");
       fs.writeFileSync(filePath, optedOutContent, "utf-8");
 
       // Run update targeting greet
@@ -1797,10 +1798,7 @@ describe("golden-test", () => {
 
       // Remove the description section marker block for greet (opt-out)
       const originalContent = fs.readFileSync(filePath, "utf-8");
-      const optedOutContent = removeMarkerBlock(
-        originalContent,
-        "politty:command:greet:description",
-      );
+      const optedOutContent = removeSectionBlock(originalContent, "description", "greet");
       fs.writeFileSync(filePath, optedOutContent, "utf-8");
 
       // Switch to read-only mode
@@ -1819,31 +1817,36 @@ describe("golden-test", () => {
   });
 
   describe("doctor mode", () => {
-    it("should detect missing section markers in read-only mode", async () => {
+    const filesConfig = { commands: ["", "greet", "config"] };
+
+    /** Generate a doc file, remove a section marker, and return the file path. */
+    async function setupWithMissingMarker(
+      fileName: string,
+      sectionType: SectionType,
+      scope: string,
+    ): Promise<string> {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       vi.stubEnv(DOCTOR_ENV, "");
 
-      const filePath = path.join(testDir, "doctor-detect.md");
-
-      // Create initial file with all sections
+      const filePath = path.join(testDir, fileName);
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: filesConfig },
       });
 
-      // Remove the description section marker for greet (simulating missing marker)
-      const originalContent = fs.readFileSync(filePath, "utf-8");
-      const modifiedContent = removeMarkerBlock(
-        originalContent,
-        "politty:command:greet:description",
-      );
-      fs.writeFileSync(filePath, modifiedContent, "utf-8");
+      const content = fs.readFileSync(filePath, "utf-8");
+      fs.writeFileSync(filePath, removeSectionBlock(content, sectionType, scope), "utf-8");
+      return filePath;
+    }
+
+    it("should detect missing section markers in read-only mode", async () => {
+      const filePath = await setupWithMissingMarker("doctor-detect.md", "description", "greet");
 
       // Without doctor mode: should succeed (opt-out respected)
       vi.stubEnv(UPDATE_GOLDEN_ENV, "");
       const resultNormal = await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
       expect(resultNormal.success).toBe(true);
@@ -1852,7 +1855,7 @@ describe("golden-test", () => {
       vi.stubEnv(DOCTOR_ENV, "true");
       const resultDoctor = await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
       expect(resultDoctor.success).toBe(false);
@@ -1862,34 +1865,15 @@ describe("golden-test", () => {
     });
 
     it("should insert missing section markers in update+doctor mode", async () => {
-      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
-      vi.stubEnv(DOCTOR_ENV, "");
+      const filePath = await setupWithMissingMarker("doctor-insert.md", "description", "greet");
 
-      const filePath = path.join(testDir, "doctor-insert.md");
-
-      // Create initial file with all sections
-      await generateDoc({
-        command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
-      });
-
-      // Remove the description section marker for greet
-      const originalContent = fs.readFileSync(filePath, "utf-8");
-      const modifiedContent = removeMarkerBlock(
-        originalContent,
-        "politty:command:greet:description",
-      );
-      fs.writeFileSync(filePath, modifiedContent, "utf-8");
-
-      // Run with both update and doctor mode
       vi.stubEnv(DOCTOR_ENV, "true");
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
 
-      // Verify: the description marker was re-inserted
       const updatedContent = fs.readFileSync(filePath, "utf-8");
       expect(updatedContent).toContain("<!-- politty:command:greet:description:start -->");
       expect(updatedContent).toContain("<!-- politty:command:greet:description:end -->");
@@ -1904,63 +1888,28 @@ describe("golden-test", () => {
     });
 
     it("should not insert markers without doctor mode (opt-out respected)", async () => {
-      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
-      vi.stubEnv(DOCTOR_ENV, "");
+      const filePath = await setupWithMissingMarker("doctor-no-insert.md", "description", "greet");
 
-      const filePath = path.join(testDir, "doctor-no-insert.md");
-
-      // Create initial file
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
-      });
-
-      // Remove the description section marker for greet
-      const originalContent = fs.readFileSync(filePath, "utf-8");
-      const modifiedContent = removeMarkerBlock(
-        originalContent,
-        "politty:command:greet:description",
-      );
-      fs.writeFileSync(filePath, modifiedContent, "utf-8");
-
-      // Run update WITHOUT doctor mode
-      await generateDoc({
-        command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
 
-      // Verify: opt-out is respected, description marker NOT re-inserted
       const updatedContent = fs.readFileSync(filePath, "utf-8");
       expect(updatedContent).not.toContain("<!-- politty:command:greet:description:start -->");
     });
 
     it("should insert missing heading marker at the start of command section", async () => {
-      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
-      vi.stubEnv(DOCTOR_ENV, "");
+      const filePath = await setupWithMissingMarker("doctor-heading.md", "heading", "greet");
 
-      const filePath = path.join(testDir, "doctor-heading.md");
-
-      // Create initial file with all sections
-      await generateDoc({
-        command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
-      });
-
-      // Remove the heading section marker for greet (first section)
-      const originalContent = fs.readFileSync(filePath, "utf-8");
-      const modifiedContent = removeMarkerBlock(originalContent, "politty:command:greet:heading");
-      fs.writeFileSync(filePath, modifiedContent, "utf-8");
-
-      // Run with both update and doctor mode
       vi.stubEnv(DOCTOR_ENV, "true");
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
 
-      // Verify: the heading marker was re-inserted
       const updatedContent = fs.readFileSync(filePath, "utf-8");
       expect(updatedContent).toContain("<!-- politty:command:greet:heading:start -->");
       expect(updatedContent).toContain("<!-- politty:command:greet:heading:end -->");
@@ -1970,7 +1919,7 @@ describe("golden-test", () => {
       const descPos = updatedContent.indexOf("<!-- politty:command:greet:description:start -->");
       expect(headingPos).toBeLessThan(descPos);
 
-      // Verify no excessive blank lines before the heading marker (max 2 newlines for section separation)
+      // Verify no excessive blank lines before the heading marker
       const beforeHeading = updatedContent.slice(0, headingPos);
       expect(beforeHeading).not.toMatch(/\n{3,}$/);
     });
