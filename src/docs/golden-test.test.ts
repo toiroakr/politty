@@ -1921,6 +1921,51 @@ describe("golden-test", () => {
       const updatedContent = fs.readFileSync(filePath, "utf-8");
       expect(updatedContent).not.toContain("<!-- politty:command:greet:description:start -->");
     });
+
+    it("should insert missing heading marker at the start of command section", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      vi.stubEnv(DOCTOR_ENV, "");
+
+      const filePath = path.join(testDir, "doctor-heading.md");
+
+      // Create initial file with all sections
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      // Remove the heading section marker for greet (first section)
+      const originalContent = fs.readFileSync(filePath, "utf-8");
+      const headStart = "<!-- politty:command:greet:heading:start -->";
+      const headEnd = "<!-- politty:command:greet:heading:end -->";
+      const startIdx = originalContent.indexOf(headStart);
+      const endIdx = originalContent.indexOf(headEnd) + headEnd.length;
+      const modifiedContent =
+        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      fs.writeFileSync(filePath, modifiedContent, "utf-8");
+
+      // Run with both update and doctor mode
+      vi.stubEnv(DOCTOR_ENV, "true");
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet"],
+      });
+
+      // Verify: the heading marker was re-inserted
+      const updatedContent = fs.readFileSync(filePath, "utf-8");
+      expect(updatedContent).toContain("<!-- politty:command:greet:heading:start -->");
+      expect(updatedContent).toContain("<!-- politty:command:greet:heading:end -->");
+
+      // Verify marker order: heading < description
+      const headingPos = updatedContent.indexOf("<!-- politty:command:greet:heading:start -->");
+      const descPos = updatedContent.indexOf("<!-- politty:command:greet:description:start -->");
+      expect(headingPos).toBeLessThan(descPos);
+
+      // Verify no excessive blank lines before the heading marker (max 2 newlines for section separation)
+      const beforeHeading = updatedContent.slice(0, headingPos);
+      expect(beforeHeading).not.toMatch(/\n{3,}$/);
+    });
   });
 
   describe("assertDocMatch", () => {

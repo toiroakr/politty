@@ -562,6 +562,9 @@ function insertSectionMarkerAtOrder(
     const nextStart = sectionStartMarker(nextType, scope);
     const nextStartIdx = content.indexOf(nextStart);
     if (nextStartIdx !== -1) {
+      if (nextStartIdx === 0) {
+        return newSection + "\n\n" + content;
+      }
       // Walk back over blank lines
       let insertPos = nextStartIdx;
       while (insertPos > 0 && content[insertPos - 1] === "\n") {
@@ -570,7 +573,7 @@ function insertSectionMarkerAtOrder(
       if (insertPos < nextStartIdx) {
         insertPos++;
       }
-      return content.slice(0, insertPos) + "\n" + newSection + "\n" + content.slice(nextStartIdx);
+      return content.slice(0, insertPos) + "\n" + newSection + "\n\n" + content.slice(nextStartIdx);
     }
   }
 
