@@ -9,6 +9,29 @@ import { renderArgsTable } from "./render-args.js";
 import { renderCommandIndex } from "./render-index.js";
 import { DOCTOR_ENV, SECTION_TYPES, UPDATE_GOLDEN_ENV, type SectionType } from "./types.js";
 
+/**
+ * Remove a section marker block from content.
+ * @param content - Document content
+ * @param markerPrefix - Marker prefix, e.g. "politty:command:greet:description"
+ * @returns Content with the marker block removed
+ * @throws If start or end markers are not found
+ */
+function removeMarkerBlock(content: string, markerPrefix: string): string {
+  const startMarker = `<!-- ${markerPrefix}:start -->`;
+  const endMarker = `<!-- ${markerPrefix}:end -->`;
+  const startIdx = content.indexOf(startMarker);
+  const endIdx = content.indexOf(endMarker);
+  if (startIdx === -1 || endIdx === -1) {
+    throw new Error(
+      `Marker not found in content. start="${startMarker}" (${startIdx}), end="${endMarker}" (${endIdx})`,
+    );
+  }
+  const endPos = endIdx + endMarker.length;
+  // Remove trailing newline if present
+  const sliceEnd = content[endPos] === "\n" ? endPos + 1 : endPos;
+  return content.slice(0, startIdx) + content.slice(sliceEnd);
+}
+
 /** Get relative path from CWD (for index marker scope) */
 function relPath(absPath: string): string {
   return path.relative(process.cwd(), absPath);
@@ -1640,12 +1663,10 @@ describe("golden-test", () => {
       expect(originalContent).toContain("<!-- politty:command:greet:description:start -->");
 
       // Remove the description section marker block for greet (opt-out)
-      const descStart = "<!-- politty:command:greet:description:start -->";
-      const descEnd = "<!-- politty:command:greet:description:end -->";
-      const startIdx = originalContent.indexOf(descStart);
-      const endIdx = originalContent.indexOf(descEnd) + descEnd.length;
-      const optedOutContent =
-        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      const optedOutContent = removeMarkerBlock(
+        originalContent,
+        "politty:command:greet:description",
+      );
       fs.writeFileSync(filePath, optedOutContent, "utf-8");
 
       // Run update targeting greet
@@ -1776,12 +1797,10 @@ describe("golden-test", () => {
 
       // Remove the description section marker block for greet (opt-out)
       const originalContent = fs.readFileSync(filePath, "utf-8");
-      const descStart = "<!-- politty:command:greet:description:start -->";
-      const descEnd = "<!-- politty:command:greet:description:end -->";
-      const startIdx = originalContent.indexOf(descStart);
-      const endIdx = originalContent.indexOf(descEnd) + descEnd.length;
-      const optedOutContent =
-        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      const optedOutContent = removeMarkerBlock(
+        originalContent,
+        "politty:command:greet:description",
+      );
       fs.writeFileSync(filePath, optedOutContent, "utf-8");
 
       // Switch to read-only mode
@@ -1814,12 +1833,10 @@ describe("golden-test", () => {
 
       // Remove the description section marker for greet (simulating missing marker)
       const originalContent = fs.readFileSync(filePath, "utf-8");
-      const descStart = "<!-- politty:command:greet:description:start -->";
-      const descEnd = "<!-- politty:command:greet:description:end -->";
-      const startIdx = originalContent.indexOf(descStart);
-      const endIdx = originalContent.indexOf(descEnd) + descEnd.length;
-      const modifiedContent =
-        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      const modifiedContent = removeMarkerBlock(
+        originalContent,
+        "politty:command:greet:description",
+      );
       fs.writeFileSync(filePath, modifiedContent, "utf-8");
 
       // Without doctor mode: should succeed (opt-out respected)
@@ -1858,12 +1875,10 @@ describe("golden-test", () => {
 
       // Remove the description section marker for greet
       const originalContent = fs.readFileSync(filePath, "utf-8");
-      const descStart = "<!-- politty:command:greet:description:start -->";
-      const descEnd = "<!-- politty:command:greet:description:end -->";
-      const startIdx = originalContent.indexOf(descStart);
-      const endIdx = originalContent.indexOf(descEnd) + descEnd.length;
-      const modifiedContent =
-        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      const modifiedContent = removeMarkerBlock(
+        originalContent,
+        "politty:command:greet:description",
+      );
       fs.writeFileSync(filePath, modifiedContent, "utf-8");
 
       // Run with both update and doctor mode
@@ -1902,12 +1917,10 @@ describe("golden-test", () => {
 
       // Remove the description section marker for greet
       const originalContent = fs.readFileSync(filePath, "utf-8");
-      const descStart = "<!-- politty:command:greet:description:start -->";
-      const descEnd = "<!-- politty:command:greet:description:end -->";
-      const startIdx = originalContent.indexOf(descStart);
-      const endIdx = originalContent.indexOf(descEnd) + descEnd.length;
-      const modifiedContent =
-        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      const modifiedContent = removeMarkerBlock(
+        originalContent,
+        "politty:command:greet:description",
+      );
       fs.writeFileSync(filePath, modifiedContent, "utf-8");
 
       // Run update WITHOUT doctor mode
@@ -1936,12 +1949,7 @@ describe("golden-test", () => {
 
       // Remove the heading section marker for greet (first section)
       const originalContent = fs.readFileSync(filePath, "utf-8");
-      const headStart = "<!-- politty:command:greet:heading:start -->";
-      const headEnd = "<!-- politty:command:greet:heading:end -->";
-      const startIdx = originalContent.indexOf(headStart);
-      const endIdx = originalContent.indexOf(headEnd) + headEnd.length;
-      const modifiedContent =
-        originalContent.slice(0, startIdx) + originalContent.slice(endIdx + 1);
+      const modifiedContent = removeMarkerBlock(originalContent, "politty:command:greet:heading");
       fs.writeFileSync(filePath, modifiedContent, "utf-8");
 
       // Run with both update and doctor mode

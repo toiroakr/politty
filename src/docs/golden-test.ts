@@ -2001,12 +2001,14 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     });
   }
 
+  const errorHint = doctorMode
+    ? `Run with ${DOCTOR_ENV}=true and ${UPDATE_GOLDEN_ENV}=true to fix missing markers.`
+    : `Run with ${UPDATE_GOLDEN_ENV}=true to update.`;
+
   return {
     success: !hasError,
     files: results,
-    error: hasError
-      ? `Documentation is out of date. Run with ${UPDATE_GOLDEN_ENV}=true to update.`
-      : undefined,
+    error: hasError ? `Documentation is out of date. ${errorHint}` : undefined,
   };
 }
 
