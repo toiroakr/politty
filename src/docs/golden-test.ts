@@ -1737,12 +1737,18 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
                 if (fileStatus !== "created") {
                   fileStatus = "updated";
                 }
+              } else {
+                hasError = true;
+                fileStatus = "diff";
+                diffs.push(
+                  `[doctor] Failed to insert missing section marker "${sectionType}" for command "${formatCommandPath(targetCommand)}": no insertion point found.\n${generatedSectionPart}`,
+                );
               }
             } else {
               hasError = true;
               fileStatus = "diff";
               diffs.push(
-                `[doctor] Missing section marker "${sectionType}" for command "${formatCommandPath(targetCommand)}". Run with ${UPDATE_GOLDEN_ENV}=true to insert.\n${generatedSectionPart}`,
+                `[doctor] Missing section marker "${sectionType}" for command "${formatCommandPath(targetCommand)}". Run with ${DOCTOR_ENV}=true and ${UPDATE_GOLDEN_ENV}=true to insert.\n${generatedSectionPart}`,
               );
             }
           }
