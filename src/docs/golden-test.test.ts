@@ -1923,6 +1923,65 @@ describe("golden-test", () => {
       const beforeHeading = updatedContent.slice(0, headingPos);
       expect(beforeHeading).not.toMatch(/\n{3,}$/);
     });
+
+    it("should not produce excessive blank lines when inserting after a preceding section", async () => {
+      const filePath = await setupWithMissingMarker("doctor-mid-insert.md", "usage", "greet");
+
+      vi.stubEnv(DOCTOR_ENV, "true");
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: filesConfig },
+        targetCommands: ["greet"],
+      });
+
+      const updatedContent = fs.readFileSync(filePath, "utf-8");
+      expect(updatedContent).toContain("<!-- politty:command:greet:usage:start -->");
+
+      // Verify marker order: description < usage < arguments
+      const descPos = updatedContent.indexOf("<!-- politty:command:greet:description:start -->");
+      const usagePos = updatedContent.indexOf("<!-- politty:command:greet:usage:start -->");
+      const argsPos = updatedContent.indexOf("<!-- politty:command:greet:arguments:start -->");
+      expect(descPos).toBeLessThan(usagePos);
+      if (argsPos !== -1) {
+        expect(usagePos).toBeLessThan(argsPos);
+      }
+
+      // Verify no triple+ newlines anywhere in the content
+      expect(updatedContent).not.toMatch(/\n{3,}/);
+    });
+
+    it("should detect multiple missing section markers in read-only doctor mode", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      vi.stubEnv(DOCTOR_ENV, "");
+
+      const filePath = path.join(testDir, "doctor-multi-missing.md");
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: filesConfig },
+      });
+
+      // Remove both description and usage sections for greet
+      let content = fs.readFileSync(filePath, "utf-8");
+      content = removeSectionBlock(content, "description", "greet");
+      content = removeSectionBlock(content, "usage", "greet");
+      fs.writeFileSync(filePath, content, "utf-8");
+
+      // Read-only doctor mode should report both missing markers
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+      vi.stubEnv(DOCTOR_ENV, "true");
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: filesConfig },
+        targetCommands: ["greet"],
+      });
+
+      expect(result.success).toBe(false);
+      const diff = result.files[0]?.diff ?? "";
+      expect(diff).toContain('[doctor] Missing section marker "description"');
+      expect(diff).toContain('[doctor] Missing section marker "usage"');
+      // Verify hint message does not redundantly mention DOCTOR_ENV
+      expect(diff).not.toContain("POLITTY_DOCS_DOCTOR=true and");
+    });
   });
 
   describe("assertDocMatch", () => {
