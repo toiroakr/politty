@@ -389,9 +389,13 @@ export function renderUnionOptionsMarkdown(
     const uniqueFields = option.fields.filter(
       (f) => !commonFieldNames.has(f.name) && !f.positional,
     );
-    if (uniqueFields.length === 0) continue;
 
     const label = option.description ?? `Variant ${i + 1}`;
+    if (uniqueFields.length === 0) {
+      sections.push(`**${label}:**\n\n_no options_`);
+      continue;
+    }
+
     const rendered =
       style === "table"
         ? renderOptionsTableFromArray(uniqueFields)

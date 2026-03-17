@@ -375,10 +375,10 @@ function renderUnionOptions(
 
     const uniqueFields = option.fields.filter((f) => !commonFields.has(f.name) && !f.positional);
 
+    const label = option.description ?? `Variant ${i + 1}`;
+
     if (uniqueFields.length > 0) {
       lines.push("");
-
-      const label = option.description ?? `Variant ${i + 1}`;
       lines.push(`  ${styles.bold(`${label}:`)}`);
 
       for (const field of uniqueFields) {
@@ -396,6 +396,10 @@ function renderUnionOptions(
         }
         lines.push(formatOption(`  ${flags}`, desc));
       }
+    } else {
+      lines.push("");
+      lines.push(`  ${styles.bold(`${label}:`)}`);
+      lines.push(`    ${styles.dim(styles.italic("no options"))}`);
     }
   }
 

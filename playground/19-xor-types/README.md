@@ -26,6 +26,10 @@ auth-demo [options]
 
 > One of the following option groups is required:
 
+**Anonymous:**
+
+_no options_
+
 **Token Auth:**
 
 | Option            | Alias | Description | Required | Default |

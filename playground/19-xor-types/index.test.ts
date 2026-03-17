@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
@@ -49,11 +49,11 @@ describe("19-xor-types", () => {
     });
   });
 
-  it("fails when no auth option is provided", async () => {
-    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+  it("succeeds with anonymous auth (no options)", async () => {
     const result = await runCommand(main, []);
 
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(0);
+    expect(console).toHaveBeenCalledWith("Authenticated anonymously");
   });
 
   it("documentation", async () => {
