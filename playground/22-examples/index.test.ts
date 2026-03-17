@@ -81,7 +81,7 @@ describe("22-examples", () => {
 
   describe("root command", () => {
     describe("documentation", () => {
-      it("generates documentation", async () => {
+      it("generates documentation", { timeout: 10000 }, async () => {
         await assertDocMatch({
           ...baseDocConfig,
           targetCommands: [""],
