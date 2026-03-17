@@ -1,5 +1,11 @@
 # politty
 
+## 0.4.11
+
+### Patch Changes
+
+- bae8af4: Show description for empty xor variants in help output and generated docs instead of silently skipping them
+
 ## 0.4.10
 
 ### Patch Changes
