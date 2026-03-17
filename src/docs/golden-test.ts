@@ -523,14 +523,14 @@ function replaceSectionMarker(
 /**
  * Insert a new section marker into existing content at the correct position
  * relative to other section markers for the same command, based on SECTION_TYPES order.
- * Returns updated content, or null if insertion point could not be determined.
+ * @throws If no adjacent marker is found (unreachable when at least one marker exists for the command)
  */
 function insertSectionMarkerAtOrder(
   content: string,
   type: SectionType,
   scope: string,
   newSection: string,
-): string | null {
+): string {
   const typeIndex = SECTION_TYPES.indexOf(type);
 
   // Try to insert after the preceding section marker
@@ -555,22 +555,20 @@ function insertSectionMarkerAtOrder(
     const nextStart = sectionStartMarker(nextType, scope);
     const nextStartIdx = content.indexOf(nextStart);
     if (nextStartIdx !== -1) {
-      if (nextStartIdx === 0) {
-        return newSection + "\n\n" + content;
+      // Skip existing leading newlines to avoid excessive blank lines
+      let beforePos = nextStartIdx;
+      while (beforePos > 0 && content[beforePos - 1] === "\n") {
+        beforePos--;
       }
-      // Walk back over blank lines
-      let insertPos = nextStartIdx;
-      while (insertPos > 0 && content[insertPos - 1] === "\n") {
-        insertPos--;
-      }
-      if (insertPos < nextStartIdx) {
-        insertPos++;
-      }
-      return content.slice(0, insertPos) + "\n" + newSection + "\n\n" + content.slice(nextStartIdx);
+      return (
+        content.slice(0, beforePos) + "\n\n" + newSection + "\n\n" + content.slice(nextStartIdx)
+      );
     }
   }
 
-  return null;
+  throw new Error(
+    `No insertion point found for section "${type}" (scope="${scope}"). This should be unreachable when at least one marker exists for the command.`,
+  );
 }
 
 /**
@@ -1721,24 +1719,15 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
             }
 
             if (updateMode) {
-              const updated = insertSectionMarkerAtOrder(
+              existingContent = insertSectionMarkerAtOrder(
                 existingContent,
                 sectionType,
                 targetCommand,
                 generatedSectionPart,
               );
-              if (updated) {
-                existingContent = updated;
-                writeFile(filePath, existingContent);
-                if (fileStatus !== "created") {
-                  fileStatus = "updated";
-                }
-              } else {
-                hasError = true;
-                fileStatus = "diff";
-                diffs.push(
-                  `[doctor] Failed to insert missing section marker "${sectionType}" for command "${formatCommandPath(targetCommand)}": no insertion point found.\n${generatedSectionPart}`,
-                );
+              writeFile(filePath, existingContent);
+              if (fileStatus !== "created") {
+                fileStatus = "updated";
               }
             } else {
               hasError = true;

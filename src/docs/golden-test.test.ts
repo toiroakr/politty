@@ -1836,6 +1836,11 @@ describe("golden-test", () => {
 
       const content = fs.readFileSync(filePath, "utf-8");
       fs.writeFileSync(filePath, removeSectionBlock(content, sectionType, scope), "utf-8");
+
+      // Reset env to neutral state so callers start from a clean slate
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+      vi.stubEnv(DOCTOR_ENV, "");
+
       return filePath;
     }
 
@@ -1867,6 +1872,7 @@ describe("golden-test", () => {
     it("should insert missing section markers in update+doctor mode", async () => {
       const filePath = await setupWithMissingMarker("doctor-insert.md", "description", "greet");
 
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       vi.stubEnv(DOCTOR_ENV, "true");
       await generateDoc({
         command: testCommand,
@@ -1903,6 +1909,7 @@ describe("golden-test", () => {
     it("should insert missing heading marker at the start of command section", async () => {
       const filePath = await setupWithMissingMarker("doctor-heading.md", "heading", "greet");
 
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       vi.stubEnv(DOCTOR_ENV, "true");
       await generateDoc({
         command: testCommand,
@@ -1927,6 +1934,7 @@ describe("golden-test", () => {
     it("should not produce excessive blank lines when inserting after a preceding section", async () => {
       const filePath = await setupWithMissingMarker("doctor-mid-insert.md", "usage", "greet");
 
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       vi.stubEnv(DOCTOR_ENV, "true");
       await generateDoc({
         command: testCommand,
