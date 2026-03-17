@@ -1987,8 +1987,9 @@ describe("golden-test", () => {
       const diff = result.files[0]?.diff ?? "";
       expect(diff).toContain('[doctor] Missing section marker "description"');
       expect(diff).toContain('[doctor] Missing section marker "usage"');
-      // Verify hint message does not redundantly mention DOCTOR_ENV
-      expect(diff).not.toContain("POLITTY_DOCS_DOCTOR=true and");
+      // Verify hint message mentions both env vars for correct remediation
+      expect(diff).toContain("POLITTY_DOCS_DOCTOR=true");
+      expect(diff).toContain("POLITTY_DOCS_UPDATE=true");
     });
   });
 

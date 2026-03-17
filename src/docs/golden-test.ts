@@ -560,8 +560,9 @@ function insertSectionMarkerAtOrder(
       while (beforePos > 0 && content[beforePos - 1] === "\n") {
         beforePos--;
       }
+      const prefix = beforePos === 0 ? "" : "\n\n";
       return (
-        content.slice(0, beforePos) + "\n\n" + newSection + "\n\n" + content.slice(nextStartIdx)
+        content.slice(0, beforePos) + prefix + newSection + "\n\n" + content.slice(nextStartIdx)
       );
     }
   }
@@ -1733,7 +1734,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
               hasError = true;
               fileStatus = "diff";
               diffs.push(
-                `[doctor] Missing section marker "${sectionType}" for command "${formatCommandPath(targetCommand)}". Run with ${UPDATE_GOLDEN_ENV}=true to insert.\n${generatedSectionPart}`,
+                `[doctor] Missing section marker "${sectionType}" for command "${formatCommandPath(targetCommand)}". Run with ${DOCTOR_ENV}=true ${UPDATE_GOLDEN_ENV}=true to insert.\n${generatedSectionPart}`,
               );
             }
           }
@@ -1983,12 +1984,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     });
   }
 
-  const errorHint =
-    doctorMode && updateMode
-      ? "Check diffs above and fix markers manually."
-      : doctorMode
-        ? `Run with ${UPDATE_GOLDEN_ENV}=true to fix missing markers.`
-        : `Run with ${UPDATE_GOLDEN_ENV}=true to update.`;
+  const errorHint = doctorMode
+    ? `Run with ${DOCTOR_ENV}=true ${UPDATE_GOLDEN_ENV}=true to fix missing markers.`
+    : `Run with ${UPDATE_GOLDEN_ENV}=true to update.`;
 
   return {
     success: !hasError,
