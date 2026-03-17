@@ -11,6 +11,7 @@ import { z } from "zod";
 import { arg, defineCommand, runMain } from "../../src/index.js";
 
 const args = z.xor([
+  z.object({}).strict().describe("Anonymous"),
   z
     .object({
       token: arg(z.string(), { description: "API Token" }),
@@ -31,10 +32,12 @@ export const main = defineCommand({
   run(args) {
     if ("token" in args) {
       console.log("Authenticated with token:", args.token);
-    } else {
+    } else if ("username" in args) {
       console.log("Authenticated with credentials:");
       console.log("  Username:", args.username);
       console.log("  Password:", args.password);
+    } else {
+      console.log("Authenticated anonymously");
     }
   },
 });

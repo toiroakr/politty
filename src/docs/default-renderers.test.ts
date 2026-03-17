@@ -556,4 +556,27 @@ describe("default-renderers", () => {
       expect(markdown).not.toContain("| Option |");
     });
   });
+
+  describe("xor with empty variant", () => {
+    it("should render empty variant label with 'no options' in table style", async () => {
+      const cmd = defineCommand({
+        name: "xor-empty",
+        args: z.xor([
+          z.object({}).strict().describe("Without Name"),
+          z
+            .object({ name: arg(z.string(), { description: "Name" }) })
+            .strict()
+            .describe("With Name"),
+        ]),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "xor-empty");
+      const markdown = defaultRenderers.tableStyle(info);
+
+      expect(markdown).toContain("**Without Name:**\n\n_no options_");
+      expect(markdown).toContain("**With Name:**");
+      expect(markdown).toContain("--name");
+    });
+  });
 });

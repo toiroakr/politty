@@ -419,6 +419,26 @@ describe("Help Generator", () => {
       expect(result).toContain("--username");
       expect(result).toContain("--password");
     });
+
+    it("should render xor variant with no fields using dim text", () => {
+      const cmd = defineCommand({
+        name: "xor-empty",
+        args: z.xor([
+          z.object({}).strict().describe("Without Name"),
+          z
+            .object({ name: arg(z.string(), { description: "Name" }) })
+            .strict()
+            .describe("With Name"),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("Without Name:");
+      expect(result).toContain("no options");
+      expect(result).toContain("With Name:");
+      expect(result).toContain("--name");
+    });
   });
 
   describe("Kebab-case display", () => {
