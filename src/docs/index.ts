@@ -33,6 +33,7 @@ export type { ArgsShape, ArgsTableOptions } from "./render-args.js";
 export { renderCommandIndex } from "./render-index.js";
 export type { CommandCategory } from "./render-index.js";
 export {
+  DOCTOR_ENV,
   globalOptionsEndMarker,
   globalOptionsStartMarker,
   GLOBAL_OPTIONS_MARKER_PREFIX,

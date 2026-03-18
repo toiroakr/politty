@@ -31,6 +31,7 @@ import type {
   RootDocConfig,
 } from "./types.js";
 import {
+  DOCTOR_ENV,
   globalOptionsEndMarker,
   globalOptionsStartMarker,
   indexEndMarker,
@@ -65,11 +66,8 @@ async function applyFormatter(
   return formatted;
 }
 
-/**
- * Check if update mode is enabled via environment variable
- */
-function isUpdateMode(): boolean {
-  const value = process.env[UPDATE_GOLDEN_ENV];
+function isTruthyEnv(envKey: string): boolean {
+  const value = process.env[envKey];
   return value === "true" || value === "1";
 }
 
@@ -520,6 +518,58 @@ function replaceSectionMarker(
   const start = sectionStartMarker(type, scope);
   const end = sectionEndMarker(type, scope);
   return replaceMarkerSection(content, start, end, newContent);
+}
+
+/**
+ * Insert a new section marker into existing content at the correct position
+ * relative to other section markers for the same command, based on SECTION_TYPES order.
+ * @throws If no adjacent marker is found (unreachable when at least one marker exists for the command)
+ */
+function insertSectionMarkerAtOrder(
+  content: string,
+  type: SectionType,
+  scope: string,
+  newSection: string,
+): string {
+  const typeIndex = SECTION_TYPES.indexOf(type);
+
+  // Try to insert after the preceding section marker
+  for (let i = typeIndex - 1; i >= 0; i--) {
+    const prevType = SECTION_TYPES[i]!;
+    const prevEnd = sectionEndMarker(prevType, scope);
+    const prevEndIdx = content.indexOf(prevEnd);
+    if (prevEndIdx !== -1) {
+      const insertPos = prevEndIdx + prevEnd.length;
+      // Skip existing trailing newlines to avoid excessive blank lines
+      let afterPos = insertPos;
+      while (afterPos < content.length && content[afterPos] === "\n") {
+        afterPos++;
+      }
+      return content.slice(0, insertPos) + "\n\n" + newSection + "\n\n" + content.slice(afterPos);
+    }
+  }
+
+  // Try to insert before the following section marker
+  for (let i = typeIndex + 1; i < SECTION_TYPES.length; i++) {
+    const nextType = SECTION_TYPES[i]!;
+    const nextStart = sectionStartMarker(nextType, scope);
+    const nextStartIdx = content.indexOf(nextStart);
+    if (nextStartIdx !== -1) {
+      // Skip existing leading newlines to avoid excessive blank lines
+      let beforePos = nextStartIdx;
+      while (beforePos > 0 && content[beforePos - 1] === "\n") {
+        beforePos--;
+      }
+      const prefix = beforePos === 0 ? "" : "\n\n";
+      return (
+        content.slice(0, beforePos) + prefix + newSection + "\n\n" + content.slice(nextStartIdx)
+      );
+    }
+  }
+
+  throw new Error(
+    `No insertion point found for section "${type}" (scope="${scope}"). This should be unreachable when at least one marker exists for the command.`,
+  );
 }
 
 /**
@@ -1385,7 +1435,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       rootDoc = { ...rootDoc, globalOptions: globalShape };
     }
   }
-  const updateMode = isUpdateMode();
+  const updateMode = isTruthyEnv(UPDATE_GOLDEN_ENV);
+  const doctorMode = isTruthyEnv(DOCTOR_ENV);
+  let hasDoctorIssues = false;
 
   // Validate rootDoc.path does not overlap with files keys (only for explicit files mode)
   if (rootDoc && !usingPathConfig) {
@@ -1648,6 +1700,47 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
             }
           }
         }
+
+        // Doctor mode: detect and insert missing section markers
+        if (doctorMode) {
+          const generatedMarkers = collectSectionMarkers(generatedSection, targetCommand);
+          const existingMarkerSet = new Set(existingMarkers);
+
+          for (const sectionType of generatedMarkers) {
+            if (existingMarkerSet.has(sectionType)) {
+              continue;
+            }
+
+            const generatedSectionPart = extractSectionMarker(
+              generatedSection,
+              sectionType,
+              targetCommand,
+            );
+            if (!generatedSectionPart) {
+              continue;
+            }
+
+            if (updateMode) {
+              existingContent = insertSectionMarkerAtOrder(
+                existingContent,
+                sectionType,
+                targetCommand,
+                generatedSectionPart,
+              );
+              writeFile(filePath, existingContent);
+              if (fileStatus !== "created") {
+                fileStatus = "updated";
+              }
+            } else {
+              hasError = true;
+              hasDoctorIssues = true;
+              fileStatus = "diff";
+              diffs.push(
+                `[doctor] Missing section marker "${sectionType}" for command "${formatCommandPath(targetCommand)}". Run with ${DOCTOR_ENV}=true ${UPDATE_GOLDEN_ENV}=true to insert.\n${generatedSectionPart}`,
+              );
+            }
+          }
+        }
       }
 
       // Remove orphaned section markers for commands no longer in this file
@@ -1893,12 +1986,14 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     });
   }
 
+  const errorHint = hasDoctorIssues
+    ? `Run with ${DOCTOR_ENV}=true ${UPDATE_GOLDEN_ENV}=true to fix missing markers.`
+    : `Run with ${UPDATE_GOLDEN_ENV}=true to update.`;
+
   return {
     success: !hasError,
     files: results,
-    error: hasError
-      ? `Documentation is out of date. Run with ${UPDATE_GOLDEN_ENV}=true to update.`
-      : undefined,
+    error: hasError ? `Documentation is out of date. ${errorHint}` : undefined,
   };
 }
 
@@ -1923,7 +2018,7 @@ export async function assertDocMatch(config: GenerateDocConfig): Promise<void> {
 
     throw new Error(
       `Documentation does not match golden files.\n\n${diffMessages}\n\n` +
-        `Run with ${UPDATE_GOLDEN_ENV}=true to update the documentation.`,
+        (result.error ?? `Run with ${UPDATE_GOLDEN_ENV}=true to update the documentation.`),
     );
   }
 }
@@ -1939,7 +2034,7 @@ export function initDocFile(
   config: Pick<GenerateDocConfig, "files"> | string,
   fileSystem?: DeleteFileFs,
 ): void {
-  if (!isUpdateMode()) {
+  if (!isTruthyEnv(UPDATE_GOLDEN_ENV)) {
     return;
   }
 

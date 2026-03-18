@@ -197,6 +197,8 @@ export interface MainOptions {
   setup?: ((context: GlobalSetupContext) => void | Promise<void>) | undefined;
   /** Global cleanup hook (runs after command execution, always executes even on error) */
   cleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
+  /** Whether to display errors to stderr before process.exit (default: true) */
+  displayErrors?: boolean;
 }
 
 /**

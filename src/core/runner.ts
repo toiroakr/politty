@@ -22,13 +22,14 @@ import {
   validateReservedAliases,
 } from "../validator/command-validator.js";
 import {
+  findSimilar,
   formatRuntimeError,
-  formatUnknownFlag,
   formatUnknownFlagWarning,
-  formatUnknownSubcommand,
-  formatValidationErrors,
 } from "../validator/error-formatter.js";
-import { validateArgs } from "../validator/zod-validator.js";
+import {
+  formatValidationErrors as formatPlainValidationErrors,
+  validateArgs,
+} from "../validator/zod-validator.js";
 import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import { extractFields, type ExtractedFields } from "./schema-extractor.js";
@@ -210,6 +211,12 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     },
   });
 
+  // Display errors (controlled by displayErrors option, default: true)
+  if ((options.displayErrors ?? true) && !result.success && result.error) {
+    const errorLogger = options.logger ?? defaultLogger;
+    errorLogger.error(formatRuntimeError(result.error, options.debug ?? false));
+  }
+
   // Global cleanup (always)
   if (options.cleanup) {
     const cleanupCtx: GlobalCleanupContext = {
@@ -222,12 +229,14 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     }
   }
 
-  // Flush stdout before exit to prevent truncated output when piped.
-  // When stdout is a pipe (e.g., eval "$(cli completion zsh)"), writes are
-  // buffered asynchronously. Calling process.exit() before the buffer is
-  // drained causes data loss.
+  // Flush stdout/stderr before exit to prevent truncated output when piped.
+  // When stdout/stderr is a pipe, writes are buffered asynchronously.
+  // Calling process.exit() before the buffer is drained causes data loss.
   if (process.stdout.writableLength > 0) {
     await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
+  }
+  if (process.stderr.writableLength > 0) {
+    await new Promise<void>((resolve) => process.stderr.once("drain", resolve));
   }
 
   process.exit(result.exitCode);
@@ -287,8 +296,6 @@ async function runCommandInternal<TResult = unknown>(
         // Find first positional argument (potential subcommand), skipping global option values
         const potentialSubCmd = findFirstPositional(argv, context.globalExtracted);
         if (potentialSubCmd && !subCmdNames.includes(potentialSubCmd)) {
-          logger.error(formatUnknownSubcommand(potentialSubCmd, subCmdNames));
-          logger.error("");
           hasUnknownSubcommand = true;
         }
       }
@@ -301,9 +308,14 @@ async function runCommandInternal<TResult = unknown>(
       logger.log(help);
       collector?.stop();
       if (hasUnknownSubcommand) {
+        const unknownCmd = findFirstPositional(argv, context.globalExtracted) ?? "";
+        const similar = findSimilar(unknownCmd, subCmdNames);
+        const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
         return {
           success: false,
-          error: new Error(`Unknown subcommand: ${argv.find((arg) => !arg.startsWith("-"))}`),
+          error: new Error(
+            `Unknown subcommand: ${unknownCmd}${suggestion ? `.${suggestion}` : ""}`,
+          ),
           exitCode: 1,
           logs: getCurrentLogs(),
         };
@@ -363,9 +375,6 @@ async function runCommandInternal<TResult = unknown>(
 
       if (unknownKeysMode === "strict") {
         // strict mode: treat unknown flags as errors
-        for (const flag of parseResult.unknownFlags) {
-          logger.error(formatUnknownFlag(flag, knownFlags));
-        }
         collector?.stop();
         return {
           success: false,
@@ -406,12 +415,10 @@ async function runCommandInternal<TResult = unknown>(
       // command schema is also strict.
       const globalValidation = validateArgs(accumulatedGlobalArgs, options.globalArgs);
       if (!globalValidation.success) {
-        const errorMessage = formatValidationErrors(globalValidation.errors);
-        logger.error(errorMessage);
         collector?.stop();
         return {
           success: false,
-          error: new Error(errorMessage),
+          error: new Error(formatPlainValidationErrors(globalValidation.errors)),
           exitCode: 1,
           logs: getCurrentLogs(),
         };
@@ -441,11 +448,10 @@ async function runCommandInternal<TResult = unknown>(
     const validationResult = validateArgs(parseResult.rawArgs, command.args);
 
     if (!validationResult.success) {
-      logger.error(formatValidationErrors(validationResult.errors));
       collector?.stop();
       return {
         success: false,
-        error: new Error(formatValidationErrors(validationResult.errors)),
+        error: new Error(formatPlainValidationErrors(validationResult.errors)),
         exitCode: 1,
         logs: getCurrentLogs(),
       };
@@ -481,7 +487,6 @@ async function runCommandInternal<TResult = unknown>(
     return result as RunResult<TResult>;
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    logger.error(formatRuntimeError(err, options.debug ?? false));
     collector?.stop();
     return {
       success: false,
