@@ -308,12 +308,14 @@ async function runCommandInternal<TResult = unknown>(
       logger.log(help);
       collector?.stop();
       if (hasUnknownSubcommand) {
-        const unknownCmd = argv.find((arg) => !arg.startsWith("-")) ?? "";
+        const unknownCmd = findFirstPositional(argv, context.globalExtracted) ?? "";
         const similar = findSimilar(unknownCmd, subCmdNames);
         const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
         return {
           success: false,
-          error: new Error(`Unknown subcommand: ${unknownCmd}.${suggestion}`),
+          error: new Error(
+            `Unknown subcommand: ${unknownCmd}${suggestion ? `.${suggestion}` : ""}`,
+          ),
           exitCode: 1,
           logs: getCurrentLogs(),
         };
