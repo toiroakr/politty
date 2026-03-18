@@ -531,7 +531,7 @@ function insertSectionMarkerAtOrder(
   content: string,
   type: SectionType,
   scope: string,
-  _generatedSection: string,
+  generatedSection: string,
 ): string {
   const typeIndex = SECTION_TYPES.indexOf(type);
   const startMarker = sectionStartMarker(type, scope);
@@ -561,28 +561,39 @@ function insertSectionMarkerAtOrder(
   }
 
   if (prevBoundary != null && nextBoundary != null) {
-    // Both boundaries found: wrap the content between them with markers
+    // Both boundaries found: wrap the existing content between them with markers
+    // to preserve user customizations
     const between = content.slice(prevBoundary, nextBoundary);
-    // Extract the inner content, trimming surrounding blank lines
     const innerContent = between.replace(/^\n+/, "\n").replace(/\n+$/, "\n");
     const wrapped = startMarker + innerContent + endMarker;
     return content.slice(0, prevBoundary) + "\n\n" + wrapped + "\n\n" + content.slice(nextBoundary);
   }
 
+  // Only one boundary found: cannot safely determine the current command's content range
+  // (wrapping could capture other commands). Insert generated content instead.
   if (prevBoundary != null) {
-    // Only preceding boundary: wrap content from prevBoundary to end (or next non-blank structure)
-    const rest = content.slice(prevBoundary);
-    const innerContent = rest.replace(/^\n+/, "\n").replace(/\n+$/, "\n");
-    const wrapped = startMarker + innerContent + endMarker;
-    return content.slice(0, prevBoundary) + "\n\n" + wrapped + "\n";
+    let afterPos = prevBoundary;
+    while (afterPos < content.length && content[afterPos] === "\n") {
+      afterPos++;
+    }
+    return (
+      content.slice(0, prevBoundary) +
+      "\n\n" +
+      generatedSection +
+      (afterPos < content.length ? "\n\n" : "\n") +
+      content.slice(afterPos)
+    );
   }
 
   if (nextBoundary != null) {
-    // Only following boundary: wrap content from start to nextBoundary
-    const before = content.slice(0, nextBoundary);
-    const innerContent = before.replace(/^\n+/, "\n").replace(/\n+$/, "\n");
-    const wrapped = startMarker + innerContent + endMarker;
-    return wrapped + "\n\n" + content.slice(nextBoundary);
+    let beforePos = nextBoundary;
+    while (beforePos > 0 && content[beforePos - 1] === "\n") {
+      beforePos--;
+    }
+    const prefix = beforePos === 0 ? "" : "\n\n";
+    return (
+      content.slice(0, beforePos) + prefix + generatedSection + "\n\n" + content.slice(nextBoundary)
+    );
   }
 
   throw new Error(
