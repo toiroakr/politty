@@ -386,7 +386,7 @@ describe("runCommand with log collection", () => {
     expect(warnings[0]!.message).toBe("Warning from cleanup");
   });
 
-  it("should collect logs on validation error", async () => {
+  it("should return error on validation failure without logging", async () => {
     const command = defineCommand({
       name: "test",
       args: z.object({
@@ -397,10 +397,12 @@ describe("runCommand with log collection", () => {
 
     const result = await runCommand(command, [], { captureLogs: true });
 
-    // Validation error logs should be collected
+    // runCommand (programmatic API) should not log errors directly;
+    // errors are returned in result.error for the caller to handle
     expect(result.success).toBe(false);
-    const errors = result.logs.entries.filter((e) => e.level === "error");
-    expect(errors.length).toBeGreaterThan(0);
+    if (!result.success) {
+      expect(result.error.message).toContain("required");
+    }
   });
 
   it("should collect logs across subcommand routing", async () => {

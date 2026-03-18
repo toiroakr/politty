@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { spyOnConsoleLog } from "../../tests/utils/console.js";
+import { spyOnConsoleError, spyOnConsoleLog } from "../../tests/utils/console.js";
 import { arg } from "./arg-registry.js";
 import { defineCommand } from "./command.js";
 import { runCommand } from "./runner.js";
@@ -217,6 +217,67 @@ describe("runCommand", () => {
 
       consoleSpy.mockRestore();
     });
+
+    it("should not display validation errors directly via console.error in runCommand", async () => {
+      const consoleSpy = spyOnConsoleError();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          name: z.string(),
+        }),
+      });
+
+      const result = await runCommand(cmd, []);
+
+      expect(result.exitCode).toBe(1);
+      expect(result.success).toBe(false);
+      // runCommand (programmatic API) should NOT display errors itself;
+      // it should only return them in result.error for the caller to handle
+      expect(consoleSpy).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should return validation error message in result.error for caller to handle", async () => {
+      const consoleSpy = spyOnConsoleError();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          name: z.string(),
+        }),
+      });
+
+      const result = await runCommand(cmd, []);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error.message).toContain("name");
+      }
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should not display errors directly for unknown flags in strict mode", async () => {
+      const consoleSpy = spyOnConsoleError();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.strictObject({
+          verbose: z.boolean().default(false),
+        }),
+      });
+
+      const result = await runCommand(cmd, ["--unknown-flag"]);
+
+      expect(result.success).toBe(false);
+      // runCommand should NOT display errors itself
+      expect(consoleSpy).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
   });
 
   describe("Subcommand routing", () => {
@@ -298,13 +359,15 @@ describe("runCommand", () => {
       const result = await runCommand(cmd, ["--unknown-flag"]);
 
       // Strict mode: should error and not continue execution
-      expect(consoleSpy).toHaveBeenCalled();
-      const output = consoleSpy.mock.calls[0]?.[0] ?? "";
-      expect(output).toContain("Unknown option");
-      expect(output).not.toContain("Warning");
+      // runCommand (programmatic API) should not display errors directly
+      expect(consoleSpy).not.toHaveBeenCalled();
       expect(runFn).not.toHaveBeenCalled(); // Command should not run
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
+      if (!result.success) {
+        expect(result.error.message).toContain("Unknown option");
+        expect(result.error.message).not.toContain("Warning");
+      }
       consoleSpy.mockRestore();
     });
 
@@ -325,7 +388,8 @@ describe("runCommand", () => {
       const result = await runCommand(cmd, ["--unknown-flag"]);
 
       // Strict mode: should error and not continue execution
-      expect(consoleSpy).toHaveBeenCalled();
+      // runCommand (programmatic API) should not display errors directly
+      expect(consoleSpy).not.toHaveBeenCalled();
       expect(runFn).not.toHaveBeenCalled();
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
@@ -415,7 +479,8 @@ describe("runCommand", () => {
       const result = await runCommand(cmd, ["-x"]); // Unknown short flag
 
       // Strict mode: should error and not continue execution
-      expect(consoleSpy).toHaveBeenCalled();
+      // runCommand (programmatic API) should not display errors directly
+      expect(consoleSpy).not.toHaveBeenCalled();
       expect(runFn).not.toHaveBeenCalled();
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);

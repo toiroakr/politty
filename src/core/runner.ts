@@ -26,9 +26,11 @@ import {
   formatUnknownFlag,
   formatUnknownFlagWarning,
   formatUnknownSubcommand,
-  formatValidationErrors,
 } from "../validator/error-formatter.js";
-import { validateArgs } from "../validator/zod-validator.js";
+import {
+  formatValidationErrors as formatPlainValidationErrors,
+  validateArgs,
+} from "../validator/zod-validator.js";
 import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import { extractFields, type ExtractedFields } from "./schema-extractor.js";
@@ -210,6 +212,12 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     },
   });
 
+  // Display errors (controlled by displayErrors option, default: true)
+  if ((options.displayErrors ?? true) && !result.success && result.error) {
+    const errorLogger = options.logger ?? defaultLogger;
+    errorLogger.error(formatRuntimeError(result.error, options.debug ?? false));
+  }
+
   // Global cleanup (always)
   if (options.cleanup) {
     const cleanupCtx: GlobalCleanupContext = {
@@ -363,13 +371,12 @@ async function runCommandInternal<TResult = unknown>(
 
       if (unknownKeysMode === "strict") {
         // strict mode: treat unknown flags as errors
-        for (const flag of parseResult.unknownFlags) {
-          logger.error(formatUnknownFlag(flag, knownFlags));
-        }
         collector?.stop();
         return {
           success: false,
-          error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
+          error: new Error(
+            parseResult.unknownFlags.map((flag) => formatUnknownFlag(flag, knownFlags)).join("\n"),
+          ),
           exitCode: 1,
           logs: getCurrentLogs(),
         };
@@ -406,12 +413,10 @@ async function runCommandInternal<TResult = unknown>(
       // command schema is also strict.
       const globalValidation = validateArgs(accumulatedGlobalArgs, options.globalArgs);
       if (!globalValidation.success) {
-        const errorMessage = formatValidationErrors(globalValidation.errors);
-        logger.error(errorMessage);
         collector?.stop();
         return {
           success: false,
-          error: new Error(errorMessage),
+          error: new Error(formatPlainValidationErrors(globalValidation.errors)),
           exitCode: 1,
           logs: getCurrentLogs(),
         };
@@ -441,11 +446,10 @@ async function runCommandInternal<TResult = unknown>(
     const validationResult = validateArgs(parseResult.rawArgs, command.args);
 
     if (!validationResult.success) {
-      logger.error(formatValidationErrors(validationResult.errors));
       collector?.stop();
       return {
         success: false,
-        error: new Error(formatValidationErrors(validationResult.errors)),
+        error: new Error(formatPlainValidationErrors(validationResult.errors)),
         exitCode: 1,
         logs: getCurrentLogs(),
       };
@@ -481,7 +485,6 @@ async function runCommandInternal<TResult = unknown>(
     return result as RunResult<TResult>;
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
-    logger.error(formatRuntimeError(err, options.debug ?? false));
     collector?.stop();
     return {
       success: false,

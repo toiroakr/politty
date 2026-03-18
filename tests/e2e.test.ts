@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { arg, defineCommand, runCommand } from "../src/index.js";
-import { spyOnConsoleError, spyOnConsoleLog } from "./utils/console.js";
+import { spyOnConsoleLog } from "./utils/console.js";
 
 /**
  * Task 9.2: E2E tests
@@ -486,8 +486,6 @@ describe("E2E Tests", () => {
     });
 
     it("should error when positional follows array positional", async () => {
-      const consoleSpy = spyOnConsoleError();
-
       const cmd = defineCommand({
         name: "test-cmd",
         args: z.object({
@@ -499,18 +497,14 @@ describe("E2E Tests", () => {
       const result = await runCommand(cmd, ["a.txt", "b.txt"]);
 
       expect(result.exitCode).toBe(1);
-      // Verify the error message was logged
-      expect(consoleSpy).toHaveBeenCalled();
-      const errorMessage = consoleSpy.getLogs()[0] ?? "";
-      expect(errorMessage).toContain("output");
-      expect(errorMessage).toContain("files");
-
-      consoleSpy.mockRestore();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain("output");
+        expect(result.error.message).toContain("files");
+      }
     });
 
     it("should error when required positional follows optional positional", async () => {
-      const consoleSpy = spyOnConsoleError();
-
       const cmd = defineCommand({
         name: "test-cmd",
         args: z.object({
@@ -522,12 +516,11 @@ describe("E2E Tests", () => {
       const result = await runCommand(cmd, ["a", "b"]);
 
       expect(result.exitCode).toBe(1);
-      expect(consoleSpy).toHaveBeenCalled();
-      const errorMessage = consoleSpy.getLogs()[0] ?? "";
-      expect(errorMessage).toContain("required");
-      expect(errorMessage).toContain("optional");
-
-      consoleSpy.mockRestore();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain("required");
+        expect(result.error.message).toContain("optional");
+      }
     });
 
     it("should work with required then optional positionals", async () => {
@@ -579,8 +572,6 @@ describe("E2E Tests", () => {
     });
 
     it("should error when array positional is used with optional positional", async () => {
-      const consoleSpy = spyOnConsoleError();
-
       const cmd = defineCommand({
         name: "test-cmd",
         args: z.object({
@@ -592,13 +583,12 @@ describe("E2E Tests", () => {
       const result = await runCommand(cmd, ["a.txt"]);
 
       expect(result.exitCode).toBe(1);
-      expect(consoleSpy).toHaveBeenCalled();
-      const errorMessage = consoleSpy.getLogs()[0] ?? "";
-      expect(errorMessage).toContain("files");
-      expect(errorMessage).toContain("mode");
-      expect(errorMessage).toContain("ambiguous");
-
-      consoleSpy.mockRestore();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain("files");
+        expect(result.error.message).toContain("mode");
+        expect(result.error.message).toContain("ambiguous");
+      }
     });
   });
 
