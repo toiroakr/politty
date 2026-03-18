@@ -523,48 +523,66 @@ function replaceSectionMarker(
 /**
  * Insert a new section marker into existing content at the correct position
  * relative to other section markers for the same command, based on SECTION_TYPES order.
+ * Preserves any existing content between adjacent markers by wrapping it with the new markers
+ * instead of replacing it with generated content.
  * @throws If no adjacent marker is found (unreachable when at least one marker exists for the command)
  */
 function insertSectionMarkerAtOrder(
   content: string,
   type: SectionType,
   scope: string,
-  newSection: string,
+  _generatedSection: string,
 ): string {
   const typeIndex = SECTION_TYPES.indexOf(type);
+  const startMarker = sectionStartMarker(type, scope);
+  const endMarker = sectionEndMarker(type, scope);
 
-  // Try to insert after the preceding section marker
+  // Find the boundary: end of preceding marker and start of following marker
+  let prevBoundary: number | null = null;
   for (let i = typeIndex - 1; i >= 0; i--) {
     const prevType = SECTION_TYPES[i]!;
     const prevEnd = sectionEndMarker(prevType, scope);
     const prevEndIdx = content.indexOf(prevEnd);
     if (prevEndIdx !== -1) {
-      const insertPos = prevEndIdx + prevEnd.length;
-      // Skip existing trailing newlines to avoid excessive blank lines
-      let afterPos = insertPos;
-      while (afterPos < content.length && content[afterPos] === "\n") {
-        afterPos++;
-      }
-      return content.slice(0, insertPos) + "\n\n" + newSection + "\n\n" + content.slice(afterPos);
+      prevBoundary = prevEndIdx + prevEnd.length;
+      break;
     }
   }
 
-  // Try to insert before the following section marker
+  let nextBoundary: number | null = null;
   for (let i = typeIndex + 1; i < SECTION_TYPES.length; i++) {
     const nextType = SECTION_TYPES[i]!;
     const nextStart = sectionStartMarker(nextType, scope);
     const nextStartIdx = content.indexOf(nextStart);
     if (nextStartIdx !== -1) {
-      // Skip existing leading newlines to avoid excessive blank lines
-      let beforePos = nextStartIdx;
-      while (beforePos > 0 && content[beforePos - 1] === "\n") {
-        beforePos--;
-      }
-      const prefix = beforePos === 0 ? "" : "\n\n";
-      return (
-        content.slice(0, beforePos) + prefix + newSection + "\n\n" + content.slice(nextStartIdx)
-      );
+      nextBoundary = nextStartIdx;
+      break;
     }
+  }
+
+  if (prevBoundary != null && nextBoundary != null) {
+    // Both boundaries found: wrap the content between them with markers
+    const between = content.slice(prevBoundary, nextBoundary);
+    // Extract the inner content, trimming surrounding blank lines
+    const innerContent = between.replace(/^\n+/, "\n").replace(/\n+$/, "\n");
+    const wrapped = startMarker + innerContent + endMarker;
+    return content.slice(0, prevBoundary) + "\n\n" + wrapped + "\n\n" + content.slice(nextBoundary);
+  }
+
+  if (prevBoundary != null) {
+    // Only preceding boundary: wrap content from prevBoundary to end (or next non-blank structure)
+    const rest = content.slice(prevBoundary);
+    const innerContent = rest.replace(/^\n+/, "\n").replace(/\n+$/, "\n");
+    const wrapped = startMarker + innerContent + endMarker;
+    return content.slice(0, prevBoundary) + "\n\n" + wrapped + "\n";
+  }
+
+  if (nextBoundary != null) {
+    // Only following boundary: wrap content from start to nextBoundary
+    const before = content.slice(0, nextBoundary);
+    const innerContent = before.replace(/^\n+/, "\n").replace(/\n+$/, "\n");
+    const wrapped = startMarker + innerContent + endMarker;
+    return wrapped + "\n\n" + content.slice(nextBoundary);
   }
 
   throw new Error(
