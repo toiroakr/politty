@@ -2016,7 +2016,7 @@ export async function assertDocMatch(config: GenerateDocConfig): Promise<void> {
 
     throw new Error(
       `Documentation does not match golden files.\n\n${diffMessages}\n\n` +
-        `Run with ${UPDATE_GOLDEN_ENV}=true to update the documentation.`,
+        (result.error ?? `Run with ${UPDATE_GOLDEN_ENV}=true to update the documentation.`),
     );
   }
 }
