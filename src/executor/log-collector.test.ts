@@ -403,6 +403,9 @@ describe("runCommand with log collection", () => {
     if (!result.success) {
       expect(result.error.message).toContain("required");
     }
+    // Verify no error entries were captured in logs
+    const errorEntries = result.logs.entries.filter((e) => e.level === "error");
+    expect(errorEntries).toHaveLength(0);
   });
 
   it("should collect logs across subcommand routing", async () => {

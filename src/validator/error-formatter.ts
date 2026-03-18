@@ -130,25 +130,3 @@ export function formatRuntimeError(error: Error, debug: boolean): string {
 
   return `${styles.error("Error:")} ${error.message}`;
 }
-
-/**
- * Format unknown subcommand error with suggestions
- *
- * @param subcommand - The unknown subcommand name
- * @param knownSubcommands - List of known subcommand names
- * @returns Formatted error message with suggestions
- */
-export function formatUnknownSubcommand(subcommand: string, knownSubcommands: string[]): string {
-  const similar = findSimilar(subcommand, knownSubcommands);
-
-  let message = `${styles.error("Unknown command:")} ${styles.bold(subcommand)}`;
-
-  if (similar.length > 0) {
-    message += `\n\n${styles.info("Did you mean?")}`;
-    for (const suggestion of similar) {
-      message += `\n  ${symbols.arrow} ${styles.command(suggestion)}`;
-    }
-  }
-
-  return message;
-}

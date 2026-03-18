@@ -3,7 +3,7 @@ import { z } from "zod";
 import { spyOnConsoleError, spyOnConsoleLog } from "../../tests/utils/console.js";
 import { arg } from "./arg-registry.js";
 import { defineCommand } from "./command.js";
-import { runCommand } from "./runner.js";
+import { runCommand, runMain } from "./runner.js";
 
 /**
  * Task 8.1: runCommand function tests
@@ -365,7 +365,7 @@ describe("runCommand", () => {
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
       if (!result.success) {
-        expect(result.error.message).toContain("Unknown option");
+        expect(result.error.message).toContain("Unknown flags");
         expect(result.error.message).not.toContain("Warning");
       }
       consoleSpy.mockRestore();
@@ -507,5 +507,48 @@ describe("runCommand", () => {
       expect(result.success).toBe(true);
       consoleSpy.mockRestore();
     });
+  });
+});
+
+describe("runMain displayErrors", () => {
+  it("should display errors by default", async () => {
+    const consoleSpy = spyOnConsoleError();
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({
+        name: z.string(),
+      }),
+    });
+
+    await runMain(cmd);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(consoleSpy).toHaveBeenCalled();
+    expect(consoleSpy.getLogs().join("\n")).toContain("name");
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
+  });
+
+  it("should suppress errors when displayErrors is false", async () => {
+    const consoleSpy = spyOnConsoleError();
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({
+        name: z.string(),
+      }),
+    });
+
+    await runMain(cmd, { displayErrors: false });
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(consoleSpy).not.toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+    exitSpy.mockRestore();
   });
 });

@@ -21,12 +21,7 @@ import {
   validateDuplicateFields,
   validateReservedAliases,
 } from "../validator/command-validator.js";
-import {
-  formatRuntimeError,
-  formatUnknownFlag,
-  formatUnknownFlagWarning,
-  formatUnknownSubcommand,
-} from "../validator/error-formatter.js";
+import { formatRuntimeError, formatUnknownFlagWarning } from "../validator/error-formatter.js";
 import {
   formatValidationErrors as formatPlainValidationErrors,
   validateArgs,
@@ -295,8 +290,6 @@ async function runCommandInternal<TResult = unknown>(
         // Find first positional argument (potential subcommand), skipping global option values
         const potentialSubCmd = findFirstPositional(argv, context.globalExtracted);
         if (potentialSubCmd && !subCmdNames.includes(potentialSubCmd)) {
-          logger.error(formatUnknownSubcommand(potentialSubCmd, subCmdNames));
-          logger.error("");
           hasUnknownSubcommand = true;
         }
       }
@@ -374,9 +367,7 @@ async function runCommandInternal<TResult = unknown>(
         collector?.stop();
         return {
           success: false,
-          error: new Error(
-            parseResult.unknownFlags.map((flag) => formatUnknownFlag(flag, knownFlags)).join("\n"),
-          ),
+          error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
           exitCode: 1,
           logs: getCurrentLogs(),
         };
