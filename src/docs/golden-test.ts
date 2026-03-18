@@ -1437,6 +1437,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   }
   const updateMode = isTruthyEnv(UPDATE_GOLDEN_ENV);
   const doctorMode = isTruthyEnv(DOCTOR_ENV);
+  let hasDoctorIssues = false;
 
   // Validate rootDoc.path does not overlap with files keys (only for explicit files mode)
   if (rootDoc && !usingPathConfig) {
@@ -1732,6 +1733,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
               }
             } else {
               hasError = true;
+              hasDoctorIssues = true;
               fileStatus = "diff";
               diffs.push(
                 `[doctor] Missing section marker "${sectionType}" for command "${formatCommandPath(targetCommand)}". Run with ${DOCTOR_ENV}=true ${UPDATE_GOLDEN_ENV}=true to insert.\n${generatedSectionPart}`,
@@ -1984,7 +1986,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     });
   }
 
-  const errorHint = doctorMode
+  const errorHint = hasDoctorIssues
     ? `Run with ${DOCTOR_ENV}=true ${UPDATE_GOLDEN_ENV}=true to fix missing markers.`
     : `Run with ${UPDATE_GOLDEN_ENV}=true to update.`;
 

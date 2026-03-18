@@ -35,7 +35,7 @@ function levenshteinDistance(a: string, b: string): number {
 /**
  * Find similar strings from a list
  */
-function findSimilar(target: string, candidates: string[]): string[] {
+export function findSimilar(target: string, candidates: string[]): string[] {
   const threshold = Math.max(2, Math.floor(target.length / 2));
 
   return candidates

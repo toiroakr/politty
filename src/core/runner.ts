@@ -21,7 +21,11 @@ import {
   validateDuplicateFields,
   validateReservedAliases,
 } from "../validator/command-validator.js";
-import { formatRuntimeError, formatUnknownFlagWarning } from "../validator/error-formatter.js";
+import {
+  findSimilar,
+  formatRuntimeError,
+  formatUnknownFlagWarning,
+} from "../validator/error-formatter.js";
 import {
   formatValidationErrors as formatPlainValidationErrors,
   validateArgs,
@@ -225,12 +229,14 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     }
   }
 
-  // Flush stdout before exit to prevent truncated output when piped.
-  // When stdout is a pipe (e.g., eval "$(cli completion zsh)"), writes are
-  // buffered asynchronously. Calling process.exit() before the buffer is
-  // drained causes data loss.
+  // Flush stdout/stderr before exit to prevent truncated output when piped.
+  // When stdout/stderr is a pipe, writes are buffered asynchronously.
+  // Calling process.exit() before the buffer is drained causes data loss.
   if (process.stdout.writableLength > 0) {
     await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
+  }
+  if (process.stderr.writableLength > 0) {
+    await new Promise<void>((resolve) => process.stderr.once("drain", resolve));
   }
 
   process.exit(result.exitCode);
@@ -302,9 +308,12 @@ async function runCommandInternal<TResult = unknown>(
       logger.log(help);
       collector?.stop();
       if (hasUnknownSubcommand) {
+        const unknownCmd = argv.find((arg) => !arg.startsWith("-")) ?? "";
+        const similar = findSimilar(unknownCmd, subCmdNames);
+        const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
         return {
           success: false,
-          error: new Error(`Unknown subcommand: ${argv.find((arg) => !arg.startsWith("-"))}`),
+          error: new Error(`Unknown subcommand: ${unknownCmd}.${suggestion}`),
           exitCode: 1,
           logs: getCurrentLogs(),
         };

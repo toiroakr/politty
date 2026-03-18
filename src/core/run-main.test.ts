@@ -511,7 +511,10 @@ describe("runCommand", () => {
 });
 
 describe("runMain displayErrors", () => {
+  const originalArgv = process.argv;
+
   it("should display errors by default", async () => {
+    process.argv = ["node", "test"];
     const consoleSpy = spyOnConsoleError();
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
@@ -530,9 +533,11 @@ describe("runMain displayErrors", () => {
 
     consoleSpy.mockRestore();
     exitSpy.mockRestore();
+    process.argv = originalArgv;
   });
 
   it("should suppress errors when displayErrors is false", async () => {
+    process.argv = ["node", "test"];
     const consoleSpy = spyOnConsoleError();
     const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
@@ -550,5 +555,6 @@ describe("runMain displayErrors", () => {
 
     consoleSpy.mockRestore();
     exitSpy.mockRestore();
+    process.argv = originalArgv;
   });
 });
