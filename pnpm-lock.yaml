@@ -46,8 +46,8 @@ importers:
         specifier: 1.0.0
         version: 1.0.0
       tsdown:
-        specifier: 0.21.2
-        version: 0.21.2(@typescript/native-preview@7.0.0-dev.20260315.1)(oxc-resolver@11.19.1)(typescript@5.9.3)
+        specifier: 0.21.3
+        version: 0.21.3(@typescript/native-preview@7.0.0-dev.20260315.1)(oxc-resolver@11.19.1)(typescript@5.9.3)
       tsx:
         specifier: 4.21.0
         version: 4.21.0
@@ -1692,14 +1692,14 @@ packages:
   tsconfig@7.0.0:
     resolution: {integrity: sha512-vZXmzPrL+EmC4T/4rVlT2jNVMWCi/O4DIiSj3UHg1OE5kCKbk4mfrXc6dZksLgRM/TZlKnousKH9bbTazUWRRw==}
 
-  tsdown@0.21.2:
-    resolution: {integrity: sha512-pP8eAcd1XAWjl5gjosuJs0BAuVoheUe3V8VDHx31QK7YOgXjcCMsBSyFWO3CMh/CSUkjRUzR96JtGH3WJFTExQ==}
+  tsdown@0.21.3:
+    resolution: {integrity: sha512-oKKeMC8+IgNsB+81hvF5VBsqhqL/nr0g9vse+ujbK40vv0i3ReFI6gUts7hQH7J53ylQNjMgf2Vu6n0+P/uddA==}
     engines: {node: '>=20.19.0'}
     hasBin: true
     peerDependencies:
       '@arethetypeswrong/core': ^0.18.1
-      '@tsdown/css': 0.21.2
-      '@tsdown/exe': 0.21.2
+      '@tsdown/css': 0.21.3
+      '@tsdown/exe': 0.21.3
       '@vitejs/devtools': '*'
       publint: ^0.3.0
       typescript: ^5.0.0
@@ -3264,7 +3264,7 @@ snapshots:
       strip-bom: 3.0.0
       strip-json-comments: 2.0.1
 
-  tsdown@0.21.2(@typescript/native-preview@7.0.0-dev.20260315.1)(oxc-resolver@11.19.1)(typescript@5.9.3):
+  tsdown@0.21.3(@typescript/native-preview@7.0.0-dev.20260315.1)(oxc-resolver@11.19.1)(typescript@5.9.3):
     dependencies:
       ansis: 4.2.0
       cac: 7.0.0
