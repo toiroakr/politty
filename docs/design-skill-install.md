@@ -80,46 +80,23 @@ npm パッケージ内にスキルをまとめて配置：
 ```
 @my-agent/skills/              # npm パッケージ
 ├── package.json
-├── skills/                    # スキル群のルート
-│   ├── commit/
-│   │   ├── skill.json
-│   │   └── prompts/
-│   │       └── commit.md
-│   ├── review-pr/
-│   │   ├── skill.json
-│   │   └── prompts/
-│   │       └── review.md
-│   └── test-gen/
-│       ├── skill.json
-│       └── prompts/
-│           └── test-gen.md
-└── index.js                   # スキルカタログを export
+└── skills/                    # スキル群のルート ← このパスを withSkillCommand に渡す
+    ├── commit/
+    │   ├── skill.json
+    │   └── prompts/
+    │       └── commit.md
+    ├── review-pr/
+    │   ├── skill.json
+    │   └── prompts/
+    │       └── review.md
+    └── test-gen/
+        ├── skill.json
+        └── prompts/
+            └── test-gen.md
 ```
 
-### 1.4 スキルカタログ
-
-パッケージは `SkillCatalog` をエクスポートし、利用可能なスキルを宣言する：
-
-```typescript
-// @my-agent/skills/index.ts
-import type { SkillCatalog } from "politty/skill";
-
-export const catalog: SkillCatalog = {
-  // スキルディレクトリのベースパス（このファイルからの相対パス）
-  baseDir: new URL("./skills", import.meta.url).pathname,
-  // または __dirname + "/skills" (CJS)
-};
-```
-
-`baseDir` 配下の各ディレクトリが `skill.json` を含んでいれば自動でスキルとして認識される。
-明示的にスキル一覧を限定したい場合は `include` を指定：
-
-```typescript
-export const catalog: SkillCatalog = {
-  baseDir: new URL("./skills", import.meta.url).pathname,
-  include: ["commit", "review-pr"],  // これだけ公開
-};
-```
+パッケージ側は `skill.json` を含むディレクトリを配置するだけ。
+特別なエクスポートやカタログ定義は不要。
 
 ---
 
@@ -130,7 +107,7 @@ export const catalog: SkillCatalog = {
 ```
 npm install @my-agent/skills     ← npm が node_modules に配置
     ↓
-mycli skill install commit       ← politty がプロジェクトに展開
+mycli skill install commit       ← ソースディレクトリからプロジェクトに展開
     ↓
 .skills/commit/                  ← プロジェクト内にコピーされる
 ├── skill.json
@@ -141,7 +118,7 @@ mycli skill install commit       ← politty がプロジェクトに展開
 
 ```
 skill install <name>
-  1. 登録済みカタログからスキルを検索
+  1. ソースディレクトリ群から <name>/ を検索
   2. skill.json を読み込み・バリデーション
   3. インストール先にすでに存在するか確認
      - 存在する場合: エラー（--force で上書き）
@@ -154,12 +131,12 @@ skill install <name>
 ```
 skill update [name]
   1. インストール済みスキルの skill.json からバージョンを取得
-  2. カタログ側の skill.json からバージョンを取得
+  2. ソースディレクトリの skill.json からバージョンを取得
   3. バージョンが異なる場合、上書きコピー
   4. 差分サマリーを表示
 ```
 
-更新 = カタログ（node_modules 内）の最新をプロジェクトに再コピー。
+更新 = ソースディレクトリ（node_modules 内）の最新をプロジェクトに再コピー。
 npm パッケージ自体の更新は `npm update` で行う。
 
 ---
@@ -196,11 +173,11 @@ project-root/
 
 ```
 mycli skill
-├── install <name> [--force]        # カタログからプロジェクトに展開
+├── install <name> [--force]        # ソースからプロジェクトに展開
 ├── install --all [--force]         # 全スキルをインストール
-├── update [name]                   # カタログ側の最新に同期
+├── update [name]                   # ソース側の最新に同期
 ├── update --all                    # 全スキルを更新
-├── list [--available] [--json]     # インストール済み一覧（--available でカタログも表示）
+├── list [--available] [--json]     # インストール済み一覧（--available でソースも表示）
 ├── remove <name>                   # 展開済みスキルを削除
 └── info <name>                     # 詳細表示
 ```
@@ -240,7 +217,7 @@ const updateArgs = z.object({
 const listArgs = z.object({
   available: arg(z.boolean().default(false), {
     alias: "a",
-    description: "Show available skills from catalogs",
+    description: "Show available skills from source directories",
   }),
   json: arg(z.boolean().default(false), {
     description: "Output as JSON",
@@ -328,17 +305,6 @@ Installed:   .skills/commit/
 // politty/skill (新規サブモジュール)
 
 /**
- * スキルカタログの定義
- * スキルパッケージ側がエクスポートする
- */
-export interface SkillCatalog {
-  /** スキルディレクトリのベースパス */
-  baseDir: string;
-  /** 公開するスキル名の限定（省略時は baseDir 配下の全スキル） */
-  include?: string[];
-}
-
-/**
  * スキルコマンドを追加するラッパー
  */
 export function withSkillCommand<T extends AnyCommand>(
@@ -350,8 +316,11 @@ export function withSkillCommand<T extends AnyCommand>(
  * オプション
  */
 export interface SkillCommandOptions {
-  /** スキルカタログの一覧（複数パッケージ対応） */
-  catalogs: SkillCatalog[];
+  /**
+   * スキルのソースディレクトリ一覧
+   * 各ディレクトリ配下の skill.json を持つサブディレクトリがスキルとして認識される
+   */
+  sourceDirs: string[];
   /** スキルのインストール先ディレクトリ（デフォルト: ".skills"） */
   installDir?: string;
   /** インストール後のフック */
@@ -382,11 +351,11 @@ export interface InstalledSkill {
 }
 
 /**
- * カタログ上のスキル情報
+ * ソースディレクトリ上のスキル情報
  */
-export interface CatalogSkill {
+export interface AvailableSkill {
   manifest: SkillManifest;
-  /** カタログ内のソースパス */
+  /** ソースディレクトリ内のパス */
   sourcePath: string;
 }
 
@@ -396,16 +365,16 @@ export interface CatalogSkill {
 export function createSkillManager(options: SkillManagerOptions): SkillManager;
 
 export interface SkillManagerOptions {
-  catalogs: SkillCatalog[];
+  sourceDirs: string[];
   installDir: string;
 }
 
 export interface SkillManager {
-  /** カタログからスキルをインストール */
+  /** ソースからスキルをインストール */
   install(name: string, options?: { force?: boolean }): Promise<InstalledSkill>;
   /** 全スキルをインストール */
   installAll(options?: { force?: boolean }): Promise<InstalledSkill[]>;
-  /** カタログ側の最新に更新 */
+  /** ソース側の最新に更新 */
   update(name: string): Promise<InstalledSkill | null>;
   /** 全スキルを更新 */
   updateAll(): Promise<InstalledSkill[]>;
@@ -413,8 +382,8 @@ export interface SkillManager {
   remove(name: string): Promise<void>;
   /** インストール済みスキルの一覧 */
   list(): Promise<InstalledSkill[]>;
-  /** カタログ上の利用可能なスキル一覧 */
-  available(): Promise<CatalogSkill[]>;
+  /** ソースディレクトリの利用可能なスキル一覧 */
+  available(): Promise<AvailableSkill[]>;
   /** スキルの詳細情報 */
   info(name: string): Promise<InstalledSkill | null>;
 }
@@ -425,8 +394,6 @@ export interface SkillManager {
 ```typescript
 import { defineCommand, runMain } from "politty";
 import { withSkillCommand } from "politty/skill";
-import { catalog as builtinSkills } from "@my-agent/skills";
-import { catalog as communitySkills } from "@my-agent/community-skills";
 
 const cli = withSkillCommand(
   defineCommand({
@@ -438,40 +405,25 @@ const cli = withSkillCommand(
     },
   }),
   {
-    catalogs: [builtinSkills, communitySkills],
+    // node_modules 内のスキルディレクトリを直接指定
+    sourceDirs: [
+      require.resolve("@my-agent/skills/skills"),     // 公式スキル
+      require.resolve("@my-agent/community/skills"),   // コミュニティスキル
+    ],
     installDir: ".agent/skills",
-    onInstall: (skill) => {
-      console.log(`Installed: ${skill.manifest.name}`);
-    },
   },
 );
 
 runMain(cli, { version: "1.0.0" });
 ```
 
-### 5.3 利用例（スキルパッケージ作者）
-
-```typescript
-// @my-agent/skills/index.ts
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-import type { SkillCatalog } from "politty/skill";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-export const catalog: SkillCatalog = {
-  baseDir: join(__dirname, "skills"),
-};
-```
-
-### 5.4 プログラマティック利用
+### 5.3 プログラマティック利用
 
 ```typescript
 import { createSkillManager } from "politty/skill";
-import { catalog } from "@my-agent/skills";
 
 const manager = createSkillManager({
-  catalogs: [catalog],
+  sourceDirs: [require.resolve("@my-agent/skills/skills")],
   installDir: ".skills",
 });
 
@@ -494,28 +446,29 @@ if (skill) {
 
 ## 6. 内部処理
 
-### 6.1 カタログスキャン
+### 6.1 ソースディレクトリスキャン
 
 ```typescript
-async function scanCatalog(catalog: SkillCatalog): Promise<CatalogSkill[]> {
-  const entries = await readdir(catalog.baseDir, { withFileTypes: true });
-  const skills: CatalogSkill[] = [];
+async function scanSourceDirs(sourceDirs: string[]): Promise<AvailableSkill[]> {
+  const skills: AvailableSkill[] = [];
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    if (catalog.include && !catalog.include.includes(entry.name)) continue;
+  for (const dir of sourceDirs) {
+    const entries = await readdir(dir, { withFileTypes: true });
 
-    const manifestPath = join(catalog.baseDir, entry.name, "skill.json");
-    if (!existsSync(manifestPath)) continue;
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
 
-    const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
-    // Zod でバリデーション
-    const parsed = skillManifestSchema.parse(manifest);
+      const manifestPath = join(dir, entry.name, "skill.json");
+      if (!existsSync(manifestPath)) continue;
 
-    skills.push({
-      manifest: parsed,
-      sourcePath: join(catalog.baseDir, entry.name),
-    });
+      const manifest = JSON.parse(await readFile(manifestPath, "utf-8"));
+      const parsed = skillManifestSchema.parse(manifest);
+
+      skills.push({
+        manifest: parsed,
+        sourcePath: join(dir, entry.name),
+      });
+    }
   }
 
   return skills;
@@ -526,7 +479,7 @@ async function scanCatalog(catalog: SkillCatalog): Promise<CatalogSkill[]> {
 
 ```typescript
 async function installSkill(
-  source: CatalogSkill,
+  source: AvailableSkill,
   installDir: string,
   options?: { force?: boolean },
 ): Promise<InstalledSkill> {
@@ -553,10 +506,10 @@ async function installSkill(
 ```typescript
 async function checkUpdate(
   installed: InstalledSkill,
-  catalogSkill: CatalogSkill,
+  source: AvailableSkill,
 ): Promise<boolean> {
   // バージョン文字列の単純比較
-  return installed.manifest.version !== catalogSkill.manifest.version;
+  return installed.manifest.version !== source.manifest.version;
 }
 ```
 
@@ -566,9 +519,9 @@ async function checkUpdate(
 
 ### Phase 1: MVP
 
-1. **`src/skill/types.ts`** — 型定義（`SkillManifest`, `SkillCatalog`, `InstalledSkill`, `CatalogSkill`）
+1. **`src/skill/types.ts`** — 型定義（`SkillManifest`, `InstalledSkill`, `AvailableSkill`）
 2. **`src/skill/manifest.ts`** — マニフェスト読み込み・Zod バリデーション
-3. **`src/skill/catalog.ts`** — カタログスキャン
+3. **`src/skill/scanner.ts`** — ソースディレクトリスキャン
 4. **`src/skill/manager.ts`** — `SkillManager` 実装（install, list, remove, info）
 5. **`src/skill/commands.ts`** — CLI サブコマンド定義
 6. **`src/skill/index.ts`** — `withSkillCommand()`, `createSkillManager()` 公開API
@@ -593,12 +546,12 @@ src/skill/
 ├── index.ts              # 公開API（withSkillCommand, createSkillManager, 型）
 ├── types.ts              # 型定義
 ├── manifest.ts           # マニフェストスキーマ・バリデーション
-├── catalog.ts            # カタログスキャン
+├── scanner.ts            # ソースディレクトリスキャン
 ├── manager.ts            # SkillManager 実装
 ├── commands.ts           # CLI サブコマンド定義
 └── __tests__/
     ├── manifest.test.ts
-    ├── catalog.test.ts
+    ├── scanner.test.ts
     ├── manager.test.ts
     └── commands.test.ts
 ```
@@ -619,9 +572,9 @@ src/skill/
 スキルの「実行」はCLI利用者側の責任。
 理由：スキルの実行方法はエージェントごとに大きく異なる。
 
-### Q3: 複数カタログで名前が衝突した場合は？
+### Q3: 複数ソースディレクトリで名前が衝突した場合は？
 
-先に登録されたカタログが優先される。`skill list --available` で各スキルのソースカタログも表示して透明性を確保する。
+先に指定されたディレクトリが優先される。`skill list --available` で各スキルのソースパスも表示して透明性を確保する。
 
 ### Q4: マニフェストの最小要件
 
