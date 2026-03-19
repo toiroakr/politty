@@ -63,6 +63,16 @@
         "types": "./dist/completion/index.d.cts",
         "default": "./dist/completion/index.cjs"
       }
+    },
+    "./skill": {
+      "import": {
+        "types": "./dist/skill/index.d.ts",
+        "default": "./dist/skill/index.js"
+      },
+      "require": {
+        "types": "./dist/skill/index.d.cts",
+        "default": "./dist/skill/index.cjs"
+      }
     }
   },
   "scripts": {
