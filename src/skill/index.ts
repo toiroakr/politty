@@ -12,6 +12,7 @@
  * ```typescript
  * import { defineCommand, runMain } from "politty";
  * import { withSkillCommand } from "politty/skill";
+ * import { sourceDir } from "@my-agent/skills";
  *
  * const cli = withSkillCommand(
  *   defineCommand({
@@ -21,9 +22,7 @@
  *       run: runCommand,
  *     },
  *   }),
- *   {
- *     sourceDir: require.resolve("@my-agent/skills/skills"),
- *   },
+ *   { sourceDir },
  * );
  *
  * runMain(cli);
@@ -48,6 +47,7 @@ import {
   createSkillAddCommand,
   createSkillListCommand,
   createSkillRemoveCommand,
+  createSkillSyncCommand,
 } from "./commands.js";
 import type { SkillCommandOptions } from "./types.js";
 
@@ -70,14 +70,14 @@ export type { DiscoveredSkill, SkillCommandOptions, SkillFrontmatter } from "./t
  *
  * @example
  * ```typescript
+ * import { sourceDir } from "@my-agent/skills";
+ *
  * const cli = withSkillCommand(
  *   defineCommand({
  *     name: "my-agent",
  *     subCommands: { run: runCommand },
  *   }),
- *   {
- *     sourceDir: require.resolve("@my-agent/skills/skills"),
- *   },
+ *   { sourceDir },
  * );
  * ```
  */
@@ -95,6 +95,7 @@ export function withSkillCommand<T extends AnyCommand>(
       name: "skills",
       description: "Manage agent skills",
       subCommands: {
+        sync: createSkillSyncCommand(options),
         add: createSkillAddCommand(options),
         remove: createSkillRemoveCommand(options),
         list: createSkillListCommand(options),

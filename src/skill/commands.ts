@@ -7,15 +7,55 @@ import { scanSourceDir } from "./scanner.js";
 import type { DiscoveredSkill, SkillCommandOptions } from "./types.js";
 
 /**
- * Create the `skill add` subcommand.
+ * Create the `skills sync` subcommand.
  *
- * Discovers skills from sourceDirs and delegates installation
+ * Removes all skills provided by this package, then reinstalls them.
+ * This ensures the installed state matches the current source.
+ */
+export function createSkillSyncCommand(options: SkillCommandOptions) {
+  return defineCommand({
+    name: "sync",
+    description: "Remove and reinstall all skills from source",
+    args: z.object({
+      exclude: arg(z.array(z.string()).default([]), {
+        alias: "e",
+        description: "Skill names to exclude from sync",
+      }),
+    }),
+    run(args) {
+      const allSkills = scanSourceDir(options.sourceDir);
+
+      if (allSkills.length === 0) {
+        logger.info("No skills found in source directory.");
+        return;
+      }
+
+      const excluded = new Set(args.exclude);
+      const skills = allSkills.filter((s) => !excluded.has(s.frontmatter.name));
+
+      // Remove all (non-excluded)
+      for (const skill of skills) {
+        removeSkill(skill.frontmatter.name);
+      }
+
+      // Add all (non-excluded)
+      for (const skill of skills) {
+        addSkill(skill);
+      }
+    },
+  });
+}
+
+/**
+ * Create the `skills add` subcommand.
+ *
+ * Discovers skills from sourceDir and delegates installation
  * to `npx skills add <local-path>`.
  */
 export function createSkillAddCommand(options: SkillCommandOptions) {
   return defineCommand({
     name: "add",
-    description: "Install skills from source packages",
+    description: "Install skills from source package",
     args: z.object({
       name: arg(z.string().optional(), {
         positional: true,
@@ -30,7 +70,7 @@ export function createSkillAddCommand(options: SkillCommandOptions) {
       const sourceSkills = scanSourceDir(options.sourceDir);
 
       if (sourceSkills.length === 0) {
-        logger.info("No skills found in source directories.");
+        logger.info("No skills found in source directory.");
         return;
       }
 
@@ -47,13 +87,8 @@ export function createSkillAddCommand(options: SkillCommandOptions) {
         return;
       }
 
-      const skill = sourceSkills.find((s) => s.frontmatter.name === args.name);
-      if (!skill) {
-        logger.error(`Skill "${args.name}" not found in source directories.`);
-        logger.info(`Available: ${sourceSkills.map((s) => s.frontmatter.name).join(", ")}`);
-        process.exitCode = 1;
-        return;
-      }
+      const skill = findSkill(sourceSkills, args.name);
+      if (!skill) return;
 
       addSkill(skill);
     },
@@ -61,9 +96,9 @@ export function createSkillAddCommand(options: SkillCommandOptions) {
 }
 
 /**
- * Create the `skill remove` subcommand.
+ * Create the `skills remove` subcommand.
  *
- * Only skills provided by this CLI's sourceDirs can be removed.
+ * Only skills provided by this CLI's sourceDir can be removed.
  * Delegates actual removal to `npx skills remove <name>`.
  */
 export function createSkillRemoveCommand(options: SkillCommandOptions) {
@@ -84,7 +119,7 @@ export function createSkillRemoveCommand(options: SkillCommandOptions) {
       const sourceSkills = scanSourceDir(options.sourceDir);
 
       if (sourceSkills.length === 0) {
-        logger.info("No skills found in source directories.");
+        logger.info("No skills found in source directory.");
         return;
       }
 
@@ -101,13 +136,8 @@ export function createSkillRemoveCommand(options: SkillCommandOptions) {
         return;
       }
 
-      const skill = sourceSkills.find((s) => s.frontmatter.name === args.name);
-      if (!skill) {
-        logger.error(`Skill "${args.name}" not found in source directories.`);
-        logger.info(`Available: ${sourceSkills.map((s) => s.frontmatter.name).join(", ")}`);
-        process.exitCode = 1;
-        return;
-      }
+      const skill = findSkill(sourceSkills, args.name);
+      if (!skill) return;
 
       removeSkill(skill.frontmatter.name);
     },
@@ -115,14 +145,14 @@ export function createSkillRemoveCommand(options: SkillCommandOptions) {
 }
 
 /**
- * Create the `skill list` subcommand.
+ * Create the `skills list` subcommand.
  *
- * Lists available skills from source directories.
+ * Lists available skills from the source directory.
  */
 export function createSkillListCommand(options: SkillCommandOptions) {
   return defineCommand({
     name: "list",
-    description: "List available skills from source packages",
+    description: "List available skills from source package",
     args: z.object({
       json: arg(z.boolean().default(false), {
         description: "Output as JSON",
@@ -146,7 +176,7 @@ export function createSkillListCommand(options: SkillCommandOptions) {
       }
 
       if (sourceSkills.length === 0) {
-        logger.info("No skills found in source directories.");
+        logger.info("No skills found in source directory.");
         return;
       }
 
@@ -161,8 +191,18 @@ export function createSkillListCommand(options: SkillCommandOptions) {
   });
 }
 
+function findSkill(skills: DiscoveredSkill[], name: string): DiscoveredSkill | undefined {
+  const skill = skills.find((s) => s.frontmatter.name === name);
+  if (!skill) {
+    logger.error(`Skill "${name}" not found in source directory.`);
+    logger.info(`Available: ${skills.map((s) => s.frontmatter.name).join(", ")}`);
+    process.exitCode = 1;
+  }
+  return skill;
+}
+
 function addSkill(skill: DiscoveredSkill): void {
-  logger.info(`Installing ${skill.frontmatter.name} from ${skill.sourcePath}...`);
+  logger.info(`Installing ${skill.frontmatter.name}...`);
   try {
     execFileSync("npx", ["skills", "add", skill.sourcePath], {
       stdio: "inherit",

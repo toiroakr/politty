@@ -31,7 +31,8 @@ export interface SkillCommandOptions {
    *
    * @example
    * ```typescript
-   * sourceDir: require.resolve("@my-agent/skills/skills"),
+   * import { sourceDir } from "@my-agent/skills";
+   * // sourceDir is the absolute path to the skills directory
    * ```
    */
   sourceDir: string;
