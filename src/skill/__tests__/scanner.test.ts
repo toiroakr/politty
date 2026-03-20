@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { scanInstalledSkills, scanSourceDirs } from "../scanner.js";
+import { scanSourceDirs } from "../scanner.js";
 
 function createTempDir(): string {
   const dir = join(
@@ -135,47 +135,5 @@ describe("scanSourceDirs", () => {
 
     expect(skills).toHaveLength(1);
     expect(skills[0]!.frontmatter.name).toBe("single");
-  });
-});
-
-describe("scanInstalledSkills", () => {
-  let tempDir: string;
-
-  beforeEach(() => {
-    tempDir = createTempDir();
-  });
-
-  afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
-  });
-
-  it("should discover installed skills", () => {
-    writeSkillMd(tempDir, "commit", {
-      name: "commit",
-      description: "Commit skill",
-      package: "@my-agent/skills",
-    });
-
-    const skills = scanInstalledSkills(tempDir);
-
-    expect(skills).toHaveLength(1);
-    expect(skills[0]!.frontmatter.name).toBe("commit");
-    expect(skills[0]!.frontmatter.package).toBe("@my-agent/skills");
-    expect(skills[0]!.installedPath).toBe(join(tempDir, "commit"));
-  });
-
-  it("should return empty array for non-existent directory", () => {
-    const skills = scanInstalledSkills("/nonexistent/path");
-
-    expect(skills).toHaveLength(0);
-  });
-
-  it("should skip directories without SKILL.md", () => {
-    mkdirSync(join(tempDir, "not-a-skill"), { recursive: true });
-    writeFileSync(join(tempDir, "not-a-skill", "README.md"), "# Not a skill");
-
-    const skills = scanInstalledSkills(tempDir);
-
-    expect(skills).toHaveLength(0);
   });
 });

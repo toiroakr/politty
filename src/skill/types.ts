@@ -32,20 +32,6 @@ export interface InstalledSkill {
 }
 
 /**
- * Result of a sync operation.
- */
-export interface SyncResult {
-  /** Newly installed skills */
-  installed: DiscoveredSkill[];
-  /** Skills removed because the source no longer provides them */
-  removed: InstalledSkill[];
-  /** Skills that were already up to date */
-  unchanged: DiscoveredSkill[];
-  /** Skills that were updated (content changed) */
-  updated: DiscoveredSkill[];
-}
-
-/**
  * Options for `withSkillCommand`.
  */
 export interface SkillCommandOptions {
@@ -62,6 +48,4 @@ export interface SkillCommandOptions {
    * ```
    */
   sourceDirs: string[];
-  /** Hook called after sync completes */
-  onSync?: (result: SyncResult) => void | Promise<void>;
 }

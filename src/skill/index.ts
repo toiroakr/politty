@@ -1,13 +1,13 @@
 /**
  * Skill management module for coding agent CLIs.
  *
- * Provides utilities to manage SKILL.md-based skills following
- * the vercel-labs/skills format. Skills are distributed via npm packages
- * and synced to the project using the `skill sync` command.
+ * Wraps vercel-labs/skills by providing source directory scanning
+ * and package-based filtering. The actual installation and removal
+ * of skills is delegated to `npx skills`.
  *
  * The SKILL.md frontmatter is extended with a `package` field for
  * tracking which npm package each skill originated from. This enables
- * detection of skill removals when a package drops a skill.
+ * package-level operations like removing all skills from a package.
  *
  * @example
  * ```typescript
@@ -47,26 +47,30 @@
 
 import { defineCommand } from "../core/command.js";
 import type { AnyCommand } from "../types.js";
-import { createSkillListCommand, createSkillSyncCommand } from "./commands.js";
+import {
+  createSkillAddCommand,
+  createSkillListCommand,
+  createSkillRemoveCommand,
+} from "./commands.js";
 import type { SkillCommandOptions } from "./types.js";
 
 // Public API re-exports
 export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./frontmatter.js";
-export { scanInstalledSkills, scanSourceDirs } from "./scanner.js";
-export { syncSkills } from "./sync.js";
+export { scanSourceDirs } from "./scanner.js";
 export type {
   DiscoveredSkill,
   InstalledSkill,
   SkillCommandOptions,
   SkillFrontmatter,
-  SyncResult,
 } from "./types.js";
 
 /**
  * Wrap a command with a `skill` subcommand for managing SKILL.md-based skills.
  *
- * Adds `skill sync` and `skill list` subcommands that discover skills from
- * npm package source directories and install them to `.agents/skills/`.
+ * Adds `skill add`, `skill remove`, and `skill list` subcommands.
+ * Installation and removal are delegated to vercel-labs/skills (`npx skills`).
+ * politty provides source directory scanning (local path resolution) and
+ * package-based filtering for removal.
  *
  * @param command - The root command to wrap
  * @param options - Skill command configuration
@@ -95,11 +99,12 @@ export function withSkillCommand<T extends AnyCommand>(
 
   wrappedCommand.subCommands = {
     ...command.subCommands,
-    skill: defineCommand({
-      name: "skill",
+    skills: defineCommand({
+      name: "skills",
       description: "Manage agent skills",
       subCommands: {
-        sync: createSkillSyncCommand(options),
+        add: createSkillAddCommand(options),
+        remove: createSkillRemoveCommand(options),
         list: createSkillListCommand(options),
       },
     }),

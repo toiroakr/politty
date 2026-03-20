@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { parseSkillMd } from "./frontmatter.js";
-import type { DiscoveredSkill, InstalledSkill } from "./types.js";
+import type { DiscoveredSkill } from "./types.js";
 
 const SKILL_MD = "SKILL.md";
 
@@ -49,40 +49,6 @@ export function scanSourceDirs(sourceDirs: string[]): DiscoveredSkill[] {
         skills.push(skill);
       }
     }
-  }
-
-  return skills;
-}
-
-/**
- * Scan an installed skills directory for SKILL.md files.
- *
- * @param installDir - The directory where skills are installed (e.g., `.agents/skills`)
- */
-export function scanInstalledSkills(installDir: string): InstalledSkill[] {
-  if (!existsSync(installDir) || !statSync(installDir).isDirectory()) {
-    return [];
-  }
-
-  const skills: InstalledSkill[] = [];
-  const entries = readdirSync(installDir, { withFileTypes: true });
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-
-    const skillDir = join(installDir, entry.name);
-    const skillMdPath = join(skillDir, SKILL_MD);
-
-    if (!existsSync(skillMdPath)) continue;
-
-    const content = readFileSync(skillMdPath, "utf-8");
-    const parsed = parseSkillMd(content);
-    if (!parsed) continue;
-
-    skills.push({
-      frontmatter: parsed.frontmatter,
-      installedPath: skillDir,
-    });
   }
 
   return skills;
