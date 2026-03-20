@@ -10,9 +10,12 @@
  *
  * @example
  * ```typescript
+ * import { dirname, resolve } from "node:path";
+ * import { fileURLToPath } from "node:url";
  * import { defineCommand, runMain } from "politty";
  * import { withSkillCommand } from "politty/skill";
- * import { sourceDir } from "@my-agent/skills";
+ *
+ * const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
  *
  * const cli = withSkillCommand(
  *   defineCommand({
@@ -70,7 +73,8 @@ export type { DiscoveredSkill, SkillCommandOptions, SkillFrontmatter } from "./t
  *
  * @example
  * ```typescript
- * import { sourceDir } from "@my-agent/skills";
+ * // Resolves to ../skills from both src/ and dist/
+ * const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
  *
  * const cli = withSkillCommand(
  *   defineCommand({

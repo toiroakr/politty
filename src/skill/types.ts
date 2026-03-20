@@ -31,8 +31,9 @@ export interface SkillCommandOptions {
    *
    * @example
    * ```typescript
-   * import { sourceDir } from "@my-agent/skills";
-   * // sourceDir is the absolute path to the skills directory
+   * // Resolves to ../skills relative to the current file.
+   * // Works from both src/ and dist/ if at the same depth.
+   * const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
    * ```
    */
   sourceDir: string;
