@@ -1017,6 +1017,141 @@ type CommandValidationResult =
 
 ---
 
+## Skill Management (`politty/skill`)
+
+### `withSkillCommand`
+
+Wraps a command with a `skills` subcommand for managing SKILL.md-based agent skills. Delegates actual installation and removal to [vercel-labs/skills](https://github.com/vercel-labs/skills) (`npx skills`).
+
+```typescript
+function withSkillCommand<T extends AnyCommand>(command: T, options: SkillCommandOptions): T;
+```
+
+#### Parameters
+
+| Name      | Type                  | Description           |
+| --------- | --------------------- | --------------------- |
+| `command` | `AnyCommand`          | Command to wrap       |
+| `options` | `SkillCommandOptions` | Skill command options |
+
+**SkillCommandOptions:**
+
+| Property    | Type     | Description                                |
+| ----------- | -------- | ------------------------------------------ |
+| `sourceDir` | `string` | Source directory containing SKILL.md files |
+
+#### Generated Subcommands
+
+| Command                         | Description                       |
+| ------------------------------- | --------------------------------- |
+| `skills sync [--exclude name]`  | Remove and reinstall all skills   |
+| `skills add <name> \| --all`    | Install skill(s) from source      |
+| `skills remove <name> \| --all` | Remove installed skill(s)         |
+| `skills list [--json]`          | List available skills from source |
+
+#### Example
+
+```typescript
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineCommand, runMain } from "politty";
+import { withSkillCommand } from "politty/skill";
+
+const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
+
+const cli = withSkillCommand(
+  defineCommand({
+    name: "my-agent",
+    subCommands: {
+      /* ... */
+    },
+  }),
+  { sourceDir },
+);
+
+runMain(cli);
+```
+
+---
+
+### `scanSourceDir`
+
+Scans a directory for SKILL.md files and returns discovered skills.
+
+```typescript
+function scanSourceDir(sourceDir: string): DiscoveredSkill[];
+```
+
+If the directory itself contains a SKILL.md, it is treated as a single-skill source. Otherwise, each subdirectory with a SKILL.md is treated as a skill.
+
+---
+
+### `parseSkillMd`
+
+Parses a SKILL.md content string and validates its frontmatter.
+
+```typescript
+function parseSkillMd(content: string): ParsedSkillMd | null;
+```
+
+Returns `null` if the frontmatter is missing or invalid (requires `name` and `description`).
+
+---
+
+### `parseFrontmatter`
+
+Parses YAML frontmatter from a markdown string. Supports a minimal YAML subset: strings, quoted strings, booleans, numbers, flow-style arrays, and one-level nested objects.
+
+```typescript
+function parseFrontmatter(content: string): { data: Record<string, unknown>; body: string };
+```
+
+---
+
+### `skillFrontmatterSchema`
+
+Zod schema for SKILL.md frontmatter validation.
+
+```typescript
+const skillFrontmatterSchema: z.ZodObject<{
+  name: z.ZodString;
+  description: z.ZodString;
+  package: z.ZodOptional<z.ZodString>;
+  metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+}>;
+```
+
+---
+
+### `DiscoveredSkill`
+
+A skill found in a source directory.
+
+```typescript
+interface DiscoveredSkill {
+  frontmatter: SkillFrontmatter;
+  sourcePath: string;
+  rawContent: string;
+}
+```
+
+---
+
+### `SkillFrontmatter`
+
+Parsed SKILL.md frontmatter. Compatible with vercel-labs/skills format, extended with `package` field.
+
+```typescript
+interface SkillFrontmatter {
+  name: string;
+  description: string;
+  package?: string;
+  metadata?: Record<string, unknown>;
+}
+```
+
+---
+
 ## Exports
 
 ```typescript
@@ -1086,4 +1221,13 @@ export {
 // Zod validation
 export { formatValidationErrors } from "./validator/zod-validator.js";
 export type { ValidationError, ValidationResult } from "./validator/zod-validator.js";
+```
+
+### `politty/skill`
+
+```typescript
+export { withSkillCommand } from "./skill/index.js";
+export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./skill/frontmatter.js";
+export { scanSourceDir } from "./skill/scanner.js";
+export type { DiscoveredSkill, SkillCommandOptions, SkillFrontmatter } from "./skill/types.js";
 ```

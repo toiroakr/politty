@@ -14,6 +14,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **Signal Handling**: Proper SIGINT/SIGTERM handling with guaranteed cleanup execution
 - **Auto Help Generation**: Automatically generate help text from definitions
 - **Discriminated Union**: Support for mutually exclusive argument sets
+- **Skill Management**: Manage agent skills (SKILL.md) via [vercel-labs/skills](https://github.com/vercel-labs/skills) wrapper
 
 ## Requirements
 
@@ -368,6 +369,57 @@ const command = defineCommand({
 });
 ```
 
+## Skill Management
+
+politty wraps [vercel-labs/skills](https://github.com/vercel-labs/skills) to manage SKILL.md-based agent skills distributed via npm packages.
+
+### Quick Setup
+
+Use `withSkillCommand` to add skill management to your CLI:
+
+```typescript
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineCommand, runMain } from "politty";
+import { withSkillCommand } from "politty/skill";
+
+// Resolves to ../skills from both src/ and dist/
+const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
+
+const cli = withSkillCommand(
+  defineCommand({
+    name: "my-agent",
+    subCommands: {
+      /* ... */
+    },
+  }),
+  { sourceDir },
+);
+
+runMain(cli);
+```
+
+Skills are SKILL.md files with YAML frontmatter:
+
+```markdown
+---
+name: commit
+description: Git commit message generation
+package: "@my-agent/skills"
+---
+
+# Instructions for the agent...
+```
+
+Then users can manage skills:
+
+```bash
+my-agent skills sync              # Remove and reinstall all skills
+my-agent skills add commit        # Install a specific skill
+my-agent skills remove commit     # Remove a specific skill
+my-agent skills list              # List available skills
+```
+
 ## Documentation
 
 For detailed documentation, see the `docs/` directory:
@@ -376,6 +428,7 @@ For detailed documentation, see the `docs/` directory:
 - [Essentials](./docs/essentials.md) - Core concepts explained
 - [Advanced Features](./docs/advanced-features.md) - Subcommands, Discriminated Union
 - [Recipes](./docs/recipes.md) - Testing, configuration, error handling
+- [Skill Management](./docs/skill-management.md) - Agent skill management via vercel-labs/skills
 - [API Reference](./docs/api-reference.md) - Detailed API reference
 - [Doc Generation](./docs/doc-generation.md) - Automatic documentation generation
 

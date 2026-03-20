@@ -4,8 +4,7 @@
 
 Add `politty/skill` module for managing SKILL.md-based agent skills
 
-- `withSkillCommand()` wrapper adds `skill sync` and `skill list` subcommands
+- `withSkillCommand()` wrapper adds `skills sync`, `skills add`, `skills remove`, `skills list` subcommands
+- Wraps vercel-labs/skills: provides local path resolution for install, skill filtering for remove
 - SKILL.md frontmatter parsing with `package` field for provenance tracking
-- Skill sync detects additions, updates, and removals by package
-- Follows vercel-labs/skills SKILL.md format conventions
-- Replaces the previous skill.json-based design
+- `sync` command removes and reinstalls all skills with `--exclude` support

@@ -19,6 +19,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **[Essentials](./essentials.md)**: Core concepts (arguments, validation, lifecycle) explained
 - **[Advanced Features](./advanced-features.md)**: Subcommands, Discriminated Union, advanced features
 - **[Shell Completion](./shell-completion.md)**: Completion types, shell-specific setup, and troubleshooting
+- **[Skill Management](./skill-management.md)**: Manage agent skills via vercel-labs/skills wrapper
 - **[Recipes](./recipes.md)**: Practical examples for testing, configuration, error handling
 - **[API Reference](./api-reference.md)**: Detailed API reference
 - **[Doc Generation](./doc-generation.md)**: Automatic documentation generation with golden tests
