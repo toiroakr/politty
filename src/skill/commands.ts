@@ -63,8 +63,8 @@ export function createSkillAddCommand(options: SkillCommandOptions) {
 /**
  * Create the `skill remove` subcommand.
  *
- * Delegates removal to `npx skills remove <name>`.
- * Supports `--package` flag to remove all skills from a specific package.
+ * Only skills provided by this CLI's sourceDirs can be removed.
+ * Delegates actual removal to `npx skills remove <name>`.
  */
 export function createSkillRemoveCommand(options: SkillCommandOptions) {
   return defineCommand({
@@ -76,34 +76,40 @@ export function createSkillRemoveCommand(options: SkillCommandOptions) {
         description: "Skill name to remove",
         placeholder: "NAME",
       }),
-      package: arg(z.string().optional(), {
-        alias: "p",
-        description: "Remove all skills from a specific package",
+      all: arg(z.boolean().default(false), {
+        description: "Remove all skills provided by this CLI",
       }),
     }),
     run(args) {
-      if (args.package) {
-        const sourceSkills = scanSourceDirs(options.sourceDirs);
-        const packageSkills = sourceSkills.filter((s) => s.frontmatter.package === args.package);
+      const sourceSkills = scanSourceDirs(options.sourceDirs);
 
-        if (packageSkills.length === 0) {
-          logger.info(`No skills found from package "${args.package}".`);
-          return;
-        }
+      if (sourceSkills.length === 0) {
+        logger.info("No skills found in source directories.");
+        return;
+      }
 
-        for (const skill of packageSkills) {
+      if (args.all) {
+        for (const skill of sourceSkills) {
           removeSkill(skill.frontmatter.name);
         }
         return;
       }
 
       if (!args.name) {
-        logger.error("Specify a skill name or use --package.");
+        logger.error("Specify a skill name or use --all.");
         process.exitCode = 1;
         return;
       }
 
-      removeSkill(args.name);
+      const skill = sourceSkills.find((s) => s.frontmatter.name === args.name);
+      if (!skill) {
+        logger.error(`Skill "${args.name}" not found in source directories.`);
+        logger.info(`Available: ${sourceSkills.map((s) => s.frontmatter.name).join(", ")}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      removeSkill(skill.frontmatter.name);
     },
   });
 }
