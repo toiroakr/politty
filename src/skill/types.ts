@@ -22,30 +22,17 @@ export interface DiscoveredSkill {
 }
 
 /**
- * A skill installed in the project.
- */
-export interface InstalledSkill {
-  /** Parsed frontmatter metadata */
-  frontmatter: SkillFrontmatter;
-  /** Absolute path to the installed skill directory */
-  installedPath: string;
-}
-
-/**
  * Options for `withSkillCommand`.
  */
 export interface SkillCommandOptions {
   /**
-   * Source directories containing SKILL.md files.
-   * Each directory's subdirectories with SKILL.md are treated as skills.
+   * Source directory containing SKILL.md files.
+   * Subdirectories with SKILL.md are treated as skills.
    *
    * @example
    * ```typescript
-   * sourceDirs: [
-   *   require.resolve("@my-agent/skills/skills"),
-   *   require.resolve("@my-agent/community/skills"),
-   * ]
+   * sourceDir: require.resolve("@my-agent/skills/skills"),
    * ```
    */
-  sourceDirs: string[];
+  sourceDir: string;
 }

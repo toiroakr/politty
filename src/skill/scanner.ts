@@ -6,14 +6,15 @@ import type { DiscoveredSkill } from "./types.js";
 const SKILL_MD = "SKILL.md";
 
 /**
- * Scan source directories for SKILL.md files.
+ * Scan a source directory for SKILL.md files.
  *
- * Each source directory is expected to contain subdirectories,
+ * The directory is expected to contain subdirectories,
  * each with a SKILL.md file at its root.
+ * If the directory itself has a SKILL.md, it is treated as a single-skill source.
  *
  * @example
  * ```
- * sourceDirs: ["node_modules/@my-agent/skills/skills"]
+ * sourceDir: "node_modules/@my-agent/skills/skills"
  *
  * node_modules/@my-agent/skills/skills/
  * ├── commit/
@@ -22,32 +23,24 @@ const SKILL_MD = "SKILL.md";
  *     └── SKILL.md
  * ```
  */
-export function scanSourceDirs(sourceDirs: string[]): DiscoveredSkill[] {
+export function scanSourceDir(sourceDir: string): DiscoveredSkill[] {
+  if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) return [];
+
+  // Check if dir itself has a SKILL.md (single-skill source)
+  const directSkill = tryParseSkillDir(sourceDir);
+  if (directSkill) return [directSkill];
+
+  // Scan subdirectories
   const skills: DiscoveredSkill[] = [];
-  const seenNames = new Set<string>();
+  const entries = readdirSync(sourceDir, { withFileTypes: true });
 
-  for (const dir of sourceDirs) {
-    if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
 
-    // Check if dir itself has a SKILL.md (single-skill source)
-    const directSkill = tryParseSkillDir(dir);
-    if (directSkill && !seenNames.has(directSkill.frontmatter.name)) {
-      seenNames.add(directSkill.frontmatter.name);
-      skills.push(directSkill);
-      continue;
-    }
-
-    // Scan subdirectories
-    const entries = readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-
-      const skillDir = join(dir, entry.name);
-      const skill = tryParseSkillDir(skillDir);
-      if (skill && !seenNames.has(skill.frontmatter.name)) {
-        seenNames.add(skill.frontmatter.name);
-        skills.push(skill);
-      }
+    const skillDir = join(sourceDir, entry.name);
+    const skill = tryParseSkillDir(skillDir);
+    if (skill) {
+      skills.push(skill);
     }
   }
 

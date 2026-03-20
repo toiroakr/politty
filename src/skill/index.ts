@@ -2,12 +2,11 @@
  * Skill management module for coding agent CLIs.
  *
  * Wraps vercel-labs/skills by providing source directory scanning
- * and package-based filtering. The actual installation and removal
+ * and skill filtering. The actual installation and removal
  * of skills is delegated to `npx skills`.
  *
  * The SKILL.md frontmatter is extended with a `package` field for
- * tracking which npm package each skill originated from. This enables
- * package-level operations like removing all skills from a package.
+ * tracking which npm package each skill originated from.
  *
  * @example
  * ```typescript
@@ -23,9 +22,7 @@
  *     },
  *   }),
  *   {
- *     sourceDirs: [
- *       require.resolve("@my-agent/skills/skills"),
- *     ],
+ *     sourceDir: require.resolve("@my-agent/skills/skills"),
  *   },
  * );
  *
@@ -56,25 +53,20 @@ import type { SkillCommandOptions } from "./types.js";
 
 // Public API re-exports
 export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./frontmatter.js";
-export { scanSourceDirs } from "./scanner.js";
-export type {
-  DiscoveredSkill,
-  InstalledSkill,
-  SkillCommandOptions,
-  SkillFrontmatter,
-} from "./types.js";
+export { scanSourceDir } from "./scanner.js";
+export type { DiscoveredSkill, SkillCommandOptions, SkillFrontmatter } from "./types.js";
 
 /**
- * Wrap a command with a `skill` subcommand for managing SKILL.md-based skills.
+ * Wrap a command with a `skills` subcommand for managing SKILL.md-based skills.
  *
- * Adds `skill add`, `skill remove`, and `skill list` subcommands.
+ * Adds `skills add`, `skills remove`, and `skills list` subcommands.
  * Installation and removal are delegated to vercel-labs/skills (`npx skills`).
  * politty provides source directory scanning (local path resolution) and
- * package-based filtering for removal.
+ * skill filtering scoped to the source directory.
  *
  * @param command - The root command to wrap
  * @param options - Skill command configuration
- * @returns The command with `skill` subcommand added
+ * @returns The command with `skills` subcommand added
  *
  * @example
  * ```typescript
@@ -84,7 +76,7 @@ export type {
  *     subCommands: { run: runCommand },
  *   }),
  *   {
- *     sourceDirs: [require.resolve("@my-agent/skills/skills")],
+ *     sourceDir: require.resolve("@my-agent/skills/skills"),
  *   },
  * );
  * ```

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
 import { logger, symbols } from "../output/logger.js";
-import { scanSourceDirs } from "./scanner.js";
+import { scanSourceDir } from "./scanner.js";
 import type { DiscoveredSkill, SkillCommandOptions } from "./types.js";
 
 /**
@@ -27,7 +27,7 @@ export function createSkillAddCommand(options: SkillCommandOptions) {
       }),
     }),
     run(args) {
-      const sourceSkills = scanSourceDirs(options.sourceDirs);
+      const sourceSkills = scanSourceDir(options.sourceDir);
 
       if (sourceSkills.length === 0) {
         logger.info("No skills found in source directories.");
@@ -81,7 +81,7 @@ export function createSkillRemoveCommand(options: SkillCommandOptions) {
       }),
     }),
     run(args) {
-      const sourceSkills = scanSourceDirs(options.sourceDirs);
+      const sourceSkills = scanSourceDir(options.sourceDir);
 
       if (sourceSkills.length === 0) {
         logger.info("No skills found in source directories.");
@@ -129,7 +129,7 @@ export function createSkillListCommand(options: SkillCommandOptions) {
       }),
     }),
     run(args) {
-      const sourceSkills = scanSourceDirs(options.sourceDirs);
+      const sourceSkills = scanSourceDir(options.sourceDir);
 
       if (args.json) {
         console.log(

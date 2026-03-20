@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { scanSourceDirs } from "../scanner.js";
+import { scanSourceDir } from "../scanner.js";
 
 function createTempDir(): string {
   const dir = join(
@@ -22,7 +22,7 @@ function writeSkillMd(dir: string, name: string, frontmatter: Record<string, str
   writeFileSync(join(skillDir, "SKILL.md"), `---\n${fm}\n---\n# ${name} skill\n`);
 }
 
-describe("scanSourceDirs", () => {
+describe("scanSourceDir", () => {
   let tempDir: string;
 
   beforeEach(() => {
@@ -45,7 +45,7 @@ describe("scanSourceDirs", () => {
       package: "@my-agent/skills",
     });
 
-    const skills = scanSourceDirs([tempDir]);
+    const skills = scanSourceDir(tempDir);
 
     expect(skills).toHaveLength(2);
     expect(skills.map((s) => s.frontmatter.name).sort()).toEqual(["commit", "review-pr"]);
@@ -59,7 +59,7 @@ describe("scanSourceDirs", () => {
     mkdirSync(join(tempDir, "not-a-skill"), { recursive: true });
     writeFileSync(join(tempDir, "not-a-skill", "README.md"), "# Not a skill");
 
-    const skills = scanSourceDirs([tempDir]);
+    const skills = scanSourceDir(tempDir);
 
     expect(skills).toHaveLength(1);
     expect(skills[0]!.frontmatter.name).toBe("commit");
@@ -70,57 +70,15 @@ describe("scanSourceDirs", () => {
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, "SKILL.md"), "---\nname: invalid\n---\n# Missing description");
 
-    const skills = scanSourceDirs([tempDir]);
+    const skills = scanSourceDir(tempDir);
 
     expect(skills).toHaveLength(0);
   });
 
-  it("should deduplicate skills by name across source dirs", () => {
-    const dir1 = join(tempDir, "source1");
-    const dir2 = join(tempDir, "source2");
-    mkdirSync(dir1, { recursive: true });
-    mkdirSync(dir2, { recursive: true });
-
-    writeSkillMd(dir1, "commit", {
-      name: "commit",
-      description: "Commit skill v1",
-    });
-    writeSkillMd(dir2, "commit", {
-      name: "commit",
-      description: "Commit skill v2",
-    });
-
-    const skills = scanSourceDirs([dir1, dir2]);
-
-    expect(skills).toHaveLength(1);
-    // First source wins
-    expect(skills[0]!.frontmatter.description).toBe("Commit skill v1");
-  });
-
-  it("should handle non-existent source directories", () => {
-    const skills = scanSourceDirs(["/nonexistent/path"]);
+  it("should handle non-existent source directory", () => {
+    const skills = scanSourceDir("/nonexistent/path");
 
     expect(skills).toHaveLength(0);
-  });
-
-  it("should handle multiple source directories", () => {
-    const dir1 = join(tempDir, "source1");
-    const dir2 = join(tempDir, "source2");
-    mkdirSync(dir1, { recursive: true });
-    mkdirSync(dir2, { recursive: true });
-
-    writeSkillMd(dir1, "commit", {
-      name: "commit",
-      description: "Commit skill",
-    });
-    writeSkillMd(dir2, "review", {
-      name: "review",
-      description: "Review skill",
-    });
-
-    const skills = scanSourceDirs([dir1, dir2]);
-
-    expect(skills).toHaveLength(2);
   });
 
   it("should handle a single-skill source directory (SKILL.md at root)", () => {
@@ -131,7 +89,7 @@ describe("scanSourceDirs", () => {
       "---\nname: single\ndescription: A single skill\n---\n# Single\n",
     );
 
-    const skills = scanSourceDirs([singleSkillDir]);
+    const skills = scanSourceDir(singleSkillDir);
 
     expect(skills).toHaveLength(1);
     expect(skills[0]!.frontmatter.name).toBe("single");
