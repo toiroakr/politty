@@ -62,7 +62,7 @@ export type { DiscoveredSkill, SkillCommandOptions, SkillFrontmatter } from "./t
 /**
  * Wrap a command with a `skills` subcommand for managing SKILL.md-based skills.
  *
- * Adds `skills add`, `skills remove`, and `skills list` subcommands.
+ * Adds `skills sync`, `skills add`, `skills remove`, and `skills list` subcommands.
  * Installation and removal are delegated to vercel-labs/skills (`npx skills`).
  * politty provides source directory scanning (local path resolution) and
  * skill filtering scoped to the source directory.
