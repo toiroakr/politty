@@ -1,3 +1,4 @@
+import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
 /**
@@ -31,10 +32,8 @@ export interface ParsedSkillMd {
 /**
  * Parse YAML frontmatter from a SKILL.md string.
  *
- * Supports a minimal subset of YAML sufficient for SKILL.md:
- * - String values (plain and quoted)
- * - Nested objects (one level, via dot-path or indentation)
- * - Boolean/null values
+ * Extracts the YAML block between `---` delimiters and parses it
+ * using the `yaml` package.
  *
  * @example
  * ```typescript
@@ -59,73 +58,16 @@ export function parseFrontmatter(content: string): {
 
   const yamlBlock = match[1]!;
   const body = match[2]!;
-  const data: Record<string, unknown> = {};
 
-  let currentKey: string | null = null;
-  let currentObject: Record<string, unknown> | null = null;
-
-  for (const line of yamlBlock.split("\n")) {
-    // Skip empty lines and comments
-    if (/^\s*$/.test(line) || /^\s*#/.test(line)) continue;
-
-    // Check for indented key (nested object)
-    const indentedMatch = line.match(/^[ \t]+(\w[\w-]*):\s*(.*)$/);
-    if (indentedMatch && currentKey && currentObject) {
-      const key = indentedMatch[1]!;
-      const rawVal = indentedMatch[2]!;
-      currentObject[key] = parseYamlValue(rawVal.trim());
-      data[currentKey] = currentObject;
-      continue;
+  try {
+    const data = parseYaml(yamlBlock);
+    if (data == null || typeof data !== "object" || Array.isArray(data)) {
+      return { data: {}, body };
     }
-
-    // Top-level key: value
-    const kvMatch = line.match(/^(\w[\w-]*):\s*(.*)$/);
-    if (kvMatch) {
-      const key = kvMatch[1]!;
-      const value = kvMatch[2]!.trim();
-
-      if (value === "") {
-        // Start of a nested object
-        currentKey = key;
-        currentObject = {};
-        data[key] = currentObject;
-      } else {
-        currentKey = null;
-        currentObject = null;
-        data[key] = parseYamlValue(value);
-      }
-    }
+    return { data: data as Record<string, unknown>, body };
+  } catch {
+    return { data: {}, body };
   }
-
-  return { data, body };
-}
-
-/**
- * Parse a single YAML value (minimal subset).
- */
-function parseYamlValue(raw: string): unknown {
-  if (raw === "" || raw === "~" || raw === "null") return null;
-  if (raw === "true") return true;
-  if (raw === "false") return false;
-
-  // Quoted string
-  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
-    return raw.slice(1, -1);
-  }
-
-  // Flow-style array: [a, b, c]
-  if (raw.startsWith("[") && raw.endsWith("]")) {
-    const inner = raw.slice(1, -1).trim();
-    if (inner === "") return [];
-    return inner.split(",").map((item) => parseYamlValue(item.trim()));
-  }
-
-  // Number
-  if (/^-?\d+(\.\d+)?$/.test(raw)) {
-    return Number(raw);
-  }
-
-  return raw;
 }
 
 /**

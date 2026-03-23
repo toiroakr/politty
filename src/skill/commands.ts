@@ -6,6 +6,10 @@ import { logger, symbols } from "../output/logger.js";
 import { scanSourceDir } from "./scanner.js";
 import type { DiscoveredSkill, SkillCommandOptions } from "./types.js";
 
+function getSkills(options: SkillCommandOptions): DiscoveredSkill[] {
+  return scanSourceDir(options.sourceDir);
+}
+
 /**
  * Create the `skills sync` subcommand.
  *
@@ -23,7 +27,7 @@ export function createSkillSyncCommand(options: SkillCommandOptions) {
       }),
     }),
     run(args) {
-      const allSkills = scanSourceDir(options.sourceDir);
+      const allSkills = getSkills(options);
 
       if (allSkills.length === 0) {
         logger.info("No skills found in source directory.");
@@ -33,13 +37,20 @@ export function createSkillSyncCommand(options: SkillCommandOptions) {
       const excluded = new Set(args.exclude);
       const skills = allSkills.filter((s) => !excluded.has(s.frontmatter.name));
 
-      // Remove all (non-excluded)
+      // Remove all (non-excluded), tracking failures
+      const failedRemoves = new Set<string>();
       for (const skill of skills) {
-        removeSkill(skill.frontmatter.name);
+        if (!removeSkill(skill.frontmatter.name)) {
+          failedRemoves.add(skill.frontmatter.name);
+        }
       }
 
-      // Add all (non-excluded)
+      // Add all (non-excluded), skipping skills that failed to remove
       for (const skill of skills) {
+        if (failedRemoves.has(skill.frontmatter.name)) {
+          logger.warn(`Skipping install of ${skill.frontmatter.name} (removal failed)`);
+          continue;
+        }
         addSkill(skill);
       }
     },
@@ -67,7 +78,7 @@ export function createSkillAddCommand(options: SkillCommandOptions) {
       }),
     }),
     run(args) {
-      const sourceSkills = scanSourceDir(options.sourceDir);
+      const sourceSkills = getSkills(options);
 
       if (sourceSkills.length === 0) {
         logger.info("No skills found in source directory.");
@@ -116,7 +127,7 @@ export function createSkillRemoveCommand(options: SkillCommandOptions) {
       }),
     }),
     run(args) {
-      const sourceSkills = scanSourceDir(options.sourceDir);
+      const sourceSkills = getSkills(options);
 
       if (sourceSkills.length === 0) {
         logger.info("No skills found in source directory.");
@@ -159,7 +170,7 @@ export function createSkillListCommand(options: SkillCommandOptions) {
       }),
     }),
     run(args) {
-      const sourceSkills = scanSourceDir(options.sourceDir);
+      const sourceSkills = getSkills(options);
 
       if (args.json) {
         console.log(
@@ -201,27 +212,31 @@ function findSkill(skills: DiscoveredSkill[], name: string): DiscoveredSkill | u
   return skill;
 }
 
-function addSkill(skill: DiscoveredSkill): void {
+function addSkill(skill: DiscoveredSkill): boolean {
   logger.info(`Installing ${skill.frontmatter.name}...`);
   try {
     execFileSync("npx", ["skills", "add", skill.sourcePath], {
       stdio: "inherit",
     });
     logger.info(`${symbols.success} Installed ${skill.frontmatter.name}`);
+    return true;
   } catch {
     logger.error(`Failed to install ${skill.frontmatter.name}`);
     process.exitCode = 1;
+    return false;
   }
 }
 
-function removeSkill(name: string): void {
+function removeSkill(name: string): boolean {
   try {
     execFileSync("npx", ["skills", "remove", name], {
       stdio: "inherit",
     });
     logger.info(`${symbols.success} Removed ${name}`);
+    return true;
   } catch {
     logger.error(`Failed to remove ${name}`);
     process.exitCode = 1;
+    return false;
   }
 }
