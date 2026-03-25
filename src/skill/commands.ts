@@ -13,8 +13,8 @@ function getSkills(options: SkillCommandOptions): DiscoveredSkill[] {
 /**
  * Create the `skills sync` subcommand.
  *
- * Removes all skills provided by this package, then reinstalls them.
- * This ensures the installed state matches the current source.
+ * Removes and reinstalls all skills discovered in sourceDir.
+ * Skills previously installed but no longer in sourceDir are not affected.
  */
 export function createSkillSyncCommand(options: SkillCommandOptions) {
   return defineCommand({

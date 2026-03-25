@@ -81,7 +81,7 @@ runMain(cli);
 
 ### `skills sync`
 
-Removes all skills from this package, then reinstalls them. Ensures installed skills match the current source.
+Removes and reinstalls all skills discovered in `sourceDir`. Skills that were previously installed but are no longer present in `sourceDir` are not affected.
 
 ```bash
 my-agent skills sync
