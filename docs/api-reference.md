@@ -1142,12 +1142,12 @@ interface DiscoveredSkill {
 Parsed SKILL.md frontmatter. Compatible with vercel-labs/skills format, extended with `package` field.
 
 ```typescript
-interface SkillFrontmatter {
+type SkillFrontmatter = {
   name: string;
   description: string;
   package?: string;
   metadata?: Record<string, unknown>;
-}
+};
 ```
 
 ---
