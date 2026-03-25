@@ -102,10 +102,10 @@ describe("createSkillSyncCommand", () => {
     const command = createSkillSyncCommand({ sourceDir: tempDir });
     command.run!({ exclude: [] });
 
-    // Should call remove for each skill, then add for each skill
+    // Args: ["--yes", "skills", "remove"|"add", name|path]
     const calls = mockedExecFileSync.mock.calls;
-    const removeNames = calls.filter((c) => c[1]![1] === "remove").map((c) => c[1]![2]);
-    const addPaths = calls.filter((c) => c[1]![1] === "add").map((c) => c[1]![2]);
+    const removeNames = calls.filter((c) => c[1]![2] === "remove").map((c) => c[1]![3]);
+    const addPaths = calls.filter((c) => c[1]![2] === "add").map((c) => c[1]![3]);
 
     expect(removeNames.sort()).toEqual(["commit", "review"]);
     expect(addPaths).toHaveLength(2);
@@ -119,8 +119,8 @@ describe("createSkillSyncCommand", () => {
     command.run!({ exclude: ["commit"] });
 
     const calls = mockedExecFileSync.mock.calls;
-    const removeNames = calls.filter((c) => c[1]![1] === "remove").map((c) => c[1]![2]);
-    const addPaths = calls.filter((c) => c[1]![1] === "add");
+    const removeNames = calls.filter((c) => c[1]![2] === "remove").map((c) => c[1]![3]);
+    const addPaths = calls.filter((c) => c[1]![2] === "add");
 
     expect(removeNames).toEqual(["review"]);
     expect(addPaths).toHaveLength(1);
@@ -131,8 +131,9 @@ describe("createSkillSyncCommand", () => {
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
 
     // Make remove fail for "commit"
+    // Args: ["--yes", "skills", "remove", name]
     mockedExecFileSync.mockImplementation((_cmd, args) => {
-      if (args![1] === "remove" && args![2] === "commit") {
+      if (args![2] === "remove" && args![3] === "commit") {
         throw new Error("remove failed");
       }
       return Buffer.from("");
@@ -142,8 +143,8 @@ describe("createSkillSyncCommand", () => {
     command.run!({ exclude: [] });
 
     // "commit" should not be re-added
-    const addCalls = mockedExecFileSync.mock.calls.filter((c) => c[1]![1] === "add");
-    const addedPaths = addCalls.map((c) => c[1]![2] as string);
+    const addCalls = mockedExecFileSync.mock.calls.filter((c) => c[1]![2] === "add");
+    const addedPaths = addCalls.map((c) => c[1]![3] as string);
 
     expect(addedPaths).toHaveLength(1);
     expect(addedPaths[0]).toContain("review");
@@ -191,6 +192,16 @@ describe("createSkillAddCommand", () => {
     expect(process.exitCode).toBe(1);
     expect(mockedExecFileSync).not.toHaveBeenCalled();
   });
+
+  it("should set exitCode when both --all and name are provided", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const command = createSkillAddCommand({ sourceDir: tempDir });
+    command.run!({ name: "commit", all: true });
+
+    expect(process.exitCode).toBe(1);
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
+  });
 });
 
 describe("createSkillRemoveCommand", () => {
@@ -222,6 +233,16 @@ describe("createSkillRemoveCommand", () => {
 
     const command = createSkillRemoveCommand({ sourceDir: tempDir });
     command.run!({ name: "nonexistent", all: false });
+
+    expect(process.exitCode).toBe(1);
+    expect(mockedExecFileSync).not.toHaveBeenCalled();
+  });
+
+  it("should set exitCode when both --all and name are provided", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const command = createSkillRemoveCommand({ sourceDir: tempDir });
+    command.run!({ name: "commit", all: true });
 
     expect(process.exitCode).toBe(1);
     expect(mockedExecFileSync).not.toHaveBeenCalled();

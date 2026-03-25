@@ -162,6 +162,26 @@ Missing description`);
     expect(result).toBeNull();
   });
 
+  it("should return null for empty name", () => {
+    const result = parseSkillMd(`---
+name: ""
+description: A test skill
+---
+`);
+
+    expect(result).toBeNull();
+  });
+
+  it("should return null for empty description", () => {
+    const result = parseSkillMd(`---
+name: test
+description: ""
+---
+`);
+
+    expect(result).toBeNull();
+  });
+
   it("should return null for content without frontmatter", () => {
     const result = parseSkillMd("# Just markdown");
 

@@ -44,6 +44,7 @@ export function scanSourceDir(sourceDir: string): DiscoveredSkill[] {
     }
   }
 
+  skills.sort((a, b) => a.frontmatter.name.localeCompare(b.frontmatter.name));
   return skills;
 }
 

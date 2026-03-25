@@ -15,7 +15,7 @@ export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
 export interface DiscoveredSkill {
   /** Parsed frontmatter metadata */
   frontmatter: SkillFrontmatter;
-  /** Absolute path to the directory containing SKILL.md */
+  /** Path to the directory containing SKILL.md (matches the sourceDir input) */
   sourcePath: string;
   /** Raw SKILL.md content (frontmatter + body) */
   rawContent: string;

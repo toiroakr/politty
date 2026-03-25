@@ -78,6 +78,12 @@ export function createSkillAddCommand(options: SkillCommandOptions) {
       }),
     }),
     run(args) {
+      if (args.all && args.name) {
+        logger.error("Specify either a skill name or --all, not both.");
+        process.exitCode = 1;
+        return;
+      }
+
       const sourceSkills = getSkills(options);
 
       if (sourceSkills.length === 0) {
@@ -127,6 +133,12 @@ export function createSkillRemoveCommand(options: SkillCommandOptions) {
       }),
     }),
     run(args) {
+      if (args.all && args.name) {
+        logger.error("Specify either a skill name or --all, not both.");
+        process.exitCode = 1;
+        return;
+      }
+
       const sourceSkills = getSkills(options);
 
       if (sourceSkills.length === 0) {
@@ -215,7 +227,7 @@ function findSkill(skills: DiscoveredSkill[], name: string): DiscoveredSkill | u
 function addSkill(skill: DiscoveredSkill): boolean {
   logger.info(`Installing ${skill.frontmatter.name}...`);
   try {
-    execFileSync("npx", ["skills", "add", skill.sourcePath], {
+    execFileSync("npx", ["--yes", "skills", "add", skill.sourcePath], {
       stdio: "inherit",
     });
     logger.info(`${symbols.success} Installed ${skill.frontmatter.name}`);
@@ -229,7 +241,7 @@ function addSkill(skill: DiscoveredSkill): boolean {
 
 function removeSkill(name: string): boolean {
   try {
-    execFileSync("npx", ["skills", "remove", name], {
+    execFileSync("npx", ["--yes", "skills", "remove", name], {
       stdio: "inherit",
     });
     logger.info(`${symbols.success} Removed ${name}`);

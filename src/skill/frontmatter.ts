@@ -8,9 +8,9 @@ import { z } from "zod";
  */
 export const skillFrontmatterSchema = z.object({
   /** Skill identifier */
-  name: z.string(),
+  name: z.string().min(1),
   /** Human-readable description */
-  description: z.string(),
+  description: z.string().min(1),
   /** npm package this skill originated from (for provenance tracking) */
   package: z.string().optional(),
   /** Additional metadata */
