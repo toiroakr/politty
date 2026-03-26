@@ -7,23 +7,14 @@ import type { PromptAdapter } from "./types.js";
 export function createClackAdapter(): PromptAdapter {
   return {
     text(config) {
+      // clack's text() does not accept undefined for placeholder
       const opts: Parameters<typeof text>[0] = { message: config.message };
-      if (config.placeholder !== undefined) {
-        opts.placeholder = config.placeholder;
-      }
+      if (config.placeholder !== undefined) opts.placeholder = config.placeholder;
       return text(opts);
     },
-    password(config) {
-      return password({ message: config.message });
-    },
-    confirm(config) {
-      return confirm({ message: config.message });
-    },
-    select(config) {
-      return select({ message: config.message, options: config.options });
-    },
-    isCancelled(value) {
-      return isCancel(value);
-    },
+    password: (config) => password(config),
+    confirm: (config) => confirm(config),
+    select: (config) => select(config),
+    isCancelled: isCancel,
   };
 }

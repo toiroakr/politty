@@ -20,53 +20,52 @@ export function resolvePromptConfig(field: ResolvedFieldMeta): ResolvedPromptCon
   if (!promptMeta || promptMeta.enabled === false) return null;
 
   const message = promptMeta.message ?? field.description ?? field.name;
-
-  let type: ResolvedPromptConfig["type"];
-  let choices: ResolvedPromptConfig["choices"] | undefined;
-
-  // Priority 1: Explicit type
-  if (promptMeta.type) {
-    type = promptMeta.type === "file" || promptMeta.type === "directory" ? "text" : promptMeta.type;
-  }
-  // Priority 2: Explicit choices
-  else if (promptMeta.choices && promptMeta.choices.length > 0) {
-    type = "select";
-  }
-  // Priority 3: Inherited from completion type
-  else if (field.completion?.type === "file" || field.completion?.type === "directory") {
-    type = "text";
-  }
-  // Priority 4: Auto-detect from schema
-  else if (field.enumValues && field.enumValues.length > 0) {
-    type = "select";
-    choices = field.enumValues.map((v) => ({ label: v, value: v }));
-  } else if (field.type === "boolean") {
-    type = "confirm";
-  } else {
-    type = "text";
-  }
-
-  // Populate choices from enum values when type is "select" but no choices set yet
-  // (handles explicit prompt.type: "select" on an enum field)
-  if (
-    type === "select" &&
-    choices === undefined &&
-    field.enumValues &&
-    field.enumValues.length > 0
-  ) {
-    choices = field.enumValues.map((v) => ({ label: v, value: v }));
-  }
-
-  // Explicit choices override auto-detected ones
-  if (promptMeta.choices && promptMeta.choices.length > 0) {
-    choices = promptMeta.choices.map((c) => (typeof c === "string" ? { label: c, value: c } : c));
-  }
+  const type = resolvePromptType(field, promptMeta);
+  const choices = resolveChoices(field, promptMeta, type);
 
   const result: ResolvedPromptConfig = { field, type, message };
   if (choices !== undefined) {
     result.choices = choices;
   }
   return result;
+}
+
+function resolvePromptType(
+  field: ResolvedFieldMeta,
+  promptMeta: NonNullable<ResolvedFieldMeta["prompt"]>,
+): ResolvedPromptConfig["type"] {
+  // Priority 1: Explicit type
+  if (promptMeta.type) {
+    return promptMeta.type === "file" || promptMeta.type === "directory" ? "text" : promptMeta.type;
+  }
+  // Priority 2: Explicit choices
+  if (promptMeta.choices && promptMeta.choices.length > 0) {
+    return "select";
+  }
+  // Priority 3: Inherited from completion type
+  if (field.completion?.type === "file" || field.completion?.type === "directory") {
+    return "text";
+  }
+  // Priority 4: Auto-detect from schema
+  if (field.enumValues && field.enumValues.length > 0) return "select";
+  if (field.type === "boolean") return "confirm";
+  return "text";
+}
+
+function resolveChoices(
+  field: ResolvedFieldMeta,
+  promptMeta: NonNullable<ResolvedFieldMeta["prompt"]>,
+  type: ResolvedPromptConfig["type"],
+): ResolvedPromptConfig["choices"] | undefined {
+  // Explicit choices always win
+  if (promptMeta.choices && promptMeta.choices.length > 0) {
+    return promptMeta.choices.map((c) => (typeof c === "string" ? { label: c, value: c } : c));
+  }
+  // Auto-populate from enum values for select type
+  if (type === "select" && field.enumValues && field.enumValues.length > 0) {
+    return field.enumValues.map((v) => ({ label: v, value: v }));
+  }
+  return undefined;
 }
 
 /**

@@ -3,7 +3,7 @@ import type { MainOptions, RunCommandOptions } from "../types.js";
 import { createClackAdapter } from "./clack-adapter.js";
 import { getFieldsToPrompt } from "./prompt-resolver.js";
 import { isInteractive } from "./tty-detector.js";
-import type { PromptAdapter } from "./types.js";
+import type { PromptAdapter, ResolvedPromptConfig } from "./types.js";
 
 export { getFieldsToPrompt, resolvePromptConfig } from "./prompt-resolver.js";
 export { isInteractive } from "./tty-detector.js";
@@ -41,31 +41,7 @@ export async function promptMissingArgs(
   const result = { ...rawArgs };
 
   for (const config of fieldsToPrompt) {
-    let value: unknown;
-    switch (config.type) {
-      case "text": {
-        const textOpts: Parameters<PromptAdapter["text"]>[0] = {
-          message: config.message,
-        };
-        if (config.field.placeholder !== undefined) {
-          textOpts.placeholder = config.field.placeholder;
-        }
-        value = await adapter.text(textOpts);
-        break;
-      }
-      case "password":
-        value = await adapter.password({ message: config.message });
-        break;
-      case "confirm":
-        value = await adapter.confirm({ message: config.message });
-        break;
-      case "select":
-        value = await adapter.select({
-          message: config.message,
-          options: config.choices ?? [],
-        });
-        break;
-    }
+    const value = await promptField(adapter, config);
 
     if (adapter.isCancelled(value)) {
       throw new Error("Prompt cancelled by user");
@@ -75,6 +51,20 @@ export async function promptMissingArgs(
   }
 
   return result;
+}
+
+async function promptField(adapter: PromptAdapter, config: ResolvedPromptConfig): Promise<unknown> {
+  const { message } = config;
+  switch (config.type) {
+    case "text":
+      return adapter.text({ message, placeholder: config.field.placeholder });
+    case "password":
+      return adapter.password({ message });
+    case "confirm":
+      return adapter.confirm({ message });
+    case "select":
+      return adapter.select({ message, options: config.choices ?? [] });
+  }
 }
 
 /**
