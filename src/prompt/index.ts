@@ -92,6 +92,10 @@ export function createPromptResolver(
 /**
  * Enhance MainOptions or RunCommandOptions with interactive prompting.
  *
+ * Note: this replaces any existing `resolvePrompts` callback on the options
+ * object. If you need to compose multiple resolvers, build a custom
+ * `resolvePrompts` callback instead of using this helper.
+ *
  * @example
  * ```ts
  * import { runMain, defineCommand } from "politty";

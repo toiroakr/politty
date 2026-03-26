@@ -78,6 +78,9 @@ export function getFieldsToPrompt(
   const configs: ResolvedPromptConfig[] = [];
   for (const field of fields) {
     if (rawArgs[field.name] !== undefined) continue;
+    // Array fields are not supported for interactive prompting yet;
+    // a scalar text response would fail Zod array validation.
+    if (field.type === "array") continue;
     const config = resolvePromptConfig(field);
     if (config) configs.push(config);
   }
