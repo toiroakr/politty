@@ -20,6 +20,8 @@ export {
   type CompletionType,
   type CustomCompletion,
   type EffectContext,
+  type PromptMeta,
+  type PromptType,
 } from "./core/arg-registry.js";
 export { createDualCaseProxy } from "./core/case-proxy.js";
 export type { CamelCase, KebabCase, WithCaseVariants } from "./core/case-types.js";

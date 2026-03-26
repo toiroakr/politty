@@ -199,6 +199,17 @@ export interface MainOptions {
   cleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
   /** Whether to display errors to stderr before process.exit (default: true) */
   displayErrors?: boolean;
+  /**
+   * Optional async callback to resolve missing argument values interactively.
+   * Called after env fallback, before Zod validation.
+   * Provided by the `politty/prompt` module via `withPrompt()`.
+   */
+  resolvePrompts?:
+    | ((
+        rawArgs: Record<string, unknown>,
+        extracted: import("./core/schema-extractor.js").ExtractedFields,
+      ) => Promise<Record<string, unknown>>)
+    | undefined;
 }
 
 /**
@@ -219,6 +230,17 @@ export interface RunCommandOptions {
   setup?: ((context: GlobalSetupContext) => void | Promise<void>) | undefined;
   /** Global cleanup hook (runs after command execution, always executes even on error) */
   cleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
+  /**
+   * Optional async callback to resolve missing argument values interactively.
+   * Called after env fallback, before Zod validation.
+   * Provided by the `politty/prompt` module via `withPrompt()`.
+   */
+  resolvePrompts?:
+    | ((
+        rawArgs: Record<string, unknown>,
+        extracted: import("./core/schema-extractor.js").ExtractedFields,
+      ) => Promise<Record<string, unknown>>)
+    | undefined;
 }
 
 /**
@@ -244,6 +266,18 @@ export interface InternalRunOptions {
   logger?: Logger | undefined;
   /** Global args schema (shared across all subcommands) */
   globalArgs?: ArgsSchema | undefined;
+  /**
+   * Optional async callback to resolve missing argument values interactively.
+   * Called after env fallback, before Zod validation.
+   * Provided by the `politty/prompt` module via `withPrompt()`.
+   * @internal
+   */
+  resolvePrompts?:
+    | ((
+        rawArgs: Record<string, unknown>,
+        extracted: import("./core/schema-extractor.js").ExtractedFields,
+      ) => Promise<Record<string, unknown>>)
+    | undefined;
 }
 
 /**

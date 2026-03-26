@@ -201,6 +201,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     handleSignals: true,
     logger: options.logger,
     globalArgs: options.globalArgs,
+    resolvePrompts: options.resolvePrompts,
     _globalExtracted: globalExtracted,
     _globalCleanup: options.cleanup,
     _context: {
@@ -409,6 +410,15 @@ async function runCommandInternal<TResult = unknown>(
         }
       }
 
+      // Prompt for missing global args (if resolvePrompts callback is provided)
+      if (options.resolvePrompts) {
+        const resolved = await options.resolvePrompts(
+          accumulatedGlobalArgs,
+          options._globalExtracted,
+        );
+        Object.assign(accumulatedGlobalArgs, resolved);
+      }
+
       // Note: validation only sees recognized global flags. Misspelled globals
       // (e.g., --verboes) are treated as local flags by the scanner, so a strict
       // global schema cannot catch them. They are rejected only if the local
@@ -445,7 +455,13 @@ async function runCommandInternal<TResult = unknown>(
       return result as RunResult<TResult>;
     }
 
-    const validationResult = validateArgs(parseResult.rawArgs, command.args);
+    // Prompt for missing command args (if resolvePrompts callback is provided)
+    let argsToValidate = parseResult.rawArgs;
+    if (options.resolvePrompts && parseResult.extractedFields) {
+      argsToValidate = await options.resolvePrompts(argsToValidate, parseResult.extractedFields);
+    }
+
+    const validationResult = validateArgs(argsToValidate, command.args);
 
     if (!validationResult.success) {
       collector?.stop();
