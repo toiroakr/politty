@@ -60,6 +60,16 @@ export function resolvePromptConfig(field: ResolvedFieldMeta): ResolvedPromptCon
 
 /**
  * Filter fields that need prompting (missing value + prompt configured).
+ *
+ * Known limitation: for union/discriminatedUnion schemas, this iterates all
+ * fields across every variant without checking which variant is active.
+ * Variant-aware filtering requires the discriminator value from rawArgs and
+ * the ExtractedFields.variants metadata, which is not available here.
+ *
+ * Fields with Zod defaults that also have prompt metadata will be prompted
+ * when the raw value is undefined. This is intentional: `prompt: {}` is an
+ * explicit opt-in to interactive input. Omit prompt metadata to let the
+ * default apply silently.
  */
 export function getFieldsToPrompt(
   fields: ResolvedFieldMeta[],

@@ -458,7 +458,8 @@ async function runCommandInternal<TResult = unknown>(
     // Prompt for missing command args (if resolvePrompts callback is provided)
     let argsToValidate = parseResult.rawArgs;
     if (options.resolvePrompts && parseResult.extractedFields) {
-      argsToValidate = await options.resolvePrompts(argsToValidate, parseResult.extractedFields);
+      const resolved = await options.resolvePrompts(argsToValidate, parseResult.extractedFields);
+      argsToValidate = { ...argsToValidate, ...resolved };
     }
 
     const validationResult = validateArgs(argsToValidate, command.args);
