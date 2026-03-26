@@ -1,6 +1,6 @@
-import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { format } from "oxfmt";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { arg, defineCommand } from "../index.js";
@@ -505,11 +505,9 @@ describe("golden-test", () => {
 
       const filePath = path.join(testDir, "oxfmt-formatted.md");
 
-      const oxfmtFormatter = (content: string) => {
-        return execSync("pnpm oxfmt --stdin-filepath=file.md", {
-          input: content,
-          encoding: "utf-8",
-        });
+      const oxfmtFormatter = async (content: string) => {
+        const { code } = await format("file.md", content);
+        return code;
       };
 
       const result = await generateDoc({

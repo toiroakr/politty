@@ -1,11 +1,9 @@
-import { execSync } from "node:child_process";
+import { format } from "oxfmt";
 
 /**
  * Format content using oxfmt
  */
-export function mdFormatter(content: string): string {
-  return execSync("pnpm oxfmt --stdin-filepath=file.md", {
-    input: content,
-    encoding: "utf-8",
-  });
+export async function mdFormatter(content: string): Promise<string> {
+  const { code } = await format("file.md", content);
+  return code;
 }
