@@ -129,6 +129,20 @@ describe("resolvePromptConfig", () => {
     });
   });
 
+  it("populates enum choices when type is explicitly select", () => {
+    const field = makeField({
+      enumValues: ["a", "b", "c"],
+      prompt: { type: "select" },
+    });
+    const config = resolvePromptConfig(field)!;
+    expect(config.type).toBe("select");
+    expect(config.choices).toEqual([
+      { label: "a", value: "a" },
+      { label: "b", value: "b" },
+      { label: "c", value: "c" },
+    ]);
+  });
+
   it("explicit choices override auto-detected enum choices", () => {
     const field = makeField({
       enumValues: ["a", "b"],
@@ -167,5 +181,15 @@ describe("getFieldsToPrompt", () => {
     const fields = [makeField({ name: "a" }), makeField({ name: "b" })];
     const result = getFieldsToPrompt(fields, {});
     expect(result).toHaveLength(0);
+  });
+
+  it("skips array fields even with prompt metadata", () => {
+    const fields = [
+      makeField({ name: "tags", type: "array", prompt: { message: "Tags?" } }),
+      makeField({ name: "name", type: "string", prompt: { message: "Name?" } }),
+    ];
+    const result = getFieldsToPrompt(fields, {});
+    expect(result).toHaveLength(1);
+    expect(result[0]!.field.name).toBe("name");
   });
 });

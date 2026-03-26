@@ -314,6 +314,56 @@ describe("withPrompt integration", () => {
     expect(result.success).toBe(false);
   });
 
+  it("merges prompted values with existing CLI args", async () => {
+    const adapter = createMockAdapter({ "Your name": "Alice" });
+
+    const cmd = defineCommand({
+      name: "greet",
+      args: z.object({
+        name: arg(z.string(), {
+          description: "Your name",
+          prompt: {},
+        }),
+        age: z.coerce.number(),
+      }),
+      run: ({ name, age }) => `${name}:${age}`,
+    });
+
+    const result = await runCommand(
+      cmd,
+      ["--age", "30"],
+      withPrompt({}, { adapter, interactive: true }),
+    );
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toBe("Alice:30");
+    }
+  });
+
+  it("preserves CLI args when custom resolvePrompts returns only missing values", async () => {
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({
+        name: z.string(),
+        age: z.coerce.number(),
+      }),
+      run: ({ name, age }) => `${name}:${age}`,
+    });
+
+    const result = await runCommand(cmd, ["--age", "25"], {
+      resolvePrompts: async (_rawArgs, _extracted) => {
+        // Return only the missing value, not all args
+        return { name: "Bob" };
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toBe("Bob:25");
+    }
+  });
+
   it("non-interactive mode skips prompts and fails validation", async () => {
     const adapter = createMockAdapter({ "Name?": "Alice" });
 
