@@ -46,6 +46,17 @@ export function resolvePromptConfig(field: ResolvedFieldMeta): ResolvedPromptCon
     type = "text";
   }
 
+  // Populate choices from enum values when type is "select" but no choices set yet
+  // (handles explicit prompt.type: "select" on an enum field)
+  if (
+    type === "select" &&
+    choices === undefined &&
+    field.enumValues &&
+    field.enumValues.length > 0
+  ) {
+    choices = field.enumValues.map((v) => ({ label: v, value: v }));
+  }
+
   // Explicit choices override auto-detected ones
   if (promptMeta.choices && promptMeta.choices.length > 0) {
     choices = promptMeta.choices.map((c) => (typeof c === "string" ? { label: c, value: c } : c));
