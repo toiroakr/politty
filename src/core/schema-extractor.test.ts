@@ -103,4 +103,18 @@ describe("schema-extractor", () => {
       expect(toCamelCase("dryRun")).toBe("dryRun");
     });
   });
+
+  describe("extractFields discriminatedUnion", () => {
+    it("extracts discriminator value from z.enum() single-value discriminators", () => {
+      const schema = z.discriminatedUnion("mode", [
+        z.object({ mode: z.enum(["a"]), foo: z.string() }),
+        z.object({ mode: z.enum(["b"]), bar: z.string() }),
+      ]);
+      const result = extractFields(schema);
+      expect(result.schemaType).toBe("discriminatedUnion");
+      expect(result.variants).toHaveLength(2);
+      expect(result.variants![0]!.discriminatorValue).toBe("a");
+      expect(result.variants![1]!.discriminatorValue).toBe("b");
+    });
+  });
 });
