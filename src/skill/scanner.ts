@@ -52,17 +52,13 @@ function tryParseSkillDir(dir: string): DiscoveredSkill | null {
   const skillMdPath = join(dir, SKILL_MD);
   if (!existsSync(skillMdPath)) return null;
 
-  try {
-    const content = readFileSync(skillMdPath, "utf-8");
-    const parsed = parseSkillMd(content);
-    if (!parsed) return null;
+  const content = readFileSync(skillMdPath, "utf-8");
+  const parsed = parseSkillMd(content);
+  if (!parsed) return null;
 
-    return {
-      frontmatter: parsed.frontmatter,
-      sourcePath: dir,
-      rawContent: content,
-    };
-  } catch {
-    return null;
-  }
+  return {
+    frontmatter: parsed.frontmatter,
+    sourcePath: dir,
+    rawContent: content,
+  };
 }
