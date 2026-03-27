@@ -90,6 +90,10 @@ export function getFieldsToPrompt(
     if (rawArgs[field.name] !== undefined) continue;
     // Array fields are not supported for interactive prompting yet;
     // a scalar text response would fail Zod array validation.
+    // Object-valued fields (detected as type "unknown") are also unsupported
+    // but share the "unknown" bucket with literals, so they are not filtered
+    // here. Putting prompt metadata on object fields yields a Zod validation
+    // error at parse time, which is an acceptable misconfiguration signal.
     if (field.type === "array") continue;
     const config = resolvePromptConfig(field);
     if (config) configs.push(config);

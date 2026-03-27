@@ -482,6 +482,9 @@ function extractFromDiscriminatedUnion(schema: z.ZodType): ExtractedFields {
         const values = (litDef as { value?: unknown; values?: unknown[] })?.values;
         discriminatorValue = String(value ?? values?.[0] ?? "");
       } else if (typeName === "enum") {
+        // Only single-value enums map to one variant. Multi-value enums
+        // (z.enum(['a','b'])) on a single variant are not standard for
+        // discriminatedUnion and are not extracted here.
         const enumValues = extractEnumValues(discriminatorSchema);
         if (enumValues && enumValues.length === 1) {
           discriminatorValue = enumValues[0]!;

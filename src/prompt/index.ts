@@ -66,21 +66,25 @@ async function promptDiscriminatedUnion(
   if (!discriminator || !variants) return;
 
   // Prompt for discriminator if not already provided.
-  // Build choices from all variants (the deduplicated extracted.fields only
-  // keeps the first variant's discriminator, losing later values).
+  // The deduplicated extracted.fields only keeps the first variant's
+  // discriminator, so scan all variants for prompt metadata and build
+  // choices from every variant's discriminator value.
   if (result[discriminator] === undefined) {
-    const discFields = getFieldsToPrompt(
-      extracted.fields.filter((f) => f.name === discriminator),
-      result,
-    );
-    if (discFields.length > 0) {
-      const discConfig = { ...discFields[0]! };
-      const allValues = variants.map((v) => v.discriminatorValue).filter(Boolean);
-      if (allValues.length > 0) {
-        discConfig.type = "select";
-        discConfig.choices = allValues.map((v) => ({ label: v, value: v }));
+    // Find discriminator field with prompt metadata from any variant
+    const discField =
+      findDiscriminatorWithPrompt(extracted.fields, discriminator) ??
+      findDiscriminatorFromVariants(variants, discriminator);
+    if (discField) {
+      const discConfigs = getFieldsToPrompt([discField], result);
+      if (discConfigs.length > 0) {
+        const discConfig = { ...discConfigs[0]! };
+        const allValues = variants.map((v) => v.discriminatorValue).filter(Boolean);
+        if (allValues.length > 0) {
+          discConfig.type = "select";
+          discConfig.choices = allValues.map((v) => ({ label: v, value: v }));
+        }
+        await promptAndCollect(adapter, result, discConfig);
       }
-      await promptAndCollect(adapter, result, discConfig);
     }
   }
 
@@ -95,6 +99,25 @@ async function promptDiscriminatedUnion(
   }
   // When no variant matches (invalid value or unextracted discriminator),
   // skip prompting and let Zod validation surface the error.
+}
+
+function findDiscriminatorWithPrompt(
+  fields: ResolvedFieldMeta[],
+  discriminator: string,
+): ResolvedFieldMeta | undefined {
+  const field = fields.find((f) => f.name === discriminator);
+  return field?.prompt ? field : undefined;
+}
+
+function findDiscriminatorFromVariants(
+  variants: NonNullable<ExtractedFields["variants"]>,
+  discriminator: string,
+): ResolvedFieldMeta | undefined {
+  for (const variant of variants) {
+    const field = variant.fields.find((f) => f.name === discriminator);
+    if (field?.prompt) return field;
+  }
+  return undefined;
 }
 
 async function promptAllFields(
