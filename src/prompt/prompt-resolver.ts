@@ -20,8 +20,10 @@ export function resolvePromptConfig(field: ResolvedFieldMeta): ResolvedPromptCon
   if (!promptMeta || promptMeta.enabled === false) return null;
 
   const message = promptMeta.message ?? field.description ?? field.name;
-  const type = resolvePromptType(field, promptMeta);
-  const choices = resolveChoices(field, promptMeta, type);
+  const rawType = resolvePromptType(field, promptMeta);
+  const choices = resolveChoices(field, promptMeta, rawType);
+  // Fall back to text when select has no choices to avoid adapter crash
+  const type = rawType === "select" && !choices ? "text" : rawType;
 
   return { field, type, message, ...(choices && { choices }) };
 }
@@ -69,10 +71,10 @@ function resolveChoices(
 /**
  * Filter fields that need prompting (missing value + prompt configured).
  *
- * Known limitation: for union/discriminatedUnion schemas, this iterates all
- * fields across every variant without checking which variant is active.
- * Variant-aware filtering requires the discriminator value from rawArgs and
- * the ExtractedFields.variants metadata, which is not available here.
+ * For discriminatedUnion schemas, variant-aware narrowing is handled by the
+ * caller (promptMissingArgs) which prompts the discriminator first and then
+ * passes only the active variant's fields. For plain union schemas, this
+ * iterates all fields across every variant without narrowing.
  *
  * Fields with Zod defaults that also have prompt metadata will be prompted
  * when the raw value is undefined. This is intentional: `prompt: {}` is an

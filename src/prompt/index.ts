@@ -1,4 +1,4 @@
-import type { ExtractedFields } from "../core/schema-extractor.js";
+import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
 import type { MainOptions, RunCommandOptions } from "../types.js";
 import { createClackAdapter } from "./clack-adapter.js";
 import { getFieldsToPrompt } from "./prompt-resolver.js";
@@ -34,23 +34,78 @@ export async function promptMissingArgs(
   const interactive = options?.interactive ?? isInteractive();
   if (!interactive) return rawArgs;
 
-  const fieldsToPrompt = getFieldsToPrompt(extracted.fields, rawArgs);
-  if (fieldsToPrompt.length === 0) return rawArgs;
-
   const adapter = options?.adapter ?? createClackAdapter();
   const result = { ...rawArgs };
 
-  for (const config of fieldsToPrompt) {
-    const value = await promptField(adapter, config);
-
-    if (adapter.isCancelled(value)) {
-      throw new Error("Prompt cancelled by user");
-    }
-
-    result[config.field.name] = value;
+  // For discriminatedUnion schemas, prompt the discriminator first then
+  // narrow to the active variant to avoid prompting irrelevant fields.
+  if (
+    extracted.schemaType === "discriminatedUnion" &&
+    extracted.discriminator &&
+    extracted.variants
+  ) {
+    await promptDiscriminatedUnion(adapter, result, extracted);
+  } else {
+    await promptAllFields(adapter, result, extracted.fields);
   }
 
   return result;
+}
+
+async function promptDiscriminatedUnion(
+  adapter: PromptAdapter,
+  result: Record<string, unknown>,
+  extracted: ExtractedFields,
+): Promise<void> {
+  const { discriminator, variants } = extracted;
+  if (!discriminator || !variants) return;
+
+  // Prompt for discriminator if not already provided
+  if (result[discriminator] === undefined) {
+    const discFields = getFieldsToPrompt(
+      extracted.fields.filter((f) => f.name === discriminator),
+      result,
+    );
+    if (discFields.length > 0) {
+      await promptAndCollect(adapter, result, discFields[0]!);
+    }
+  }
+
+  // Find the active variant based on discriminator value
+  const discValue = String(result[discriminator] ?? "");
+  const activeVariant = variants.find((v) => v.discriminatorValue === discValue);
+
+  if (activeVariant) {
+    // Prompt only the active variant's fields (excluding discriminator)
+    const variantFields = activeVariant.fields.filter((f) => f.name !== discriminator);
+    await promptAllFields(adapter, result, variantFields);
+  } else {
+    // Fallback: prompt all fields if no matching variant found
+    await promptAllFields(adapter, result, extracted.fields);
+  }
+}
+
+async function promptAllFields(
+  adapter: PromptAdapter,
+  result: Record<string, unknown>,
+  fields: ResolvedFieldMeta[],
+): Promise<void> {
+  const fieldsToPrompt = getFieldsToPrompt(fields, result);
+  for (const config of fieldsToPrompt) {
+    await promptAndCollect(adapter, result, config);
+  }
+}
+
+async function promptAndCollect(
+  adapter: PromptAdapter,
+  result: Record<string, unknown>,
+  config: ResolvedPromptConfig,
+): Promise<void> {
+  const value = await promptField(adapter, config);
+  if (adapter.isCancelled(value)) {
+    throw new Error("Prompt cancelled by user");
+  }
+  result[config.field.name] = value;
 }
 
 async function promptField(adapter: PromptAdapter, config: ResolvedPromptConfig): Promise<unknown> {
@@ -108,7 +163,7 @@ export function createPromptResolver(
 export function withPrompt<T extends MainOptions | RunCommandOptions>(
   options: T,
   promptOptions?: WithPromptOptions,
-): T {
+): T & { resolvePrompts: ReturnType<typeof createPromptResolver> } {
   return {
     ...options,
     resolvePrompts: createPromptResolver(promptOptions),

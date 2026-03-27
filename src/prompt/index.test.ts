@@ -380,4 +380,64 @@ describe("withPrompt integration", () => {
     expect(result.success).toBe(false);
     expect(adapter.text).not.toHaveBeenCalled();
   });
+
+  it("narrows prompts to active variant for discriminatedUnion", async () => {
+    const adapter = createMockAdapter({ mode: "a", foo: "fooVal" });
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.discriminatedUnion("mode", [
+        z.strictObject({
+          mode: arg(z.literal("a"), { prompt: {} }),
+          foo: arg(z.string(), { prompt: {} }),
+        }),
+        z.strictObject({
+          mode: arg(z.literal("b"), { prompt: {} }),
+          bar: arg(z.string(), { prompt: {} }),
+        }),
+      ]),
+      run: (args) => args,
+    });
+
+    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toEqual({ mode: "a", foo: "fooVal" });
+    }
+    // Should NOT have prompted for 'bar' (variant b only)
+    expect(adapter.text).toHaveBeenCalledTimes(2); // mode + foo
+  });
+
+  it("falls back to text when select has no choices", async () => {
+    const adapter = createMockAdapter({ "Pick one": "typed-value" });
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({
+        item: arg(z.string(), {
+          prompt: { type: "select", message: "Pick one" },
+        }),
+      }),
+      run: ({ item }) => item,
+    });
+
+    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toBe("typed-value");
+    }
+    // Should use text, not select (no choices available)
+    expect(adapter.text).toHaveBeenCalledOnce();
+    expect(adapter.select).not.toHaveBeenCalled();
+  });
+});
+
+describe("withPrompt type safety", () => {
+  it("preserves resolvePrompts in return type", () => {
+    const opts = withPrompt({ version: "1.0.0" });
+    // At runtime, resolvePrompts should exist
+    expect(typeof opts.resolvePrompts).toBe("function");
+  });
 });
