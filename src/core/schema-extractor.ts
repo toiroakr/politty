@@ -467,7 +467,10 @@ function extractFromDiscriminatedUnion(schema: z.ZodType): ExtractedFields {
     const shape = getObjectShape(option as z.ZodObject<z.ZodRawShape>);
     const variantFields: ResolvedFieldMeta[] = [];
 
-    // Get discriminator value
+    // Get discriminator value.
+    // Only z.literal() discriminators are extracted; z.enum() discriminators
+    // leave discriminatorValue empty. This is uncommon in practice since Zod
+    // discriminatedUnion conventionally uses z.literal() per variant.
     let discriminatorValue = "";
     const discriminatorSchema = shape[discriminator];
     if (discriminatorSchema) {

@@ -79,10 +79,9 @@ async function promptDiscriminatedUnion(
     // Prompt only the active variant's fields (excluding discriminator)
     const variantFields = activeVariant.fields.filter((f) => f.name !== discriminator);
     await promptAllFields(adapter, result, variantFields);
-  } else {
-    // Fallback: prompt all fields if no matching variant found
-    await promptAllFields(adapter, result, extracted.fields);
   }
+  // When no variant matches (invalid value or unextracted discriminator),
+  // skip prompting and let Zod validation surface the error.
 }
 
 async function promptAllFields(
