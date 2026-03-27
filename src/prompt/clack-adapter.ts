@@ -6,12 +6,11 @@ import type { PromptAdapter } from "./types.js";
  */
 export function createClackAdapter(): PromptAdapter {
   return {
-    text(config) {
-      // clack's text() does not accept undefined for placeholder
-      const opts: Parameters<typeof text>[0] = { message: config.message };
-      if (config.placeholder !== undefined) opts.placeholder = config.placeholder;
-      return text(opts);
-    },
+    text: (config) =>
+      text({
+        message: config.message,
+        ...(config.placeholder !== undefined && { placeholder: config.placeholder }),
+      }),
     password: (config) => password(config),
     confirm: (config) => confirm(config),
     select: (config) => select(config),
