@@ -405,8 +405,65 @@ describe("withPrompt integration", () => {
     if (result.success) {
       expect(result.result).toEqual({ mode: "a", foo: "fooVal" });
     }
-    // Should NOT have prompted for 'bar' (variant b only)
-    expect(adapter.text).toHaveBeenCalledTimes(2); // mode + foo
+    // Discriminator prompted as select with all variant values
+    expect(adapter.select).toHaveBeenCalledOnce();
+    // foo prompted as text; bar (variant b) NOT prompted
+    expect(adapter.text).toHaveBeenCalledOnce();
+  });
+
+  it("presents all variant values for discriminator select", async () => {
+    const adapter = createMockAdapter({ mode: "b", bar: "barVal" });
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.discriminatedUnion("mode", [
+        z.strictObject({
+          mode: arg(z.literal("a"), { prompt: {} }),
+          foo: arg(z.string(), { prompt: {} }),
+        }),
+        z.strictObject({
+          mode: arg(z.literal("b"), { prompt: {} }),
+          bar: arg(z.string(), { prompt: {} }),
+        }),
+      ]),
+      run: (args) => args,
+    });
+
+    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toEqual({ mode: "b", bar: "barVal" });
+    }
+    // Select should include both "a" and "b"
+    expect(adapter.select).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: [
+          { label: "a", value: "a" },
+          { label: "b", value: "b" },
+        ],
+      }),
+    );
+  });
+
+  it("skips prompts for plain union schemas", async () => {
+    const adapter = createMockAdapter({});
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.object({ foo: arg(z.string(), { prompt: {} }) }),
+        z.object({ bar: arg(z.string(), { prompt: {} }) }),
+      ]),
+      run: (args) => args,
+    });
+
+    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+
+    // Prompting skipped, so validation fails due to missing required fields
+    expect(result.success).toBe(false);
+    expect(adapter.text).not.toHaveBeenCalled();
+    expect(adapter.select).not.toHaveBeenCalled();
   });
 
   it("falls back to text when select has no choices", async () => {

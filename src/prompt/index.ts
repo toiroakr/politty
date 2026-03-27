@@ -45,6 +45,11 @@ export async function promptMissingArgs(
     extracted.variants
   ) {
     await promptDiscriminatedUnion(adapter, result, extracted);
+  } else if (extracted.schemaType === "union" || extracted.schemaType === "xor") {
+    // Plain unions have no discriminator to narrow by. Prompting the merged
+    // field set would collect answers for incompatible branches, causing
+    // silent data loss (strip mode) or validation errors (strict mode).
+    // Skip prompting and let Zod validation handle it.
   } else {
     await promptAllFields(adapter, result, extracted.fields);
   }
@@ -60,14 +65,22 @@ async function promptDiscriminatedUnion(
   const { discriminator, variants } = extracted;
   if (!discriminator || !variants) return;
 
-  // Prompt for discriminator if not already provided
+  // Prompt for discriminator if not already provided.
+  // Build choices from all variants (the deduplicated extracted.fields only
+  // keeps the first variant's discriminator, losing later values).
   if (result[discriminator] === undefined) {
     const discFields = getFieldsToPrompt(
       extracted.fields.filter((f) => f.name === discriminator),
       result,
     );
     if (discFields.length > 0) {
-      await promptAndCollect(adapter, result, discFields[0]!);
+      const discConfig = { ...discFields[0]! };
+      const allValues = variants.map((v) => v.discriminatorValue).filter(Boolean);
+      if (allValues.length > 0) {
+        discConfig.type = "select";
+        discConfig.choices = allValues.map((v) => ({ label: v, value: v }));
+      }
+      await promptAndCollect(adapter, result, discConfig);
     }
   }
 
