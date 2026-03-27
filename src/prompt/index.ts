@@ -1,7 +1,7 @@
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
 import type { MainOptions, RunCommandOptions } from "../types.js";
 import { createClackAdapter } from "./clack-adapter.js";
-import { getFieldsToPrompt } from "./prompt-resolver.js";
+import { getFieldsToPrompt, resolvePromptConfig } from "./prompt-resolver.js";
 import { isInteractive } from "./tty-detector.js";
 import type { PromptAdapter, ResolvedPromptConfig } from "./types.js";
 
@@ -77,17 +77,14 @@ async function promptDiscriminatedUnion(
   // choices from every variant's discriminator value.
   if (result[discriminator] === undefined) {
     const discField = findDiscriminatorField(extracted.fields, variants, discriminator);
-    if (discField) {
-      const discConfigs = getFieldsToPrompt([discField], result);
-      if (discConfigs.length > 0) {
-        const discConfig = { ...discConfigs[0]! };
-        const allValues = variants.map((v) => v.discriminatorValue).filter(Boolean);
-        if (allValues.length > 0) {
-          discConfig.type = "select";
-          discConfig.choices = allValues.map((v) => ({ label: v, value: v }));
-        }
-        await promptAndCollect(adapter, result, discConfig);
+    const discConfig = discField ? resolvePromptConfig(discField) : null;
+    if (discConfig) {
+      const allValues = variants.map((v) => v.discriminatorValue).filter(Boolean);
+      if (allValues.length > 0) {
+        discConfig.type = "select";
+        discConfig.choices = allValues.map((v) => ({ label: v, value: v }));
       }
+      await promptAndCollect(adapter, result, discConfig);
     }
   }
 
