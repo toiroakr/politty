@@ -23,11 +23,11 @@ export function resolvePromptConfig(field: ResolvedFieldMeta): ResolvedPromptCon
   const type = resolvePromptType(field, promptMeta);
   const choices = resolveChoices(field, promptMeta, type);
 
-  const result: ResolvedPromptConfig = { field, type, message };
-  if (choices !== undefined) {
-    result.choices = choices;
-  }
-  return result;
+  return { field, type, message, ...(choices && { choices }) };
+}
+
+function hasChoices(list: unknown[] | undefined): list is unknown[] {
+  return list !== undefined && list.length > 0;
 }
 
 function resolvePromptType(
@@ -39,15 +39,13 @@ function resolvePromptType(
     return promptMeta.type === "file" || promptMeta.type === "directory" ? "text" : promptMeta.type;
   }
   // Priority 2: Explicit choices
-  if (promptMeta.choices && promptMeta.choices.length > 0) {
-    return "select";
-  }
+  if (hasChoices(promptMeta.choices)) return "select";
   // Priority 3: Inherited from completion type
   if (field.completion?.type === "file" || field.completion?.type === "directory") {
     return "text";
   }
   // Priority 4: Auto-detect from schema
-  if (field.enumValues && field.enumValues.length > 0) return "select";
+  if (hasChoices(field.enumValues)) return "select";
   if (field.type === "boolean") return "confirm";
   return "text";
 }
@@ -58,11 +56,11 @@ function resolveChoices(
   type: ResolvedPromptConfig["type"],
 ): ResolvedPromptConfig["choices"] | undefined {
   // Explicit choices always win
-  if (promptMeta.choices && promptMeta.choices.length > 0) {
+  if (hasChoices(promptMeta.choices)) {
     return promptMeta.choices.map((c) => (typeof c === "string" ? { label: c, value: c } : c));
   }
   // Auto-populate from enum values for select type
-  if (type === "select" && field.enumValues && field.enumValues.length > 0) {
+  if (type === "select" && hasChoices(field.enumValues)) {
     return field.enumValues.map((v) => ({ label: v, value: v }));
   }
   return undefined;
