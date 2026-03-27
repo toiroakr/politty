@@ -489,6 +489,70 @@ describe("withPrompt integration", () => {
     expect(adapter.text).toHaveBeenCalledOnce();
     expect(adapter.select).not.toHaveBeenCalled();
   });
+
+  it("prompts for missing global args when globalArgs schema is provided", async () => {
+    const adapter = createMockAdapter({ "Name?": "Alice", verbose: true });
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({
+        name: arg(z.string(), { prompt: { message: "Name?" } }),
+      }),
+      run: ({ name }) => name,
+    });
+
+    const result = await runCommand(
+      cmd,
+      [],
+      withPrompt(
+        {
+          globalArgs: z.object({
+            verbose: arg(z.boolean().default(false), { prompt: {} }),
+          }),
+        },
+        { adapter, interactive: true },
+      ),
+    );
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toBe("Alice");
+    }
+  });
+
+  it("skips discriminator prompt when discriminator is provided via CLI", async () => {
+    const adapter = createMockAdapter({ foo: "fooVal" });
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.discriminatedUnion("mode", [
+        z.strictObject({
+          mode: arg(z.literal("a"), { prompt: {} }),
+          foo: arg(z.string(), { prompt: {} }),
+        }),
+        z.strictObject({
+          mode: arg(z.literal("b"), { prompt: {} }),
+          bar: arg(z.string(), { prompt: {} }),
+        }),
+      ]),
+      run: (args) => args,
+    });
+
+    const result = await runCommand(
+      cmd,
+      ["--mode", "a"],
+      withPrompt({}, { adapter, interactive: true }),
+    );
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.result).toEqual({ mode: "a", foo: "fooVal" });
+    }
+    // Discriminator already provided, should not prompt for it
+    expect(adapter.select).not.toHaveBeenCalled();
+    // Only foo should be prompted
+    expect(adapter.text).toHaveBeenCalledOnce();
+  });
 });
 
 describe("withPrompt type safety", () => {
