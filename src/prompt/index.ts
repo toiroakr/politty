@@ -1,20 +1,18 @@
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
-import type { MainOptions, RunCommandOptions } from "../types.js";
-import { createClackAdapter } from "./clack-adapter.js";
 import { getFieldsToPrompt, resolvePromptConfig } from "./prompt-resolver.js";
 import { isInteractive } from "./tty-detector.js";
-import type { PromptAdapter, ResolvedPromptConfig } from "./types.js";
+import type { PromptAdapter } from "./types.js";
 
 export { getFieldsToPrompt, resolvePromptConfig } from "./prompt-resolver.js";
 export { isInteractive } from "./tty-detector.js";
 export type { PromptAdapter, ResolvedPromptConfig } from "./types.js";
 
 /**
- * Options for prompt behavior
+ * Options for promptMissingArgs behavior
  */
-export interface WithPromptOptions {
-  /** Custom prompt adapter (defaults to @clack/prompts) */
-  adapter?: PromptAdapter;
+export interface PromptOptions {
+  /** Prompt adapter to use for rendering prompts */
+  adapter: PromptAdapter;
   /** Override interactive detection (force enable/disable prompts) */
   interactive?: boolean;
 }
@@ -29,12 +27,12 @@ export interface WithPromptOptions {
 export async function promptMissingArgs(
   rawArgs: Record<string, unknown>,
   extracted: ExtractedFields,
-  options?: WithPromptOptions,
+  options: PromptOptions,
 ): Promise<Record<string, unknown>> {
-  const interactive = options?.interactive ?? isInteractive();
+  const interactive = options.interactive ?? isInteractive();
   if (!interactive) return rawArgs;
 
-  const adapter = options?.adapter ?? createClackAdapter();
+  const adapter = options.adapter;
   const result = { ...rawArgs };
 
   // For discriminatedUnion schemas, prompt the discriminator first then
@@ -133,7 +131,7 @@ async function promptAllFields(
 async function promptAndCollect(
   adapter: PromptAdapter,
   result: Record<string, unknown>,
-  config: ResolvedPromptConfig,
+  config: import("./types.js").ResolvedPromptConfig,
 ): Promise<void> {
   const { message } = config;
   let value: unknown;
@@ -155,52 +153,4 @@ async function promptAndCollect(
     throw new Error("Prompt cancelled by user");
   }
   result[config.field.name] = value;
-}
-
-/**
- * Create a resolvePrompts callback for use with MainOptions/RunCommandOptions.
- */
-export function createPromptResolver(
-  options?: WithPromptOptions,
-): (
-  rawArgs: Record<string, unknown>,
-  extracted: ExtractedFields,
-) => Promise<Record<string, unknown>> {
-  return (rawArgs, extracted) => promptMissingArgs(rawArgs, extracted, options);
-}
-
-/**
- * Enhance MainOptions or RunCommandOptions with interactive prompting.
- *
- * Note: this replaces any existing `resolvePrompts` callback on the options
- * object. If you need to compose multiple resolvers, build a custom
- * `resolvePrompts` callback instead of using this helper.
- *
- * @example
- * ```ts
- * import { runMain, defineCommand } from "politty";
- * import { withPrompt } from "politty/prompt";
- *
- * const cmd = defineCommand({
- *   name: "greet",
- *   args: z.object({
- *     name: arg(z.string(), {
- *       description: "Your name",
- *       prompt: { message: "What is your name?" },
- *     }),
- *   }),
- *   run: ({ name }) => console.log(`Hello, ${name}!`),
- * });
- *
- * runMain(cmd, withPrompt({ version: "1.0.0" }));
- * ```
- */
-export function withPrompt<T extends MainOptions | RunCommandOptions>(
-  options: T,
-  promptOptions?: WithPromptOptions,
-): T & { resolvePrompts: ReturnType<typeof createPromptResolver> } {
-  return {
-    ...options,
-    resolvePrompts: createPromptResolver(promptOptions),
-  };
 }

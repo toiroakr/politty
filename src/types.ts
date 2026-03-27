@@ -180,9 +180,9 @@ export type SubCommandsRecord = Record<string, SubCommandValue>;
 /**
  * Async callback to resolve missing argument values interactively.
  * Called after env fallback, before Zod validation.
- * Provided by the `politty/prompt` module via `withPrompt()`.
+ * Provided by adapter subpath modules (e.g. `politty/prompt/clack`).
  */
-type ResolvePromptsFn = (
+export type PromptResolver = (
   rawArgs: Record<string, unknown>,
   extracted: import("./core/schema-extractor.js").ExtractedFields,
 ) => Promise<Record<string, unknown>>;
@@ -209,8 +209,8 @@ export interface MainOptions {
   cleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
   /** Whether to display errors to stderr before process.exit (default: true) */
   displayErrors?: boolean;
-  /** Optional callback to resolve missing argument values interactively. */
-  resolvePrompts?: ResolvePromptsFn | undefined;
+  /** Prompt resolver for interactive missing-arg prompts (e.g. from `politty/prompt/clack`). */
+  prompt?: PromptResolver | undefined;
 }
 
 /**
@@ -231,8 +231,8 @@ export interface RunCommandOptions {
   setup?: ((context: GlobalSetupContext) => void | Promise<void>) | undefined;
   /** Global cleanup hook (runs after command execution, always executes even on error) */
   cleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
-  /** Optional callback to resolve missing argument values interactively. */
-  resolvePrompts?: ResolvePromptsFn | undefined;
+  /** Prompt resolver for interactive missing-arg prompts (e.g. from `politty/prompt/clack`). */
+  prompt?: PromptResolver | undefined;
 }
 
 /**
@@ -259,7 +259,7 @@ export interface InternalRunOptions {
   /** Global args schema (shared across all subcommands) */
   globalArgs?: ArgsSchema | undefined;
   /** @internal */
-  resolvePrompts?: ResolvePromptsFn | undefined;
+  prompt?: PromptResolver | undefined;
 }
 
 /**

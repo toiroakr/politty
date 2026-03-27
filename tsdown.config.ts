@@ -7,6 +7,8 @@ export default defineConfig({
     "src/docs/index.ts",
     "src/completion/index.ts",
     "src/prompt/index.ts",
+    "src/prompt/clack/index.ts",
+    "src/prompt/inquirer/index.ts",
   ],
   format: ["es", "cjs"],
   dts: true,
@@ -16,6 +18,6 @@ export default defineConfig({
   minify: false,
   target: "node18",
   outDir: "dist",
-  external: ["zod", "string-width", "@clack/prompts"],
+  external: ["zod", "string-width", "@clack/prompts", "@inquirer/prompts"],
   fixedExtension: false,
 });

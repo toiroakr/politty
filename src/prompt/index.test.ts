@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { arg, defineCommand, runCommand } from "../index.js";
-import { promptMissingArgs, withPrompt } from "./index.js";
+import type { PromptResolver } from "../types.js";
+import { promptMissingArgs } from "./index.js";
 import type { PromptAdapter } from "./types.js";
 
 function createMockAdapter(responses: Record<string, unknown>): PromptAdapter {
@@ -28,8 +29,14 @@ function createCancelAdapter(): PromptAdapter {
   };
 }
 
+/** Create a PromptResolver from a mock adapter for testing */
+function createTestResolver(adapter: PromptAdapter, interactive = true): PromptResolver {
+  return (rawArgs, extracted) => promptMissingArgs(rawArgs, extracted, { adapter, interactive });
+}
+
 describe("promptMissingArgs", () => {
   it("returns rawArgs unchanged in non-interactive mode", async () => {
+    const adapter = createMockAdapter({});
     const rawArgs = { name: undefined };
     const extracted = {
       fields: [
@@ -49,6 +56,7 @@ describe("promptMissingArgs", () => {
     };
 
     const result = await promptMissingArgs(rawArgs, extracted, {
+      adapter,
       interactive: false,
     });
     expect(result).toBe(rawArgs);
@@ -133,7 +141,7 @@ describe("promptMissingArgs", () => {
   });
 });
 
-describe("withPrompt integration", () => {
+describe("prompt integration", () => {
   it("prompts for missing required args and succeeds", async () => {
     const adapter = createMockAdapter({ "Your name": "Alice" });
 
@@ -148,7 +156,7 @@ describe("withPrompt integration", () => {
       run: ({ name }) => name,
     });
 
-    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+    const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -170,11 +178,9 @@ describe("withPrompt integration", () => {
       run: ({ name }) => name,
     });
 
-    const result = await runCommand(
-      cmd,
-      ["--name", "Bob"],
-      withPrompt({}, { adapter, interactive: true }),
-    );
+    const result = await runCommand(cmd, ["--name", "Bob"], {
+      prompt: createTestResolver(adapter),
+    });
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -199,7 +205,7 @@ describe("withPrompt integration", () => {
 
     process.env.TEST_PROMPT_NAME = "EnvName";
     try {
-      const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+      const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
 
       expect(result.success).toBe(true);
       if (result.success) {
@@ -225,7 +231,7 @@ describe("withPrompt integration", () => {
       run: ({ verbose }) => verbose,
     });
 
-    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+    const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -248,7 +254,7 @@ describe("withPrompt integration", () => {
       run: ({ level }) => level,
     });
 
-    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+    const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -270,7 +276,7 @@ describe("withPrompt integration", () => {
       run: ({ token }) => token,
     });
 
-    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+    const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -290,7 +296,7 @@ describe("withPrompt integration", () => {
       run: ({ name }) => name,
     });
 
-    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+    const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
 
     expect(result.success).toBe(false);
     expect(result.exitCode).toBe(1);
@@ -308,7 +314,7 @@ describe("withPrompt integration", () => {
       run: ({ name }) => name,
     });
 
-    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+    const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
 
     // Should fail because 'age' is required but not prompted
     expect(result.success).toBe(false);
@@ -329,11 +335,9 @@ describe("withPrompt integration", () => {
       run: ({ name, age }) => `${name}:${age}`,
     });
 
-    const result = await runCommand(
-      cmd,
-      ["--age", "30"],
-      withPrompt({}, { adapter, interactive: true }),
-    );
+    const result = await runCommand(cmd, ["--age", "30"], {
+      prompt: createTestResolver(adapter),
+    });
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -341,7 +345,7 @@ describe("withPrompt integration", () => {
     }
   });
 
-  it("preserves CLI args when custom resolvePrompts returns only missing values", async () => {
+  it("preserves CLI args when custom prompt returns only missing values", async () => {
     const cmd = defineCommand({
       name: "test",
       args: z.object({
@@ -352,8 +356,7 @@ describe("withPrompt integration", () => {
     });
 
     const result = await runCommand(cmd, ["--age", "25"], {
-      resolvePrompts: async (_rawArgs, _extracted) => {
-        // Return only the missing value, not all args
+      prompt: async (_rawArgs, _extracted) => {
         return { name: "Bob" };
       },
     });
@@ -375,7 +378,9 @@ describe("withPrompt integration", () => {
       run: ({ name }) => name,
     });
 
-    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: false }));
+    const result = await runCommand(cmd, [], {
+      prompt: createTestResolver(adapter, false),
+    });
 
     expect(result.success).toBe(false);
     expect(adapter.text).not.toHaveBeenCalled();
@@ -399,7 +404,7 @@ describe("withPrompt integration", () => {
       run: (args) => args,
     });
 
-    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+    const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -429,7 +434,7 @@ describe("withPrompt integration", () => {
       run: (args) => args,
     });
 
-    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+    const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -458,7 +463,7 @@ describe("withPrompt integration", () => {
       run: (args) => args,
     });
 
-    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+    const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
 
     // Prompting skipped, so validation fails due to missing required fields
     expect(result.success).toBe(false);
@@ -479,7 +484,7 @@ describe("withPrompt integration", () => {
       run: ({ item }) => item,
     });
 
-    const result = await runCommand(cmd, [], withPrompt({}, { adapter, interactive: true }));
+    const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -501,18 +506,12 @@ describe("withPrompt integration", () => {
       run: ({ name }) => name,
     });
 
-    const result = await runCommand(
-      cmd,
-      [],
-      withPrompt(
-        {
-          globalArgs: z.object({
-            verbose: arg(z.boolean().default(false), { prompt: {} }),
-          }),
-        },
-        { adapter, interactive: true },
-      ),
-    );
+    const result = await runCommand(cmd, [], {
+      globalArgs: z.object({
+        verbose: arg(z.boolean().default(false), { prompt: {} }),
+      }),
+      prompt: createTestResolver(adapter),
+    });
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -538,11 +537,9 @@ describe("withPrompt integration", () => {
       run: (args) => args,
     });
 
-    const result = await runCommand(
-      cmd,
-      ["--mode", "a"],
-      withPrompt({}, { adapter, interactive: true }),
-    );
+    const result = await runCommand(cmd, ["--mode", "a"], {
+      prompt: createTestResolver(adapter),
+    });
 
     expect(result.success).toBe(true);
     if (result.success) {
@@ -552,13 +549,5 @@ describe("withPrompt integration", () => {
     expect(adapter.select).not.toHaveBeenCalled();
     // Only foo should be prompted
     expect(adapter.text).toHaveBeenCalledOnce();
-  });
-});
-
-describe("withPrompt type safety", () => {
-  it("preserves resolvePrompts in return type", () => {
-    const opts = withPrompt({ version: "1.0.0" });
-    // At runtime, resolvePrompts should exist
-    expect(typeof opts.resolvePrompts).toBe("function");
   });
 });

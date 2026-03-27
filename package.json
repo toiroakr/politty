@@ -73,6 +73,26 @@
         "types": "./dist/prompt/index.d.cts",
         "default": "./dist/prompt/index.cjs"
       }
+    },
+    "./prompt/clack": {
+      "import": {
+        "types": "./dist/prompt/clack/index.d.ts",
+        "default": "./dist/prompt/clack/index.js"
+      },
+      "require": {
+        "types": "./dist/prompt/clack/index.d.cts",
+        "default": "./dist/prompt/clack/index.cjs"
+      }
+    },
+    "./prompt/inquirer": {
+      "import": {
+        "types": "./dist/prompt/inquirer/index.d.ts",
+        "default": "./dist/prompt/inquirer/index.js"
+      },
+      "require": {
+        "types": "./dist/prompt/inquirer/index.d.cts",
+        "default": "./dist/prompt/inquirer/index.cjs"
+      }
     }
   },
   "scripts": {
@@ -97,6 +117,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.10.0",
+    "@inquirer/prompts": "^8.3.2",
     "string-width": "^8.2.0"
   },
   "devDependencies": {

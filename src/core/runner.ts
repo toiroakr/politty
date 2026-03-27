@@ -201,7 +201,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     handleSignals: true,
     logger: options.logger,
     globalArgs: options.globalArgs,
-    resolvePrompts: options.resolvePrompts,
+    prompt: options.prompt,
     _globalExtracted: globalExtracted,
     _globalCleanup: options.cleanup,
     _context: {
@@ -410,12 +410,9 @@ async function runCommandInternal<TResult = unknown>(
         }
       }
 
-      // Prompt for missing global args (if resolvePrompts callback is provided)
-      if (options.resolvePrompts) {
-        const resolved = await options.resolvePrompts(
-          accumulatedGlobalArgs,
-          options._globalExtracted,
-        );
+      // Prompt for missing global args (if prompt resolver is provided)
+      if (options.prompt) {
+        const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted);
         Object.assign(accumulatedGlobalArgs, resolved);
       }
 
@@ -455,10 +452,10 @@ async function runCommandInternal<TResult = unknown>(
       return result as RunResult<TResult>;
     }
 
-    // Prompt for missing command args (if resolvePrompts callback is provided)
+    // Prompt for missing command args (if prompt resolver is provided)
     let argsToValidate = parseResult.rawArgs;
-    if (options.resolvePrompts && parseResult.extractedFields) {
-      const resolved = await options.resolvePrompts(argsToValidate, parseResult.extractedFields);
+    if (options.prompt && parseResult.extractedFields) {
+      const resolved = await options.prompt(argsToValidate, parseResult.extractedFields);
       argsToValidate = { ...argsToValidate, ...resolved };
     }
 

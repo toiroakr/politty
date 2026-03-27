@@ -73,6 +73,7 @@ export type {
   // Options and result types
   MainOptions,
   NonRunnableCommand,
+  PromptResolver,
   RunCommandOptions,
   RunnableCommand,
   RunResult,
