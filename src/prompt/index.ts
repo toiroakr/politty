@@ -51,6 +51,12 @@ export async function promptMissingArgs(
     // silent data loss (strip mode) or validation errors (strict mode).
     // Skip prompting and let Zod validation handle it.
   } else {
+    // For object and intersection schemas, prompt all fields as a flat list.
+    // Limitation: intersection schemas that compose a discriminatedUnion
+    // (e.g. sharedOptions.and(z.discriminatedUnion(...))) lose variant
+    // structure here because extractFields flattens both operands. Variant-
+    // aware prompting for intersections requires architectural changes to
+    // preserve sub-schema structure through extraction.
     await promptAllFields(adapter, result, extracted.fields);
   }
 
