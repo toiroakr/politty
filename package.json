@@ -92,7 +92,7 @@
     "@changesets/cli": "2.30.0",
     "@quansync/fs": "1.0.0",
     "@types/node": "25.5.0",
-    "@typescript/native-preview": "7.0.0-dev.20260324.1",
+    "@typescript/native-preview": "7.0.0-dev.20260325.1",
     "@vitest/coverage-v8": "4.1.1",
     "knip": "6.0.5",
     "lefthook": "2.1.4",
