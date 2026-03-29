@@ -1,5 +1,14 @@
 # politty
 
+## 0.4.13
+
+### Patch Changes
+
+- caa32e4: Add `politty/prompt` module for interactive missing-option prompts with TTY detection, discriminatedUnion support, and pluggable adapter interface. Ships with two adapters: `politty/prompt/clack` (@clack/prompts) and `politty/prompt/inquirer` (@inquirer/prompts).
+- 1db0f98: Switch CI runner from ubuntu-slim to ubuntu-latest to fix knip memory allocation failure with oxc-parser
+- 200ac28: Use FileConfig.title and description in deriveIndexFromFiles for index category generation
+- 34ad15e: Use oxfmt JavaScript API instead of CLI subprocess for formatting in tests
+
 ## 0.4.12
 
 ### Patch Changes
