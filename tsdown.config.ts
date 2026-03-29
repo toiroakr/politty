@@ -6,6 +6,7 @@ export default defineConfig({
     "src/augment.ts",
     "src/docs/index.ts",
     "src/completion/index.ts",
+    "src/skill/index.ts",
     "src/prompt/index.ts",
     "src/prompt/clack/index.ts",
     "src/prompt/inquirer/index.ts",

@@ -1,0 +1,40 @@
+import type { z } from "zod";
+import type { skillFrontmatterSchema } from "./frontmatter.js";
+
+/**
+ * SKILL.md frontmatter metadata.
+ *
+ * Follows vercel-labs/skills SKILL.md format with an additional `package` field
+ * for tracking provenance (which npm package a skill originated from).
+ */
+export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
+
+/**
+ * A skill discovered from a source directory (npm package).
+ */
+export interface DiscoveredSkill {
+  /** Parsed frontmatter metadata */
+  frontmatter: SkillFrontmatter;
+  /** Path to the directory containing SKILL.md (matches the sourceDir input) */
+  sourcePath: string;
+  /** Raw SKILL.md content (frontmatter + body) */
+  rawContent: string;
+}
+
+/**
+ * Options for `withSkillCommand`.
+ */
+export interface SkillCommandOptions {
+  /**
+   * Source directory containing SKILL.md files.
+   * Subdirectories with SKILL.md are treated as skills.
+   *
+   * @example
+   * ```typescript
+   * // Resolves to ../skills relative to the current file.
+   * // Works from both src/ and dist/ if at the same depth.
+   * const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
+   * ```
+   */
+  sourceDir: string;
+}

@@ -20,6 +20,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **[Advanced Features](./advanced-features.md)**: Subcommands, Discriminated Union, advanced features
 - **[Interactive Prompts](./interactive-prompts.md)**: Prompt for missing arguments interactively
 - **[Shell Completion](./shell-completion.md)**: Completion types, shell-specific setup, and troubleshooting
+- **[Skill Management](./skill-management.md)**: Manage agent skills via vercel-labs/skills wrapper
 - **[Recipes](./recipes.md)**: Practical examples for testing, configuration, error handling
 - **[API Reference](./api-reference.md)**: Detailed API reference
 - **[Doc Generation](./doc-generation.md)**: Automatic documentation generation with golden tests
