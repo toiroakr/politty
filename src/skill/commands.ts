@@ -232,8 +232,9 @@ function addSkill(skill: DiscoveredSkill): boolean {
     });
     logger.info(`${symbols.success} Installed ${skill.frontmatter.name}`);
     return true;
-  } catch {
-    logger.error(`Failed to install ${skill.frontmatter.name}`);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to install ${skill.frontmatter.name}: ${reason}`);
     process.exitCode = 1;
     return false;
   }
@@ -246,8 +247,9 @@ function removeSkill(name: string): boolean {
     });
     logger.info(`${symbols.success} Removed ${name}`);
     return true;
-  } catch {
-    logger.error(`Failed to remove ${name}`);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.error(`Failed to remove ${name}: ${reason}`);
     process.exitCode = 1;
     return false;
   }
