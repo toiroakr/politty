@@ -1,7 +1,7 @@
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
 import { getFieldsToPrompt, resolvePromptConfig } from "./prompt-resolver.js";
 import { isInteractive } from "./tty-detector.js";
-import type { PromptAdapter } from "./types.js";
+import type { PromptAdapter, ResolvedPromptConfig } from "./types.js";
 
 export { getFieldsToPrompt, resolvePromptConfig } from "./prompt-resolver.js";
 export { isInteractive } from "./tty-detector.js";
@@ -131,7 +131,7 @@ async function promptAllFields(
 async function promptAndCollect(
   adapter: PromptAdapter,
   result: Record<string, unknown>,
-  config: import("./types.js").ResolvedPromptConfig,
+  config: ResolvedPromptConfig,
 ): Promise<void> {
   const { message } = config;
   let value: unknown;
