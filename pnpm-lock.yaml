@@ -8,12 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@clack/prompts':
-        specifier: ^0.10.0
-        version: 0.10.1
-      '@inquirer/prompts':
-        specifier: ^8.3.2
-        version: 8.3.2(@types/node@25.5.0)
       string-width:
         specifier: ^8.2.0
         version: 8.2.0
@@ -21,6 +15,12 @@ importers:
       '@changesets/cli':
         specifier: 2.30.0
         version: 2.30.0(@types/node@25.5.0)
+      '@clack/prompts':
+        specifier: ^0.10.0
+        version: 0.10.1
+      '@inquirer/prompts':
+        specifier: ^8.3.2
+        version: 8.3.2(@types/node@25.5.0)
       '@quansync/fs':
         specifier: 1.0.0
         version: 1.0.0
