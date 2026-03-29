@@ -1,6 +1,6 @@
-import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { format } from "oxfmt";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { arg, defineCommand } from "../index.js";
@@ -505,11 +505,9 @@ describe("golden-test", () => {
 
       const filePath = path.join(testDir, "oxfmt-formatted.md");
 
-      const oxfmtFormatter = (content: string) => {
-        return execSync("pnpm oxfmt --stdin-filepath=file.md", {
-          input: content,
-          encoding: "utf-8",
-        });
+      const oxfmtFormatter = async (content: string) => {
+        const { code } = await format("file.md", content);
+        return code;
       };
 
       const result = await generateDoc({
@@ -2665,6 +2663,54 @@ Old description.
       const rootDocResult = result.files.find((f) => f.path === rootDocPath);
       expect(rootDocResult?.status).toBe("diff");
       expect(rootDocResult?.diff).toBeDefined();
+    });
+
+    it("should use FileConfig.title and description for index category", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "index-fileconfig.md");
+      const greetPath = path.join(testDir, "cli", "greet.md");
+
+      // FileConfig with custom title and description
+      const categories = [
+        {
+          title: "Custom Title",
+          description: "Custom description for the category",
+          commands: ["greet"],
+          docPath: "./cli/greet.md",
+        },
+      ];
+
+      const indexContent = await renderCommandIndex(testCommand, categories);
+
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Commands
+
+<!-- politty:index:${relPath(rootDocPath)}:start -->
+${indexContent}
+<!-- politty:index:${relPath(rootDocPath)}:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+        },
+        files: {
+          [greetPath]: {
+            commands: ["greet"],
+            title: "Custom Title",
+            description: "Custom description for the category",
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.find((f) => f.path === rootDocPath)?.status).toBe("match");
     });
   });
 

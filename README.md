@@ -13,6 +13,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **Lifecycle Management**: Guaranteed `setup` → `run` → `cleanup` execution order
 - **Signal Handling**: Proper SIGINT/SIGTERM handling with guaranteed cleanup execution
 - **Auto Help Generation**: Automatically generate help text from definitions
+- **Interactive Prompts**: Prompt for missing arguments with pluggable adapters (clack, inquirer)
 - **Discriminated Union**: Support for mutually exclusive argument sets
 - **Skill Management**: Manage agent skills (SKILL.md) via [vercel-labs/skills](https://github.com/vercel-labs/skills) wrapper
 
@@ -279,14 +280,15 @@ if (result.success) {
 
 Attach metadata to an argument.
 
-| Metadata      | Type       | Description                          |
-| ------------- | ---------- | ------------------------------------ |
-| `positional`  | `boolean?` | Treat as positional argument         |
-| `alias`       | `string?`  | Short alias (e.g., `-v`)             |
-| `description` | `string?`  | Argument description                 |
-| `placeholder` | `string?`  | Placeholder shown in help            |
-| `env`         | `string?`  | Environment variable name (fallback) |
-| `completion`  | `object?`  | Shell completion configuration       |
+| Metadata      | Type          | Description                                                              |
+| ------------- | ------------- | ------------------------------------------------------------------------ |
+| `positional`  | `boolean?`    | Treat as positional argument                                             |
+| `alias`       | `string?`     | Short alias (e.g., `-v`)                                                 |
+| `description` | `string?`     | Argument description                                                     |
+| `placeholder` | `string?`     | Placeholder shown in help                                                |
+| `env`         | `string?`     | Environment variable name (fallback)                                     |
+| `completion`  | `object?`     | Shell completion configuration                                           |
+| `prompt`      | `PromptMeta?` | Interactive prompt configuration ([docs](./docs/interactive-prompts.md)) |
 
 ## Shell Completion
 
@@ -427,6 +429,7 @@ For detailed documentation, see the `docs/` directory:
 - [Getting Started](./docs/getting-started.md) - Installation and creating your first command
 - [Essentials](./docs/essentials.md) - Core concepts explained
 - [Advanced Features](./docs/advanced-features.md) - Subcommands, Discriminated Union
+- [Interactive Prompts](./docs/interactive-prompts.md) - Prompt for missing arguments interactively
 - [Recipes](./docs/recipes.md) - Testing, configuration, error handling
 - [Skill Management](./docs/skill-management.md) - Agent skill management via vercel-labs/skills
 - [API Reference](./docs/api-reference.md) - Detailed API reference

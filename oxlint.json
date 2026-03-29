@@ -5,7 +5,8 @@
     "no-restricted-imports": [
       "error",
       { "patterns": ["**/tests/utils/**", "**/docs/**", "**/completion/**"] }
-    ]
+    ],
+    "typescript/consistent-type-imports": "error"
   },
   "overrides": [
     {

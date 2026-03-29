@@ -1,10 +1,11 @@
-import { z } from "zod";
+import type { z } from "zod";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import {
   getArgMeta as getArgMetaFromRegistry,
   type ArgMeta,
   type CompletionMeta,
   type EffectContext,
+  type PromptMeta,
 } from "./arg-registry.js";
 
 /**
@@ -69,6 +70,8 @@ export interface ResolvedFieldMeta {
   enumValues?: string[] | undefined;
   /** Completion metadata from arg() */
   completion?: CompletionMeta | undefined;
+  /** Prompt metadata from arg() for interactive input */
+  prompt?: PromptMeta | undefined;
   /** Side-effect callback from arg() metadata */
   effect?: ((value: unknown, context: EffectContext) => void | PromiseLike<void>) | undefined;
 }
@@ -418,6 +421,7 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
     schema,
     enumValues,
     completion: argMeta?.completion,
+    prompt: argMeta?.prompt,
     effect: argMeta?.effect,
   };
 
@@ -463,7 +467,8 @@ function extractFromDiscriminatedUnion(schema: z.ZodType): ExtractedFields {
     const shape = getObjectShape(option as z.ZodObject<z.ZodRawShape>);
     const variantFields: ResolvedFieldMeta[] = [];
 
-    // Get discriminator value
+    // Get discriminator value from the variant's discriminator schema.
+    // Supports z.literal() and single-value z.enum() discriminators.
     let discriminatorValue = "";
     const discriminatorSchema = shape[discriminator];
     if (discriminatorSchema) {
@@ -476,6 +481,14 @@ function extractFromDiscriminatedUnion(schema: z.ZodType): ExtractedFields {
         const value = (litDef as { value?: unknown; values?: unknown[] })?.value;
         const values = (litDef as { value?: unknown; values?: unknown[] })?.values;
         discriminatorValue = String(value ?? values?.[0] ?? "");
+      } else if (typeName === "enum") {
+        // Only single-value enums map to one variant. Multi-value enums
+        // (z.enum(['a','b'])) on a single variant are not standard for
+        // discriminatedUnion and are not extracted here.
+        const enumValues = extractEnumValues(discriminatorSchema);
+        if (enumValues && enumValues.length === 1) {
+          discriminatorValue = enumValues[0]!;
+        }
       }
     }
 

@@ -850,9 +850,10 @@ function deriveIndexFromFiles(
     const docPath = "./" + path.relative(path.dirname(rootDocPath), filePath).replace(/\\/g, "/");
     const firstCmdPath = commandPaths[0];
     const cmdInfo = firstCmdPath !== undefined ? allCommands.get(firstCmdPath) : undefined;
+    const fileConfig = Array.isArray(fileConfigRaw) ? undefined : fileConfigRaw;
     categories.push({
-      title: cmdInfo?.name ?? path.basename(filePath, path.extname(filePath)),
-      description: cmdInfo?.description ?? "",
+      title: fileConfig?.title ?? cmdInfo?.name ?? path.basename(filePath, path.extname(filePath)),
+      description: fileConfig?.description ?? cmdInfo?.description ?? "",
       commands: topLevelCommands,
       docPath,
     });

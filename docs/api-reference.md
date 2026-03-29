@@ -576,6 +576,10 @@ interface BaseArgMeta {
    * CLI arguments always take priority over environment variables.
    */
   env?: string | string[];
+  /** Shell completion configuration */
+  completion?: CompletionMeta;
+  /** Interactive prompt configuration (see [Interactive Prompts](./interactive-prompts.md)) */
+  prompt?: PromptMeta;
 }
 ```
 
@@ -640,6 +644,8 @@ interface MainOptions {
   skipValidation?: boolean;
   /** Custom logger (default: console) */
   logger?: Logger;
+  /** Prompt resolver for interactive missing-arg prompts */
+  prompt?: PromptResolver;
 }
 ```
 
@@ -1152,6 +1158,71 @@ type SkillFrontmatter = {
 
 ---
 
+## Prompt Types
+
+For full usage details, see [Interactive Prompts](./interactive-prompts.md).
+
+### `PromptMeta`
+
+Prompt metadata for interactive input when a value is missing.
+
+```typescript
+interface PromptMeta {
+  /** Prompt message shown to the user. Defaults to the field's description or name. */
+  message?: string;
+  /** Explicit prompt type. Overrides auto-detection from schema/completion. */
+  type?: PromptType;
+  /** Choices for select prompt. Overrides enum values from schema. */
+  choices?: Array<string | { label: string; value: string }>;
+  /** Whether to enable prompting for this field (default: true when prompt is set) */
+  enabled?: boolean;
+}
+```
+
+---
+
+### `PromptType`
+
+Available prompt input types.
+
+```typescript
+type PromptType = "text" | "password" | "confirm" | "select" | "file" | "directory";
+```
+
+---
+
+### `PromptResolver`
+
+Async callback to resolve missing argument values interactively. Provided by adapter subpath modules.
+
+```typescript
+type PromptResolver = (
+  rawArgs: Record<string, unknown>,
+  extracted: ExtractedFields,
+) => Promise<Record<string, unknown>>;
+```
+
+---
+
+### `PromptAdapter`
+
+Adapter interface for prompt rendering. Implement this to use a custom prompt library.
+
+```typescript
+interface PromptAdapter {
+  text(config: { message: string; placeholder?: string }): Promise<string | symbol>;
+  password(config: { message: string }): Promise<string | symbol>;
+  confirm(config: { message: string }): Promise<boolean | symbol>;
+  select(config: {
+    message: string;
+    options: Array<{ label: string; value: string }>;
+  }): Promise<string | symbol>;
+  isCancelled(value: unknown): boolean;
+}
+```
+
+---
+
 ## Exports
 
 ```typescript
@@ -1192,6 +1263,7 @@ export type {
   LogStream,
   MainOptions,
   NonRunnableCommand,
+  PromptResolver,
   RunCommandOptions,
   RunnableCommand,
   RunResult,
@@ -1221,6 +1293,10 @@ export {
 // Zod validation
 export { formatValidationErrors } from "./validator/zod-validator.js";
 export type { ValidationError, ValidationResult } from "./validator/zod-validator.js";
+
+// Prompt (subpath exports)
+// import { prompt } from "politty/prompt/clack";
+// import { prompt } from "politty/prompt/inquirer";
 ```
 
 ### `politty/skill`
