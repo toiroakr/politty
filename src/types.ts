@@ -1,5 +1,6 @@
 import type { z } from "zod";
 
+import type { ExtractedFields } from "./core/schema-extractor.js";
 import type { LazyCommand } from "./lazy.js";
 
 /**
@@ -184,7 +185,7 @@ export type SubCommandsRecord = Record<string, SubCommandValue>;
  */
 export type PromptResolver = (
   rawArgs: Record<string, unknown>,
-  extracted: import("./core/schema-extractor.js").ExtractedFields,
+  extracted: ExtractedFields,
 ) => Promise<Record<string, unknown>>;
 
 /**
