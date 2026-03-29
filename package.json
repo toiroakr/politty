@@ -63,6 +63,36 @@
         "types": "./dist/completion/index.d.cts",
         "default": "./dist/completion/index.cjs"
       }
+    },
+    "./prompt": {
+      "import": {
+        "types": "./dist/prompt/index.d.ts",
+        "default": "./dist/prompt/index.js"
+      },
+      "require": {
+        "types": "./dist/prompt/index.d.cts",
+        "default": "./dist/prompt/index.cjs"
+      }
+    },
+    "./prompt/clack": {
+      "import": {
+        "types": "./dist/prompt/clack/index.d.ts",
+        "default": "./dist/prompt/clack/index.js"
+      },
+      "require": {
+        "types": "./dist/prompt/clack/index.d.cts",
+        "default": "./dist/prompt/clack/index.cjs"
+      }
+    },
+    "./prompt/inquirer": {
+      "import": {
+        "types": "./dist/prompt/inquirer/index.d.ts",
+        "default": "./dist/prompt/inquirer/index.js"
+      },
+      "require": {
+        "types": "./dist/prompt/inquirer/index.d.cts",
+        "default": "./dist/prompt/inquirer/index.cjs"
+      }
     }
   },
   "scripts": {
@@ -90,6 +120,8 @@
   },
   "devDependencies": {
     "@changesets/cli": "2.30.0",
+    "@clack/prompts": "^0.10.0",
+    "@inquirer/prompts": "^8.3.2",
     "@quansync/fs": "1.0.0",
     "@types/node": "25.5.0",
     "@typescript/native-preview": "7.0.0-dev.20260326.1",
@@ -107,7 +139,17 @@
     "zod": "4.3.6"
   },
   "peerDependencies": {
+    "@clack/prompts": "^0.10.0",
+    "@inquirer/prompts": "^8.3.2",
     "zod": "^4.2.1"
+  },
+  "peerDependenciesMeta": {
+    "@clack/prompts": {
+      "optional": true
+    },
+    "@inquirer/prompts": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=18"

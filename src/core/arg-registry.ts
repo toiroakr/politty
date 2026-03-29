@@ -65,6 +65,51 @@ export type CompletionMeta = {
 );
 
 /**
+ * Prompt input type for interactive prompts
+ *
+ * - "text": free-form text input (default for string schemas)
+ * - "password": masked text input
+ * - "confirm": yes/no prompt (default for boolean schemas)
+ * - "select": single selection from choices (default for enum schemas)
+ * - "file": file path input (inherited from completion type)
+ * - "directory": directory path input (inherited from completion type)
+ */
+export type PromptType = "text" | "password" | "confirm" | "select" | "file" | "directory";
+
+/**
+ * Prompt metadata for interactive input when a value is missing.
+ * Used by the `politty/prompt` module to request user input for unresolved arguments.
+ *
+ * @example
+ * ```ts
+ * // Custom prompt message
+ * name: arg(z.string(), {
+ *   prompt: { message: "What is your name?" }
+ * })
+ *
+ * // Password input (masked)
+ * token: arg(z.string(), {
+ *   prompt: { type: "password", message: "Enter API token" }
+ * })
+ *
+ * // Select with custom choices
+ * region: arg(z.string(), {
+ *   prompt: { choices: ["us-east-1", "eu-west-1", "ap-northeast-1"] }
+ * })
+ * ```
+ */
+export interface PromptMeta {
+  /** Prompt message shown to the user. Defaults to the field's description or name. */
+  message?: string;
+  /** Explicit prompt type. Overrides auto-detection from schema/completion. */
+  type?: PromptType;
+  /** Choices for select prompt. Overrides enum values from schema. */
+  choices?: Array<string | { label: string; value: string }>;
+  /** Whether to enable prompting for this field (default: true when prompt is set) */
+  enabled?: boolean;
+}
+
+/**
  * Context provided to effect callbacks.
  * When GlobalArgs is extended via declaration merging, `globalArgs` is typed accordingly.
  */
@@ -104,6 +149,20 @@ export interface BaseArgMeta<TValue = unknown> {
   env?: string | string[];
   /** Completion configuration for shell tab-completion */
   completion?: CompletionMeta;
+  /**
+   * Interactive prompt configuration for missing values.
+   * When set, the `politty/prompt` module will prompt the user interactively
+   * if this argument is not provided via CLI args or environment variables.
+   *
+   * @example
+   * ```ts
+   * name: arg(z.string(), {
+   *   description: "User name",
+   *   prompt: { message: "What is your name?" },
+   * })
+   * ```
+   */
+  prompt?: PromptMeta;
   /**
    * Side-effect callback executed after argument parsing and validation.
    * Runs before the command lifecycle (setup/run/cleanup).
