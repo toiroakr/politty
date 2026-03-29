@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { z } from "zod";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import {
   getArgMeta as getArgMetaFromRegistry,

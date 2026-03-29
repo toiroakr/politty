@@ -2664,6 +2664,54 @@ Old description.
       expect(rootDocResult?.status).toBe("diff");
       expect(rootDocResult?.diff).toBeDefined();
     });
+
+    it("should use FileConfig.title and description for index category", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "index-fileconfig.md");
+      const greetPath = path.join(testDir, "cli", "greet.md");
+
+      // FileConfig with custom title and description
+      const categories = [
+        {
+          title: "Custom Title",
+          description: "Custom description for the category",
+          commands: ["greet"],
+          docPath: "./cli/greet.md",
+        },
+      ];
+
+      const indexContent = await renderCommandIndex(testCommand, categories);
+
+      const initialContent = `# test-cli
+
+A test CLI for documentation generation
+
+## Commands
+
+<!-- politty:index:${relPath(rootDocPath)}:start -->
+${indexContent}
+<!-- politty:index:${relPath(rootDocPath)}:end -->
+`;
+      fs.writeFileSync(rootDocPath, initialContent, "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+        },
+        files: {
+          [greetPath]: {
+            commands: ["greet"],
+            title: "Custom Title",
+            description: "Custom description for the category",
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.find((f) => f.path === rootDocPath)?.status).toBe("match");
+    });
   });
 
   describe("rootDoc combined globalOptions and index markers", () => {
