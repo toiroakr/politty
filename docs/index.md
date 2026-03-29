@@ -18,6 +18,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **[Getting Started](./getting-started.md)**: Installation and creating your first command
 - **[Essentials](./essentials.md)**: Core concepts (arguments, validation, lifecycle) explained
 - **[Advanced Features](./advanced-features.md)**: Subcommands, Discriminated Union, advanced features
+- **[Interactive Prompts](./interactive-prompts.md)**: Prompt for missing arguments interactively
 - **[Shell Completion](./shell-completion.md)**: Completion types, shell-specific setup, and troubleshooting
 - **[Recipes](./recipes.md)**: Practical examples for testing, configuration, error handling
 - **[API Reference](./api-reference.md)**: Detailed API reference
