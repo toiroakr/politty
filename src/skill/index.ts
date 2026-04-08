@@ -1,9 +1,8 @@
 /**
  * Skill management module for coding agent CLIs.
  *
- * Wraps vercel-labs/skills by providing source directory scanning
- * and skill filtering. The actual installation and removal
- * of skills is delegated to `npx skills`.
+ * Provides source directory scanning, skill filtering,
+ * and file-based installation/removal of SKILL.md-based agent skills.
  *
  * The SKILL.md frontmatter is extended with a `package` field for
  * tracking which npm package each skill originated from.
@@ -56,6 +55,7 @@ import type { SkillCommandOptions } from "./types.js";
 
 // Public API re-exports
 export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./frontmatter.js";
+export { installSkill, uninstallSkill } from "./installer.js";
 export { scanSourceDir } from "./scanner.js";
 export type { DiscoveredSkill, SkillCommandOptions, SkillFrontmatter } from "./types.js";
 
@@ -63,9 +63,8 @@ export type { DiscoveredSkill, SkillCommandOptions, SkillFrontmatter } from "./t
  * Wrap a command with a `skills` subcommand for managing SKILL.md-based skills.
  *
  * Adds `skills sync`, `skills add`, `skills remove`, and `skills list` subcommands.
- * Installation and removal are delegated to vercel-labs/skills (`npx skills`).
- * politty provides source directory scanning (local path resolution) and
- * skill filtering scoped to the source directory.
+ * Skills are installed by copying to `.agents/skills/<name>/` and creating
+ * symlinks from agent-specific directories (e.g. `.claude/skills/`).
  *
  * @param command - The root command to wrap
  * @param options - Skill command configuration

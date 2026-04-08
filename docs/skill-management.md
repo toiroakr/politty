@@ -1,15 +1,13 @@
 # Skill Management
 
-politty provides a `withSkillCommand` wrapper that adds agent skill management to your CLI. It wraps [vercel-labs/skills](https://github.com/vercel-labs/skills), handling source directory scanning and skill filtering while delegating actual installation to `npx skills`.
+politty provides a `withSkillCommand` wrapper that adds agent skill management to your CLI. It handles source directory scanning, skill filtering, and file-based installation/removal.
 
 ## Overview
 
 politty's role is focused:
 
-1. **Install**: Scans your source directory for SKILL.md files and provides their local paths to `npx skills add`
+1. **Install**: Scans your source directory for SKILL.md files, copies them to `.agents/skills/<name>/`, and creates symlinks from agent-specific directories (e.g. `.claude/skills/`)
 2. **Remove**: Filters removal to only skills defined in your source directory
-
-The actual installation destination (`.claude/skills/`, `.cursor/skills/`, etc.) is determined by vercel-labs/skills.
 
 ## Setup
 
@@ -139,7 +137,7 @@ if (parsed) {
 
 ## SKILL.md Format
 
-Compatible with [vercel-labs/skills](https://github.com/vercel-labs/skills). The frontmatter parser supports:
+The frontmatter parser supports:
 
 - String values: `name: commit`
 - Quoted strings: `package: "@my-agent/skills"`

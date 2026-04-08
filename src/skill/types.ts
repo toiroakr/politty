@@ -4,7 +4,7 @@ import type { skillFrontmatterSchema } from "./frontmatter.js";
 /**
  * SKILL.md frontmatter metadata.
  *
- * Follows vercel-labs/skills SKILL.md format with an additional `package` field
+ * SKILL.md frontmatter with an optional `package` field
  * for tracking provenance (which npm package a skill originated from).
  */
 export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;

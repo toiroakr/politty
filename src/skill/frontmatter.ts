@@ -4,7 +4,7 @@ import { z } from "zod";
 /**
  * Zod schema for SKILL.md frontmatter.
  *
- * Compatible with vercel-labs/skills format, extended with `package` field.
+ * Validates SKILL.md frontmatter fields including the optional `package` field for provenance tracking.
  */
 export const skillFrontmatterSchema = z.object({
   /** Skill identifier */

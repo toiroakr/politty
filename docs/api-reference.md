@@ -1027,7 +1027,7 @@ type CommandValidationResult =
 
 ### `withSkillCommand`
 
-Wraps a command with a `skills` subcommand for managing SKILL.md-based agent skills. Delegates actual installation and removal to [vercel-labs/skills](https://github.com/vercel-labs/skills) (`npx skills`).
+Wraps a command with a `skills` subcommand for managing SKILL.md-based agent skills. Skills are installed by copying to `.agents/skills/<name>/` and creating symlinks from agent-specific directories.
 
 ```typescript
 function withSkillCommand<T extends AnyCommand>(command: T, options: SkillCommandOptions): T;
@@ -1145,7 +1145,7 @@ interface DiscoveredSkill {
 
 ### `SkillFrontmatter`
 
-Parsed SKILL.md frontmatter. Compatible with vercel-labs/skills format, extended with `package` field.
+Parsed SKILL.md frontmatter with optional `package` field for provenance tracking.
 
 ```typescript
 type SkillFrontmatter = {

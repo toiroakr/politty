@@ -1,8 +1,8 @@
-import { execFileSync } from "node:child_process";
 import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
 import { logger, symbols } from "../output/logger.js";
+import { installSkill, uninstallSkill } from "./installer.js";
 import { scanSourceDir } from "./scanner.js";
 import type { DiscoveredSkill, SkillCommandOptions } from "./types.js";
 
@@ -60,30 +60,20 @@ export function createSkillSyncCommand(options: SkillCommandOptions) {
 /**
  * Create the `skills add` subcommand.
  *
- * Discovers skills from sourceDir and delegates installation
- * to `npx skills add <local-path>`.
+ * Installs skills from sourceDir. Defaults to all skills if no name is given.
  */
 export function createSkillAddCommand(options: SkillCommandOptions) {
   return defineCommand({
     name: "add",
-    description: "Install skills from source package",
+    description: "Install skills from source",
     args: z.object({
       name: arg(z.string().optional(), {
         positional: true,
-        description: "Skill name to install",
+        description: "Skill name to install (default: all)",
         placeholder: "NAME",
-      }),
-      all: arg(z.boolean().default(false), {
-        description: "Install all available skills",
       }),
     }),
     run(args) {
-      if (args.all && args.name) {
-        logger.error("Specify either a skill name or --all, not both.");
-        process.exitCode = 1;
-        return;
-      }
-
       const sourceSkills = getSkills(options);
 
       if (sourceSkills.length === 0) {
@@ -91,16 +81,10 @@ export function createSkillAddCommand(options: SkillCommandOptions) {
         return;
       }
 
-      if (args.all) {
+      if (!args.name) {
         for (const skill of sourceSkills) {
           addSkill(skill);
         }
-        return;
-      }
-
-      if (!args.name) {
-        logger.error("Specify a skill name or use --all.");
-        process.exitCode = 1;
         return;
       }
 
@@ -115,8 +99,8 @@ export function createSkillAddCommand(options: SkillCommandOptions) {
 /**
  * Create the `skills remove` subcommand.
  *
+ * Removes installed skills. Defaults to all skills if no name is given.
  * Only skills provided by this CLI's sourceDir can be removed.
- * Delegates actual removal to `npx skills remove <name>`.
  */
 export function createSkillRemoveCommand(options: SkillCommandOptions) {
   return defineCommand({
@@ -125,20 +109,11 @@ export function createSkillRemoveCommand(options: SkillCommandOptions) {
     args: z.object({
       name: arg(z.string().optional(), {
         positional: true,
-        description: "Skill name to remove",
+        description: "Skill name to remove (default: all)",
         placeholder: "NAME",
-      }),
-      all: arg(z.boolean().default(false), {
-        description: "Remove all skills provided by this CLI",
       }),
     }),
     run(args) {
-      if (args.all && args.name) {
-        logger.error("Specify either a skill name or --all, not both.");
-        process.exitCode = 1;
-        return;
-      }
-
       const sourceSkills = getSkills(options);
 
       if (sourceSkills.length === 0) {
@@ -146,16 +121,10 @@ export function createSkillRemoveCommand(options: SkillCommandOptions) {
         return;
       }
 
-      if (args.all) {
+      if (!args.name) {
         for (const skill of sourceSkills) {
           removeSkill(skill.frontmatter.name);
         }
-        return;
-      }
-
-      if (!args.name) {
-        logger.error("Specify a skill name or use --all.");
-        process.exitCode = 1;
         return;
       }
 
@@ -175,7 +144,7 @@ export function createSkillRemoveCommand(options: SkillCommandOptions) {
 export function createSkillListCommand(options: SkillCommandOptions) {
   return defineCommand({
     name: "list",
-    description: "List available skills from source package",
+    description: "List available skills from source",
     args: z.object({
       json: arg(z.boolean().default(false), {
         description: "Output as JSON",
@@ -225,11 +194,8 @@ function findSkill(skills: DiscoveredSkill[], name: string): DiscoveredSkill | u
 }
 
 function addSkill(skill: DiscoveredSkill): boolean {
-  logger.info(`Installing ${skill.frontmatter.name}...`);
   try {
-    execFileSync("npx", ["--yes", "skills", "add", skill.sourcePath], {
-      stdio: "inherit",
-    });
+    installSkill(skill);
     logger.info(`${symbols.success} Installed ${skill.frontmatter.name}`);
     return true;
   } catch (error) {
@@ -242,9 +208,7 @@ function addSkill(skill: DiscoveredSkill): boolean {
 
 function removeSkill(name: string): boolean {
   try {
-    execFileSync("npx", ["--yes", "skills", "remove", name], {
-      stdio: "inherit",
-    });
+    uninstallSkill(name);
     logger.info(`${symbols.success} Removed ${name}`);
     return true;
   } catch (error) {

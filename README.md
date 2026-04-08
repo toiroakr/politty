@@ -15,7 +15,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **Auto Help Generation**: Automatically generate help text from definitions
 - **Interactive Prompts**: Prompt for missing arguments with pluggable adapters (clack, inquirer)
 - **Discriminated Union**: Support for mutually exclusive argument sets
-- **Skill Management**: Manage agent skills (SKILL.md) via [vercel-labs/skills](https://github.com/vercel-labs/skills) wrapper
+- **Skill Management**: Manage agent skills (SKILL.md) with file-based install/uninstall
 
 ## Requirements
 
@@ -373,7 +373,7 @@ const command = defineCommand({
 
 ## Skill Management
 
-politty wraps [vercel-labs/skills](https://github.com/vercel-labs/skills) to manage SKILL.md-based agent skills distributed via npm packages.
+politty manages SKILL.md-based agent skills distributed via npm packages.
 
 ### Quick Setup
 
@@ -431,7 +431,7 @@ For detailed documentation, see the `docs/` directory:
 - [Advanced Features](./docs/advanced-features.md) - Subcommands, Discriminated Union
 - [Interactive Prompts](./docs/interactive-prompts.md) - Prompt for missing arguments interactively
 - [Recipes](./docs/recipes.md) - Testing, configuration, error handling
-- [Skill Management](./docs/skill-management.md) - Agent skill management via vercel-labs/skills
+- [Skill Management](./docs/skill-management.md) - Agent skill management (SKILL.md-based)
 - [API Reference](./docs/api-reference.md) - Detailed API reference
 - [Doc Generation](./docs/doc-generation.md) - Automatic documentation generation
 
