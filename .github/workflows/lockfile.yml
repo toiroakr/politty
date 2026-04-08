@@ -1,19 +1,18 @@
-name: autofix.ci (aqua)
+name: autofix.ci (lockfile)
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - "aqua.yaml"
-      - "aqua-checksums.json"
+      - "package.json"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  aqua-checksum:
-    name: Update Aqua Checksum
+  lockfile:
+    name: Update Lockfile
     runs-on: ubuntu-slim
     timeout-minutes: 10
     permissions:
@@ -22,9 +21,14 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      - uses: aquaproj/aqua-installer@11dd79b4e498d471a9385aa9fb7f62bb5f52a73c # v4.0.4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+        name: Install pnpm
         with:
-          aqua_version: v2.57.1
-      - name: Update checksum
-        run: aqua upc -prune
+          standalone: true
+          run_install: false
+      - name: Install Node.js
+        run: pnpm env use --global 24
+        shell: bash
+      - name: Update lockfile
+        run: pnpm install --no-frozen-lockfile
       - uses: autofix-ci/action@7a166d7532b277f34e16238930461bf77f9d7ed8 # v1.3.3
