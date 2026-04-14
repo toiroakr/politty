@@ -591,8 +591,18 @@ Metadata for regular arguments.
 
 ```typescript
 interface RegularArgMeta extends BaseArgMeta {
-  /** Short alias (e.g., 'v' allows using --verbose as -v) */
-  alias?: string;
+  /**
+   * Alias name(s).
+   * - 1-char string  → short alias (`-v`)
+   * - >1-char string → long alias (`--long-name`, e.g. `--to-be` for `--tobe`)
+   * - array          → multiple aliases of either kind
+   */
+  alias?: string | string[];
+  /**
+   * Alias name(s) accepted by the parser but hidden from help,
+   * generated docs, and shell completion (e.g. legacy names).
+   */
+  hiddenAlias?: string | string[];
 }
 ```
 
@@ -604,8 +614,10 @@ Metadata for overriding built-in aliases (-h, -H).
 
 ```typescript
 interface BuiltinOverrideArgMeta extends BaseArgMeta {
-  /** Built-in alias to override ('h' or 'H') */
-  alias: "h" | "H";
+  /** Built-in alias to override ('h' or 'H'); may be combined with extra aliases */
+  alias: "h" | "H" | Array<"h" | "H" | string>;
+  /** Hidden aliases (accepted but not surfaced in help/docs/completion) */
+  hiddenAlias?: string | string[];
   /** Must be true to override built-in alias */
   overrideBuiltinAlias: true;
 }
@@ -896,8 +908,10 @@ interface ResolvedFieldMeta {
   name: string;
   /** CLI option name (kebab-case, used on command line) */
   cliName: string;
-  /** Short alias */
-  alias?: string;
+  /** Aliases (1-char = short `-v`, multi-char = long `--to-be`) */
+  alias?: string[];
+  /** Aliases accepted by parser but hidden from help/docs/completion */
+  hiddenAlias?: string[];
   /** Description */
   description?: string;
   /** Whether positional argument */

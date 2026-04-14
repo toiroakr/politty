@@ -29,14 +29,14 @@ const command = defineCommand({
     // Method 1: Using arg()
     source: arg(z.string(), {
       positional: true,
-      description: "Source file"
+      description: "Source file",
     }),
 
     // Method 2: Using .meta()
     // Requires import "politty/augment"
     destination: z.string().meta({
       positional: true,
-      description: "Destination file"
+      description: "Destination file",
     }),
   }),
   // ...
@@ -69,13 +69,14 @@ args: z.object({
   // --verbose or -v (boolean flag)
   verbose: arg(z.boolean().default(false), {
     alias: "v",
-    description: "Enable verbose logging"
+    description: "Enable verbose logging",
   }),
-})
+});
 ```
 
 - **Boolean flags**: Their presence alone is treated as `true` (e.g., `--verbose`).
-- **Aliases**: Use `alias` to define short forms like `-v`.
+- **Aliases**: Use `alias` to define short forms like `-v`. Multi-character entries become additional long options (e.g. `alias: "to-be"` accepts both `--tobe` and `--to-be`). Pass an array to combine short and long aliases: `alias: ["v", "loud"]`.
+- **Hidden aliases**: Use `hiddenAlias` for names the parser should accept but that should not appear in help, generated docs, or shell completion (typical use: legacy or deprecated names).
 - **Default values**: Use Zod's `.default()` to set fallback values.
 
 ### Array Options
@@ -86,9 +87,9 @@ Using `z.array()` allows the same option to be specified multiple times.
 args: z.object({
   include: arg(z.array(z.string()), {
     alias: "i",
-    description: "Files to include"
-  })
-})
+    description: "Files to include",
+  }),
+});
 ```
 
 ```bash
@@ -111,7 +112,7 @@ args: z.object({
 
   // Convert "2023-01-01" to Date object
   date: arg(z.coerce.date()),
-})
+});
 ```
 
 ### Advanced Validation
@@ -125,7 +126,7 @@ args: z.object({
   age: arg(z.coerce.number().min(18).max(100)),
 
   url: arg(z.string().url()),
-})
+});
 ```
 
 Validation errors are automatically caught and displayed to users in a readable format.
@@ -150,7 +151,7 @@ const command = defineCommand({
   cleanup: async ({ args, error }) => {
     console.log("Cleaning up...");
     if (error) console.error("An error occurred during execution:", error);
-  }
+  },
 });
 ```
 
