@@ -416,27 +416,40 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   // Extract enum values from schema
   const enumValues = extractEnumValues(schema);
 
-  // Normalize alias-like inputs to a deduped, sanitised array (or undefined when empty).
-  // Leading dashes are stripped and entries must match [A-Za-z0-9][A-Za-z0-9-]* to avoid
-  // unreachable aliases and broken shell-completion case patterns.
+  // Normalize alias-like inputs to a deduped, validated array (or undefined when empty).
+  // Leading dashes are stripped for convenience; entries that still fail the pattern after
+  // stripping cause a validation error so that invalid aliases are never silently ignored.
   const aliasPattern = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
-  const normalizeAliasList = (input: unknown): string[] | undefined => {
+  const normalizeAliasList = (
+    input: unknown,
+    metaKey: "alias" | "hiddenAlias",
+  ): string[] | undefined => {
     if (input == null) return undefined;
     const arr = Array.isArray(input) ? input : [input];
-    const normalized = arr.flatMap((a) => {
-      if (typeof a !== "string") return [];
+    const normalized = arr.map((a) => {
+      if (typeof a !== "string") {
+        throw new Error(
+          `Invalid ${metaKey} for field "${name}": expected string or string[], received ${typeof a}.`,
+        );
+      }
       const candidate = a.trim().replace(/^-+/, "");
-      return candidate.length > 0 && aliasPattern.test(candidate) ? [candidate] : [];
+      if (candidate.length === 0 || !aliasPattern.test(candidate)) {
+        throw new Error(
+          `Invalid ${metaKey} "${a}" for field "${name}": aliases must match ${aliasPattern}.`,
+        );
+      }
+      return candidate;
     });
     const result = Array.from(new Set(normalized));
     return result.length > 0 ? result : undefined;
   };
 
-  const alias = normalizeAliasList(argMeta?.alias);
+  const alias = normalizeAliasList(argMeta?.alias, "alias");
   // Filter hiddenAlias so it never overlaps with visible alias (visible wins)
   const visibleSet = new Set(alias ?? []);
   const hiddenAliasRaw = normalizeAliasList(
     (argMeta as { hiddenAlias?: string | string[] } | undefined)?.hiddenAlias,
+    "hiddenAlias",
   );
   const hiddenAlias = hiddenAliasRaw?.filter((a) => !visibleSet.has(a));
   const hiddenAliasFinal = hiddenAlias && hiddenAlias.length > 0 ? hiddenAlias : undefined;
