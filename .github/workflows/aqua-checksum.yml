@@ -1,4 +1,4 @@
-name: autofix.ci (aqua)
+name: autofix.ci
 
 on:
   pull_request:
@@ -8,7 +8,7 @@ on:
       - "aqua-checksums.json"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: aqua-checksum-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

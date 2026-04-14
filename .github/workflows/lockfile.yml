@@ -1,4 +1,4 @@
-name: autofix.ci (lockfile)
+name: autofix.ci
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
       - "package.json"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: lockfile-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
