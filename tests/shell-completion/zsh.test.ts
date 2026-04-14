@@ -151,7 +151,7 @@ wait_output '__DONE__' 15 || { echo "FAIL:setup_timeout"; exit 1 }
 wait_output '%' 5
 
 zpty -w -n tp "${command}"
-sleep 0.5
+sleep 0.1
 zpty -w -n tp $'\\t'
 
 local tries=50
