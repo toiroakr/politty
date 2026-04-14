@@ -251,20 +251,42 @@ export const argRegistry = z.registry<ArgMeta>();
  * ```
  */
 /**
- * Type helper to validate ArgMeta
- * Forces a type error if alias is "h" or "H" without overrideBuiltinAlias: true
+ * Detect whether `A` contains a reserved alias ("h" or "H"), for either a
+ * plain string or a tuple/array of strings. Uses `[A] extends [never]` to
+ * prevent distribution returning `never` for missing fields.
  */
-type ValidateArgMeta<M> = M extends { alias: infer A }
-  ? A extends "h" | "H"
-    ? M extends { overrideBuiltinAlias: true }
-      ? M
-      : {
-          [K in keyof M]: M[K];
-        } & {
-          __typeError: "Alias 'h' or 'H' requires overrideBuiltinAlias: true";
-        }
-    : M
-  : M;
+type ContainsReservedAlias<A> = [A] extends [never]
+  ? false
+  : A extends "h" | "H"
+    ? true
+    : A extends readonly (infer E)[]
+      ? [Extract<E, "h" | "H">] extends [never]
+        ? false
+        : true
+      : false;
+
+type ReservedAliasTypeError<M> = {
+  [K in keyof M]: M[K];
+} & {
+  __typeError: "Alias 'h' or 'H' requires overrideBuiltinAlias: true";
+};
+
+type AliasFieldOf<M> = M extends { alias: infer A } ? A : never;
+type HiddenAliasFieldOf<M> = M extends { hiddenAlias: infer H } ? H : never;
+
+/**
+ * Type helper to validate ArgMeta.
+ * Forces a type error when a reserved alias ("h" / "H") is used without
+ * `overrideBuiltinAlias: true`, whether the alias is provided as a string
+ * or as part of an array, and whether it appears in `alias` or `hiddenAlias`.
+ */
+type ValidateArgMeta<M> = M extends { overrideBuiltinAlias: true }
+  ? M
+  : ContainsReservedAlias<AliasFieldOf<M>> extends true
+    ? ReservedAliasTypeError<M>
+    : ContainsReservedAlias<HiddenAliasFieldOf<M>> extends true
+      ? ReservedAliasTypeError<M>
+      : M;
 
 export function arg<T extends z.ZodType>(schema: T): T;
 export function arg<T extends z.ZodType, M extends ArgMeta<z.output<T>>>(

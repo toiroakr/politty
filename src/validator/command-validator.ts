@@ -133,7 +133,7 @@ function checkDuplicateAliases(
         errors.push({
           commandPath,
           type: "duplicate_alias",
-          message: `Alias "${alias}" for field "${field.name}" conflicts with existing field name "${alias}".`,
+          message: `Alias "${alias}" for field "${field.name}" conflicts with existing field name or CLI name "${alias}".`,
           field: field.name,
         });
       }
@@ -315,7 +315,8 @@ export function validateReservedAliases(
     const alias = aliasList.find((a) => a === "h" || a === "H") ?? "h";
     throw new ReservedAliasError(
       `Alias "${alias}" is reserved for --${alias === "h" ? "help" : "help-all"}. ` +
-        `To override this, set { alias: "${alias}", overrideBuiltinAlias: true } for "${field}".`,
+        `To override this, set { overrideBuiltinAlias: true } for "${field}" ` +
+        `and keep the alias where it is currently defined (in alias or hiddenAlias).`,
     );
   }
 }

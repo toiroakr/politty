@@ -92,8 +92,46 @@ describe("ArgParser", () => {
       });
 
       expect(() => parseArgs(["--help"], cmd)).toThrow(
-        'Alias "h" is reserved for --help. To override this, set { alias: "h", overrideBuiltinAlias: true }',
+        /Alias "h" is reserved for --help\. To override this, set \{ overrideBuiltinAlias: true \} for "header"/,
       );
+    });
+
+    it("should reject reserved alias inside an `as const` alias array at the type level", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          // @ts-expect-error - reserved alias inside a narrowed tuple must require overrideBuiltinAlias
+          header: arg(z.string(), { alias: ["H", "host"] as const }),
+        }),
+      });
+
+      // Runtime enforcement regardless of type narrowing
+      expect(() => parseArgs([], cmd)).toThrow(/Alias "H" is reserved for --help-all/);
+    });
+
+    it("should reject reserved value in hiddenAlias when narrowed as a tuple", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          // @ts-expect-error - reserved alias inside a narrowed hiddenAlias tuple must require overrideBuiltinAlias
+          header: arg(z.string(), { hiddenAlias: ["h"] as const }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(/Alias "h" is reserved for --help/);
+    });
+
+    it("should still catch reserved alias in a widened array at runtime", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          // TypeScript widens `["H", "host"]` to string[] here, so the type-level
+          // guard cannot fire — but the runtime validator still does.
+          header: arg(z.string(), { alias: ["H", "host"] }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(/Alias "H" is reserved for --help-all/);
     });
 
     it("should prioritize subcommand over --help-all", () => {
@@ -597,7 +635,7 @@ describe("ArgParser", () => {
 
       expect(() => parseArgs([], cmd)).toThrow(DuplicateAliasError);
       expect(() => parseArgs([], cmd)).toThrow(
-        /Alias "output" for field "verbose" conflicts with existing field name "output"/,
+        /Alias "output" for field "verbose" conflicts with existing field name or CLI name "output"/,
       );
     });
 
@@ -706,7 +744,7 @@ describe("ArgParser", () => {
 
       expect(() => parseArgs([], cmd)).toThrow(DuplicateAliasError);
       expect(() => parseArgs([], cmd)).toThrow(
-        /Alias "output" for field "tobe" conflicts with existing field name "output"/,
+        /Alias "output" for field "tobe" conflicts with existing field name or CLI name "output"/,
       );
     });
   });
