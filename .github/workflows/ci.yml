@@ -35,7 +35,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Typecheck, lint, format, and knip
         run: |
-          pnpm tsc &
+          pnpm typecheck &
           pnpm lint &
           pnpm format:check &
           pnpm knip &
