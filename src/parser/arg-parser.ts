@@ -287,9 +287,11 @@ function separateGlobalArgs(
   const lookup = buildGlobalFlagLookup(globalExtracted);
 
   // Local schema fields for collision detection: local takes precedence.
-  // Use buildParserOptions to get all aliasMap entries (including implicit
-  // camelCase variants of hyphenated names and aliases) so that e.g.
-  // `--toBe` is correctly recognised as local when `alias: "to-be"`.
+  // Collect field names, CLI names, and aliasMap keys (which include implicit
+  // camelCase variants of hyphenated names/aliases) so that e.g. `--toBe` is
+  // correctly recognised as local when `alias: "to-be"`, and `--fooBar` is
+  // recognised as local when the field is named `fooBar` (cliName `foo-bar`).
+  const localFieldNames = new Set(localExtracted?.fields.map((f) => f.name) ?? []);
   const localCliNames = new Set(localExtracted?.fields.map((f) => f.cliName) ?? []);
   const localAliasMapKeys = localExtracted
     ? new Set(buildParserOptions(localExtracted).aliasMap?.keys() ?? [])
@@ -314,9 +316,11 @@ function separateGlobalArgs(
       );
       const flagName = isNegated ? withoutDashes.slice(3) : withoutDashes;
 
-      // If also defined locally (name, cliName, alias, or their camelCase variants),
-      // let the local parser handle it
+      // If also defined locally (field name, cliName, alias, or their camelCase
+      // variants), let the local parser handle it
       const isLocalCollision =
+        localFieldNames.has(withoutDashes) ||
+        localFieldNames.has(flagName) ||
         localCliNames.has(withoutDashes) ||
         localCliNames.has(flagName) ||
         localAliasMapKeys.has(withoutDashes) ||

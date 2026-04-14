@@ -195,13 +195,13 @@ export interface RegularArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
    * - >1-char string → long alias (`--long-name`)
    * - array          → multiple aliases of either kind
    */
-  alias?: string | string[];
+  alias?: string | string[] | readonly string[];
   /**
    * Alias name(s) that are accepted by the parser but hidden from help,
    * generated docs, and shell completion. Useful for legacy or deprecated
    * names that should still work without being advertised.
    */
-  hiddenAlias?: string | string[];
+  hiddenAlias?: string | string[] | readonly string[];
 }
 
 /**
@@ -209,9 +209,9 @@ export interface RegularArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
  */
 export interface BuiltinOverrideArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
   /** Built-in alias to override ('h' or 'H'), optionally combined with extra aliases */
-  alias: "h" | "H" | Array<"h" | "H" | string>;
+  alias: "h" | "H" | Array<"h" | "H" | string> | ReadonlyArray<"h" | "H" | string>;
   /** Hidden aliases (accepted but not surfaced in help/docs/completion) */
-  hiddenAlias?: string | string[];
+  hiddenAlias?: string | string[] | readonly string[];
   /** Must be true to override built-in aliases */
   overrideBuiltinAlias: true;
 }

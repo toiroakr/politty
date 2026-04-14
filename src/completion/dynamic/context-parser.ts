@@ -2,7 +2,7 @@
  * Parse completion context from partial command line
  */
 
-import { extractFields } from "../../core/schema-extractor.js";
+import { extractFields, toCamelCase } from "../../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import type { AnyCommand } from "../../types.js";
 import type { CompletableOption, CompletablePositional } from "../types.js";
@@ -155,9 +155,17 @@ function findOption(
   options: CompletableOption[],
   nameOrAlias: string,
 ): CompletableOption | undefined {
-  return options.find(
-    (opt) => opt.cliName === nameOrAlias || (opt.alias?.includes(nameOrAlias) ?? false),
-  );
+  return options.find((opt) => {
+    if (opt.cliName === nameOrAlias) return true;
+    if (opt.alias?.includes(nameOrAlias)) return true;
+    // Also match camelCase variants of hyphenated aliases/cliName so that
+    // e.g. --toBe is recognised when alias: "to-be" is defined.
+    if (nameOrAlias.length > 1) {
+      if (opt.cliName.includes("-") && toCamelCase(opt.cliName) === nameOrAlias) return true;
+      if (opt.alias?.some((a) => a.includes("-") && toCamelCase(a) === nameOrAlias)) return true;
+    }
+    return false;
+  });
 }
 
 /**
