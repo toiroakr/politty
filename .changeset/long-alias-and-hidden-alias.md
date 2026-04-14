@@ -1,5 +1,5 @@
 ---
-"politty": minor
+"politty": patch
 ---
 
 Extend `alias` to accept `string | string[]`. Multi-character entries
