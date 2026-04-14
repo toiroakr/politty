@@ -747,6 +747,19 @@ describe("ArgParser", () => {
         /Alias "output" for field "tobe" conflicts with existing field name or CLI name "output"/,
       );
     });
+
+    it("should detect camelCase variant collision between long alias and explicit alias", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          first: arg(z.string(), { alias: "to-be" }),
+          second: arg(z.string(), { alias: "toBe" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateAliasError);
+      expect(() => parseArgs([], cmd)).toThrow(/Duplicate alias "toBe".*"first".*"second"/);
+    });
   });
 
   describe("hiddenAlias", () => {

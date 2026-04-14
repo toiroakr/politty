@@ -123,32 +123,47 @@ function checkDuplicateAliases(
   const fieldNames = new Set(extracted.fields.map((f) => f.name));
   const cliNames = new Set(extracted.fields.map((f) => f.cliName));
 
+  // Helper: register an alias (or derived variant) and check for conflicts
+  const registerAlias = (alias: string, fieldName: string, isDerived: boolean) => {
+    // Check if alias conflicts with an existing field name / cliName
+    if (fieldNames.has(alias) || cliNames.has(alias)) {
+      errors.push({
+        commandPath,
+        type: "duplicate_alias",
+        message: `Alias "${alias}" for field "${fieldName}" conflicts with existing field name or CLI name "${alias}".`,
+        field: fieldName,
+      });
+    }
+
+    // Check if alias is already used by another field
+    const existingField = seenAliases.get(alias);
+    if (existingField && existingField !== fieldName) {
+      const qualifier = isDerived ? " (derived camelCase variant)" : "";
+      errors.push({
+        commandPath,
+        type: "duplicate_alias",
+        message: `Duplicate alias "${alias}"${qualifier} detected. Both "${existingField}" and "${fieldName}" use the same alias.`,
+        field: fieldName,
+      });
+    }
+    seenAliases.set(alias, fieldName);
+  };
+
   for (const field of extracted.fields) {
     const allAliases = getAllAliases(field);
     if (allAliases.length === 0) continue;
 
     for (const alias of allAliases) {
-      // Check if alias conflicts with an existing field name / cliName
-      if (fieldNames.has(alias) || cliNames.has(alias)) {
-        errors.push({
-          commandPath,
-          type: "duplicate_alias",
-          message: `Alias "${alias}" for field "${field.name}" conflicts with existing field name or CLI name "${alias}".`,
-          field: field.name,
-        });
-      }
+      registerAlias(alias, field.name, false);
 
-      // Check if alias is already used by another field
-      const existingField = seenAliases.get(alias);
-      if (existingField && existingField !== field.name) {
-        errors.push({
-          commandPath,
-          type: "duplicate_alias",
-          message: `Duplicate alias "${alias}" detected. Both "${existingField}" and "${field.name}" use the same alias.`,
-          field: field.name,
-        });
+      // Also validate implicit camelCase variants of hyphenated long aliases,
+      // since the parser registers these as additional lookup entries.
+      if (alias.length > 1 && alias.includes("-")) {
+        const camelVariant = toCamelCase(alias);
+        if (camelVariant !== alias && !fieldNames.has(camelVariant)) {
+          registerAlias(camelVariant, field.name, true);
+        }
       }
-      seenAliases.set(alias, field.name);
     }
   }
   return errors;
