@@ -46,8 +46,7 @@ export interface ResolvedFieldMeta {
   /**
    * Aliases for this option, normalized to an array.
    * 1-char entries are short aliases (`-v`); multi-char entries are long
-   * aliases (`--to-be`). The first entry is treated as the primary alias
-   * for backwards compatibility with consumers that expected a single value.
+   * aliases (`--to-be`).
    */
   alias?: string[] | undefined;
   /**

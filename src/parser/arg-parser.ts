@@ -286,12 +286,14 @@ function separateGlobalArgs(
 ): { separated: string[]; globalParsed: Record<string, unknown> } {
   const lookup = buildGlobalFlagLookup(globalExtracted);
 
-  // Local schema fields for collision detection: local takes precedence
+  // Local schema fields for collision detection: local takes precedence.
+  // Use buildParserOptions to get all aliasMap entries (including implicit
+  // camelCase variants of hyphenated names and aliases) so that e.g.
+  // `--toBe` is correctly recognised as local when `alias: "to-be"`.
   const localCliNames = new Set(localExtracted?.fields.map((f) => f.cliName) ?? []);
-  const localAliases = new Set<string>();
-  for (const f of localExtracted?.fields ?? []) {
-    for (const alias of getAllAliases(f)) localAliases.add(alias);
-  }
+  const localAliasMapKeys = localExtracted
+    ? new Set(buildParserOptions(localExtracted).aliasMap?.keys() ?? [])
+    : new Set<string>();
 
   const globalTokens: string[] = [];
   const commandTokens: string[] = [];
@@ -312,12 +314,13 @@ function separateGlobalArgs(
       );
       const flagName = isNegated ? withoutDashes.slice(3) : withoutDashes;
 
-      // If also defined locally (name, cliName, or long alias), let the local parser handle it
+      // If also defined locally (name, cliName, alias, or their camelCase variants),
+      // let the local parser handle it
       const isLocalCollision =
         localCliNames.has(withoutDashes) ||
         localCliNames.has(flagName) ||
-        localAliases.has(withoutDashes) ||
-        localAliases.has(flagName);
+        localAliasMapKeys.has(withoutDashes) ||
+        localAliasMapKeys.has(flagName);
 
       if (isGlobal && !isLocalCollision) {
         // collectGlobalFlag returns 1 or 2; subtract 1 because the for-loop increments
@@ -335,7 +338,7 @@ function separateGlobalArgs(
         const isKnownGlobal = lookup.aliases.has(withoutDash) || lookup.flagNames.has(resolvedName);
 
         // If also defined locally, let the local parser handle it
-        if (isKnownGlobal && !localAliases.has(withoutDash)) {
+        if (isKnownGlobal && !localAliasMapKeys.has(withoutDash)) {
           i +=
             collectGlobalFlag(argv, i, resolvedName, false, lookup.booleanFlags, globalTokens) - 1;
           continue;
