@@ -416,13 +416,19 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   // Extract enum values from schema
   const enumValues = extractEnumValues(schema);
 
-  // Normalize alias-like inputs to a deduped array (or undefined when empty)
+  // Normalize alias-like inputs to a deduped, sanitised array (or undefined when empty).
+  // Leading dashes are stripped and entries must match [A-Za-z0-9][A-Za-z0-9-]* to avoid
+  // unreachable aliases and broken shell-completion case patterns.
+  const aliasPattern = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
   const normalizeAliasList = (input: unknown): string[] | undefined => {
     if (input == null) return undefined;
     const arr = Array.isArray(input) ? input : [input];
-    const result = Array.from(
-      new Set(arr.filter((a): a is string => typeof a === "string" && a.length > 0)),
-    );
+    const normalized = arr.flatMap((a) => {
+      if (typeof a !== "string") return [];
+      const candidate = a.trim().replace(/^-+/, "");
+      return candidate.length > 0 && aliasPattern.test(candidate) ? [candidate] : [];
+    });
+    const result = Array.from(new Set(normalized));
     return result.length > 0 ? result : undefined;
   };
 

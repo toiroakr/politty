@@ -439,11 +439,16 @@ function formatFlags(opt: ResolvedFieldMeta): string {
 
   parts.push(longFlag);
 
-  // Long aliases (e.g., --to-be)
+  // Long aliases (e.g., --to-be), with the same placeholder for non-boolean options
   if (opt.alias) {
     for (const alias of opt.alias) {
       if (alias.length > 1) {
-        parts.push(styles.option(`--${alias}`));
+        let longAlias = styles.option(`--${alias}`);
+        if (opt.type !== "boolean") {
+          const placeholder = opt.placeholder ?? opt.cliName.toUpperCase();
+          longAlias += ` ${styles.placeholder(`<${placeholder}>`)}`;
+        }
+        parts.push(longAlias);
       }
     }
   }
