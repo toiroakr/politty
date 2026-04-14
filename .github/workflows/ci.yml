@@ -36,10 +36,18 @@ jobs:
       - name: Typecheck, lint, format, and knip
         run: |
           pnpm typecheck &
+          TYPECHECK_PID=$!
           pnpm lint &
+          LINT_PID=$!
           pnpm format:check &
+          FORMAT_PID=$!
           pnpm knip &
-          FAIL=0; for pid in $(jobs -p); do wait $pid || FAIL=1; done; exit $FAIL
+          KNIP_PID=$!
+          FAIL=0
+          for pid in "$TYPECHECK_PID" "$LINT_PID" "$FORMAT_PID" "$KNIP_PID"; do
+            wait "$pid" || FAIL=1
+          done
+          exit $FAIL
       - name: Test with coverage
         run: npx vitest run --coverage --project unit
       - name: Run octocov
@@ -66,8 +74,9 @@ jobs:
       - name: Install shell tools
         if: matrix.install
         run: |
-          sudo apt-get install -y --no-install-recommends ${{ matrix.install }} 2>/dev/null \
-            || (sudo apt-get update -o Acquire::http::Timeout=10 -o Acquire::Retries=3 \
+          sudo apt-get install -y --no-install-recommends ${{ matrix.install }} \
+            || (echo "apt-get install failed; updating package lists and retrying." \
+                && sudo apt-get update -o Acquire::http::Timeout=10 -o Acquire::Retries=3 \
                 && sudo apt-get install -y --no-install-recommends ${{ matrix.install }})
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
