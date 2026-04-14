@@ -56,6 +56,29 @@ describe("Completion", () => {
       expect(outputOpt?.takesValue).toBe(true); // string requires value
     });
 
+    it("should expose visible alias but exclude hiddenAlias from extracted completion data", () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          tobe: arg(z.string(), {
+            alias: ["t", "to-be"],
+            hiddenAlias: "legacy",
+            description: "choice",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const data = extractCompletionData(cmd, "test");
+      const opt = data.command.options.find((o) => o.name === "tobe");
+
+      expect(opt).toBeDefined();
+      // visible aliases only
+      expect(opt?.alias).toEqual(["t", "to-be"]);
+      // hiddenAlias must not leak into the completion alias list
+      expect(opt?.alias).not.toContain("legacy");
+    });
+
     it("should extract subcommands", () => {
       const buildCmd = defineCommand({
         name: "build",
