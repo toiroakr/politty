@@ -176,6 +176,43 @@ describe("Help Generator", () => {
       expect(result).toContain("Show help");
       expect(result).toContain("Show version");
     });
+
+    it("should display visible long aliases next to the canonical flag", () => {
+      const cmd = defineCommand({
+        name: "cli",
+        args: z.object({
+          tobe: arg(z.string(), {
+            alias: ["t", "to-be"],
+            description: "philosophical choice",
+          }),
+        }),
+      });
+
+      const result = renderOptions(cmd);
+
+      expect(result).toContain("-t");
+      expect(result).toContain("--tobe");
+      expect(result).toContain("--to-be");
+    });
+
+    it("should hide hiddenAlias entries from the help output", () => {
+      const cmd = defineCommand({
+        name: "cli",
+        args: z.object({
+          tobe: arg(z.string(), {
+            alias: "to-be",
+            hiddenAlias: ["legacy", "old"],
+            description: "...",
+          }),
+        }),
+      });
+
+      const result = renderOptions(cmd);
+
+      expect(result).toContain("--to-be");
+      expect(result).not.toContain("--legacy");
+      expect(result).not.toContain("--old");
+    });
   });
 
   describe("generateHelp", () => {

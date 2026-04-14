@@ -150,7 +150,11 @@ export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: str
   for (const opt of sub.options) {
     if (opt.takesValue) {
       const patterns: string[] = [`${parentPath}:--${opt.cliName}`];
-      if (opt.alias) patterns.push(`${parentPath}:-${opt.alias}`);
+      if (opt.alias) {
+        for (const a of opt.alias) {
+          patterns.push(`${parentPath}:${a.length === 1 ? `-${a}` : `--${a}`}`);
+        }
+      }
       lines.push(`        ${patterns.join("|")}) return 0 ;;`);
     }
   }

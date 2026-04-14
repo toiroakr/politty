@@ -150,7 +150,11 @@ function renderFilteredTable(
           break;
         }
         case "alias":
-          cells.push(opt.alias ? `\`-${opt.alias}\`` : "-");
+          cells.push(
+            opt.alias && opt.alias.length > 0
+              ? opt.alias.map((a) => `\`${a.length === 1 ? `-${a}` : `--${a}`}\``).join(", ")
+              : "-",
+          );
           break;
         case "description":
           cells.push(escapeTableCell(opt.description ?? ""));

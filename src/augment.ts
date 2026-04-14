@@ -23,7 +23,8 @@ declare module "zod" {
     description?: string;
     positional?: boolean;
     placeholder?: string;
-    alias?: string;
+    alias?: string | string[] | readonly string[];
+    hiddenAlias?: string | string[] | readonly string[];
     overrideBuiltinAlias?: boolean;
     // We can't strictly enforce the union type here (e.g. built-in alias rules)
     // because GlobalMeta must be an interface, but this provides basic type safety.

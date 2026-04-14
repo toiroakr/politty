@@ -1,4 +1,4 @@
-import { extractFields, type ExtractedFields } from "../core/schema-extractor.js";
+import { extractFields, getAllAliases, type ExtractedFields } from "../core/schema-extractor.js";
 import type { AnyCommand } from "../types.js";
 import {
   validateCaseVariantCollisions,
@@ -135,9 +135,13 @@ export function parseArgs(
   // Note: only the current command's overrideBuiltinAlias is checked here.
   // Global options with alias 'h'/'H' do not participate in this override check.
   const hasUserDefinedH =
-    extracted?.fields.some((f) => f.alias === "H" && f.overrideBuiltinAlias === true) ?? false;
+    extracted?.fields.some(
+      (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("H"),
+    ) ?? false;
   const hasUserDefinedh =
-    extracted?.fields.some((f) => f.alias === "h" && f.overrideBuiltinAlias === true) ?? false;
+    extracted?.fields.some(
+      (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("h"),
+    ) ?? false;
   const helpAllRequested = argv.includes("--help-all") || (!hasUserDefinedH && argv.includes("-H"));
   const helpRequested =
     !helpAllRequested && (argv.includes("--help") || (!hasUserDefinedh && argv.includes("-h")));
@@ -213,14 +217,17 @@ export function parseArgs(
   // Detect unknown flags
   const knownFlags = new Set(extracted.fields.map((f) => f.name));
   const knownCliNames = new Set(extracted.fields.map((f) => f.cliName));
-  const knownAliases = new Set(extracted.fields.filter((f) => f.alias).map((f) => f.alias!));
+  const knownAliases = new Set<string>();
+  for (const f of extracted.fields) {
+    for (const alias of getAllAliases(f)) knownAliases.add(alias);
+  }
 
   // Also consider global flags as known
   if (options.globalExtracted) {
     for (const f of options.globalExtracted.fields) {
       knownFlags.add(f.name);
       knownCliNames.add(f.cliName);
-      if (f.alias) knownAliases.add(f.alias);
+      for (const alias of getAllAliases(f)) knownAliases.add(alias);
     }
   }
 
@@ -279,11 +286,16 @@ function separateGlobalArgs(
 ): { separated: string[]; globalParsed: Record<string, unknown> } {
   const lookup = buildGlobalFlagLookup(globalExtracted);
 
-  // Local schema fields for collision detection: local takes precedence
+  // Local schema fields for collision detection: local takes precedence.
+  // Collect field names, CLI names, and aliasMap keys (which include implicit
+  // camelCase variants of hyphenated names/aliases) so that e.g. `--toBe` is
+  // correctly recognised as local when `alias: "to-be"`, and `--fooBar` is
+  // recognised as local when the field is named `fooBar` (cliName `foo-bar`).
+  const localFieldNames = new Set(localExtracted?.fields.map((f) => f.name) ?? []);
   const localCliNames = new Set(localExtracted?.fields.map((f) => f.cliName) ?? []);
-  const localAliases = new Set(
-    localExtracted?.fields.filter((f) => f.alias).map((f) => f.alias!) ?? [],
-  );
+  const localAliasMapKeys = localExtracted
+    ? new Set(buildParserOptions(localExtracted).aliasMap?.keys() ?? [])
+    : new Set<string>();
 
   const globalTokens: string[] = [];
   const commandTokens: string[] = [];
@@ -304,8 +316,15 @@ function separateGlobalArgs(
       );
       const flagName = isNegated ? withoutDashes.slice(3) : withoutDashes;
 
-      // If also defined locally, let the local parser handle it
-      const isLocalCollision = localCliNames.has(withoutDashes) || localCliNames.has(flagName);
+      // If also defined locally (field name, cliName, alias, or their camelCase
+      // variants), let the local parser handle it
+      const isLocalCollision =
+        localFieldNames.has(withoutDashes) ||
+        localFieldNames.has(flagName) ||
+        localCliNames.has(withoutDashes) ||
+        localCliNames.has(flagName) ||
+        localAliasMapKeys.has(withoutDashes) ||
+        localAliasMapKeys.has(flagName);
 
       if (isGlobal && !isLocalCollision) {
         // collectGlobalFlag returns 1 or 2; subtract 1 because the for-loop increments
@@ -323,7 +342,7 @@ function separateGlobalArgs(
         const isKnownGlobal = lookup.aliases.has(withoutDash) || lookup.flagNames.has(resolvedName);
 
         // If also defined locally, let the local parser handle it
-        if (isKnownGlobal && !localAliases.has(withoutDash)) {
+        if (isKnownGlobal && !localAliasMapKeys.has(withoutDash)) {
           i +=
             collectGlobalFlag(argv, i, resolvedName, false, lookup.booleanFlags, globalTokens) - 1;
           continue;

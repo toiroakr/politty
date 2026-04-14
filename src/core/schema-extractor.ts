@@ -43,8 +43,17 @@ export interface ResolvedFieldMeta {
   name: string;
   /** CLI option name (kebab-case, for command line usage) */
   cliName: string;
-  /** Short alias (e.g., 'v' for --verbose) */
-  alias?: string | undefined;
+  /**
+   * Aliases for this option, normalized to an array.
+   * 1-char entries are short aliases (`-v`); multi-char entries are long
+   * aliases (`--to-be`).
+   */
+  alias?: string[] | undefined;
+  /**
+   * Aliases that are accepted at parse time but hidden from help,
+   * generated docs, and shell completion.
+   */
+  hiddenAlias?: string[] | undefined;
   /** Argument description */
   description?: string | undefined;
   /** Whether this is a positional argument */
@@ -407,10 +416,49 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   // Extract enum values from schema
   const enumValues = extractEnumValues(schema);
 
+  // Normalize alias-like inputs to a deduped, validated array (or undefined when empty).
+  // Leading dashes are stripped for convenience; entries that still fail the pattern after
+  // stripping cause a validation error so that invalid aliases are never silently ignored.
+  const aliasPattern = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
+  const normalizeAliasList = (
+    input: unknown,
+    metaKey: "alias" | "hiddenAlias",
+  ): string[] | undefined => {
+    if (input == null) return undefined;
+    const arr = Array.isArray(input) ? input : [input];
+    const normalized = arr.map((a) => {
+      if (typeof a !== "string") {
+        throw new Error(
+          `Invalid ${metaKey} for field "${name}": expected string or string[], received ${typeof a}.`,
+        );
+      }
+      const candidate = a.trim().replace(/^-+/, "");
+      if (candidate.length === 0 || !aliasPattern.test(candidate)) {
+        throw new Error(
+          `Invalid ${metaKey} "${a}" for field "${name}": aliases must match ${aliasPattern}.`,
+        );
+      }
+      return candidate;
+    });
+    const result = Array.from(new Set(normalized));
+    return result.length > 0 ? result : undefined;
+  };
+
+  const alias = normalizeAliasList(argMeta?.alias, "alias");
+  // Filter hiddenAlias so it never overlaps with visible alias (visible wins)
+  const visibleSet = new Set(alias ?? []);
+  const hiddenAliasRaw = normalizeAliasList(
+    (argMeta as { hiddenAlias?: string | string[] } | undefined)?.hiddenAlias,
+    "hiddenAlias",
+  );
+  const hiddenAlias = hiddenAliasRaw?.filter((a) => !visibleSet.has(a));
+  const hiddenAliasFinal = hiddenAlias && hiddenAlias.length > 0 ? hiddenAlias : undefined;
+
   const meta: ResolvedFieldMeta = {
     name,
     cliName,
-    alias: argMeta?.alias,
+    alias,
+    hiddenAlias: hiddenAliasFinal,
     description,
     positional: argMeta?.positional ?? false,
     placeholder: argMeta?.placeholder,
@@ -431,6 +479,16 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   }
 
   return meta;
+}
+
+/**
+ * Get the combined list of visible + hidden aliases for a field.
+ * Used by the parser and validators which treat both equally,
+ * while help/docs/completion rely on `field.alias` only.
+ */
+export function getAllAliases(field: ResolvedFieldMeta): string[] {
+  if (!field.alias && !field.hiddenAlias) return [];
+  return [...(field.alias ?? []), ...(field.hiddenAlias ?? [])];
 }
 
 /**

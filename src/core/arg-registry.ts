@@ -183,18 +183,35 @@ export interface BaseArgMeta<TValue = unknown> {
 
 /**
  * Metadata for regular arguments (non-builtin aliases)
+ *
+ * `alias` accepts either a single string or an array of strings.
+ * Single-character entries become short options (e.g. `-v`); multi-character
+ * entries become additional long options (e.g. `--to-be` for `--tobe`).
  */
 export interface RegularArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
-  /** Short alias (e.g., 'v' for --verbose) */
-  alias?: string;
+  /**
+   * Alias name(s) for this option.
+   * - 1-char string  → short alias (`-v`)
+   * - >1-char string → long alias (`--long-name`)
+   * - array          → multiple aliases of either kind
+   */
+  alias?: string | string[] | readonly string[];
+  /**
+   * Alias name(s) that are accepted by the parser but hidden from help,
+   * generated docs, and shell completion. Useful for legacy or deprecated
+   * names that should still work without being advertised.
+   */
+  hiddenAlias?: string | string[] | readonly string[];
 }
 
 /**
  * Metadata for overriding built-in aliases (-h, -H)
  */
 export interface BuiltinOverrideArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
-  /** Built-in alias to override ('h' or 'H') */
-  alias: "h" | "H";
+  /** Built-in alias to override ('h' or 'H'), optionally combined with extra aliases */
+  alias: "h" | "H" | Array<"h" | "H" | string> | ReadonlyArray<"h" | "H" | string>;
+  /** Hidden aliases (accepted but not surfaced in help/docs/completion) */
+  hiddenAlias?: string | string[] | readonly string[];
   /** Must be true to override built-in aliases */
   overrideBuiltinAlias: true;
 }
@@ -234,18 +251,42 @@ export const argRegistry = z.registry<ArgMeta>();
  * ```
  */
 /**
- * Type helper to validate ArgMeta
- * Forces a type error if alias is "h" or "H" without overrideBuiltinAlias: true
+ * Detect whether `A` contains a reserved alias ("h" or "H"), for either a
+ * plain string or a tuple/array of strings. Uses `[A] extends [never]` to
+ * prevent distribution returning `never` for missing fields.
  */
-type ValidateArgMeta<M> = M extends { alias: "h" | "H" }
-  ? M extends { overrideBuiltinAlias: true }
-    ? M
-    : {
-        [K in keyof M]: M[K];
-      } & {
-        __typeError: "Alias 'h' or 'H' requires overrideBuiltinAlias: true";
-      }
-  : M;
+type ContainsReservedAlias<A> = [A] extends [never]
+  ? false
+  : A extends "h" | "H"
+    ? true
+    : A extends readonly (infer E)[]
+      ? [Extract<E, "h" | "H">] extends [never]
+        ? false
+        : true
+      : false;
+
+type ReservedAliasTypeError<M> = {
+  [K in keyof M]: M[K];
+} & {
+  __typeError: "Alias 'h' or 'H' requires overrideBuiltinAlias: true";
+};
+
+type AliasFieldOf<M> = M extends { alias: infer A } ? A : never;
+type HiddenAliasFieldOf<M> = M extends { hiddenAlias: infer H } ? H : never;
+
+/**
+ * Type helper to validate ArgMeta.
+ * Forces a type error when a reserved alias ("h" / "H") is used without
+ * `overrideBuiltinAlias: true`, whether the alias is provided as a string
+ * or as part of an array, and whether it appears in `alias` or `hiddenAlias`.
+ */
+type ValidateArgMeta<M> = M extends { overrideBuiltinAlias: true }
+  ? M
+  : ContainsReservedAlias<AliasFieldOf<M>> extends true
+    ? ReservedAliasTypeError<M>
+    : ContainsReservedAlias<HiddenAliasFieldOf<M>> extends true
+      ? ReservedAliasTypeError<M>
+      : M;
 
 export function arg<T extends z.ZodType>(schema: T): T;
 export function arg<T extends z.ZodType, M extends ArgMeta<z.output<T>>>(

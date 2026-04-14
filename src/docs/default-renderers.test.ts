@@ -157,6 +157,46 @@ describe("default-renderers", () => {
       expect(table).toContain("| `--config <CONFIG>` | - | Config file | Yes | - |");
     });
 
+    it("should render long aliases alongside the canonical flag", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          tobe: arg(z.string(), {
+            alias: ["t", "to-be"],
+            description: "choice",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const table = renderOptionsTable(info);
+
+      // Alias cell should contain both short and long alias
+      expect(table).toContain("`-t`");
+      expect(table).toContain("`--to-be`");
+    });
+
+    it("should exclude hiddenAlias from rendered docs", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          tobe: arg(z.string(), {
+            alias: "to-be",
+            hiddenAlias: "legacy",
+            description: "choice",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const table = renderOptionsTable(info);
+
+      expect(table).toContain("--to-be");
+      expect(table).not.toContain("legacy");
+    });
+
     it("should display camelCase options in kebab-case", async () => {
       const cmd = defineCommand({
         name: "test",

@@ -92,7 +92,9 @@ function optionValueCases(options: CompletableOption[]): string[] {
 
     const conditions: string[] = [`test "$_prev" = "--${opt.cliName}"`];
     if (opt.alias) {
-      conditions.push(`test "$_prev" = "-${opt.alias}"`);
+      for (const a of opt.alias) {
+        conditions.push(`test "$_prev" = "${a.length === 1 ? `-${a}` : `--${a}`}"`);
+      }
     }
     const cond = conditions.join("; or ");
 
@@ -137,7 +139,11 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
       lines.push(`        echo "--${opt.cliName}\t${desc}"`);
     } else {
       const checks: string[] = [`"--${opt.cliName}"`];
-      if (opt.alias) checks.push(`"-${opt.alias}"`);
+      if (opt.alias) {
+        for (const a of opt.alias) {
+          checks.push(a.length === 1 ? `"-${a}"` : `"--${a}"`);
+        }
+      }
       lines.push(
         `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
       );
@@ -214,7 +220,11 @@ function optTakesValueCases(sub: CompletableSubcommand, parentPath: string): str
   for (const opt of sub.options) {
     if (opt.takesValue) {
       const patterns: string[] = [`"${parentPath}:--${opt.cliName}"`];
-      if (opt.alias) patterns.push(`"${parentPath}:-${opt.alias}"`);
+      if (opt.alias) {
+        for (const a of opt.alias) {
+          patterns.push(`"${parentPath}:${a.length === 1 ? `-${a}` : `--${a}`}"`);
+        }
+      }
       lines.push(`        case ${patterns.join(" ")}`);
       lines.push(`            return 0`);
     }
