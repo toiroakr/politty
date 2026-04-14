@@ -60,6 +60,7 @@ jobs:
           - shell: bash
             install: expect
           - shell: zsh
+            install: zsh
           - shell: fish
             install: fish
     steps:
