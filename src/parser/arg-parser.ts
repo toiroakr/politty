@@ -1,4 +1,4 @@
-import { extractFields, type ExtractedFields } from "../core/schema-extractor.js";
+import { extractFields, getAllAliases, type ExtractedFields } from "../core/schema-extractor.js";
 import type { AnyCommand } from "../types.js";
 import {
   validateCaseVariantCollisions,
@@ -135,9 +135,13 @@ export function parseArgs(
   // Note: only the current command's overrideBuiltinAlias is checked here.
   // Global options with alias 'h'/'H' do not participate in this override check.
   const hasUserDefinedH =
-    extracted?.fields.some((f) => f.alias === "H" && f.overrideBuiltinAlias === true) ?? false;
+    extracted?.fields.some(
+      (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("H"),
+    ) ?? false;
   const hasUserDefinedh =
-    extracted?.fields.some((f) => f.alias === "h" && f.overrideBuiltinAlias === true) ?? false;
+    extracted?.fields.some(
+      (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("h"),
+    ) ?? false;
   const helpAllRequested = argv.includes("--help-all") || (!hasUserDefinedH && argv.includes("-H"));
   const helpRequested =
     !helpAllRequested && (argv.includes("--help") || (!hasUserDefinedh && argv.includes("-h")));
@@ -213,14 +217,17 @@ export function parseArgs(
   // Detect unknown flags
   const knownFlags = new Set(extracted.fields.map((f) => f.name));
   const knownCliNames = new Set(extracted.fields.map((f) => f.cliName));
-  const knownAliases = new Set(extracted.fields.filter((f) => f.alias).map((f) => f.alias!));
+  const knownAliases = new Set<string>();
+  for (const f of extracted.fields) {
+    for (const alias of getAllAliases(f)) knownAliases.add(alias);
+  }
 
   // Also consider global flags as known
   if (options.globalExtracted) {
     for (const f of options.globalExtracted.fields) {
       knownFlags.add(f.name);
       knownCliNames.add(f.cliName);
-      if (f.alias) knownAliases.add(f.alias);
+      for (const alias of getAllAliases(f)) knownAliases.add(alias);
     }
   }
 
@@ -281,9 +288,10 @@ function separateGlobalArgs(
 
   // Local schema fields for collision detection: local takes precedence
   const localCliNames = new Set(localExtracted?.fields.map((f) => f.cliName) ?? []);
-  const localAliases = new Set(
-    localExtracted?.fields.filter((f) => f.alias).map((f) => f.alias!) ?? [],
-  );
+  const localAliases = new Set<string>();
+  for (const f of localExtracted?.fields ?? []) {
+    for (const alias of getAllAliases(f)) localAliases.add(alias);
+  }
 
   const globalTokens: string[] = [];
   const commandTokens: string[] = [];
@@ -304,8 +312,12 @@ function separateGlobalArgs(
       );
       const flagName = isNegated ? withoutDashes.slice(3) : withoutDashes;
 
-      // If also defined locally, let the local parser handle it
-      const isLocalCollision = localCliNames.has(withoutDashes) || localCliNames.has(flagName);
+      // If also defined locally (name, cliName, or long alias), let the local parser handle it
+      const isLocalCollision =
+        localCliNames.has(withoutDashes) ||
+        localCliNames.has(flagName) ||
+        localAliases.has(withoutDashes) ||
+        localAliases.has(flagName);
 
       if (isGlobal && !isLocalCollision) {
         // collectGlobalFlag returns 1 or 2; subtract 1 because the for-loop increments

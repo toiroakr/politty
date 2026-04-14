@@ -218,7 +218,9 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
       return true;
     }
 
-    return !context.usedOptions.has(opt.cliName) && !context.usedOptions.has(opt.alias || "");
+    if (context.usedOptions.has(opt.cliName)) return false;
+    if (opt.alias && opt.alias.some((a) => context.usedOptions.has(a))) return false;
+    return true;
   });
 
   for (const opt of availableOptions) {

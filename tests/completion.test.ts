@@ -46,13 +46,13 @@ describe("Completion", () => {
 
       const verboseOpt = data.command.options.find((o) => o.name === "verbose");
       expect(verboseOpt).toBeDefined();
-      expect(verboseOpt?.alias).toBe("v");
+      expect(verboseOpt?.alias).toEqual(["v"]);
       expect(verboseOpt?.description).toBe("Enable verbose output");
       expect(verboseOpt?.takesValue).toBe(false); // boolean flag
 
       const outputOpt = data.command.options.find((o) => o.name === "output");
       expect(outputOpt).toBeDefined();
-      expect(outputOpt?.alias).toBe("o");
+      expect(outputOpt?.alias).toEqual(["o"]);
       expect(outputOpt?.takesValue).toBe(true); // string requires value
     });
 

@@ -155,7 +155,9 @@ function findOption(
   options: CompletableOption[],
   nameOrAlias: string,
 ): CompletableOption | undefined {
-  return options.find((opt) => opt.cliName === nameOrAlias || opt.alias === nameOrAlias);
+  return options.find(
+    (opt) => opt.cliName === nameOrAlias || (opt.alias?.includes(nameOrAlias) ?? false),
+  );
 }
 
 /**
@@ -197,7 +199,9 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
 
       if (opt) {
         usedOptions.add(opt.cliName);
-        if (opt.alias) usedOptions.add(opt.alias);
+        if (opt.alias) {
+          for (const a of opt.alias) usedOptions.add(a);
+        }
 
         // Skip next word if option takes value and doesn't have inline value
         if (opt.takesValue && !hasInlineValue(word)) {

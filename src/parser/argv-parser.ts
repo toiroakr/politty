@@ -1,4 +1,4 @@
-import { toCamelCase, type ExtractedFields } from "../core/schema-extractor.js";
+import { getAllAliases, toCamelCase, type ExtractedFields } from "../core/schema-extractor.js";
 
 /**
  * Parsed arguments result
@@ -248,8 +248,17 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
       aliasMap.set(field.cliName, field.name);
     }
 
-    if (field.alias) {
-      aliasMap.set(field.alias, field.name);
+    for (const alias of getAllAliases(field)) {
+      aliasMap.set(alias, field.name);
+
+      // For long aliases (multi-character with hyphens), also accept the
+      // camelCase variant so users can type `--toBe` for `alias: "to-be"`.
+      if (alias.length > 1 && alias.includes("-")) {
+        const camelAlias = toCamelCase(alias);
+        if (camelAlias !== alias && !definedNames.has(camelAlias) && !aliasMap.has(camelAlias)) {
+          aliasMap.set(camelAlias, field.name);
+        }
+      }
     }
 
     // Map camelCase variant to field name for kebab-case field names

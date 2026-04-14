@@ -51,8 +51,11 @@ export interface CompletableOption {
   name: string;
   /** CLI name (kebab-case, e.g., "dry-run") */
   cliName: string;
-  /** Short alias (e.g., "v") */
-  alias?: string | undefined;
+  /**
+   * Aliases for this option (both short and long).
+   * 1-char entries are short (`-v`); multi-char entries are long (`--to-be`).
+   */
+  alias?: string[] | undefined;
   /** Description for completion */
   description?: string | undefined;
   /** Whether this option takes a value */

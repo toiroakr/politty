@@ -131,10 +131,20 @@ function formatOptionFlags(opt: ResolvedFieldMeta): string {
   const longFlag =
     opt.type === "boolean" ? `--${opt.cliName}` : `--${opt.cliName} <${placeholder}>`;
 
-  if (opt.alias) {
-    return `\`-${opt.alias}\`, \`${longFlag}\``;
+  if (!opt.alias || opt.alias.length === 0) {
+    return `\`${longFlag}\``;
   }
-  return `\`${longFlag}\``;
+  const shortParts = opt.alias.filter((a) => a.length === 1).map((a) => `\`-${a}\``);
+  const longParts = opt.alias.filter((a) => a.length > 1).map((a) => `\`--${a}\``);
+  return [...shortParts, `\`${longFlag}\``, ...longParts].join(", ");
+}
+
+/**
+ * Format aliases for a markdown table cell
+ */
+function formatAliasCell(alias: string[] | undefined): string {
+  if (!alias || alias.length === 0) return "-";
+  return alias.map((a) => `\`${a.length === 1 ? `-${a}` : `--${a}`}\``).join(", ");
 }
 
 /**
@@ -181,7 +191,7 @@ export function renderOptionsTable(info: CommandInfo): string {
 
   for (const opt of info.options) {
     const optionName = formatOptionName(opt);
-    const alias = opt.alias ? `\`-${opt.alias}\`` : "-";
+    const alias = formatAliasCell(opt.alias);
     const desc = escapeTableCell(opt.description ?? "");
     const required = opt.required ? "Yes" : "No";
     const defaultVal = formatDefaultValue(opt.defaultValue);
@@ -322,7 +332,7 @@ export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): strin
 
   for (const opt of options) {
     const optionName = formatOptionName(opt);
-    const alias = opt.alias ? `\`-${opt.alias}\`` : "-";
+    const alias = formatAliasCell(opt.alias);
     const desc = escapeTableCell(opt.description ?? "");
     const required = opt.required ? "Yes" : "No";
     const defaultVal = formatDefaultValue(opt.defaultValue);

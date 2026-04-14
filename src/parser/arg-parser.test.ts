@@ -636,6 +636,134 @@ describe("ArgParser", () => {
     });
   });
 
+  describe("Long aliases", () => {
+    it("should accept a long alias string for a canonical option", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          tobe: arg(z.string(), { alias: "to-be" }),
+        }),
+      });
+
+      const result = parseArgs(["--to-be", "value"], cmd);
+      expect(result.rawArgs.tobe).toBe("value");
+      expect(result.unknownFlags).toEqual([]);
+    });
+
+    it("should also accept the camelCase variant of a kebab-case long alias", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          tobe: arg(z.string(), { alias: "to-be" }),
+        }),
+      });
+
+      const result = parseArgs(["--toBe", "value"], cmd);
+      expect(result.rawArgs.tobe).toBe("value");
+    });
+
+    it("should support mixing a short alias and a long alias in an array", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          tobe: arg(z.string(), { alias: ["t", "to-be"] }),
+        }),
+      });
+
+      const shortResult = parseArgs(["-t", "value"], cmd);
+      expect(shortResult.rawArgs.tobe).toBe("value");
+
+      const longAliasResult = parseArgs(["--to-be", "other"], cmd);
+      expect(longAliasResult.rawArgs.tobe).toBe("other");
+
+      const canonicalResult = parseArgs(["--tobe", "third"], cmd);
+      expect(canonicalResult.rawArgs.tobe).toBe("third");
+    });
+
+    it("should detect duplicate aliases inside an array", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          first: arg(z.string(), { alias: ["a", "long-name"] }),
+          second: arg(z.string(), { alias: "long-name" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateAliasError);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Duplicate alias "long-name" detected.*"first".*"second"/,
+      );
+    });
+
+    it("should detect a long alias colliding with an existing option name", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          tobe: arg(z.string(), { alias: "output" }),
+          output: arg(z.string()),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateAliasError);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Alias "output" for field "tobe" conflicts with existing field name "output"/,
+      );
+    });
+  });
+
+  describe("hiddenAlias", () => {
+    it("should accept a hidden alias at parse time", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          tobe: arg(z.string(), { hiddenAlias: "legacy" }),
+        }),
+      });
+
+      const result = parseArgs(["--legacy", "value"], cmd);
+      expect(result.rawArgs.tobe).toBe("value");
+      expect(result.unknownFlags).toEqual([]);
+    });
+
+    it("should accept both visible alias and hidden alias", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          tobe: arg(z.string(), { alias: "to-be", hiddenAlias: ["legacy", "l"] }),
+        }),
+      });
+
+      expect(parseArgs(["--to-be", "a"], cmd).rawArgs.tobe).toBe("a");
+      expect(parseArgs(["--legacy", "b"], cmd).rawArgs.tobe).toBe("b");
+      expect(parseArgs(["-l", "c"], cmd).rawArgs.tobe).toBe("c");
+    });
+
+    it("should detect duplicates between visible alias and hidden alias across fields", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          a: arg(z.string(), { alias: "shared" }),
+          b: arg(z.string(), { hiddenAlias: "shared" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateAliasError);
+    });
+
+    it("should drop hiddenAlias entries that duplicate the visible alias", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          tobe: arg(z.string(), { alias: "to-be", hiddenAlias: "to-be" }),
+        }),
+      });
+
+      // visible wins; parser should still work
+      const result = parseArgs(["--to-be", "value"], cmd);
+      expect(result.rawArgs.tobe).toBe("value");
+    });
+  });
+
   describe("Kebab-case to camelCase conversion", () => {
     it("should convert --dry-run to dryRun", () => {
       const cmd = defineCommand({

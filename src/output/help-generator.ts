@@ -1,4 +1,5 @@
 import {
+  getAllAliases,
   getExtractedFields,
   type ExtractedFields,
   type ResolvedFieldMeta,
@@ -156,11 +157,16 @@ export function renderOptions(
 
   const extracted = getExtractedFields(command);
 
-  // Check if user has overridden built-in aliases
+  // Check if user has overridden built-in aliases (includes hiddenAlias since the
+  // parser routes those to the user's field, making the built-in -h/-H misleading)
   const hasUserDefinedh =
-    extracted?.fields.some((f) => f.alias === "h" && f.overrideBuiltinAlias === true) ?? false;
+    extracted?.fields.some(
+      (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("h"),
+    ) ?? false;
   const hasUserDefinedH =
-    extracted?.fields.some((f) => f.alias === "H" && f.overrideBuiltinAlias === true) ?? false;
+    extracted?.fields.some(
+      (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("H"),
+    ) ?? false;
 
   // Add built-in options
   if (hasUserDefinedh) {
@@ -413,8 +419,13 @@ function renderUnionOptions(
 function formatFlags(opt: ResolvedFieldMeta): string {
   const parts: string[] = [];
 
+  // Short aliases first (e.g., -v)
   if (opt.alias) {
-    parts.push(styles.option(`-${opt.alias}`));
+    for (const alias of opt.alias) {
+      if (alias.length === 1) {
+        parts.push(styles.option(`-${alias}`));
+      }
+    }
   }
 
   // Use cliName (kebab-case) for display
@@ -427,6 +438,15 @@ function formatFlags(opt: ResolvedFieldMeta): string {
   }
 
   parts.push(longFlag);
+
+  // Long aliases (e.g., --to-be)
+  if (opt.alias) {
+    for (const alias of opt.alias) {
+      if (alias.length > 1) {
+        parts.push(styles.option(`--${alias}`));
+      }
+    }
+  }
 
   return parts.join(", ");
 }

@@ -1,4 +1,4 @@
-import type { ExtractedFields } from "../core/schema-extractor.js";
+import { getAllAliases, type ExtractedFields } from "../core/schema-extractor.js";
 import { buildParserOptions } from "./argv-parser.js";
 
 /**
@@ -11,7 +11,7 @@ export interface GlobalFlagLookup {
   flagNames: Set<string>;
   /** kebab-case CLI names */
   cliNames: Set<string>;
-  /** single-char aliases */
+  /** single-char (short) aliases */
   aliases: Set<string>;
 }
 
@@ -21,12 +21,18 @@ export interface GlobalFlagLookup {
  */
 export function buildGlobalFlagLookup(globalExtracted: ExtractedFields): GlobalFlagLookup {
   const { aliasMap = new Map(), booleanFlags = new Set() } = buildParserOptions(globalExtracted);
+  const shortAliases = new Set<string>();
+  for (const field of globalExtracted.fields) {
+    for (const alias of getAllAliases(field)) {
+      if (alias.length === 1) shortAliases.add(alias);
+    }
+  }
   return {
     aliasMap,
     booleanFlags,
     flagNames: new Set(globalExtracted.fields.map((f) => f.name)),
     cliNames: new Set(globalExtracted.fields.map((f) => f.cliName)),
-    aliases: new Set(globalExtracted.fields.filter((f) => f.alias).map((f) => f.alias!)),
+    aliases: shortAliases,
   };
 }
 

@@ -1,4 +1,9 @@
-import { extractFields, toCamelCase, type ExtractedFields } from "../core/schema-extractor.js";
+import {
+  extractFields,
+  getAllAliases,
+  toCamelCase,
+  type ExtractedFields,
+} from "../core/schema-extractor.js";
 import { resolveLazyCommand } from "../executor/subcommand-router.js";
 import type { AnyCommand } from "../types.js";
 import {
@@ -116,31 +121,35 @@ function checkDuplicateAliases(
   const errors: CommandValidationError[] = [];
   const seenAliases = new Map<string, string>();
   const fieldNames = new Set(extracted.fields.map((f) => f.name));
+  const cliNames = new Set(extracted.fields.map((f) => f.cliName));
 
   for (const field of extracted.fields) {
-    if (!field.alias) continue;
+    const allAliases = getAllAliases(field);
+    if (allAliases.length === 0) continue;
 
-    // Check if alias conflicts with an existing field name
-    if (fieldNames.has(field.alias)) {
-      errors.push({
-        commandPath,
-        type: "duplicate_alias",
-        message: `Alias "${field.alias}" for field "${field.name}" conflicts with existing field name "${field.alias}".`,
-        field: field.name,
-      });
-    }
+    for (const alias of allAliases) {
+      // Check if alias conflicts with an existing field name / cliName
+      if (fieldNames.has(alias) || cliNames.has(alias)) {
+        errors.push({
+          commandPath,
+          type: "duplicate_alias",
+          message: `Alias "${alias}" for field "${field.name}" conflicts with existing field name "${alias}".`,
+          field: field.name,
+        });
+      }
 
-    // Check if alias is already used by another field
-    const existingField = seenAliases.get(field.alias);
-    if (existingField) {
-      errors.push({
-        commandPath,
-        type: "duplicate_alias",
-        message: `Duplicate alias "${field.alias}" detected. Both "${existingField}" and "${field.name}" use the same alias.`,
-        field: field.name,
-      });
+      // Check if alias is already used by another field
+      const existingField = seenAliases.get(alias);
+      if (existingField && existingField !== field.name) {
+        errors.push({
+          commandPath,
+          type: "duplicate_alias",
+          message: `Duplicate alias "${alias}" detected. Both "${existingField}" and "${field.name}" use the same alias.`,
+          field: field.name,
+        });
+      }
+      seenAliases.set(alias, field.name);
     }
-    seenAliases.set(field.alias, field.name);
   }
   return errors;
 }
@@ -209,13 +218,16 @@ function checkReservedAliases(
   const errors: CommandValidationError[] = [];
 
   for (const field of extracted.fields) {
-    if ((field.alias === "h" || field.alias === "H") && field.overrideBuiltinAlias !== true) {
-      errors.push({
-        commandPath,
-        type: "reserved_alias",
-        message: `Alias "${field.alias}" is reserved for --${field.alias === "h" ? "help" : "help-all"}.`,
-        field: field.name,
-      });
+    if (field.overrideBuiltinAlias === true) continue;
+    for (const alias of getAllAliases(field)) {
+      if (alias === "h" || alias === "H") {
+        errors.push({
+          commandPath,
+          type: "reserved_alias",
+          message: `Alias "${alias}" is reserved for --${alias === "h" ? "help" : "help-all"}.`,
+          field: field.name,
+        });
+      }
     }
   }
   return errors;
@@ -298,7 +310,9 @@ export function validateReservedAliases(
   if (errors.length > 0) {
     const err = errors[0]!;
     const field = err.field ?? "unknown";
-    const alias = extracted.fields.find((f) => f.name === field)?.alias ?? "h";
+    const found = extracted.fields.find((f) => f.name === field);
+    const aliasList = found ? getAllAliases(found) : [];
+    const alias = aliasList.find((a) => a === "h" || a === "H") ?? "h";
     throw new ReservedAliasError(
       `Alias "${alias}" is reserved for --${alias === "h" ? "help" : "help-all"}. ` +
         `To override this, set { alias: "${alias}", overrideBuiltinAlias: true } for "${field}".`,

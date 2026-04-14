@@ -70,7 +70,11 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
     if (valLines.length === 0) continue;
 
     const patterns: string[] = [`--${opt.cliName}`];
-    if (opt.alias) patterns.push(`-${opt.alias}`);
+    if (opt.alias) {
+      for (const a of opt.alias) {
+        patterns.push(a.length === 1 ? `-${a}` : `--${a}`);
+      }
+    }
 
     lines.push(`            ${patterns.join("|")})`);
     for (const vl of valLines) {
@@ -121,7 +125,11 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
       lines.push(`        _opts+=("--${opt.cliName}${desc}")`);
     } else {
       const patterns: string[] = [`"--${opt.cliName}"`];
-      if (opt.alias) patterns.push(`"-${opt.alias}"`);
+      if (opt.alias) {
+        for (const a of opt.alias) {
+          patterns.push(a.length === 1 ? `"-${a}"` : `"--${a}"`);
+        }
+      }
       lines.push(
         `        __${fn}_not_used ${patterns.join(" ")} && _opts+=("--${opt.cliName}${desc}")`,
       );

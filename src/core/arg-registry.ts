@@ -183,18 +183,35 @@ export interface BaseArgMeta<TValue = unknown> {
 
 /**
  * Metadata for regular arguments (non-builtin aliases)
+ *
+ * `alias` accepts either a single string or an array of strings.
+ * Single-character entries become short options (e.g. `-v`); multi-character
+ * entries become additional long options (e.g. `--to-be` for `--tobe`).
  */
 export interface RegularArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
-  /** Short alias (e.g., 'v' for --verbose) */
-  alias?: string;
+  /**
+   * Alias name(s) for this option.
+   * - 1-char string  → short alias (`-v`)
+   * - >1-char string → long alias (`--long-name`)
+   * - array          → multiple aliases of either kind
+   */
+  alias?: string | string[];
+  /**
+   * Alias name(s) that are accepted by the parser but hidden from help,
+   * generated docs, and shell completion. Useful for legacy or deprecated
+   * names that should still work without being advertised.
+   */
+  hiddenAlias?: string | string[];
 }
 
 /**
  * Metadata for overriding built-in aliases (-h, -H)
  */
 export interface BuiltinOverrideArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
-  /** Built-in alias to override ('h' or 'H') */
-  alias: "h" | "H";
+  /** Built-in alias to override ('h' or 'H'), optionally combined with extra aliases */
+  alias: "h" | "H" | Array<"h" | "H" | string>;
+  /** Hidden aliases (accepted but not surfaced in help/docs/completion) */
+  hiddenAlias?: string | string[];
   /** Must be true to override built-in aliases */
   overrideBuiltinAlias: true;
 }
@@ -237,14 +254,16 @@ export const argRegistry = z.registry<ArgMeta>();
  * Type helper to validate ArgMeta
  * Forces a type error if alias is "h" or "H" without overrideBuiltinAlias: true
  */
-type ValidateArgMeta<M> = M extends { alias: "h" | "H" }
-  ? M extends { overrideBuiltinAlias: true }
-    ? M
-    : {
-        [K in keyof M]: M[K];
-      } & {
-        __typeError: "Alias 'h' or 'H' requires overrideBuiltinAlias: true";
-      }
+type ValidateArgMeta<M> = M extends { alias: infer A }
+  ? A extends "h" | "H"
+    ? M extends { overrideBuiltinAlias: true }
+      ? M
+      : {
+          [K in keyof M]: M[K];
+        } & {
+          __typeError: "Alias 'h' or 'H' requires overrideBuiltinAlias: true";
+        }
+    : M
   : M;
 
 export function arg<T extends z.ZodType>(schema: T): T;
