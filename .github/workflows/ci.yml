@@ -33,14 +33,13 @@ jobs:
         shell: bash
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Typecheck
-        run: pnpm tsc
-      - name: Lint
-        run: pnpm lint
-      - name: Format
-        run: pnpm format:check
-      - name: Knip
-        run: pnpm knip
+      - name: Typecheck, lint, format, and knip
+        run: |
+          pnpm tsc &
+          pnpm lint &
+          pnpm format:check &
+          pnpm knip &
+          FAIL=0; for pid in $(jobs -p); do wait $pid || FAIL=1; done; exit $FAIL
       - name: Test with coverage
         run: npx vitest run --coverage --project unit
       - name: Run octocov
