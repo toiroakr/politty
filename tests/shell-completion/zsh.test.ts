@@ -154,10 +154,10 @@ zpty -w -n tp "${command}"
 sleep 0.1
 zpty -w -n tp $'\\t'
 
-local tries=50
+local tries=30
 while (( tries > 0 )); do
   [[ -f "${resultFile}" ]] && break
-  sleep 0.2
+  sleep 0.1
   (( tries-- ))
 done
 
