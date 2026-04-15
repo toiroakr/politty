@@ -33,14 +33,21 @@ jobs:
         shell: bash
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Typecheck
-        run: pnpm tsc
-      - name: Lint
-        run: pnpm lint
-      - name: Format
-        run: pnpm format:check
-      - name: Knip
-        run: pnpm knip
+      - name: Typecheck, lint, format, and knip
+        run: |
+          pnpm typecheck &
+          TYPECHECK_PID=$!
+          pnpm lint &
+          LINT_PID=$!
+          pnpm format:check &
+          FORMAT_PID=$!
+          pnpm knip &
+          KNIP_PID=$!
+          FAIL=0
+          for pid in "$TYPECHECK_PID" "$LINT_PID" "$FORMAT_PID" "$KNIP_PID"; do
+            wait "$pid" || FAIL=1
+          done
+          exit $FAIL
       - name: Test with coverage
         run: npx vitest run --coverage --project unit
       - name: Run octocov
@@ -65,7 +72,12 @@ jobs:
             install: fish
     steps:
       - name: Install shell tools
-        run: sudo apt-get update && sudo apt-get install -y ${{ matrix.install }}
+        if: matrix.install
+        run: |
+          sudo apt-get install -y --no-install-recommends ${{ matrix.install }} \
+            || (echo "apt-get install failed; updating package lists and retrying." \
+                && sudo apt-get update -o Acquire::http::Timeout=10 -o Acquire::Retries=3 \
+                && sudo apt-get install -o Acquire::http::Timeout=10 -o Acquire::Retries=3 -y --no-install-recommends ${{ matrix.install }})
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
