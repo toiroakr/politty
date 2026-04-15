@@ -95,6 +95,8 @@ export interface CommandBase<
   name: string;
   /** Command description */
   description?: string | undefined;
+  /** Alternative names for this command (used as subcommand aliases) */
+  aliases?: string[] | undefined;
   /** Argument schema (preserves the original Zod schema type) */
   args: TArgsSchema;
   /** Subcommands */

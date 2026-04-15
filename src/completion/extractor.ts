@@ -37,6 +37,26 @@ export function getVisibleSubs(subs: CompletableSubcommand[]): CompletableSubcom
 }
 
 /**
+ * Get all completable subcommand names including aliases.
+ * Returns an array of { name, description } for all visible subcommands
+ * and their aliases.
+ */
+export function getSubNamesWithAliases(
+  subs: CompletableSubcommand[],
+): Array<{ name: string; description?: string | undefined }> {
+  const result: Array<{ name: string; description?: string | undefined }> = [];
+  for (const sub of getVisibleSubs(subs)) {
+    result.push({ name: sub.name, description: sub.description });
+    if (sub.aliases) {
+      for (const alias of sub.aliases) {
+        result.push({ name: alias, description: sub.description });
+      }
+    }
+  }
+  return result;
+}
+
+/**
  * Convert a resolved field to a completable option
  */
 function fieldToOption(field: ResolvedFieldMeta): CompletableOption {
@@ -129,6 +149,7 @@ function extractSubcommand(name: string, command: AnyCommand): CompletableSubcom
   return {
     name,
     description: command.description,
+    aliases: command.aliases,
     subcommands,
     options: extractOptions(command),
     positionals: extractCompletablePositionals(command),
@@ -180,6 +201,7 @@ export interface RouteEntry {
  * Recursively collect all subcommand route entries.
  * Returns entries used by all shell generators for both dispatch routing
  * and subcommand lookup (is_subcmd) tables.
+ * Aliases are mapped to the same handler as the canonical name.
  */
 export function collectRouteEntries(
   sub: CompletableSubcommand,
@@ -196,6 +218,17 @@ export function collectRouteEntries(
       funcSuffix,
       lookupPattern: `${parentPath}:${child.name}`,
     });
+    // Add alias route entries that map to the same handler
+    if (child.aliases) {
+      for (const alias of child.aliases) {
+        const aliasPathStr = joinPrefix(parentPath, alias, ":");
+        entries.push({
+          pathStr: aliasPathStr,
+          funcSuffix,
+          lookupPattern: `${parentPath}:${alias}`,
+        });
+      }
+    }
   }
   return entries;
 }

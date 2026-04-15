@@ -9,6 +9,7 @@ import type { AnyCommand } from "../types.js";
 import {
   collectRouteEntries,
   extractCompletionData,
+  getSubNamesWithAliases,
   getVisibleSubs,
   isSubcmdCaseLines,
   optTakesValueEntries,
@@ -184,9 +185,9 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`        return 0`);
   lines.push(`    fi`);
 
-  // 4. Subcommand or positional completion
+  // 4. Subcommand or positional completion (includes aliases)
   if (visibleSubs.length > 0) {
-    const subItems = visibleSubs
+    const subItems = getSubNamesWithAliases(sub.subcommands)
       .map((s) => {
         const desc = s.description ? `:${escapeDesc(s.description)}` : "";
         return `"${s.name}${desc}"`;
@@ -294,7 +295,7 @@ export function generateZshCompletion(
   lines.push(`        __${fn}_cdescribe 'options' _opts`);
   if (visibleSubs.length > 0) {
     lines.push(`    else`);
-    const subItems = visibleSubs
+    const subItems = getSubNamesWithAliases(root.subcommands)
       .map((s) => {
         const desc = s.description ? `:${escapeDesc(s.description)}` : "";
         return `"${s.name}${desc}"`;

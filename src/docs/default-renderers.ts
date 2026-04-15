@@ -274,40 +274,7 @@ function getRelativePath(from: string, to: string): string {
  * Render subcommands as table
  */
 export function renderSubcommandsTable(info: CommandInfo, generateAnchors = true): string {
-  if (info.subCommands.length === 0) {
-    return "";
-  }
-
-  const lines: string[] = [];
-  lines.push("| Command | Description |");
-  lines.push("|---------|-------------|");
-
-  const currentFile = info.filePath;
-  const fileMap = info.fileMap;
-
-  for (const sub of info.subCommands) {
-    const fullName = sub.fullPath.join(" ");
-    const desc = escapeTableCell(sub.description ?? "");
-    const subCommandPath = sub.fullPath.join(" ");
-
-    if (generateAnchors) {
-      const anchor = generateAnchor(sub.fullPath);
-      const subFile = fileMap?.[subCommandPath];
-
-      if (currentFile && subFile && currentFile !== subFile) {
-        // Cross-file link
-        const relativePath = getRelativePath(currentFile, subFile);
-        lines.push(`| [\`${fullName}\`](${relativePath}#${anchor}) | ${desc} |`);
-      } else {
-        // Same-file anchor
-        lines.push(`| [\`${fullName}\`](#${anchor}) | ${desc} |`);
-      }
-    } else {
-      lines.push(`| \`${fullName}\` | ${desc} |`);
-    }
-  }
-
-  return lines.join("\n");
+  return renderSubcommandsTableFromArray(info.subCommands, info, generateAnchors);
 }
 
 /**
@@ -563,9 +530,17 @@ export function renderSubcommandsTableFromArray(
     return "";
   }
 
+  // Check if any subcommand has aliases
+  const hasAliases = subcommands.some((s) => s.aliases && s.aliases.length > 0);
+
   const lines: string[] = [];
-  lines.push("| Command | Description |");
-  lines.push("|---------|-------------|");
+  if (hasAliases) {
+    lines.push("| Command | Aliases | Description |");
+    lines.push("|---------|---------|-------------|");
+  } else {
+    lines.push("| Command | Description |");
+    lines.push("|---------|-------------|");
+  }
 
   const currentFile = info.filePath;
   const fileMap = info.fileMap;
@@ -574,6 +549,11 @@ export function renderSubcommandsTableFromArray(
     const fullName = sub.fullPath.join(" ");
     const desc = escapeTableCell(sub.description ?? "");
     const subCommandPath = sub.fullPath.join(" ");
+    const aliasCell = hasAliases
+      ? sub.aliases && sub.aliases.length > 0
+        ? sub.aliases.map((a) => `\`${a}\``).join(", ")
+        : "-"
+      : "";
 
     if (generateAnchors) {
       const anchor = generateAnchor(sub.fullPath);
@@ -582,13 +562,25 @@ export function renderSubcommandsTableFromArray(
       if (currentFile && subFile && currentFile !== subFile) {
         // Cross-file link
         const relativePath = getRelativePath(currentFile, subFile);
-        lines.push(`| [\`${fullName}\`](${relativePath}#${anchor}) | ${desc} |`);
+        if (hasAliases) {
+          lines.push(`| [\`${fullName}\`](${relativePath}#${anchor}) | ${aliasCell} | ${desc} |`);
+        } else {
+          lines.push(`| [\`${fullName}\`](${relativePath}#${anchor}) | ${desc} |`);
+        }
       } else {
         // Same-file anchor
-        lines.push(`| [\`${fullName}\`](#${anchor}) | ${desc} |`);
+        if (hasAliases) {
+          lines.push(`| [\`${fullName}\`](#${anchor}) | ${aliasCell} | ${desc} |`);
+        } else {
+          lines.push(`| [\`${fullName}\`](#${anchor}) | ${desc} |`);
+        }
       }
     } else {
-      lines.push(`| \`${fullName}\` | ${desc} |`);
+      if (hasAliases) {
+        lines.push(`| \`${fullName}\` | ${aliasCell} | ${desc} |`);
+      } else {
+        lines.push(`| \`${fullName}\` | ${desc} |`);
+      }
     }
   }
 
@@ -716,16 +708,28 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     const title = info.commandPath || info.name;
     sections.push(wrapWithMarker("heading", scope, `${h} ${title}`));
 
-    // Description
-    if (info.description) {
-      const context: SimpleRenderContext = {
-        content: info.description,
-        heading: "",
-        info,
-      };
-      const content = customRenderDescription ? customRenderDescription(context) : context.content;
-      if (content) {
-        sections.push(wrapWithMarker("description", scope, content));
+    // Description (includes aliases when present)
+    {
+      const parts: string[] = [];
+      if (info.description) {
+        parts.push(info.description);
+      }
+      if (info.aliases && info.aliases.length > 0) {
+        parts.push(`**Aliases:** ${info.aliases.map((a) => `\`${a}\``).join(", ")}`);
+      }
+      if (parts.length > 0) {
+        const defaultContent = parts.join("\n\n");
+        const context: SimpleRenderContext = {
+          content: defaultContent,
+          heading: "",
+          info,
+        };
+        const content = customRenderDescription
+          ? customRenderDescription(context)
+          : context.content;
+        if (content) {
+          sections.push(wrapWithMarker("description", scope, content));
+        }
       }
     }
 

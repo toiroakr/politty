@@ -1,6 +1,11 @@
 import { executeLifecycle } from "../executor/command-runner.js";
 import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collector.js";
-import { listSubCommands, resolveSubcommand } from "../executor/subcommand-router.js";
+import {
+  listSubCommandNamesWithAliases,
+  listSubCommands,
+  resolveSubcommand,
+  resolveSubCommandAlias,
+} from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
 import { findFirstPositional } from "../parser/subcommand-scanner.js";
@@ -293,10 +298,11 @@ async function runCommandInternal<TResult = unknown>(
       // Check if there's an unknown subcommand specified
       let hasUnknownSubcommand = false;
       const subCmdNames = listSubCommands(command);
+      const allSubCmdNames = [...listSubCommandNamesWithAliases(command)];
       if (subCmdNames.length > 0) {
         // Find first positional argument (potential subcommand), skipping global option values
         const potentialSubCmd = findFirstPositional(argv, context.globalExtracted);
-        if (potentialSubCmd && !subCmdNames.includes(potentialSubCmd)) {
+        if (potentialSubCmd && !allSubCmdNames.includes(potentialSubCmd)) {
           hasUnknownSubcommand = true;
         }
       }
@@ -310,7 +316,7 @@ async function runCommandInternal<TResult = unknown>(
       collector?.stop();
       if (hasUnknownSubcommand) {
         const unknownCmd = findFirstPositional(argv, context.globalExtracted) ?? "";
-        const similar = findSimilar(unknownCmd, subCmdNames);
+        const similar = findSimilar(unknownCmd, allSubCmdNames);
         const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
         return {
           success: false,
@@ -339,12 +345,15 @@ async function runCommandInternal<TResult = unknown>(
     if (parseResult.subCommand) {
       const subCmd = await resolveSubcommand(command, parseResult.subCommand);
       if (subCmd) {
+        // Detect if the subcommand was accessed via an alias
+        const canonicalName = resolveSubCommandAlias(command, parseResult.subCommand);
         // Build new context for subcommand
         const subContext: CommandContext = {
           commandPath: [...(context.commandPath ?? []), parseResult.subCommand],
           rootName: context.rootName,
           rootVersion: context.rootVersion,
           globalExtracted: context.globalExtracted,
+          aliasFor: canonicalName,
         };
         // Stop this collector and pass logs to subcommand
         collector?.stop();

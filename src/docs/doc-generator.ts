@@ -24,6 +24,7 @@ export async function buildCommandInfo(
       subCommands.push({
         name,
         description: resolved.description,
+        aliases: resolved.aliases,
         fullPath,
       });
     }
@@ -32,6 +33,7 @@ export async function buildCommandInfo(
   return {
     name: command.name ?? "",
     description: command.description,
+    aliases: command.aliases,
     fullCommandPath: commandPath.length > 0 ? `${rootName} ${commandPath.join(" ")}` : rootName,
     commandPath: commandPath.join(" "),
     depth: commandPath.length + 1,

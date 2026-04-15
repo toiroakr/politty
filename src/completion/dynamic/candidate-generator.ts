@@ -183,10 +183,23 @@ function generateSubcommandCandidates(context: CompletionContext): CandidateResu
   const candidates: CompletionCandidate[] = [];
   let directive = CompletionDirective.FilterPrefix;
 
-  // Add subcommands
+  // Add subcommands (context.subcommands already includes aliases)
   for (const name of context.subcommands) {
+    // Try direct lookup first, then alias lookup
+    let description: string | undefined;
     const sub = context.currentCommand.subCommands?.[name];
-    const description = sub ? resolveSubCommandMeta(sub)?.description : undefined;
+    if (sub) {
+      description = resolveSubCommandMeta(sub)?.description;
+    } else if (context.currentCommand.subCommands) {
+      // Alias lookup
+      for (const subCmd of Object.values(context.currentCommand.subCommands)) {
+        const meta = resolveSubCommandMeta(subCmd);
+        if (meta?.aliases?.includes(name)) {
+          description = meta.description;
+          break;
+        }
+      }
+    }
 
     candidates.push({
       value: name,

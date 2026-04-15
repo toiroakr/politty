@@ -401,6 +401,69 @@ function collectSchemaErrors(
 }
 
 /**
+ * Check for alias conflicts within subcommands
+ * - Aliases must not conflict with subcommand names
+ * - Aliases must not conflict with other aliases
+ */
+function checkSubCommandAliasConflicts(
+  command: AnyCommand,
+  commandPath: string[],
+): CommandValidationError[] {
+  const errors: CommandValidationError[] = [];
+  if (!command.subCommands) return errors;
+
+  // Build a map of all registered names (subcommand names + aliases)
+  const nameToOwner = new Map<string, string>();
+  for (const [name] of Object.entries(command.subCommands)) {
+    nameToOwner.set(name, name);
+  }
+
+  for (const [name, subCmdValue] of Object.entries(command.subCommands)) {
+    const resolved = isLazyCommandCheck(subCmdValue)
+      ? (subCmdValue as { meta: AnyCommand }).meta
+      : typeof subCmdValue !== "function"
+        ? (subCmdValue as AnyCommand)
+        : null;
+    if (!resolved?.aliases) continue;
+
+    for (const alias of resolved.aliases) {
+      const existing = nameToOwner.get(alias);
+      if (existing) {
+        if (existing === name) {
+          errors.push({
+            commandPath,
+            type: "duplicate_alias",
+            message: `Alias "${alias}" for subcommand "${name}" conflicts with its own name.`,
+            field: name,
+          });
+        } else {
+          errors.push({
+            commandPath,
+            type: "duplicate_alias",
+            message: `Alias "${alias}" for subcommand "${name}" conflicts with existing subcommand or alias "${existing}".`,
+            field: name,
+          });
+        }
+      } else {
+        nameToOwner.set(alias, name);
+      }
+    }
+  }
+
+  return errors;
+}
+
+/** Check if value is a LazyCommand (avoids circular import) */
+function isLazyCommandCheck(value: unknown): boolean {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "__politty_lazy__" in value &&
+    (value as Record<string, unknown>).__politty_lazy__ === true
+  );
+}
+
+/**
  * Validate a command and all its subcommands recursively
  *
  * This function collects all validation errors without throwing,
@@ -431,6 +494,9 @@ export async function validateCommand(
     const extracted = extractFields(command.args);
     errors.push(...collectSchemaErrors(extracted, hasSubCommands, commandPath));
   }
+
+  // Validate subcommand alias conflicts
+  errors.push(...checkSubCommandAliasConflicts(command, commandPath));
 
   // Recursively validate subcommands
   if (command.subCommands) {

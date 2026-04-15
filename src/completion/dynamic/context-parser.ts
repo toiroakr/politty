@@ -93,30 +93,48 @@ function extractPositionalsForContext(command: AnyCommand): CompletablePositiona
 }
 
 /**
- * Get subcommand names from a command
+ * Get subcommand names from a command (including aliases)
  */
 function getSubcommandNames(command: AnyCommand): string[] {
   if (!command.subCommands) {
     return [];
   }
-  // Filter out internal subcommands (e.g., __complete)
-  return Object.keys(command.subCommands).filter((name) => !name.startsWith("__"));
+  const names: string[] = [];
+  for (const [name, subCmd] of Object.entries(command.subCommands)) {
+    // Filter out internal subcommands (e.g., __complete)
+    if (name.startsWith("__")) continue;
+    names.push(name);
+    const meta = resolveSubCommandMeta(subCmd);
+    if (meta?.aliases) {
+      names.push(...meta.aliases);
+    }
+  }
+  return names;
 }
 
 /**
- * Resolve subcommand by name
+ * Resolve subcommand by name (including alias lookup)
  */
 function resolveSubcommand(command: AnyCommand, name: string): AnyCommand | null {
   if (!command.subCommands) {
     return null;
   }
 
+  // Direct lookup
   const sub = command.subCommands[name];
-  if (!sub) {
-    return null;
+  if (sub) {
+    return resolveSubCommandMeta(sub);
   }
 
-  return resolveSubCommandMeta(sub);
+  // Alias lookup
+  for (const [, subCmd] of Object.entries(command.subCommands)) {
+    const meta = resolveSubCommandMeta(subCmd);
+    if (meta?.aliases?.includes(name)) {
+      return meta;
+    }
+  }
+
+  return null;
 }
 
 /**

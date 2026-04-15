@@ -23,6 +23,8 @@ export interface CommandInfo {
   name: string;
   /** Command description */
   description?: string | undefined;
+  /** Alternative names (aliases) for this command */
+  aliases?: string[] | undefined;
   /** Full command path (e.g., "my-cli config get") */
   fullCommandPath: string;
   /** Command path relative to root (e.g., "" for root, "config" for subcommand) */
@@ -63,6 +65,8 @@ export interface SubCommandInfo {
   name: string;
   /** Subcommand description */
   description?: string | undefined;
+  /** Alternative names (aliases) for this subcommand */
+  aliases?: string[] | undefined;
   /** Full command path */
   fullPath: string[];
 }
