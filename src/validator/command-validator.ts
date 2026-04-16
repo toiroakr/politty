@@ -429,12 +429,14 @@ function checkSubCommandAliasConflicts(
     if (!resolved?.aliases) continue;
 
     for (const alias of resolved.aliases) {
-      // Validate alias format: non-empty, no leading '-', no whitespace
-      if (alias.trim().length === 0 || alias.startsWith("-") || /\s/.test(alias)) {
+      // Validate alias format: must be a safe token (alphanumeric, hyphens, underscores).
+      // Rejects empty strings, leading dashes, whitespace, colons (used as path
+      // separator in completion scripts), and shell metacharacters ($, `, ", ', \).
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(alias)) {
         errors.push({
           commandPath,
           type: "invalid_alias",
-          message: `Alias "${alias}" for subcommand "${name}" is invalid. Aliases must be non-empty, must not start with "-", and must not contain whitespace.`,
+          message: `Alias "${alias}" for subcommand "${name}" is invalid. Aliases must start with an alphanumeric character and contain only alphanumeric characters, hyphens, or underscores.`,
           field: name,
         });
         continue;

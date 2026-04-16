@@ -584,8 +584,11 @@ function renderSubcommandsWithOptions(
     const fullPath = parentPath ? `${parentPath} ${name}` : name;
     const desc = cmd?.description ?? "";
     const aliases = cmd?.aliases;
+    const displayAliases = aliases?.map((a) => (parentPath ? `${parentPath} ${a}` : a));
     const displayName =
-      aliases && aliases.length > 0 ? `${fullPath}, ${aliases.join(", ")}` : fullPath;
+      displayAliases && displayAliases.length > 0
+        ? `${fullPath}, ${displayAliases.join(", ")}`
+        : fullPath;
 
     // Add subcommand name with description (all subcommands at same indent level)
     lines.push(formatOption(styles.command(displayName), desc, baseIndent));
