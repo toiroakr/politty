@@ -551,7 +551,7 @@ export function renderSubcommandsTableFromArray(
     const subCommandPath = sub.fullPath.join(" ");
     const aliasCell = hasAliases
       ? sub.aliases && sub.aliases.length > 0
-        ? sub.aliases.map((a) => `\`${a}\``).join(", ")
+        ? sub.aliases.map((a) => `\`${escapeTableCell(a)}\``).join(", ")
         : "-"
       : "";
 

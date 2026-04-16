@@ -33,6 +33,7 @@ export interface CommandValidationError {
   type:
     | "duplicate_field"
     | "duplicate_alias"
+    | "invalid_alias"
     | "positional_config"
     | "reserved_alias"
     | "case_variant_collision";
@@ -427,13 +428,35 @@ function checkSubCommandAliasConflicts(
     if (!resolved?.aliases) continue;
 
     for (const alias of resolved.aliases) {
+      // Validate alias format: non-empty, no leading '-', no whitespace
+      if (alias.trim().length === 0 || alias.startsWith("-") || /\s/.test(alias)) {
+        errors.push({
+          commandPath,
+          type: "invalid_alias",
+          message: `Alias "${alias}" for subcommand "${name}" is invalid. Aliases must be non-empty, must not start with "-", and must not contain whitespace.`,
+          field: name,
+        });
+        continue;
+      }
+
+      // Check if alias equals its own canonical name
+      if (alias === name) {
+        errors.push({
+          commandPath,
+          type: "duplicate_alias",
+          message: `Alias "${alias}" for subcommand "${name}" conflicts with its own name.`,
+          field: name,
+        });
+        continue;
+      }
+
       const existing = nameToOwner.get(alias);
       if (existing) {
         if (existing === name) {
           errors.push({
             commandPath,
             type: "duplicate_alias",
-            message: `Alias "${alias}" for subcommand "${name}" conflicts with its own name.`,
+            message: `Alias "${alias}" is duplicated within subcommand "${name}" alias list.`,
             field: name,
           });
         } else {

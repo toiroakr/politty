@@ -158,6 +158,53 @@ describe("validateCommand", () => {
       }
     });
 
+    it("should detect invalid subcommand aliases (empty, dash-prefixed, whitespace)", async () => {
+      const sub1 = defineCommand({ name: "sub1", aliases: [""] });
+      const sub2 = defineCommand({ name: "sub2", aliases: ["-bad"] });
+      const sub3 = defineCommand({ name: "sub3", aliases: ["has space"] });
+
+      const parent = defineCommand({
+        name: "cli",
+        subCommands: { sub1, sub2, sub3 },
+      });
+
+      const result = await validateCommand(parent);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.filter((e) => e.type === "invalid_alias").length).toBe(3);
+      }
+    });
+
+    it("should detect subcommand alias conflicting with its own name", async () => {
+      const sub = defineCommand({ name: "install", aliases: ["install"] });
+
+      const parent = defineCommand({
+        name: "cli",
+        subCommands: { install: sub },
+      });
+
+      const result = await validateCommand(parent);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors[0]?.message).toContain("conflicts with its own name");
+      }
+    });
+
+    it("should detect duplicate aliases within the same subcommand", async () => {
+      const sub = defineCommand({ name: "install", aliases: ["i", "i"] });
+
+      const parent = defineCommand({
+        name: "cli",
+        subCommands: { install: sub },
+      });
+
+      const result = await validateCommand(parent);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors[0]?.message).toContain("duplicated within subcommand");
+      }
+    });
+
     it("should validate deeply nested subcommands", async () => {
       const deepInvalid = defineCommand({
         name: "deep",
