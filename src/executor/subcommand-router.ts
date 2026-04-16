@@ -55,6 +55,11 @@ export async function resolveSubcommand(
  * Resolve an alias to the canonical subcommand name.
  * Returns the canonical name if the given name is an alias, or undefined.
  *
+ * Note: Aliases are only recognized for eagerly-defined commands and
+ * `lazy()` commands (which carry synchronous metadata). Pure async
+ * subcommand functions do not expose metadata synchronously, so their
+ * aliases cannot be resolved without loading the module.
+ *
  * @param command - The parent command
  * @param alias - The alias to look up
  * @returns The canonical subcommand name, or undefined

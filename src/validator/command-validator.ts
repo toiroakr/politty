@@ -5,6 +5,7 @@ import {
   type ExtractedFields,
 } from "../core/schema-extractor.js";
 import { resolveLazyCommand } from "../executor/subcommand-router.js";
+import { isLazyCommand } from "../lazy.js";
 import type { AnyCommand } from "../types.js";
 import {
   CaseVariantCollisionError,
@@ -420,8 +421,8 @@ function checkSubCommandAliasConflicts(
   }
 
   for (const [name, subCmdValue] of Object.entries(command.subCommands)) {
-    const resolved = isLazyCommandCheck(subCmdValue)
-      ? (subCmdValue as { meta: AnyCommand }).meta
+    const resolved = isLazyCommand(subCmdValue)
+      ? subCmdValue.meta
       : typeof subCmdValue !== "function"
         ? (subCmdValue as AnyCommand)
         : null;
@@ -474,16 +475,6 @@ function checkSubCommandAliasConflicts(
   }
 
   return errors;
-}
-
-/** Check if value is a LazyCommand (avoids circular import) */
-function isLazyCommandCheck(value: unknown): boolean {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "__politty_lazy__" in value &&
-    (value as Record<string, unknown>).__politty_lazy__ === true
-  );
 }
 
 /**

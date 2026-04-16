@@ -181,6 +181,12 @@ export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: str
   }
   for (const child of getVisibleSubs(sub.subcommands)) {
     lines.push(...optTakesValueEntries(child, joinPrefix(parentPath, child.name, ":")));
+    // Also generate opt-takes-value entries under alias paths
+    if (child.aliases) {
+      for (const alias of child.aliases) {
+        lines.push(...optTakesValueEntries(child, joinPrefix(parentPath, alias, ":")));
+      }
+    }
   }
   return lines;
 }
@@ -218,10 +224,13 @@ export function collectRouteEntries(
       funcSuffix,
       lookupPattern: `${parentPath}:${child.name}`,
     });
-    // Add alias route entries that map to the same handler
+    // Add alias route entries that map to the same handler,
+    // including descendant routes so nested completion works via alias paths
     if (child.aliases) {
       for (const alias of child.aliases) {
         const aliasPathStr = joinPrefix(parentPath, alias, ":");
+        // Recurse into descendants using alias path but same funcSuffix
+        entries.push(...collectRouteEntries(child, aliasPathStr, funcSuffix));
         entries.push({
           pathStr: aliasPathStr,
           funcSuffix,
