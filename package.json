@@ -125,7 +125,7 @@
     "@quansync/fs": "1.0.0",
     "@types/node": "25.5.2",
     "@typescript/native-preview": "7.0.0-dev.20260409.1",
-    "@vitest/coverage-v8": "4.1.3",
+    "@vitest/coverage-v8": "4.1.4",
     "knip": "6.3.1",
     "lefthook": "2.1.5",
     "organize-imports-cli": "0.10.0",
@@ -135,7 +135,7 @@
     "tsdown": "0.21.6",
     "tsx": "4.21.0",
     "typescript": "6.0.2",
-    "vitest": "4.1.3",
+    "vitest": "4.1.4",
     "zod": "4.3.6"
   },
   "peerDependencies": {
