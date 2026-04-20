@@ -34,6 +34,7 @@ function defineCommand<TArgsSchema, TResult>(config: {
 | `name`        | `string`                                                    | Command name (required)                   |
 | `description` | `string`                                                    | Command description                       |
 | `args`        | `TArgsSchema`                                               | Argument schema (Zod schema)              |
+| `aliases`     | `string[]`                                                  | Alternative names for the command         |
 | `subCommands` | `Record<string, Command \| (() => Promise<Command>)>`       | Subcommands (supports lazy loading)       |
 | `setup`       | `(context: SetupContext<TArgs>) => void \| Promise<void>`   | Initialization hook                       |
 | `run`         | `(args: TArgs) => TResult \| Promise<TResult>`              | Main process                              |

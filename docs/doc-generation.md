@@ -495,6 +495,7 @@ Command information passed to render functions:
 | ----------------- | ------------------------------------- | -------------------------------------------------- |
 | `name`            | `string`                              | Command name                                       |
 | `description`     | `string \| undefined`                 | Command description                                |
+| `aliases`         | `string[] \| undefined`               | Command aliases                                    |
 | `fullCommandPath` | `string`                              | Full command path (e.g., `"my-cli config get"`)    |
 | `commandPath`     | `string`                              | Command path (e.g., `"config get"`, `""` for root) |
 | `depth`           | `number`                              | Command depth (root=1, subcommand=2, etc.)         |
@@ -510,12 +511,13 @@ Command information passed to render functions:
 
 Subcommand information:
 
-| Property       | Type                  | Description               |
-| -------------- | --------------------- | ------------------------- |
-| `name`         | `string`              | Subcommand name           |
-| `description`  | `string \| undefined` | Subcommand description    |
-| `relativePath` | `string[]`            | Relative path from parent |
-| `fullPath`     | `string[]`            | Full command path array   |
+| Property       | Type                    | Description               |
+| -------------- | ----------------------- | ------------------------- |
+| `name`         | `string`                | Subcommand name           |
+| `description`  | `string \| undefined`   | Subcommand description    |
+| `aliases`      | `string[] \| undefined` | Subcommand aliases        |
+| `relativePath` | `string[]`              | Relative path from parent |
+| `fullPath`     | `string[]`              | Full command path array   |
 
 ### `ResolvedFieldMeta`
 

@@ -9,7 +9,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **Zod Native**: Use Zod schemas directly for argument definition and validation
 - **Type Safety**: Full TypeScript support with automatic type inference for parsed arguments
 - **Flexible Argument Definition**: Support for positional arguments, flags, aliases, arrays, and environment variable fallbacks
-- **Subcommands**: Build Git-style nested subcommands (with lazy loading support)
+- **Subcommands**: Build Git-style nested subcommands (with lazy loading and alias support)
 - **Lifecycle Management**: Guaranteed `setup` → `run` → `cleanup` execution order
 - **Signal Handling**: Proper SIGINT/SIGTERM handling with guaranteed cleanup execution
 - **Auto Help Generation**: Automatically generate help text from definitions
@@ -149,6 +149,7 @@ import { arg, defineCommand, runMain } from "politty";
 const initCommand = defineCommand({
   name: "init",
   description: "Initialize a project",
+  aliases: ["i"],
   args: z.object({
     template: arg(z.string().default("default"), {
       alias: "t",
@@ -163,6 +164,7 @@ const initCommand = defineCommand({
 const buildCommand = defineCommand({
   name: "build",
   description: "Build the project",
+  aliases: ["b"],
   args: z.object({
     output: arg(z.string().default("dist"), {
       alias: "o",
@@ -194,7 +196,9 @@ Example usage:
 
 ```bash
 $ my-cli init -t react
+$ my-cli i -t react        # alias for init
 $ my-cli build -o out -m
+$ my-cli b -o out -m        # alias for build
 $ my-cli --help
 ```
 
@@ -246,6 +250,7 @@ Define a command.
 | `name`        | `string`                      | Command name        |
 | `description` | `string?`                     | Command description |
 | `args`        | `ZodSchema`                   | Argument schema     |
+| `aliases`     | `string[]?`                   | Command aliases     |
 | `subCommands` | `Record<string, Command>?`    | Subcommands         |
 | `setup`       | `(context) => Promise<void>?` | Setup hook          |
 | `run`         | `(args) => T?`                | Run function        |
@@ -393,6 +398,7 @@ The `playground/` directory contains many examples:
 - `10-subcommands` - Subcommands
 - `12-discriminated-union` - Discriminated Union
 - `21-lazy-subcommands` - Lazy loading
+- `26-command-alias` - Command aliases
 
 ## License
 

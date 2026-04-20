@@ -19,6 +19,8 @@ mycli __complete --shell bash -- <partial-tokens>
 
 All logic runs in JavaScript: parsing the command line context, resolving candidates, and returning results with directives that tell the shell how to present them.
 
+Command aliases defined via `aliases` in `defineCommand()` are automatically included in both static completion scripts and dynamic completion candidates.
+
 ## Completion Types
 
 ### Enum (Auto-detected)

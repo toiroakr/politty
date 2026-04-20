@@ -428,15 +428,16 @@ function checkSubCommandAliasConflicts(
         : null;
     if (!resolved?.aliases) continue;
 
+    const subCommandPath = [...commandPath, name];
     for (const alias of resolved.aliases) {
       // Validate alias format: must be a safe token (alphanumeric, hyphens, underscores).
       // Rejects empty strings, leading dashes, whitespace, colons (used as path
       // separator in completion scripts), and shell metacharacters ($, `, ", ', \).
       if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(alias)) {
         errors.push({
-          commandPath,
+          commandPath: subCommandPath,
           type: "invalid_alias",
-          message: `Alias "${alias}" for subcommand "${name}" is invalid. Aliases must start with an alphanumeric character and contain only alphanumeric characters, hyphens, or underscores.`,
+          message: `Alias "${alias}" is invalid. Aliases must start with an alphanumeric character and contain only alphanumeric characters, hyphens, or underscores.`,
           field: name,
         });
         continue;
@@ -445,9 +446,9 @@ function checkSubCommandAliasConflicts(
       // Check if alias equals its own canonical name
       if (alias === name) {
         errors.push({
-          commandPath,
+          commandPath: subCommandPath,
           type: "duplicate_alias",
-          message: `Alias "${alias}" for subcommand "${name}" conflicts with its own name.`,
+          message: `Alias "${alias}" conflicts with its own name.`,
           field: name,
         });
         continue;
@@ -457,16 +458,16 @@ function checkSubCommandAliasConflicts(
       if (existing) {
         if (existing === name) {
           errors.push({
-            commandPath,
+            commandPath: subCommandPath,
             type: "duplicate_alias",
-            message: `Alias "${alias}" is duplicated within subcommand "${name}" alias list.`,
+            message: `Alias "${alias}" is duplicated within the alias list.`,
             field: name,
           });
         } else {
           errors.push({
-            commandPath,
+            commandPath: subCommandPath,
             type: "duplicate_alias",
-            message: `Alias "${alias}" for subcommand "${name}" conflicts with existing subcommand or alias "${existing}".`,
+            message: `Alias "${alias}" conflicts with existing subcommand or alias "${existing}".`,
             field: name,
           });
         }

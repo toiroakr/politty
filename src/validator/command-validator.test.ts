@@ -201,7 +201,7 @@ describe("validateCommand", () => {
       const result = await validateCommand(parent);
       expect(result.valid).toBe(false);
       if (!result.valid) {
-        expect(result.errors[0]?.message).toContain("duplicated within subcommand");
+        expect(result.errors[0]?.message).toContain("duplicated within the alias list");
       }
     });
 

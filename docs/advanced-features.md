@@ -23,8 +23,8 @@ const cli = defineCommand({
   name: "app",
   subCommands: {
     init,
-    build
-  }
+    build,
+  },
 });
 ```
 
@@ -43,7 +43,7 @@ const cli = defineCommand({
   subCommands: {
     // heavyCommand is already loaded
     heavy: async () => heavyCommand,
-  }
+  },
 });
 ```
 
@@ -54,8 +54,8 @@ const cli = defineCommand({
     heavy: async () => {
       const { heavyCommand } = await import("./commands/heavy.js");
       return heavyCommand;
-    }
-  }
+    },
+  },
 });
 ```
 
@@ -66,25 +66,53 @@ See `playground/21-lazy-subcommands.ts` for a complete example.
 Subcommands can have their own `subCommands`.
 
 ```typescript
-const remoteAdd = defineCommand({ name: "add", /* ... */ });
-const remoteRemove = defineCommand({ name: "remove", /* ... */ });
+const remoteAdd = defineCommand({ name: "add" /* ... */ });
+const remoteRemove = defineCommand({ name: "remove" /* ... */ });
 
 const remote = defineCommand({
   name: "remote",
   subCommands: {
     add: remoteAdd,
-    rm: remoteRemove
-  }
+    rm: remoteRemove,
+  },
 });
 
 const cli = defineCommand({
-  subCommands: { remote }
+  subCommands: { remote },
 });
 ```
 
 ```bash
 $ my-cli remote add origin https://github.com/...
 ```
+
+### Command Aliases
+
+Subcommands can define `aliases` to allow invocation by alternative names. Aliases are displayed in help output and shell completions.
+
+```typescript
+const install = defineCommand({
+  name: "install",
+  description: "Install packages",
+  aliases: ["i", "add"],
+  run: () => console.log("Installing..."),
+});
+
+const cli = defineCommand({
+  name: "pkg",
+  subCommands: { install },
+});
+```
+
+```bash
+$ pkg install lodash   # canonical name
+$ pkg i lodash         # alias
+$ pkg add lodash       # alias
+```
+
+Alias names must start with an alphanumeric character and contain only alphanumeric characters, hyphens, or underscores. Aliases must not conflict with other subcommand names or aliases at the same level.
+
+See `playground/26-command-alias` for a complete example.
 
 ## Complex Schemas
 
@@ -93,19 +121,25 @@ $ my-cli remote add origin https://github.com/...
 Use `z.discriminatedUnion` to create mutually exclusive argument sets. This is ideal for commands where a "mode" argument determines which other arguments are valid (and required).
 
 ```typescript
-const args = z.discriminatedUnion("mode", [
-  // Mode 1: File input
-  z.object({
-    mode: z.literal("file"),
-    path: arg(z.string(), { description: "Input file path" }),
-  }).describe("Input from file"),
-  // Mode 2: URL input
-  z.object({
-    mode: z.literal("url"),
-    url: arg(z.string().url(), { description: "Input URL" }),
-    method: arg(z.enum(["GET", "POST"]).default("GET")),
-  }).describe("Input from URL"),
-]).describe("Input mode");
+const args = z
+  .discriminatedUnion("mode", [
+    // Mode 1: File input
+    z
+      .object({
+        mode: z.literal("file"),
+        path: arg(z.string(), { description: "Input file path" }),
+      })
+      .describe("Input from file"),
+    // Mode 2: URL input
+    z
+      .object({
+        mode: z.literal("url"),
+        url: arg(z.string().url(), { description: "Input URL" }),
+        method: arg(z.enum(["GET", "POST"]).default("GET")),
+      })
+      .describe("Input from URL"),
+  ])
+  .describe("Input mode");
 
 const command = defineCommand({
   args,
@@ -117,7 +151,7 @@ const command = defineCommand({
       // args.url is valid here
       console.log("Fetching URL:", args.url);
     }
-  }
+  },
 });
 ```
 
@@ -151,12 +185,14 @@ const sharedOptions = z.object({
 });
 
 const command = defineCommand({
-  args: sharedOptions.and(z.object({
-    input: arg(z.string(), { positional: true })
-  })),
+  args: sharedOptions.and(
+    z.object({
+      input: arg(z.string(), { positional: true }),
+    }),
+  ),
   run: (args) => {
     // args has verbose, json, and input
-  }
+  },
 });
 ```
 
@@ -168,10 +204,10 @@ Use Zod's `transform` to process arguments before they reach the handler.
 args: z.object({
   // Convert comma-separated string to array
   tags: arg(
-    z.string().transform(val => val.split(",")),
-    { description: "Comma-separated tags" }
-  )
-})
+    z.string().transform((val) => val.split(",")),
+    { description: "Comma-separated tags" },
+  ),
+});
 ```
 
 ## Appendix: Extending Zod Global Registry
@@ -195,12 +231,12 @@ const command = defineCommand({
     }),
     verbose: z.boolean().meta({
       alias: "v",
-      description: "Verbose mode"
+      description: "Verbose mode",
     }),
   }),
   run: (args) => {
     // ...
-  }
+  },
 });
 ```
 
