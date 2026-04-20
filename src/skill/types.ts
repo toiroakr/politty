@@ -4,6 +4,9 @@ import type { skillFrontmatterSchema } from "./frontmatter.js";
 /**
  * SKILL.md frontmatter metadata, validated against the Agent Skills
  * specification (https://agentskills.io/specification).
+ *
+ * Provenance for politty-managed installs is recorded under
+ * `metadata["politty-cli"]` as `"{packageName}:{cliName}"`.
  */
 export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
 
@@ -58,4 +61,34 @@ export interface ScanResult {
   skills: DiscoveredSkill[];
   /** Directories that looked like skills but failed validation. */
   errors: ScanError[];
+}
+
+/**
+ * Options for `withSkillCommand`.
+ */
+export interface SkillCommandOptions {
+  /**
+   * Source directory containing SKILL.md files.
+   *
+   * Each subdirectory whose name matches its `SKILL.md` frontmatter `name`
+   * is treated as a skill. Symlinked subdirectories are ignored to prevent
+   * a malicious npm package from pointing the scan outside its own tree.
+   *
+   * @example
+   * ```typescript
+   * // Resolves to ../skills relative to the current file.
+   * // Works from both src/ and dist/ if at the same depth.
+   * const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
+   * ```
+   */
+  sourceDir: string;
+
+  /**
+   * npm package name that owns this CLI's bundled skills.
+   *
+   * Stamped onto installed skills under `metadata["politty-cli"]` as
+   * `"{packageName}:{cliName}"` so `skills remove` can tell apart skills
+   * this CLI installed from skills another tool manages.
+   */
+  package: string;
 }

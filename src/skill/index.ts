@@ -6,10 +6,57 @@
  * specification (https://agentskills.io/specification).
  *
  * Provenance of politty-managed installs is recorded under
- * `metadata["politty-cli"]` as `"{packageName}:{cliName}"`.
+ * `metadata["politty-cli"]` as `"{packageName}:{cliName}"`, so
+ * `skills remove` can safely refuse to delete skills that belong to
+ * another tool.
+ *
+ * @example
+ * ```typescript
+ * import { dirname, resolve } from "node:path";
+ * import { fileURLToPath } from "node:url";
+ * import { defineCommand, runMain } from "politty";
+ * import { withSkillCommand } from "politty/skill";
+ *
+ * const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
+ *
+ * const cli = withSkillCommand(
+ *   defineCommand({
+ *     name: "my-agent",
+ *     description: "My coding agent CLI",
+ *     subCommands: {
+ *       run: runCommand,
+ *     },
+ *   }),
+ *   { sourceDir, package: "@my-agent/skills" },
+ * );
+ *
+ * runMain(cli);
+ * ```
+ *
+ * SKILL.md format (spec-compliant):
+ * ```markdown
+ * ---
+ * name: commit
+ * description: Git commit message generation
+ * license: MIT
+ * metadata:
+ *   politty-cli: "@my-agent/skills:my-agent"
+ * ---
+ * # Instructions for the agent...
+ * ```
  *
  * @packageDocumentation
  */
+
+import { defineCommand } from "../core/command.js";
+import type { AnyCommand } from "../types.js";
+import {
+  createSkillAddCommand,
+  createSkillListCommand,
+  createSkillRemoveCommand,
+  createSkillSyncCommand,
+} from "./commands.js";
+import type { SkillCommandOptions } from "./types.js";
 
 // Public API re-exports
 export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./frontmatter.js";
@@ -26,5 +73,50 @@ export type {
   ScanError,
   ScanErrorReason,
   ScanResult,
+  SkillCommandOptions,
   SkillFrontmatter,
 } from "./types.js";
+
+/**
+ * Wrap a command with a `skills` subcommand for managing SKILL.md-based skills.
+ *
+ * Adds `skills sync`, `skills add`, `skills remove`, and `skills list`.
+ * Skills are installed to `.agents/skills/<name>/` and symlinked from
+ * agent-specific directories (e.g. `.claude/skills/`). The install writes
+ * the ownership stamp `metadata["politty-cli"] = "{package}:{cliName}"`,
+ * which `remove` and `sync` consult before deleting so this CLI never
+ * clobbers skills another tool installed.
+ *
+ * @throws if `command.subCommands.skills` already exists — silently
+ *   overwriting it would hide a configuration bug.
+ */
+export function withSkillCommand<T extends AnyCommand>(
+  command: T,
+  options: SkillCommandOptions,
+): T {
+  if (command.subCommands && "skills" in command.subCommands) {
+    throw new Error(
+      `withSkillCommand: command "${command.name}" already defines a "skills" subcommand.`,
+    );
+  }
+
+  const cliName = command.name;
+  const skillsSubCommand = defineCommand({
+    name: "skills",
+    description: "Manage agent skills",
+    subCommands: {
+      sync: createSkillSyncCommand(options, cliName),
+      add: createSkillAddCommand(options, cliName),
+      remove: createSkillRemoveCommand(options, cliName),
+      list: createSkillListCommand(options, cliName),
+    },
+  });
+
+  return {
+    ...command,
+    subCommands: {
+      ...command.subCommands,
+      skills: skillsSubCommand,
+    },
+  } as T;
+}
