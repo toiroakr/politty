@@ -1037,6 +1037,217 @@ type CommandValidationResult =
 
 ---
 
+## Skill Management (`politty/skill`)
+
+Validates SKILL.md files against the [Agent Skills specification](https://agentskills.io/specification) and installs them into `.agents/skills/<name>/` with symlinks from agent-specific directories. Install is atomic (staging dir + `rename`). Each install is stamped with `metadata.politty-cli = "{package}:{cliName}"` so `remove` / `sync` can refuse to delete skills owned by another tool.
+
+### `withSkillCommand`
+
+Wraps a command with a `skills` subcommand for managing SKILL.md-based agent skills.
+
+```typescript
+function withSkillCommand<T extends AnyCommand>(command: T, options: SkillCommandOptions): T;
+```
+
+Throws if `command.subCommands.skills` already exists.
+
+#### Parameters
+
+| Name      | Type                  | Description           |
+| --------- | --------------------- | --------------------- |
+| `command` | `AnyCommand`          | Command to wrap       |
+| `options` | `SkillCommandOptions` | Skill command options |
+
+**SkillCommandOptions:**
+
+| Property    | Type     | Description                                                                                                                                 |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sourceDir` | `string` | Source directory containing SKILL.md files (symlinked subdirs are skipped)                                                                  |
+| `package`   | `string` | npm package name that owns these skills. Combined with the command name as `"{package}:{cliName}"` and stamped onto each installed SKILL.md |
+
+#### Generated Subcommands
+
+| Command                        | Description                                               |
+| ------------------------------ | --------------------------------------------------------- |
+| `skills sync [--exclude name]` | Remove orphans and reinstall all skills owned by this CLI |
+| `skills add [name]`            | Install skill(s) from source                              |
+| `skills remove [name]`         | Remove skill(s) owned by this CLI                         |
+| `skills list [--json]`         | List available skills from source                         |
+
+#### Example
+
+```typescript
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineCommand, runMain } from "politty";
+import { withSkillCommand } from "politty/skill";
+
+const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
+
+const cli = withSkillCommand(
+  defineCommand({
+    name: "my-agent",
+    subCommands: {
+      /* ... */
+    },
+  }),
+  { sourceDir, package: "@my-agent/skills" },
+);
+
+runMain(cli);
+```
+
+---
+
+### `scanSourceDir`
+
+Scans a directory for SKILL.md files.
+
+```typescript
+function scanSourceDir(sourceDir: string): ScanResult;
+```
+
+If the directory itself contains a SKILL.md, it is treated as a single-skill source; the parent-dir name match is skipped in that case. Otherwise, each non-symlinked subdirectory with a SKILL.md is validated; the subdirectory name **must** equal the frontmatter `name`.
+
+**ScanResult:**
+
+```typescript
+interface ScanResult {
+  skills: DiscoveredSkill[];
+  errors: ScanError[];
+}
+
+interface ScanError {
+  path: string;
+  reason: ScanErrorReason;
+  message: string;
+}
+
+// Runtime tuple of every scan error reason (for exhaustive iteration).
+const SCAN_ERROR_REASONS = [
+  "parse-failed",
+  "name-mismatch",
+  "read-failed",
+  "missing-source",
+] as const;
+type ScanErrorReason = (typeof SCAN_ERROR_REASONS)[number];
+```
+
+---
+
+### `installSkill`
+
+Installs a skill atomically into `.agents/skills/<name>/`, symlinks from agent-specific directories (e.g. `.claude/skills/`), and stamps `metadata.politty-cli = ownership` on the copied SKILL.md.
+
+```typescript
+function installSkill(skill: DiscoveredSkill, ownership: string, cwd?: string): void;
+```
+
+`ownership` is required; callers managing their own lifecycle typically compute it as `` `${packageName}:${cliName}` ``.
+
+---
+
+### `uninstallSkill`
+
+Removes a skill's symlinks and the canonical copy. Does not perform an ownership check — callers that need one should call `readInstalledOwnership` first (`skills remove` does this automatically).
+
+```typescript
+function uninstallSkill(name: string, cwd?: string): void;
+```
+
+---
+
+### `readInstalledOwnership`
+
+Returns `metadata["politty-cli"]` from the installed SKILL.md, or `null` if the skill is not installed or the stamp is absent.
+
+```typescript
+function readInstalledOwnership(name: string, cwd?: string): string | null;
+```
+
+---
+
+### `parseSkillMd`
+
+Parses a SKILL.md content string and validates its frontmatter against the Agent Skills specification.
+
+```typescript
+function parseSkillMd(content: string): ParsedSkillMd | null;
+```
+
+Returns `null` if the frontmatter is missing or fails validation.
+
+---
+
+### `parseFrontmatter`
+
+Parses YAML frontmatter from a markdown string. Tolerates a leading UTF-8 BOM. Returns `{ data: {}, body: content }` when no fence is found.
+
+```typescript
+function parseFrontmatter(content: string): { data: Record<string, unknown>; body: string };
+```
+
+---
+
+### `skillFrontmatterSchema`
+
+Zod schema for SKILL.md frontmatter. Enforces the Agent Skills spec and passes through unknown top-level keys via `.passthrough()`.
+
+```typescript
+const skillFrontmatterSchema: z.ZodObject<{
+  name: z.ZodString; // /^[a-z0-9]+(-[a-z0-9]+)*$/, 1..64
+  description: z.ZodString; // 1..1024
+  license: z.ZodOptional<z.ZodString>;
+  compatibility: z.ZodOptional<z.ZodString>; // <=500
+  metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+  "allowed-tools": z.ZodOptional<z.ZodString>;
+}>;
+```
+
+---
+
+### `OWNERSHIP_METADATA_KEY`
+
+String constant `"politty-cli"`. The metadata key under which the `{package}:{cliName}` ownership stamp is written.
+
+```typescript
+const OWNERSHIP_METADATA_KEY: "politty-cli";
+```
+
+---
+
+### `DiscoveredSkill`
+
+A skill found in a source directory.
+
+```typescript
+interface DiscoveredSkill {
+  frontmatter: SkillFrontmatter;
+  sourcePath: string;
+  rawContent: string;
+}
+```
+
+---
+
+### `SkillFrontmatter`
+
+Parsed SKILL.md frontmatter, validated against the Agent Skills specification.
+
+```typescript
+type SkillFrontmatter = {
+  name: string;
+  description: string;
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
+  "allowed-tools"?: string;
+  // unknown top-level keys round-trip via .passthrough()
+};
+```
+
+---
+
 ## Prompt Types
 
 For full usage details, see [Interactive Prompts](./interactive-prompts.md).
@@ -1176,4 +1387,27 @@ export type { ValidationError, ValidationResult } from "./validator/zod-validato
 // Prompt (subpath exports)
 // import { prompt } from "politty/prompt/clack";
 // import { prompt } from "politty/prompt/inquirer";
+```
+
+### `politty/skill`
+
+```typescript
+export { withSkillCommand } from "./skill/index.js";
+export {
+  installSkill,
+  uninstallSkill,
+  readInstalledOwnership,
+  OWNERSHIP_METADATA_KEY,
+} from "./skill/installer.js";
+export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./skill/frontmatter.js";
+export { scanSourceDir } from "./skill/scanner.js";
+export { SCAN_ERROR_REASONS } from "./skill/types.js";
+export type {
+  DiscoveredSkill,
+  ScanError,
+  ScanErrorReason,
+  ScanResult,
+  SkillCommandOptions,
+  SkillFrontmatter,
+} from "./skill/types.js";
 ```
