@@ -80,10 +80,9 @@ export function createSkillSyncCommand(options: SkillCommandOptions, cliName: st
       }
 
       // Reinstall in-place. `installSkill` stages into a temp sibling and
-      // `rename`s over the canonical directory, so each skill is replaced
-      // atomically — no remove-all-first pass is needed, and there is no
-      // window in which the skill directory is absent. `addSkill`'s
-      // ownership guard still refuses to clobber skills owned by another CLI.
+      // `rename`s the staged copy over the canonical directory, so a
+      // remove-all-first pass is not needed. `addSkill`'s ownership guard
+      // still refuses to clobber skills owned by another CLI.
       for (const skill of skills) {
         addSkill(skill, stamp);
       }
