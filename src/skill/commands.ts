@@ -56,12 +56,16 @@ export function createSkillSyncCommand(options: SkillCommandOptions, cliName: st
       const skills = allSkills.filter((s) => !excluded.has(s.frontmatter.name));
       const stamp = ownershipFor(options, cliName);
 
-      // Refuse orphan reconciliation only when the scan itself failed at
-      // the directory level (missing sourceDir, unreadable sourceDir).
-      // Per-skill validation errors (parse-failed, name-mismatch, a single
-      // unreadable SKILL.md) must not block orphan cleanup — the remaining
-      // valid skills are still an authoritative view of "what this CLI
-      // bundles" for comparison against installed skills.
+      // Refuse orphan reconciliation when the scan itself could not produce
+      // an authoritative view of "what this CLI bundles":
+      //   * `missing-source` — sourceDir missing or not a directory.
+      //   * any error whose `path === sourceDir` — includes the
+      //     single-skill-source case where sourceDir's own SKILL.md failed
+      //     to parse; without a single valid skill there, we cannot tell
+      //     orphan-vs-intentionally-dropped.
+      // Per-skill errors on *subdirectories* (parse-failed, name-mismatch,
+      // a single unreadable SKILL.md) do not block cleanup: the remaining
+      // valid siblings still provide an authoritative bundle listing.
       const directoryScanFailed = errors.some(
         (e) => e.reason === "missing-source" || e.path === options.sourceDir,
       );
