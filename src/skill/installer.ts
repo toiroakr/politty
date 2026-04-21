@@ -17,7 +17,7 @@ import { parseFrontmatter } from "./frontmatter.js";
 import type { DiscoveredSkill } from "./types.js";
 
 /** Canonical directory where skill files are stored. */
-const AGENTS_SKILLS_DIR = ".agents/skills";
+export const AGENTS_SKILLS_DIR = ".agents/skills";
 
 /**
  * Agent directories that get symlinks to the canonical skill directory.
@@ -217,15 +217,29 @@ function upsertMetadataKey(yaml: string, key: string, value: string): string {
     }
   }
 
+  // Match existing child indent so writes into a 4-space (or tab-indented)
+  // metadata block don't break the mapping. Fall back to two spaces if the
+  // block has no children yet.
+  const firstChildIndent = findFirstChildIndent(lines, metaIdx + 1, end);
+  const indent = firstChildIndent ?? "  ";
+
   const keyPattern = new RegExp(`^[ \\t]+${escapeRegex(key)}[ \\t]*:`);
   for (let i = metaIdx + 1; i < end; i++) {
     if (keyPattern.test(lines[i]!)) {
-      lines[i] = `  ${key}: ${quotedValue}`;
+      lines[i] = `${indent}${key}: ${quotedValue}`;
       return lines.join("\n");
     }
   }
-  lines.splice(end, 0, `  ${key}: ${quotedValue}`);
+  lines.splice(end, 0, `${indent}${key}: ${quotedValue}`);
   return lines.join("\n");
+}
+
+function findFirstChildIndent(lines: string[], start: number, end: number): string | null {
+  for (let i = start; i < end; i++) {
+    const m = lines[i]!.match(/^([ \t]+)\S/);
+    if (m) return m[1]!;
+  }
+  return null;
 }
 
 function parseInlineMap(source: string): Record<string, string> {

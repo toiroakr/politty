@@ -14,6 +14,7 @@ vi.mock("../installer.js", () => ({
   uninstallSkill: vi.fn(),
   readInstalledOwnership: vi.fn(),
   OWNERSHIP_METADATA_KEY: "politty-cli",
+  AGENTS_SKILLS_DIR: ".agents/skills",
 }));
 
 const installer = await import("../installer.js");

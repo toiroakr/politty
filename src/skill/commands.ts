@@ -5,6 +5,7 @@ import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
 import { logger, symbols } from "../output/logger.js";
 import {
+  AGENTS_SKILLS_DIR,
   installSkill,
   OWNERSHIP_METADATA_KEY,
   readInstalledOwnership,
@@ -275,7 +276,7 @@ function findOwnedInstalledSkills(
   expectedOwnership: string,
   cwd: string = process.cwd(),
 ): string[] {
-  const base = resolve(cwd, ".agents", "skills");
+  const base = resolve(cwd, AGENTS_SKILLS_DIR);
   const owned: string[] = [];
   let entries: Dirent[];
   try {

@@ -114,6 +114,24 @@ describe("installSkill", () => {
     expect(readInstalledOwnership("commit", projectDir)).toBe(OWNERSHIP);
   });
 
+  it("should preserve existing child indent when inserting into a 4-space metadata block", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    writeFileSync(
+      join(skill.sourcePath, "SKILL.md"),
+      `---\nname: commit\ndescription: 4-space indented metadata\nmetadata:\n    owner: alice\n---\nbody\n`,
+    );
+
+    installSkill(skill, OWNERSHIP, projectDir);
+
+    expect(readInstalledOwnership("commit", projectDir)).toBe(OWNERSHIP);
+    const content = readFileSync(join(projectDir, ".agents/skills/commit/SKILL.md"), "utf-8");
+    // Both the pre-existing child and the newly-inserted politty-cli line
+    // must share the same 4-space indent, or YAML will close the mapping
+    // at the shallower line and fail to parse.
+    expect(content).toMatch(/\n {4}owner: alice\n/);
+    expect(content).toMatch(/\n {4}politty-cli: /);
+  });
+
   it("should populate .claude/skills/<name>/ via symlink on Unix, accept copy fallback on Windows", () => {
     const skill = createSkillFixture(sourceDir, "commit");
 
