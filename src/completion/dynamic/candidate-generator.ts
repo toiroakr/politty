@@ -3,6 +3,7 @@
  */
 
 import { execSync } from "node:child_process";
+import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import type { ValueCompletion } from "../types.js";
 import type { CompletionContext } from "./context-parser.js";
@@ -190,13 +191,12 @@ function generateSubcommandCandidates(context: CompletionContext): CandidateResu
     const sub = context.currentCommand.subCommands?.[name];
     if (sub) {
       description = resolveSubCommandMeta(sub)?.description;
-    } else if (context.currentCommand.subCommands) {
-      // Alias lookup
-      for (const subCmd of Object.values(context.currentCommand.subCommands)) {
-        const meta = resolveSubCommandMeta(subCmd);
-        if (meta?.aliases?.includes(name)) {
-          description = meta.description;
-          break;
+    } else {
+      const canonical = resolveSubCommandAlias(context.currentCommand, name);
+      if (canonical) {
+        const resolved = context.currentCommand.subCommands?.[canonical];
+        if (resolved) {
+          description = resolveSubCommandMeta(resolved)?.description;
         }
       }
     }

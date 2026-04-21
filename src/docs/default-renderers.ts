@@ -555,32 +555,26 @@ export function renderSubcommandsTableFromArray(
         : "-"
       : "";
 
+    // Build command cell (with optional anchor link)
+    let cmdCell: string;
     if (generateAnchors) {
       const anchor = generateAnchor(sub.fullPath);
       const subFile = fileMap?.[subCommandPath];
 
       if (currentFile && subFile && currentFile !== subFile) {
-        // Cross-file link
         const relativePath = getRelativePath(currentFile, subFile);
-        if (hasAliases) {
-          lines.push(`| [\`${fullName}\`](${relativePath}#${anchor}) | ${aliasCell} | ${desc} |`);
-        } else {
-          lines.push(`| [\`${fullName}\`](${relativePath}#${anchor}) | ${desc} |`);
-        }
+        cmdCell = `[\`${fullName}\`](${relativePath}#${anchor})`;
       } else {
-        // Same-file anchor
-        if (hasAliases) {
-          lines.push(`| [\`${fullName}\`](#${anchor}) | ${aliasCell} | ${desc} |`);
-        } else {
-          lines.push(`| [\`${fullName}\`](#${anchor}) | ${desc} |`);
-        }
+        cmdCell = `[\`${fullName}\`](#${anchor})`;
       }
     } else {
-      if (hasAliases) {
-        lines.push(`| \`${fullName}\` | ${aliasCell} | ${desc} |`);
-      } else {
-        lines.push(`| \`${fullName}\` | ${desc} |`);
-      }
+      cmdCell = `\`${fullName}\``;
+    }
+
+    if (hasAliases) {
+      lines.push(`| ${cmdCell} | ${aliasCell} | ${desc} |`);
+    } else {
+      lines.push(`| ${cmdCell} | ${desc} |`);
     }
   }
 

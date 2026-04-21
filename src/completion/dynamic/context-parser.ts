@@ -3,6 +3,7 @@
  */
 
 import { extractFields, toCamelCase } from "../../core/schema-extractor.js";
+import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import type { AnyCommand } from "../../types.js";
 import type { CompletableOption, CompletablePositional } from "../types.js";
@@ -127,11 +128,9 @@ function resolveSubcommand(command: AnyCommand, name: string): AnyCommand | null
   }
 
   // Alias lookup
-  for (const [, subCmd] of Object.entries(command.subCommands)) {
-    const meta = resolveSubCommandMeta(subCmd);
-    if (meta?.aliases?.includes(name)) {
-      return meta;
-    }
+  const canonical = resolveSubCommandAlias(command, name);
+  if (canonical) {
+    return resolveSubCommandMeta(command.subCommands[canonical]!);
   }
 
   return null;

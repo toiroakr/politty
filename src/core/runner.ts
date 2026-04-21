@@ -298,11 +298,11 @@ async function runCommandInternal<TResult = unknown>(
       // Check if there's an unknown subcommand specified
       let hasUnknownSubcommand = false;
       const subCmdNames = listSubCommands(command);
-      const allSubCmdNames = [...listSubCommandNamesWithAliases(command)];
+      const allSubCmdNameSet = listSubCommandNamesWithAliases(command);
       if (subCmdNames.length > 0) {
         // Find first positional argument (potential subcommand), skipping global option values
         const potentialSubCmd = findFirstPositional(argv, context.globalExtracted);
-        if (potentialSubCmd && !allSubCmdNames.includes(potentialSubCmd)) {
+        if (potentialSubCmd && !allSubCmdNameSet.has(potentialSubCmd)) {
           hasUnknownSubcommand = true;
         }
       }
@@ -316,7 +316,7 @@ async function runCommandInternal<TResult = unknown>(
       collector?.stop();
       if (hasUnknownSubcommand) {
         const unknownCmd = findFirstPositional(argv, context.globalExtracted) ?? "";
-        const similar = findSimilar(unknownCmd, allSubCmdNames);
+        const similar = findSimilar(unknownCmd, [...allSubCmdNameSet]);
         const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
         return {
           success: false,

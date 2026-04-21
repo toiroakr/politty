@@ -511,13 +511,12 @@ Command information passed to render functions:
 
 Subcommand information:
 
-| Property       | Type                    | Description               |
-| -------------- | ----------------------- | ------------------------- |
-| `name`         | `string`                | Subcommand name           |
-| `description`  | `string \| undefined`   | Subcommand description    |
-| `aliases`      | `string[] \| undefined` | Subcommand aliases        |
-| `relativePath` | `string[]`              | Relative path from parent |
-| `fullPath`     | `string[]`              | Full command path array   |
+| Property      | Type                    | Description             |
+| ------------- | ----------------------- | ----------------------- |
+| `name`        | `string`                | Subcommand name         |
+| `description` | `string \| undefined`   | Subcommand description  |
+| `aliases`     | `string[] \| undefined` | Subcommand aliases      |
+| `fullPath`    | `string[]`              | Full command path array |
 
 ### `ResolvedFieldMeta`
 
