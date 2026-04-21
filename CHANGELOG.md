@@ -1,5 +1,11 @@
 # politty
 
+## 0.4.15
+
+### Patch Changes
+
+- 161151d: Add command alias support for subcommands. Commands can now define `aliases` in `defineCommand()` to allow invocation by alternative names. Aliases are displayed in help output, documentation, and shell completions, with validation to prevent conflicts.
+
 ## 0.4.14
 
 ### Patch Changes
