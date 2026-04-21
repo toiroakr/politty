@@ -1039,7 +1039,7 @@ type CommandValidationResult =
 
 ## Skill Management (`politty/skill`)
 
-Validates SKILL.md files against the [Agent Skills specification](https://agentskills.io/specification) and installs them into `.agents/skills/<name>/` with symlinks from agent-specific directories. Install is atomic (staging dir + `rename`). Each install is stamped with `metadata.politty-cli = "{package}:{cliName}"` so `remove` / `sync` can refuse to delete skills owned by another tool.
+Validates SKILL.md files against the [Agent Skills specification](https://agentskills.io/specification) and installs them into `.agents/skills/<name>/` with symlinks from agent-specific directories. Install is atomic (staging dir + `rename`). Each install is stamped with `metadata["politty-cli"] = "{package}:{cliName}"` so `remove` / `sync` can refuse to delete skills owned by another tool.
 
 ### `withSkillCommand`
 
@@ -1137,7 +1137,7 @@ type ScanErrorReason = (typeof SCAN_ERROR_REASONS)[number];
 
 ### `installSkill`
 
-Installs a skill atomically into `.agents/skills/<name>/`, symlinks from agent-specific directories (e.g. `.claude/skills/`), and stamps `metadata.politty-cli = ownership` on the copied SKILL.md.
+Installs a skill atomically into `.agents/skills/<name>/`, symlinks from agent-specific directories (e.g. `.claude/skills/`), and stamps `metadata["politty-cli"] = ownership` on the copied SKILL.md.
 
 ```typescript
 function installSkill(skill: DiscoveredSkill, ownership: string, cwd?: string): void;

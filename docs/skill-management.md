@@ -9,7 +9,7 @@ SKILL.md files are validated against the [Agent Skills specification](https://ag
 politty's role is focused:
 
 1. **Install**: Scans your source directory for SKILL.md files, copies each to `.agents/skills/<name>/`, and creates symlinks from agent-specific directories (e.g. `.claude/skills/`). The install is atomic (staging dir + `rename`) so partial copies can never be observed.
-2. **Stamp**: Each installed SKILL.md is stamped with `metadata.politty-cli = "{package}:{cliName}"` so politty can tell apart skills your CLI owns from skills another tool manages.
+2. **Stamp**: Each installed SKILL.md is stamped with `metadata["politty-cli"] = "{package}:{cliName}"` so politty can tell apart skills your CLI owns from skills another tool manages.
 3. **Remove safely**: `skills remove` and `skills sync` refuse to delete skills that don't carry your CLI's stamp, protecting projects that use multiple skill-providing tools.
 
 ## Setup
@@ -59,7 +59,7 @@ Generate conventional commit messages from staged changes.
 - `description` is 1..1024 chars
 - Unknown top-level fields are preserved (round-tripped via `.passthrough()`)
 
-You do not need to write `metadata.politty-cli` yourself — the installer sets it at install time based on the `package` option you pass to `withSkillCommand`.
+You do not need to write `metadata["politty-cli"]` yourself — the installer sets it at install time based on the `package` option you pass to `withSkillCommand`.
 
 ### 3. Add withSkillCommand
 
@@ -113,7 +113,7 @@ my-agent skills add            # Install all skills
 
 ### `skills remove`
 
-Remove a specific skill, or all skills discovered in `sourceDir` when no name is given. Only skills whose `metadata.politty-cli` matches `"{package}:{cliName}"` are removed.
+Remove a specific skill, or all skills discovered in `sourceDir` when no name is given. Only skills whose `metadata["politty-cli"]` matches `"{package}:{cliName}"` are removed.
 
 ```bash
 my-agent skills remove commit
