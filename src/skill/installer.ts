@@ -47,10 +47,13 @@ function assertSafeName(name: string): void {
 /**
  * Install a skill to the project's agent skill directories.
  *
- * Writes atomically: the skill is assembled in a temporary sibling
- * directory and `rename`d into place, so partial copies can never be
- * observed. The ownership stamp `metadata["politty-cli"]` is rewritten at
- * install time based on the caller-supplied `ownership` value.
+ * The skill is assembled in a temporary sibling directory and `rename`d
+ * into place, which prevents partially-copied content from ever being
+ * observed. When replacing an existing installation, the canonical
+ * directory is removed before the rename, so the skill path may be
+ * briefly absent during the swap — this is not a full atomic replace.
+ * The ownership stamp `metadata["politty-cli"]` is rewritten at install
+ * time based on the caller-supplied `ownership` value.
  *
  * @param ownership - `"{packageName}:{cliName}"` — required. Written to
  *   `metadata["politty-cli"]` of the installed SKILL.md.

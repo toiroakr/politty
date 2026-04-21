@@ -8,7 +8,7 @@ SKILL.md files are validated against the [Agent Skills specification](https://ag
 
 politty's role is focused:
 
-1. **Install**: Scans your source directory for SKILL.md files, copies each to `.agents/skills/<name>/`, and creates symlinks from agent-specific directories (e.g. `.claude/skills/`). The install is atomic (staging dir + `rename`) so partial copies can never be observed.
+1. **Install**: Scans your source directory for SKILL.md files, copies each to `.agents/skills/<name>/`, and creates symlinks from agent-specific directories (e.g. `.claude/skills/`). The copy is staged in a temporary sibling directory and `rename`d into place so partial copies can never be observed; replacing an existing installation removes the old directory first, so the skill path may be briefly absent during the swap.
 2. **Stamp**: Each installed SKILL.md is stamped with `metadata["politty-cli"] = "{package}:{cliName}"` so politty can tell apart skills your CLI owns from skills another tool manages.
 3. **Remove safely**: `skills remove` and `skills sync` refuse to delete skills that don't carry your CLI's stamp, protecting projects that use multiple skill-providing tools.
 

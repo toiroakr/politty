@@ -1039,7 +1039,7 @@ type CommandValidationResult =
 
 ## Skill Management (`politty/skill`)
 
-Validates SKILL.md files against the [Agent Skills specification](https://agentskills.io/specification) and installs them into `.agents/skills/<name>/` with symlinks from agent-specific directories. Install is atomic (staging dir + `rename`). Each install is stamped with `metadata["politty-cli"] = "{package}:{cliName}"` so `remove` / `sync` can refuse to delete skills owned by another tool.
+Validates SKILL.md files against the [Agent Skills specification](https://agentskills.io/specification) and installs them into `.agents/skills/<name>/` with symlinks from agent-specific directories. The copy is staged in a sibling temp dir and `rename`d into place so partial copies are never observable; replacing an existing installation removes the old directory first, so the skill path may be briefly absent during the swap. Each install is stamped with `metadata["politty-cli"] = "{package}:{cliName}"` so `remove` / `sync` can refuse to delete skills owned by another tool.
 
 ### `withSkillCommand`
 
@@ -1137,7 +1137,7 @@ type ScanErrorReason = (typeof SCAN_ERROR_REASONS)[number];
 
 ### `installSkill`
 
-Installs a skill atomically into `.agents/skills/<name>/`, symlinks from agent-specific directories (e.g. `.claude/skills/`), and stamps `metadata["politty-cli"] = ownership` on the copied SKILL.md.
+Installs a skill into `.agents/skills/<name>/` via a staged sibling directory that is `rename`d into place (partial copies never observable; replacing an existing install briefly removes the old directory before the rename), symlinks from agent-specific directories (e.g. `.claude/skills/`), and stamps `metadata["politty-cli"] = ownership` on the copied SKILL.md.
 
 ```typescript
 function installSkill(skill: DiscoveredSkill, ownership: string, cwd?: string): void;
