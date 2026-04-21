@@ -233,6 +233,13 @@ function optTakesValueCases(sub: CompletableSubcommand, parentPath: string): str
   for (const child of getVisibleSubs(sub.subcommands)) {
     const childPath = parentPath ? `${parentPath}:${child.name}` : child.name;
     lines.push(...optTakesValueCases(child, childPath));
+    // Also generate opt-takes-value cases under alias paths
+    if (child.aliases) {
+      for (const alias of child.aliases) {
+        const aliasPath = parentPath ? `${parentPath}:${alias}` : alias;
+        lines.push(...optTakesValueCases(child, aliasPath));
+      }
+    }
   }
   return lines;
 }

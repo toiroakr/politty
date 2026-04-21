@@ -112,6 +112,8 @@ $ pkg add lodash       # alias
 
 Alias names must start with an alphanumeric character and contain only alphanumeric characters, hyphens, or underscores. Aliases must not conflict with other subcommand names or aliases at the same level.
 
+> **Note**: Aliases require synchronous metadata, so they work with eagerly-defined commands and `lazy(meta, load)` subcommands. Legacy async subcommand functions (`async () => ...`) do not expose metadata synchronously, so aliases defined on the returned command won't be recognized for parsing, help, or completion. Use `lazy()` for alias-enabled lazy subcommands.
+
 See `playground/26-command-alias` for a complete example.
 
 ## Complex Schemas

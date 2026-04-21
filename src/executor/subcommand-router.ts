@@ -52,6 +52,38 @@ export async function resolveSubcommand(
 }
 
 /**
+ * Resolve a subcommand by name (including alias lookup) and return both the
+ * resolved command and the canonical name if accessed via alias.
+ *
+ * This avoids a redundant alias scan when the caller needs both pieces of info.
+ */
+export async function resolveSubcommandWithAlias(
+  command: AnyCommand,
+  name: string,
+): Promise<{ command: AnyCommand; aliasFor: string | undefined } | undefined> {
+  if (!command.subCommands) {
+    return undefined;
+  }
+
+  // Direct lookup
+  const subCmd = command.subCommands[name];
+  if (subCmd) {
+    return { command: await resolveLazyCommand(subCmd), aliasFor: undefined };
+  }
+
+  // Alias lookup
+  const canonicalName = resolveSubCommandAlias(command, name);
+  if (canonicalName) {
+    return {
+      command: await resolveLazyCommand(command.subCommands[canonicalName]!),
+      aliasFor: canonicalName,
+    };
+  }
+
+  return undefined;
+}
+
+/**
  * Resolve an alias to the canonical subcommand name.
  * Returns the canonical name if the given name is an alias, or undefined.
  *

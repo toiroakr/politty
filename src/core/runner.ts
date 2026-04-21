@@ -3,8 +3,7 @@ import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collec
 import {
   listSubCommandNamesWithAliases,
   listSubCommands,
-  resolveSubcommand,
-  resolveSubCommandAlias,
+  resolveSubcommandWithAlias,
 } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
@@ -343,21 +342,19 @@ async function runCommandInternal<TResult = unknown>(
 
     // Handle subcommand
     if (parseResult.subCommand) {
-      const subCmd = await resolveSubcommand(command, parseResult.subCommand);
-      if (subCmd) {
-        // Detect if the subcommand was accessed via an alias
-        const canonicalName = resolveSubCommandAlias(command, parseResult.subCommand);
+      const resolved = await resolveSubcommandWithAlias(command, parseResult.subCommand);
+      if (resolved) {
         // Build new context for subcommand
         const subContext: CommandContext = {
           commandPath: [...(context.commandPath ?? []), parseResult.subCommand],
           rootName: context.rootName,
           rootVersion: context.rootVersion,
           globalExtracted: context.globalExtracted,
-          aliasFor: canonicalName,
+          aliasFor: resolved.aliasFor,
         };
         // Stop this collector and pass logs to subcommand
         collector?.stop();
-        return runCommandInternal<TResult>(subCmd, parseResult.remainingArgs, {
+        return runCommandInternal<TResult>(resolved.command, parseResult.remainingArgs, {
           ...options,
           _context: subContext,
           _existingLogs: getCurrentLogs(),
