@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -238,6 +239,27 @@ describe("installSkill", () => {
 
     expect(() => installSkill(skill, OWNERSHIP, projectDir)).toThrow(/Invalid skill name/);
   });
+
+  it("should throw when source SKILL.md has no YAML frontmatter", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    // Overwrite the fixture with a file that lacks a frontmatter fence.
+    // stampOwnership should refuse rather than install an unstamped skill.
+    writeFileSync(join(skill.sourcePath, "SKILL.md"), "# no frontmatter here\n");
+
+    expect(() => installSkill(skill, OWNERSHIP, projectDir)).toThrow(/no YAML frontmatter/);
+  });
+
+  it("should throw when flow-style metadata carries a non-string value", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    // Spec restricts metadata values to strings; installer must refuse
+    // rather than silently drop the non-string entry.
+    writeFileSync(
+      join(skill.sourcePath, "SKILL.md"),
+      `---\nname: commit\ndescription: bad metadata\nmetadata: { count: 3 }\n---\nbody\n`,
+    );
+
+    expect(() => installSkill(skill, OWNERSHIP, projectDir)).toThrow(/not a string/);
+  });
 });
 
 describe("uninstallSkill", () => {
@@ -290,5 +312,23 @@ describe("readInstalledOwnership", () => {
     writeFileSync(join(skillDir, "SKILL.md"), "---\nname: noowner\ndescription: ok\n---\n");
 
     expect(readInstalledOwnership("noowner", projectDir)).toBeNull();
+  });
+
+  it("should surface non-ENOENT read errors instead of returning null", () => {
+    // Skip on Windows (no reliable unreadable-file primitive) and when
+    // running as root (permission bits are ignored).
+    if (process.platform === "win32") return;
+    if (typeof process.getuid === "function" && process.getuid() === 0) return;
+
+    const skillDir = join(projectDir, ".agents/skills/locked");
+    mkdirSync(skillDir, { recursive: true });
+    const skillMd = join(skillDir, "SKILL.md");
+    writeFileSync(skillMd, "---\nname: locked\ndescription: ok\n---\n");
+    chmodSync(skillMd, 0o000);
+    try {
+      expect(() => readInstalledOwnership("locked", projectDir)).toThrow();
+    } finally {
+      chmodSync(skillMd, 0o644);
+    }
   });
 });

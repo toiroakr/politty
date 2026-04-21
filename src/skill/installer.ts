@@ -138,12 +138,15 @@ export function uninstallSkill(name: string, cwd: string = process.cwd()): void 
 export function readInstalledOwnership(name: string, cwd: string = process.cwd()): string | null {
   assertSafeName(name);
   const path = resolve(cwd, AGENTS_SKILLS_DIR, name, "SKILL.md");
-  if (!existsSync(path)) return null;
   let content: string;
   try {
     content = readFileSync(path, "utf-8");
-  } catch {
-    return null;
+  } catch (err) {
+    // Treat "file absent" as "no ownership"; surface anything else (e.g.
+    // EACCES) so a permission bug doesn't look like an unstamped skill and
+    // get silently clobbered by `remove`/`sync`.
+    if (isNodeError(err) && err.code === "ENOENT") return null;
+    throw err;
   }
   const { data } = parseFrontmatter(content);
   const metadata = (data as { metadata?: unknown }).metadata;
@@ -159,11 +162,17 @@ export function readInstalledOwnership(name: string, cwd: string = process.cwd()
  */
 function stampOwnership(stagingDir: string, ownership: string): void {
   const skillMdPath = join(stagingDir, "SKILL.md");
-  if (!existsSync(skillMdPath)) return;
-
+  // Caller (installSkill) already asserted SKILL.md exists after staging.
   const content = readFileSync(skillMdPath, "utf-8");
   const match = content.match(/^(\uFEFF?---[ \t]*\r?\n)([\s\S]*?)(\r?\n---[ \t]*(?:\r?\n|$))/);
-  if (!match) return;
+  if (!match) {
+    // Scanner only accepts skills whose frontmatter parses, so an absent
+    // fence here means the source tree was tampered with between scan and
+    // install. Fail loud rather than ship an unstamped skill.
+    throw new Error(
+      `Skill SKILL.md at ${skillMdPath} has no YAML frontmatter; refusing to install without an ownership stamp`,
+    );
+  }
 
   const [, openFence, yamlBlock, closeFence] = match as unknown as [string, string, string, string];
   const body = content.slice(match[0].length);
@@ -258,7 +267,15 @@ function parseInlineMap(source: string): Record<string, string> {
   if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return {};
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-    if (typeof v === "string") out[k] = v;
+    // Spec restricts metadata values to strings. If source frontmatter
+    // carries a non-string value, refuse rather than silently drop it — the
+    // scanner should have rejected it, but be defensive.
+    if (typeof v !== "string") {
+      throw new Error(
+        `metadata["${k}"] is not a string (got ${typeof v}); SKILL.md metadata values must be strings`,
+      );
+    }
+    out[k] = v;
   }
   return out;
 }
@@ -270,6 +287,17 @@ function escapeRegex(s: string): string {
 /**
  * Create symlinks (or copy fallback) from each agent-specific directory
  * into the canonical skill directory.
+ *
+ * When re-pointing an existing agent-specific link, the old entry is
+ * removed before the new `symlink`/`cpSync` runs, so the agent path is
+ * briefly absent during the swap. This window is per agent-directory and
+ * independent of the canonical `rename`.
+ *
+ * The `cpSync` fallback (Windows without Developer Mode, or other
+ * `symlink` failures) produces a real copy rather than a link. In that
+ * configuration subsequent `skills sync` runs must re-copy the canonical
+ * content into the agent directory — plain edits to `.agents/skills/`
+ * will not propagate by themselves.
  */
 function populateAgentDirs(cwd: string, name: string, canonicalDir: string): void {
   for (const target of SYMLINK_TARGETS) {
@@ -304,4 +332,8 @@ function isSymlink(path: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isNodeError(err: unknown): err is NodeJS.ErrnoException {
+  return err instanceof Error && typeof (err as NodeJS.ErrnoException).code === "string";
 }
