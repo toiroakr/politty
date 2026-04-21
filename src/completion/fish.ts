@@ -9,6 +9,7 @@ import type { AnyCommand } from "../types.js";
 import {
   collectRouteEntries,
   extractCompletionData,
+  getSubNamesWithAliases,
   getVisibleSubs,
   sanitize,
 } from "./extractor.js";
@@ -199,9 +200,9 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`        return`);
   lines.push(`    end`);
 
-  // 4. Subcommand or positional completion
+  // 4. Subcommand or positional completion (includes aliases)
   if (visibleSubs.length > 0) {
-    for (const s of visibleSubs) {
+    for (const s of getSubNamesWithAliases(sub.subcommands)) {
       const desc = escapeDesc(s.description ?? "");
       lines.push(`    echo "${s.name}\t${desc}"`);
     }
@@ -232,6 +233,13 @@ function optTakesValueCases(sub: CompletableSubcommand, parentPath: string): str
   for (const child of getVisibleSubs(sub.subcommands)) {
     const childPath = parentPath ? `${parentPath}:${child.name}` : child.name;
     lines.push(...optTakesValueCases(child, childPath));
+    // Also generate opt-takes-value cases under alias paths
+    if (child.aliases) {
+      for (const alias of child.aliases) {
+        const aliasPath = parentPath ? `${parentPath}:${alias}` : alias;
+        lines.push(...optTakesValueCases(child, aliasPath));
+      }
+    }
   }
   return lines;
 }
@@ -313,7 +321,7 @@ export function generateFishCompletion(
   lines.push(...availableOptionLines(root.options, fn));
   if (visibleSubs.length > 0) {
     lines.push(`    else`);
-    for (const s of visibleSubs) {
+    for (const s of getSubNamesWithAliases(root.subcommands)) {
       const desc = escapeDesc(s.description ?? "");
       lines.push(`        echo "${s.name}\t${desc}"`);
     }

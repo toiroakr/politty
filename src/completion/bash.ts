@@ -9,6 +9,7 @@ import type { AnyCommand } from "../types.js";
 import {
   collectRouteEntries,
   extractCompletionData,
+  getSubNamesWithAliases,
   getVisibleSubs,
   isSubcmdCaseLines,
   optTakesValueEntries,
@@ -254,7 +255,9 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
 
   // 4. Subcommand or positional completion
   if (visibleSubs.length > 0) {
-    const subNames = visibleSubs.map((s) => s.name).join(" ");
+    const subNames = getSubNamesWithAliases(sub.subcommands)
+      .map((s) => s.name)
+      .join(" ");
     lines.push(`    COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
     lines.push(`    compopt +o default 2>/dev/null`);
   } else if (sub.positionals.length > 0) {
@@ -345,7 +348,9 @@ export function generateBashCompletion(
   lines.push(`        compopt +o default 2>/dev/null`);
   if (visibleSubs.length > 0) {
     lines.push(`    else`);
-    const subNames = visibleSubs.map((s) => s.name).join(" ");
+    const subNames = getSubNamesWithAliases(root.subcommands)
+      .map((s) => s.name)
+      .join(" ");
     lines.push(`        COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
     lines.push(`        compopt +o default 2>/dev/null`);
   } else if (root.positionals.length > 0) {

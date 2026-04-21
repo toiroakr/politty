@@ -96,6 +96,8 @@ export interface CompletableSubcommand {
   name: string;
   /** Subcommand description */
   description?: string | undefined;
+  /** Alternative names (aliases) for this subcommand */
+  aliases?: string[] | undefined;
   /** Nested subcommands */
   subcommands: CompletableSubcommand[];
   /** Options for this subcommand */

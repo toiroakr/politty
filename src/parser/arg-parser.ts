@@ -1,4 +1,5 @@
 import { extractFields, getAllAliases, type ExtractedFields } from "../core/schema-extractor.js";
+import { listSubCommandNamesWithAliases } from "../executor/subcommand-router.js";
 import type { AnyCommand } from "../types.js";
 import {
   validateCaseVariantCollisions,
@@ -67,7 +68,8 @@ export function parseArgs(
 ): ParseResult {
   // Check for subcommand FIRST (before help/version)
   // This ensures `cmd subcmd --help` shows subcmd's help, not cmd's help
-  const subCommandNames = command.subCommands ? Object.keys(command.subCommands) : [];
+  const subCommandNameSet = listSubCommandNamesWithAliases(command);
+  const subCommandNames = [...subCommandNameSet];
   const hasSubCommands = subCommandNames.length > 0;
 
   if (hasSubCommands && argv.length > 0) {
@@ -97,7 +99,7 @@ export function parseArgs(
     } else {
       const firstArg = argv[0];
       // Only treat as subcommand if it doesn't start with '-' (not a flag)
-      if (firstArg && !firstArg.startsWith("-") && subCommandNames.includes(firstArg)) {
+      if (firstArg && !firstArg.startsWith("-") && subCommandNameSet.has(firstArg)) {
         return {
           helpRequested: false,
           helpAllRequested: false,

@@ -3,6 +3,7 @@
  */
 
 import { extractFields, toCamelCase } from "../../core/schema-extractor.js";
+import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import type { AnyCommand } from "../../types.js";
 import type { CompletableOption, CompletablePositional } from "../types.js";
@@ -93,30 +94,46 @@ function extractPositionalsForContext(command: AnyCommand): CompletablePositiona
 }
 
 /**
- * Get subcommand names from a command
+ * Get subcommand names from a command (including aliases)
  */
 function getSubcommandNames(command: AnyCommand): string[] {
   if (!command.subCommands) {
     return [];
   }
-  // Filter out internal subcommands (e.g., __complete)
-  return Object.keys(command.subCommands).filter((name) => !name.startsWith("__"));
+  const names: string[] = [];
+  for (const [name, subCmd] of Object.entries(command.subCommands)) {
+    // Filter out internal subcommands (e.g., __complete)
+    if (name.startsWith("__")) continue;
+    names.push(name);
+    const meta = resolveSubCommandMeta(subCmd);
+    if (meta?.aliases) {
+      names.push(...meta.aliases);
+    }
+  }
+  return names;
 }
 
 /**
- * Resolve subcommand by name
+ * Resolve subcommand by name (including alias lookup)
  */
 function resolveSubcommand(command: AnyCommand, name: string): AnyCommand | null {
   if (!command.subCommands) {
     return null;
   }
 
+  // Direct lookup
   const sub = command.subCommands[name];
-  if (!sub) {
-    return null;
+  if (sub) {
+    return resolveSubCommandMeta(sub);
   }
 
-  return resolveSubCommandMeta(sub);
+  // Alias lookup
+  const canonical = resolveSubCommandAlias(command, name);
+  if (canonical) {
+    return resolveSubCommandMeta(command.subCommands[canonical]!);
+  }
+
+  return null;
 }
 
 /**

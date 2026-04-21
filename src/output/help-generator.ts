@@ -42,6 +42,8 @@ export interface CommandContext {
   rootVersion?: string | undefined;
   /** Extracted fields from global args schema */
   globalExtracted?: ExtractedFields | undefined;
+  /** When the command was accessed via an alias, the canonical command name */
+  aliasFor?: string | undefined;
 }
 
 /**
@@ -581,9 +583,12 @@ function renderSubcommandsWithOptions(
     const cmd = resolveSubCommandMeta(subCmd);
     const fullPath = parentPath ? `${parentPath} ${name}` : name;
     const desc = cmd?.description ?? "";
+    const aliases = cmd?.aliases;
+    const displayName =
+      aliases && aliases.length > 0 ? `${fullPath}, ${aliases.join(", ")}` : fullPath;
 
     // Add subcommand name with description (all subcommands at same indent level)
-    lines.push(formatOption(styles.command(fullPath), desc, baseIndent));
+    lines.push(formatOption(styles.command(displayName), desc, baseIndent));
 
     if (cmd) {
       // Add subcommand options (one level deeper than the subcommand itself)
@@ -638,9 +643,21 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
     sections.push(header);
   }
 
+  // Alias info (when accessed via alias, show "Alias for <canonical>")
+  if (context?.aliasFor) {
+    sections.push(styles.dim(`Alias for ${styles.commandName(context.aliasFor)}`));
+  }
+
   // Description
   if (command.description) {
     sections.push(command.description);
+  }
+
+  // Aliases (when the command defines aliases and was NOT accessed via alias)
+  if (!context?.aliasFor && command.aliases && command.aliases.length > 0) {
+    sections.push(
+      `${styles.sectionHeader("Aliases:")} ${command.aliases.map((a) => styles.command(a)).join(", ")}`,
+    );
   }
 
   // Usage
@@ -680,9 +697,12 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
       for (const [name, subCmd] of Object.entries(visibleSubCommands)) {
         const cmd = resolveSubCommandMeta(subCmd);
         const desc = cmd?.description ?? "";
-        // Include parent path in subcommand name
+        // Include parent path in subcommand name, plus aliases
         const fullName = currentPath ? `${currentPath} ${name}` : name;
-        subLines.push(formatOption(styles.command(fullName), desc));
+        const aliases = cmd?.aliases;
+        const displayName =
+          aliases && aliases.length > 0 ? `${fullName}, ${aliases.join(", ")}` : fullName;
+        subLines.push(formatOption(styles.command(displayName), desc));
       }
       sections.push(`${styles.sectionHeader("Commands:")}\n${subLines.join("\n")}`);
     }

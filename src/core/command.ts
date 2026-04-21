@@ -41,6 +41,7 @@ type ResolvedArgs<TArgsSchema, TGlobalArgs> = MergedArgs<InferArgs<TArgsSchema>,
 interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResult, TGlobalArgs> {
   name: string;
   description?: string;
+  aliases?: string[];
   args?: TArgsSchema;
   subCommands?: SubCommandsRecord;
   setup?: (context: { args: ResolvedArgs<TArgsSchema, TGlobalArgs> }) => void | Promise<void>;
@@ -156,6 +157,7 @@ export function defineCommand<
   return {
     name: config.name,
     description: config.description,
+    aliases: config.aliases,
     args: config.args as TArgsSchema,
     subCommands: config.subCommands,
     setup: config.setup,

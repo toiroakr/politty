@@ -5,6 +5,7 @@ import {
   type ExtractedFields,
 } from "../core/schema-extractor.js";
 import { resolveLazyCommand } from "../executor/subcommand-router.js";
+import { isLazyCommand } from "../lazy.js";
 import type { AnyCommand } from "../types.js";
 import {
   CaseVariantCollisionError,
@@ -33,6 +34,7 @@ export interface CommandValidationError {
   type:
     | "duplicate_field"
     | "duplicate_alias"
+    | "invalid_alias"
     | "positional_config"
     | "reserved_alias"
     | "case_variant_collision";
@@ -401,6 +403,84 @@ function collectSchemaErrors(
 }
 
 /**
+ * Check for alias conflicts within subcommands
+ * - Aliases must not conflict with subcommand names
+ * - Aliases must not conflict with other aliases
+ */
+function checkSubCommandAliasConflicts(
+  command: AnyCommand,
+  commandPath: string[],
+): CommandValidationError[] {
+  const errors: CommandValidationError[] = [];
+  if (!command.subCommands) return errors;
+
+  // Build a map of all registered names (subcommand names + aliases)
+  const nameToOwner = new Map<string, string>();
+  for (const [name] of Object.entries(command.subCommands)) {
+    nameToOwner.set(name, name);
+  }
+
+  for (const [name, subCmdValue] of Object.entries(command.subCommands)) {
+    const resolved = isLazyCommand(subCmdValue)
+      ? subCmdValue.meta
+      : typeof subCmdValue !== "function"
+        ? (subCmdValue as AnyCommand)
+        : null;
+    if (!resolved?.aliases) continue;
+
+    const subCommandPath = [...commandPath, name];
+    for (const alias of resolved.aliases) {
+      // Validate alias format: must be a safe token (alphanumeric, hyphens, underscores).
+      // Rejects empty strings, leading dashes, whitespace, colons (used as path
+      // separator in completion scripts), and shell metacharacters ($, `, ", ', \).
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(alias)) {
+        errors.push({
+          commandPath: subCommandPath,
+          type: "invalid_alias",
+          message: `Alias "${alias}" is invalid. Aliases must start with an alphanumeric character and contain only alphanumeric characters, hyphens, or underscores.`,
+          field: name,
+        });
+        continue;
+      }
+
+      // Check if alias equals its own canonical name
+      if (alias === name) {
+        errors.push({
+          commandPath: subCommandPath,
+          type: "duplicate_alias",
+          message: `Alias "${alias}" conflicts with its own name.`,
+          field: name,
+        });
+        continue;
+      }
+
+      const existing = nameToOwner.get(alias);
+      if (existing) {
+        if (existing === name) {
+          errors.push({
+            commandPath: subCommandPath,
+            type: "duplicate_alias",
+            message: `Alias "${alias}" is duplicated within the alias list.`,
+            field: name,
+          });
+        } else {
+          errors.push({
+            commandPath: subCommandPath,
+            type: "duplicate_alias",
+            message: `Alias "${alias}" conflicts with existing subcommand or alias "${existing}".`,
+            field: name,
+          });
+        }
+      } else {
+        nameToOwner.set(alias, name);
+      }
+    }
+  }
+
+  return errors;
+}
+
+/**
  * Validate a command and all its subcommands recursively
  *
  * This function collects all validation errors without throwing,
@@ -431,6 +511,9 @@ export async function validateCommand(
     const extracted = extractFields(command.args);
     errors.push(...collectSchemaErrors(extracted, hasSubCommands, commandPath));
   }
+
+  // Validate subcommand alias conflicts
+  errors.push(...checkSubCommandAliasConflicts(command, commandPath));
 
   // Recursively validate subcommands
   if (command.subCommands) {
