@@ -194,8 +194,11 @@ function upsertMetadataKey(yaml: string, key: string, value: string): string {
 
   // Flow-style inline metadata: reparse the value, merge our key, and
   // rewrite the whole section in block form. A line-based splice would
-  // produce invalid YAML here.
-  const inlineMatch = lines[metaIdx]!.match(/^metadata[ \t]*:[ \t]*(\S.*)$/);
+  // produce invalid YAML here. We only take this branch when the value
+  // clearly starts a flow map (`{ ... }`) — trailing comments or other
+  // scalar decorations (e.g. `metadata: # note`) must fall through to the
+  // block-style path so we don't rewrite a legal block into an empty map.
+  const inlineMatch = lines[metaIdx]!.match(/^metadata[ \t]*:[ \t]*(\{.*)$/);
   if (inlineMatch) {
     const existing = parseInlineMap(inlineMatch[1]!);
     existing[key] = value;

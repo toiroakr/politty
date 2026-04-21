@@ -114,6 +114,24 @@ describe("installSkill", () => {
     expect(readInstalledOwnership("commit", projectDir)).toBe(OWNERSHIP);
   });
 
+  it("should not misread a block-style metadata line with a trailing comment as flow style", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    writeFileSync(
+      join(skill.sourcePath, "SKILL.md"),
+      `---\nname: commit\ndescription: Block style with comment\nmetadata: # inline note\n  owner: alice\n---\nbody\n`,
+    );
+
+    installSkill(skill, OWNERSHIP, projectDir);
+
+    expect(readInstalledOwnership("commit", projectDir)).toBe(OWNERSHIP);
+    const content = readFileSync(join(projectDir, ".agents/skills/commit/SKILL.md"), "utf-8");
+    // The pre-existing block child must survive. If we had mistaken the
+    // comment for a flow map, parseInlineMap would have returned `{}` and
+    // the rebuild would have dropped `owner: alice`.
+    expect(content).toContain("owner: alice");
+    expect(content).toMatch(/politty-cli: /);
+  });
+
   it("should preserve existing child indent when inserting into a 4-space metadata block", () => {
     const skill = createSkillFixture(sourceDir, "commit");
     writeFileSync(
