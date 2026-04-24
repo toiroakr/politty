@@ -1208,7 +1208,7 @@ const skillFrontmatterSchema: z.ZodObject<{
 
 ### `OWNERSHIP_METADATA_KEY`
 
-String constant `"politty-cli"`. The metadata key under which the `{package}:{cliName}` ownership stamp is written.
+String constant `"politty-cli"`. The metadata key under which the `{package}:{cliName}` ownership stamp is declared in each source SKILL.md (politty itself never writes this field).
 
 ```typescript
 const OWNERSHIP_METADATA_KEY: "politty-cli";

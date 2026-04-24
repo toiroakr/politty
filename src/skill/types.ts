@@ -86,10 +86,12 @@ export interface SkillCommandOptions {
    * npm package name that owns this CLI's bundled skills.
    *
    * Each source `SKILL.md` must pre-declare
-   * `metadata["politty-cli"]: "{package}:{cliName}"` — `installSkill`
-   * refuses to install a skill whose stamp does not match the expected
-   * value, so two tools managing skills in the same project cannot
-   * accidentally clobber each other.
+   * `metadata["politty-cli"]: "{package}:{cliName}"`. The `skills add` and
+   * `skills sync` subcommands verify this stamp before installing — two
+   * tools managing skills in the same project cannot accidentally clobber
+   * each other. `installSkill` itself performs only the symlink operation;
+   * programmatic callers that bypass `withSkillCommand` are responsible for
+   * validating ownership up front.
    */
   package: string;
 }
