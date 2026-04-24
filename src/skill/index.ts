@@ -98,7 +98,7 @@ export function withSkillCommand<T extends AnyCommand>(
   command: T,
   options: SkillCommandOptions,
 ): T {
-  if (command.subCommands && "skills" in command.subCommands) {
+  if (command.subCommands && Object.hasOwn(command.subCommands, "skills")) {
     throw new Error(
       `withSkillCommand: command "${command.name}" already defines a "skills" subcommand.`,
     );
