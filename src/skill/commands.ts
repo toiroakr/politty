@@ -80,9 +80,8 @@ export function createSkillSyncCommand(options: SkillCommandOptions, cliName: st
         }
       }
 
-      // Reinstall in-place. `installSkill` stages into a temp sibling and
-      // `rename`s the staged copy over the canonical directory, so a
-      // remove-all-first pass is not needed. `addSkill`'s ownership guard
+      // Reinstall in-place. `installSkill` is a pure symlink operation so
+      // a remove-all-first pass is not needed. `addSkill`'s ownership guard
       // still refuses to clobber skills owned by another CLI.
       for (const skill of skills) {
         addSkill(skill, stamp);
@@ -228,21 +227,32 @@ function findOrThrow(skills: DiscoveredSkill[], name: string): DiscoveredSkill {
   return skill;
 }
 
-function addSkill(skill: DiscoveredSkill, ownership: string): void {
+function addSkill(skill: DiscoveredSkill, expectedOwnership: string): void {
   const name = skill.frontmatter.name;
-  // Refuse to clobber a skill owned by another CLI. installSkill() rewrites
-  // the canonical directory unconditionally, so without this guard `add`
-  // would silently overwrite a skill some other tool manages (and steal
-  // ownership by stamping our `{package}:{cli}` over theirs).
+  // Validate the source skill's authored stamp before install. This is the
+  // scanner-level correctness check that a skill package's SKILL.md
+  // declares the expected `{package}:{cli}` ownership; a mismatch points
+  // at a packaging bug, not a malicious actor.
+  const sourceOwnership = skill.frontmatter.metadata?.[OWNERSHIP_METADATA_KEY] ?? null;
+  if (sourceOwnership !== expectedOwnership) {
+    throw new Error(
+      `Refusing to install "${name}": source SKILL.md declares ` +
+        `metadata.${OWNERSHIP_METADATA_KEY}=${JSON.stringify(sourceOwnership)}, ` +
+        `expected ${JSON.stringify(expectedOwnership)}.`,
+    );
+  }
+  // Refuse to clobber a skill canonical that another CLI owns. Because
+  // `.agents/skills/<name>` is a symlink to the source package after
+  // install, this effectively checks the other CLI's source stamp.
   const actual = readInstalledOwnership(name);
-  if (actual !== null && actual !== ownership) {
+  if (actual !== null && actual !== expectedOwnership) {
     throw new Error(
       `Refusing to install "${name}": owned by ${JSON.stringify(actual)}, ` +
-        `not ${JSON.stringify(ownership)}. ` +
+        `not ${JSON.stringify(expectedOwnership)}. ` +
         `Check metadata.${OWNERSHIP_METADATA_KEY} in .agents/skills/${name}/SKILL.md.`,
     );
   }
-  installSkill(skill, ownership);
+  installSkill(skill);
   logger.info(`${symbols.success} Installed ${name}`);
 }
 

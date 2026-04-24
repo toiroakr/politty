@@ -401,15 +401,17 @@ const cli = withSkillCommand(
 runMain(cli);
 ```
 
-`package` identifies who owns the installed skills. It is combined with the command name as `"{package}:{cliName}"` and stamped onto each installed SKILL.md under `metadata["politty-cli"]`, so `skills remove`/`sync` can refuse to delete skills that belong to another tool.
+`package` identifies who owns these skills. It is combined with the command name as `"{package}:{cliName}"` and must match the `metadata["politty-cli"]` stamp pre-declared in each source SKILL.md — `skills add`/`sync` refuse mismatches, and `remove`/`sync` refuse to delete skills belonging to another tool. Install is symlink-only (`.agents/skills/<name>` -> source, `.claude/skills/<name>` -> canonical); source updates propagate live without re-running `sync`.
 
-Skills are SKILL.md files with YAML frontmatter (spec-compliant: https://agentskills.io/specification):
+Skills are SKILL.md files with YAML frontmatter (spec-compliant: https://agentskills.io/specification). The `metadata["politty-cli"]` stamp is authored by the skill package:
 
 ```markdown
 ---
 name: commit
 description: Git commit message generation
 license: MIT
+metadata:
+  politty-cli: "@my-agent/skills:my-agent"
 ---
 
 # Instructions for the agent...

@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseFrontmatter, skillFrontmatterSchema } from "./frontmatter.js";
 import type { DiscoveredSkill, ScanError, ScanResult } from "./types.js";
@@ -16,8 +16,10 @@ const SKILL_MD = "SKILL.md";
  * single-skill source. The parent-directory-name match is not enforced in
  * that case because the caller chose an arbitrary path.
  *
- * Symlinked subdirectories are skipped: a dependency could otherwise point
- * the scan outside its own tree.
+ * Symlinks within the source tree are followed (symlinked skill dirs and
+ * symlinked SKILL.md files are both accepted). npm packages already
+ * execute arbitrary JS on install, so additional symlink-based isolation
+ * here would not raise the trust boundary in any realistic threat model.
  *
  * @example
  * ```
@@ -54,15 +56,17 @@ export function scanSourceDir(sourceDir: string): ScanResult {
       return { skills, errors };
     }
 
-    // Otherwise, scan immediate subdirectories.
+    // Otherwise, scan immediate subdirectories. `statSync` follows
+    // symlinks, so a symlinked skill dir is still recognised as a
+    // directory (unlike `isDirectory` on the raw Dirent).
     const entries = readdirSync(sourceDir, { withFileTypes: true });
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-
       const skillDir = join(sourceDir, entry.name);
-
-      // Skip symlinks so a dependency cannot plant a link escaping its tree.
-      if (isSymlink(skillDir)) continue;
+      try {
+        if (!statSync(skillDir).isDirectory()) continue;
+      } catch {
+        continue;
+      }
       if (!existsSync(join(skillDir, SKILL_MD))) continue;
 
       pushResult(tryParseSkillDir(skillDir, { enforceParentMatch: true }), skills, errors);
@@ -86,26 +90,6 @@ function tryParseSkillDir(
   opts: { enforceParentMatch: boolean },
 ): DiscoveredSkill | ScanError {
   const skillMdPath = join(dir, SKILL_MD);
-
-  // Require SKILL.md to be a regular file. A crafted npm package could
-  // otherwise make it a symlink to an attacker-chosen path (e.g. an
-  // environment file) and trick the scanner into parsing unexpected
-  // content as frontmatter.
-  try {
-    if (!lstatSync(skillMdPath).isFile()) {
-      return {
-        path: dir,
-        reason: "read-failed",
-        message: `${skillMdPath} is not a regular file (symlinks are rejected)`,
-      };
-    }
-  } catch (error) {
-    return {
-      path: dir,
-      reason: "read-failed",
-      message: `Failed to stat ${skillMdPath}: ${errorMessage(error)}`,
-    };
-  }
 
   let content: string;
   try {
@@ -157,14 +141,6 @@ function pushResult(
     skills.push(value);
   } else {
     errors.push(value);
-  }
-}
-
-function isSymlink(path: string): boolean {
-  try {
-    return lstatSync(path).isSymbolicLink();
-  } catch {
-    return false;
   }
 }
 

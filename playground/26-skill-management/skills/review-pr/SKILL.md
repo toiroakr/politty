@@ -1,6 +1,8 @@
 ---
 name: review-pr
 description: Review pull request changes and provide feedback
+metadata:
+  politty-cli: "playground-agent:my-agent"
 ---
 
 # Review PR Skill

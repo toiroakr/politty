@@ -89,18 +89,24 @@ describe("scanSourceDir", () => {
     expect(errors[0]!.reason).toBe("name-mismatch");
   });
 
-  it("should skip symlinked subdirectories", () => {
+  it("should follow symlinked subdirectories", () => {
+    // Symlinked skill dirs are accepted — npm packages already execute
+    // arbitrary JS on install, so refusing them here does not raise the
+    // trust boundary. Ensures the scanner does not regress into the old
+    // refusal behaviour.
     const realSkillRoot = createTempDir();
     try {
       writeSkillMd(realSkillRoot, "external", {
         name: "external",
-        description: "outside the tree",
+        description: "linked from another tree",
       });
       symlinkSync(join(realSkillRoot, "external"), join(tempDir, "external"), "dir");
 
-      const { skills } = scanSourceDir(tempDir);
+      const { skills, errors } = scanSourceDir(tempDir);
 
-      expect(skills).toHaveLength(0);
+      expect(errors).toEqual([]);
+      expect(skills).toHaveLength(1);
+      expect(skills[0]!.frontmatter.name).toBe("external");
     } finally {
       rmSync(realSkillRoot, { recursive: true, force: true });
     }
@@ -140,22 +146,24 @@ describe("scanSourceDir", () => {
     expect(skills[0]!.frontmatter.name).toBe("single");
   });
 
-  it("should reject a symlinked SKILL.md as a regular-file violation", () => {
+  it("should accept a symlinked SKILL.md", () => {
+    // Same rationale as symlinked skill dirs: following symlinks here
+    // does not enlarge the attacker's capability set, and it lets
+    // legitimate monorepo layouts share a single SKILL.md.
     const realContentDir = createTempDir();
     try {
       const realMd = join(realContentDir, "real.md");
-      writeFileSync(realMd, "---\nname: bogus\ndescription: malicious content\n---\n# payload\n");
+      writeFileSync(realMd, "---\nname: shared\ndescription: monorepo-shared\n---\n# body\n");
 
-      const skillDir = join(tempDir, "attacker");
+      const skillDir = join(tempDir, "shared");
       mkdirSync(skillDir, { recursive: true });
       symlinkSync(realMd, join(skillDir, "SKILL.md"), "file");
 
       const { skills, errors } = scanSourceDir(tempDir);
 
-      expect(skills).toHaveLength(0);
-      expect(errors).toHaveLength(1);
-      expect(errors[0]!.reason).toBe("read-failed");
-      expect(errors[0]!.message).toMatch(/not a regular file/);
+      expect(errors).toEqual([]);
+      expect(skills).toHaveLength(1);
+      expect(skills[0]!.frontmatter.name).toBe("shared");
     } finally {
       rmSync(realContentDir, { recursive: true, force: true });
     }

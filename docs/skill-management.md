@@ -8,8 +8,8 @@ SKILL.md files are validated against the [Agent Skills specification](https://ag
 
 politty's role is focused:
 
-1. **Install**: Scans your source directory for SKILL.md files, copies each to `.agents/skills/<name>/`, and creates symlinks from agent-specific directories (e.g. `.claude/skills/`). The copy is staged in a temporary sibling directory and `rename`d into place so partial copies can never be observed; replacing an existing installation removes the old directory first, so the skill path may be briefly absent during the swap. If `symlink` is unavailable (e.g. Windows without Developer Mode), `.claude/skills/<name>` is created as a real copy rather than a link — a subsequent `skills sync` is needed to propagate changes from `.agents/skills/` into those copies.
-2. **Stamp**: Each installed SKILL.md is stamped with `metadata["politty-cli"] = "{package}:{cliName}"` so politty can tell apart skills your CLI owns from skills another tool manages.
+1. **Install**: Scans your source directory for SKILL.md files and makes `.agents/skills/<name>` a symlink to each one (typically pointing into `node_modules/<pkg>/skills/<name>`). Agent-specific directories (e.g. `.claude/skills/<name>`) are symlinked to the canonical `.agents/skills/<name>` so a single `sync` replaces both links at once. Updates to the source propagate live without re-running `sync`. If `symlinkSync` fails (e.g. Windows without Developer Mode), install errors out — there is no copy fallback.
+2. **Validate ownership**: The source SKILL.md must pre-declare `metadata["politty-cli"] = "{package}:{cliName}"`. The installer refuses to install a skill whose stamp does not match the expected value, so two tools managing skills in the same project cannot accidentally clobber each other. The install is a pure symlink operation — politty never writes to your SKILL.md.
 3. **Remove safely**: `skills remove` and `skills sync` refuse to delete skills that don't carry your CLI's stamp, protecting projects that use multiple skill-providing tools.
 
 ## Setup
@@ -42,6 +42,8 @@ Each skill is a directory containing a SKILL.md with YAML frontmatter:
 name: commit
 description: Git commit message generation
 license: MIT
+metadata:
+  politty-cli: "@my-agent/skills:my-agent"
 ---
 
 # Commit Skill
@@ -59,7 +61,7 @@ Generate conventional commit messages from staged changes.
 - `description` is 1..1024 chars
 - Unknown top-level fields are preserved (round-tripped via `.passthrough()`)
 
-You do not need to write `metadata["politty-cli"]` yourself — the installer sets it at install time based on the `package` option you pass to `withSkillCommand`.
+**You must pre-declare `metadata["politty-cli"]: "{package}:{cliName}"` in the source SKILL.md.** The installer validates that the source stamp matches the `package` option you pass to `withSkillCommand` combined with your command's `name`, and refuses to install otherwise. Because the install is a symlink (not a copy), politty never writes to your SKILL.md — the stamp is authored by you at package time, not rewritten at install time.
 
 ### 3. Add withSkillCommand
 
@@ -88,7 +90,7 @@ runMain(cli);
 
 > **Note:** Use `import.meta.url` for path resolution so it works from both source (`src/`) and built (`dist/`) files.
 
-The `package` option identifies who owns the installed skills. It is combined with the command name as `"{package}:{cliName}"` and stamped onto each installed SKILL.md under `metadata["politty-cli"]`.
+The `package` option identifies who owns the installed skills. It is combined with the command name as `"{package}:{cliName}"` and compared against the source SKILL.md's `metadata["politty-cli"]` stamp — installation fails if they don't match.
 
 ## Commands
 
@@ -150,10 +152,12 @@ if (parsed) {
   console.log(parsed.body);
 }
 
-// Install one explicitly; you must supply the ownership stamp
-installSkill(skills[0], "@my-agent/skills:my-agent");
+// Install one explicitly. The source SKILL.md must already declare
+// metadata["politty-cli"]; installSkill symlinks it into place verbatim
+// and does not rewrite any file.
+installSkill(skills[0]);
 
-// Read the ownership stamp of an installed skill
+// Read the ownership stamp of an installed skill (via its symlink target)
 readInstalledOwnership("commit"); // "@my-agent/skills:my-agent" | null
 ```
 
@@ -170,6 +174,7 @@ description: Generate commit messages
 license: MIT
 compatibility: "claude-code>=1.0"
 metadata:
+  politty-cli: "@my-agent/skills:my-agent"
   owner: alice
 ---
 

@@ -1039,7 +1039,7 @@ type CommandValidationResult =
 
 ## Skill Management (`politty/skill`)
 
-Validates SKILL.md files against the [Agent Skills specification](https://agentskills.io/specification) and installs them into `.agents/skills/<name>/` with symlinks from agent-specific directories. The copy is staged in a sibling temp dir and `rename`d into place so partial copies are never observable; replacing an existing installation removes the old directory first, so the skill path may be briefly absent during the swap. Each install is stamped with `metadata["politty-cli"] = "{package}:{cliName}"` so `remove` / `sync` can refuse to delete skills owned by another tool.
+Validates SKILL.md files against the [Agent Skills specification](https://agentskills.io/specification) and installs them by making `.agents/skills/<name>` a symlink to the source (typically `node_modules/<pkg>/skills/<name>`). Agent-specific directories (e.g. `.claude/skills/<name>`) are then symlinked to the canonical `.agents/skills/<name>`, so source updates propagate live and a single `sync` replaces both links. Source SKILL.md must pre-declare `metadata["politty-cli"] = "{package}:{cliName}"`; `installSkill` refuses to install a skill whose stamp doesn't match, and `remove` / `sync` refuse to delete skills owned by another tool. The installer never writes to SKILL.md — if `symlinkSync` fails, it errors out rather than falling back to a copy.
 
 ### `withSkillCommand`
 
@@ -1060,10 +1060,10 @@ Throws if `command.subCommands.skills` already exists.
 
 **SkillCommandOptions:**
 
-| Property    | Type     | Description                                                                                                                                 |
-| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sourceDir` | `string` | Source directory containing SKILL.md files (symlinked subdirs are skipped)                                                                  |
-| `package`   | `string` | npm package name that owns these skills. Combined with the command name as `"{package}:{cliName}"` and stamped onto each installed SKILL.md |
+| Property    | Type     | Description                                                                                                                                                                                            |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `sourceDir` | `string` | Source directory containing SKILL.md files (symlinks within the source tree are followed)                                                                                                              |
+| `package`   | `string` | npm package name that owns these skills. Combined with the command name as `"{package}:{cliName}"` and compared against each source SKILL.md's `metadata["politty-cli"]` stamp; mismatches are refused |
 
 #### Generated Subcommands
 
@@ -1107,7 +1107,7 @@ Scans a directory for SKILL.md files.
 function scanSourceDir(sourceDir: string): ScanResult;
 ```
 
-If the directory itself contains a SKILL.md, it is treated as a single-skill source; the parent-dir name match is skipped in that case. Otherwise, each non-symlinked subdirectory with a SKILL.md is validated; the subdirectory name **must** equal the frontmatter `name`.
+If the directory itself contains a SKILL.md, it is treated as a single-skill source; the parent-dir name match is skipped in that case. Otherwise, each subdirectory with a SKILL.md is validated; the subdirectory name **must** equal the frontmatter `name`. Symlinked skill directories and symlinked SKILL.md files are followed (npm packages already execute arbitrary JS on install, so refusing symlinks here would not raise the trust boundary).
 
 **ScanResult:**
 
@@ -1137,13 +1137,13 @@ type ScanErrorReason = (typeof SCAN_ERROR_REASONS)[number];
 
 ### `installSkill`
 
-Installs a skill into `.agents/skills/<name>/` via a staged sibling directory that is `rename`d into place (partial copies never observable; replacing an existing install briefly removes the old directory before the rename), symlinks from agent-specific directories (e.g. `.claude/skills/`), and stamps `metadata["politty-cli"] = ownership` on the copied SKILL.md.
+Makes `.agents/skills/<name>` a symlink to `skill.sourcePath` (typically `node_modules/<pkg>/skills/<name>`) and populates agent-specific directories (e.g. `.claude/skills/<name>`) as symlinks to that canonical path. Never writes to the source SKILL.md; the ownership stamp is authored by the skill package, not rewritten at install time. Throws if `symlinkSync` fails — there is no copy fallback.
 
 ```typescript
-function installSkill(skill: DiscoveredSkill, ownership: string, cwd?: string): void;
+function installSkill(skill: DiscoveredSkill, cwd?: string): void;
 ```
 
-`ownership` is required; callers managing their own lifecycle typically compute it as `` `${packageName}:${cliName}` ``.
+Callers that wrap `installSkill` directly should validate `skill.frontmatter.metadata?.["politty-cli"]` against their expected `"{package}:{cliName}"` before calling; `withSkillCommand`'s `skills add` / `skills sync` do this automatically.
 
 ---
 
@@ -1159,7 +1159,7 @@ function uninstallSkill(name: string, cwd?: string): void;
 
 ### `readInstalledOwnership`
 
-Returns `metadata["politty-cli"]` from the installed SKILL.md, or `null` if the skill is not installed or the stamp is absent.
+Returns `metadata["politty-cli"]` from the installed SKILL.md (read through the symlink at `.agents/skills/<name>`, i.e. the source package's own authored stamp), or `null` if the skill is not installed, the canonical symlink is broken (source package uninstalled), or the stamp is absent/malformed. Other read errors (e.g. EACCES) are surfaced rather than swallowed, so `remove` / `sync` do not misinterpret a transient failure as "not installed" and clobber user data.
 
 ```typescript
 function readInstalledOwnership(name: string, cwd?: string): string | null;

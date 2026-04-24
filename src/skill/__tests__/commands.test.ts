@@ -39,13 +39,23 @@ function createTempDir(): string {
   return dir;
 }
 
-function writeSkillMd(dir: string, name: string, frontmatter: Record<string, string>): void {
+function writeSkillMd(
+  dir: string,
+  name: string,
+  frontmatter: Record<string, string>,
+  opts: { ownership?: string | null } = {},
+): void {
   const skillDir = join(dir, name);
   mkdirSync(skillDir, { recursive: true });
   const fm = Object.entries(frontmatter)
     .map(([k, v]) => `${k}: ${v.includes(" ") || v.startsWith("@") ? `"${v}"` : v}`)
     .join("\n");
-  writeFileSync(join(skillDir, "SKILL.md"), `---\n${fm}\n---\n# ${name} skill\n`);
+  // Default to stamping the authored ownership so addSkill's scanner-level
+  // stamp-match guard passes. Tests exercising mismatch explicitly pass
+  // `ownership: null` or a distinct value.
+  const ownership = "ownership" in opts ? opts.ownership : OWNERSHIP;
+  const meta = ownership === null ? "" : `\nmetadata:\n  politty-cli: ${JSON.stringify(ownership)}`;
+  writeFileSync(join(skillDir, "SKILL.md"), `---\n${fm}${meta}\n---\n# ${name} skill\n`);
 }
 
 describe("createSkillListCommand", () => {
@@ -119,13 +129,10 @@ describe("createSkillSyncCommand", () => {
     const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
     const installNames = mockedInstallSkill.mock.calls.map((c) => c[0].frontmatter.name);
 
-    // Skills still in source are replaced atomically via installSkill's
-    // rename-over, so no explicit uninstall is emitted for them.
+    // Skills still in source are replaced in place via installSkill's
+    // rm + symlink swap, so no explicit uninstall is emitted for them.
     expect(uninstallNames).toEqual([]);
     expect(installNames.sort()).toEqual(["commit", "review"]);
-    for (const call of mockedInstallSkill.mock.calls) {
-      expect(call[1]).toBe(OWNERSHIP);
-    }
   });
 
   it("should exclude specified skills from sync", () => {
@@ -271,9 +278,6 @@ describe("createSkillAddCommand", () => {
     command.run!({ name: undefined });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(2);
-    for (const call of mockedInstallSkill.mock.calls) {
-      expect(call[1]).toBe(OWNERSHIP);
-    }
   });
 
   it("should install specific skill by name", () => {
@@ -321,6 +325,35 @@ describe("createSkillAddCommand", () => {
     command.run!({ name: "commit" });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
+  });
+
+  it("should refuse to install when source SKILL.md has no politty-cli stamp", () => {
+    // Skill package forgot to declare ownership — packaging bug, surface early.
+    writeSkillMd(
+      tempDir,
+      "commit",
+      { name: "commit", description: "Commit skill" },
+      { ownership: null },
+    );
+
+    const command = createSkillAddCommand(opts(tempDir), CLI);
+
+    expect(() => command.run!({ name: "commit" })).toThrow(/source SKILL\.md declares/);
+    expect(mockedInstallSkill).not.toHaveBeenCalled();
+  });
+
+  it("should refuse to install when source SKILL.md's politty-cli stamp does not match", () => {
+    writeSkillMd(
+      tempDir,
+      "commit",
+      { name: "commit", description: "Commit skill" },
+      { ownership: "wrong-pkg:wrong-cli" },
+    );
+
+    const command = createSkillAddCommand(opts(tempDir), CLI);
+
+    expect(() => command.run!({ name: "commit" })).toThrow(/source SKILL\.md declares/);
+    expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 });
 

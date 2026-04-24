@@ -1,6 +1,8 @@
 ---
 name: commit
 description: Generate conventional commit messages from staged changes
+metadata:
+  politty-cli: "playground-agent:my-agent"
 ---
 
 # Commit Skill

@@ -71,8 +71,7 @@ export interface SkillCommandOptions {
    * Source directory containing SKILL.md files.
    *
    * Each subdirectory whose name matches its `SKILL.md` frontmatter `name`
-   * is treated as a skill. Symlinked subdirectories are ignored to prevent
-   * a malicious npm package from pointing the scan outside its own tree.
+   * is treated as a skill. Symlinks within the source tree are followed.
    *
    * @example
    * ```typescript
@@ -86,9 +85,11 @@ export interface SkillCommandOptions {
   /**
    * npm package name that owns this CLI's bundled skills.
    *
-   * Stamped onto installed skills under `metadata["politty-cli"]` as
-   * `"{packageName}:{cliName}"` so `skills remove` can tell apart skills
-   * this CLI installed from skills another tool manages.
+   * Each source `SKILL.md` must pre-declare
+   * `metadata["politty-cli"]: "{package}:{cliName}"` — `installSkill`
+   * refuses to install a skill whose stamp does not match the expected
+   * value, so two tools managing skills in the same project cannot
+   * accidentally clobber each other.
    */
   package: string;
 }

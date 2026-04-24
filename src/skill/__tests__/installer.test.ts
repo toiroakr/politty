@@ -1,16 +1,15 @@
 import {
-  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { installSkill, readInstalledOwnership, uninstallSkill } from "../installer.js";
 import type { DiscoveredSkill } from "../types.js";
@@ -26,13 +25,23 @@ function createTempDir(): string {
   return dir;
 }
 
-function createSkillFixture(dir: string, name: string): DiscoveredSkill {
+function createSkillFixture(
+  dir: string,
+  name: string,
+  ownership: string | null = OWNERSHIP,
+): DiscoveredSkill {
   const skillDir = join(dir, name);
   mkdirSync(skillDir, { recursive: true });
-  const raw = `---\nname: ${name}\ndescription: Test skill\n---\n# ${name}\n`;
+  const meta = ownership === null ? "" : `metadata:\n  politty-cli: ${JSON.stringify(ownership)}\n`;
+  const raw = `---\nname: ${name}\ndescription: Test skill\n${meta}---\n# ${name}\n`;
   writeFileSync(join(skillDir, "SKILL.md"), raw);
+  const frontmatter: DiscoveredSkill["frontmatter"] = {
+    name,
+    description: "Test skill",
+    ...(ownership === null ? {} : { metadata: { "politty-cli": ownership } }),
+  };
   return {
-    frontmatter: { name, description: "Test skill" },
+    frontmatter,
     sourcePath: skillDir,
     rawContent: raw,
   };
@@ -52,182 +61,85 @@ describe("installSkill", () => {
     rmSync(projectDir, { recursive: true, force: true });
   });
 
-  it("should copy skill to .agents/skills/<name>/", () => {
+  it("should create .agents/skills/<name> as a symlink to the source", () => {
     const skill = createSkillFixture(sourceDir, "commit");
 
-    installSkill(skill, OWNERSHIP, projectDir);
+    installSkill(skill, projectDir);
 
-    const canonicalPath = join(projectDir, ".agents/skills/commit/SKILL.md");
-    expect(existsSync(canonicalPath)).toBe(true);
-    expect(readFileSync(canonicalPath, "utf-8")).toContain("name: commit");
+    const canonicalPath = join(projectDir, ".agents/skills/commit");
+    expect(lstatSync(canonicalPath).isSymbolicLink()).toBe(true);
+    // Reading through the symlink yields the source SKILL.md verbatim.
+    expect(readFileSync(join(canonicalPath, "SKILL.md"), "utf-8")).toContain("name: commit");
   });
 
-  it("should stamp metadata.politty-cli on the installed SKILL.md", () => {
+  it("should not write back to the source SKILL.md", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    const before = readFileSync(join(skill.sourcePath, "SKILL.md"), "utf-8");
+
+    installSkill(skill, projectDir);
+
+    // The installer is a pure symlink operation; source content must be byte-identical.
+    expect(readFileSync(join(skill.sourcePath, "SKILL.md"), "utf-8")).toBe(before);
+  });
+
+  it("should expose the source's authored ownership stamp via readInstalledOwnership", () => {
     const skill = createSkillFixture(sourceDir, "commit");
 
-    installSkill(skill, OWNERSHIP, projectDir);
+    installSkill(skill, projectDir);
 
     expect(readInstalledOwnership("commit", projectDir)).toBe(OWNERSHIP);
   });
 
-  it("should overwrite an existing politty-cli stamp rather than duplicating it", () => {
-    const skill = createSkillFixture(sourceDir, "commit");
-    writeFileSync(
-      join(skill.sourcePath, "SKILL.md"),
-      `---\nname: commit\ndescription: Test skill\nmetadata:\n  politty-cli: "stale:other"\n---\nbody\n`,
-    );
-
-    installSkill(skill, OWNERSHIP, projectDir);
-
-    const content = readFileSync(join(projectDir, ".agents/skills/commit/SKILL.md"), "utf-8");
-    const matches = content.match(/politty-cli:/g);
-    expect(matches).not.toBeNull();
-    expect(matches!.length).toBe(1);
-    expect(readInstalledOwnership("commit", projectDir)).toBe(OWNERSHIP);
-  });
-
-  it("should stamp correctly when source SKILL.md uses flow-style metadata", () => {
-    const skill = createSkillFixture(sourceDir, "commit");
-    writeFileSync(
-      join(skill.sourcePath, "SKILL.md"),
-      `---\nname: commit\ndescription: Flow metadata\nmetadata: { owner: alice }\n---\nbody\n`,
-    );
-
-    installSkill(skill, OWNERSHIP, projectDir);
-
-    expect(readInstalledOwnership("commit", projectDir)).toBe(OWNERSHIP);
-    const content = readFileSync(join(projectDir, ".agents/skills/commit/SKILL.md"), "utf-8");
-    // Flow style must be rewritten to block style; the pre-existing key must survive.
-    expect(content).toContain("metadata:");
-    expect(content).toContain("owner:");
-    expect(content).toMatch(/politty-cli:/);
-  });
-
-  it("should handle empty flow-style metadata", () => {
-    const skill = createSkillFixture(sourceDir, "commit");
-    writeFileSync(
-      join(skill.sourcePath, "SKILL.md"),
-      `---\nname: commit\ndescription: Empty flow metadata\nmetadata: {}\n---\nbody\n`,
-    );
-
-    installSkill(skill, OWNERSHIP, projectDir);
-
-    expect(readInstalledOwnership("commit", projectDir)).toBe(OWNERSHIP);
-  });
-
-  it("should not misread a block-style metadata line with a trailing comment as flow style", () => {
-    const skill = createSkillFixture(sourceDir, "commit");
-    writeFileSync(
-      join(skill.sourcePath, "SKILL.md"),
-      `---\nname: commit\ndescription: Block style with comment\nmetadata: # inline note\n  owner: alice\n---\nbody\n`,
-    );
-
-    installSkill(skill, OWNERSHIP, projectDir);
-
-    expect(readInstalledOwnership("commit", projectDir)).toBe(OWNERSHIP);
-    const content = readFileSync(join(projectDir, ".agents/skills/commit/SKILL.md"), "utf-8");
-    // The pre-existing block child must survive. If we had mistaken the
-    // comment for a flow map, parseInlineMap would have returned `{}` and
-    // the rebuild would have dropped `owner: alice`.
-    expect(content).toContain("owner: alice");
-    expect(content).toMatch(/politty-cli: /);
-  });
-
-  it("should preserve existing child indent when inserting into a 4-space metadata block", () => {
-    const skill = createSkillFixture(sourceDir, "commit");
-    writeFileSync(
-      join(skill.sourcePath, "SKILL.md"),
-      `---\nname: commit\ndescription: 4-space indented metadata\nmetadata:\n    owner: alice\n---\nbody\n`,
-    );
-
-    installSkill(skill, OWNERSHIP, projectDir);
-
-    expect(readInstalledOwnership("commit", projectDir)).toBe(OWNERSHIP);
-    const content = readFileSync(join(projectDir, ".agents/skills/commit/SKILL.md"), "utf-8");
-    // Both the pre-existing child and the newly-inserted politty-cli line
-    // must share the same 4-space indent, or YAML will close the mapping
-    // at the shallower line and fail to parse.
-    expect(content).toMatch(/\n {4}owner: alice\n/);
-    expect(content).toMatch(/\n {4}politty-cli: /);
-  });
-
-  it("should populate .claude/skills/<name>/ via symlink on Unix, accept copy fallback on Windows", () => {
+  it("should populate .claude/skills/<name>/ as a symlink to the canonical path", () => {
     const skill = createSkillFixture(sourceDir, "commit");
 
-    installSkill(skill, OWNERSHIP, projectDir);
+    installSkill(skill, projectDir);
 
     const claudePath = join(projectDir, ".claude/skills/commit");
-    expect(existsSync(claudePath)).toBe(true);
-    expect(readFileSync(join(claudePath, "SKILL.md"), "utf-8")).toContain("name: commit");
     const stat = lstatSync(claudePath);
-    if (process.platform === "win32") {
-      // Windows without Developer Mode/admin cannot create symlinks — either
-      // outcome is acceptable. Permissive assertion here keeps the same
-      // branch covered but lets the production code fall back to cpSync.
-      expect(stat.isSymbolicLink() || stat.isDirectory()).toBe(true);
-    } else {
-      // On Unix, `symlinkSync` is expected to succeed. If this regresses
-      // into the cpSync fallback path, updates to the canonical directory
-      // would stop propagating to `.claude/skills/<name>` — catch it here.
-      expect(stat.isSymbolicLink()).toBe(true);
-    }
+    expect(stat.isSymbolicLink()).toBe(true);
+    // The relative link should point at the canonical directory, not the source.
+    const linkTarget = readlinkSync(claudePath);
+    expect(linkTarget).toBe(join("..", "..", ".agents/skills/commit"));
+    expect(readFileSync(join(claudePath, "SKILL.md"), "utf-8")).toContain("name: commit");
   });
 
-  it("should overwrite an existing installation atomically", () => {
+  it("should reflect source updates live via the symlink", () => {
     const skill = createSkillFixture(sourceDir, "commit");
+    installSkill(skill, projectDir);
 
-    installSkill(skill, OWNERSHIP, projectDir);
-
+    // Updating the source after install must be observable through the
+    // installed path without a re-run, since the install is a symlink.
     writeFileSync(
       join(skill.sourcePath, "SKILL.md"),
-      "---\nname: commit\ndescription: Updated\n---\n",
+      `---\nname: commit\ndescription: Updated\nmetadata:\n  politty-cli: "${OWNERSHIP}"\n---\nupdated body\n`,
     );
-    installSkill(skill, OWNERSHIP, projectDir);
 
     const content = readFileSync(join(projectDir, ".agents/skills/commit/SKILL.md"), "utf-8");
     expect(content).toContain("Updated");
+    expect(content).toContain("updated body");
   });
 
-  it("should remove stale files from previous installs", () => {
-    const skill = createSkillFixture(sourceDir, "commit");
-    writeFileSync(join(skill.sourcePath, "old-helper.md"), "# old");
+  it("should overwrite an existing installation", () => {
+    const firstSource = createTempDir();
+    const secondSource = createTempDir();
+    try {
+      const first = createSkillFixture(firstSource, "commit");
+      installSkill(first, projectDir);
 
-    installSkill(skill, OWNERSHIP, projectDir);
-    expect(existsSync(join(projectDir, ".agents/skills/commit/old-helper.md"))).toBe(true);
+      const second = createSkillFixture(secondSource, "commit");
+      writeFileSync(
+        join(second.sourcePath, "SKILL.md"),
+        `---\nname: commit\ndescription: Updated\nmetadata:\n  politty-cli: "${OWNERSHIP}"\n---\nv2\n`,
+      );
+      installSkill(second, projectDir);
 
-    rmSync(join(skill.sourcePath, "old-helper.md"));
-    installSkill(skill, OWNERSHIP, projectDir);
-
-    expect(existsSync(join(projectDir, ".agents/skills/commit/old-helper.md"))).toBe(false);
-  });
-
-  it("should not leave a staging directory behind on success", () => {
-    const skill = createSkillFixture(sourceDir, "commit");
-
-    installSkill(skill, OWNERSHIP, projectDir);
-
-    const parent = join(projectDir, ".agents/skills");
-    const leftovers = readdirSync(parent).filter((n) => n.startsWith(".install-"));
-    expect(leftovers).toEqual([]);
-  });
-
-  it("should refuse to install when SKILL.md is a symlink in the source tree", () => {
-    const skillDir = join(sourceDir, "attacker");
-    mkdirSync(skillDir, { recursive: true });
-    // Put real content somewhere outside the skill dir, then make SKILL.md
-    // a symlink pointing at it. The install-time symlink filter drops the
-    // link during cpSync, so the staged skill ends up without SKILL.md.
-    const realTarget = join(sourceDir, "decoy.md");
-    writeFileSync(realTarget, "---\nname: attacker\ndescription: evil\n---\nbody\n");
-    symlinkSync(realTarget, join(skillDir, "SKILL.md"), "file");
-
-    const skill: DiscoveredSkill = {
-      frontmatter: { name: "attacker", description: "evil" },
-      sourcePath: skillDir,
-      rawContent: "",
-    };
-
-    expect(() => installSkill(skill, OWNERSHIP, projectDir)).toThrow(/no SKILL\.md/);
+      const content = readFileSync(join(projectDir, ".agents/skills/commit/SKILL.md"), "utf-8");
+      expect(content).toContain("Updated");
+    } finally {
+      rmSync(firstSource, { recursive: true, force: true });
+      rmSync(secondSource, { recursive: true, force: true });
+    }
   });
 
   it("should reject unsafe skill names", () => {
@@ -237,28 +149,18 @@ describe("installSkill", () => {
       rawContent: "",
     };
 
-    expect(() => installSkill(skill, OWNERSHIP, projectDir)).toThrow(/Invalid skill name/);
+    expect(() => installSkill(skill, projectDir)).toThrow(/Invalid skill name/);
   });
 
-  it("should throw when source SKILL.md has no YAML frontmatter", () => {
+  it("should throw if symlinkSync fails (e.g. Windows without Developer Mode)", () => {
     const skill = createSkillFixture(sourceDir, "commit");
-    // Overwrite the fixture with a file that lacks a frontmatter fence.
-    // stampOwnership should refuse rather than install an unstamped skill.
-    writeFileSync(join(skill.sourcePath, "SKILL.md"), "# no frontmatter here\n");
+    // Point sourcePath at a non-existent location so realpathSync throws.
+    const broken: DiscoveredSkill = {
+      ...skill,
+      sourcePath: resolve(sourceDir, "does-not-exist"),
+    };
 
-    expect(() => installSkill(skill, OWNERSHIP, projectDir)).toThrow(/no YAML frontmatter/);
-  });
-
-  it("should throw when flow-style metadata carries a non-string value", () => {
-    const skill = createSkillFixture(sourceDir, "commit");
-    // Spec restricts metadata values to strings; installer must refuse
-    // rather than silently drop the non-string entry.
-    writeFileSync(
-      join(skill.sourcePath, "SKILL.md"),
-      `---\nname: commit\ndescription: bad metadata\nmetadata: { count: 3 }\n---\nbody\n`,
-    );
-
-    expect(() => installSkill(skill, OWNERSHIP, projectDir)).toThrow(/not a string/);
+    expect(() => installSkill(broken, projectDir)).toThrow();
   });
 });
 
@@ -278,12 +180,22 @@ describe("uninstallSkill", () => {
 
   it("should remove skill from all directories", () => {
     const skill = createSkillFixture(sourceDir, "commit");
-    installSkill(skill, OWNERSHIP, projectDir);
+    installSkill(skill, projectDir);
 
     uninstallSkill("commit", projectDir);
 
     expect(existsSync(join(projectDir, ".agents/skills/commit"))).toBe(false);
     expect(existsSync(join(projectDir, ".claude/skills/commit"))).toBe(false);
+  });
+
+  it("should not touch the source directory", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    installSkill(skill, projectDir);
+
+    uninstallSkill("commit", projectDir);
+
+    // Symlink-based uninstall must not reach through to delete the source.
+    expect(existsSync(join(skill.sourcePath, "SKILL.md"))).toBe(true);
   });
 
   it("should not throw when skill is not installed", () => {
@@ -292,13 +204,16 @@ describe("uninstallSkill", () => {
 });
 
 describe("readInstalledOwnership", () => {
+  let sourceDir: string;
   let projectDir: string;
 
   beforeEach(() => {
+    sourceDir = createTempDir();
     projectDir = createTempDir();
   });
 
   afterEach(() => {
+    rmSync(sourceDir, { recursive: true, force: true });
     rmSync(projectDir, { recursive: true, force: true });
   });
 
@@ -307,28 +222,56 @@ describe("readInstalledOwnership", () => {
   });
 
   it("should return null when metadata.politty-cli is absent", () => {
-    const skillDir = join(projectDir, ".agents/skills/noowner");
-    mkdirSync(skillDir, { recursive: true });
-    writeFileSync(join(skillDir, "SKILL.md"), "---\nname: noowner\ndescription: ok\n---\n");
+    const skill = createSkillFixture(sourceDir, "noowner", null);
+    installSkill(skill, projectDir);
 
     expect(readInstalledOwnership("noowner", projectDir)).toBeNull();
   });
 
-  it("should surface non-ENOENT read errors instead of returning null", () => {
-    // Skip on Windows (no reliable unreadable-file primitive) and when
-    // running as root (permission bits are ignored).
-    if (process.platform === "win32") return;
-    if (typeof process.getuid === "function" && process.getuid() === 0) return;
+  it("should return the stamp authored in the source SKILL.md", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    installSkill(skill, projectDir);
 
-    const skillDir = join(projectDir, ".agents/skills/locked");
+    expect(readInstalledOwnership("commit", projectDir)).toBe(OWNERSHIP);
+  });
+
+  it("should return null when the canonical symlink is broken", () => {
+    // Simulate the source directory being removed after install (e.g. an
+    // npm package was uninstalled but sync was not re-run). The broken
+    // link should read as "not installed", not as a hard failure.
+    const skill = createSkillFixture(sourceDir, "commit");
+    installSkill(skill, projectDir);
+    rmSync(skill.sourcePath, { recursive: true, force: true });
+
+    expect(readInstalledOwnership("commit", projectDir)).toBeNull();
+  });
+
+  it("should accept a symlinked source SKILL.md", () => {
+    // Previously the scanner refused source SKILL.md symlinks as an
+    // attack; the new model allows them because npm packages already
+    // execute arbitrary JS. Make sure the install + ownership read path
+    // does not regress into refusing them.
+    const skillDir = join(sourceDir, "linked");
     mkdirSync(skillDir, { recursive: true });
-    const skillMd = join(skillDir, "SKILL.md");
-    writeFileSync(skillMd, "---\nname: locked\ndescription: ok\n---\n");
-    chmodSync(skillMd, 0o000);
-    try {
-      expect(() => readInstalledOwnership("locked", projectDir)).toThrow();
-    } finally {
-      chmodSync(skillMd, 0o644);
-    }
+    const realTarget = join(sourceDir, "linked.md");
+    writeFileSync(
+      realTarget,
+      `---\nname: linked\ndescription: linked\nmetadata:\n  politty-cli: "${OWNERSHIP}"\n---\n`,
+    );
+    symlinkSync(realTarget, join(skillDir, "SKILL.md"), "file");
+
+    const skill: DiscoveredSkill = {
+      frontmatter: {
+        name: "linked",
+        description: "linked",
+        metadata: { "politty-cli": OWNERSHIP },
+      },
+      sourcePath: skillDir,
+      rawContent: "",
+    };
+
+    installSkill(skill, projectDir);
+
+    expect(readInstalledOwnership("linked", projectDir)).toBe(OWNERSHIP);
   });
 });
