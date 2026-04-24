@@ -4,7 +4,6 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
-  rmSync,
   symlinkSync,
   unlinkSync,
 } from "node:fs";
@@ -61,9 +60,7 @@ export function installSkill(skill: DiscoveredSkill, cwd: string = process.cwd()
   mkdirSync(canonicalParent, { recursive: true });
 
   const canonicalDir = join(canonicalParent, name);
-  if (existsSync(canonicalDir) || isSymlink(canonicalDir)) {
-    rmSync(canonicalDir, { recursive: true, force: true });
-  }
+  prepareSymlinkSlot(canonicalDir);
   // Use realpath of both endpoints so the relative link stays correct when
   // either the agent dir or the project path includes symlink components
   // (e.g. CLI invoked from a symlinked checkout).
@@ -93,9 +90,9 @@ export function uninstallSkill(name: string, cwd: string = process.cwd()): void 
 }
 
 /**
- * Unlink `path` iff it is a symlink. No-op when absent. A real directory
- * here means the path was installed outside this CLI; we refuse rather
- * than recursively rm'ing it.
+ * Unlink `path` iff it is a symlink. No-op when absent or when the path
+ * is a real file/directory. A real directory means the path was installed
+ * outside this CLI; we leave it alone rather than recursively rm'ing it.
  *
  * `unlinkSync` (not `rmSync`) is required for symlinks to directories —
  * `rmSync` without `recursive: true` errors "Path is a directory" on a
@@ -105,6 +102,34 @@ export function uninstallSkill(name: string, cwd: string = process.cwd()): void 
 function removeSymlinkOnly(path: string): void {
   if (!isSymlink(path)) return;
   unlinkSync(path);
+}
+
+/**
+ * Clear a slot so a new symlink can be created at `path`.
+ *
+ * - Absent → no-op.
+ * - Symlink (live or broken) → unlink.
+ * - Real file/directory → throw, refusing to clobber user data.
+ *
+ * Install flows call this before `symlinkSync` instead of the previous
+ * `rmSync(recursive)` so a legacy or manual install at `.agents/skills/<name>`
+ * or `.claude/skills/<name>` isn't silently recursively deleted.
+ */
+function prepareSymlinkSlot(path: string): void {
+  let stat;
+  try {
+    stat = lstatSync(path);
+  } catch {
+    return;
+  }
+  if (stat.isSymbolicLink()) {
+    unlinkSync(path);
+    return;
+  }
+  throw new Error(
+    `Refusing to replace non-symlink path at ${path}. ` +
+      `This looks like a legacy or manual install; remove or migrate it before retrying.`,
+  );
 }
 
 /**
@@ -172,9 +197,7 @@ function populateAgentDirs(cwd: string, name: string, canonicalDir: string): voi
     mkdirSync(targetParent, { recursive: true });
 
     const targetDir = join(targetParent, name);
-    if (existsSync(targetDir) || isSymlink(targetDir)) {
-      rmSync(targetDir, { recursive: true, force: true });
-    }
+    prepareSymlinkSlot(targetDir);
 
     // realpath the PARENT directories only. Resolving `canonicalDir` itself
     // would dereference it to the source path, baking the source location

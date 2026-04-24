@@ -157,6 +157,40 @@ describe("installSkill", () => {
     expect(() => installSkill(skill, projectDir)).toThrow(/Invalid skill name/);
   });
 
+  it("should refuse to replace a real canonical directory (legacy install)", () => {
+    // A real directory at .agents/skills/<name> means a prior legacy or
+    // manual install. The previous `rmSync(recursive)` would have blown
+    // it away; the install primitive must now throw instead so data
+    // isn't silently lost when a programmatic caller skips the
+    // addSkill wrapper's hasInstalledSkill guard.
+    const legacyDir = join(projectDir, ".agents/skills/commit");
+    mkdirSync(legacyDir, { recursive: true });
+    writeFileSync(join(legacyDir, "SKILL.md"), "---\nname: commit\ndescription: legacy\n---\n");
+
+    const skill = createSkillFixture(sourceDir, "commit");
+
+    expect(() => installSkill(skill, projectDir)).toThrow(/Refusing to replace non-symlink/);
+    // Legacy content must remain intact.
+    expect(readFileSync(join(legacyDir, "SKILL.md"), "utf-8")).toContain("legacy");
+  });
+
+  it("should refuse to replace a real .claude/skills/<name> directory", () => {
+    // populateAgentDirs also needs to refuse, not recursively delete, a
+    // real directory at .claude/skills/<name> that some other tool or
+    // the user created.
+    const legacyClaudeDir = join(projectDir, ".claude/skills/commit");
+    mkdirSync(legacyClaudeDir, { recursive: true });
+    writeFileSync(
+      join(legacyClaudeDir, "SKILL.md"),
+      "---\nname: commit\ndescription: legacy-claude\n---\n",
+    );
+
+    const skill = createSkillFixture(sourceDir, "commit");
+
+    expect(() => installSkill(skill, projectDir)).toThrow(/Refusing to replace non-symlink/);
+    expect(readFileSync(join(legacyClaudeDir, "SKILL.md"), "utf-8")).toContain("legacy-claude");
+  });
+
   it("should throw if symlinkSync fails (e.g. Windows without Developer Mode)", () => {
     const skill = createSkillFixture(sourceDir, "commit");
     // Point sourcePath at a non-existent location so realpathSync throws.
