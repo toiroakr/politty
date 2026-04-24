@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseFrontmatter, skillFrontmatterSchema } from "./frontmatter.js";
 import type { DiscoveredSkill, ScanError, ScanResult } from "./types.js";
@@ -50,8 +50,12 @@ export function scanSourceDir(sourceDir: string): ScanResult {
       return { skills, errors };
     }
 
-    // Single-skill source: the dir itself has a SKILL.md.
-    if (existsSync(join(sourceDir, SKILL_MD))) {
+    // Single-skill source: the dir itself has a SKILL.md. `skillMdPresent`
+    // uses `lstatSync` so a broken SKILL.md symlink is still recognised as
+    // present and surfaces as a `read-failed` scan error, not silently
+    // treated as "no SKILL.md here" (which would flip a single-skill source
+    // into an empty bundle).
+    if (skillMdPresent(join(sourceDir, SKILL_MD))) {
       pushResult(tryParseSkillDir(sourceDir, { enforceParentMatch: false }), skills, errors);
       return { skills, errors };
     }
@@ -67,7 +71,7 @@ export function scanSourceDir(sourceDir: string): ScanResult {
       } catch {
         continue;
       }
-      if (!existsSync(join(skillDir, SKILL_MD))) continue;
+      if (!skillMdPresent(join(skillDir, SKILL_MD))) continue;
 
       pushResult(tryParseSkillDir(skillDir, { enforceParentMatch: true }), skills, errors);
     }
@@ -146,4 +150,19 @@ function pushResult(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Presence check that treats a broken symlink as "present" so downstream
+ * parsing can report it as a `read-failed` scan error instead of silently
+ * skipping the candidate. `existsSync` follows symlinks and returns false
+ * for broken ones, which is the wrong default for scan reporting.
+ */
+function skillMdPresent(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
 }

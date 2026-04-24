@@ -180,4 +180,36 @@ describe("scanSourceDir", () => {
     expect(skills).toHaveLength(1);
     expect(skills[0]!.frontmatter.name).toBe("my-skill");
   });
+
+  it("should surface a read-failed error for a broken SKILL.md symlink in a skill dir", () => {
+    // existsSync() returns false for a broken symlink, so the pre-fix code
+    // would silently skip the directory. The scanner's contract is to
+    // collect issues into `errors`, not hide them.
+    const skillDir = join(tempDir, "dangling");
+    mkdirSync(skillDir, { recursive: true });
+    symlinkSync(join(tempDir, "does-not-exist.md"), join(skillDir, "SKILL.md"), "file");
+
+    const { skills, errors } = scanSourceDir(tempDir);
+
+    expect(skills).toHaveLength(0);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.reason).toBe("read-failed");
+    expect(errors[0]!.path).toBe(skillDir);
+  });
+
+  it("should surface a read-failed error for a broken SKILL.md symlink in a single-skill source", () => {
+    // Same underlying bug in the single-skill-source branch — a broken
+    // symlink must not silently flip the bundle to "empty", which would
+    // let `skills sync` remove orphans as if the source were empty.
+    const singleSkillDir = join(tempDir, "broken-single");
+    mkdirSync(singleSkillDir, { recursive: true });
+    symlinkSync(join(tempDir, "nothing-here.md"), join(singleSkillDir, "SKILL.md"), "file");
+
+    const { skills, errors } = scanSourceDir(singleSkillDir);
+
+    expect(skills).toHaveLength(0);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.reason).toBe("read-failed");
+    expect(errors[0]!.path).toBe(singleSkillDir);
+  });
 });
