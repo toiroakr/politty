@@ -1,6 +1,6 @@
 # Skill Management
 
-politty provides a `withSkillCommand` wrapper that adds agent skill management to your CLI. It handles source-directory scanning, spec validation, and file-based installation of SKILL.md-based skills.
+politty provides a `withSkillCommand` wrapper that adds agent skill management to your CLI. It handles source-directory scanning, spec validation, and symlink-or-copy installation of SKILL.md-based skills.
 
 SKILL.md files are validated against the [Agent Skills specification](https://agentskills.io/specification).
 
@@ -8,9 +8,13 @@ SKILL.md files are validated against the [Agent Skills specification](https://ag
 
 politty's role is focused:
 
-1. **Install**: Scans your source directory for SKILL.md files and makes `.agents/skills/<name>` a symlink to each one (typically pointing into `node_modules/<pkg>/skills/<name>`). Agent-specific directories (e.g. `.claude/skills/<name>`) are symlinked to the canonical `.agents/skills/<name>` so a single `sync` replaces both links at once. Updates to the source propagate live without re-running `sync`. If `symlinkSync` fails (e.g. Windows without Developer Mode), install errors out — there is no copy fallback.
-2. **Validate ownership**: The source SKILL.md must pre-declare `metadata["politty-cli"] = "{package}:{cliName}"`. The `skills add` and `skills sync` subcommands verify the stamp before installing, so two tools managing skills in the same project cannot accidentally clobber each other. The `installSkill` primitive itself is symlink-only and performs no stamp validation — programmatic callers that bypass `withSkillCommand` are responsible for that check. politty never writes to your SKILL.md either way.
-3. **Remove safely**: `skills remove` and `skills sync` refuse to delete skills that don't carry your CLI's stamp, protecting projects that use multiple skill-providing tools.
+1. **Install**: Scans your source directory for SKILL.md files and populates `.agents/skills/<name>` for each one (typically pointing into `node_modules/<pkg>/skills/<name>`). Agent-specific directories (e.g. `.claude/skills/<name>`) are populated from that canonical path so a single `sync` replaces both hops at once. The materialization strategy is controlled by `mode`:
+   - **`"auto"` (default)** — try a symlink first; fall back to a recursive copy when `symlinkSync` fails (e.g. Windows without Developer Mode, network filesystems without symlink support). Source updates propagate live for slots that ended up as symlinks.
+   - **`"symlink"`** — symlink only. Throws on filesystems without symlink support. Useful when the CLI author requires live-updating installs.
+   - **`"copy"`** — recursive copy only. Source updates require re-running `sync`, but works on every filesystem.
+
+2. **Validate ownership**: The source SKILL.md must pre-declare `metadata["politty-cli"] = "{package}:{cliName}"`. The `skills add` and `skills sync` subcommands verify the stamp before installing, so two tools managing skills in the same project cannot accidentally clobber each other. The `installSkill` primitive itself performs no stamp validation — programmatic callers that bypass `withSkillCommand` are responsible for that check. politty never writes to your SKILL.md.
+3. **Remove safely**: `skills remove` and `skills sync` refuse to delete skills that don't carry your CLI's stamp, protecting projects that use multiple skill-providing tools. Real directories (copy-mode installs) are only removed when their SKILL.md still carries the expected ownership stamp — legacy or foreign installs are left untouched.
 
 ## Setup
 
@@ -61,7 +65,7 @@ Generate conventional commit messages from staged changes.
 - `description` is 1..1024 chars
 - Unknown top-level fields are preserved (round-tripped via `.passthrough()`)
 
-**You must pre-declare `metadata["politty-cli"]: "{package}:{cliName}"` in the source SKILL.md.** The `skills add` and `skills sync` subcommands validate that the source stamp matches the `package` option you pass to `withSkillCommand` combined with your command's `name`, and refuse to install otherwise. (The `installSkill` primitive itself is symlink-only; callers using it programmatically are responsible for ownership validation.) Because the install is a symlink (not a copy), politty never writes to your SKILL.md — the stamp is authored by you at package time, not rewritten at install time.
+**You must pre-declare `metadata["politty-cli"]: "{package}:{cliName}"` in the source SKILL.md.** The `skills add` and `skills sync` subcommands validate that the source stamp matches the `package` option you pass to `withSkillCommand` combined with your command's `name`, and refuse to install otherwise. (The `installSkill` primitive itself performs no stamp validation; callers using it programmatically are responsible for that check.) politty never writes to your SKILL.md — the stamp is authored by you at package time, not rewritten at install time. Copy-mode installs still carry the stamp because the source SKILL.md is copied verbatim.
 
 ### 3. Add withSkillCommand
 
@@ -82,7 +86,15 @@ const cli = withSkillCommand(
       /* ... */
     },
   }),
-  { sourceDir, package: "@my-agent/skills" },
+  {
+    sourceDir,
+    package: "@my-agent/skills",
+    // mode: "auto" (default) — try symlink, fall back to copy on Windows
+    //   without Developer Mode or filesystems that don't support symlinks.
+    // mode: "symlink" — symlink only; throws on unsupported filesystems.
+    // mode: "copy" — recursive copy; works anywhere, source updates require
+    //   re-running `skills sync`.
+  },
 );
 
 runMain(cli);
@@ -162,6 +174,8 @@ if (parsed) {
 // metadata["politty-cli"]; installSkill symlinks it into place verbatim
 // and does not rewrite any file.
 installSkill(skills[0]);
+// Force a recursive copy instead of a symlink:
+installSkill(skills[0], undefined, { mode: "copy" });
 
 // Read the ownership stamp of an installed skill (via its symlink target)
 readInstalledOwnership("commit"); // "@my-agent/skills:my-agent" | null

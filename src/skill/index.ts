@@ -1,9 +1,9 @@
 /**
  * Skill management module for coding agent CLIs.
  *
- * Provides source-directory scanning and file-based installation of
- * SKILL.md-based agent skills, validated against the Agent Skills
- * specification (https://agentskills.io/specification).
+ * Provides source-directory scanning and symlink-based (or copy-based)
+ * installation of SKILL.md-based agent skills, validated against the
+ * Agent Skills specification (https://agentskills.io/specification).
  *
  * Provenance of politty-managed installs is recorded under
  * `metadata["politty-cli"]` as `"{packageName}:{cliName}"`, so
@@ -71,25 +71,36 @@ export { scanSourceDir } from "./scanner.js";
 export { SCAN_ERROR_REASONS } from "./types.js";
 export type {
   DiscoveredSkill,
+  InstallMode,
+  InstallSkillOptions,
   ScanError,
   ScanErrorReason,
   ScanResult,
   SkillCommandOptions,
   SkillFrontmatter,
+  UninstallSkillOptions,
 } from "./types.js";
 
 /**
  * Wrap a command with a `skills` subcommand for managing SKILL.md-based skills.
  *
  * Adds `skills sync`, `skills add`, `skills remove`, and `skills list`.
- * Install is symlink-only: `.agents/skills/<name>` becomes a symlink to
- * the source skill directory, and each agent-specific directory (e.g.
- * `.claude/skills/<name>`) is symlinked to the canonical `.agents/skills/<name>`
- * — politty never writes to `SKILL.md`. The ownership stamp
- * `metadata["politty-cli"] = "{package}:{cliName}"` must be authored by
- * the skill package itself; `add` and `sync` verify it before installing
- * and `remove` and `sync` consult it before deleting, so this CLI never
- * clobbers skills another tool installed.
+ * The install materialization is controlled by `options.mode`
+ * (see {@link SkillCommandOptions}):
+ *
+ * - `"auto"` (default) — attempt a symlink, fall back to recursive copy
+ *   when `symlinkSync` fails (e.g. Windows without Developer Mode).
+ * - `"symlink"` — symlink only. Source updates propagate live but install
+ *   errors out on filesystems without symlink support.
+ * - `"copy"` — recursive copy only. Source updates require re-running sync.
+ *
+ * Under all modes the canonical slot is `.agents/skills/<name>` and each
+ * agent-specific directory (e.g. `.claude/skills/<name>`) is populated
+ * from that canonical slot. politty never writes to `SKILL.md`. The
+ * ownership stamp `metadata["politty-cli"] = "{package}:{cliName}"` must
+ * be authored by the skill package itself; `add` and `sync` verify it
+ * before installing and `remove` / `sync` consult it before deleting, so
+ * this CLI never clobbers skills another tool installed.
  *
  * @throws if `command.subCommands.skills` already exists — silently
  *   overwriting it would hide a configuration bug.

@@ -64,6 +64,40 @@ export interface ScanResult {
 }
 
 /**
+ * How an install materializes skill files under `.agents/skills/<name>`
+ * and each `SYMLINK_TARGETS` entry.
+ *
+ * - `"auto"` (default): attempt a symlink; if `symlinkSync` fails (e.g.
+ *   Windows without Developer Mode, filesystems that do not support
+ *   symlinks), fall back to a recursive copy. Source updates propagate
+ *   live only for the paths that ended up as symlinks.
+ * - `"symlink"`: symlink only. Throws if `symlinkSync` fails — useful when
+ *   the CLI author requires live-updating installs and wants packaging
+ *   failures to surface, not silently become copies.
+ * - `"copy"`: recursive copy only. Source updates require re-running
+ *   `skills sync`. Works on any filesystem, trades liveness for portability.
+ */
+export type InstallMode = "auto" | "symlink" | "copy";
+
+/** Options for {@link installSkill}. */
+export interface InstallSkillOptions {
+  /** Install materialization strategy. Default: `"auto"`. */
+  mode?: InstallMode;
+}
+
+/** Options for {@link uninstallSkill}. */
+export interface UninstallSkillOptions {
+  /**
+   * If set, `uninstallSkill` also removes a real directory at the install
+   * path when its SKILL.md's `metadata["politty-cli"]` matches this stamp
+   * (a copy-mode install this CLI owns). Without this option, only
+   * symlinks are removed — real directories are assumed to be legacy or
+   * manual installs and left untouched.
+   */
+  expectedOwnership?: string;
+}
+
+/**
  * Options for `withSkillCommand`.
  */
 export interface SkillCommandOptions {
@@ -94,4 +128,13 @@ export interface SkillCommandOptions {
    * validating ownership up front.
    */
   package: string;
+
+  /**
+   * Default install mode for the `skills add` and `skills sync` commands.
+   * Defaults to `"auto"` — try symlink, fall back to copy on filesystems
+   * that do not support symlinks (e.g. Windows without Developer Mode).
+   * Set to `"symlink"` to require live-updating installs, or `"copy"` to
+   * always copy. See {@link InstallMode}.
+   */
+  mode?: InstallMode;
 }

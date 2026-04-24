@@ -1,15 +1,24 @@
 import {
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
+  statSync,
   symlinkSync,
   unlinkSync,
 } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
-import type { DiscoveredSkill } from "./types.js";
+import type {
+  DiscoveredSkill,
+  InstallMode,
+  InstallSkillOptions,
+  UninstallSkillOptions,
+} from "./types.js";
 
 /** Canonical directory where skill files are stored. */
 export const AGENTS_SKILLS_DIR = ".agents/skills";
@@ -40,82 +49,98 @@ function assertSafeName(name: string): void {
 }
 
 /**
- * Install a skill to the project's agent skill directories as a symlink.
+ * Install a skill to the project's agent skill directories.
  *
- * Canonical `.agents/skills/<name>` becomes a symlink to `skill.sourcePath`
- * (typically `node_modules/<pkg>/skills/<name>`), and each agent-specific
- * directory in `SYMLINK_TARGETS` gets a symlink to the canonical path.
- * Updates to the source propagate live — no staging, no copy, no
- * re-stamping. Symlink failures are surfaced as errors rather than
- * silently falling back to copy.
+ * Canonical `.agents/skills/<name>` and each `SYMLINK_TARGETS` entry are
+ * populated according to `options.mode`:
+ *
+ * - `"symlink"`: symlink to the source (or to the canonical dir for the
+ *   agent-specific slots). Source updates propagate live. Throws on
+ *   filesystems without symlink support.
+ * - `"copy"`: recursive copy. Works anywhere, but source updates require
+ *   re-running install.
+ * - `"auto"` (default): try symlink, fall back to copy on `symlinkSync`
+ *   failure. Canonical and each agent slot decide independently — a slot
+ *   that can symlink will, even if another slot had to copy.
  *
  * The ownership stamp (`metadata["politty-cli"]`) is authored by the skill
  * package; the installer does not modify SKILL.md.
  */
-export function installSkill(skill: DiscoveredSkill, cwd: string = process.cwd()): void {
+export function installSkill(
+  skill: DiscoveredSkill,
+  cwd: string = process.cwd(),
+  options: InstallSkillOptions = {},
+): void {
   const name = skill.frontmatter.name;
   assertSafeName(name);
+
+  const mode: InstallMode = options.mode ?? "auto";
+  const expectedStamp = skill.frontmatter.metadata?.[OWNERSHIP_METADATA_KEY] ?? null;
 
   const canonicalParent = resolve(cwd, AGENTS_SKILLS_DIR);
   mkdirSync(canonicalParent, { recursive: true });
 
   const canonicalDir = join(canonicalParent, name);
-  prepareSymlinkSlot(canonicalDir);
+  clearInstallSlot(canonicalDir, expectedStamp);
   // Use realpath of both endpoints so the relative link stays correct when
   // either the agent dir or the project path includes symlink components
   // (e.g. CLI invoked from a symlinked checkout).
   const resolvedParent = realpathSync(canonicalParent);
   const resolvedSource = realpathSync(skill.sourcePath);
-  symlinkSync(relative(resolvedParent, resolvedSource), canonicalDir, "dir");
+  symlinkOrCopy({
+    linkTarget: relative(resolvedParent, resolvedSource),
+    linkPath: canonicalDir,
+    copyFrom: resolvedSource,
+    mode,
+  });
 
-  populateAgentDirs(cwd, name, canonicalDir);
+  populateAgentDirs(cwd, name, canonicalDir, expectedStamp, mode);
 }
 
 /**
  * Uninstall a skill from the project's agent skill directories.
  *
- * Removes symlinks from agent directories, then removes the canonical symlink.
- * A real directory at any of those paths means it wasn't installed by us
- * (legacy/manual install) — we leave it alone rather than recursively
- * deleting user data the CLI has no claim to. Ownership validation is the
- * caller's responsibility (`removeOwnedSkill` handles it for the CLI flow).
+ * Symlinks (at any of `.agents/skills/<name>` or `SYMLINK_TARGETS`) are
+ * always safe to remove — by construction they were created by an install
+ * flow. A real directory at any of those paths is only removed when
+ * `options.expectedOwnership` is provided and the directory's SKILL.md
+ * carries that ownership stamp (i.e. a copy-mode install this CLI owns).
+ * Unstamped or foreign real directories are left alone so that legacy or
+ * manual installs are not silently recursively deleted.
+ *
+ * The `skills remove` / `skills sync` subcommands always pass
+ * `expectedOwnership`. Direct programmatic callers get the conservative
+ * default (symlinks only).
  */
-export function uninstallSkill(name: string, cwd: string = process.cwd()): void {
+export function uninstallSkill(
+  name: string,
+  cwd: string = process.cwd(),
+  options: UninstallSkillOptions = {},
+): void {
   assertSafeName(name);
+  const expected = options.expectedOwnership ?? null;
 
   for (const target of SYMLINK_TARGETS) {
-    removeSymlinkOnly(resolve(cwd, target, name));
+    removeInstalledSlot(resolve(cwd, target, name), expected);
   }
-  removeSymlinkOnly(resolve(cwd, AGENTS_SKILLS_DIR, name));
+  removeInstalledSlot(resolve(cwd, AGENTS_SKILLS_DIR, name), expected);
 }
 
 /**
- * Unlink `path` iff it is a symlink. No-op when absent or when the path
- * is a real file/directory. A real directory means the path was installed
- * outside this CLI; we leave it alone rather than recursively rm'ing it.
+ * Remove a previously-installed slot:
+ * - Symlink → unlink.
+ * - Real directory whose SKILL.md carries `expectedStamp` → rm -rf. This
+ *   handles copy-mode installs that share the same canonical path as the
+ *   symlink-mode installs.
+ * - Anything else (absent, real dir without matching stamp, real file) →
+ *   no-op; caller can detect nothing changed by checking after the call.
  *
  * `unlinkSync` (not `rmSync`) is required for symlinks to directories —
  * `rmSync` without `recursive: true` errors "Path is a directory" on a
  * dir-symlink, but passing `recursive: true` would follow the symlink and
  * delete its target contents.
  */
-function removeSymlinkOnly(path: string): void {
-  if (!isSymlink(path)) return;
-  unlinkSync(path);
-}
-
-/**
- * Clear a slot so a new symlink can be created at `path`.
- *
- * - Absent → no-op.
- * - Symlink (live or broken) → unlink.
- * - Real file/directory → throw, refusing to clobber user data.
- *
- * Install flows call this before `symlinkSync` instead of the previous
- * `rmSync(recursive)` so a legacy or manual install at `.agents/skills/<name>`
- * or `.claude/skills/<name>` isn't silently recursively deleted.
- */
-function prepareSymlinkSlot(path: string): void {
+function removeInstalledSlot(path: string, expectedStamp: string | null): void {
   let stat;
   try {
     stat = lstatSync(path);
@@ -126,6 +151,40 @@ function prepareSymlinkSlot(path: string): void {
     unlinkSync(path);
     return;
   }
+  if (stat.isDirectory() && expectedStamp !== null && readStampAt(path) === expectedStamp) {
+    rmSync(path, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Clear a slot so a new install can occupy `path`.
+ *
+ * - Absent → no-op.
+ * - Symlink (live or broken) → unlink.
+ * - Real directory whose SKILL.md carries `expectedStamp` → rm -rf. This
+ *   is how a copy-mode install gets replaced in place by another install
+ *   (symlink or copy); the ownership check guarantees we are only ever
+ *   removing data we previously produced.
+ * - Real file or foreign real directory → throw. The ownership guards in
+ *   `addSkill` / `removeOwnedSkill` usually prevent this from being
+ *   reachable, but a programmatic caller or a hand-made legacy install
+ *   surfaces as an actionable error here rather than silent data loss.
+ */
+function clearInstallSlot(path: string, expectedStamp: string | null): void {
+  let stat;
+  try {
+    stat = lstatSync(path);
+  } catch {
+    return;
+  }
+  if (stat.isSymbolicLink()) {
+    unlinkSync(path);
+    return;
+  }
+  if (stat.isDirectory() && expectedStamp !== null && readStampAt(path) === expectedStamp) {
+    rmSync(path, { recursive: true, force: true });
+    return;
+  }
   throw new Error(
     `Refusing to replace non-symlink path at ${path}. ` +
       `This looks like a legacy or manual install; remove or migrate it before retrying.`,
@@ -133,11 +192,78 @@ function prepareSymlinkSlot(path: string): void {
 }
 
 /**
+ * Create `linkPath` as a symlink to `linkTarget` when the filesystem
+ * supports it, otherwise recursively copy `copyFrom` into `linkPath`.
+ *
+ * The three modes are independent of one another — a project may end up
+ * with the canonical slot as a symlink and an agent slot as a copy, or
+ * any other combination. Callers observe only the final on-disk layout.
+ */
+function symlinkOrCopy(args: {
+  linkTarget: string;
+  linkPath: string;
+  copyFrom: string;
+  mode: InstallMode;
+}): void {
+  const { linkTarget, linkPath, copyFrom, mode } = args;
+  if (mode !== "copy") {
+    try {
+      symlinkSync(linkTarget, linkPath, "dir");
+      return;
+    } catch (err) {
+      if (mode === "symlink") throw err;
+      // auto → fall through to copy
+    }
+  }
+  copyDirRecursive(copyFrom, linkPath);
+}
+
+/**
+ * Recursively copy `src` to `dest` following symlinks (`statSync`, not
+ * `lstatSync`). Symlinks in the source are materialised as copies of
+ * their target content so the install does not leave dangling references
+ * back into `node_modules`. Non-regular files (sockets, devices) are
+ * ignored.
+ */
+function copyDirRecursive(src: string, dest: string): void {
+  const stat = statSync(src);
+  if (stat.isDirectory()) {
+    mkdirSync(dest, { recursive: true });
+    for (const entry of readdirSync(src)) {
+      copyDirRecursive(join(src, entry), join(dest, entry));
+    }
+    return;
+  }
+  if (stat.isFile()) {
+    copyFileSync(src, dest);
+  }
+}
+
+/**
+ * Read the `metadata["politty-cli"]` stamp from a SKILL.md at `<dir>/SKILL.md`.
+ * Returns `null` when the file is absent, unreadable, has no frontmatter,
+ * or has no string-valued stamp.
+ */
+function readStampAt(dir: string): string | null {
+  let content: string;
+  try {
+    content = readFileSync(join(dir, "SKILL.md"), "utf-8");
+  } catch {
+    return null;
+  }
+  const { data } = parseFrontmatter(content);
+  const metadata = (data as { metadata?: unknown }).metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const value = (metadata as Record<string, unknown>)[OWNERSHIP_METADATA_KEY];
+  return typeof value === "string" ? value : null;
+}
+
+/**
  * Report whether a skill is currently installed, independent of its
  * ownership stamp. Returns `true` when `.agents/skills/<name>/SKILL.md`
- * resolves to a readable file (through a valid symlink or directly);
- * returns `false` when the path is absent or the canonical symlink is
- * broken (source package uninstalled).
+ * resolves to a readable file (through a valid symlink or directly, or
+ * via a copy-mode install); returns `false` when the path is absent or
+ * the canonical symlink is broken (source package uninstalled).
  *
  * Callers use this to distinguish the two cases where
  * {@link readInstalledOwnership} returns `null` — "not installed" (safe
@@ -152,8 +278,9 @@ export function hasInstalledSkill(name: string, cwd: string = process.cwd()): bo
 /**
  * Read the ownership stamp off an installed skill's SKILL.md, if any.
  *
- * Because `.agents/skills/<name>` is a symlink to the source, this reads
- * the stamp authored by the skill package.
+ * For symlink-mode installs `.agents/skills/<name>` points at the source,
+ * so this reads the package-authored stamp. For copy-mode installs the
+ * stamp was captured at install time into the local copy.
  *
  * @returns `metadata["politty-cli"]` as `"{packageName}:{cliName}"`, or
  *   `null` if the skill is not installed *or* the stamp is absent/malformed.
@@ -182,41 +309,40 @@ export function readInstalledOwnership(name: string, cwd: string = process.cwd()
 }
 
 /**
- * Create symlinks from each agent-specific directory to the canonical
- * skill directory. The old link is removed before the new one is created,
- * so the agent path is briefly absent during the swap.
- *
- * `symlink` failure (e.g. Windows without Developer Mode) is propagated
- * as-is — no copy fallback. Users on platforms without symlink support
- * must resolve the underlying permission before `skills` commands can
- * proceed.
+ * Populate each agent-specific directory so it routes to the canonical
+ * install. In symlink-capable filesystems the agent slot is a symlink to
+ * `.agents/skills/<name>` so one install swap updates all agent views at
+ * once. When `mode` is `"copy"` (or `"auto"` with symlink failure) the
+ * slot is a copy of `canonicalDir` instead.
  */
-function populateAgentDirs(cwd: string, name: string, canonicalDir: string): void {
+function populateAgentDirs(
+  cwd: string,
+  name: string,
+  canonicalDir: string,
+  expectedStamp: string | null,
+  mode: InstallMode,
+): void {
   for (const target of SYMLINK_TARGETS) {
     const targetParent = resolve(cwd, target);
     mkdirSync(targetParent, { recursive: true });
 
     const targetDir = join(targetParent, name);
-    prepareSymlinkSlot(targetDir);
+    clearInstallSlot(targetDir, expectedStamp);
 
     // realpath the PARENT directories only. Resolving `canonicalDir` itself
-    // would dereference it to the source path, baking the source location
-    // into every agent link; the agent link should route through the
-    // canonical symlink instead so a single `skills sync` replaces both
-    // hops at once.
+    // would dereference it to the source path (in symlink mode), baking the
+    // source location into every agent link; the agent link should route
+    // through the canonical slot instead so a single `skills sync`
+    // replaces both hops at once.
     const resolvedTargetParent = realpathSync(targetParent);
     const resolvedCanonicalParent = realpathSync(resolve(canonicalDir, ".."));
     const linkTarget = join(relative(resolvedTargetParent, resolvedCanonicalParent), name);
-    symlinkSync(linkTarget, targetDir, "dir");
-  }
-}
-
-/** Detects a path that is a symlink (even if its target is broken). */
-function isSymlink(path: string): boolean {
-  try {
-    return lstatSync(path).isSymbolicLink();
-  } catch {
-    return false;
+    symlinkOrCopy({
+      linkTarget,
+      linkPath: targetDir,
+      copyFrom: canonicalDir,
+      mode,
+    });
   }
 }
 

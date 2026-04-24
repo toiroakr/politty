@@ -278,6 +278,15 @@ describe("createSkillSyncCommand", () => {
     }
   });
 
+  it("should thread options.mode through sync as well as add", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const command = createSkillSyncCommand({ ...opts(tempDir), mode: "symlink" }, CLI);
+    command.run!({ exclude: [] });
+
+    expect(mockedInstallSkill.mock.calls[0]![2]).toEqual({ mode: "symlink" });
+  });
+
   it("should still reinstall valid skills even when another skill has per-file errors", () => {
     // A parse-failed or name-mismatch on one skill must not block the rest
     // of the sync — the valid skills still represent what the CLI bundles.
@@ -369,6 +378,28 @@ describe("createSkillAddCommand", () => {
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
   });
 
+  it("should thread options.mode through to installSkill", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const command = createSkillAddCommand({ ...opts(tempDir), mode: "copy" }, CLI);
+    command.run!({ name: "commit" });
+
+    expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
+    expect(mockedInstallSkill.mock.calls[0]![2]).toEqual({ mode: "copy" });
+  });
+
+  it("should default to not passing a mode option when none is configured", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const command = createSkillAddCommand(opts(tempDir), CLI);
+    command.run!({ name: "commit" });
+
+    expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
+    // No mode configured → installer defaults (auto) apply without
+    // commands.ts having to know the default.
+    expect(mockedInstallSkill.mock.calls[0]![2]).toEqual({});
+  });
+
   it("should refuse to install when source SKILL.md has no politty-cli stamp", () => {
     // Skill package forgot to declare ownership — packaging bug, surface early.
     writeSkillMd(
@@ -446,6 +477,9 @@ describe("createSkillRemoveCommand", () => {
 
     expect(mockedUninstallSkill).toHaveBeenCalledTimes(1);
     expect(mockedUninstallSkill.mock.calls[0]![0]).toBe("commit");
+    // Third arg carries the expectedOwnership so uninstall can rm copy-mode
+    // installs owned by this CLI — but never one it doesn't own.
+    expect(mockedUninstallSkill.mock.calls[0]![2]).toEqual({ expectedOwnership: OWNERSHIP });
   });
 
   it("should refuse to remove a skill owned by another CLI", () => {
@@ -463,7 +497,9 @@ describe("createSkillRemoveCommand", () => {
     const command = createSkillRemoveCommand(opts(tempDir), CLI);
     command.run!({ name: "orphan" });
 
-    expect(mockedUninstallSkill).toHaveBeenCalledWith("orphan");
+    expect(mockedUninstallSkill).toHaveBeenCalledWith("orphan", undefined, {
+      expectedOwnership: OWNERSHIP,
+    });
   });
 
   it("should allow orphan removal even when source dir still bundles other skills", () => {
@@ -473,7 +509,9 @@ describe("createSkillRemoveCommand", () => {
     const command = createSkillRemoveCommand(opts(tempDir), CLI);
     command.run!({ name: "orphan" });
 
-    expect(mockedUninstallSkill).toHaveBeenCalledWith("orphan");
+    expect(mockedUninstallSkill).toHaveBeenCalledWith("orphan", undefined, {
+      expectedOwnership: OWNERSHIP,
+    });
   });
 
   it("should no-op when skill is not installed", () => {

@@ -191,7 +191,7 @@ describe("installSkill", () => {
     expect(readFileSync(join(legacyClaudeDir, "SKILL.md"), "utf-8")).toContain("legacy-claude");
   });
 
-  it("should throw if symlinkSync fails (e.g. Windows without Developer Mode)", () => {
+  it("should throw if realpathSync fails (missing source)", () => {
     const skill = createSkillFixture(sourceDir, "commit");
     // Point sourcePath at a non-existent location so realpathSync throws.
     const broken: DiscoveredSkill = {
@@ -200,6 +200,89 @@ describe("installSkill", () => {
     };
 
     expect(() => installSkill(broken, projectDir)).toThrow();
+  });
+
+  it("should copy the source when mode is 'copy'", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+
+    installSkill(skill, projectDir, { mode: "copy" });
+
+    const canonicalPath = join(projectDir, ".agents/skills/commit");
+    // In copy mode the slot is a real directory, not a symlink.
+    expect(lstatSync(canonicalPath).isDirectory()).toBe(true);
+    expect(lstatSync(canonicalPath).isSymbolicLink()).toBe(false);
+    // Content comes from the copied source.
+    expect(readFileSync(join(canonicalPath, "SKILL.md"), "utf-8")).toContain("name: commit");
+  });
+
+  it("should not reflect source updates when mode is 'copy'", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    installSkill(skill, projectDir, { mode: "copy" });
+
+    // Copy-mode installs are snapshots — editing the source after install
+    // should NOT leak into the installed location.
+    writeFileSync(
+      join(skill.sourcePath, "SKILL.md"),
+      `---\nname: commit\ndescription: Updated\nmetadata:\n  politty-cli: "${OWNERSHIP}"\n---\nupdated body\n`,
+    );
+
+    const content = readFileSync(join(projectDir, ".agents/skills/commit/SKILL.md"), "utf-8");
+    expect(content).not.toContain("Updated");
+    expect(content).not.toContain("updated body");
+  });
+
+  it("should populate .claude/skills/<name>/ via copy when mode is 'copy'", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+
+    installSkill(skill, projectDir, { mode: "copy" });
+
+    const claudePath = join(projectDir, ".claude/skills/commit");
+    const stat = lstatSync(claudePath);
+    expect(stat.isDirectory()).toBe(true);
+    expect(stat.isSymbolicLink()).toBe(false);
+    expect(readFileSync(join(claudePath, "SKILL.md"), "utf-8")).toContain("name: commit");
+  });
+
+  it("should replace a previous copy-mode install in place", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    installSkill(skill, projectDir, { mode: "copy" });
+
+    writeFileSync(
+      join(skill.sourcePath, "SKILL.md"),
+      `---\nname: commit\ndescription: V2\nmetadata:\n  politty-cli: "${OWNERSHIP}"\n---\nv2 body\n`,
+    );
+    installSkill(skill, projectDir, { mode: "copy" });
+
+    const content = readFileSync(join(projectDir, ".agents/skills/commit/SKILL.md"), "utf-8");
+    expect(content).toContain("V2");
+    expect(content).toContain("v2 body");
+  });
+
+  it("should switch a copy-mode install to a symlink when re-installed with mode 'symlink'", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    installSkill(skill, projectDir, { mode: "copy" });
+    expect(lstatSync(join(projectDir, ".agents/skills/commit")).isDirectory()).toBe(true);
+
+    // A subsequent install with a different mode must clear the copy-mode
+    // real directory (our own prior install, same ownership stamp) and
+    // replace it with a symlink.
+    installSkill(skill, projectDir, { mode: "symlink" });
+    expect(lstatSync(join(projectDir, ".agents/skills/commit")).isSymbolicLink()).toBe(true);
+  });
+
+  it("should throw in 'symlink' mode when symlinkSync fails", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    // Monkey-patch realpathSync via a non-writable target name? Easiest is
+    // to pre-populate the slot with a foreign real dir so clearInstallSlot
+    // throws — exercises the "throws rather than copies" contract.
+    const legacyDir = join(projectDir, ".agents/skills/commit");
+    mkdirSync(legacyDir, { recursive: true });
+    writeFileSync(
+      join(legacyDir, "SKILL.md"),
+      "---\nname: commit\ndescription: legacy\n---\n# legacy\n",
+    );
+
+    expect(() => installSkill(skill, projectDir, { mode: "symlink" })).toThrow();
   });
 });
 
@@ -241,11 +324,10 @@ describe("uninstallSkill", () => {
     expect(() => uninstallSkill("nonexistent", projectDir)).not.toThrow();
   });
 
-  it("should leave a real directory at the install path untouched", () => {
+  it("should leave a real directory at the install path untouched without expectedOwnership", () => {
     // A legacy/manual install is a real directory (not a symlink) at
-    // .agents/skills/<name>. uninstallSkill must never rm -rf it —
-    // ownership checks happen upstream, this primitive only unlinks
-    // symlinks it itself could have created.
+    // .agents/skills/<name>. Without expectedOwnership, uninstallSkill is
+    // conservative and only unlinks symlinks — real data is never rm -rf'd.
     const canonicalDir = join(projectDir, ".agents/skills/legacy");
     mkdirSync(canonicalDir, { recursive: true });
     const skillMd = join(canonicalDir, "SKILL.md");
@@ -255,6 +337,47 @@ describe("uninstallSkill", () => {
 
     expect(existsSync(canonicalDir)).toBe(true);
     expect(readFileSync(skillMd, "utf-8")).toContain("name: legacy");
+  });
+
+  it("should remove a copy-mode install when expectedOwnership matches", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    installSkill(skill, projectDir, { mode: "copy" });
+    expect(lstatSync(join(projectDir, ".agents/skills/commit")).isDirectory()).toBe(true);
+
+    uninstallSkill("commit", projectDir, { expectedOwnership: OWNERSHIP });
+
+    expect(existsSync(join(projectDir, ".agents/skills/commit"))).toBe(false);
+    expect(existsSync(join(projectDir, ".claude/skills/commit"))).toBe(false);
+  });
+
+  it("should refuse to remove a real directory whose stamp does not match", () => {
+    // A real directory carrying some other tool's ownership stamp must not
+    // be rm -rf'd just because uninstallSkill was called with our own stamp.
+    const canonicalDir = join(projectDir, ".agents/skills/foreign");
+    mkdirSync(canonicalDir, { recursive: true });
+    const skillMd = join(canonicalDir, "SKILL.md");
+    writeFileSync(
+      skillMd,
+      '---\nname: foreign\ndescription: other\nmetadata:\n  politty-cli: "other:tool"\n---\n',
+    );
+
+    uninstallSkill("foreign", projectDir, { expectedOwnership: OWNERSHIP });
+
+    expect(existsSync(canonicalDir)).toBe(true);
+    expect(readFileSync(skillMd, "utf-8")).toContain("other:tool");
+  });
+
+  it("should remove symlinks regardless of expectedOwnership", () => {
+    // Symlinks were created by some install flow; uninstall should always
+    // unlink them so a plain `uninstallSkill(name, cwd)` call still cleans
+    // up symlink-mode installs.
+    const skill = createSkillFixture(sourceDir, "commit");
+    installSkill(skill, projectDir, { mode: "symlink" });
+
+    uninstallSkill("commit", projectDir);
+
+    expect(existsSync(join(projectDir, ".agents/skills/commit"))).toBe(false);
+    expect(existsSync(join(projectDir, ".claude/skills/commit"))).toBe(false);
   });
 });
 

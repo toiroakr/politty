@@ -13,7 +13,13 @@ import {
   uninstallSkill,
 } from "./installer.js";
 import { scanSourceDir } from "./scanner.js";
-import type { DiscoveredSkill, ScanError, ScanResult, SkillCommandOptions } from "./types.js";
+import type {
+  DiscoveredSkill,
+  InstallMode,
+  ScanError,
+  ScanResult,
+  SkillCommandOptions,
+} from "./types.js";
 
 /**
  * Build the `"{package}:{cli}"` ownership stamp stored in the installed
@@ -92,11 +98,11 @@ export function createSkillSyncCommand(options: SkillCommandOptions, cliName: st
         }
       }
 
-      // Reinstall in-place. `installSkill` is a pure symlink operation so
-      // a remove-all-first pass is not needed. `addSkill`'s ownership guard
-      // still refuses to clobber skills owned by another CLI.
+      // Reinstall in-place. `installSkill` clears the slot before
+      // writing, so a remove-all-first pass is not needed. `addSkill`'s
+      // ownership guard still refuses to clobber skills owned by another CLI.
       for (const skill of skills) {
-        addSkill(skill, stamp);
+        addSkill(skill, stamp, options.mode);
       }
     },
   });
@@ -127,7 +133,7 @@ export function createSkillAddCommand(options: SkillCommandOptions, cliName: str
         // checking for emptiness — so a typo surfaces a useful error even
         // if the source dir is misconfigured.
         const skill = findOrThrow(sourceSkills, args.name);
-        addSkill(skill, stamp);
+        addSkill(skill, stamp, options.mode);
         return;
       }
 
@@ -137,7 +143,7 @@ export function createSkillAddCommand(options: SkillCommandOptions, cliName: str
       }
 
       for (const skill of sourceSkills) {
-        addSkill(skill, stamp);
+        addSkill(skill, stamp, options.mode);
       }
     },
   });
@@ -245,7 +251,11 @@ function findOrThrow(skills: DiscoveredSkill[], name: string): DiscoveredSkill {
   return skill;
 }
 
-function addSkill(skill: DiscoveredSkill, expectedOwnership: string): void {
+function addSkill(
+  skill: DiscoveredSkill,
+  expectedOwnership: string,
+  mode: InstallMode | undefined,
+): void {
   const name = skill.frontmatter.name;
   // Validate the source skill's authored stamp before install. This is the
   // scanner-level correctness check that a skill package's SKILL.md
@@ -280,7 +290,7 @@ function addSkill(skill: DiscoveredSkill, expectedOwnership: string): void {
         `Remove it manually (or add the stamp to take ownership) before running "skills add".`,
     );
   }
-  installSkill(skill);
+  installSkill(skill, undefined, mode === undefined ? {} : { mode });
   logger.info(`${symbols.success} Installed ${name}`);
 }
 
@@ -301,7 +311,7 @@ function removeOwnedSkill(name: string, expectedOwnership: string): void {
         `Check metadata.${OWNERSHIP_METADATA_KEY} in .agents/skills/${name}/SKILL.md.`,
     );
   }
-  uninstallSkill(name);
+  uninstallSkill(name, undefined, { expectedOwnership });
   logger.info(`${symbols.success} Removed ${name}`);
 }
 

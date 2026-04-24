@@ -1039,7 +1039,7 @@ type CommandValidationResult =
 
 ## Skill Management (`politty/skill`)
 
-Validates SKILL.md files against the [Agent Skills specification](https://agentskills.io/specification) and installs them by making `.agents/skills/<name>` a symlink to the source (typically `node_modules/<pkg>/skills/<name>`). Agent-specific directories (e.g. `.claude/skills/<name>`) are then symlinked to the canonical `.agents/skills/<name>`, so source updates propagate live and a single `sync` replaces both links. Source SKILL.md must pre-declare `metadata["politty-cli"] = "{package}:{cliName}"`; the `skills add` / `skills sync` subcommands verify the stamp before installing, and `skills remove` / `skills sync` refuse to delete skills owned by another tool. `installSkill` itself is symlink-only and does not validate ownership — programmatic callers that bypass `withSkillCommand` are responsible for that check. The installer never writes to SKILL.md, and if `symlinkSync` fails it errors out rather than falling back to a copy.
+Validates SKILL.md files against the [Agent Skills specification](https://agentskills.io/specification) and installs them by populating `.agents/skills/<name>` and each agent-specific directory (e.g. `.claude/skills/<name>`) from the source (typically `node_modules/<pkg>/skills/<name>`). The materialization is controlled by `mode`: `"auto"` (default) tries a symlink and falls back to a recursive copy on filesystems without symlink support (e.g. Windows without Developer Mode); `"symlink"` is symlink-only and throws on failure; `"copy"` always copies. Agent-specific slots route through the canonical `.agents/skills/<name>` so one `sync` swaps all hops at once. Source SKILL.md must pre-declare `metadata["politty-cli"] = "{package}:{cliName}"`; the `skills add` / `skills sync` subcommands verify the stamp before installing, and `skills remove` / `skills sync` refuse to delete skills owned by another tool. `installSkill` itself does not validate ownership — programmatic callers that bypass `withSkillCommand` are responsible for that check. The installer never writes to SKILL.md.
 
 ### `withSkillCommand`
 
@@ -1060,10 +1060,11 @@ Throws if `command.subCommands.skills` already exists.
 
 **SkillCommandOptions:**
 
-| Property    | Type     | Description                                                                                                                                                                                            |
-| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `sourceDir` | `string` | Source directory containing SKILL.md files (symlinks within the source tree are followed)                                                                                                              |
-| `package`   | `string` | npm package name that owns these skills. Combined with the command name as `"{package}:{cliName}"` and compared against each source SKILL.md's `metadata["politty-cli"]` stamp; mismatches are refused |
+| Property    | Type          | Description                                                                                                                                                                                            |
+| ----------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `sourceDir` | `string`      | Source directory containing SKILL.md files (symlinks within the source tree are followed)                                                                                                              |
+| `package`   | `string`      | npm package name that owns these skills. Combined with the command name as `"{package}:{cliName}"` and compared against each source SKILL.md's `metadata["politty-cli"]` stamp; mismatches are refused |
+| `mode`      | `InstallMode` | Install materialization strategy (`"auto"` \| `"symlink"` \| `"copy"`). Defaults to `"auto"` — try symlink, fall back to copy on filesystems without symlink support                                   |
 
 #### Generated Subcommands
 
@@ -1137,10 +1138,23 @@ type ScanErrorReason = (typeof SCAN_ERROR_REASONS)[number];
 
 ### `installSkill`
 
-Makes `.agents/skills/<name>` a symlink to `skill.sourcePath` (typically `node_modules/<pkg>/skills/<name>`) and populates agent-specific directories (e.g. `.claude/skills/<name>`) as symlinks to that canonical path. Never writes to the source SKILL.md; the ownership stamp is authored by the skill package, not rewritten at install time. Throws if `symlinkSync` fails — there is no copy fallback.
+Populates `.agents/skills/<name>` from `skill.sourcePath` (typically `node_modules/<pkg>/skills/<name>`) and each agent-specific directory (e.g. `.claude/skills/<name>`) from the canonical slot. The materialization is controlled by `options.mode`:
+
+- `"auto"` (default) — attempt a symlink; on `symlinkSync` failure fall back to a recursive copy. Slots decide independently, so a project can end up with the canonical as a symlink and the agent slot as a copy (or any other combination) depending on what each parent dir supports.
+- `"symlink"` — symlink only; throws on any `symlinkSync` failure.
+- `"copy"` — recursive copy only.
+
+Never writes to the source SKILL.md; the ownership stamp is authored by the skill package, not rewritten at install time.
 
 ```typescript
-function installSkill(skill: DiscoveredSkill, cwd?: string): void;
+function installSkill(skill: DiscoveredSkill, cwd?: string, options?: InstallSkillOptions): void;
+
+interface InstallSkillOptions {
+  /** Install materialization strategy. Default: `"auto"`. */
+  mode?: InstallMode;
+}
+
+type InstallMode = "auto" | "symlink" | "copy";
 ```
 
 Callers that wrap `installSkill` directly should validate `skill.frontmatter.metadata?.["politty-cli"]` against their expected `"{package}:{cliName}"` before calling; `withSkillCommand`'s `skills add` / `skills sync` do this automatically.
@@ -1149,17 +1163,26 @@ Callers that wrap `installSkill` directly should validate `skill.frontmatter.met
 
 ### `uninstallSkill`
 
-Removes a skill's symlinks and the canonical copy. Does not perform an ownership check — callers that need one should call `readInstalledOwnership` first (`skills remove` does this automatically).
+Removes a skill's symlinks at `.agents/skills/<name>` and each agent-specific directory. Real directories (copy-mode installs) are removed only when `options.expectedOwnership` is provided and the directory's SKILL.md carries that stamp — unstamped or foreign real directories are always left alone. The `skills remove` / `skills sync` subcommands always pass `expectedOwnership` after their own ownership check; direct programmatic callers get the conservative symlink-only default.
 
 ```typescript
-function uninstallSkill(name: string, cwd?: string): void;
+function uninstallSkill(name: string, cwd?: string, options?: UninstallSkillOptions): void;
+
+interface UninstallSkillOptions {
+  /**
+   * If provided, real directories are removed when their SKILL.md's
+   * `metadata["politty-cli"]` equals this stamp. Without it, only
+   * symlinks are unlinked.
+   */
+  expectedOwnership?: string;
+}
 ```
 
 ---
 
 ### `readInstalledOwnership`
 
-Returns `metadata["politty-cli"]` from the installed SKILL.md (read through the symlink at `.agents/skills/<name>`, i.e. the source package's own authored stamp), or `null` if the skill is not installed, the canonical symlink is broken (source package uninstalled), or the stamp is absent/malformed. Other read errors (e.g. EACCES) are surfaced rather than swallowed, so `remove` / `sync` do not misinterpret a transient failure as "not installed" and clobber user data.
+Returns `metadata["politty-cli"]` from the installed SKILL.md at `.agents/skills/<name>/SKILL.md`. For symlink-mode installs this reads through to the source package's authored stamp; for copy-mode installs it reads the stamp captured in the local copy. Returns `null` if the skill is not installed, the canonical symlink is broken (source package uninstalled), or the stamp is absent/malformed. Other read errors (e.g. EACCES) are surfaced rather than swallowed, so `remove` / `sync` do not misinterpret a transient failure as "not installed" and clobber user data.
 
 ```typescript
 function readInstalledOwnership(name: string, cwd?: string): string | null;
@@ -1415,10 +1438,13 @@ export { scanSourceDir } from "./skill/scanner.js";
 export { SCAN_ERROR_REASONS } from "./skill/types.js";
 export type {
   DiscoveredSkill,
+  InstallMode,
+  InstallSkillOptions,
   ScanError,
   ScanErrorReason,
   ScanResult,
   SkillCommandOptions,
   SkillFrontmatter,
+  UninstallSkillOptions,
 } from "./skill/types.js";
 ```
