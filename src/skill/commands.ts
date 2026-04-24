@@ -24,7 +24,14 @@ function ownershipFor(options: SkillCommandOptions, cliName: string): string {
 
 function logScanErrors(errors: ScanError[]): void {
   for (const err of errors) {
-    logger.warn(`Skipping skill at ${err.path}: ${err.message}`);
+    // `missing-source` is a directory-level failure (err.path === sourceDir),
+    // not a skill we're skipping. Label it distinctly so the log isn't
+    // misleading in that case.
+    const prefix =
+      err.reason === "missing-source"
+        ? `Failed to scan source directory ${err.path}`
+        : `Skipping skill at ${err.path}`;
+    logger.warn(`${prefix}: ${err.message}`);
   }
 }
 
