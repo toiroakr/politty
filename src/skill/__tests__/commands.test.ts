@@ -395,8 +395,8 @@ describe("createSkillAddCommand", () => {
     command.run!({ name: "commit" });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
-    // No mode configured → installer defaults (auto) apply without
-    // commands.ts having to know the default.
+    // No mode configured → installer default ("symlink") applies
+    // without commands.ts having to know the default.
     expect(mockedInstallSkill.mock.calls[0]![2]).toEqual({});
   });
 

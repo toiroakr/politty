@@ -1,5 +1,5 @@
 import type * as FS from "node:fs";
-import { lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,7 +27,7 @@ const OWNERSHIP = "politty-test:my-agent";
 function createTempDir(): string {
   const dir = join(
     tmpdir(),
-    `politty-auto-fallback-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    `politty-symlink-failure-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
   );
   mkdirSync(dir, { recursive: true });
   return dir;
@@ -49,7 +49,7 @@ function createSkillFixture(dir: string, name: string): DiscoveredSkill {
   };
 }
 
-describe("installSkill auto-mode fallback", () => {
+describe("installSkill symlink-failure guidance", () => {
   let sourceDir: string;
   let projectDir: string;
 
@@ -63,28 +63,13 @@ describe("installSkill auto-mode fallback", () => {
     rmSync(projectDir, { recursive: true, force: true });
   });
 
-  it("should fall back to copy when symlinkSync throws in 'auto' mode (default)", () => {
+  it("should throw with guidance to retry with mode 'copy' when symlinkSync fails", () => {
     const skill = createSkillFixture(sourceDir, "commit");
 
-    // Default is "auto" — mocked symlinkSync always fails, so every slot
-    // must materialize as a real directory (a copy).
-    installSkill(skill, projectDir);
-
-    const canonicalPath = join(projectDir, ".agents/skills/commit");
-    expect(lstatSync(canonicalPath).isDirectory()).toBe(true);
-    expect(lstatSync(canonicalPath).isSymbolicLink()).toBe(false);
-    expect(readFileSync(join(canonicalPath, "SKILL.md"), "utf-8")).toContain("name: commit");
-
-    const claudePath = join(projectDir, ".claude/skills/commit");
-    expect(lstatSync(claudePath).isDirectory()).toBe(true);
-    expect(lstatSync(claudePath).isSymbolicLink()).toBe(false);
-    expect(readFileSync(join(claudePath, "SKILL.md"), "utf-8")).toContain("name: commit");
-  });
-
-  it("should throw in 'symlink' mode when symlinkSync fails", () => {
-    const skill = createSkillFixture(sourceDir, "commit");
-
-    expect(() => installSkill(skill, projectDir, { mode: "symlink" })).toThrow(/EPERM/);
+    // Default mode is "symlink"; symlinkSync is mocked to always throw so
+    // this exercises the Windows-without-Developer-Mode error path.
+    expect(() => installSkill(skill, projectDir)).toThrow(/mode: "copy"/);
+    expect(() => installSkill(skill, projectDir)).toThrow(/EPERM/);
   });
 
   it("should succeed in 'copy' mode regardless of symlinkSync availability", () => {

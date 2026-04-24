@@ -54,14 +54,12 @@ function assertSafeName(name: string): void {
  * Canonical `.agents/skills/<name>` and each `SYMLINK_TARGETS` entry are
  * populated according to `options.mode`:
  *
- * - `"symlink"`: symlink to the source (or to the canonical dir for the
- *   agent-specific slots). Source updates propagate live. Throws on
- *   filesystems without symlink support.
+ * - `"symlink"` (default): symlink to the source (or to the canonical dir
+ *   for the agent-specific slots). Source updates propagate live. Throws
+ *   with guidance to retry with `"copy"` on filesystems without symlink
+ *   support (e.g. Windows without Developer Mode).
  * - `"copy"`: recursive copy. Works anywhere, but source updates require
  *   re-running install.
- * - `"auto"` (default): try symlink, fall back to copy on `symlinkSync`
- *   failure. Canonical and each agent slot decide independently — a slot
- *   that can symlink will, even if another slot had to copy.
  *
  * The ownership stamp (`metadata["politty-cli"]`) is authored by the skill
  * package; the installer does not modify SKILL.md.
@@ -74,7 +72,7 @@ export function installSkill(
   const name = skill.frontmatter.name;
   assertSafeName(name);
 
-  const mode: InstallMode = options.mode ?? "auto";
+  const mode: InstallMode = options.mode ?? "symlink";
   const expectedStamp = skill.frontmatter.metadata?.[OWNERSHIP_METADATA_KEY] ?? null;
 
   const canonicalParent = resolve(cwd, AGENTS_SKILLS_DIR);
@@ -192,12 +190,13 @@ function clearInstallSlot(path: string, expectedStamp: string | null): void {
 }
 
 /**
- * Create `linkPath` as a symlink to `linkTarget` when the filesystem
- * supports it, otherwise recursively copy `copyFrom` into `linkPath`.
+ * Create `linkPath` as a symlink to `linkTarget` (symlink mode) or
+ * recursively copy `copyFrom` into `linkPath` (copy mode).
  *
- * The three modes are independent of one another — a project may end up
- * with the canonical slot as a symlink and an agent slot as a copy, or
- * any other combination. Callers observe only the final on-disk layout.
+ * In symlink mode, a `symlinkSync` failure is re-thrown with guidance to
+ * retry with `mode: "copy"`. Windows without Developer Mode is the
+ * canonical case — the underlying EPERM doesn't hint at the fix on its
+ * own.
  */
 function symlinkOrCopy(args: {
   linkTarget: string;
@@ -206,16 +205,21 @@ function symlinkOrCopy(args: {
   mode: InstallMode;
 }): void {
   const { linkTarget, linkPath, copyFrom, mode } = args;
-  if (mode !== "copy") {
-    try {
-      symlinkSync(linkTarget, linkPath, "dir");
-      return;
-    } catch (err) {
-      if (mode === "symlink") throw err;
-      // auto → fall through to copy
-    }
+  if (mode === "copy") {
+    copyDirRecursive(copyFrom, linkPath);
+    return;
   }
-  copyDirRecursive(copyFrom, linkPath);
+  try {
+    symlinkSync(linkTarget, linkPath, "dir");
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Failed to symlink ${linkPath} → ${linkTarget}: ${cause}. ` +
+        `If this filesystem does not support symlinks (e.g. Windows without ` +
+        `Developer Mode), retry with mode: "copy".`,
+      { cause: err },
+    );
+  }
 }
 
 /**
@@ -312,8 +316,8 @@ export function readInstalledOwnership(name: string, cwd: string = process.cwd()
  * Populate each agent-specific directory so it routes to the canonical
  * install. In symlink-capable filesystems the agent slot is a symlink to
  * `.agents/skills/<name>` so one install swap updates all agent views at
- * once. When `mode` is `"copy"` (or `"auto"` with symlink failure) the
- * slot is a copy of `canonicalDir` instead.
+ * once. When `mode` is `"copy"` the slot is a recursive copy of
+ * `canonicalDir` instead.
  */
 function populateAgentDirs(
   cwd: string,

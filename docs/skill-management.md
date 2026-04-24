@@ -9,9 +9,8 @@ SKILL.md files are validated against the [Agent Skills specification](https://ag
 politty's role is focused:
 
 1. **Install**: Scans your source directory for SKILL.md files and populates `.agents/skills/<name>` for each one (typically pointing into `node_modules/<pkg>/skills/<name>`). Agent-specific directories (e.g. `.claude/skills/<name>`) are populated from that canonical path so a single `sync` replaces both hops at once. The materialization strategy is controlled by `mode`:
-   - **`"auto"` (default)** — try a symlink first; fall back to a recursive copy when `symlinkSync` fails (e.g. Windows without Developer Mode, network filesystems without symlink support). Source updates propagate live for slots that ended up as symlinks.
-   - **`"symlink"`** — symlink only. Throws on filesystems without symlink support. Useful when the CLI author requires live-updating installs.
-   - **`"copy"`** — recursive copy only. Source updates require re-running `sync`, but works on every filesystem.
+   - **`"symlink"` (default)** — symlink the source into place. Source updates propagate live. On filesystems without symlink support (e.g. Windows without Developer Mode, some network filesystems), install fails with a clear error pointing at `mode: "copy"` as the fix.
+   - **`"copy"`** — recursive copy. Source updates require re-running `sync`, but works on every filesystem.
 
 2. **Validate ownership**: The source SKILL.md must pre-declare `metadata["politty-cli"] = "{package}:{cliName}"`. The `skills add` and `skills sync` subcommands verify the stamp before installing, so two tools managing skills in the same project cannot accidentally clobber each other. The `installSkill` primitive itself performs no stamp validation — programmatic callers that bypass `withSkillCommand` are responsible for that check. politty never writes to your SKILL.md.
 3. **Remove safely**: `skills remove` and `skills sync` refuse to delete skills that don't carry your CLI's stamp, protecting projects that use multiple skill-providing tools. Real directories (copy-mode installs) are only removed when their SKILL.md still carries the expected ownership stamp — legacy or foreign installs are left untouched.
@@ -89,9 +88,9 @@ const cli = withSkillCommand(
   {
     sourceDir,
     package: "@my-agent/skills",
-    // mode: "auto" (default) — try symlink, fall back to copy on Windows
-    //   without Developer Mode or filesystems that don't support symlinks.
-    // mode: "symlink" — symlink only; throws on unsupported filesystems.
+    // mode: "symlink" (default) — source updates propagate live. Throws
+    //   with guidance to retry with "copy" on filesystems without symlink
+    //   support (e.g. Windows without Developer Mode).
     // mode: "copy" — recursive copy; works anywhere, source updates require
     //   re-running `skills sync`.
   },

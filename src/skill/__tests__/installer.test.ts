@@ -269,21 +269,6 @@ describe("installSkill", () => {
     installSkill(skill, projectDir, { mode: "symlink" });
     expect(lstatSync(join(projectDir, ".agents/skills/commit")).isSymbolicLink()).toBe(true);
   });
-
-  it("should throw in 'symlink' mode when symlinkSync fails", () => {
-    const skill = createSkillFixture(sourceDir, "commit");
-    // Monkey-patch realpathSync via a non-writable target name? Easiest is
-    // to pre-populate the slot with a foreign real dir so clearInstallSlot
-    // throws — exercises the "throws rather than copies" contract.
-    const legacyDir = join(projectDir, ".agents/skills/commit");
-    mkdirSync(legacyDir, { recursive: true });
-    writeFileSync(
-      join(legacyDir, "SKILL.md"),
-      "---\nname: commit\ndescription: legacy\n---\n# legacy\n",
-    );
-
-    expect(() => installSkill(skill, projectDir, { mode: "symlink" })).toThrow();
-  });
 });
 
 describe("uninstallSkill", () => {

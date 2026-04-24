@@ -88,13 +88,12 @@ export type {
  * The install materialization is controlled by `options.mode`
  * (see {@link SkillCommandOptions}):
  *
- * - `"auto"` (default) — attempt a symlink, fall back to recursive copy
+ * - `"symlink"` (default) — symlink the source into place. Source updates
+ *   propagate live. Install errors out with guidance to retry with `"copy"`
  *   when `symlinkSync` fails (e.g. Windows without Developer Mode).
- * - `"symlink"` — symlink only. Source updates propagate live but install
- *   errors out on filesystems without symlink support.
- * - `"copy"` — recursive copy only. Source updates require re-running sync.
+ * - `"copy"` — recursive copy. Source updates require re-running sync.
  *
- * Under all modes the canonical slot is `.agents/skills/<name>` and each
+ * Under both modes the canonical slot is `.agents/skills/<name>` and each
  * agent-specific directory (e.g. `.claude/skills/<name>`) is populated
  * from that canonical slot. politty never writes to `SKILL.md`. The
  * ownership stamp `metadata["politty-cli"] = "{package}:{cliName}"` must
