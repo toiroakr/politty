@@ -269,6 +269,16 @@ describe("installSkill", () => {
     installSkill(skill, projectDir, { mode: "symlink" });
     expect(lstatSync(join(projectDir, ".agents/skills/commit")).isSymbolicLink()).toBe(true);
   });
+
+  it("should refuse to recurse into a directory symlink cycle in copy mode", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    // Create a directory symlink inside the source that resolves back to
+    // the skill directory itself, forming a cycle. Without cycle detection
+    // copyDirRecursive would recurse until the stack overflows.
+    symlinkSync(skill.sourcePath, join(skill.sourcePath, "loop"), "dir");
+
+    expect(() => installSkill(skill, projectDir, { mode: "copy" })).toThrow(/cyclic/i);
+  });
 });
 
 describe("uninstallSkill", () => {

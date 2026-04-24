@@ -302,6 +302,39 @@ describe("createSkillSyncCommand", () => {
     const installNames = mockedInstallSkill.mock.calls.map((c) => c[0].frontmatter.name);
     expect(installNames).toEqual(["commit"]);
   });
+
+  it("should clean up orphans even when the only valid skill is excluded", () => {
+    // Regression: `allSkillsInvalid` once checked the post-exclusion `skills`
+    // list, so excluding the sole valid skill while any per-file error was
+    // present flipped the bundle to "invalid" and preserved orphans. The
+    // check now uses `allSkills` (pre-exclusion) so excluded-but-valid
+    // skills still make the scan authoritative.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    const badDir = join(tempDir, "broken");
+    mkdirSync(badDir, { recursive: true });
+    writeFileSync(join(badDir, "SKILL.md"), "---\nname: broken\n---\n# missing description\n");
+
+    const projectDir = join(tempDir, ".project");
+    const installedDir = join(projectDir, ".agents/skills");
+    mkdirSync(join(installedDir, "orphan"), { recursive: true });
+    writeFileSync(
+      join(installedDir, "orphan", "SKILL.md"),
+      `---\nname: orphan\ndescription: gone\nmetadata:\n  politty-cli: "${OWNERSHIP}"\n---\n`,
+    );
+
+    mockedReadOwnership.mockReturnValue(OWNERSHIP);
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(projectDir);
+
+    try {
+      const command = createSkillSyncCommand(opts(tempDir), CLI);
+      command.run!({ exclude: ["commit"] });
+
+      const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
+      expect(uninstallNames).toContain("orphan");
+    } finally {
+      cwdSpy.mockRestore();
+    }
+  });
 });
 
 describe("createSkillAddCommand", () => {

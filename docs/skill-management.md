@@ -170,8 +170,9 @@ if (parsed) {
 }
 
 // Install one explicitly. The source SKILL.md must already declare
-// metadata["politty-cli"]; installSkill symlinks it into place verbatim
-// and does not rewrite any file.
+// metadata["politty-cli"]; installSkill installs it without rewriting
+// any file — symlinking the source in by default, or recursively copying
+// when mode is "copy".
 installSkill(skills[0]);
 // Force a recursive copy instead of a symlink:
 installSkill(skills[0], undefined, { mode: "copy" });

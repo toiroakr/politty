@@ -228,13 +228,34 @@ function symlinkOrCopy(args: {
  * their target content so the install does not leave dangling references
  * back into `node_modules`. Non-regular files (sockets, devices) are
  * ignored.
+ *
+ * `activeRealPaths` tracks the realpath of every directory currently on
+ * the recursion stack so a directory symlink pointing at an ancestor
+ * (e.g. `foo/bar -> ../..`) fails fast instead of recursing until the
+ * stack overflows or the disk fills.
  */
-function copyDirRecursive(src: string, dest: string): void {
+function copyDirRecursive(
+  src: string,
+  dest: string,
+  activeRealPaths: Set<string> = new Set(),
+): void {
   const stat = statSync(src);
   if (stat.isDirectory()) {
-    mkdirSync(dest, { recursive: true });
-    for (const entry of readdirSync(src)) {
-      copyDirRecursive(join(src, entry), join(dest, entry));
+    const realSrc = realpathSync(src);
+    if (activeRealPaths.has(realSrc)) {
+      throw new Error(
+        `Refusing to recursively copy cyclic directory symlink at ${src} ` +
+          `(resolves to ${realSrc}, already on the copy stack).`,
+      );
+    }
+    activeRealPaths.add(realSrc);
+    try {
+      mkdirSync(dest, { recursive: true });
+      for (const entry of readdirSync(src)) {
+        copyDirRecursive(join(src, entry), join(dest, entry), activeRealPaths);
+      }
+    } finally {
+      activeRealPaths.delete(realSrc);
     }
     return;
   }

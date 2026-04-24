@@ -401,7 +401,7 @@ const cli = withSkillCommand(
 runMain(cli);
 ```
 
-`package` identifies who owns these skills. It is combined with the command name as `"{package}:{cliName}"` and must match the `metadata["politty-cli"]` stamp pre-declared in each source SKILL.md — `skills add`/`sync` refuse mismatches, and `remove`/`sync` refuse to delete skills belonging to another tool. Install is symlink-only (`.agents/skills/<name>` -> source, `.claude/skills/<name>` -> canonical); source updates propagate live without re-running `sync`.
+`package` identifies who owns these skills. It is combined with the command name as `"{package}:{cliName}"` and must match the `metadata["politty-cli"]` stamp pre-declared in each source SKILL.md — `skills add`/`sync` refuse mismatches, and `remove`/`sync` refuse to delete skills belonging to another tool. The default install mode is `"symlink"` (`.agents/skills/<name>` -> source, `.claude/skills/<name>` -> canonical), so source updates propagate live; on filesystems without symlink support (e.g. Windows without Developer Mode) install throws with guidance to retry with `mode: "copy"`, which recursively copies instead (source updates then require re-running `sync`). See [Skill Management](./docs/skill-management.md) for details.
 
 Skills are SKILL.md files with YAML frontmatter (spec-compliant: https://agentskills.io/specification). The `metadata["politty-cli"]` stamp is authored by the skill package:
 
