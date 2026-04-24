@@ -11,7 +11,12 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { installSkill, readInstalledOwnership, uninstallSkill } from "../installer.js";
+import {
+  hasInstalledSkill,
+  installSkill,
+  readInstalledOwnership,
+  uninstallSkill,
+} from "../installer.js";
 import type { DiscoveredSkill } from "../types.js";
 
 const OWNERSHIP = "politty-test:my-agent";
@@ -273,5 +278,70 @@ describe("readInstalledOwnership", () => {
     installSkill(skill, projectDir);
 
     expect(readInstalledOwnership("linked", projectDir)).toBe(OWNERSHIP);
+  });
+});
+
+describe("hasInstalledSkill", () => {
+  let sourceDir: string;
+  let projectDir: string;
+
+  beforeEach(() => {
+    sourceDir = createTempDir();
+    projectDir = createTempDir();
+  });
+
+  afterEach(() => {
+    rmSync(sourceDir, { recursive: true, force: true });
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  it("should return false when nothing is installed", () => {
+    expect(hasInstalledSkill("nobody", projectDir)).toBe(false);
+  });
+
+  it("should return true for an installed skill (even without a stamp)", () => {
+    const skill = createSkillFixture(sourceDir, "unstamped", null);
+    installSkill(skill, projectDir);
+
+    // hasInstalledSkill is ownership-blind by design: it exists specifically
+    // to let callers distinguish "not installed" from "installed but
+    // unstamped" (readInstalledOwnership returns null for both).
+    expect(hasInstalledSkill("unstamped", projectDir)).toBe(true);
+  });
+
+  it("should return true for an installed skill with a valid stamp", () => {
+    const skill = createSkillFixture(sourceDir, "stamped");
+    installSkill(skill, projectDir);
+
+    expect(hasInstalledSkill("stamped", projectDir)).toBe(true);
+  });
+
+  it("should return false when the canonical symlink is broken", () => {
+    // A broken canonical (source package removed after install) is treated
+    // as "not installed" so `skills add` can fresh-install without hitting
+    // the legacy-install refusal.
+    const skill = createSkillFixture(sourceDir, "commit");
+    installSkill(skill, projectDir);
+    rmSync(skill.sourcePath, { recursive: true, force: true });
+
+    expect(hasInstalledSkill("commit", projectDir)).toBe(false);
+  });
+
+  it("should return true for a manually-created unstamped SKILL.md", () => {
+    // Simulates a legacy or manual install: a real directory with a real
+    // SKILL.md, not managed by this CLI. `skills add` must refuse to
+    // clobber it, so hasInstalledSkill must report its presence.
+    const manualDir = resolve(projectDir, ".agents/skills/legacy");
+    mkdirSync(manualDir, { recursive: true });
+    writeFileSync(
+      join(manualDir, "SKILL.md"),
+      "---\nname: legacy\ndescription: manual\n---\n# Legacy\n",
+    );
+
+    expect(hasInstalledSkill("legacy", projectDir)).toBe(true);
+  });
+
+  it("should reject unsafe skill names", () => {
+    expect(() => hasInstalledSkill("../escape", projectDir)).toThrow(/Invalid skill name/);
   });
 });

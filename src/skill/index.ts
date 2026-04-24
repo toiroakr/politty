@@ -61,6 +61,7 @@ import type { SkillCommandOptions } from "./types.js";
 // Public API re-exports
 export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./frontmatter.js";
 export {
+  hasInstalledSkill,
   installSkill,
   OWNERSHIP_METADATA_KEY,
   readInstalledOwnership,

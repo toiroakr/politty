@@ -1167,6 +1167,16 @@ function readInstalledOwnership(name: string, cwd?: string): string | null;
 
 ---
 
+### `hasInstalledSkill`
+
+Returns `true` when `.agents/skills/<name>/SKILL.md` resolves to a readable file (through a valid symlink or directly), `false` when the path is absent or the canonical symlink is broken. Use together with `readInstalledOwnership` to distinguish its two `null` cases — "not installed" (safe to install fresh) vs. "installed but unstamped" (a legacy or manual install that should not be silently clobbered).
+
+```typescript
+function hasInstalledSkill(name: string, cwd?: string): boolean;
+```
+
+---
+
 ### `parseSkillMd`
 
 Parses a SKILL.md content string and validates its frontmatter against the Agent Skills specification.
@@ -1394,6 +1404,7 @@ export type { ValidationError, ValidationResult } from "./validator/zod-validato
 ```typescript
 export { withSkillCommand } from "./skill/index.js";
 export {
+  hasInstalledSkill,
   installSkill,
   uninstallSkill,
   readInstalledOwnership,

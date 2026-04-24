@@ -13,6 +13,7 @@ vi.mock("../installer.js", () => ({
   installSkill: vi.fn(),
   uninstallSkill: vi.fn(),
   readInstalledOwnership: vi.fn(),
+  hasInstalledSkill: vi.fn(() => false),
   OWNERSHIP_METADATA_KEY: "politty-cli",
   AGENTS_SKILLS_DIR: ".agents/skills",
 }));
@@ -21,6 +22,7 @@ const installer = await import("../installer.js");
 const mockedInstallSkill = vi.mocked(installer.installSkill);
 const mockedUninstallSkill = vi.mocked(installer.uninstallSkill);
 const mockedReadOwnership = vi.mocked(installer.readInstalledOwnership);
+const mockedHasInstalledSkill = vi.mocked(installer.hasInstalledSkill);
 
 const PACKAGE = "@my-agent/skills";
 const CLI = "my-agent";
@@ -118,6 +120,8 @@ describe("createSkillSyncCommand", () => {
     mockedUninstallSkill.mockReset();
     mockedReadOwnership.mockReset();
     mockedReadOwnership.mockReturnValue(OWNERSHIP);
+    mockedHasInstalledSkill.mockReset();
+    mockedHasInstalledSkill.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -269,6 +273,8 @@ describe("createSkillAddCommand", () => {
     mockedReadOwnership.mockReset();
     // Default: nothing previously installed, so add is a fresh install.
     mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReset();
+    mockedHasInstalledSkill.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -358,6 +364,21 @@ describe("createSkillAddCommand", () => {
     const command = createSkillAddCommand(opts(tempDir), CLI);
 
     expect(() => command.run!({ name: "commit" })).toThrow(/source SKILL\.md declares/);
+    expect(mockedInstallSkill).not.toHaveBeenCalled();
+  });
+
+  it("should refuse to clobber an installed but unstamped legacy skill", () => {
+    // readInstalledOwnership returns null both for "not installed" and for
+    // "installed but has no (or malformed) politty-cli stamp". The scanner-
+    // level guards don't catch the latter — hasInstalledSkill resolves the
+    // ambiguity so we don't silently rmSync a user's manual install.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReturnValue(true);
+
+    const command = createSkillAddCommand(opts(tempDir), CLI);
+
+    expect(() => command.run!({ name: "commit" })).toThrow(/without a politty-cli stamp/);
     expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 });

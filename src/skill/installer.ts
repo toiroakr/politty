@@ -95,13 +95,31 @@ export function uninstallSkill(name: string, cwd: string = process.cwd()): void 
 }
 
 /**
+ * Report whether a skill is currently installed, independent of its
+ * ownership stamp. Returns `true` when `.agents/skills/<name>/SKILL.md`
+ * resolves to a readable file (through a valid symlink or directly);
+ * returns `false` when the path is absent or the canonical symlink is
+ * broken (source package uninstalled).
+ *
+ * Callers use this to distinguish the two cases where
+ * {@link readInstalledOwnership} returns `null` — "not installed" (safe
+ * to install fresh) vs. "installed but unstamped" (legacy or manual
+ * install that should not be silently clobbered).
+ */
+export function hasInstalledSkill(name: string, cwd: string = process.cwd()): boolean {
+  assertSafeName(name);
+  return existsSync(resolve(cwd, AGENTS_SKILLS_DIR, name, "SKILL.md"));
+}
+
+/**
  * Read the ownership stamp off an installed skill's SKILL.md, if any.
  *
  * Because `.agents/skills/<name>` is a symlink to the source, this reads
  * the stamp authored by the skill package.
  *
  * @returns `metadata["politty-cli"]` as `"{packageName}:{cliName}"`, or
- *   `null` if the skill is not installed or the stamp is absent/malformed.
+ *   `null` if the skill is not installed *or* the stamp is absent/malformed.
+ *   Use {@link hasInstalledSkill} to distinguish the two cases.
  */
 export function readInstalledOwnership(name: string, cwd: string = process.cwd()): string | null {
   assertSafeName(name);

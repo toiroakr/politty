@@ -138,7 +138,13 @@ my-agent skills list --json
 The scanning, parsing, and install primitives are exported for programmatic use:
 
 ```typescript
-import { scanSourceDir, parseSkillMd, installSkill, readInstalledOwnership } from "politty/skill";
+import {
+  scanSourceDir,
+  parseSkillMd,
+  installSkill,
+  readInstalledOwnership,
+  hasInstalledSkill,
+} from "politty/skill";
 
 // Discover skills (collects validation errors instead of throwing)
 const { skills, errors } = scanSourceDir("./skills");
@@ -159,6 +165,11 @@ installSkill(skills[0]);
 
 // Read the ownership stamp of an installed skill (via its symlink target)
 readInstalledOwnership("commit"); // "@my-agent/skills:my-agent" | null
+
+// Presence check independent of ownership — true for both stamped installs
+// and unstamped legacy/manual installs; false for "not installed" and for
+// broken canonical symlinks (source package uninstalled).
+hasInstalledSkill("commit"); // boolean
 ```
 
 ## SKILL.md Format

@@ -6,6 +6,7 @@ import { defineCommand } from "../core/command.js";
 import { logger, symbols } from "../output/logger.js";
 import {
   AGENTS_SKILLS_DIR,
+  hasInstalledSkill,
   installSkill,
   OWNERSHIP_METADATA_KEY,
   readInstalledOwnership,
@@ -263,6 +264,16 @@ function addSkill(skill: DiscoveredSkill, expectedOwnership: string): void {
       `Refusing to install "${name}": owned by ${JSON.stringify(actual)}, ` +
         `not ${JSON.stringify(expectedOwnership)}. ` +
         `Check metadata.${OWNERSHIP_METADATA_KEY} in .agents/skills/${name}/SKILL.md.`,
+    );
+  }
+  // readInstalledOwnership returns null for both "not installed" and
+  // "installed but unstamped" — we distinguish via hasInstalledSkill so
+  // we don't silently rmSync a legacy/manual install we have no claim to.
+  if (actual === null && hasInstalledSkill(name)) {
+    throw new Error(
+      `Refusing to install "${name}": .agents/skills/${name}/SKILL.md exists without a ` +
+        `${OWNERSHIP_METADATA_KEY} stamp, so it was not installed by this CLI. ` +
+        `Remove it manually (or add the stamp to take ownership) before running "skills add".`,
     );
   }
   installSkill(skill);
