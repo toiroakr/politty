@@ -81,10 +81,13 @@ export type {
  * Wrap a command with a `skills` subcommand for managing SKILL.md-based skills.
  *
  * Adds `skills sync`, `skills add`, `skills remove`, and `skills list`.
- * Skills are installed to `.agents/skills/<name>/` and symlinked from
- * agent-specific directories (e.g. `.claude/skills/`). The install writes
- * the ownership stamp `metadata["politty-cli"] = "{package}:{cliName}"`,
- * which `remove` and `sync` consult before deleting so this CLI never
+ * Install is symlink-only: `.agents/skills/<name>` becomes a symlink to
+ * the source skill directory, and each agent-specific directory (e.g.
+ * `.claude/skills/<name>`) is symlinked to the canonical `.agents/skills/<name>`
+ * — politty never writes to `SKILL.md`. The ownership stamp
+ * `metadata["politty-cli"] = "{package}:{cliName}"` must be authored by
+ * the skill package itself; `add` and `sync` verify it before installing
+ * and `remove` and `sync` consult it before deleting, so this CLI never
  * clobbers skills another tool installed.
  *
  * @throws if `command.subCommands.skills` already exists — silently
