@@ -131,7 +131,7 @@ my-agent skills list
 my-agent skills list --json
 ```
 
-`--json` emits `{ name, description, owner, sourcePath }` per skill.
+`--json` emits `{ name, description, owner, expectedOwner, sourcePath }` per skill. `owner` is what the source SKILL.md actually declares under `metadata["politty-cli"]` (may be `null`); `expectedOwner` is `"{package}:{cliName}"`. A mismatch means `skills add` will refuse to install.
 
 ## Programmatic API
 

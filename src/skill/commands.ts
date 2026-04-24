@@ -197,7 +197,13 @@ export function createSkillListCommand(options: SkillCommandOptions, cliName: st
             sourceSkills.map((s) => ({
               name: s.frontmatter.name,
               description: s.frontmatter.description,
-              owner: stamp,
+              // `owner` is what the source SKILL.md actually declares; it
+              // may be null or differ from `expectedOwner` when the
+              // packaging is wrong, and in that case `skills add` refuses.
+              // Surfacing both lets tooling detect the mismatch without
+              // having to re-read SKILL.md.
+              owner: s.frontmatter.metadata?.[OWNERSHIP_METADATA_KEY] ?? null,
+              expectedOwner: stamp,
               sourcePath: s.sourcePath,
             })),
           ),

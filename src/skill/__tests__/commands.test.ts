@@ -97,7 +97,12 @@ describe("createSkillListCommand", () => {
       expect(output).toHaveLength(1);
       expect(output[0].name).toBe("commit");
       expect(output[0].description).toBe("Commit skill");
+      // `owner` reflects what the source SKILL.md actually declares; the
+      // default fixture stamps OWNERSHIP so both match. `expectedOwner`
+      // is what this CLI demands — tooling compares the two to detect
+      // packaging mismatches.
       expect(output[0].owner).toBe(OWNERSHIP);
+      expect(output[0].expectedOwner).toBe(OWNERSHIP);
     } finally {
       consoleSpy.mockRestore();
     }

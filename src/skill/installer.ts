@@ -110,9 +110,11 @@ export function readInstalledOwnership(name: string, cwd: string = process.cwd()
   try {
     content = readFileSync(path, "utf-8");
   } catch (err) {
-    // Treat "file absent" as "no ownership"; surface anything else (e.g.
-    // EACCES, broken symlink) so a real error doesn't look like an
-    // unstamped skill and get silently clobbered by `remove`/`sync`.
+    // Treat a missing file/path as "no ownership" — this also covers a
+    // broken canonical symlink (source package uninstalled), which surfaces
+    // as ENOENT/ENOTDIR. Surface anything else (e.g. EACCES, EPERM) so a
+    // real error doesn't look like an unstamped skill and get silently
+    // clobbered by `remove`/`sync`.
     if (isNodeError(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) return null;
     throw err;
   }
