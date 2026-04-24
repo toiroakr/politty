@@ -72,14 +72,18 @@ export function createSkillSyncCommand(options: SkillCommandOptions, cliName: st
       //     single-skill-source case where sourceDir's own SKILL.md failed
       //     to parse; without a single valid skill there, we cannot tell
       //     orphan-vs-intentionally-dropped.
-      // Per-skill errors on *subdirectories* (parse-failed, name-mismatch,
-      // a single unreadable SKILL.md) do not block cleanup: the remaining
-      // valid siblings still provide an authoritative bundle listing.
+      //   * every discovered SKILL.md failed validation (errors > 0 but no
+      //     valid skill returned) — we would otherwise interpret a totally
+      //     broken bundle as "CLI ships nothing" and rm every owned install.
+      // Per-skill errors on *subdirectories* alongside at least one valid
+      // skill do not block cleanup: the valid siblings still provide an
+      // authoritative bundle listing.
       const directoryScanFailed = errors.some(
         (e) => e.reason === "missing-source" || e.path === options.sourceDir,
       );
+      const allSkillsInvalid = errors.length > 0 && skills.length === 0;
 
-      if (!directoryScanFailed) {
+      if (!directoryScanFailed && !allSkillsInvalid) {
         // Remove skills we previously owned that the CLI no longer bundles.
         const sourceNames = new Set(skills.map((s) => s.frontmatter.name));
         for (const orphan of findOwnedInstalledSkills(stamp)) {

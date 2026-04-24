@@ -247,6 +247,37 @@ describe("createSkillSyncCommand", () => {
     }
   });
 
+  it("should skip orphan cleanup when every discovered skill failed validation", async () => {
+    // A totally broken bundle (every SKILL.md parse-failed, 0 valid) must not
+    // be interpreted as "CLI ships nothing" — that would wipe every owned
+    // install. Only directory-level success with a zero-length skills list is
+    // an authoritative "dropped all" signal.
+    const badDir = join(tempDir, "broken");
+    mkdirSync(badDir, { recursive: true });
+    writeFileSync(join(badDir, "SKILL.md"), "---\nname: broken\n---\n# missing description\n");
+
+    const projectDir = join(tempDir, ".project");
+    const installedDir = join(projectDir, ".agents/skills");
+    mkdirSync(join(installedDir, "orphan"), { recursive: true });
+    writeFileSync(
+      join(installedDir, "orphan", "SKILL.md"),
+      `---\nname: orphan\ndescription: installed\nmetadata:\n  politty-cli: "${OWNERSHIP}"\n---\n`,
+    );
+
+    mockedReadOwnership.mockReturnValue(OWNERSHIP);
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(projectDir);
+
+    try {
+      const command = createSkillSyncCommand(opts(tempDir), CLI);
+      command.run!({ exclude: [] });
+
+      expect(mockedUninstallSkill).not.toHaveBeenCalled();
+      expect(mockedInstallSkill).not.toHaveBeenCalled();
+    } finally {
+      cwdSpy.mockRestore();
+    }
+  });
+
   it("should still reinstall valid skills even when another skill has per-file errors", () => {
     // A parse-failed or name-mismatch on one skill must not block the rest
     // of the sync — the valid skills still represent what the CLI bundles.
