@@ -206,6 +206,22 @@ describe("uninstallSkill", () => {
   it("should not throw when skill is not installed", () => {
     expect(() => uninstallSkill("nonexistent", projectDir)).not.toThrow();
   });
+
+  it("should leave a real directory at the install path untouched", () => {
+    // A legacy/manual install is a real directory (not a symlink) at
+    // .agents/skills/<name>. uninstallSkill must never rm -rf it —
+    // ownership checks happen upstream, this primitive only unlinks
+    // symlinks it itself could have created.
+    const canonicalDir = join(projectDir, ".agents/skills/legacy");
+    mkdirSync(canonicalDir, { recursive: true });
+    const skillMd = join(canonicalDir, "SKILL.md");
+    writeFileSync(skillMd, "---\nname: legacy\ndescription: manual\n---\n# Legacy\n");
+
+    uninstallSkill("legacy", projectDir);
+
+    expect(existsSync(canonicalDir)).toBe(true);
+    expect(readFileSync(skillMd, "utf-8")).toContain("name: legacy");
+  });
 });
 
 describe("readInstalledOwnership", () => {

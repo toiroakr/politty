@@ -6,6 +6,7 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
 } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
@@ -77,21 +78,33 @@ export function installSkill(skill: DiscoveredSkill, cwd: string = process.cwd()
  * Uninstall a skill from the project's agent skill directories.
  *
  * Removes symlinks from agent directories, then removes the canonical symlink.
+ * A real directory at any of those paths means it wasn't installed by us
+ * (legacy/manual install) — we leave it alone rather than recursively
+ * deleting user data the CLI has no claim to. Ownership validation is the
+ * caller's responsibility (`removeOwnedSkill` handles it for the CLI flow).
  */
 export function uninstallSkill(name: string, cwd: string = process.cwd()): void {
   assertSafeName(name);
 
   for (const target of SYMLINK_TARGETS) {
-    const targetDir = resolve(cwd, target, name);
-    if (existsSync(targetDir) || isSymlink(targetDir)) {
-      rmSync(targetDir, { recursive: true, force: true });
-    }
+    removeSymlinkOnly(resolve(cwd, target, name));
   }
+  removeSymlinkOnly(resolve(cwd, AGENTS_SKILLS_DIR, name));
+}
 
-  const canonicalDir = resolve(cwd, AGENTS_SKILLS_DIR, name);
-  if (existsSync(canonicalDir) || isSymlink(canonicalDir)) {
-    rmSync(canonicalDir, { recursive: true, force: true });
-  }
+/**
+ * Unlink `path` iff it is a symlink. No-op when absent. A real directory
+ * here means the path was installed outside this CLI; we refuse rather
+ * than recursively rm'ing it.
+ *
+ * `unlinkSync` (not `rmSync`) is required for symlinks to directories —
+ * `rmSync` without `recursive: true` errors "Path is a directory" on a
+ * dir-symlink, but passing `recursive: true` would follow the symlink and
+ * delete its target contents.
+ */
+function removeSymlinkOnly(path: string): void {
+  if (!isSymlink(path)) return;
+  unlinkSync(path);
 }
 
 /**
