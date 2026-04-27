@@ -1038,6 +1038,249 @@ type CommandValidationResult =
 
 ---
 
+## Skill Management (`politty/skill`)
+
+Validates SKILL.md files against the [Agent Skills specification](https://agentskills.io/specification) and installs them by populating `.agents/skills/<name>` and each agent-specific directory (e.g. `.claude/skills/<name>`) from the source (typically `node_modules/<pkg>/skills/<name>`). The materialization is controlled by `mode`: `"symlink"` (default) symlinks the source into place and throws with guidance to retry with `"copy"` on filesystems without symlink support (e.g. Windows without Developer Mode); `"copy"` always copies. Agent-specific slots route through the canonical `.agents/skills/<name>` so one `sync` swaps all hops at once. Source SKILL.md must pre-declare `metadata["politty-cli"] = "{package}:{cliName}"`; the `skills add` / `skills sync` subcommands verify the stamp before installing, and `skills remove` / `skills sync` refuse to delete skills owned by another tool. `installSkill` itself does not validate ownership — programmatic callers that bypass `withSkillCommand` are responsible for that check. The installer never writes to SKILL.md.
+
+### `withSkillCommand`
+
+Wraps a command with a `skills` subcommand for managing SKILL.md-based agent skills.
+
+```typescript
+function withSkillCommand<T extends AnyCommand>(command: T, options: SkillCommandOptions): T;
+```
+
+Throws if `command.subCommands.skills` already exists.
+
+#### Parameters
+
+| Name      | Type                  | Description           |
+| --------- | --------------------- | --------------------- |
+| `command` | `AnyCommand`          | Command to wrap       |
+| `options` | `SkillCommandOptions` | Skill command options |
+
+**SkillCommandOptions:**
+
+| Property    | Type          | Description                                                                                                                                                                                                                                           |
+| ----------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sourceDir` | `string`      | Source directory containing SKILL.md files (symlinks within the source tree are followed)                                                                                                                                                             |
+| `package`   | `string`      | npm package name that owns these skills. Combined with the command name as `"{package}:{cliName}"` and compared against each source SKILL.md's `metadata["politty-cli"]` stamp; mismatches are refused                                                |
+| `mode`      | `InstallMode` | Install materialization strategy (`"symlink"` \| `"copy"`). Defaults to `"symlink"` — symlink the source into place; install throws with guidance to retry with `"copy"` on filesystems without symlink support (e.g. Windows without Developer Mode) |
+
+#### Generated Subcommands
+
+| Command                        | Description                                               |
+| ------------------------------ | --------------------------------------------------------- |
+| `skills sync [--exclude name]` | Remove orphans and reinstall all skills owned by this CLI |
+| `skills add [name]`            | Install skill(s) from source                              |
+| `skills remove [name]`         | Remove skill(s) owned by this CLI                         |
+| `skills list [--json]`         | List available skills from source                         |
+
+#### Example
+
+```typescript
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineCommand, runMain } from "politty";
+import { withSkillCommand } from "politty/skill";
+
+const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
+
+const cli = withSkillCommand(
+  defineCommand({
+    name: "my-agent",
+    subCommands: {
+      /* ... */
+    },
+  }),
+  { sourceDir, package: "@my-agent/skills" },
+);
+
+runMain(cli);
+```
+
+---
+
+### `scanSourceDir`
+
+Scans a directory for SKILL.md files.
+
+```typescript
+function scanSourceDir(sourceDir: string): ScanResult;
+```
+
+If the directory itself contains a SKILL.md, it is treated as a single-skill source; the parent-dir name match is skipped in that case. Otherwise, each subdirectory with a SKILL.md is validated; the subdirectory name **must** equal the frontmatter `name`. Symlinked skill directories and symlinked SKILL.md files are followed (npm packages already execute arbitrary JS on install, so refusing symlinks here would not raise the trust boundary).
+
+**ScanResult:**
+
+```typescript
+interface ScanResult {
+  skills: DiscoveredSkill[];
+  errors: ScanError[];
+}
+
+interface ScanError {
+  path: string;
+  reason: ScanErrorReason;
+  message: string;
+}
+
+// Runtime tuple of every scan error reason (for exhaustive iteration).
+const SCAN_ERROR_REASONS = [
+  "parse-failed",
+  "name-mismatch",
+  "read-failed",
+  "missing-source",
+] as const;
+type ScanErrorReason = (typeof SCAN_ERROR_REASONS)[number];
+```
+
+---
+
+### `installSkill`
+
+Populates `.agents/skills/<name>` from `skill.sourcePath` (typically `node_modules/<pkg>/skills/<name>`) and each agent-specific directory (e.g. `.claude/skills/<name>`) from the canonical slot. The materialization is controlled by `options.mode`:
+
+- `"symlink"` (default) — symlink the source into place. On `symlinkSync` failure (e.g. Windows without Developer Mode, or other filesystems that refuse symlinks) throws an error whose message names the path pair, the underlying cause, and tells the caller to retry with `mode: "copy"`. The original error is attached via the ES2022 `cause` option.
+- `"copy"` — recursive copy only; works anywhere.
+
+Never writes to the source SKILL.md; the ownership stamp is authored by the skill package, not rewritten at install time.
+
+```typescript
+function installSkill(skill: DiscoveredSkill, cwd?: string, options?: InstallSkillOptions): void;
+
+interface InstallSkillOptions {
+  /** Install materialization strategy. Default: `"symlink"`. */
+  mode?: InstallMode;
+}
+
+type InstallMode = "symlink" | "copy";
+```
+
+Callers that wrap `installSkill` directly should validate `skill.frontmatter.metadata?.["politty-cli"]` against their expected `"{package}:{cliName}"` before calling; `withSkillCommand`'s `skills add` / `skills sync` do this automatically.
+
+---
+
+### `uninstallSkill`
+
+Removes a skill's symlinks at `.agents/skills/<name>` and each agent-specific directory. Real directories (copy-mode installs) are removed only when `options.expectedOwnership` is provided and the directory's SKILL.md carries that stamp — unstamped or foreign real directories are always left alone. The `skills remove` / `skills sync` subcommands always pass `expectedOwnership` after their own ownership check; direct programmatic callers get the conservative symlink-only default.
+
+```typescript
+function uninstallSkill(name: string, cwd?: string, options?: UninstallSkillOptions): void;
+
+interface UninstallSkillOptions {
+  /**
+   * If provided, real directories are removed when their SKILL.md's
+   * `metadata["politty-cli"]` equals this stamp. Without it, only
+   * symlinks are unlinked.
+   */
+  expectedOwnership?: string;
+}
+```
+
+---
+
+### `readInstalledOwnership`
+
+Returns `metadata["politty-cli"]` from the installed SKILL.md at `.agents/skills/<name>/SKILL.md`. For symlink-mode installs this reads through to the source package's authored stamp; for copy-mode installs it reads the stamp captured in the local copy. Returns `null` if the skill is not installed, the canonical symlink is broken (source package uninstalled), or the stamp is absent/malformed. Other read errors (e.g. EACCES) are surfaced rather than swallowed, so `remove` / `sync` do not misinterpret a transient failure as "not installed" and clobber user data.
+
+```typescript
+function readInstalledOwnership(name: string, cwd?: string): string | null;
+```
+
+---
+
+### `hasInstalledSkill`
+
+Returns `true` when `.agents/skills/<name>/SKILL.md` resolves to a readable file (through a valid symlink or directly), `false` when the path is absent or the canonical symlink is broken. Use together with `readInstalledOwnership` to distinguish its two `null` cases — "not installed" (safe to install fresh) vs. "installed but unstamped" (a legacy or manual install that should not be silently clobbered).
+
+```typescript
+function hasInstalledSkill(name: string, cwd?: string): boolean;
+```
+
+---
+
+### `parseSkillMd`
+
+Parses a SKILL.md content string and validates its frontmatter against the Agent Skills specification.
+
+```typescript
+function parseSkillMd(content: string): ParsedSkillMd | null;
+```
+
+Returns `null` if the frontmatter is missing or fails validation.
+
+---
+
+### `parseFrontmatter`
+
+Parses YAML frontmatter from a markdown string. Tolerates a leading UTF-8 BOM. Returns `{ data: {}, body: content }` when no fence is found.
+
+```typescript
+function parseFrontmatter(content: string): { data: Record<string, unknown>; body: string };
+```
+
+---
+
+### `skillFrontmatterSchema`
+
+Zod schema for SKILL.md frontmatter. Enforces the Agent Skills spec and passes through unknown top-level keys via `.passthrough()`.
+
+```typescript
+const skillFrontmatterSchema: z.ZodObject<{
+  name: z.ZodString; // /^[a-z0-9]+(-[a-z0-9]+)*$/, 1..64
+  description: z.ZodString; // 1..1024
+  license: z.ZodOptional<z.ZodString>;
+  compatibility: z.ZodOptional<z.ZodString>; // <=500
+  metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+  "allowed-tools": z.ZodOptional<z.ZodString>;
+}>;
+```
+
+---
+
+### `OWNERSHIP_METADATA_KEY`
+
+String constant `"politty-cli"`. The metadata key under which the `{package}:{cliName}` ownership stamp is declared in each source SKILL.md (politty itself never writes this field).
+
+```typescript
+const OWNERSHIP_METADATA_KEY: "politty-cli";
+```
+
+---
+
+### `DiscoveredSkill`
+
+A skill found in a source directory.
+
+```typescript
+interface DiscoveredSkill {
+  frontmatter: SkillFrontmatter;
+  sourcePath: string;
+  rawContent: string;
+}
+```
+
+---
+
+### `SkillFrontmatter`
+
+Parsed SKILL.md frontmatter, validated against the Agent Skills specification.
+
+```typescript
+type SkillFrontmatter = {
+  name: string;
+  description: string;
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
+  "allowed-tools"?: string;
+  // unknown top-level keys round-trip via .passthrough()
+};
+```
+
+---
+
 ## Prompt Types
 
 For full usage details, see [Interactive Prompts](./interactive-prompts.md).
@@ -1177,4 +1420,31 @@ export type { ValidationError, ValidationResult } from "./validator/zod-validato
 // Prompt (subpath exports)
 // import { prompt } from "politty/prompt/clack";
 // import { prompt } from "politty/prompt/inquirer";
+```
+
+### `politty/skill`
+
+```typescript
+export { withSkillCommand } from "./skill/index.js";
+export {
+  hasInstalledSkill,
+  installSkill,
+  uninstallSkill,
+  readInstalledOwnership,
+  OWNERSHIP_METADATA_KEY,
+} from "./skill/installer.js";
+export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./skill/frontmatter.js";
+export { scanSourceDir } from "./skill/scanner.js";
+export { SCAN_ERROR_REASONS } from "./skill/types.js";
+export type {
+  DiscoveredSkill,
+  InstallMode,
+  InstallSkillOptions,
+  ScanError,
+  ScanErrorReason,
+  ScanResult,
+  SkillCommandOptions,
+  SkillFrontmatter,
+  UninstallSkillOptions,
+} from "./skill/types.js";
 ```

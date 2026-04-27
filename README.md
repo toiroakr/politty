@@ -15,6 +15,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **Auto Help Generation**: Automatically generate help text from definitions
 - **Interactive Prompts**: Prompt for missing arguments with pluggable adapters (clack, inquirer)
 - **Discriminated Union**: Support for mutually exclusive argument sets
+- **Skill Management**: Manage agent skills (SKILL.md) with file-based install/uninstall
 
 ## Requirements
 
@@ -375,6 +376,61 @@ const command = defineCommand({
 });
 ```
 
+## Skill Management
+
+politty manages SKILL.md-based agent skills distributed via npm packages.
+
+### Quick Setup
+
+Use `withSkillCommand` to add skill management to your CLI:
+
+```typescript
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineCommand, runMain } from "politty";
+import { withSkillCommand } from "politty/skill";
+
+// Resolves to ../skills from both src/ and dist/
+const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
+
+const cli = withSkillCommand(
+  defineCommand({
+    name: "my-agent",
+    subCommands: {
+      /* ... */
+    },
+  }),
+  { sourceDir, package: "@my-agent/skills" },
+);
+
+runMain(cli);
+```
+
+`package` identifies who owns these skills. It is combined with the command name as `"{package}:{cliName}"` and must match the `metadata["politty-cli"]` stamp pre-declared in each source SKILL.md — `skills add`/`sync` refuse mismatches, and `remove`/`sync` refuse to delete skills belonging to another tool. The default install mode is `"symlink"` (`.agents/skills/<name>` -> source, `.claude/skills/<name>` -> canonical), so source updates propagate live; on filesystems without symlink support (e.g. Windows without Developer Mode) install throws with guidance to retry with `mode: "copy"`, which recursively copies instead (source updates then require re-running `sync`). See [Skill Management](./docs/skill-management.md) for details.
+
+Skills are SKILL.md files with YAML frontmatter (spec-compliant: https://agentskills.io/specification). The `metadata["politty-cli"]` stamp is authored by the skill package:
+
+```markdown
+---
+name: commit
+description: Git commit message generation
+license: MIT
+metadata:
+  politty-cli: "@my-agent/skills:my-agent"
+---
+
+# Instructions for the agent...
+```
+
+Then users can manage skills:
+
+```bash
+my-agent skills sync              # Remove and reinstall all skills
+my-agent skills add commit        # Install a specific skill
+my-agent skills remove commit     # Remove a specific skill
+my-agent skills list              # List available skills
+```
+
 ## Documentation
 
 For detailed documentation, see the `docs/` directory:
@@ -384,6 +440,7 @@ For detailed documentation, see the `docs/` directory:
 - [Advanced Features](./docs/advanced-features.md) - Subcommands, Discriminated Union
 - [Interactive Prompts](./docs/interactive-prompts.md) - Prompt for missing arguments interactively
 - [Recipes](./docs/recipes.md) - Testing, configuration, error handling
+- [Skill Management](./docs/skill-management.md) - Agent skill management (SKILL.md-based)
 - [API Reference](./docs/api-reference.md) - Detailed API reference
 - [Doc Generation](./docs/doc-generation.md) - Automatic documentation generation
 

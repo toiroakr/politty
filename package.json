@@ -64,6 +64,16 @@
         "default": "./dist/completion/index.cjs"
       }
     },
+    "./skill": {
+      "import": {
+        "types": "./dist/skill/index.d.ts",
+        "default": "./dist/skill/index.js"
+      },
+      "require": {
+        "types": "./dist/skill/index.d.cts",
+        "default": "./dist/skill/index.cjs"
+      }
+    },
     "./prompt": {
       "import": {
         "types": "./dist/prompt/index.d.ts",
@@ -116,7 +126,8 @@
     "release": "pnpm build && changeset publish"
   },
   "dependencies": {
-    "string-width": "^8.2.0"
+    "string-width": "^8.2.0",
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@changesets/cli": "2.30.0",
