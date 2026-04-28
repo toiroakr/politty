@@ -404,10 +404,13 @@ type CompletionType = "subcommand" | "option-name" | "option-value" | "positiona
 
 ### `generateCandidates`
 
-Generates completion candidates based on context.
+Generates completion candidates based on context. Async because dynamic resolvers may return promises.
 
 ```typescript
-function generateCandidates(context: CompletionContext): CandidateResult;
+function generateCandidates(
+  context: CompletionContext,
+  options: { shell: "bash" | "zsh" | "fish" },
+): Promise<CandidateResult>;
 ```
 
 #### Return Value
@@ -435,17 +438,52 @@ Completion configuration for arguments.
 interface CompletionMeta {
   /** Completion type */
   type?: "file" | "directory" | "none";
-  /** Custom completion */
+  /** Custom completion (mutually exclusive: choices | shellCommand | resolve) */
   custom?: {
     /** Static choices */
     choices?: string[];
     /** Shell command for dynamic values */
     shellCommand?: string;
+    /** In-process JS resolver (see DynamicCompletionResolver) */
+    resolve?: DynamicCompletionResolver;
   };
   /** File extension filters (for type: "file") */
   extensions?: string[];
 }
 ```
+
+---
+
+### `DynamicCompletionResolver`
+
+Callback invoked at completion time inside the `__complete` command.
+
+```typescript
+type DynamicCompletionResolver = (
+  ctx: DynamicCompletionContext,
+) => DynamicCompletionResult | Promise<DynamicCompletionResult>;
+
+interface DynamicCompletionContext {
+  /** Word being completed (`--field=` inline prefix is stripped before this is set). */
+  currentWord: string;
+  /** Target shell formatting requested by the caller. */
+  shell: "bash" | "zsh" | "fish";
+  /** Best-effort parsed values of OTHER args (camelCase keys, raw strings). */
+  parsedArgs: Readonly<Record<string, unknown>>;
+  /** Values already supplied for the same option/positional being completed. */
+  previousValues: readonly string[];
+  /** Subcommand path from root (e.g. ["api"]). */
+  subcommandPath: readonly string[];
+}
+
+interface DynamicCompletionResult {
+  candidates: Array<string | { value: string; description?: string }>;
+  /** Optional override; defaults to FilterPrefix | NoFileCompletion. */
+  directive?: number;
+}
+```
+
+Specifying more than one of `choices`, `shellCommand`, or `resolve` on the same field throws at command-definition time. Static shell scripts automatically delegate to `<program> __complete --shell <shell>` when a field uses `resolve`.
 
 #### Example
 

@@ -46,6 +46,19 @@ export interface CompletionContext {
   usedOptions: Set<string>;
   /** Number of positional arguments already provided */
   providedPositionalCount: number;
+  /**
+   * Best-effort parsed values for the CURRENT command, keyed by camelCase
+   * field name. Includes positionals (single value or string[] for variadic
+   * positionals) and options (string for scalars, string[] for array
+   * options). Zod validation is NOT applied — values are raw strings.
+   */
+  parsedArgs: Record<string, unknown>;
+  /**
+   * Values already supplied for the option/positional currently being
+   * completed (for de-duplicating array options and oneof exclusivity in
+   * dynamic resolvers).
+   */
+  previousValues: string[];
 }
 
 /**
@@ -201,6 +214,21 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
   const usedOptions = new Set<string>();
   let positionalCount = 0;
 
+  // Best-effort parsed values for the CURRENT command. Reset when traversing
+  // into a subcommand so dynamic resolvers only see siblings on the same
+  // command frame.
+  let parsedArgs: Record<string, unknown> = {};
+  let positionalValues: string[] = [];
+
+  const recordOptionValue = (opt: CompletableOption, value: string): void => {
+    if (opt.valueType === "array") {
+      const existing = parsedArgs[opt.name];
+      parsedArgs[opt.name] = Array.isArray(existing) ? [...existing, value] : [value];
+    } else {
+      parsedArgs[opt.name] = value;
+    }
+  };
+
   // Process arguments to resolve subcommands and track state
   let i = 0;
   let options = extractOptions(currentCommand);
@@ -228,9 +256,15 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
           for (const a of opt.alias) usedOptions.add(a);
         }
 
-        // Skip next word if option takes value and doesn't have inline value
-        if (opt.takesValue && !hasInlineValue(word)) {
-          i++;
+        if (opt.takesValue) {
+          if (hasInlineValue(word)) {
+            const eqIdx = word.indexOf("=");
+            recordOptionValue(opt, word.slice(eqIdx + 1));
+          } else if (i + 1 < argv.length - 1) {
+            // Skip next word if option takes value and doesn't have inline value
+            recordOptionValue(opt, argv[i + 1]!);
+            i++;
+          }
         }
       }
       i++;
@@ -245,11 +279,14 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
       options = extractOptions(currentCommand);
       usedOptions.clear(); // Reset for new subcommand
       positionalCount = 0;
+      parsedArgs = {};
+      positionalValues = [];
       i++;
       continue;
     }
 
     // Otherwise it's a positional argument
+    positionalValues.push(word);
     positionalCount++;
     i++;
   }
@@ -261,6 +298,20 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
   // Extract data for current command
   const positionals = extractPositionalsForContext(currentCommand);
   const subcommands = getSubcommandNames(currentCommand);
+
+  // Map collected positional values to their field names so resolvers can
+  // reference them like options. The trailing variadic positional (if any)
+  // absorbs every value beyond `positionals.length - 1`.
+  for (let p = 0; p < positionals.length; p++) {
+    const pos = positionals[p]!;
+    if (pos.variadic) {
+      parsedArgs[pos.name] = positionalValues.slice(p);
+      break;
+    }
+    if (p < positionalValues.length) {
+      parsedArgs[pos.name] = positionalValues[p];
+    }
+  }
 
   // Determine completion type
   let completionType: CompletionType;
@@ -318,6 +369,21 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     }
   }
 
+  // Compute previousValues for the target of completion. Useful for resolvers
+  // that need to de-dup repeated array options or enforce oneof exclusivity.
+  let previousValues: string[] = [];
+  if (targetOption) {
+    if (targetOption.valueType === "array") {
+      const stored = parsedArgs[targetOption.name];
+      previousValues = Array.isArray(stored) ? (stored as string[]) : [];
+    }
+  } else if (completionType === "positional" && positionalIndex !== undefined) {
+    const pos = positionals[positionalIndex];
+    if (pos?.variadic) {
+      previousValues = positionalValues.slice(positionalIndex);
+    }
+  }
+
   return {
     subcommandPath,
     currentCommand,
@@ -331,6 +397,8 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     positionals,
     usedOptions,
     providedPositionalCount: positionalCount,
+    parsedArgs,
+    previousValues,
   };
 }
 

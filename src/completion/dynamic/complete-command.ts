@@ -64,15 +64,21 @@ export function createDynamicCompleteCommand(
     name: "__complete",
     // No description - this is a hidden command
     args: completeArgsSchema,
-    run(args) {
+    async run(args) {
       // Parse the completion context
       const context = parseCompletionContext(args.args, rootCommand);
 
-      // Generate candidates (shellCommand/file extensions resolved in JS)
-      const result = generateCandidates(context);
-
       // Detect bash inline option-value prefix
       const inlinePrefix = detectInlinePrefix(context.currentWord);
+
+      // Generate candidates (shellCommand/file extensions resolved in JS,
+      // dynamic resolvers awaited). When an inline prefix is present, hand
+      // the resolver only the value after `=` so it does not have to peel
+      // the prefix off itself.
+      const generationContext = inlinePrefix
+        ? { ...context, currentWord: context.currentWord.slice(inlinePrefix.length) }
+        : context;
+      const result = await generateCandidates(generationContext, { shell: args.shell });
 
       // Format for the target shell
       const output = formatForShell(result, {

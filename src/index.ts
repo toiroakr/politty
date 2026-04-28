@@ -6,6 +6,7 @@
 
 // Core exports
 // Completion exports
+export { isDynamicValueCompletion } from "./completion/dynamic-completion-types.js";
 export {
   generateCompletion,
   withCompletionCommand,
@@ -26,6 +27,13 @@ export {
 export { createDualCaseProxy } from "./core/case-proxy.js";
 export type { CamelCase, KebabCase, WithCaseVariants } from "./core/case-types.js";
 export { createDefineCommand, defineCommand, type MergedArgs } from "./core/command.js";
+export type {
+  CompletionDirectiveMask,
+  DynamicCompletionCandidate,
+  DynamicCompletionContext,
+  DynamicCompletionResolver,
+  DynamicCompletionResult,
+} from "./core/dynamic-completion-types.js";
 export { runCommand, runMain } from "./core/runner.js";
 export {
   extractFields,

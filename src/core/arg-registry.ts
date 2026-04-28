@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { GlobalArgs, IsEmpty } from "../types.js";
+import type { DynamicCompletionResolver } from "./dynamic-completion-types.js";
 
 /**
  * Built-in completion types
@@ -8,13 +9,23 @@ import type { GlobalArgs, IsEmpty } from "../types.js";
 export type CompletionType = "file" | "directory" | "none";
 
 /**
- * Custom completion specification
+ * Custom completion specification.
+ *
+ * `choices`, `shellCommand`, and `resolve` are mutually exclusive — specifying
+ * more than one throws when the field metadata is resolved.
  */
 export interface CustomCompletion {
   /** Static list of choices for completion */
   choices?: string[];
   /** Shell command to execute for dynamic completion */
   shellCommand?: string;
+  /**
+   * In-process JS callback for dynamic completion. Receives parsed context
+   * (other arg values typed so far, previously supplied values for this same
+   * option) and returns candidates. Static shell scripts delegate to
+   * `<program> __complete` whenever this is set.
+   */
+  resolve?: DynamicCompletionResolver;
 }
 
 /**
@@ -307,5 +318,8 @@ export function arg<T extends z.ZodType>(schema: T, meta?: ValidateArgMeta<ArgMe
  * @returns The metadata if registered, undefined otherwise
  */
 export function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
-  return argRegistry.get(schema);
+  // Cast through unknown to soften strict thenable variance from
+  // DynamicCompletionResolver's Promise return; the registry stores
+  // ArgMeta values verbatim.
+  return argRegistry.get(schema) as ArgMeta | undefined;
 }

@@ -5,6 +5,7 @@
  * Used by both the static extractor and the dynamic context parser.
  */
 
+import type { DynamicCompletionResolver } from "./dynamic-completion-types.js";
 import type { ValueCompletion } from "./types.js";
 
 /**
@@ -15,30 +16,53 @@ export interface ValueCompletionField {
   completion?:
     | ({
         type?: string;
-        custom?: { choices?: string[]; shellCommand?: string };
+        custom?: {
+          choices?: string[];
+          shellCommand?: string;
+          resolve?: DynamicCompletionResolver;
+        };
       } & ({ extensions?: string[]; matcher?: never } | { matcher?: string[]; extensions?: never }))
     | undefined;
   enumValues?: string[] | undefined;
+  /** Field name surfaced in error messages when custom variants are mixed. */
+  name?: string;
 }
 
 /**
- * Resolve value completion from field metadata
+ * Resolve value completion from field metadata.
  *
- * Priority:
- * 1. Explicit custom completion (choices or shellCommand)
- * 2. Explicit completion type (file, directory, none)
- * 3. Auto-detected enum values from schema
+ * Priority (within `custom`): `resolve` > `choices` > `shellCommand`.
+ * Specifying more than one of these on the same field throws so the
+ * misconfiguration surfaces at command-definition time rather than at
+ * completion time.
+ *
+ * Outside `custom`: explicit `type` (file/directory/none) > auto-detected
+ * enum values from the schema.
  */
 export function resolveValueCompletion(field: ValueCompletionField): ValueCompletion | undefined {
   const meta = field.completion;
 
-  // Priority 1: Explicit custom completion
   if (meta?.custom) {
-    if (meta.custom.choices && meta.custom.choices.length > 0) {
-      return { type: "choices", choices: meta.custom.choices };
+    const c = meta.custom;
+    const definedKeys: string[] = [];
+    if (c.resolve) definedKeys.push("resolve");
+    if (c.choices && c.choices.length > 0) definedKeys.push("choices");
+    if (c.shellCommand) definedKeys.push("shellCommand");
+
+    if (definedKeys.length > 1) {
+      throw new Error(
+        `Field "${field.name ?? "<unknown>"}": completion.custom may only specify one of choices, shellCommand, resolve (got ${definedKeys.join(", ")}).`,
+      );
     }
-    if (meta.custom.shellCommand) {
-      return { type: "command", shellCommand: meta.custom.shellCommand };
+
+    if (c.resolve) {
+      return { type: "dynamic", resolve: c.resolve };
+    }
+    if (c.choices && c.choices.length > 0) {
+      return { type: "choices", choices: c.choices };
+    }
+    if (c.shellCommand) {
+      return { type: "command", shellCommand: c.shellCommand };
     }
   }
 

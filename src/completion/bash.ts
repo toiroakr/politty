@@ -11,6 +11,7 @@ import {
   extractCompletionData,
   getSubNamesWithAliases,
   getVisibleSubs,
+  hasDynamicCompletion,
   isSubcmdCaseLines,
   optTakesValueEntries,
   sanitize,
@@ -33,10 +34,20 @@ function escapeBashDQ(s: string): string {
  * Generate bash value completion code for a ValueCompletion spec.
  * Returns an array of bash lines.
  */
-function bashValueLines(vc: ValueCompletion | undefined, inline: boolean): string[] {
+function bashValueLines(vc: ValueCompletion | undefined, inline: boolean, fn: string): string[] {
   if (!vc) return [];
 
   switch (vc.type) {
+    case "dynamic": {
+      // Delegate to `<program> __complete --shell bash`; the politty bash
+      // formatter already prepends the inline prefix to each candidate, so
+      // the consumer just drops sentinel lines.
+      return [
+        `local _dyn_out`,
+        `_dyn_out=$(__${fn}_invoke_complete bash "\${_words[@]}")`,
+        `__${fn}_apply_dynamic_output "$_dyn_out"`,
+      ];
+    }
     case "choices": {
       const items = vc.choices!.map((c) => `"${escapeBashDQ(c)}"`).join(" ");
       if (inline) {
@@ -112,11 +123,11 @@ function bashFileFilter(checks: string, inline: boolean): string[] {
 }
 
 /** Collect value-taking option patterns for case matching */
-function optionValueCases(options: CompletableOption[], inline: boolean): string[] {
+function optionValueCases(options: CompletableOption[], inline: boolean, fn: string): string[] {
   const lines: string[] = [];
   for (const opt of options) {
     if (!opt.takesValue || !opt.valueCompletion) continue;
-    const valLines = bashValueLines(opt.valueCompletion, inline);
+    const valLines = bashValueLines(opt.valueCompletion, inline, fn);
     if (valLines.length === 0) continue;
 
     const patterns: string[] = [`--${opt.cliName}`];
@@ -137,7 +148,7 @@ function optionValueCases(options: CompletableOption[], inline: boolean): string
 }
 
 /** Generate positional completion block */
-function positionalBlock(positionals: CompletablePositional[]): string[] {
+function positionalBlock(positionals: CompletablePositional[], fn: string): string[] {
   if (positionals.length === 0) return [];
   const lines: string[] = [];
   lines.push(`    case "$_pos_count" in`);
@@ -149,7 +160,7 @@ function positionalBlock(positionals: CompletablePositional[]): string[] {
     } else {
       lines.push(`        ${pos.position})`);
     }
-    for (const vl of bashValueLines(pos.valueCompletion, false)) {
+    for (const vl of bashValueLines(pos.valueCompletion, false, fn)) {
       lines.push(`            ${vl}`);
     }
     lines.push(`            ;;`);
@@ -160,11 +171,11 @@ function positionalBlock(positionals: CompletablePositional[]): string[] {
 }
 
 /** Generate prev/inline value completion blocks for options */
-function valueCompletionBlocks(options: CompletableOption[]): string[] {
+function valueCompletionBlocks(options: CompletableOption[], fn: string): string[] {
   if (!options.some((o) => o.takesValue && o.valueCompletion)) return [];
 
   const lines: string[] = [];
-  const prevCases = optionValueCases(options, false);
+  const prevCases = optionValueCases(options, false, fn);
   if (prevCases.length > 0) {
     lines.push(`    if [[ -z "$_inline_prefix" ]]; then`);
     lines.push(`        case "$_prev" in`);
@@ -172,7 +183,7 @@ function valueCompletionBlocks(options: CompletableOption[]): string[] {
     lines.push(`        esac`);
     lines.push(`    fi`);
   }
-  const inlineCases = optionValueCases(options, true);
+  const inlineCases = optionValueCases(options, true, fn);
   if (inlineCases.length > 0) {
     lines.push(`    if [[ -n "$_inline_prefix" ]]; then`);
     lines.push(`        case "\${_inline_prefix%=}" in`);
@@ -223,7 +234,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`${funcName}() {`);
 
   // 1. Option value completion (prev is value-taking option)
-  lines.push(...valueCompletionBlocks(sub.options));
+  lines.push(...valueCompletionBlocks(sub.options, fn));
 
   // Fallback: value-taking option without explicit completion → default file completion
   const fullPathStr = fullPath.join(":");
@@ -237,7 +248,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 2. After -- separator
   if (sub.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
-    lines.push(...positionalBlock(sub.positionals).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(sub.positionals, fn).map((l) => `    ${l}`));
     lines.push(`        return`);
     lines.push(`    fi`);
   } else {
@@ -261,7 +272,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
     lines.push(`    COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
     lines.push(`    compopt +o default 2>/dev/null`);
   } else if (sub.positionals.length > 0) {
-    lines.push(...positionalBlock(sub.positionals));
+    lines.push(...positionalBlock(sub.positionals, fn));
   }
 
   lines.push(`}`);
@@ -283,6 +294,34 @@ export function generateBashCompletion(
   lines.push(`# Bash completion for ${programName}`);
   lines.push(`# Generated by politty`);
   lines.push(``);
+
+  // Dynamic completion delegate helpers (only when any value spec uses
+  // an in-process JS resolver). The static script invokes
+  // `<program> __complete --shell bash` and parses the candidate stream.
+  if (hasDynamicCompletion(root)) {
+    lines.push(`__${fn}_invoke_complete() {`);
+    lines.push(`    local _shell="$1"; shift`);
+    lines.push(
+      `    "\${${fn.toUpperCase()}_BIN:-${programName}}" __complete --shell "$_shell" -- "$@" 2>/dev/null`,
+    );
+    lines.push(`}`);
+    lines.push(``);
+    lines.push(`__${fn}_apply_dynamic_output() {`);
+    lines.push(`    local _raw="$1"`);
+    lines.push(`    COMPREPLY=()`);
+    lines.push(`    local _line`);
+    lines.push(`    while IFS= read -r _line; do`);
+    lines.push(`        case "$_line" in`);
+    lines.push(`            ":"*) ;;`);
+    lines.push(`            "@ext:"*|"@matcher:"*) ;;`);
+    lines.push(`            "") ;;`);
+    lines.push(`            *) COMPREPLY+=("$_line") ;;`);
+    lines.push(`        esac`);
+    lines.push(`    done <<< "$_raw"`);
+    lines.push(`    compopt +o default 2>/dev/null`);
+    lines.push(`}`);
+    lines.push(``);
+  }
 
   // Helper: check if option is already used
   lines.push(`__${fn}_not_used() {`);
@@ -325,7 +364,7 @@ export function generateBashCompletion(
 
   // Root handler
   lines.push(`__${fn}_complete_root() {`);
-  lines.push(...valueCompletionBlocks(root.options));
+  lines.push(...valueCompletionBlocks(root.options, fn));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(
     `    if [[ -z "$_inline_prefix" ]] && __${fn}_opt_takes_value "" "$_prev"; then return; fi`,
@@ -335,7 +374,7 @@ export function generateBashCompletion(
   );
   if (root.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
-    lines.push(...positionalBlock(root.positionals).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(root.positionals, fn).map((l) => `    ${l}`));
     lines.push(`        return`);
     lines.push(`    fi`);
   } else {
@@ -355,7 +394,7 @@ export function generateBashCompletion(
     lines.push(`        compopt +o default 2>/dev/null`);
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
-    lines.push(...positionalBlock(root.positionals).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(root.positionals, fn).map((l) => `    ${l}`));
   }
   lines.push(`    fi`);
   lines.push(`}`);

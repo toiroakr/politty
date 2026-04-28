@@ -5,7 +5,7 @@
 import { execSync } from "node:child_process";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
-import type { ValueCompletion } from "../types.js";
+import type { ShellType, ValueCompletion } from "../types.js";
 import type { CompletionContext } from "./context-parser.js";
 
 /**
@@ -57,11 +57,29 @@ export interface CandidateResult {
 }
 
 /**
- * Generate completion candidates based on context
+ * Options for candidate generation.
  */
-export function generateCandidates(context: CompletionContext): CandidateResult {
+export interface GenerateCandidatesOptions {
+  /**
+   * Target shell. Forwarded to dynamic resolvers so they can vary output
+   * (e.g. include descriptions only for shells that render them).
+   */
+  shell: ShellType;
+}
+
+/**
+ * Generate completion candidates based on context.
+ *
+ * Async because dynamic resolvers may return promises. Sync completion
+ * sources (choices/file/directory/command/none, subcommand, option name)
+ * still resolve synchronously and the await is a no-op for them.
+ */
+export async function generateCandidates(
+  context: CompletionContext,
+  options: GenerateCandidatesOptions,
+): Promise<CandidateResult> {
   const candidates: CompletionCandidate[] = [];
-  let directive = CompletionDirective.Default;
+  const directive = CompletionDirective.Default;
 
   switch (context.completionType) {
     case "subcommand":
@@ -71,10 +89,10 @@ export function generateCandidates(context: CompletionContext): CandidateResult 
       return generateOptionNameCandidates(context);
 
     case "option-value":
-      return generateOptionValueCandidates(context);
+      return generateOptionValueCandidates(context, options);
 
     case "positional":
-      return generatePositionalCandidates(context);
+      return generatePositionalCandidates(context, options);
 
     default:
       return { candidates, directive };
@@ -105,13 +123,15 @@ type ValueResolutionResult = Pick<CandidateResult, "directive" | "fileExtensions
 /**
  * Resolve value completion, executing shell commands and file lookups in JS
  */
-function resolveValueCandidates(
+async function resolveValueCandidates(
   vc: ValueCompletion,
   candidates: CompletionCandidate[],
-  _currentWord: string,
+  ctx: ResolverInvocationContext,
   description?: string,
-): ValueResolutionResult {
-  let directive = CompletionDirective.FilterPrefix;
+): Promise<ValueResolutionResult> {
+  // Type as `number` so subsequent assignments of bitwise-OR'd values do not
+  // narrow against the literal initial value.
+  let directive: number = CompletionDirective.FilterPrefix;
   let fileExtensions: string[] | undefined;
   let fileMatchers: string[] | undefined;
 
@@ -172,9 +192,52 @@ function resolveValueCandidates(
     case "none":
       directive |= CompletionDirective.NoFileCompletion;
       break;
+
+    case "dynamic": {
+      try {
+        const result = await vc.resolve({
+          currentWord: ctx.currentWord,
+          shell: ctx.shell,
+          parsedArgs: ctx.parsedArgs,
+          previousValues: ctx.previousValues,
+          subcommandPath: ctx.subcommandPath,
+        });
+        for (const c of result.candidates) {
+          if (typeof c === "string") {
+            candidates.push({ value: c, type: "value" });
+          } else {
+            candidates.push({
+              value: c.value,
+              description: c.description,
+              type: "value",
+            });
+          }
+        }
+        directive =
+          result.directive ??
+          CompletionDirective.FilterPrefix | CompletionDirective.NoFileCompletion;
+      } catch {
+        // Resolver failures must not break the user's shell. Surface an
+        // empty candidate set with the Error directive so callers that care
+        // can detect a faulted resolver.
+        directive = CompletionDirective.NoFileCompletion | CompletionDirective.Error;
+      }
+      break;
+    }
   }
 
   return { directive, fileExtensions, fileMatchers };
+}
+
+/**
+ * Subset of `CompletionContext` needed to invoke a dynamic resolver.
+ */
+interface ResolverInvocationContext {
+  currentWord: string;
+  shell: ShellType;
+  parsedArgs: Readonly<Record<string, unknown>>;
+  previousValues: readonly string[];
+  subcommandPath: readonly string[];
 }
 
 /**
@@ -257,9 +320,30 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
 }
 
 /**
+ * Build the resolver-invocation slice of CompletionContext.
+ * `currentWord` is passed verbatim — the caller (`__complete`) strips inline
+ * `--field=` prefixes before invoking us.
+ */
+function resolverContext(
+  context: CompletionContext,
+  options: GenerateCandidatesOptions,
+): ResolverInvocationContext {
+  return {
+    currentWord: context.currentWord,
+    shell: options.shell,
+    parsedArgs: context.parsedArgs,
+    previousValues: context.previousValues,
+    subcommandPath: context.subcommandPath,
+  };
+}
+
+/**
  * Generate option value candidates
  */
-function generateOptionValueCandidates(context: CompletionContext): CandidateResult {
+async function generateOptionValueCandidates(
+  context: CompletionContext,
+  options: GenerateCandidatesOptions,
+): Promise<CandidateResult> {
   const candidates: CompletionCandidate[] = [];
 
   if (!context.targetOption) {
@@ -271,13 +355,19 @@ function generateOptionValueCandidates(context: CompletionContext): CandidateRes
     return { candidates, directive: CompletionDirective.FilterPrefix };
   }
 
-  return { candidates, ...resolveValueCandidates(vc, candidates, context.currentWord) };
+  return {
+    candidates,
+    ...(await resolveValueCandidates(vc, candidates, resolverContext(context, options))),
+  };
 }
 
 /**
  * Generate positional argument candidates
  */
-function generatePositionalCandidates(context: CompletionContext): CandidateResult {
+async function generatePositionalCandidates(
+  context: CompletionContext,
+  options: GenerateCandidatesOptions,
+): Promise<CandidateResult> {
   const candidates: CompletionCandidate[] = [];
 
   // Get the positional at current index, clamping to last (variadic) positional
@@ -297,6 +387,11 @@ function generatePositionalCandidates(context: CompletionContext): CandidateResu
 
   return {
     candidates,
-    ...resolveValueCandidates(vc, candidates, context.currentWord, positional.description),
+    ...(await resolveValueCandidates(
+      vc,
+      candidates,
+      resolverContext(context, options),
+      positional.description,
+    )),
   };
 }
