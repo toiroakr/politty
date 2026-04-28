@@ -34,7 +34,6 @@ import { generateFishCompletion } from "./fish.js";
 import type { CompletionOptions, CompletionResult, ShellType } from "./types.js";
 import { generateZshCompletion } from "./zsh.js";
 
-// Re-export dynamic completion
 // Re-export dynamic completion types (in-process resolver)
 export {
   isDynamicValueCompletion,

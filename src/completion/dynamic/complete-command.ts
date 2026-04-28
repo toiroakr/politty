@@ -72,24 +72,19 @@ export function createDynamicCompleteCommand(
       // Parse the completion context
       const context = parseCompletionContext(args.args, rootCommand, globalArgsSchema);
 
-      // Detect bash inline option-value prefix
+      // Detect bash inline option-value prefix and strip it from currentWord
+      // so resolvers/formatters never have to peel `--field=` off themselves.
       const inlinePrefix = detectInlinePrefix(context.currentWord);
+      const effectiveWord = inlinePrefix
+        ? context.currentWord.slice(inlinePrefix.length)
+        : context.currentWord;
 
-      // Generate candidates (shellCommand/file extensions resolved in JS,
-      // dynamic resolvers awaited). When an inline prefix is present, hand
-      // the resolver only the value after `=` so it does not have to peel
-      // the prefix off itself.
-      const generationContext = inlinePrefix
-        ? { ...context, currentWord: context.currentWord.slice(inlinePrefix.length) }
-        : context;
+      const generationContext = inlinePrefix ? { ...context, currentWord: effectiveWord } : context;
       const result = await generateCandidates(generationContext, { shell: args.shell });
 
-      // Format for the target shell
       const output = formatForShell(result, {
         shell: args.shell,
-        currentWord: inlinePrefix
-          ? context.currentWord.slice(inlinePrefix.length)
-          : context.currentWord,
+        currentWord: effectiveWord,
         inlinePrefix,
       });
 

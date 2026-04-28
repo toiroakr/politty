@@ -3,6 +3,7 @@
  */
 
 import { execSync } from "node:child_process";
+import type { DynamicCompletionContext } from "../../core/dynamic-completion-types.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import type { ShellType, ValueCompletion } from "../types.js";
@@ -126,11 +127,9 @@ type ValueResolutionResult = Pick<CandidateResult, "directive" | "fileExtensions
 async function resolveValueCandidates(
   vc: ValueCompletion,
   candidates: CompletionCandidate[],
-  ctx: ResolverInvocationContext,
+  ctx: DynamicCompletionContext,
   description?: string,
 ): Promise<ValueResolutionResult> {
-  // Type as `number` so subsequent assignments of bitwise-OR'd values do not
-  // narrow against the literal initial value.
   let directive: number = CompletionDirective.FilterPrefix;
   let fileExtensions: string[] | undefined;
   let fileMatchers: string[] | undefined;
@@ -195,23 +194,10 @@ async function resolveValueCandidates(
 
     case "dynamic": {
       try {
-        const result = await vc.resolve({
-          currentWord: ctx.currentWord,
-          shell: ctx.shell,
-          parsedArgs: ctx.parsedArgs,
-          previousValues: ctx.previousValues,
-          subcommandPath: ctx.subcommandPath,
-        });
+        const result = await vc.resolve(ctx);
         for (const c of result.candidates) {
-          if (typeof c === "string") {
-            candidates.push({ value: c, type: "value" });
-          } else {
-            candidates.push({
-              value: c.value,
-              description: c.description,
-              type: "value",
-            });
-          }
+          const normalized = typeof c === "string" ? { value: c } : c;
+          candidates.push({ ...normalized, type: "value" });
         }
         directive =
           result.directive ??
@@ -227,17 +213,6 @@ async function resolveValueCandidates(
   }
 
   return { directive, fileExtensions, fileMatchers };
-}
-
-/**
- * Subset of `CompletionContext` needed to invoke a dynamic resolver.
- */
-interface ResolverInvocationContext {
-  currentWord: string;
-  shell: ShellType;
-  parsedArgs: Readonly<Record<string, unknown>>;
-  previousValues: readonly string[];
-  subcommandPath: readonly string[];
 }
 
 /**
@@ -327,7 +302,7 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
 function resolverContext(
   context: CompletionContext,
   options: GenerateCandidatesOptions,
-): ResolverInvocationContext {
+): DynamicCompletionContext {
   return {
     currentWord: context.currentWord,
     shell: options.shell,
