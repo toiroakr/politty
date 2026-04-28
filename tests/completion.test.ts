@@ -1556,7 +1556,7 @@ describe("Completion", () => {
       const originalSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
 
       // Bump the binary mtime by 5s — this should force a rewrite.
-      const bumped = new Date((statSync(fakeBin).mtimeMs + 5000) / 1000);
+      const bumped = new Date(statSync(fakeBin).mtimeMs + 5000);
       utimesSync(fakeBin, bumped, bumped);
 
       refreshIfStale(

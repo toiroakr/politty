@@ -211,6 +211,7 @@ export function createCompletionCommand(
               programName: resolvedProgramName,
               ...(programVersion !== undefined && { programVersion }),
               ...(cacheDir !== undefined && { cacheDir }),
+              ...(globalArgsSchema !== undefined && { globalArgsSchema }),
             },
             shellType,
           );
@@ -280,7 +281,7 @@ export function createCompletionCommand(
 export function createRefreshCompletionCommand(
   rootCommand: AnyCommand,
   programName: string,
-  extra: { cacheDir?: string; programVersion?: string } = {},
+  extra: { cacheDir?: string; programVersion?: string; globalArgsSchema?: ArgsSchema } = {},
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Command<typeof refreshArgsSchema, RefreshArgs, any> {
   return defineCommand({
@@ -294,6 +295,7 @@ export function createRefreshCompletionCommand(
           programName,
           ...(extra.programVersion !== undefined && { programVersion: extra.programVersion }),
           ...(extra.cacheDir !== undefined && { cacheDir: extra.cacheDir }),
+          ...(extra.globalArgsSchema !== undefined && { globalArgsSchema: extra.globalArgsSchema }),
         },
         args.shell,
       );
@@ -350,9 +352,10 @@ export function withCompletionCommand<T extends AnyCommand>(
 
   const { programName, globalArgsSchema, cacheDir, programVersion } = opts;
   const resolvedProgramName = programName ?? command.name;
-  const extra: { cacheDir?: string; programVersion?: string } = {};
+  const extra: { cacheDir?: string; programVersion?: string; globalArgsSchema?: ArgsSchema } = {};
   if (cacheDir !== undefined) extra.cacheDir = cacheDir;
   if (programVersion !== undefined) extra.programVersion = programVersion;
+  if (globalArgsSchema !== undefined) extra.globalArgsSchema = globalArgsSchema;
 
   const wrappedCommand = {
     ...command,

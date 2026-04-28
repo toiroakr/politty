@@ -14,7 +14,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { AnyCommand } from "../types.js";
+import type { AnyCommand, ArgsSchema } from "../types.js";
 import { computeBinSig } from "./header.js";
 import { generateCompletion } from "./index.js";
 import { defaultCacheDir } from "./loader.js";
@@ -26,6 +26,7 @@ export interface InstallContext {
   programVersion?: string | undefined;
   cacheDir?: string | undefined;
   binPath?: string | undefined;
+  globalArgsSchema?: ArgsSchema | undefined;
 }
 
 /**
@@ -61,6 +62,7 @@ function generateScript(ctx: InstallContext, shell: ShellType): string {
     ...(ctx.programVersion !== undefined && { programVersion: ctx.programVersion }),
     ...(ctx.binPath !== undefined && { binPath: ctx.binPath }),
     ...(ctx.cacheDir !== undefined && { cacheDir: ctx.cacheDir }),
+    ...(ctx.globalArgsSchema !== undefined && { globalArgsSchema: ctx.globalArgsSchema }),
   }).script;
 }
 
