@@ -167,7 +167,7 @@ export function createCompletionCommand(
   if (!rootCommand.subCommands?.__complete) {
     rootCommand.subCommands = {
       ...rootCommand.subCommands,
-      __complete: createDynamicCompleteCommand(rootCommand, resolvedProgramName),
+      __complete: createDynamicCompleteCommand(rootCommand, resolvedProgramName, globalArgsSchema),
     };
   }
 
@@ -248,9 +248,7 @@ export function withCompletionCommand<T extends AnyCommand>(
   wrappedCommand.subCommands = {
     ...command.subCommands,
     completion: createCompletionCommand(wrappedCommand, programName, globalArgsSchema),
-    // Note: __complete (dynamic completion) does not yet receive globalArgsSchema.
-    // Static completion scripts (bash/zsh/fish) already include global options.
-    __complete: createDynamicCompleteCommand(wrappedCommand, programName),
+    __complete: createDynamicCompleteCommand(wrappedCommand, programName, globalArgsSchema),
   };
 
   return wrappedCommand;

@@ -416,5 +416,98 @@ describe("Dynamic completion (in-process resolver)", () => {
       const dyn = generateCompletion(dynamicCmd, { shell: "bash", programName: "mycli" }).script;
       expect(dyn).toContain("${MYCLI_BIN:-mycli}");
     });
+
+    it("bash: applies resolver-supplied directive bits via compopt", () => {
+      const dyn = generateCompletion(dynamicCmd, { shell: "bash", programName: "mycli" }).script;
+      // DirectoryCompletion=32, FileCompletion=16, NoSpace=1
+      expect(dyn).toContain("(( _directive & 32 ))");
+      expect(dyn).toContain("compopt -o dirnames");
+      expect(dyn).toContain("(( _directive & 16 ))");
+      expect(dyn).toContain("compopt -o default");
+      expect(dyn).toContain("(( _directive & 1 ))");
+      expect(dyn).toContain("compopt -o nospace");
+    });
+  });
+
+  describe("Variadic positional previousValues", () => {
+    const cmd = defineCommand({
+      name: "mycli",
+      args: z.object({
+        items: arg(z.array(z.string()).default([]), {
+          positional: true,
+          completion: {
+            custom: { resolve: () => ({ candidates: [] }) },
+          },
+        }),
+      }),
+      run: () => {},
+    });
+
+    it("populates previousValues for repeated variadic positional values", () => {
+      const ctx = parseCompletionContext(["foo", "bar", ""], cmd);
+      expect(ctx.previousValues).toEqual(["foo", "bar"]);
+    });
+
+    it("returns empty previousValues at the first variadic position", () => {
+      const ctx = parseCompletionContext([""], cmd);
+      expect(ctx.previousValues).toEqual([]);
+    });
+  });
+
+  describe("Global args resolver reachability", () => {
+    const globalArgs = z.object({
+      profile: arg(z.string().optional(), {
+        description: "Profile name",
+        completion: {
+          custom: {
+            resolve: () => ({ candidates: ["default", "staging", "prod"] }),
+          },
+        },
+      }),
+    });
+
+    const sub = defineCommand({
+      name: "deploy",
+      args: z.object({
+        env: arg(z.string()),
+      }),
+      run: () => {},
+    });
+
+    const root = withCompletionCommand(
+      defineCommand({
+        name: "mycli",
+        subCommands: { deploy: sub },
+      }),
+      { globalArgsSchema: globalArgs },
+    );
+
+    it("forwards globalArgsSchema so global resolvers are reached from a subcommand", async () => {
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      await runCommand(root, ["__complete", "--shell", "bash", "--", "deploy", "--profile", ""]);
+      const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+      consoleSpy.mockRestore();
+
+      const lines = output.split("\n");
+      expect(lines).toContain("default");
+      expect(lines).toContain("staging");
+      expect(lines).toContain("prod");
+    });
+
+    it("local options shadow same-named global options", () => {
+      const localShadow = z.object({
+        profile: arg(z.string(), {
+          completion: { custom: { choices: ["local-only"] } },
+        }),
+      });
+      const cmd = defineCommand({
+        name: "mycli",
+        args: localShadow,
+        run: () => {},
+      });
+      const ctx = parseCompletionContext(["--profile", ""], cmd, globalArgs);
+      // The local definition wins; targetOption resolves to local.
+      expect(ctx.targetOption?.valueCompletion?.type).toBe("choices");
+    });
   });
 });

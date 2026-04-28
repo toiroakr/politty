@@ -16,7 +16,7 @@
 import { z } from "zod";
 import { arg } from "../../core/arg-registry.js";
 import { defineCommand } from "../../core/command.js";
-import type { AnyCommand, Command } from "../../types.js";
+import type { AnyCommand, ArgsSchema, Command } from "../../types.js";
 import { generateCandidates } from "./candidate-generator.js";
 import { parseCompletionContext } from "./context-parser.js";
 import { formatForShell } from "./shell-formatter.js";
@@ -53,11 +53,15 @@ type CompleteArgs = z.infer<typeof completeArgsSchema>;
  *
  * @param rootCommand - The root command to generate completions for
  * @param programName - The program name (optional, defaults to rootCommand.name)
+ * @param globalArgsSchema - Global args schema. Forwarded to
+ *   `parseCompletionContext` so resolvers attached to global options remain
+ *   reachable at every subcommand level.
  * @returns A command that outputs completion candidates
  */
 export function createDynamicCompleteCommand(
   rootCommand: AnyCommand,
   _programName?: string,
+  globalArgsSchema?: ArgsSchema,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Command<typeof completeArgsSchema, CompleteArgs, any> {
   return defineCommand({
@@ -66,7 +70,7 @@ export function createDynamicCompleteCommand(
     args: completeArgsSchema,
     async run(args) {
       // Parse the completion context
-      const context = parseCompletionContext(args.args, rootCommand);
+      const context = parseCompletionContext(args.args, rootCommand, globalArgsSchema);
 
       // Detect bash inline option-value prefix
       const inlinePrefix = detectInlinePrefix(context.currentWord);

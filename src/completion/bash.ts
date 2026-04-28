@@ -6,6 +6,7 @@
  */
 
 import type { AnyCommand } from "../types.js";
+import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
   collectRouteEntries,
   extractCompletionData,
@@ -309,16 +310,27 @@ export function generateBashCompletion(
     lines.push(`__${fn}_apply_dynamic_output() {`);
     lines.push(`    local _raw="$1"`);
     lines.push(`    COMPREPLY=()`);
-    lines.push(`    local _line`);
+    lines.push(`    local _line _directive=0`);
     lines.push(`    while IFS= read -r _line; do`);
     lines.push(`        case "$_line" in`);
-    lines.push(`            ":"*) ;;`);
+    lines.push(`            ":"*) _directive="\${_line#:}" ;;`);
     lines.push(`            "@ext:"*|"@matcher:"*) ;;`);
     lines.push(`            "") ;;`);
     lines.push(`            *) COMPREPLY+=("$_line") ;;`);
     lines.push(`        esac`);
     lines.push(`    done <<< "$_raw"`);
-    lines.push(`    compopt +o default 2>/dev/null`);
+    // Apply resolver-supplied directive bits. DirectoryCompletion takes
+    // precedence over FileCompletion when both are set; NoSpace stacks.
+    lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
+    lines.push(`        compopt -o dirnames 2>/dev/null`);
+    lines.push(`    elif (( _directive & ${CompletionDirective.FileCompletion} )); then`);
+    lines.push(`        compopt -o default 2>/dev/null`);
+    lines.push(`    else`);
+    lines.push(`        compopt +o default 2>/dev/null`);
+    lines.push(`    fi`);
+    lines.push(`    if (( _directive & ${CompletionDirective.NoSpace} )); then`);
+    lines.push(`        compopt -o nospace 2>/dev/null`);
+    lines.push(`    fi`);
     lines.push(`}`);
     lines.push(``);
   }

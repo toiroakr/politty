@@ -5,7 +5,7 @@
 import { extractFields, toCamelCase } from "../../core/schema-extractor.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
-import type { AnyCommand } from "../../types.js";
+import type { AnyCommand, ArgsSchema } from "../../types.js";
 import type { CompletableOption, CompletablePositional } from "../types.js";
 import { resolveValueCompletion } from "../value-completion-resolver.js";
 
@@ -68,8 +68,11 @@ function extractOptions(command: AnyCommand): CompletableOption[] {
   if (!command.args) {
     return [];
   }
+  return extractOptionsFromSchema(command.args);
+}
 
-  const extracted = extractFields(command.args);
+function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
+  const extracted = extractFields(schema);
   return extracted.fields
     .filter((field) => !field.positional)
     .map((field) => ({
@@ -82,6 +85,20 @@ function extractOptions(command: AnyCommand): CompletableOption[] {
       required: field.required,
       valueCompletion: resolveValueCompletion(field),
     }));
+}
+
+/** Merge global options into local, with local shadowing on cliName collision. */
+function mergeGlobalOptions(
+  local: CompletableOption[],
+  globals: CompletableOption[],
+): CompletableOption[] {
+  if (globals.length === 0) return local;
+  const seen = new Set(local.map((o) => o.cliName));
+  const merged = [...local];
+  for (const g of globals) {
+    if (!seen.has(g.cliName)) merged.push(g);
+  }
+  return merged;
 }
 
 /**
@@ -203,12 +220,21 @@ function findOption(
  *
  * @param argv - Arguments after the program name (e.g., ["build", "--fo"])
  * @param rootCommand - The root command
+ * @param globalArgsSchema - Optional global args. When provided, options
+ *   derived from this schema are merged into every command level so dynamic
+ *   resolvers attached to global options can be reached from any subcommand.
  * @returns Completion context
  */
-export function parseCompletionContext(argv: string[], rootCommand: AnyCommand): CompletionContext {
+export function parseCompletionContext(
+  argv: string[],
+  rootCommand: AnyCommand,
+  globalArgsSchema?: ArgsSchema,
+): CompletionContext {
   // Initialize with root command
   let currentCommand = rootCommand;
   const subcommandPath: string[] = [];
+
+  const globalOptions = globalArgsSchema ? extractOptionsFromSchema(globalArgsSchema) : [];
 
   // Track used options and positional count
   const usedOptions = new Set<string>();
@@ -231,7 +257,7 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
 
   // Process arguments to resolve subcommands and track state
   let i = 0;
-  let options = extractOptions(currentCommand);
+  let options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
   let afterDoubleDash = false;
 
   // Traverse subcommands
@@ -276,7 +302,7 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     if (subcommand) {
       subcommandPath.push(word);
       currentCommand = subcommand;
-      options = extractOptions(currentCommand);
+      options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
       usedOptions.clear(); // Reset for new subcommand
       positionalCount = 0;
       parsedArgs = {};
@@ -378,9 +404,14 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
       previousValues = Array.isArray(stored) ? (stored as string[]) : [];
     }
   } else if (completionType === "positional" && positionalIndex !== undefined) {
-    const pos = positionals[positionalIndex];
+    // Clamp to the last positional so a variadic tail still receives the
+    // previously-supplied values when positionalIndex outruns the schema
+    // (e.g. completing the 3rd value of a single variadic positional).
+    const lastIdx = positionals.length - 1;
+    const clampedIdx = positionalIndex > lastIdx ? lastIdx : positionalIndex;
+    const pos = clampedIdx >= 0 ? positionals[clampedIdx] : undefined;
     if (pos?.variadic) {
-      previousValues = positionalValues.slice(positionalIndex);
+      previousValues = positionalValues.slice(clampedIdx);
     }
   }
 
