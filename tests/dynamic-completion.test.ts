@@ -8,7 +8,26 @@ import {
   withCompletionCommand,
   type DynamicCompletionContext,
 } from "../src/completion/index.js";
-import { arg, defineCommand, runCommand } from "../src/index.js";
+import { arg, defineCommand, runCommand, type AnyCommand } from "../src/index.js";
+
+/**
+ * Run __complete on `cmd` with `argv` (everything after `--`) and return the
+ * captured console output split into lines. Restores the spy on return.
+ */
+async function runComplete(
+  cmd: AnyCommand,
+  argv: string[],
+  shell: "bash" | "zsh" | "fish" = "bash",
+): Promise<string[]> {
+  const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await runCommand(cmd, ["__complete", "--shell", shell, "--", ...argv]);
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    return output.split("\n");
+  } finally {
+    consoleSpy.mockRestore();
+  }
+}
 
 describe("Dynamic completion (in-process resolver)", () => {
   describe("resolveValueCompletion exclusivity", () => {
@@ -305,9 +324,7 @@ describe("Dynamic completion (in-process resolver)", () => {
         }),
       );
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-      await runCommand(cmd, ["__complete", "--shell", "bash", "--", "--field=foo"]);
-      consoleSpy.mockRestore();
+      await runComplete(cmd, ["--field=foo"]);
 
       expect(captured?.currentWord).toBe("foo");
     });
@@ -337,22 +354,7 @@ describe("Dynamic completion (in-process resolver)", () => {
         }),
       );
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-      await runCommand(cmd, [
-        "__complete",
-        "--shell",
-        "bash",
-        "--",
-        "GetApplication",
-        "-f",
-        "workspaceId",
-        "-f",
-        "",
-      ]);
-      const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
-      consoleSpy.mockRestore();
-
-      const lines = output.split("\n");
+      const lines = await runComplete(cmd, ["GetApplication", "-f", "workspaceId", "-f", ""]);
       expect(lines).toContain("applicationName");
       expect(lines).not.toContain("workspaceId");
       // Trailing directive line
@@ -499,12 +501,7 @@ describe("Dynamic completion (in-process resolver)", () => {
     );
 
     it("forwards globalArgsSchema so global resolvers are reached from a subcommand", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-      await runCommand(root, ["__complete", "--shell", "bash", "--", "deploy", "--profile", ""]);
-      const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
-      consoleSpy.mockRestore();
-
-      const lines = output.split("\n");
+      const lines = await runComplete(root, ["deploy", "--profile", ""]);
       expect(lines).toContain("default");
       expect(lines).toContain("staging");
       expect(lines).toContain("prod");
@@ -604,12 +601,7 @@ describe("Dynamic completion (in-process resolver)", () => {
     );
 
     it("emits `:`-prefixed candidates rather than dropping them as directives", async () => {
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-      await runCommand(cmd, ["__complete", "--shell", "bash", "--", "--field", ""]);
-      const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
-      consoleSpy.mockRestore();
-
-      const lines = output.split("\n");
+      const lines = await runComplete(cmd, ["--field", ""]);
       expect(lines).toContain(":pseudo");
       expect(lines).toContain("::double");
       expect(lines).toContain("regular");
