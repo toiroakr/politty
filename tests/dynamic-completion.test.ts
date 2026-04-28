@@ -394,21 +394,21 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(stat).not.toContain("__mycli_invoke_complete");
     });
 
-    it("zsh: emits filter helper only when dynamic specs exist", () => {
+    it("zsh: emits apply helper only when dynamic specs exist", () => {
       const dyn = generateCompletion(dynamicCmd, { shell: "zsh", programName: "mycli" }).script;
       const stat = generateCompletion(staticCmd, { shell: "zsh", programName: "mycli" }).script;
 
       expect(dyn).toContain("__mycli_invoke_complete");
-      expect(dyn).toContain("__mycli_filter_dynamic_lines");
+      expect(dyn).toContain("__mycli_apply_dynamic_output");
       expect(stat).not.toContain("__mycli_invoke_complete");
     });
 
-    it("fish: emits filter helper only when dynamic specs exist", () => {
+    it("fish: emits apply helper only when dynamic specs exist", () => {
       const dyn = generateCompletion(dynamicCmd, { shell: "fish", programName: "mycli" }).script;
       const stat = generateCompletion(staticCmd, { shell: "fish", programName: "mycli" }).script;
 
       expect(dyn).toContain("__mycli_invoke_complete");
-      expect(dyn).toContain("__mycli_filter_dynamic_lines");
+      expect(dyn).toContain("__mycli_apply_dynamic_output");
       expect(stat).not.toContain("__mycli_invoke_complete");
     });
 
@@ -426,6 +426,22 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(dyn).toContain("compopt -o default");
       expect(dyn).toContain("(( _directive & 1 ))");
       expect(dyn).toContain("compopt -o nospace");
+    });
+
+    it("zsh: dispatches resolver directive bits to _files", () => {
+      const dyn = generateCompletion(dynamicCmd, { shell: "zsh", programName: "mycli" }).script;
+      expect(dyn).toContain("(( _directive & 32 ))");
+      expect(dyn).toContain("_files -/");
+      expect(dyn).toContain("(( _directive & 16 ))");
+      expect(dyn).toContain("_files");
+    });
+
+    it("fish: dispatches resolver directive bits to __fish_complete_path", () => {
+      const dyn = generateCompletion(dynamicCmd, { shell: "fish", programName: "mycli" }).script;
+      expect(dyn).toContain("$_directive & 32");
+      expect(dyn).toContain("__fish_complete_directories");
+      expect(dyn).toContain("$_directive & 16");
+      expect(dyn).toContain("__fish_complete_path");
     });
   });
 

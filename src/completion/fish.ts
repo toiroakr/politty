@@ -6,6 +6,7 @@
  */
 
 import type { AnyCommand } from "../types.js";
+import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
   collectRouteEntries,
   extractCompletionData,
@@ -36,11 +37,11 @@ function fishValueLines(vc: ValueCompletion | undefined, fn: string): string[] {
   if (!vc) return [];
   switch (vc.type) {
     case "dynamic": {
-      // Delegate to `<program> __complete --shell fish`. The enclosing main
-      // handler already builds `$_args` with the program name stripped and
-      // the current incomplete word appended, which is exactly what
-      // `__complete` expects.
-      return [`__${fn}_invoke_complete fish $_args | __${fn}_filter_dynamic_lines`];
+      // Delegate to `<program> __complete --shell fish` and pipe each line
+      // through the apply helper, which interprets the trailing
+      // `:<directive>` so resolver-supplied file/directory completion still
+      // reaches the shell.
+      return [`__${fn}_invoke_complete fish $_args | __${fn}_apply_dynamic_output`];
     }
     case "choices":
       return vc.choices!.map((c) => `echo "${escapeDesc(c)}"`);
@@ -280,14 +281,28 @@ export function generateFishCompletion(
     lines.push(`    $_bin __complete --shell $_shell -- $_argv 2>/dev/null`);
     lines.push(`end`);
     lines.push(``);
-    lines.push(`function __${fn}_filter_dynamic_lines`);
+    lines.push(`function __${fn}_apply_dynamic_output`);
+    lines.push(`    set -l _directive 0`);
     lines.push(`    while read -l _l`);
     lines.push(`        switch $_l`);
-    lines.push(`            case ':*' '@ext:*' '@matcher:*' ''`);
+    lines.push(`            case ':*'`);
+    lines.push(`                set _directive (string sub -s 2 -- $_l)`);
+    lines.push(`            case '@ext:*' '@matcher:*' ''`);
     lines.push(`                # drop sentinel lines`);
     lines.push(`            case '*'`);
     lines.push(`                echo $_l`);
     lines.push(`        end`);
+    lines.push(`    end`);
+    // Apply resolver-supplied directive bits. fish lacks compopt; emit
+    // path/dir candidates inline so completion still includes them.
+    lines.push(
+      `    if test (math "$_directive & ${CompletionDirective.DirectoryCompletion}") -ne 0`,
+    );
+    lines.push(`        __fish_complete_directories ""`);
+    lines.push(
+      `    else if test (math "$_directive & ${CompletionDirective.FileCompletion}") -ne 0`,
+    );
+    lines.push(`        __fish_complete_path ""`);
     lines.push(`    end`);
     lines.push(`end`);
     lines.push(``);

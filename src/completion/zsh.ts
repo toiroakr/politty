@@ -6,6 +6,7 @@
  */
 
 import type { AnyCommand } from "../types.js";
+import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
   collectRouteEntries,
   extractCompletionData,
@@ -42,12 +43,10 @@ function zshValueLines(vc: ValueCompletion | undefined, fn: string): string[] {
   if (!vc) return [];
   switch (vc.type) {
     case "dynamic": {
-      // Delegate to `<program> __complete --shell zsh`. zsh formatter emits
-      // value:description pairs, which `_describe` consumes directly.
-      return [
-        `_vals=("\${(@f)$(__${fn}_invoke_complete zsh "\${words[@]:1}" | __${fn}_filter_dynamic_lines)}")`,
-        `__${fn}_cdescribe 'completions' _vals`,
-      ];
+      // Delegate to `<program> __complete --shell zsh` and let the apply
+      // helper interpret the trailing `:<directive>` line so resolver-supplied
+      // file/directory completion still reaches the shell.
+      return [`__${fn}_apply_dynamic_output "$(__${fn}_invoke_complete zsh "\${words[@]:1}")"`];
     }
     case "choices": {
       const items = vc.choices!.map((c) => `"${escapeDesc(c)}"`).join(" ");
@@ -240,14 +239,30 @@ export function generateZshCompletion(
     );
     lines.push(`}`);
     lines.push(``);
-    lines.push(`__${fn}_filter_dynamic_lines() {`);
+    lines.push(`__${fn}_apply_dynamic_output() {`);
+    lines.push(`    local _raw="$1"`);
+    lines.push(`    local _directive=0`);
+    lines.push(`    local -a _vals`);
     lines.push(`    local _l`);
     lines.push(`    while IFS= read -r _l; do`);
     lines.push(`        case "$_l" in`);
-    lines.push(`            (:*|@ext:*|@matcher:*|'') ;;`);
-    lines.push(`            (*) print -r -- "$_l" ;;`);
+    lines.push(`            (:*) _directive="\${_l#:}" ;;`);
+    lines.push(`            (@ext:*|@matcher:*|'') ;;`);
+    lines.push(`            (*) _vals+=("$_l") ;;`);
     lines.push(`        esac`);
-    lines.push(`    done`);
+    lines.push(`    done <<< "$_raw"`);
+    // Directive precedence mirrors bash: directory > file > value list.
+    lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
+    lines.push(`        _files -/`);
+    lines.push(`        return`);
+    lines.push(`    fi`);
+    lines.push(`    if (( _directive & ${CompletionDirective.FileCompletion} )); then`);
+    lines.push(`        _files`);
+    lines.push(`        return`);
+    lines.push(`    fi`);
+    lines.push(`    if (( \${#_vals[@]} > 0 )); then`);
+    lines.push(`        __${fn}_cdescribe 'completions' _vals`);
+    lines.push(`    fi`);
     lines.push(`}`);
     lines.push(``);
   }
