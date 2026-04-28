@@ -242,16 +242,22 @@ export function parseCompletionContext(
 
   // Best-effort parsed values for the CURRENT command. Reset when traversing
   // into a subcommand so dynamic resolvers only see siblings on the same
-  // command frame.
+  // command frame. Global option values live in a separate map so they
+  // survive subcommand descent — runtime accumulates globals across the
+  // command path, and resolvers attached to global options expect them
+  // visible regardless of where the option was supplied.
   let parsedArgs: Record<string, unknown> = {};
   let positionalValues: string[] = [];
+  const globalParsedArgs: Record<string, unknown> = {};
+  const globalOptionNames = new Set(globalOptions.map((o) => o.name));
 
   const recordOptionValue = (opt: CompletableOption, value: string): void => {
+    const target = globalOptionNames.has(opt.name) ? globalParsedArgs : parsedArgs;
     if (opt.valueType === "array") {
-      const existing = parsedArgs[opt.name];
-      parsedArgs[opt.name] = Array.isArray(existing) ? [...existing, value] : [value];
+      const existing = target[opt.name];
+      target[opt.name] = Array.isArray(existing) ? [...existing, value] : [value];
     } else {
-      parsedArgs[opt.name] = value;
+      target[opt.name] = value;
     }
   };
 
@@ -400,7 +406,8 @@ export function parseCompletionContext(
   let previousValues: string[] = [];
   if (targetOption) {
     if (targetOption.valueType === "array") {
-      const stored = parsedArgs[targetOption.name];
+      const store = globalOptionNames.has(targetOption.name) ? globalParsedArgs : parsedArgs;
+      const stored = store[targetOption.name];
       previousValues = Array.isArray(stored) ? (stored as string[]) : [];
     }
   } else if (completionType === "positional" && positionalIndex !== undefined) {
@@ -415,6 +422,9 @@ export function parseCompletionContext(
     }
   }
 
+  // Expose globals alongside locals; local args win on name collision.
+  const mergedParsedArgs: Record<string, unknown> = { ...globalParsedArgs, ...parsedArgs };
+
   return {
     subcommandPath,
     currentCommand,
@@ -428,7 +438,7 @@ export function parseCompletionContext(
     positionals,
     usedOptions,
     providedPositionalCount: positionalCount,
-    parsedArgs,
+    parsedArgs: mergedParsedArgs,
     previousValues,
   };
 }

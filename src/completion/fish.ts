@@ -40,8 +40,9 @@ function fishValueLines(vc: ValueCompletion | undefined, fn: string): string[] {
       // Delegate to `<program> __complete --shell fish` and pipe each line
       // through the apply helper, which interprets the trailing
       // `:<directive>` so resolver-supplied file/directory completion still
-      // reaches the shell.
-      return [`__${fn}_invoke_complete fish $_args | __${fn}_apply_dynamic_output`];
+      // reaches the shell. `$_cur` is passed so file/dir directives respect
+      // the partial path the user has typed.
+      return [`__${fn}_invoke_complete fish $_args | __${fn}_apply_dynamic_output "$_cur"`];
     }
     case "choices":
       return vc.choices!.map((c) => `echo "${escapeDesc(c)}"`);
@@ -282,6 +283,7 @@ export function generateFishCompletion(
     lines.push(`end`);
     lines.push(``);
     lines.push(`function __${fn}_apply_dynamic_output`);
+    lines.push(`    set -l _cur $argv[1]`);
     lines.push(`    set -l _directive 0`);
     lines.push(`    while read -l _l`);
     lines.push(`        switch $_l`);
@@ -294,15 +296,16 @@ export function generateFishCompletion(
     lines.push(`        end`);
     lines.push(`    end`);
     // Apply resolver-supplied directive bits. fish lacks compopt; emit
-    // path/dir candidates inline so completion still includes them.
+    // path/dir candidates inline (filtered by the partially-typed token)
+    // so completion still includes them.
     lines.push(
       `    if test (math "$_directive & ${CompletionDirective.DirectoryCompletion}") -ne 0`,
     );
-    lines.push(`        __fish_complete_directories ""`);
+    lines.push(`        __fish_complete_directories "$_cur"`);
     lines.push(
       `    else if test (math "$_directive & ${CompletionDirective.FileCompletion}") -ne 0`,
     );
-    lines.push(`        __fish_complete_path ""`);
+    lines.push(`        __fish_complete_path "$_cur"`);
     lines.push(`    end`);
     lines.push(`end`);
     lines.push(``);

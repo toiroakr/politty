@@ -525,5 +525,56 @@ describe("Dynamic completion (in-process resolver)", () => {
       // The local definition wins; targetOption resolves to local.
       expect(ctx.targetOption?.valueCompletion?.type).toBe("choices");
     });
+
+    it("preserves global option values across subcommand descent", () => {
+      const subWithResolver = defineCommand({
+        name: "deploy",
+        args: z.object({
+          env: arg(z.string(), {
+            completion: {
+              custom: {
+                resolve: ({ parsedArgs }) => ({
+                  candidates: parsedArgs.profile === "prod" ? ["live"] : [],
+                }),
+              },
+            },
+          }),
+        }),
+        run: () => {},
+      });
+      const parent = defineCommand({
+        name: "mycli",
+        subCommands: { deploy: subWithResolver },
+      });
+      const ctx = parseCompletionContext(
+        ["--profile", "prod", "deploy", "--env", ""],
+        parent,
+        globalArgs,
+      );
+      // The global `profile` value supplied before the subcommand survives
+      // the descent and is visible to the subcommand resolver.
+      expect(ctx.parsedArgs.profile).toBe("prod");
+    });
+  });
+
+  describe("fish dynamic helper passes the typed token", () => {
+    const dynamicCmd = defineCommand({
+      name: "mycli",
+      args: z.object({
+        path: arg(z.string(), {
+          completion: {
+            custom: { resolve: () => ({ candidates: [] }) },
+          },
+        }),
+      }),
+      run: () => {},
+    });
+
+    it("fish: forwards $_cur to the apply helper", () => {
+      const dyn = generateCompletion(dynamicCmd, { shell: "fish", programName: "mycli" }).script;
+      expect(dyn).toContain(`__mycli_apply_dynamic_output "$_cur"`);
+      expect(dyn).toContain(`__fish_complete_path "$_cur"`);
+      expect(dyn).toContain(`__fish_complete_directories "$_cur"`);
+    });
   });
 });
