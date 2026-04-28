@@ -31,6 +31,13 @@ import type { AnyCommand, ArgsSchema, Command } from "../types.js";
 import { generateBashCompletion } from "./bash.js";
 import { createDynamicCompleteCommand } from "./dynamic/index.js";
 import { generateFishCompletion } from "./fish.js";
+import {
+  detectShellEnv,
+  install as installCompletion,
+  refreshIfStale,
+  spawnBackgroundRefresh,
+} from "./install.js";
+import { generateLoader } from "./loader.js";
 import type { CompletionOptions, CompletionResult, ShellType } from "./types.js";
 import { generateZshCompletion } from "./zsh.js";
 
@@ -128,9 +135,27 @@ const completionArgsSchema = z.object({
     alias: "i",
     description: "Show installation instructions",
   }),
+  loader: arg(z.boolean().default(false), {
+    description:
+      "Print just the rc loader snippet (bash/zsh). Add it to ~/.bashrc or ~/.zshrc; it auto-regenerates the cache when the binary changes.",
+  }),
+  install: arg(z.boolean().default(false), {
+    description:
+      "Write the completion script to its on-disk cache (bash/zsh) or autoload location (fish) instead of printing it.",
+  }),
 });
 
 type CompletionArgs = z.infer<typeof completionArgsSchema>;
+
+const refreshArgsSchema = z.object({
+  shell: arg(z.enum(["bash", "zsh", "fish"]), {
+    positional: true,
+    description: "Shell to refresh",
+    placeholder: "SHELL",
+  }),
+});
+
+type RefreshArgs = z.infer<typeof refreshArgsSchema>;
 
 /**
  * Create a completion subcommand for your CLI
@@ -151,9 +176,11 @@ export function createCompletionCommand(
   rootCommand: AnyCommand,
   programName?: string,
   globalArgsSchema?: ArgsSchema,
+  extra: { cacheDir?: string; programVersion?: string } = {},
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Command<typeof completionArgsSchema, CompletionArgs, any> {
   const resolvedProgramName = programName ?? rootCommand.name;
+  const { cacheDir, programVersion } = extra;
 
   if (!rootCommand.subCommands?.__complete) {
     rootCommand.subCommands = {
@@ -176,11 +203,64 @@ export function createCompletionCommand(
         return;
       }
 
+      if (args.install) {
+        try {
+          const target = installCompletion(
+            {
+              rootCommand,
+              programName: resolvedProgramName,
+              ...(programVersion !== undefined && { programVersion }),
+              ...(cacheDir !== undefined && { cacheDir }),
+            },
+            shellType,
+          );
+          console.error(`installed: ${target}`);
+          if (shellType !== "fish") {
+            console.error("");
+            console.error(`Add to your ~/.${shellType}rc:`);
+            console.error("");
+            console.error(
+              generateLoader({
+                programName: resolvedProgramName,
+                shell: shellType,
+                ...(cacheDir !== undefined && { cacheDir }),
+              })
+                .trim()
+                .replace(/^/gm, "    "),
+            );
+          }
+        } catch (e) {
+          console.error(`install failed: ${e instanceof Error ? e.message : String(e)}`);
+          process.exitCode = 1;
+        }
+        return;
+      }
+
+      if (args.loader) {
+        if (shellType === "fish") {
+          console.error(
+            "fish does not use an rc loader. Run `<program> completion fish --install` to write the self-refreshing autoload file instead.",
+          );
+          process.exitCode = 1;
+          return;
+        }
+        process.stdout.write(
+          generateLoader({
+            programName: resolvedProgramName,
+            shell: shellType,
+            ...(cacheDir !== undefined && { cacheDir }),
+          }),
+        );
+        return;
+      }
+
       const result = generateCompletion(rootCommand, {
         shell: shellType,
         programName: resolvedProgramName,
         includeDescriptions: true,
         ...(globalArgsSchema !== undefined && { globalArgsSchema }),
+        ...(programVersion !== undefined && { programVersion }),
+        ...(cacheDir !== undefined && { cacheDir }),
       });
 
       if (args.instructions) {
@@ -193,6 +273,35 @@ export function createCompletionCommand(
 }
 
 /**
+ * Hidden subcommand that the runMain background hook spawns. It does
+ * the same stat-compare + atomic rewrite as the rc loader, but in a
+ * detached child process so it's invisible to the user.
+ */
+export function createRefreshCompletionCommand(
+  rootCommand: AnyCommand,
+  programName: string,
+  extra: { cacheDir?: string; programVersion?: string } = {},
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Command<typeof refreshArgsSchema, RefreshArgs, any> {
+  return defineCommand({
+    name: "__refresh-completion",
+    description: "(internal) Refresh the on-disk completion cache if stale.",
+    args: refreshArgsSchema,
+    run(args) {
+      refreshIfStale(
+        {
+          rootCommand,
+          programName,
+          ...(extra.programVersion !== undefined && { programVersion: extra.programVersion }),
+          ...(extra.cacheDir !== undefined && { cacheDir: extra.cacheDir }),
+        },
+        args.shell,
+      );
+    },
+  });
+}
+
+/**
  * Options for withCompletionCommand
  */
 export interface WithCompletionOptions {
@@ -200,6 +309,15 @@ export interface WithCompletionOptions {
   programName?: string;
   /** Global args schema for deriving global options in completion */
   globalArgsSchema?: ArgsSchema;
+  /**
+   * Hardcode the cache directory used by the rc loader and the
+   * background refresh. When omitted, the loader derives
+   * `${XDG_CACHE_HOME:-$HOME/.cache}/<programName>` at runtime, which
+   * is the right answer for almost every CLI.
+   */
+  cacheDir?: string;
+  /** Program version embedded in the script header. */
+  programVersion?: string;
 }
 
 /**
@@ -230,7 +348,11 @@ export function withCompletionCommand<T extends AnyCommand>(
   const opts: WithCompletionOptions =
     typeof options === "string" ? { programName: options } : (options ?? {});
 
-  const { programName, globalArgsSchema } = opts;
+  const { programName, globalArgsSchema, cacheDir, programVersion } = opts;
+  const resolvedProgramName = programName ?? command.name;
+  const extra: { cacheDir?: string; programVersion?: string } = {};
+  if (cacheDir !== undefined) extra.cacheDir = cacheDir;
+  if (programVersion !== undefined) extra.programVersion = programVersion;
 
   const wrappedCommand = {
     ...command,
@@ -238,11 +360,50 @@ export function withCompletionCommand<T extends AnyCommand>(
 
   wrappedCommand.subCommands = {
     ...command.subCommands,
-    completion: createCompletionCommand(wrappedCommand, programName, globalArgsSchema),
+    completion: createCompletionCommand(wrappedCommand, programName, globalArgsSchema, extra),
     // Note: __complete (dynamic completion) does not yet receive globalArgsSchema.
     // Static completion scripts (bash/zsh/fish) already include global options.
     __complete: createDynamicCompleteCommand(wrappedCommand, programName),
+    "__refresh-completion": createRefreshCompletionCommand(
+      wrappedCommand,
+      resolvedProgramName,
+      extra,
+    ),
+  };
+
+  wrappedCommand.runMainHook = (argv) => {
+    maybeSpawnRefresh(argv);
   };
 
   return wrappedCommand;
+}
+
+/**
+ * Background-refresh trigger fired from `runMain` via `runMainHook`.
+ *
+ * Skipped when:
+ *   - the user is invoking `__complete` / `__refresh-completion` /
+ *     `completion` themselves (avoids loops and double work)
+ *   - $SHELL doesn't resolve to a known shell
+ *   - the user opted out via $POLITTY_NO_COMPLETION_REFRESH
+ *   - process.argv[1] is missing (shouldn't happen for normal CLIs)
+ */
+function maybeSpawnRefresh(argv: readonly string[]): void {
+  if (process.env.POLITTY_NO_COMPLETION_REFRESH) return;
+
+  const firstPositional = argv.find((a) => !a.startsWith("-"));
+  if (
+    firstPositional === "__complete" ||
+    firstPositional === "__refresh-completion" ||
+    firstPositional === "completion"
+  ) {
+    return;
+  }
+
+  const shell = detectShellEnv();
+  if (!shell) return;
+  const argv0 = process.argv[1];
+  if (!argv0) return;
+
+  spawnBackgroundRefresh(argv0, shell);
 }

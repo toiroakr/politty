@@ -179,6 +179,17 @@ export async function runCommand<TResult = unknown>(
  * ```
  */
 export async function runMain(command: AnyCommand, options: MainOptions = {}): Promise<never> {
+  // Generic hook plug-in point. `withCompletionCommand` uses this to
+  // fire a detached background refresh of the on-disk completion cache.
+  // Wrapped in try/catch so a misbehaving hook can never break the CLI.
+  if (command.runMainHook) {
+    try {
+      command.runMainHook(process.argv.slice(2));
+    } catch {
+      // Best-effort: hooks must never block the CLI.
+    }
+  }
+
   const globalExtracted = extractAndValidateGlobal(options);
 
   // Global setup

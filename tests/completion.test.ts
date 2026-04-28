@@ -1,4 +1,7 @@
-import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
 import {
   CompletionDirective,
@@ -12,6 +15,8 @@ import {
   parseCompletionContext,
   withCompletionCommand,
 } from "../src/completion/index.js";
+import { install, installPath, refreshIfStale } from "../src/completion/install.js";
+import { defaultCacheDir, generateLoader } from "../src/completion/loader.js";
 import {
   arg,
   defineCommand,
@@ -430,7 +435,9 @@ describe("Completion", () => {
         });
 
         expect(result.shell).toBe("bash");
-        expect(result.script).toContain("# Bash completion for mycli");
+        expect(result.script).toContain("# politty-completion-version: 1");
+        expect(result.script).toContain("# program: mycli");
+        expect(result.script).toContain("# shell: bash");
         expect(result.script).toContain("_mycli_completions()");
         expect(result.script).toContain("complete -o default -F _mycli_completions mycli");
       });
@@ -466,7 +473,9 @@ describe("Completion", () => {
 
         expect(result.shell).toBe("zsh");
         expect(result.script).toContain("#compdef mycli");
-        expect(result.script).toContain("# Zsh completion for mycli");
+        expect(result.script).toContain("# politty-completion-version: 1");
+        expect(result.script).toContain("# program: mycli");
+        expect(result.script).toContain("# shell: zsh");
         expect(result.script).toContain("_mycli()");
         expect(result.script).toContain("compdef _mycli mycli");
       });
@@ -480,7 +489,9 @@ describe("Completion", () => {
         });
 
         expect(result.shell).toBe("fish");
-        expect(result.script).toContain("# Fish completion for mycli");
+        expect(result.script).toContain("# politty-completion-version: 1");
+        expect(result.script).toContain("# program: mycli");
+        expect(result.script).toContain("# shell: fish");
         expect(result.script).toContain("complete -c mycli");
         expect(result.script).toContain("__fish_mycli_complete");
         expect(result.script).toContain("complete -c mycli -f");
@@ -1201,7 +1212,8 @@ describe("Completion", () => {
           programName: "mycli",
         });
 
-        expect(result.script).toContain("# Bash completion for mycli");
+        expect(result.script).toContain("# program: mycli");
+        expect(result.script).toContain("# shell: bash");
         expect(result.script).toContain("_mycli_completions");
         expect(result.script).toContain("complete -o default -F _mycli_completions mycli");
       });
@@ -1220,7 +1232,8 @@ describe("Completion", () => {
           programName: "mycli",
         });
 
-        expect(result.script).toContain("# Zsh completion for mycli");
+        expect(result.script).toContain("# program: mycli");
+        expect(result.script).toContain("# shell: zsh");
         expect(result.script).toContain("#compdef mycli");
         expect(result.script).toContain("compdef _mycli mycli");
       });
@@ -1239,7 +1252,8 @@ describe("Completion", () => {
           programName: "mycli",
         });
 
-        expect(result.script).toContain("# Fish completion for mycli");
+        expect(result.script).toContain("# program: mycli");
+        expect(result.script).toContain("# shell: fish");
         expect(result.script).toContain("__fish_mycli_complete");
         expect(result.script).toContain("complete -c mycli -f");
       });
@@ -1455,6 +1469,185 @@ describe("Completion", () => {
         matcher: string[];
         extensions: string[];
       }>().not.toMatchTypeOf<CompletionMeta>();
+    });
+  });
+
+  describe("static-script header", () => {
+    const cmd = defineCommand({ name: "mycli", run: () => {} });
+
+    it("embeds bin-sig + program-version in bash header when both are set", () => {
+      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+      const result = generateCompletion(cmd, {
+        shell: "bash",
+        programName: "mycli",
+        binPath: fakeBin,
+        programVersion: "1.2.3",
+      });
+      const expectedSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+      expect(result.script).toContain(`# politty-bin-sig: ${expectedSig}`);
+      expect(result.script).toContain("# program-version: 1.2.3");
+      expect(result.script).toContain("# shell: bash");
+    });
+
+    it("falls back to bin-sig 0 when binPath is unreadable", () => {
+      const result = generateCompletion(cmd, {
+        shell: "zsh",
+        programName: "mycli",
+        binPath: "/nonexistent/path/to/binary",
+      });
+      expect(result.script).toContain("# politty-bin-sig: 0");
+    });
+
+    it("does not emit program-version line when not provided", () => {
+      const result = generateCompletion(cmd, {
+        shell: "fish",
+        programName: "mycli",
+      });
+      expect(result.script).not.toContain("# program-version:");
+    });
+  });
+
+  describe("install / refreshIfStale", () => {
+    const cmd = defineCommand({ name: "mycli", run: () => {} });
+    let cacheDir: string;
+    let fakeBin: string;
+
+    beforeEach(() => {
+      const root = mkdtempSync(join(tmpdir(), "politty-install-"));
+      cacheDir = join(root, "cache");
+      fakeBin = join(root, "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+    });
+
+    it("installPath puts bash/zsh under cacheDir/completion.<shell>", () => {
+      expect(installPath("mycli", "bash", cacheDir)).toBe(join(cacheDir, "completion.bash"));
+      expect(installPath("mycli", "zsh", cacheDir)).toBe(join(cacheDir, "completion.zsh"));
+    });
+
+    it("installPath routes fish to $XDG_CONFIG_HOME/fish/completions/<prog>.fish", () => {
+      const prev = process.env.XDG_CONFIG_HOME;
+      process.env.XDG_CONFIG_HOME = "/tmp/cfg";
+      try {
+        expect(installPath("mycli", "fish")).toBe("/tmp/cfg/fish/completions/mycli.fish");
+      } finally {
+        if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
+        else process.env.XDG_CONFIG_HOME = prev;
+      }
+    });
+
+    it("install writes the script atomically with the embedded bin-sig", () => {
+      const target = install(
+        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
+        "bash",
+      );
+      expect(target).toBe(join(cacheDir, "completion.bash"));
+      const sig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+      const written = readFileSync(target, "utf8");
+      expect(written).toContain(`# politty-bin-sig: ${sig}`);
+      expect(written).toContain("_mycli_completions");
+    });
+
+    it("refreshIfStale rewrites the cache when bin-sig differs", () => {
+      const target = install(
+        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
+        "bash",
+      );
+      const originalSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+
+      // Bump the binary mtime by 5s — this should force a rewrite.
+      const bumped = new Date((statSync(fakeBin).mtimeMs + 5000) / 1000);
+      utimesSync(fakeBin, bumped, bumped);
+
+      refreshIfStale(
+        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
+        "bash",
+      );
+      const after = readFileSync(target, "utf8");
+      const newSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+      expect(newSig).not.toBe(originalSig);
+      expect(after).toContain(`# politty-bin-sig: ${newSig}`);
+    });
+
+    it("refreshIfStale leaves the cache untouched when bin-sig matches", () => {
+      const target = install(
+        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
+        "zsh",
+      );
+      const beforeMtime = statSync(target).mtimeMs;
+      // Sleep-free guarantee: same bin = same sig, so nothing should be rewritten.
+      refreshIfStale({ rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin }, "zsh");
+      expect(statSync(target).mtimeMs).toBe(beforeMtime);
+    });
+
+    it("refreshIfStale never throws on a bogus binPath", () => {
+      expect(() =>
+        refreshIfStale(
+          { rootCommand: cmd, programName: "mycli", cacheDir, binPath: "/nope/missing" },
+          "bash",
+        ),
+      ).not.toThrow();
+    });
+  });
+
+  describe("generateLoader", () => {
+    it("emits a bash loader that sources the cache file", () => {
+      const snippet = generateLoader({ programName: "mycli", shell: "bash" });
+      expect(snippet).toContain("__mycli_load_completion()");
+      expect(snippet).toContain("politty-bin-sig:");
+      expect(snippet).toContain("completion.bash");
+      expect(snippet).toContain('source "$_cache"');
+    });
+
+    it("emits a zsh loader with no_aliases and emulate -L zsh", () => {
+      const snippet = generateLoader({ programName: "mycli", shell: "zsh" });
+      expect(snippet).toContain("emulate -L zsh");
+      expect(snippet).toContain("setopt local_options no_aliases");
+      expect(snippet).toContain("completion.zsh");
+    });
+
+    it("hardcodes the cache directory when cacheDir is provided", () => {
+      const snippet = generateLoader({
+        programName: "mycli",
+        shell: "bash",
+        cacheDir: "/opt/cache",
+      });
+      expect(snippet).toContain('"/opt/cache/completion.bash"');
+      expect(snippet).not.toContain("XDG_CACHE_HOME");
+    });
+
+    it("throws for fish — fish uses an autoload file instead", () => {
+      expect(() => generateLoader({ programName: "mycli", shell: "fish" })).toThrow(
+        /fish does not use an rc loader/,
+      );
+    });
+  });
+
+  describe("defaultCacheDir", () => {
+    let prevXdg: string | undefined;
+    let prevHome: string | undefined;
+
+    beforeEach(() => {
+      prevXdg = process.env.XDG_CACHE_HOME;
+      prevHome = process.env.HOME;
+    });
+
+    afterEach(() => {
+      if (prevXdg === undefined) delete process.env.XDG_CACHE_HOME;
+      else process.env.XDG_CACHE_HOME = prevXdg;
+      if (prevHome === undefined) delete process.env.HOME;
+      else process.env.HOME = prevHome;
+    });
+
+    it("uses XDG_CACHE_HOME when set", () => {
+      process.env.XDG_CACHE_HOME = "/var/cache";
+      expect(defaultCacheDir("mycli")).toBe("/var/cache/mycli");
+    });
+
+    it("falls back to $HOME/.cache when XDG_CACHE_HOME is unset", () => {
+      delete process.env.XDG_CACHE_HOME;
+      process.env.HOME = "/home/alice";
+      expect(defaultCacheDir("mycli")).toBe("/home/alice/.cache/mycli");
     });
   });
 });
