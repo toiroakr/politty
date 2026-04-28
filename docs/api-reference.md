@@ -346,7 +346,11 @@ console.log(result.script);
 Creates the hidden `__complete` command for dynamic completion.
 
 ```typescript
-function createDynamicCompleteCommand(rootCommand: AnyCommand, programName?: string): Command;
+function createDynamicCompleteCommand(
+  rootCommand: AnyCommand,
+  programName?: string,
+  globalArgsSchema?: ArgsSchema,
+): Command;
 ```
 
 #### Usage
@@ -377,7 +381,11 @@ The last line (`:N`) is a directive that tells the shell how to handle completio
 Parses a partial command line to determine what kind of completion is needed.
 
 ```typescript
-function parseCompletionContext(argv: string[], rootCommand: AnyCommand): CompletionContext;
+function parseCompletionContext(
+  argv: string[],
+  rootCommand: AnyCommand,
+  globalArgsSchema?: ArgsSchema,
+): CompletionContext;
 ```
 
 #### Return Value
@@ -395,6 +403,8 @@ interface CompletionContext {
   subcommands: string[]; // Available subcommands
   positionals: CompletablePositional[];
   usedOptions: Set<string>; // Already used options
+  parsedArgs: Record<string, unknown>; // Other arg values (for dynamic resolvers)
+  previousValues: string[]; // Prior values for the option/positional being completed
 }
 
 type CompletionType = "subcommand" | "option-name" | "option-value" | "positional";
