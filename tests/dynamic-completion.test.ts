@@ -131,6 +131,15 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.config).toBe("tailor.yml");
     });
 
+    it("does not consume the trailing currentWord as an option value", () => {
+      // The last argv element is the word being completed. It must not be
+      // recorded as `--config`'s value, otherwise resolvers see a value the
+      // user has not finished typing.
+      const ctx = parseCompletionContext(["foo", "--config", "tailor.yml"], cmd);
+      expect(ctx.parsedArgs.config).toBeUndefined();
+      expect(ctx.currentWord).toBe("tailor.yml");
+    });
+
     it("resets parsedArgs when descending into a subcommand", () => {
       const parent = defineCommand({
         name: "mycli",
