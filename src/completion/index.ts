@@ -35,14 +35,13 @@ import type { CompletionOptions, CompletionResult, ShellType } from "./types.js"
 import { generateZshCompletion } from "./zsh.js";
 
 // Re-export dynamic completion types (in-process resolver)
-export {
-  isDynamicValueCompletion,
-  type CompletionDirectiveMask,
-  type DynamicCompletionCandidate,
-  type DynamicCompletionContext,
-  type DynamicCompletionResolver,
-  type DynamicCompletionResult,
-} from "./dynamic-completion-types.js";
+export type {
+  CompletionDirectiveMask,
+  DynamicCompletionCandidate,
+  DynamicCompletionContext,
+  DynamicCompletionResolver,
+  DynamicCompletionResult,
+} from "../core/dynamic-completion-types.js";
 export {
   CompletionDirective,
   createDynamicCompleteCommand,

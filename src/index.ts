@@ -6,7 +6,6 @@
 
 // Core exports
 // Completion exports
-export { isDynamicValueCompletion } from "./completion/dynamic-completion-types.js";
 export {
   generateCompletion,
   withCompletionCommand,

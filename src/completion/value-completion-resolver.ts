@@ -5,7 +5,7 @@
  * Used by both the static extractor and the dynamic context parser.
  */
 
-import type { DynamicCompletionResolver } from "./dynamic-completion-types.js";
+import type { DynamicCompletionResolver } from "../core/dynamic-completion-types.js";
 import type { ValueCompletion } from "./types.js";
 
 /**
