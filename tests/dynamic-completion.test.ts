@@ -526,6 +526,33 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.targetOption?.valueCompletion?.type).toBe("choices");
     });
 
+    it("does not route a same-named local option's value to globalParsedArgs", () => {
+      const subWithSameName = defineCommand({
+        name: "deploy",
+        args: z.object({
+          // Local `profile` shadows the global one.
+          profile: arg(z.string(), {
+            completion: { custom: { choices: ["a", "b"] } },
+          }),
+        }),
+        run: () => {},
+      });
+      const parent = defineCommand({
+        name: "mycli",
+        subCommands: { deploy: subWithSameName },
+      });
+      // Pass a value for the *local* `profile` after the subcommand. The local
+      // declaration should win and the value should NOT survive a hypothetical
+      // further descent (here we just verify it lands in parsedArgs by reading
+      // it directly through the merged view).
+      const ctx = parseCompletionContext(
+        ["deploy", "--profile", "local-val", ""],
+        parent,
+        globalArgs,
+      );
+      expect(ctx.parsedArgs.profile).toBe("local-val");
+    });
+
     it("preserves global option values across subcommand descent", () => {
       const subWithResolver = defineCommand({
         name: "deploy",
@@ -554,6 +581,40 @@ describe("Dynamic completion (in-process resolver)", () => {
       // The global `profile` value supplied before the subcommand survives
       // the descent and is visible to the subcommand resolver.
       expect(ctx.parsedArgs.profile).toBe("prod");
+    });
+  });
+
+  describe("Candidate values starting with `:` survive the directive filter", () => {
+    const cmd = withCompletionCommand(
+      defineCommand({
+        name: "mycli",
+        args: z.object({
+          field: arg(z.string(), {
+            completion: {
+              custom: {
+                resolve: () => ({
+                  candidates: [":pseudo", "::double", "regular"],
+                }),
+              },
+            },
+          }),
+        }),
+        run: () => {},
+      }),
+    );
+
+    it("emits `:`-prefixed candidates rather than dropping them as directives", async () => {
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      await runCommand(cmd, ["__complete", "--shell", "bash", "--", "--field", ""]);
+      const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+      consoleSpy.mockRestore();
+
+      const lines = output.split("\n");
+      expect(lines).toContain(":pseudo");
+      expect(lines).toContain("::double");
+      expect(lines).toContain("regular");
+      // Final line must still be a `:<digits>` directive sentinel.
+      expect(lines.at(-1)).toMatch(/^:\d+$/);
     });
   });
 

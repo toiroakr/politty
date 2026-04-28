@@ -249,10 +249,25 @@ export function parseCompletionContext(
   let parsedArgs: Record<string, unknown> = {};
   let positionalValues: string[] = [];
   const globalParsedArgs: Record<string, unknown> = {};
-  const globalOptionNames = new Set(globalOptions.map((o) => o.name));
+
+  // Effective global options for the current frame: globals minus those
+  // shadowed by a same-cliName local option. Recomputed at each subcommand
+  // descent so a local declaration doesn't accidentally route to globals.
+  let effectiveGlobalNames = new Set<string>();
+  const refreshEffectiveGlobalNames = (cmd: AnyCommand): void => {
+    if (globalOptions.length === 0) {
+      effectiveGlobalNames = new Set();
+      return;
+    }
+    const localCliNames = new Set(extractOptions(cmd).map((o) => o.cliName));
+    effectiveGlobalNames = new Set(
+      globalOptions.filter((g) => !localCliNames.has(g.cliName)).map((g) => g.name),
+    );
+  };
+  refreshEffectiveGlobalNames(currentCommand);
 
   const recordOptionValue = (opt: CompletableOption, value: string): void => {
-    const target = globalOptionNames.has(opt.name) ? globalParsedArgs : parsedArgs;
+    const target = effectiveGlobalNames.has(opt.name) ? globalParsedArgs : parsedArgs;
     if (opt.valueType === "array") {
       const existing = target[opt.name];
       target[opt.name] = Array.isArray(existing) ? [...existing, value] : [value];
@@ -309,6 +324,7 @@ export function parseCompletionContext(
       subcommandPath.push(word);
       currentCommand = subcommand;
       options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
+      refreshEffectiveGlobalNames(currentCommand);
       usedOptions.clear(); // Reset for new subcommand
       positionalCount = 0;
       parsedArgs = {};
@@ -406,7 +422,7 @@ export function parseCompletionContext(
   let previousValues: string[] = [];
   if (targetOption) {
     if (targetOption.valueType === "array") {
-      const store = globalOptionNames.has(targetOption.name) ? globalParsedArgs : parsedArgs;
+      const store = effectiveGlobalNames.has(targetOption.name) ? globalParsedArgs : parsedArgs;
       const stored = store[targetOption.name];
       previousValues = Array.isArray(stored) ? (stored as string[]) : [];
     }

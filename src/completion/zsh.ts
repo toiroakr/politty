@@ -242,15 +242,22 @@ export function generateZshCompletion(
     lines.push(`__${fn}_apply_dynamic_output() {`);
     lines.push(`    local _raw="$1"`);
     lines.push(`    local _directive=0`);
-    lines.push(`    local -a _vals`);
+    lines.push(`    local -a _vals _lines`);
+    lines.push(`    _lines=("\${(@f)_raw}")`);
+    // Only the trailing line is the directive sentinel; intermediate lines
+    // starting with `:` are legitimate candidate values.
+    lines.push(`    local _last=$#_lines`);
+    lines.push(`    if (( _last >= 1 )) && [[ "\${_lines[$_last]}" == :<-> ]]; then`);
+    lines.push(`        _directive="\${_lines[$_last]#:}"`);
+    lines.push(`        _lines[$_last]=()`);
+    lines.push(`    fi`);
     lines.push(`    local _l`);
-    lines.push(`    while IFS= read -r _l; do`);
+    lines.push(`    for _l in "\${_lines[@]}"; do`);
     lines.push(`        case "$_l" in`);
-    lines.push(`            (:*) _directive="\${_l#:}" ;;`);
     lines.push(`            (@ext:*|@matcher:*|'') ;;`);
     lines.push(`            (*) _vals+=("$_l") ;;`);
     lines.push(`        esac`);
-    lines.push(`    done <<< "$_raw"`);
+    lines.push(`    done`);
     // Directive precedence mirrors bash: directory > file > value list.
     lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
     lines.push(`        _files -/`);

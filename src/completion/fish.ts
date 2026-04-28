@@ -285,14 +285,31 @@ export function generateFishCompletion(
     lines.push(`function __${fn}_apply_dynamic_output`);
     lines.push(`    set -l _cur $argv[1]`);
     lines.push(`    set -l _directive 0`);
+    // Buffer one line so we can detect the trailing `:<digits>` directive
+    // sentinel without misinterpreting candidate values that legitimately
+    // start with `:` in intermediate positions.
+    lines.push(`    set -l _prev ""`);
+    lines.push(`    set -l _has_prev 0`);
     lines.push(`    while read -l _l`);
-    lines.push(`        switch $_l`);
-    lines.push(`            case ':*'`);
-    lines.push(`                set _directive (string sub -s 2 -- $_l)`);
-    lines.push(`            case '@ext:*' '@matcher:*' ''`);
-    lines.push(`                # drop sentinel lines`);
-    lines.push(`            case '*'`);
-    lines.push(`                echo $_l`);
+    lines.push(`        if test $_has_prev -eq 1`);
+    lines.push(`            switch $_prev`);
+    lines.push(`                case '@ext:*' '@matcher:*' ''`);
+    lines.push(`                case '*'`);
+    lines.push(`                    echo $_prev`);
+    lines.push(`            end`);
+    lines.push(`        end`);
+    lines.push(`        set _prev $_l`);
+    lines.push(`        set _has_prev 1`);
+    lines.push(`    end`);
+    lines.push(`    if test $_has_prev -eq 1`);
+    lines.push(`        if string match -qr '^:[0-9]+$' -- $_prev`);
+    lines.push(`            set _directive (string sub -s 2 -- $_prev)`);
+    lines.push(`        else`);
+    lines.push(`            switch $_prev`);
+    lines.push(`                case '@ext:*' '@matcher:*' ''`);
+    lines.push(`                case '*'`);
+    lines.push(`                    echo $_prev`);
+    lines.push(`            end`);
     lines.push(`        end`);
     lines.push(`    end`);
     // Apply resolver-supplied directive bits. fish lacks compopt; emit

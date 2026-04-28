@@ -310,15 +310,24 @@ export function generateBashCompletion(
     lines.push(`__${fn}_apply_dynamic_output() {`);
     lines.push(`    local _raw="$1"`);
     lines.push(`    COMPREPLY=()`);
-    lines.push(`    local _line _directive=0`);
-    lines.push(`    while IFS= read -r _line; do`);
+    lines.push(`    local _directive=0`);
+    lines.push(`    local -a _lines`);
+    lines.push(`    mapfile -t _lines <<< "$_raw"`);
+    // Only the trailing line is the directive sentinel; intermediate lines
+    // beginning with `:` are legitimate candidate values.
+    lines.push(`    local _last=$((\${#_lines[@]} - 1))`);
+    lines.push(`    if (( _last >= 0 )) && [[ "\${_lines[$_last]}" =~ ^:[0-9]+$ ]]; then`);
+    lines.push(`        _directive="\${_lines[$_last]#:}"`);
+    lines.push(`        unset '_lines[_last]'`);
+    lines.push(`    fi`);
+    lines.push(`    local _line`);
+    lines.push(`    for _line in "\${_lines[@]}"; do`);
     lines.push(`        case "$_line" in`);
-    lines.push(`            ":"*) _directive="\${_line#:}" ;;`);
     lines.push(`            "@ext:"*|"@matcher:"*) ;;`);
     lines.push(`            "") ;;`);
     lines.push(`            *) COMPREPLY+=("$_line") ;;`);
     lines.push(`        esac`);
-    lines.push(`    done <<< "$_raw"`);
+    lines.push(`    done`);
     // Apply resolver-supplied directive bits. DirectoryCompletion takes
     // precedence over FileCompletion when both are set; NoSpace stacks.
     lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);

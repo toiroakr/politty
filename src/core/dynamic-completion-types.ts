@@ -33,7 +33,12 @@ export interface DynamicCompletionContext {
    * Useful for de-duplicating repeated array options.
    */
   previousValues: readonly string[];
-  /** Subcommand path from root (e.g. ["api"]). */
+  /**
+   * Subcommand path from root (e.g. ["api"]). Reflects what the user
+   * actually typed — aliases are NOT resolved to their canonical names, so
+   * resolvers that branch on the path should accept every alias they care
+   * about.
+   */
   subcommandPath: readonly string[];
 }
 
