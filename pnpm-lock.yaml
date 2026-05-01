@@ -40,8 +40,8 @@ importers:
         specifier: 2.1.6
         version: 2.1.6
       organize-imports-cli:
-        specifier: 1.0.1
-        version: 1.0.1
+        specifier: 1.0.2
+        version: 1.0.2
       oxfmt:
         specifier: 0.46.0
         version: 0.46.0
@@ -1807,8 +1807,8 @@ packages:
   obug@2.1.1:
     resolution: {integrity: sha512-uTqF9MuPraAQ+IsnPf366RG4cP9RtUi7MLO1N3KEc+wb0a6yKpeL0lmk2IB1jY5KHPAlTc6T/JRdC/YqxHNwkQ==}
 
-  organize-imports-cli@1.0.1:
-    resolution: {integrity: sha512-HaLe8xGM3YZKbN7e7zb5yqjTbm0PphITkB7969g9opgVjXZwMxS5HDD56Phnbj3gPwffN8tnT9tc+agYMKZp/Q==}
+  organize-imports-cli@1.0.2:
+    resolution: {integrity: sha512-TQoXD9OF8xGhuu0SEMwaXYjX1z6Fi/33xT2Z8gyEO1qKXqWS0YGnAdV4sm5FGmkJ61Jf7SKTinAgyaDUb/S6jg==}
     engines: {node: '>=22.12.0'}
     hasBin: true
 
@@ -3625,7 +3625,7 @@ snapshots:
 
   obug@2.1.1: {}
 
-  organize-imports-cli@1.0.1:
+  organize-imports-cli@1.0.2:
     dependencies:
       chalk: 5.6.2
       editorconfig: 3.0.2
