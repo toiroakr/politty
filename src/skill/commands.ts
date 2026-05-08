@@ -1,7 +1,7 @@
-import { readdirSync, type Dirent } from "node:fs";
+import { lstatSync, readdirSync, type Dirent } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { arg } from "../core/arg-registry.js";
+import { arg, type RegularArgMeta } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
 import { logger, symbols } from "../output/logger.js";
 import {
@@ -12,6 +12,7 @@ import {
   readInstalledOwnership,
   uninstallSkill,
 } from "./installer.js";
+import { resolveSkillOptions, type ResolvedSkillOptions } from "./options.js";
 import { scanSourceDir } from "./scanner.js";
 import type {
   DiscoveredSkill,
@@ -25,27 +26,52 @@ import type {
  * Build the `"{package}:{cli}"` ownership stamp stored in the installed
  * SKILL.md's `metadata["politty-cli"]`.
  */
-function ownershipFor(options: SkillCommandOptions, cliName: string): string {
+function ownershipFor(options: ResolvedSkillOptions, cliName: string): string {
   return `${options.package}:${cliName}`;
 }
 
+/**
+ * Stream scan errors. Per-error `logger.warn` writes to stderr (so a
+ * malformed source SKILL.md is always loud), and a single trailing
+ * `logger.info` summary echoes the count to stdout — important for
+ * pipelines that consume only stdout from the CLI.
+ */
 function logScanErrors(errors: ScanError[]): void {
+  let skipped = 0;
   for (const err of errors) {
-    // `missing-source` is a directory-level failure (err.path === sourceDir),
-    // not a skill we're skipping. Label it distinctly so the log isn't
-    // misleading in that case.
-    const prefix =
-      err.reason === "missing-source"
-        ? `Failed to scan source directory ${err.path}`
-        : `Skipping skill at ${err.path}`;
-    logger.warn(`${prefix}: ${err.message}`);
+    if (err.reason === "missing-source") {
+      // Directory-level failure; not a per-skill skip.
+      logger.warn(`Failed to scan source directory ${err.path}: ${err.message}`);
+      continue;
+    }
+    skipped += 1;
+    logger.warn(`Skipping skill at ${err.path}: ${err.message}`);
+  }
+  if (skipped > 0) {
+    logger.info(
+      `${symbols.warning} Skipped ${skipped} skill(s) due to scan errors (see warnings above).`,
+    );
   }
 }
 
-function loadSkills(options: SkillCommandOptions): ScanResult {
+function loadSkills(options: ResolvedSkillOptions): ScanResult {
   const result = scanSourceDir(options.sourceDir);
   logScanErrors(result.errors);
   return result;
+}
+
+/**
+ * Build the metadata for `--exclude` honouring the configured alias.
+ * `undefined` alias means `arg()` is called without an alias key.
+ */
+function excludeArgMeta(options: ResolvedSkillOptions): RegularArgMeta<string[]> {
+  const meta: RegularArgMeta<string[]> = {
+    description: "Skill names to exclude from sync",
+  };
+  if (options.excludeAlias !== undefined) {
+    meta.alias = options.excludeAlias;
+  }
+  return meta;
 }
 
 /**
@@ -56,20 +82,22 @@ function loadSkills(options: SkillCommandOptions): ScanResult {
  * stale skills do not linger after the CLI drops them from its bundle.
  */
 export function createSkillSyncCommand(options: SkillCommandOptions, cliName: string) {
+  const resolved = resolveSkillOptions(options, cliName);
   return defineCommand({
     name: "sync",
     description: "Remove and reinstall all skills from source",
     args: z.object({
-      exclude: arg(z.array(z.string()).default([]), {
-        alias: "e",
-        description: "Skill names to exclude from sync",
+      exclude: arg(z.array(z.string()).default([]), excludeArgMeta(resolved)),
+      verbose: arg(z.boolean().default(false), {
+        alias: "v",
+        description: "Print install paths and modes",
       }),
     }),
     run(args) {
-      const { skills: allSkills, errors } = loadSkills(options);
+      const { skills: allSkills, errors } = loadSkills(resolved);
       const excluded = new Set(args.exclude);
       const skills = allSkills.filter((s) => !excluded.has(s.frontmatter.name));
-      const stamp = ownershipFor(options, cliName);
+      const stamp = ownershipFor(resolved, cliName);
 
       // Refuse orphan reconciliation when the scan itself could not produce
       // an authoritative view of "what this CLI bundles":
@@ -88,24 +116,39 @@ export function createSkillSyncCommand(options: SkillCommandOptions, cliName: st
       // skill do not block cleanup: the valid siblings still provide an
       // authoritative bundle listing.
       const directoryScanFailed = errors.some(
-        (e) => e.reason === "missing-source" || e.path === options.sourceDir,
+        (e) => e.reason === "missing-source" || e.path === resolved.sourceDir,
       );
       const allSkillsInvalid = errors.length > 0 && allSkills.length === 0;
 
+      let removed = 0;
       if (!directoryScanFailed && !allSkillsInvalid) {
         // Remove skills we previously owned that the CLI no longer bundles.
         const sourceNames = new Set(skills.map((s) => s.frontmatter.name));
-        for (const orphan of findOwnedInstalledSkills(stamp)) {
+        for (const orphan of findOwnedInstalledSkills(stamp, resolved.cwd)) {
           if (sourceNames.has(orphan) || excluded.has(orphan)) continue;
-          removeOwnedSkill(orphan, stamp);
+          removeOwnedSkill(orphan, stamp, resolved.cwd);
+          removed += 1;
         }
       }
 
       // Reinstall in-place. `installSkill` clears the slot before
       // writing, so a remove-all-first pass is not needed. `addSkill`'s
       // ownership guard still refuses to clobber skills owned by another CLI.
+      let installed = 0;
       for (const skill of skills) {
-        addSkill(skill, stamp, options.mode);
+        addSkill(skill, stamp, resolved, args.verbose);
+        installed += 1;
+      }
+
+      // Sync is the canonical "make it match the bundle" operation; an
+      // empty bundle or a fully-excluded run was previously silent. Always
+      // print a summary so users know the no-op was intentional.
+      if (installed === 0 && removed === 0) {
+        const reason =
+          allSkills.length > 0 && skills.length === 0 ? "all skills excluded" : "no skills bundled";
+        logger.info(`No skills installed (${reason}).`);
+      } else {
+        logger.info(`Sync complete: ${installed} installed, ${removed} removed.`);
       }
     },
   });
@@ -117,6 +160,7 @@ export function createSkillSyncCommand(options: SkillCommandOptions, cliName: st
  * Installs skills from sourceDir. Defaults to all skills if no name is given.
  */
 export function createSkillAddCommand(options: SkillCommandOptions, cliName: string) {
+  const resolved = resolveSkillOptions(options, cliName);
   return defineCommand({
     name: "add",
     description: "Install skills from source",
@@ -126,17 +170,21 @@ export function createSkillAddCommand(options: SkillCommandOptions, cliName: str
         description: "Skill name to install (default: all)",
         placeholder: "NAME",
       }),
+      verbose: arg(z.boolean().default(false), {
+        alias: "v",
+        description: "Print install paths and modes",
+      }),
     }),
     run(args) {
-      const { skills: sourceSkills } = loadSkills(options);
-      const stamp = ownershipFor(options, cliName);
+      const { skills: sourceSkills } = loadSkills(resolved);
+      const stamp = ownershipFor(resolved, cliName);
 
       if (args.name) {
         // Validate the user's request against available skills before
         // checking for emptiness — so a typo surfaces a useful error even
         // if the source dir is misconfigured.
         const skill = findOrThrow(sourceSkills, args.name);
-        addSkill(skill, stamp, options.mode);
+        addSkill(skill, stamp, resolved, args.verbose);
         return;
       }
 
@@ -146,7 +194,7 @@ export function createSkillAddCommand(options: SkillCommandOptions, cliName: str
       }
 
       for (const skill of sourceSkills) {
-        addSkill(skill, stamp, options.mode);
+        addSkill(skill, stamp, resolved, args.verbose);
       }
     },
   });
@@ -161,6 +209,7 @@ export function createSkillAddCommand(options: SkillCommandOptions, cliName: str
  * another tool installed are left untouched.
  */
 export function createSkillRemoveCommand(options: SkillCommandOptions, cliName: string) {
+  const resolved = resolveSkillOptions(options, cliName);
   return defineCommand({
     name: "remove",
     description: "Remove installed skills",
@@ -172,8 +221,8 @@ export function createSkillRemoveCommand(options: SkillCommandOptions, cliName: 
       }),
     }),
     run(args) {
-      const { skills: sourceSkills } = loadSkills(options);
-      const stamp = ownershipFor(options, cliName);
+      const { skills: sourceSkills } = loadSkills(resolved);
+      const stamp = ownershipFor(resolved, cliName);
 
       if (args.name) {
         // If sourceDir still knows this specific name, validate it for a
@@ -183,15 +232,73 @@ export function createSkillRemoveCommand(options: SkillCommandOptions, cliName: 
         if (sourceSkills.some((s) => s.frontmatter.name === args.name)) {
           findOrThrow(sourceSkills, args.name);
         }
-        removeOwnedSkill(args.name, stamp);
+        const removed = removeOwnedSkill(args.name, stamp, resolved.cwd);
+        if (!removed) {
+          logger.info(`${args.name} is not installed; nothing to remove.`);
+        }
         return;
       }
 
+      if (sourceSkills.length === 0) {
+        logger.info("No skills found in source directory; nothing to remove.");
+        return;
+      }
+
+      let removed = 0;
       for (const skill of sourceSkills) {
-        removeOwnedSkill(skill.frontmatter.name, stamp);
+        if (removeOwnedSkill(skill.frontmatter.name, stamp, resolved.cwd)) {
+          removed += 1;
+        }
+      }
+      if (removed === 0) {
+        logger.info("No installed skills owned by this CLI; nothing to remove.");
       }
     },
   });
+}
+
+/**
+ * Status of a source skill in this project's install tree.
+ *
+ * - `installed` — installed and stamped by this CLI.
+ * - `not-installed` — `.agents/skills/<name>` is absent.
+ * - `foreign` — installed but stamped by another CLI; `add`/`sync` will
+ *   refuse to overwrite it.
+ * - `unstamped` — installed without any `politty-cli` stamp (legacy or
+ *   manual install); `add` refuses to clobber it.
+ * - `missing` — `.agents/skills/<name>` exists but the canonical symlink
+ *   is broken (source package uninstalled).
+ */
+type ListStatus = "installed" | "not-installed" | "foreign" | "unstamped" | "missing";
+
+function listStatus(name: string, expectedOwnership: string, cwd: string): ListStatus {
+  let owner: string | null;
+  try {
+    owner = readInstalledOwnership(name, cwd);
+  } catch {
+    // Permission errors etc. — treat as unstamped so the user sees a
+    // surfaceable signal in the list rather than a hard crash.
+    return "unstamped";
+  }
+  if (owner === expectedOwnership) return "installed";
+  if (owner !== null) return "foreign";
+  // owner === null: distinguish "not installed" vs "installed unstamped"
+  // vs "installed but symlink broken".
+  if (!hasInstalledSkill(name, cwd)) {
+    // hasInstalledSkill returns false for both "absent" and "broken
+    // canonical symlink". Disambiguate via a direct lstat on the slot.
+    return slotPresent(name, cwd) ? "missing" : "not-installed";
+  }
+  return "unstamped";
+}
+
+function slotPresent(name: string, cwd: string): boolean {
+  try {
+    lstatSync(resolve(cwd, AGENTS_SKILLS_DIR, name));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -200,6 +307,7 @@ export function createSkillRemoveCommand(options: SkillCommandOptions, cliName: 
  * Lists available skills from the source directory.
  */
 export function createSkillListCommand(options: SkillCommandOptions, cliName: string) {
+  const resolved = resolveSkillOptions(options, cliName);
   return defineCommand({
     name: "list",
     description: "List available skills from source",
@@ -209,8 +317,8 @@ export function createSkillListCommand(options: SkillCommandOptions, cliName: st
       }),
     }),
     run(args) {
-      const { skills: sourceSkills } = loadSkills(options);
-      const stamp = ownershipFor(options, cliName);
+      const { skills: sourceSkills } = loadSkills(resolved);
+      const stamp = ownershipFor(resolved, cliName);
 
       if (args.json) {
         console.log(
@@ -225,6 +333,7 @@ export function createSkillListCommand(options: SkillCommandOptions, cliName: st
               // having to re-read SKILL.md.
               owner: s.frontmatter.metadata?.[OWNERSHIP_METADATA_KEY] ?? null,
               expectedOwner: stamp,
+              status: listStatus(s.frontmatter.name, stamp, resolved.cwd),
               sourcePath: s.sourcePath,
             })),
           ),
@@ -239,7 +348,10 @@ export function createSkillListCommand(options: SkillCommandOptions, cliName: st
 
       logger.info("Available skills:");
       for (const skill of sourceSkills) {
-        logger.info(`  ${skill.frontmatter.name.padEnd(20)} ${skill.frontmatter.description}`);
+        const status = listStatus(skill.frontmatter.name, stamp, resolved.cwd);
+        logger.info(
+          `  ${skill.frontmatter.name.padEnd(20)} ${status.padEnd(14)} ${skill.frontmatter.description}`,
+        );
       }
     },
   });
@@ -257,9 +369,12 @@ function findOrThrow(skills: DiscoveredSkill[], name: string): DiscoveredSkill {
 function addSkill(
   skill: DiscoveredSkill,
   expectedOwnership: string,
-  mode: InstallMode | undefined,
+  resolved: ResolvedSkillOptions,
+  verbose: boolean,
 ): void {
   const name = skill.frontmatter.name;
+  const cwd = resolved.cwd;
+  const mode: InstallMode | undefined = resolved.mode;
   // Validate the source skill's authored stamp before install. This is the
   // scanner-level correctness check that a skill package's SKILL.md
   // declares the expected `{package}:{cli}` ownership; a mismatch points
@@ -275,7 +390,7 @@ function addSkill(
   // Refuse to clobber a skill canonical that another CLI owns. Because
   // `.agents/skills/<name>` is a symlink to the source package after
   // install, this effectively checks the other CLI's source stamp.
-  const actual = readInstalledOwnership(name);
+  const actual = readInstalledOwnership(name, cwd);
   if (actual !== null && actual !== expectedOwnership) {
     throw new Error(
       `Refusing to install "${name}": owned by ${JSON.stringify(actual)}, ` +
@@ -286,27 +401,34 @@ function addSkill(
   // readInstalledOwnership returns null for both "not installed" and
   // "installed but unstamped" — we distinguish via hasInstalledSkill so
   // we don't silently rmSync a legacy/manual install we have no claim to.
-  if (actual === null && hasInstalledSkill(name)) {
+  if (actual === null && hasInstalledSkill(name, cwd)) {
     throw new Error(
       `Refusing to install "${name}": .agents/skills/${name}/SKILL.md exists without a ` +
         `${OWNERSHIP_METADATA_KEY} stamp, so it was not installed by this CLI. ` +
         `Remove it manually (or add the stamp to take ownership) before running "skills add".`,
     );
   }
-  installSkill(skill, undefined, mode === undefined ? {} : { mode });
+  installSkill(skill, cwd, mode === undefined ? {} : { mode });
   logger.info(`${symbols.success} Installed ${name}`);
+  if (verbose) {
+    const effectiveMode: InstallMode = mode ?? "symlink";
+    const canonical = resolve(cwd, AGENTS_SKILLS_DIR, name);
+    logger.info(`    mode=${effectiveMode}  path=${canonical}`);
+  }
 }
 
 /**
  * Remove a skill only if it belongs to this CLI (ownership stamp matches
- * `{package}:{cli}`). No-op when the skill isn't installed or has no stamp.
+ * `{package}:{cli}`). Returns `true` when something was actually removed,
+ * `false` when the skill was not installed (allowing callers to surface a
+ * "nothing to remove" message).
  *
  * Throws when the skill exists but is owned by someone else — callers
  * like `sync` that iterate silently would otherwise clobber user data.
  */
-function removeOwnedSkill(name: string, expectedOwnership: string): void {
-  const actual = readInstalledOwnership(name);
-  if (actual === null) return;
+function removeOwnedSkill(name: string, expectedOwnership: string, cwd: string): boolean {
+  const actual = readInstalledOwnership(name, cwd);
+  if (actual === null) return false;
   if (actual !== expectedOwnership) {
     throw new Error(
       `Refusing to remove "${name}": owned by ${JSON.stringify(actual)}, ` +
@@ -314,8 +436,9 @@ function removeOwnedSkill(name: string, expectedOwnership: string): void {
         `Check metadata.${OWNERSHIP_METADATA_KEY} in .agents/skills/${name}/SKILL.md.`,
     );
   }
-  uninstallSkill(name, undefined, { expectedOwnership });
+  uninstallSkill(name, cwd, { expectedOwnership });
   logger.info(`${symbols.success} Removed ${name}`);
+  return true;
 }
 
 /**
@@ -323,10 +446,7 @@ function removeOwnedSkill(name: string, expectedOwnership: string): void {
  * Used by `sync` to find orphans (skills the CLI previously bundled but
  * has since dropped).
  */
-function findOwnedInstalledSkills(
-  expectedOwnership: string,
-  cwd: string = process.cwd(),
-): string[] {
+function findOwnedInstalledSkills(expectedOwnership: string, cwd: string): string[] {
   const base = resolve(cwd, AGENTS_SKILLS_DIR);
   const owned: string[] = [];
   let entries: Dirent[];

@@ -53,4 +53,51 @@ describe("withSkillCommand", () => {
 
     expect(() => withSkillCommand(base, opts)).toThrow(/already defines a "skills"/);
   });
+
+  it("should append a default skills hint to the root description", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    const wrapped = withSkillCommand(base, opts);
+
+    // The append makes `--help` advertise the skills subcommand.
+    expect(wrapped.description).toMatch(/my-cli skills <add\|sync\|remove\|list>/);
+  });
+
+  it("should leave the description untouched when descriptionAppend is false", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    const wrapped = withSkillCommand(base, { ...opts, descriptionAppend: false });
+
+    expect(wrapped.description).toBe("Test CLI");
+  });
+
+  it("should append a custom string when descriptionAppend is provided", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    const wrapped = withSkillCommand(base, { ...opts, descriptionAppend: "(custom hint)" });
+
+    expect(wrapped.description).toBe("Test CLI (custom hint)");
+  });
+
+  it("should not duplicate the hint when re-wrapping a command", () => {
+    // A double wrap would be a configuration bug, but tests / playgrounds
+    // sometimes trigger it. Append-once keeps the help output clean.
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+    const once = withSkillCommand(base, opts);
+    const twice = withSkillCommand(
+      defineCommand({ name: "my-cli", description: once.description ?? "" }),
+      opts,
+    );
+
+    const occurrences = (twice.description ?? "").split("Manage agent skills").length - 1;
+    expect(occurrences).toBe(1);
+  });
+
+  it("should set the description to the hint when no description is provided", () => {
+    const base = defineCommand({ name: "my-cli" });
+
+    const wrapped = withSkillCommand(base, opts);
+
+    expect(wrapped.description).toMatch(/Manage agent skills/);
+  });
 });

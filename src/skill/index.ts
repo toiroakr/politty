@@ -56,6 +56,7 @@ import {
   createSkillRemoveCommand,
   createSkillSyncCommand,
 } from "./commands.js";
+import { resolveSkillOptions } from "./options.js";
 import type { SkillCommandOptions } from "./types.js";
 
 // Public API re-exports
@@ -115,6 +116,7 @@ export function withSkillCommand<T extends AnyCommand>(
   }
 
   const cliName = command.name;
+  const resolved = resolveSkillOptions(options, cliName);
   const skillsSubCommand = defineCommand({
     name: "skills",
     description: "Manage agent skills",
@@ -128,9 +130,27 @@ export function withSkillCommand<T extends AnyCommand>(
 
   return {
     ...command,
+    description: appendDescription(command.description, resolved.descriptionAppend),
     subCommands: {
       ...command.subCommands,
       skills: skillsSubCommand,
     },
   } as T;
+}
+
+/**
+ * Append the configured skills hint to the root command's description.
+ *
+ * Returns the original description unchanged when `append` is `false` or
+ * empty. When the existing description already ends with the same hint,
+ * skip the append so re-wrapping (e.g. in tests) does not duplicate it.
+ */
+function appendDescription(
+  existing: string | undefined,
+  append: string | false,
+): string | undefined {
+  if (append === false || append === "") return existing;
+  if (!existing) return append;
+  if (existing.endsWith(append)) return existing;
+  return `${existing} ${append}`;
 }

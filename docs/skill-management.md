@@ -103,6 +103,22 @@ runMain(cli);
 
 The `package` option identifies who owns the installed skills. It is combined with the command name as `"{package}:{cliName}"` and compared against the source SKILL.md's `metadata["politty-cli"]` stamp — installation fails if they don't match.
 
+### Install root resolution
+
+Every `skills` subcommand resolves an install root for `.agents/skills/...` once per invocation. The default walks up from `process.cwd()` and uses the first ancestor that contains `.git/` (a directory **or** a worktree/submodule pointer file) or `package.json`, falling back to `process.cwd()` when neither is found. This avoids creating `<sub>/.agents/skills/...` when the CLI is invoked from a project subdirectory.
+
+Pass an explicit `cwd` to override — useful when the CLI ships its own config file and should treat that file's location as the project root:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  cwd: dirname(configFilePath), // override find-up
+});
+```
+
+The programmatic primitives (`installSkill`, `uninstallSkill`, `hasInstalledSkill`, `readInstalledOwnership`) keep their original `process.cwd()` default — find-up is only applied by `withSkillCommand`'s subcommands so direct callers see no behavior change.
+
 ## Commands
 
 ### `skills sync`
@@ -112,7 +128,20 @@ Removes and reinstalls all skills owned by this CLI. Skills your CLI previously 
 ```bash
 my-agent skills sync
 my-agent skills sync --exclude commit    # Skip specific skills
-my-agent skills sync -e commit -e review # Skip multiple skills
+my-agent skills sync -x commit -x review # Skip multiple skills (short alias)
+my-agent skills sync --verbose           # Print install path and mode
+```
+
+The short alias for `--exclude` is `-x` by default. If your CLI's global
+flags already use `-x`, override or disable it via `flags.exclude.alias`:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  flags: { exclude: { alias: "X" } }, // rename
+  // flags: { exclude: { alias: false } }, // or disable entirely
+});
 ```
 
 ### `skills add`
@@ -122,6 +151,7 @@ Install a specific skill, or all skills when no name is given. A typo in the nam
 ```bash
 my-agent skills add commit
 my-agent skills add            # Install all skills
+my-agent skills add --verbose  # Print install path and mode per skill
 ```
 
 ### `skills remove`
@@ -142,7 +172,15 @@ my-agent skills list
 my-agent skills list --json
 ```
 
-`--json` emits `{ name, description, owner, expectedOwner, sourcePath }` per skill. `owner` is what the source SKILL.md actually declares under `metadata["politty-cli"]` (may be `null`); `expectedOwner` is `"{package}:{cliName}"`. A mismatch means `skills add` will refuse to install.
+`--json` emits `{ name, description, owner, expectedOwner, status, sourcePath }` per skill. `owner` is what the source SKILL.md actually declares under `metadata["politty-cli"]` (may be `null`); `expectedOwner` is `"{package}:{cliName}"`. A mismatch means `skills add` will refuse to install.
+
+`status` is one of:
+
+- `installed` — `.agents/skills/<name>` is stamped by this CLI.
+- `not-installed` — `.agents/skills/<name>` is absent.
+- `foreign` — installed but stamped by another CLI; `add`/`sync` will refuse to overwrite it.
+- `unstamped` — installed without a `politty-cli` stamp (legacy or manual install); `add` refuses to clobber it.
+- `missing` — slot exists but the canonical symlink is broken (the source package was uninstalled).
 
 ## Programmatic API
 
@@ -185,6 +223,34 @@ readInstalledOwnership("commit"); // "@my-agent/skills:my-agent" | null
 // broken canonical symlinks (source package uninstalled).
 hasInstalledSkill("commit"); // boolean
 ```
+
+## Filesystem Behavior
+
+### Symlink target convention
+
+`installSkill` writes **relative** symlink targets, with both endpoints passed through `realpathSync` first. This survives copying or remounting the project tree at a different absolute path, and stays correct when either end traverses a symlink (a symlinked checkout, a pnpm-style `node_modules`, etc.). No absolute-path symlinks are produced.
+
+### Atomicity & retry
+
+A single `installSkill` call is **not transactional**. It clears and writes the canonical `.agents/skills/<name>` slot, then clears and writes each agent-specific slot in sequence. A crash mid-call can leave some slots updated and others stale.
+
+Multi-skill `skills sync` is **fail-fast**: the first failed skill aborts the loop without rolling back already-installed siblings. Both single- and multi-skill operations are idempotent — re-running `skills sync` (or `skills add <name>`) converges back to the intended state. There is no per-skill rollback because the ownership stamp guarantees re-runs only ever touch slots this CLI owns.
+
+If you need stronger atomicity for, say, a release pipeline, gate the install with a higher-level lock and treat a non-zero exit code as "retry the entire `sync`."
+
+### Windows / no-symlink filesystems
+
+On filesystems without symlink support (Windows without Developer Mode, some network filesystems), `mode: "symlink"` (the default) throws a clear error pointing at `mode: "copy"`. Switch the mode at the `withSkillCommand` call site, or override per skill via the programmatic API:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  mode: "copy",
+});
+```
+
+Copy mode is fully self-contained: the materialised `.agents/skills/<name>` carries the source SKILL.md verbatim (including the `politty-cli` stamp), so subsequent `remove`/`sync` ownership checks behave identically to symlink mode.
 
 ## SKILL.md Format
 

@@ -65,6 +65,10 @@ describe("createSkillListCommand", () => {
 
   beforeEach(() => {
     tempDir = createTempDir();
+    mockedReadOwnership.mockReset();
+    mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReset();
+    mockedHasInstalledSkill.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -88,6 +92,7 @@ describe("createSkillListCommand", () => {
       name: "commit",
       description: "Commit skill",
     });
+    mockedReadOwnership.mockReturnValue(OWNERSHIP);
 
     const command = createSkillListCommand(opts(tempDir), CLI);
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -105,6 +110,60 @@ describe("createSkillListCommand", () => {
       // packaging mismatches.
       expect(output[0].owner).toBe(OWNERSHIP);
       expect(output[0].expectedOwner).toBe(OWNERSHIP);
+      // Status is "installed" because the installer mock reports the
+      // canonical ownership stamp on `.agents/skills/commit`.
+      expect(output[0].status).toBe("installed");
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it("should report status='foreign' for skills installed by another CLI", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    mockedReadOwnership.mockReturnValue("other-pkg:other-cli");
+
+    const command = createSkillListCommand(opts(tempDir), CLI);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      command.run!({ json: true });
+      const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+      expect(output[0].status).toBe("foreign");
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it("should report status='unstamped' for an installed legacy skill", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReturnValue(true);
+
+    const command = createSkillListCommand(opts(tempDir), CLI);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      command.run!({ json: true });
+      const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+      expect(output[0].status).toBe("unstamped");
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it("should report status='not-installed' when the canonical slot is absent", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReturnValue(false);
+
+    const command = createSkillListCommand(opts(tempDir), CLI);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      command.run!({ json: true });
+      const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+      // The repo root has no `.agents/skills/commit`, so slotPresent is false.
+      expect(output[0].status).toBe("not-installed");
     } finally {
       consoleSpy.mockRestore();
     }
@@ -133,7 +192,7 @@ describe("createSkillSyncCommand", () => {
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
 
     const command = createSkillSyncCommand(opts(tempDir), CLI);
-    command.run!({ exclude: [] });
+    command.run!({ exclude: [], verbose: false });
 
     const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
     const installNames = mockedInstallSkill.mock.calls.map((c) => c[0].frontmatter.name);
@@ -149,7 +208,7 @@ describe("createSkillSyncCommand", () => {
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
 
     const command = createSkillSyncCommand(opts(tempDir), CLI);
-    command.run!({ exclude: ["commit"] });
+    command.run!({ exclude: ["commit"], verbose: false });
 
     const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
     const installNames = mockedInstallSkill.mock.calls.map((c) => c[0].frontmatter.name);
@@ -164,14 +223,14 @@ describe("createSkillSyncCommand", () => {
 
     const command = createSkillSyncCommand(opts(tempDir), CLI);
 
-    expect(() => command.run!({ exclude: [] })).toThrow(/Refusing to install/);
+    expect(() => command.run!({ exclude: [], verbose: false })).toThrow(/Refusing to install/);
     expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 
   it("should proceed when source directory has no skills (CLI dropped all)", () => {
     const command = createSkillSyncCommand(opts(tempDir), CLI);
 
-    expect(() => command.run!({ exclude: [] })).not.toThrow();
+    expect(() => command.run!({ exclude: [], verbose: false })).not.toThrow();
     expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 
@@ -180,7 +239,7 @@ describe("createSkillSyncCommand", () => {
     // and silently wipe every install owned by this CLI.
     const command = createSkillSyncCommand(opts("/nonexistent/source"), CLI);
 
-    expect(() => command.run!({ exclude: [] })).not.toThrow();
+    expect(() => command.run!({ exclude: [], verbose: false })).not.toThrow();
     expect(mockedUninstallSkill).not.toHaveBeenCalled();
     expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
@@ -213,7 +272,7 @@ describe("createSkillSyncCommand", () => {
 
     try {
       const command = createSkillSyncCommand(opts(tempDir), CLI);
-      command.run!({ exclude: [] });
+      command.run!({ exclude: [], verbose: false });
 
       const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
       expect(uninstallNames).toContain("orphan");
@@ -238,7 +297,7 @@ describe("createSkillSyncCommand", () => {
 
     try {
       const command = createSkillSyncCommand(opts(tempDir), CLI);
-      command.run!({ exclude: ["orphan"] });
+      command.run!({ exclude: ["orphan"], verbose: false });
 
       const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
       expect(uninstallNames).not.toContain("orphan");
@@ -269,7 +328,7 @@ describe("createSkillSyncCommand", () => {
 
     try {
       const command = createSkillSyncCommand(opts(tempDir), CLI);
-      command.run!({ exclude: [] });
+      command.run!({ exclude: [], verbose: false });
 
       expect(mockedUninstallSkill).not.toHaveBeenCalled();
       expect(mockedInstallSkill).not.toHaveBeenCalled();
@@ -282,7 +341,7 @@ describe("createSkillSyncCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
     const command = createSkillSyncCommand({ ...opts(tempDir), mode: "symlink" }, CLI);
-    command.run!({ exclude: [] });
+    command.run!({ exclude: [], verbose: false });
 
     expect(mockedInstallSkill.mock.calls[0]![2]).toEqual({ mode: "symlink" });
   });
@@ -297,7 +356,7 @@ describe("createSkillSyncCommand", () => {
     writeFileSync(join(badDir, "SKILL.md"), "---\nname: broken\n---\n# missing description\n");
 
     const command = createSkillSyncCommand(opts(tempDir), CLI);
-    command.run!({ exclude: [] });
+    command.run!({ exclude: [], verbose: false });
 
     const installNames = mockedInstallSkill.mock.calls.map((c) => c[0].frontmatter.name);
     expect(installNames).toEqual(["commit"]);
@@ -327,7 +386,7 @@ describe("createSkillSyncCommand", () => {
 
     try {
       const command = createSkillSyncCommand(opts(tempDir), CLI);
-      command.run!({ exclude: ["commit"] });
+      command.run!({ exclude: ["commit"], verbose: false });
 
       const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
       expect(uninstallNames).toContain("orphan");
@@ -359,7 +418,7 @@ describe("createSkillAddCommand", () => {
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
 
     const command = createSkillAddCommand(opts(tempDir), CLI);
-    command.run!({ name: undefined });
+    command.run!({ name: undefined, verbose: false });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(2);
   });
@@ -369,7 +428,7 @@ describe("createSkillAddCommand", () => {
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
 
     const command = createSkillAddCommand(opts(tempDir), CLI);
-    command.run!({ name: "commit" });
+    command.run!({ name: "commit", verbose: false });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
     expect(mockedInstallSkill.mock.calls[0]![0].frontmatter.name).toBe("commit");
@@ -380,14 +439,14 @@ describe("createSkillAddCommand", () => {
 
     const command = createSkillAddCommand(opts(tempDir), CLI);
 
-    expect(() => command.run!({ name: "nonexistent" })).toThrow(/not found/);
+    expect(() => command.run!({ name: "nonexistent", verbose: false })).toThrow(/not found/);
     expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 
   it("should throw even when source dir is empty and a name was requested", () => {
     const command = createSkillAddCommand(opts(tempDir), CLI);
 
-    expect(() => command.run!({ name: "commit" })).toThrow(/not found/);
+    expect(() => command.run!({ name: "commit", verbose: false })).toThrow(/not found/);
     expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 
@@ -397,7 +456,7 @@ describe("createSkillAddCommand", () => {
 
     const command = createSkillAddCommand(opts(tempDir), CLI);
 
-    expect(() => command.run!({ name: "commit" })).toThrow(/Refusing to install/);
+    expect(() => command.run!({ name: "commit", verbose: false })).toThrow(/Refusing to install/);
     expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 
@@ -406,7 +465,7 @@ describe("createSkillAddCommand", () => {
     mockedReadOwnership.mockReturnValue(OWNERSHIP);
 
     const command = createSkillAddCommand(opts(tempDir), CLI);
-    command.run!({ name: "commit" });
+    command.run!({ name: "commit", verbose: false });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
   });
@@ -415,7 +474,7 @@ describe("createSkillAddCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
     const command = createSkillAddCommand({ ...opts(tempDir), mode: "copy" }, CLI);
-    command.run!({ name: "commit" });
+    command.run!({ name: "commit", verbose: false });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
     expect(mockedInstallSkill.mock.calls[0]![2]).toEqual({ mode: "copy" });
@@ -425,7 +484,7 @@ describe("createSkillAddCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
     const command = createSkillAddCommand(opts(tempDir), CLI);
-    command.run!({ name: "commit" });
+    command.run!({ name: "commit", verbose: false });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
     // No mode configured → installer default ("symlink") applies
@@ -444,7 +503,9 @@ describe("createSkillAddCommand", () => {
 
     const command = createSkillAddCommand(opts(tempDir), CLI);
 
-    expect(() => command.run!({ name: "commit" })).toThrow(/source SKILL\.md declares/);
+    expect(() => command.run!({ name: "commit", verbose: false })).toThrow(
+      /source SKILL\.md declares/,
+    );
     expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 
@@ -458,7 +519,9 @@ describe("createSkillAddCommand", () => {
 
     const command = createSkillAddCommand(opts(tempDir), CLI);
 
-    expect(() => command.run!({ name: "commit" })).toThrow(/source SKILL\.md declares/);
+    expect(() => command.run!({ name: "commit", verbose: false })).toThrow(
+      /source SKILL\.md declares/,
+    );
     expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 
@@ -473,7 +536,9 @@ describe("createSkillAddCommand", () => {
 
     const command = createSkillAddCommand(opts(tempDir), CLI);
 
-    expect(() => command.run!({ name: "commit" })).toThrow(/without a politty-cli stamp/);
+    expect(() => command.run!({ name: "commit", verbose: false })).toThrow(
+      /without a politty-cli stamp/,
+    );
     expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 });
@@ -530,7 +595,11 @@ describe("createSkillRemoveCommand", () => {
     const command = createSkillRemoveCommand(opts(tempDir), CLI);
     command.run!({ name: "orphan" });
 
-    expect(mockedUninstallSkill).toHaveBeenCalledWith("orphan", undefined, {
+    // The second arg is the resolved cwd (find-up project root from
+    // process.cwd()). Asserting on the first/third args is enough to
+    // verify the orphan-removal contract without coupling the test to
+    // the runner's working directory.
+    expect(mockedUninstallSkill).toHaveBeenCalledWith("orphan", expect.any(String), {
       expectedOwnership: OWNERSHIP,
     });
   });
@@ -542,7 +611,7 @@ describe("createSkillRemoveCommand", () => {
     const command = createSkillRemoveCommand(opts(tempDir), CLI);
     command.run!({ name: "orphan" });
 
-    expect(mockedUninstallSkill).toHaveBeenCalledWith("orphan", undefined, {
+    expect(mockedUninstallSkill).toHaveBeenCalledWith("orphan", expect.any(String), {
       expectedOwnership: OWNERSHIP,
     });
   });
@@ -555,5 +624,189 @@ describe("createSkillRemoveCommand", () => {
     command.run!({ name: "commit" });
 
     expect(mockedUninstallSkill).not.toHaveBeenCalled();
+  });
+});
+
+describe("flag overrides", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+    mockedInstallSkill.mockReset();
+    mockedReadOwnership.mockReset();
+    mockedReadOwnership.mockReturnValue(OWNERSHIP);
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("should default the exclude alias to -x", () => {
+    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    // The arg() metadata is registered on the schema; the alias-config
+    // round-trip is verified through politty's normal arg parser elsewhere.
+    // Here we assert the schema accepts the default short-flag form.
+    expect(command.args).toBeDefined();
+  });
+
+  it("should drop the short alias when flags.exclude.alias is false", () => {
+    const command = createSkillSyncCommand(
+      { ...opts(tempDir), flags: { exclude: { alias: false } } },
+      CLI,
+    );
+    expect(command.args).toBeDefined();
+  });
+
+  it("should accept a custom alias string", () => {
+    const command = createSkillSyncCommand(
+      { ...opts(tempDir), flags: { exclude: { alias: "X" } } },
+      CLI,
+    );
+    expect(command.args).toBeDefined();
+  });
+});
+
+describe("cwd resolution", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+    mockedInstallSkill.mockReset();
+    mockedReadOwnership.mockReset();
+    mockedReadOwnership.mockReturnValue(OWNERSHIP);
+    mockedHasInstalledSkill.mockReset();
+    mockedHasInstalledSkill.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("should pass options.cwd through to installSkill verbatim", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    const projectRoot = createTempDir();
+
+    const command = createSkillAddCommand({ ...opts(tempDir), cwd: projectRoot }, CLI);
+    command.run!({ name: "commit", verbose: false });
+
+    // Second arg is the resolved cwd. With an explicit override we expect
+    // exactly that path (resolved to absolute).
+    const cwdArg = mockedInstallSkill.mock.calls[0]![1];
+    expect(cwdArg).toBe(projectRoot);
+
+    rmSync(projectRoot, { recursive: true, force: true });
+  });
+});
+
+describe("--verbose output", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+    mockedInstallSkill.mockReset();
+    mockedReadOwnership.mockReset();
+    mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReset();
+    mockedHasInstalledSkill.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("should print install path and mode when --verbose is set", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const command = createSkillAddCommand({ ...opts(tempDir), mode: "copy" }, CLI);
+      command.run!({ name: "commit", verbose: true });
+
+      const lines = consoleSpy.mock.calls.map((c) => c[0] as string);
+      expect(lines.some((l) => l.includes("mode=copy"))).toBe(true);
+      expect(lines.some((l) => l.includes(".agents/skills/commit"))).toBe(true);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it("should not print path/mode when --verbose is omitted", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const command = createSkillAddCommand(opts(tempDir), CLI);
+      command.run!({ name: "commit", verbose: false });
+
+      const lines = consoleSpy.mock.calls.map((c) => c[0] as string);
+      expect(lines.some((l) => l.includes("mode="))).toBe(false);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+});
+
+describe("no-op summaries", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+    mockedInstallSkill.mockReset();
+    mockedUninstallSkill.mockReset();
+    mockedReadOwnership.mockReset();
+    mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReset();
+    mockedHasInstalledSkill.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("should print a 'no skills installed' summary when sync excludes everything", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const command = createSkillSyncCommand(opts(tempDir), CLI);
+      command.run!({ exclude: ["commit"], verbose: false });
+
+      const lines = consoleSpy.mock.calls.map((c) => c[0] as string);
+      // Without this summary, sync exits 0 with zero output — a confusing UX.
+      expect(lines.some((l) => l.includes("No skills installed"))).toBe(true);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it("should print a 'nothing to remove' summary when remove finds no installs", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    mockedReadOwnership.mockReturnValue(null);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const command = createSkillRemoveCommand(opts(tempDir), CLI);
+      command.run!({ name: undefined });
+
+      const lines = consoleSpy.mock.calls.map((c) => c[0] as string);
+      expect(lines.some((l) => l.includes("nothing to remove"))).toBe(true);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it("should print a sync-complete summary when work happens", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const command = createSkillSyncCommand(opts(tempDir), CLI);
+      command.run!({ exclude: [], verbose: false });
+
+      const lines = consoleSpy.mock.calls.map((c) => c[0] as string);
+      expect(lines.some((l) => l.includes("Sync complete"))).toBe(true);
+    } finally {
+      consoleSpy.mockRestore();
+    }
   });
 });

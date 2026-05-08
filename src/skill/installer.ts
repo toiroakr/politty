@@ -61,6 +61,25 @@ function assertSafeName(name: string): void {
  * - `"copy"`: recursive copy. Works anywhere, but source updates require
  *   re-running install.
  *
+ * **Symlink target convention.** Symlinks are written with relative
+ * targets so an install survives when the project tree is copied or
+ * mounted at a different absolute path. The endpoints are passed through
+ * `realpathSync` first so the relative path stays correct when either
+ * end traverses a symlink (a symlinked checkout, a pnpm-style
+ * `node_modules`, etc.). No absolute-path symlinks are produced by this
+ * function.
+ *
+ * **Atomicity.** This call is *not* transactional across multi-step
+ * installs. The canonical slot is cleared then written, and each
+ * `SYMLINK_TARGETS` slot is then cleared and written one at a time. A
+ * crash mid-install can leave the canonical slot updated and one or
+ * more agent-specific slots stale; re-running `installSkill` (or the
+ * `skills sync` subcommand, which iterates over multiple skills) is
+ * idempotent and converges back to the intended state. Multi-skill
+ * orchestration in {@link createSkillSyncCommand} is fail-fast — the
+ * first failed skill aborts the loop without rolling back already-
+ * installed siblings, again because re-running converges.
+ *
  * The ownership stamp (`metadata["politty-cli"]`) is authored by the skill
  * package; the installer does not modify SKILL.md.
  */

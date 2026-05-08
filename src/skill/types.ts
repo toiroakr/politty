@@ -95,6 +95,22 @@ export interface UninstallSkillOptions {
 }
 
 /**
+ * Per-flag overrides for the built-in skill subcommand options.
+ *
+ * Pass through {@link SkillCommandOptions.flags} to resolve collisions with
+ * CLI-level global flags. Setting `alias` to `false` disables the short
+ * alias entirely; passing a string renames it.
+ */
+export interface SkillFlagOverrides {
+  /**
+   * `--exclude` flag on `skills sync`. The default short alias is `-x`.
+   */
+  exclude?: {
+    alias?: string | false;
+  };
+}
+
+/**
  * Options for `withSkillCommand`.
  */
 export interface SkillCommandOptions {
@@ -133,4 +149,50 @@ export interface SkillCommandOptions {
    * Mode). Set to `"copy"` to always copy. See {@link InstallMode}.
    */
   mode?: InstallMode;
+
+  /**
+   * Project root directory used by every `skills` subcommand for resolving
+   * `.agents/skills/...` install paths.
+   *
+   * Default: walk up from `process.cwd()` and use the first ancestor that
+   * contains `.git/` or `package.json`; fall back to `process.cwd()` when
+   * neither is found. This avoids creating `<sub>/.agents/skills/...` when
+   * the CLI is invoked from a subdirectory of the project.
+   *
+   * Pass an explicit absolute (or cwd-relative) path to override — for
+   * example, the directory of a CLI-specific config file.
+   */
+  cwd?: string;
+
+  /**
+   * Customize built-in subcommand flags. Use to resolve collisions with
+   * the CLI's global flags or to opt out of short aliases.
+   *
+   * @example
+   * ```ts
+   * // CLI already uses -x globally; rename the exclude alias.
+   * withSkillCommand(cmd, {
+   *   sourceDir, package: "@my-agent/skills",
+   *   flags: { exclude: { alias: "X" } },
+   * });
+   *
+   * // Disable the short alias entirely.
+   * withSkillCommand(cmd, {
+   *   sourceDir, package: "@my-agent/skills",
+   *   flags: { exclude: { alias: false } },
+   * });
+   * ```
+   */
+  flags?: SkillFlagOverrides;
+
+  /**
+   * Append a one-line skills usage hint to the wrapped command's
+   * `description` so `--help` advertises the skills subcommand.
+   *
+   * - `undefined` (default) — append a default hint mentioning the
+   *   available subcommands.
+   * - `string` — append this exact string instead.
+   * - `false` — leave the description untouched.
+   */
+  descriptionAppend?: string | false;
 }
