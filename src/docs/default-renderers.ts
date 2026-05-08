@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
 import type { Example } from "../types.js";
 import type {
@@ -251,24 +252,9 @@ function generateAnchor(commandPath: string[]): string {
  * Always emits forward slashes so Markdown links remain portable across OSes.
  */
 function getRelativePath(from: string, to: string): string {
-  const fromParts = from.replace(/\\/g, "/").split("/").slice(0, -1); // directory of 'from'
-  const toParts = to.replace(/\\/g, "/").split("/");
-
-  // Find common prefix
-  let commonLength = 0;
-  while (
-    commonLength < fromParts.length &&
-    commonLength < toParts.length - 1 &&
-    fromParts[commonLength] === toParts[commonLength]
-  ) {
-    commonLength++;
-  }
-
-  // Build relative path
-  const upCount = fromParts.length - commonLength;
-  const relativeParts = [...Array(upCount).fill(".."), ...toParts.slice(commonLength)];
-
-  return relativeParts.join("/") || (toParts[toParts.length - 1] ?? "");
+  const fromPosix = from.replace(/\\/g, "/");
+  const toPosix = to.replace(/\\/g, "/");
+  return path.posix.relative(path.posix.dirname(fromPosix), toPosix);
 }
 
 /**
