@@ -38,7 +38,7 @@ function removeSectionBlock(content: string, type: SectionType, scope: string): 
 
 /** Get relative path from CWD (for index marker scope) */
 function relPath(absPath: string): string {
-  return path.relative(process.cwd(), absPath);
+  return path.relative(process.cwd(), absPath).replace(/\\/g, "/");
 }
 
 describe("golden-test", () => {

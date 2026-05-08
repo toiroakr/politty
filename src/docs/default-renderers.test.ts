@@ -306,6 +306,34 @@ describe("default-renderers", () => {
       expect(table).toContain("| `sub` | Sub command |");
       expect(table).not.toContain("#sub");
     });
+
+    it("should emit forward slashes for cross-file links even with backslash paths", async () => {
+      const configCmd = defineCommand({
+        name: "config",
+        description: "Config command",
+        run: () => {},
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        description: "CLI",
+        subCommands: { config: configCmd },
+      });
+
+      const info = await buildCommandInfo(cmd, "cli");
+      // Simulate Windows-style paths produced by path.join on win32.
+      const table = renderSubcommandsTable(
+        {
+          ...info,
+          filePath: "C:\\repo\\docs\\cli.md",
+          fileMap: { config: "C:\\repo\\docs\\commands\\config.md" },
+        },
+        true,
+      );
+
+      expect(table).toContain("[`config`](commands/config.md#config)");
+      expect(table).not.toContain("\\");
+    });
   });
 
   describe("createCommandRenderer", () => {

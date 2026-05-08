@@ -5,6 +5,19 @@ import { describe, expect, it } from "vitest";
 
 const TEMP_APP_PATH = join(__dirname, "temp-signal-app.ts");
 
+// Bridge for the Windows test driver: Node.js on Windows does not deliver
+// POSIX signals from `process.kill(pid, "SIGINT")`, so the harness sends an
+// IPC message and the child re-emits the signal on itself. The runtime's
+// `process.on("SIGINT" | "SIGTERM")` handlers are exercised the same way they
+// are by a real Ctrl+C in the console.
+const SIGNAL_BRIDGE = `
+process.on("message", (msg) => {
+  if (msg && typeof msg === "object" && msg.type === "signal") {
+    process.emit(msg.name);
+  }
+});
+`;
+
 const APP_CODE = `
 import { defineCommand, runMain } from "../src/index.js";
 
@@ -21,6 +34,7 @@ const command = defineCommand({
 });
 
 runMain(command);
+${SIGNAL_BRIDGE}
 `;
 
 const GLOBAL_LIFECYCLE_APP_CODE = `
@@ -45,6 +59,7 @@ runMain(command, {
     console.log("GLOBAL_CLEANUP:" + (error ? error.message : "no-error"));
   },
 });
+${SIGNAL_BRIDGE}
 `;
 
 function runSignalApp(
@@ -54,26 +69,34 @@ function runSignalApp(
   writeFileSync(tempPath, code);
 
   return new Promise((resolve, reject) => {
+    const isWindows = process.platform === "win32";
+    const stdio: ("ignore" | "pipe" | "ipc")[] = isWindows
+      ? ["ignore", "pipe", "pipe", "ipc"]
+      : ["ignore", "pipe", "pipe"];
     const child = spawn("node", ["--import", "tsx/esm", tempPath], {
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio,
       cwd: join(__dirname, ".."),
-      detached: true,
+      detached: !isWindows,
     });
 
     let output = "";
     let errorOutput = "";
     let ready = false;
 
-    child.stdout.on("data", (data) => {
+    child.stdout!.on("data", (data) => {
       const str = data.toString();
       output += str;
       if (str.includes("READY") && !ready) {
         ready = true;
-        process.kill(-child.pid!, "SIGINT");
+        if (isWindows) {
+          child.send({ type: "signal", name: "SIGINT" });
+        } else {
+          process.kill(-child.pid!, "SIGINT");
+        }
       }
     });
 
-    child.stderr.on("data", (data) => {
+    child.stderr!.on("data", (data) => {
       errorOutput += data.toString();
     });
 
