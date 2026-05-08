@@ -9,9 +9,9 @@ import { renderArgsTable } from "./render-args.js";
 import { renderCommandIndex } from "./render-index.js";
 import {
   DOCTOR_ENV,
+  SECTION_TYPES,
   sectionEndMarker,
   sectionStartMarker,
-  SECTION_TYPES,
   UPDATE_GOLDEN_ENV,
   type SectionType,
 } from "./types.js";
@@ -38,7 +38,7 @@ function removeSectionBlock(content: string, type: SectionType, scope: string): 
 
 /** Get relative path from CWD (for index marker scope) */
 function relPath(absPath: string): string {
-  return path.relative(process.cwd(), absPath);
+  return path.relative(process.cwd(), absPath).replace(/\\/g, "/");
 }
 
 describe("golden-test", () => {
