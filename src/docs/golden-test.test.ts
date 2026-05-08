@@ -351,73 +351,60 @@ describe("golden-test", () => {
       expect(content).toContain("Custom content for test-cli.");
     });
 
-    // Skipped on Windows: the doc renderer currently emits cross-file
-    // Markdown links using the host OS path separator (`commands\config.md`
-    // instead of `commands/config.md`), which breaks the assertion. Tracked
-    // in https://github.com/toiroakr/politty/issues/379 — remove the skip
-    // once the renderer normalises to forward slashes.
-    it.skipIf(process.platform === "win32")(
-      "should generate cross-file links when subcommands are in different files",
-      async () => {
-        vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+    it("should generate cross-file links when subcommands are in different files", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
 
-        const mainPath = path.join(testDir, "cli.md");
-        const configPath = path.join(testDir, "config.md");
+      const mainPath = path.join(testDir, "cli.md");
+      const configPath = path.join(testDir, "config.md");
 
-        const result = await generateDoc({
-          command: testCommand,
-          files: {
-            [mainPath]: [""],
-            [configPath]: ["config"],
-          },
-          ignores: ["greet"],
-        });
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [mainPath]: [""],
+          [configPath]: ["config"],
+        },
+        ignores: ["greet"],
+      });
 
-        expect(result.success).toBe(true);
-        expect(result.files).toHaveLength(2);
+      expect(result.success).toBe(true);
+      expect(result.files).toHaveLength(2);
 
-        // Main file should have link to config.md for config subcommand
-        const mainContent = fs.readFileSync(mainPath, "utf-8");
-        expect(mainContent).toContain("# test-cli");
-        expect(mainContent).toContain("[`config`](config.md#config)");
+      // Main file should have link to config.md for config subcommand
+      const mainContent = fs.readFileSync(mainPath, "utf-8");
+      expect(mainContent).toContain("# test-cli");
+      expect(mainContent).toContain("[`config`](config.md#config)");
 
-        // Config file should have same-file anchors for its subcommands
-        const configContent = fs.readFileSync(configPath, "utf-8");
-        expect(configContent).toContain("# config");
-        expect(configContent).toContain("[`config get`](#config-get)");
-        expect(configContent).toContain("[`config set`](#config-set)");
-      },
-    );
+      // Config file should have same-file anchors for its subcommands
+      const configContent = fs.readFileSync(configPath, "utf-8");
+      expect(configContent).toContain("# config");
+      expect(configContent).toContain("[`config get`](#config-get)");
+      expect(configContent).toContain("[`config set`](#config-set)");
+    });
 
-    // Skipped on Windows for the same reason as the cross-file links case
-    // above; tracked in https://github.com/toiroakr/politty/issues/379.
-    it.skipIf(process.platform === "win32")(
-      "should generate relative paths for nested directory structures",
-      async () => {
-        vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+    it("should generate relative paths for nested directory structures", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
 
-        fs.mkdirSync(path.join(testDir, "docs"), { recursive: true });
-        fs.mkdirSync(path.join(testDir, "docs", "commands"), { recursive: true });
+      fs.mkdirSync(path.join(testDir, "docs"), { recursive: true });
+      fs.mkdirSync(path.join(testDir, "docs", "commands"), { recursive: true });
 
-        const mainPath = path.join(testDir, "docs", "cli.md");
-        const configPath = path.join(testDir, "docs", "commands", "config.md");
+      const mainPath = path.join(testDir, "docs", "cli.md");
+      const configPath = path.join(testDir, "docs", "commands", "config.md");
 
-        const result = await generateDoc({
-          command: testCommand,
-          files: {
-            [mainPath]: [""],
-            [configPath]: ["config"],
-          },
-          ignores: ["greet"],
-        });
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [mainPath]: [""],
+          [configPath]: ["config"],
+        },
+        ignores: ["greet"],
+      });
 
-        expect(result.success).toBe(true);
+      expect(result.success).toBe(true);
 
-        // Main file should have relative link to nested config.md
-        const mainContent = fs.readFileSync(mainPath, "utf-8");
-        expect(mainContent).toContain("[`config`](commands/config.md#config)");
-      },
-    );
+      // Main file should have relative link to nested config.md
+      const mainContent = fs.readFileSync(mainPath, "utf-8");
+      expect(mainContent).toContain("[`config`](commands/config.md#config)");
+    });
 
     it("should apply sync formatter before comparison", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
