@@ -722,7 +722,9 @@ describe("--verbose output", () => {
       const command = createSkillAddCommand({ ...opts(tempDir), mode: "copy" }, CLI);
       command.run!({ name: "commit", verbose: true });
 
-      const lines = consoleSpy.mock.calls.map((c) => c[0] as string);
+      // Normalise to forward slashes so the assertion works on Windows runners
+      // where the install path is rendered with backslashes.
+      const lines = consoleSpy.mock.calls.map((c) => (c[0] as string).replaceAll("\\", "/"));
       expect(lines.some((l) => l.includes("mode=copy"))).toBe(true);
       expect(lines.some((l) => l.includes(".agents/skills/commit"))).toBe(true);
     } finally {

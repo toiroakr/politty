@@ -94,27 +94,42 @@ function runSignalApp(
 }
 
 describe("Signal Handling", () => {
-  it("should run cleanup on SIGINT", async () => {
-    const { output, code, signal } = await runSignalApp(APP_CODE);
+  // Skipped on Windows: SIGINT is a POSIX signal and Node.js on Windows
+  // handles Ctrl+C through the console control path, so
+  // `process.kill(pid, "SIGINT")` from the test harness does not drive the
+  // child's JS signal handlers the way it does on Linux/macOS. Re-enable
+  // once we emulate the Windows console-control path or split out a
+  // Windows-specific driver.
+  it.skipIf(process.platform === "win32")(
+    "should run cleanup on SIGINT",
+    async () => {
+      const { output, code, signal } = await runSignalApp(APP_CODE);
 
-    expect(output).toContain("CLEANUP_CALLED");
-    if (code !== null) {
-      expect([1, 130]).toContain(code);
-    } else {
-      expect(signal).toBe("SIGINT");
-    }
-  }, 10000);
+      expect(output).toContain("CLEANUP_CALLED");
+      if (code !== null) {
+        expect([1, 130]).toContain(code);
+      } else {
+        expect(signal).toBe("SIGINT");
+      }
+    },
+    10000,
+  );
 
-  it("should pass error to per-command cleanup and run global cleanup on signal", async () => {
-    const { output, code, signal } = await runSignalApp(GLOBAL_LIFECYCLE_APP_CODE);
+  // Skipped on Windows for the same reason as the SIGINT cleanup case above.
+  it.skipIf(process.platform === "win32")(
+    "should pass error to per-command cleanup and run global cleanup on signal",
+    async () => {
+      const { output, code, signal } = await runSignalApp(GLOBAL_LIFECYCLE_APP_CODE);
 
-    expect(output).toContain("GLOBAL_SETUP");
-    expect(output).toContain("COMMAND_CLEANUP:Process interrupted");
-    expect(output).toContain("GLOBAL_CLEANUP:Process interrupted");
-    if (code !== null) {
-      expect([1, 130]).toContain(code);
-    } else {
-      expect(signal).toBe("SIGINT");
-    }
-  }, 10000);
+      expect(output).toContain("GLOBAL_SETUP");
+      expect(output).toContain("COMMAND_CLEANUP:Process interrupted");
+      expect(output).toContain("GLOBAL_CLEANUP:Process interrupted");
+      if (code !== null) {
+        expect([1, 130]).toContain(code);
+      } else {
+        expect(signal).toBe("SIGINT");
+      }
+    },
+    10000,
+  );
 });
