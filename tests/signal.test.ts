@@ -97,9 +97,9 @@ describe("Signal Handling", () => {
   // Skipped on Windows: SIGINT is a POSIX signal and Node.js on Windows
   // handles Ctrl+C through the console control path, so
   // `process.kill(pid, "SIGINT")` from the test harness does not drive the
-  // child's JS signal handlers the way it does on Linux/macOS. Re-enable
-  // once we emulate the Windows console-control path or split out a
-  // Windows-specific driver.
+  // child's JS signal handlers the way it does on Linux/macOS. Tracked in
+  // https://github.com/toiroakr/politty/issues/380 — remove the skip once
+  // the harness (or runtime) emulates the Windows console-control path.
   it.skipIf(process.platform === "win32")(
     "should run cleanup on SIGINT",
     async () => {
@@ -115,7 +115,8 @@ describe("Signal Handling", () => {
     10000,
   );
 
-  // Skipped on Windows for the same reason as the SIGINT cleanup case above.
+  // Skipped on Windows for the same reason as the SIGINT cleanup case
+  // above; tracked in https://github.com/toiroakr/politty/issues/380.
   it.skipIf(process.platform === "win32")(
     "should pass error to per-command cleanup and run global cleanup on signal",
     async () => {
