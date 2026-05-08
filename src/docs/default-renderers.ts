@@ -247,11 +247,12 @@ function generateAnchor(commandPath: string[]): string {
 }
 
 /**
- * Generate relative path from one file to another
+ * Generate relative path from one file to another.
+ * Always emits forward slashes so Markdown links remain portable across OSes.
  */
 function getRelativePath(from: string, to: string): string {
-  const fromParts = from.split("/").slice(0, -1); // directory of 'from'
-  const toParts = to.split("/");
+  const fromParts = from.replace(/\\/g, "/").split("/").slice(0, -1); // directory of 'from'
+  const toParts = to.replace(/\\/g, "/").split("/");
 
   // Find common prefix
   let commonLength = 0;
