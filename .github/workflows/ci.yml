@@ -12,9 +12,13 @@ concurrency:
 
 jobs:
   ci:
-    name: CI
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: CI (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     permissions:
       contents: read
       actions: write
@@ -33,7 +37,9 @@ jobs:
         shell: bash
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        shell: bash
       - name: Typecheck, lint, format, and knip
+        shell: bash
         run: |
           pnpm typecheck &
           TYPECHECK_PID=$!
@@ -49,8 +55,11 @@ jobs:
           done
           exit $FAIL
       - name: Test with coverage
+        shell: bash
         run: npx vitest run --coverage --project unit
       - name: Run octocov
+        # octocov is Linux-only and uploads coverage once; skip on Windows.
+        if: matrix.os == 'ubuntu-latest'
         uses: k1LoW/octocov-action@73d561f65d59e66899ed5c87e4621a913b5d5c20 # v1.5.0
 
   shell-completion:
