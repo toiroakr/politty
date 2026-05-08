@@ -2,4 +2,7 @@
 "politty": patch
 ---
 
-Fix cross-file Markdown links in generated docs using OS path separators on Windows. Relative paths emitted by `generateDoc` are now normalised to forward slashes so links like `commands/config.md#config` render correctly across all platforms and Markdown renderers.
+Fix Windows path separators leaking into generated docs:
+
+- Cross-file Markdown links now use forward slashes (`commands/config.md#config`) instead of `commands\config.md`, so links render correctly on every Markdown renderer.
+- Index marker scopes embedded in `rootDoc` files (`<!-- politty:index:<path>:start -->`) are normalized too, so docs generated on Windows can be regenerated on macOS/Linux without silently skipping the index update.
