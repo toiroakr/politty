@@ -76,7 +76,18 @@ describe("withSkillCommand", () => {
 
     const wrapped = withSkillCommand(base, { ...opts, descriptionAppend: "(custom hint)" });
 
-    expect(wrapped.description).toBe("Test CLI (custom hint)");
+    expect(wrapped.description).toBe("Test CLI\n\n(custom hint)");
+  });
+
+  it("should separate the host description and the hint with a blank line", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    const wrapped = withSkillCommand(base, opts);
+
+    // A single space would run the hint into the host description when the
+    // host description has no trailing period (a common pattern). The blank
+    // line keeps `--help` legible.
+    expect(wrapped.description).toMatch(/^Test CLI\n\nManage agent skills/);
   });
 
   it("should not duplicate the hint when re-wrapping a command", () => {

@@ -144,6 +144,10 @@ export function withSkillCommand<T extends AnyCommand>(
  * Returns the original description unchanged when `append` is `false` or
  * empty. When the existing description already ends with the same hint,
  * skip the append so re-wrapping (e.g. in tests) does not duplicate it.
+ *
+ * The separator is a blank line so help renderers display the hint as
+ * its own paragraph — a single space would run the hint into the host
+ * description (especially when the description has no trailing period).
  */
 function appendDescription(
   existing: string | undefined,
@@ -152,5 +156,5 @@ function appendDescription(
   if (append === false || append === "") return existing;
   if (!existing) return append;
   if (existing.endsWith(append)) return existing;
-  return `${existing} ${append}`;
+  return `${existing}\n\n${append}`;
 }
