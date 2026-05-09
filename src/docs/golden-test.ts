@@ -40,9 +40,9 @@ import {
   rootFooterStartMarker,
   rootHeaderEndMarker,
   rootHeaderStartMarker,
+  SECTION_TYPES,
   sectionEndMarker,
   sectionStartMarker,
-  SECTION_TYPES,
   UPDATE_GOLDEN_ENV,
   type SectionType,
 } from "./types.js";
@@ -1954,7 +1954,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
       // Process index marker (auto-derived from files)
       const derivedCategories = deriveIndexFromFiles(files, rootDocFilePath, allCommands, ignores);
-      const indexScope = path.relative(process.cwd(), rootDocFilePath);
+      // Forward slashes keep the marker stable when docs are regenerated on a different OS.
+      const indexScope = path.relative(process.cwd(), rootDocFilePath).replace(/\\/g, "/");
       const indexResult = await processIndexMarker(
         content,
         derivedCategories,
