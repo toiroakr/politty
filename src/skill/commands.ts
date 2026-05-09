@@ -95,6 +95,16 @@ export function createSkillSyncCommand(options: SkillCommandOptions, cliName: st
     }),
     run(args) {
       const { skills: allSkills, errors } = loadSkills(resolved);
+      // Surface --exclude typos as warnings (not errors): sync's job is to
+      // make installs match source, and one stray name shouldn't block the
+      // whole reconciliation. Skipping silently was hiding real typos
+      // (e.g. `--exclude nonexitent`) that did nothing useful.
+      const sourceNamesAll = new Set(allSkills.map((s) => s.frontmatter.name));
+      for (const name of new Set(args.exclude)) {
+        if (!sourceNamesAll.has(name)) {
+          logger.warn(`--exclude ${JSON.stringify(name)}: no such skill in source.`);
+        }
+      }
       const excluded = new Set(args.exclude);
       const skills = allSkills.filter((s) => !excluded.has(s.frontmatter.name));
       const stamp = ownershipFor(resolved, cliName);
@@ -157,7 +167,11 @@ export function createSkillSyncCommand(options: SkillCommandOptions, cliName: st
 /**
  * Create the `skills add` subcommand.
  *
- * Installs skills from sourceDir. Defaults to all skills if no name is given.
+ * Installs skills from sourceDir. Accepts zero or more skill names; with no
+ * names, installs every skill in source. With one or more names, every name
+ * is validated against sourceSkills up-front so a typo never silently
+ * proceeds with the valid neighbours — a single unknown name aborts the run
+ * and lists every unknown name at once. Duplicates are deduplicated.
  */
 export function createSkillAddCommand(options: SkillCommandOptions, cliName: string) {
   const resolved = resolveSkillOptions(options, cliName);
@@ -165,9 +179,9 @@ export function createSkillAddCommand(options: SkillCommandOptions, cliName: str
     name: "add",
     description: "Install skills from source",
     args: z.object({
-      name: arg(z.string().optional(), {
+      name: arg(z.array(z.string()).default([]), {
         positional: true,
-        description: "Skill name to install (default: all)",
+        description: "Skill name(s) to install (default: all)",
         placeholder: "NAME",
       }),
       verbose: arg(z.boolean().default(false), {
@@ -179,12 +193,30 @@ export function createSkillAddCommand(options: SkillCommandOptions, cliName: str
       const { skills: sourceSkills } = loadSkills(resolved);
       const stamp = ownershipFor(resolved, cliName);
 
-      if (args.name) {
-        // Validate the user's request against available skills before
-        // checking for emptiness — so a typo surfaces a useful error even
-        // if the source dir is misconfigured.
-        const skill = findOrThrow(sourceSkills, args.name);
-        addSkill(skill, stamp, resolved, args.verbose);
+      if (args.name.length > 0) {
+        // Pre-validate every requested name in one pass. A single unknown
+        // name aborts the run before any install side effect, and we list
+        // every unknown name so the user can fix the whole CLI invocation
+        // in one round-trip rather than discovering typos one at a time.
+        const known = new Set(sourceSkills.map((s) => s.frontmatter.name));
+        const requested = Array.from(new Set(args.name));
+        const unknown = requested.filter((n) => !known.has(n));
+        if (unknown.length > 0) {
+          const available = sourceSkills.map((s) => s.frontmatter.name).join(", ") || "<none>";
+          const subject = unknown.length === 1 ? "Skill" : "Skills";
+          const quoted = unknown.map((n) => JSON.stringify(n)).join(", ");
+          throw new Error(
+            `${subject} ${quoted} not found in source directory. Available: ${available}`,
+          );
+        }
+        // Preserve source order for deterministic install logs even when
+        // the user supplied names in arbitrary order.
+        const wanted = new Set(requested);
+        for (const skill of sourceSkills) {
+          if (wanted.has(skill.frontmatter.name)) {
+            addSkill(skill, stamp, resolved, args.verbose);
+          }
+        }
         return;
       }
 
