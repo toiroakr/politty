@@ -126,7 +126,7 @@
     "@types/node": "25.6.0",
     "@typescript/native-preview": "7.0.0-dev.20260411.1",
     "@vitest/coverage-v8": "4.1.5",
-    "knip": "6.10.0",
+    "knip": "6.11.0",
     "lefthook": "2.1.6",
     "organize-imports-cli": "1.0.2",
     "oxfmt": "0.47.0",
