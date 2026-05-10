@@ -230,19 +230,16 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
       // detection, never under-bypasses it for ordinary invocations).
     }
   }
-  const internal = isInternalSubcommandInvocation(command, argv, globalExtractedForBypass);
   // For internal subcommands, drop user lifecycle hooks and the
   // globalArgs schema. The internal command implements its own
   // best-effort behavior and should not be subject to user policies.
   // Note: under exactOptionalPropertyTypes we must omit the keys (not
   // assign undefined), since `globalArgs?: ArgsSchema` does not accept
   // `undefined` as a value.
-  let effectiveOptions: MainOptions;
-  if (internal) {
+  let effectiveOptions: MainOptions = options;
+  if (isInternalSubcommandInvocation(command, argv, globalExtractedForBypass)) {
     const { setup: _s, cleanup: _c, prompt: _p, globalArgs: _g, ...rest } = options;
     effectiveOptions = rest;
-  } else {
-    effectiveOptions = options;
   }
 
   const globalExtracted = extractAndValidateGlobal(effectiveOptions);

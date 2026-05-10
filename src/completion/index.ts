@@ -182,6 +182,26 @@ export function createCompletionCommand(
   const resolvedProgramName = programName ?? rootCommand.name;
   const { cacheDir, programVersion } = extra;
 
+  // Build the option fragments once. Under exactOptionalPropertyTypes
+  // we can't pass `undefined` values directly, so we omit absent keys.
+  const refreshExtra: {
+    cacheDir?: string;
+    programVersion?: string;
+    globalArgsSchema?: ArgsSchema;
+  } = {
+    ...(cacheDir !== undefined && { cacheDir }),
+    ...(programVersion !== undefined && { programVersion }),
+    ...(globalArgsSchema !== undefined && { globalArgsSchema }),
+  };
+  const installCtxBase: Omit<Parameters<typeof installCompletion>[0], "rootCommand"> = {
+    programName: resolvedProgramName,
+    ...refreshExtra,
+  };
+  const loaderOptsBase = {
+    programName: resolvedProgramName,
+    ...(cacheDir !== undefined && { cacheDir }),
+  };
+
   if (!rootCommand.subCommands?.__complete) {
     rootCommand.subCommands = {
       ...rootCommand.subCommands,
@@ -196,14 +216,6 @@ export function createCompletionCommand(
   // subcommand with stderr swallowed and silently keep sourcing the
   // stale cache.
   if (!rootCommand.subCommands?.["__refresh-completion"]) {
-    const refreshExtra: {
-      cacheDir?: string;
-      programVersion?: string;
-      globalArgsSchema?: ArgsSchema;
-    } = {};
-    if (cacheDir !== undefined) refreshExtra.cacheDir = cacheDir;
-    if (programVersion !== undefined) refreshExtra.programVersion = programVersion;
-    if (globalArgsSchema !== undefined) refreshExtra.globalArgsSchema = globalArgsSchema;
     rootCommand.subCommands = {
       ...rootCommand.subCommands,
       "__refresh-completion": createRefreshCompletionCommand(
@@ -231,16 +243,7 @@ export function createCompletionCommand(
       if (args.install) {
         let target: string;
         try {
-          target = installCompletion(
-            {
-              rootCommand,
-              programName: resolvedProgramName,
-              ...(programVersion !== undefined && { programVersion }),
-              ...(cacheDir !== undefined && { cacheDir }),
-              ...(globalArgsSchema !== undefined && { globalArgsSchema }),
-            },
-            shellType,
-          );
+          target = installCompletion({ rootCommand, ...installCtxBase }, shellType);
         } catch (e) {
           throw new Error(`install failed: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -250,11 +253,7 @@ export function createCompletionCommand(
           console.error(`Add to your ~/.${shellType}rc:`);
           console.error("");
           console.error(
-            generateLoader({
-              programName: resolvedProgramName,
-              shell: shellType,
-              ...(cacheDir !== undefined && { cacheDir }),
-            })
+            generateLoader({ ...loaderOptsBase, shell: shellType })
               .trim()
               .replace(/^/gm, "    "),
           );
@@ -268,13 +267,7 @@ export function createCompletionCommand(
             "fish does not use an rc loader. Run `<program> completion fish --install` to write the self-refreshing autoload file instead.",
           );
         }
-        process.stdout.write(
-          generateLoader({
-            programName: resolvedProgramName,
-            shell: shellType,
-            ...(cacheDir !== undefined && { cacheDir }),
-          }),
-        );
+        process.stdout.write(generateLoader({ ...loaderOptsBase, shell: shellType }));
         return;
       }
 
@@ -312,16 +305,7 @@ export function createRefreshCompletionCommand(
     description: "(internal) Refresh the on-disk completion cache if stale.",
     args: refreshArgsSchema,
     run(args) {
-      refreshIfStale(
-        {
-          rootCommand,
-          programName,
-          ...(extra.programVersion !== undefined && { programVersion: extra.programVersion }),
-          ...(extra.cacheDir !== undefined && { cacheDir: extra.cacheDir }),
-          ...(extra.globalArgsSchema !== undefined && { globalArgsSchema: extra.globalArgsSchema }),
-        },
-        args.shell,
-      );
+      refreshIfStale({ rootCommand, programName, ...extra }, args.shell);
     },
   });
 }
@@ -375,10 +359,11 @@ export function withCompletionCommand<T extends AnyCommand>(
 
   const { programName, globalArgsSchema, cacheDir, programVersion } = opts;
   const resolvedProgramName = programName ?? command.name;
-  const extra: { cacheDir?: string; programVersion?: string; globalArgsSchema?: ArgsSchema } = {};
-  if (cacheDir !== undefined) extra.cacheDir = cacheDir;
-  if (programVersion !== undefined) extra.programVersion = programVersion;
-  if (globalArgsSchema !== undefined) extra.globalArgsSchema = globalArgsSchema;
+  const extra: { cacheDir?: string; programVersion?: string; globalArgsSchema?: ArgsSchema } = {
+    ...(cacheDir !== undefined && { cacheDir }),
+    ...(programVersion !== undefined && { programVersion }),
+    ...(globalArgsSchema !== undefined && { globalArgsSchema }),
+  };
 
   const wrappedCommand = {
     ...command,
@@ -398,11 +383,10 @@ export function withCompletionCommand<T extends AnyCommand>(
   };
 
   wrappedCommand.runMainHook = (argv) => {
-    const refreshCtx: { programName: string; cacheDir?: string } = {
+    maybeSpawnRefresh(argv, {
       programName: resolvedProgramName,
-    };
-    if (cacheDir !== undefined) refreshCtx.cacheDir = cacheDir;
-    maybeSpawnRefresh(argv, refreshCtx);
+      ...(cacheDir !== undefined && { cacheDir }),
+    });
   };
 
   return wrappedCommand;
