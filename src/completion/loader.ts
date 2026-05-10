@@ -54,6 +54,11 @@ function bashCachePathExpr(
 function generateBashLoader(opts: LoaderOptions): string {
   const fn = sanitize(opts.programName);
   const cache = bashCachePathExpr(opts.programName, opts.cacheDir, "bash");
+  // `type -P` is path-only — it skips aliases, functions, and builtins.
+  // `command -v` would surface the alias text or function name when the
+  // user has shadowed the CLI in their rc, and the subsequent `stat`
+  // would fail, leaving completions unsourced for that shell.
+  //
   // `-L` follows symlinks so the shell-side mtime matches Node's
   // `fs.statSync`, which also follows symlinks. Without `-L`, BSD `stat`
   // (macOS) reports the symlink's own mtime, so package-manager bin
@@ -66,7 +71,8 @@ function generateBashLoader(opts: LoaderOptions): string {
   // append a second line and break the header comparison.
   return `__${fn}_load_completion() {
     local _bin _cache _sig _hdr
-    _bin=$(command -v ${opts.programName}) || return 0
+    _bin=$(type -P ${opts.programName} 2>/dev/null)
+    [[ -n "$_bin" ]] || return 0
     _cache=${cache}
     _sig=$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null) || return 0
     _hdr="# politty-bin-sig: $_sig"
@@ -87,12 +93,15 @@ unset -f __${fn}_load_completion
 function generateZshLoader(opts: LoaderOptions): string {
   const fn = sanitize(opts.programName);
   const cache = bashCachePathExpr(opts.programName, opts.cacheDir, "zsh");
-  // See bash loader for `-L` and probe-order rationale.
+  // `whence -p` is the zsh equivalent of bash's `type -P` — path-only,
+  // ignoring aliases / functions / builtins. See bash loader for the
+  // rationale and for `-L` / stat probe-order.
   return `__${fn}_load_completion() {
     emulate -L zsh
     setopt local_options no_aliases
     local _bin _cache _sig _hdr
-    _bin=$(command -v ${opts.programName}) || return 0
+    _bin=$(whence -p ${opts.programName} 2>/dev/null)
+    [[ -n "$_bin" ]] || return 0
     _cache=${cache}
     _sig=$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null) || return 0
     _hdr="# politty-bin-sig: $_sig"
