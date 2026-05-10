@@ -558,3 +558,83 @@ describe("runMain displayErrors", () => {
     process.argv = originalArgv;
   });
 });
+
+describe("runMain internal subcommand bypass", () => {
+  const originalArgv = process.argv;
+
+  it("skips user setup/cleanup/prompt for `__`-prefixed registered subcommands", async () => {
+    process.argv = ["node", "test", "__internal"];
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const setup = vi.fn();
+    const cleanup = vi.fn();
+    const prompt = vi.fn();
+    let internalRan = false;
+
+    const internal = defineCommand({
+      name: "__internal",
+      run: () => {
+        internalRan = true;
+      },
+    });
+
+    const cmd = defineCommand({
+      name: "test",
+      run: () => {},
+      subCommands: { __internal: internal },
+    });
+
+    await runMain(cmd, { setup, cleanup, prompt });
+
+    expect(internalRan).toBe(true);
+    expect(setup).not.toHaveBeenCalled();
+    expect(cleanup).not.toHaveBeenCalled();
+    expect(prompt).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(0);
+
+    exitSpy.mockRestore();
+    process.argv = originalArgv;
+  });
+
+  it("still runs user setup/cleanup for ordinary subcommands", async () => {
+    process.argv = ["node", "test", "regular"];
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const setup = vi.fn();
+    const cleanup = vi.fn();
+
+    const regular = defineCommand({ name: "regular", run: () => {} });
+    const cmd = defineCommand({
+      name: "test",
+      run: () => {},
+      subCommands: { regular },
+    });
+
+    await runMain(cmd, { setup, cleanup });
+
+    expect(setup).toHaveBeenCalled();
+    expect(cleanup).toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(0);
+
+    exitSpy.mockRestore();
+    process.argv = originalArgv;
+  });
+
+  it("does not bypass when an unregistered `__`-prefixed positional is passed", async () => {
+    // Defense in depth: we only bypass for subcommands that are actually
+    // registered, so a stray `__foo` argument doesn't accidentally skip
+    // user lifecycle.
+    process.argv = ["node", "test", "__not-registered"];
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const setup = vi.fn();
+    const cmd = defineCommand({ name: "test", run: () => {} });
+
+    await runMain(cmd, { setup });
+
+    expect(setup).toHaveBeenCalled();
+
+    exitSpy.mockRestore();
+    process.argv = originalArgv;
+  });
+});

@@ -156,6 +156,24 @@ export async function runCommand<TResult = unknown>(
 }
 
 /**
+ * Hidden internal subcommands (e.g. `__refresh-completion`) are spawned
+ * by background hooks and must not run user-provided
+ * `setup`/`cleanup`/`prompt` or required `globalArgs`. Those exist for
+ * the foreground CLI run; replaying them in a detached child causes
+ * duplicate side effects, stuck prompts, and validation failures the
+ * user never opted into.
+ *
+ * We treat any registered subcommand whose name starts with `__` as
+ * internal. The registration check keeps unrelated `--`-prefixed args
+ * from accidentally tripping the bypass.
+ */
+function isInternalSubcommandInvocation(command: AnyCommand, argv: string[]): boolean {
+  const firstPositional = argv.find((a) => !a.startsWith("-"));
+  if (!firstPositional || !firstPositional.startsWith("__")) return false;
+  return Boolean(command.subCommands?.[firstPositional]);
+}
+
+/**
  * Run a CLI command as the main entry point
  *
  * This function:
@@ -190,17 +208,33 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     }
   }
 
-  const globalExtracted = extractAndValidateGlobal(options);
+  const argv = process.argv.slice(2);
+  const internal = isInternalSubcommandInvocation(command, argv);
+  // For internal subcommands, drop user lifecycle hooks and the
+  // globalArgs schema. The internal command implements its own
+  // best-effort behavior and should not be subject to user policies.
+  // Note: under exactOptionalPropertyTypes we must omit the keys (not
+  // assign undefined), since `globalArgs?: ArgsSchema` does not accept
+  // `undefined` as a value.
+  let effectiveOptions: MainOptions;
+  if (internal) {
+    const { setup: _s, cleanup: _c, prompt: _p, globalArgs: _g, ...rest } = options;
+    effectiveOptions = rest;
+  } else {
+    effectiveOptions = options;
+  }
+
+  const globalExtracted = extractAndValidateGlobal(effectiveOptions);
 
   // Global setup
-  if (options.setup) {
+  if (effectiveOptions.setup) {
     try {
-      await options.setup({});
+      await effectiveOptions.setup({});
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
-      if (options.cleanup) {
+      if (effectiveOptions.cleanup) {
         try {
-          await options.cleanup({ error });
+          await effectiveOptions.cleanup({ error });
         } catch {
           // Swallow cleanup error when setup already failed
         }
@@ -209,37 +243,37 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     }
   }
 
-  const result = await runCommandInternal(command, process.argv.slice(2), {
-    debug: options.debug,
-    captureLogs: options.captureLogs,
-    skipValidation: options.skipValidation,
+  const result = await runCommandInternal(command, argv, {
+    debug: effectiveOptions.debug,
+    captureLogs: effectiveOptions.captureLogs,
+    skipValidation: effectiveOptions.skipValidation,
     handleSignals: true,
-    logger: options.logger,
-    globalArgs: options.globalArgs,
-    prompt: options.prompt,
+    logger: effectiveOptions.logger,
+    globalArgs: effectiveOptions.globalArgs,
+    prompt: effectiveOptions.prompt,
     _globalExtracted: globalExtracted,
-    _globalCleanup: options.cleanup,
+    _globalCleanup: effectiveOptions.cleanup,
     _context: {
       commandPath: [],
       rootName: command.name,
-      rootVersion: options.version,
+      rootVersion: effectiveOptions.version,
       globalExtracted,
     },
   });
 
   // Display errors (controlled by displayErrors option, default: true)
-  if ((options.displayErrors ?? true) && !result.success && result.error) {
-    const errorLogger = options.logger ?? defaultLogger;
-    errorLogger.error(formatRuntimeError(result.error, options.debug ?? false));
+  if ((effectiveOptions.displayErrors ?? true) && !result.success && result.error) {
+    const errorLogger = effectiveOptions.logger ?? defaultLogger;
+    errorLogger.error(formatRuntimeError(result.error, effectiveOptions.debug ?? false));
   }
 
   // Global cleanup (always)
-  if (options.cleanup) {
+  if (effectiveOptions.cleanup) {
     const cleanupCtx: GlobalCleanupContext = {
       error: !result.success ? result.error : undefined,
     };
     try {
-      await options.cleanup(cleanupCtx);
+      await effectiveOptions.cleanup(cleanupCtx);
     } catch {
       // Swallow - we're about to exit anyway
     }
