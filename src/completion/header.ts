@@ -8,6 +8,7 @@
  */
 
 import { statSync } from "node:fs";
+import { join } from "node:path";
 import type { ShellType } from "./types.js";
 
 /** Schema version of the header itself. Bump when the header layout changes. */
@@ -26,6 +27,43 @@ export function computeBinSig(binPath: string): string {
   }
 }
 
+/**
+ * Walk `$PATH` looking for an executable named `programName`. Returns
+ * the first match's full path, or `null` when not found. We mirror the
+ * shell's `command -v <prog>` here so the sig embedded in the header
+ * (computed by Node) lines up with what the rc loader stat-checks at
+ * runtime — including pnpm/npm bin shims that wrap the real entrypoint.
+ * Without this alignment, shimmed installs would never match the
+ * embedded sig and the cache would regenerate on every shell startup.
+ */
+function findOnPath(programName: string): string | null {
+  // eslint-disable-next-line no-control-regex -- intentional null-byte rejection to block path injection in `programName`
+  if (!programName || /[/\\\0]/.test(programName)) return null;
+  const path = process.env.PATH ?? "";
+  for (const dir of path.split(":")) {
+    if (!dir) continue;
+    const candidate = join(dir, programName);
+    try {
+      if (statSync(candidate).isFile()) return candidate;
+    } catch {
+      // skip
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolve the binary path used for sig computation and stat checks.
+ *
+ * Order: explicit override → `$PATH` lookup of `programName` → `process.argv[1]`.
+ * The `$PATH` lookup keeps Node-side and shell-side stats pointed at the
+ * same shim file when the CLI is invoked through a package-manager bin shim.
+ */
+export function resolveBinPath(programName: string, override?: string | undefined): string {
+  if (override) return override;
+  return findOnPath(programName) ?? process.argv[1] ?? "";
+}
+
 export interface HeaderOptions {
   programName: string;
   shell: ShellType;
@@ -39,7 +77,7 @@ export interface HeaderOptions {
  * marker.
  */
 export function buildHeaderLines(opts: HeaderOptions): string[] {
-  const binPath = opts.binPath ?? process.argv[1] ?? "";
+  const binPath = resolveBinPath(opts.programName, opts.binPath);
   const sig = binPath ? computeBinSig(binPath) : "0";
   const lines = [
     `# politty-completion-version: ${COMPLETION_VERSION}`,

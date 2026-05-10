@@ -1,6 +1,14 @@
-import { mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -1587,6 +1595,28 @@ describe("Completion", () => {
           "bash",
         ),
       ).not.toThrow();
+    });
+
+    it("refreshIfStale skips when the cache file does not exist", () => {
+      const target = installPath("mycli", "bash", cacheDir);
+      expect(existsSync(target)).toBe(false);
+      refreshIfStale(
+        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
+        "bash",
+      );
+      expect(existsSync(target)).toBe(false);
+    });
+
+    it("refreshIfStale leaves a non-politty cache file alone", () => {
+      const target = installPath("mycli", "bash", cacheDir);
+      mkdirSync(dirname(target), { recursive: true });
+      const original = "# user-managed\ncomplete -c mycli\n";
+      writeFileSync(target, original);
+      refreshIfStale(
+        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
+        "bash",
+      );
+      expect(readFileSync(target, "utf8")).toBe(original);
     });
   });
 

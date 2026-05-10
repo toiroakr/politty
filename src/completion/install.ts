@@ -15,7 +15,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { AnyCommand, ArgsSchema } from "../types.js";
-import { computeBinSig } from "./header.js";
+import { computeBinSig, resolveBinPath } from "./header.js";
 import { generateCompletion } from "./index.js";
 import { defaultCacheDir } from "./loader.js";
 import type { ShellType } from "./types.js";
@@ -100,7 +100,14 @@ function readCachedSig(path: string): string | null {
 export function refreshIfStale(ctx: InstallContext, shell: ShellType): void {
   try {
     const target = installPath(ctx.programName, shell, ctx.cacheDir);
-    const binPath = ctx.binPath ?? process.argv[1] ?? "";
+    // Refresh only updates an *existing* politty-managed cache. If the
+    // file is missing or doesn't carry our sig header, bail out — the
+    // background hook from runMain must not silently create a fish
+    // autoload (or any cache) the user never opted into via
+    // `<program> completion <shell> --install` or the rc loader.
+    const cachedSig = readCachedSig(target);
+    if (cachedSig === null) return;
+    const binPath = resolveBinPath(ctx.programName, ctx.binPath);
     if (!binPath) return;
     let currentSig: string;
     try {
@@ -108,7 +115,7 @@ export function refreshIfStale(ctx: InstallContext, shell: ShellType): void {
     } catch {
       return;
     }
-    if (readCachedSig(target) === currentSig) return;
+    if (cachedSig === currentSig) return;
     writeAtomic(target, generateScript(ctx, shell));
   } catch {
     // Best-effort.

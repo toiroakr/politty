@@ -13,7 +13,7 @@ import {
   getVisibleSubs,
   sanitize,
 } from "./extractor.js";
-import { buildHeaderLines, computeBinSig } from "./header.js";
+import { buildHeaderLines, computeBinSig, resolveBinPath } from "./header.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -274,7 +274,7 @@ export function generateFishCompletion(
   // in place and let the next autoload pick up the new content.
   // Failures are silent — a stale completion is preferable to a
   // shell-startup error.
-  const sig = computeBinSig(options.binPath ?? process.argv[1] ?? "");
+  const sig = computeBinSig(resolveBinPath(programName, options.binPath));
   const refreshFn = `__${fn}_refresh_completion`;
   lines.push(`function ${refreshFn} --no-scope-shadowing`);
   lines.push(`    set -l _bin (command -v ${programName})`);
