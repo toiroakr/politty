@@ -29,14 +29,24 @@ export interface LoaderOptions {
   cacheDir?: string;
 }
 
+/**
+ * Single-quote escape: `'` -> `'\''`. Inside single quotes the shell
+ * performs no expansion at all, so `$`, backticks, and `$(...)` are
+ * inert. Used for hardcoded paths because callers may sources them
+ * from env / config — we must not let metachars in the path execute as
+ * commands when the rc snippet is sourced.
+ */
+function shSingleQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
 function bashCachePathExpr(
   programName: string,
   cacheDir: string | undefined,
   shell: "bash" | "zsh",
 ): string {
   if (cacheDir) {
-    // Hardcoded — quote-once so user-supplied paths don't word-split.
-    return `"${cacheDir.replace(/"/g, '\\"')}/completion.${shell}"`;
+    return shSingleQuote(`${cacheDir}/completion.${shell}`);
   }
   return `"\${XDG_CACHE_HOME:-$HOME/.cache}/${programName}/completion.${shell}"`;
 }

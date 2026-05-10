@@ -1642,8 +1642,20 @@ describe("Completion", () => {
         shell: "bash",
         cacheDir: "/opt/cache",
       });
-      expect(snippet).toContain('"/opt/cache/completion.bash"');
+      expect(snippet).toContain("'/opt/cache/completion.bash'");
       expect(snippet).not.toContain("XDG_CACHE_HOME");
+    });
+
+    it("single-quote escapes hardcoded cache paths so shell metachars stay inert", () => {
+      const snippet = generateLoader({
+        programName: "mycli",
+        shell: "bash",
+        cacheDir: "/opt/$(rm -rf)/cache's",
+      });
+      // Path appears once, fully single-quoted, with `'` escaped via `'\''`.
+      expect(snippet).toContain("'/opt/$(rm -rf)/cache'\\''s/completion.bash'");
+      // No naked `$(...)` that would run on source.
+      expect(snippet).not.toContain('"/opt/$(rm -rf)/cache');
     });
 
     it("throws for fish — fish uses an autoload file instead", () => {
