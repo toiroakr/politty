@@ -666,3 +666,44 @@ describe("runMain internal subcommand bypass", () => {
     process.argv = originalArgv;
   });
 });
+
+describe("runMain runMainHook", () => {
+  const originalArgv = process.argv;
+
+  it("invokes the hook once with the parsed argv before any command execution", async () => {
+    process.argv = ["node", "test", "--flag", "value"];
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const hook = vi.fn();
+
+    const cmd = defineCommand({ name: "test", run: () => {} });
+    cmd.runMainHook = hook;
+
+    await runMain(cmd);
+
+    expect(hook).toHaveBeenCalledTimes(1);
+    expect(hook).toHaveBeenCalledWith(["--flag", "value"]);
+
+    exitSpy.mockRestore();
+    process.argv = originalArgv;
+  });
+
+  it("swallows hook errors so a misbehaving hook never blocks the CLI", async () => {
+    process.argv = ["node", "test"];
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const runFn = vi.fn();
+
+    const cmd = defineCommand({ name: "test", run: runFn });
+    cmd.runMainHook = () => {
+      throw new Error("hook blew up");
+    };
+
+    await runMain(cmd);
+
+    // The user command must still run despite the hook throwing.
+    expect(runFn).toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(0);
+
+    exitSpy.mockRestore();
+    process.argv = originalArgv;
+  });
+});
