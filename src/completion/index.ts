@@ -32,7 +32,6 @@ import { generateBashCompletion } from "./bash.js";
 import { createDynamicCompleteCommand } from "./dynamic/index.js";
 import { generateFishCompletion } from "./fish.js";
 import {
-  detectShellEnv,
   hasManagedCache,
   install as installCompletion,
   refreshIfStale,
@@ -438,7 +437,7 @@ function maybeSpawnRefresh(
     return;
   }
 
-  const shell = detectShellEnv();
+  const shell = detectShell();
   if (!shell) return;
   const argv0 = process.argv[1];
   if (!argv0) return;

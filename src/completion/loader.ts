@@ -128,7 +128,7 @@ unfunction __${fn}_load_completion
 
 /**
  * Build the rc-loader snippet for bash or zsh. Fish doesn't have an
- * rc-loader; instead, `<program> completion install fish` writes a
+ * rc-loader; instead, `<program> completion fish --install` writes a
  * self-rewriting autoload file.
  */
 export function generateLoader(opts: LoaderOptions): string {
@@ -139,16 +139,16 @@ export function generateLoader(opts: LoaderOptions): string {
       return generateZshLoader(opts);
     case "fish":
       throw new Error(
-        "fish does not use an rc loader. Run `<program> completion install fish` to write the self-refreshing autoload file instead.",
+        "fish does not use an rc loader. Run `<program> completion fish --install` to write the self-refreshing autoload file instead.",
       );
   }
 }
 
 /**
- * Default cache file path (used by `completion install bash|zsh` and
- * the `__refresh-completion` subcommand). For fish, the install path
- * is `$__fish_config_dir/completions/<program>.fish` and is computed
- * inside `installPath()` instead.
+ * Default cache file path (used by `completion <bash|zsh> --install`
+ * and the `__refresh-completion` subcommand). For fish, the install
+ * path is `$__fish_config_dir/completions/<program>.fish` and is
+ * computed inside `installPath()` instead.
  */
 export function defaultCacheDir(programName: string): string {
   const xdg = process.env.XDG_CACHE_HOME ?? `${process.env.HOME ?? ""}/.cache`;

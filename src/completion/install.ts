@@ -15,7 +15,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { AnyCommand, ArgsSchema } from "../types.js";
-import { computeBinSig, resolveBinPath } from "./header.js";
+import { resolveBinPath } from "./header.js";
 import { generateCompletion } from "./index.js";
 import { defaultCacheDir } from "./loader.js";
 import type { ShellType } from "./types.js";
@@ -137,18 +137,6 @@ export function hasManagedCache(
 }
 
 /**
- * Detect the user's shell from $SHELL. Returns null if it isn't one of
- * the supported shells; callers should treat that as "skip refresh."
- */
-export function detectShellEnv(): ShellType | null {
-  const shell = (process.env.SHELL ?? "").split("/").pop()?.toLowerCase() ?? "";
-  if (shell.includes("bash")) return "bash";
-  if (shell.includes("zsh")) return "zsh";
-  if (shell.includes("fish")) return "fish";
-  return null;
-}
-
-/**
  * Spawn a detached child process that runs `<program> __refresh-completion <shell>`.
  * The child is fully decoupled (`stdio: "ignore"` + `unref()`), so it
  * outlives the parent without holding any handles.
@@ -156,7 +144,7 @@ export function detectShellEnv(): ShellType | null {
  * Caller is expected to gate this on the right conditions (interactive
  * shell, not running inside `__complete` itself, etc.).
  *
- * Re-exports `void` and never throws — even spawn failures are absorbed.
+ * Returns `void` and never throws — even spawn failures are absorbed.
  */
 export function spawnBackgroundRefresh(programArgv0: string, shell: ShellType): void {
   try {
@@ -170,6 +158,3 @@ export function spawnBackgroundRefresh(programArgv0: string, shell: ShellType): 
     // Best-effort.
   }
 }
-
-/** computeBinSig is re-exported so install.ts is self-contained for callers. */
-export { computeBinSig };
