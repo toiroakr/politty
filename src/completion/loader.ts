@@ -49,11 +49,16 @@ function generateBashLoader(opts: LoaderOptions): string {
   // (macOS) reports the symlink's own mtime, so package-manager bin
   // shims (npm/pnpm/etc.) would never match the embedded sig and the
   // cache would regenerate on every shell startup.
+  //
+  // Try GNU (`-c '%Y'`) before BSD (`-f '%m'`): GNU treats `-f` as
+  // file-system mode, so `stat -L -f '%m' file` would emit filesystem
+  // info on stdout *and* exit non-zero, causing the `||` fallback to
+  // append a second line and break the header comparison.
   return `__${fn}_load_completion() {
     local _bin _cache _sig _hdr
     _bin=$(command -v ${opts.programName}) || return 0
     _cache=${cache}
-    _sig=$(stat -L -f '%m' "$_bin" 2>/dev/null || stat -L -c '%Y' "$_bin" 2>/dev/null) || return 0
+    _sig=$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null) || return 0
     _hdr="# politty-bin-sig: $_sig"
     if [[ ! -f "$_cache" ]] || ! head -5 "$_cache" 2>/dev/null | grep -qF "$_hdr"; then
         mkdir -p "$(dirname "$_cache")" 2>/dev/null || return 0
@@ -72,15 +77,14 @@ unset -f __${fn}_load_completion
 function generateZshLoader(opts: LoaderOptions): string {
   const fn = sanitize(opts.programName);
   const cache = bashCachePathExpr(opts.programName, opts.cacheDir, "zsh");
-  // See bash loader: `-L` keeps shell-side mtime aligned with Node's
-  // `fs.statSync` so symlinked installs don't loop on regeneration.
+  // See bash loader for `-L` and probe-order rationale.
   return `__${fn}_load_completion() {
     emulate -L zsh
     setopt local_options no_aliases
     local _bin _cache _sig _hdr
     _bin=$(command -v ${opts.programName}) || return 0
     _cache=${cache}
-    _sig=$(stat -L -f '%m' "$_bin" 2>/dev/null || stat -L -c '%Y' "$_bin" 2>/dev/null) || return 0
+    _sig=$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null) || return 0
     _hdr="# politty-bin-sig: $_sig"
     if [[ ! -f "$_cache" ]] || ! head -5 "$_cache" 2>/dev/null | grep -qF "$_hdr"; then
         mkdir -p "$_cache:h" 2>/dev/null || return 0

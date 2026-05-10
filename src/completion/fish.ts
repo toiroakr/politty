@@ -280,9 +280,11 @@ export function generateFishCompletion(
   lines.push(`    set -l _bin (command -v ${programName})`);
   lines.push(`    test -z "$_bin"; and return`);
   // `-L` follows symlinks so the shell-side mtime matches Node's
-  // `fs.statSync`, mirroring the bash/zsh loader.
+  // `fs.statSync`, mirroring the bash/zsh loader. Probe order matches
+  // the bash/zsh loader: GNU (`-c`) first because `-f` is filesystem
+  // mode there and would otherwise dump filesystem info into `_sig`.
   lines.push(
-    `    set -l _sig (stat -L -f '%m' "$_bin" 2>/dev/null; or stat -L -c '%Y' "$_bin" 2>/dev/null)`,
+    `    set -l _sig (stat -L -c '%Y' "$_bin" 2>/dev/null; or stat -L -f '%m' "$_bin" 2>/dev/null)`,
   );
   lines.push(`    test "$_sig" = "${sig}"; and return`);
   lines.push(`    set -l _target "$__fish_config_dir/completions/${programName}.fish"`);
