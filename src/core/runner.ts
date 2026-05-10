@@ -186,6 +186,11 @@ function isInternalSubcommandInvocation(
  * - Uses process.argv for arguments
  * - Handles SIGINT/SIGTERM signals
  * - Calls process.exit with the appropriate exit code
+ * - Invokes `command.runMainHook` once before parsing if set, so plug-ins
+ *   like `withCompletionCommand` can fire detached background work
+ * - Bypasses user `setup`/`cleanup`/`prompt` and required `globalArgs`
+ *   for registered hidden subcommands whose name starts with `__`
+ *   (e.g. `__refresh-completion`)
  *
  * @param command - The command to run
  * @param options - Main options (version, debug)

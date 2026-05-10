@@ -248,7 +248,7 @@ const extracted = extractFields(schema);
 
 ### `withCompletionCommand`
 
-Wraps a command with shell completion support. Adds both a `completion` subcommand and a hidden `__complete` command for dynamic completion.
+Wraps a command with shell completion support. Adds a `completion` subcommand, a hidden `__complete` command for dynamic completion, and a hidden `__refresh-completion` command used by the on-disk cache auto-refresh path. See [Shell Completion](./shell-completion.md#auto-refresh) for details on the refresh flow and the `POLITTY_NO_COMPLETION_REFRESH` opt-out.
 
 ```typescript
 function withCompletionCommand<T extends AnyCommand>(
@@ -266,9 +266,12 @@ function withCompletionCommand<T extends AnyCommand>(
 
 **WithCompletionOptions:**
 
-| Property      | Type      | Description                                      |
-| ------------- | --------- | ------------------------------------------------ |
-| `programName` | `string?` | Override program name (defaults to command.name) |
+| Property           | Type          | Description                                                                                                           |
+| ------------------ | ------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `programName`      | `string?`     | Override program name (defaults to command.name)                                                                      |
+| `globalArgsSchema` | `ArgsSchema?` | Global args schema for deriving global options in completion                                                          |
+| `cacheDir`         | `string?`     | Hardcode the on-disk cache directory used by the rc loader and the runMain background refresh (overrides XDG default) |
+| `programVersion`   | `string?`     | Program version embedded in the script header                                                                         |
 
 #### Example
 
@@ -285,8 +288,9 @@ const mainCommand = withCompletionCommand(
 );
 
 // Now includes:
-// - mycli completion bash|zsh|fish
+// - mycli completion bash|zsh|fish [--install] [--loader] [--instructions]
 // - mycli __complete -- <args>
+// - mycli __refresh-completion <shell>  (hidden; spawned by the rc loader / runMain hook)
 
 runMain(mainCommand);
 ```
@@ -310,11 +314,16 @@ function generateCompletion(command: AnyCommand, options: CompletionOptions): Co
 
 **CompletionOptions:**
 
-| Property              | Type        | Description                            |
-| --------------------- | ----------- | -------------------------------------- |
-| `shell`               | `ShellType` | Target shell: "bash", "zsh", or "fish" |
-| `programName`         | `string`    | Program name as invoked                |
-| `includeDescriptions` | `boolean?`  | Include descriptions (default: true)   |
+| Property              | Type          | Description                                                                                            |
+| --------------------- | ------------- | ------------------------------------------------------------------------------------------------------ |
+| `shell`               | `ShellType`   | Target shell: "bash", "zsh", or "fish"                                                                 |
+| `programName`         | `string`      | Program name as invoked                                                                                |
+| `includeSubcommands`  | `boolean?`    | Include subcommand completions (default: true)                                                         |
+| `includeDescriptions` | `boolean?`    | Include descriptions (default: true)                                                                   |
+| `globalArgsSchema`    | `ArgsSchema?` | Global args schema for deriving global options in completion                                           |
+| `binPath`             | `string?`     | Path to the binary whose mtime is the freshness signature (defaults to `process.argv[1]`)              |
+| `programVersion`      | `string?`     | Program version embedded in the script header                                                          |
+| `cacheDir`            | `string?`     | Cache directory hardcoded into the generated rc loader (defaults to XDG cache dir resolved at runtime) |
 
 #### Return Value
 
