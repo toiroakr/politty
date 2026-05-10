@@ -164,11 +164,17 @@ export async function runCommand<TResult = unknown>(
  * user never opted into.
  *
  * We treat any registered subcommand whose name starts with `__` as
- * internal. The registration check keeps unrelated `--`-prefixed args
- * from accidentally tripping the bypass.
+ * internal. We use `findFirstPositional` (schema-aware) instead of the
+ * naive "first non-flag token" so an option *value* like
+ * `--name __refresh-completion` doesn't trip the bypass — that would
+ * silently skip lifecycle hooks for ordinary invocations.
  */
-function isInternalSubcommandInvocation(command: AnyCommand, argv: string[]): boolean {
-  const firstPositional = argv.find((a) => !a.startsWith("-"));
+function isInternalSubcommandInvocation(
+  command: AnyCommand,
+  argv: string[],
+  globalExtracted?: ExtractedFields,
+): boolean {
+  const firstPositional = findFirstPositional(argv, globalExtracted);
   if (!firstPositional || !firstPositional.startsWith("__")) return false;
   return Boolean(command.subCommands?.[firstPositional]);
 }
@@ -209,7 +215,22 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
   }
 
   const argv = process.argv.slice(2);
-  const internal = isInternalSubcommandInvocation(command, argv);
+  // Extract the global schema once *before* the bypass check so
+  // `findFirstPositional` can correctly skip option values. We re-use
+  // the same `globalExtracted` for the actual run when the call is
+  // foreground.
+  let globalExtractedForBypass: ExtractedFields | undefined;
+  if (options.globalArgs) {
+    try {
+      globalExtractedForBypass = extractFields(options.globalArgs);
+    } catch {
+      // If the schema is malformed we'll error later; for the bypass
+      // check fall back to the no-schema scan (conservative — option
+      // values may be misclassified, but that only over-bypasses the
+      // detection, never under-bypasses it for ordinary invocations).
+    }
+  }
+  const internal = isInternalSubcommandInvocation(command, argv, globalExtractedForBypass);
   // For internal subcommands, drop user lifecycle hooks and the
   // globalArgs schema. The internal command implements its own
   // best-effort behavior and should not be subject to user policies.

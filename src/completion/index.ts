@@ -189,6 +189,31 @@ export function createCompletionCommand(
       __complete: createDynamicCompleteCommand(rootCommand, resolvedProgramName),
     };
   }
+  // Register `__refresh-completion` here too so callers using
+  // `createCompletionCommand` directly (rather than
+  // `withCompletionCommand`) still expose the subcommand the generated
+  // rc loaders / fish autoload expect to invoke after the binary's
+  // mtime changes. Without it, the loaders would call an unknown
+  // subcommand with stderr swallowed and silently keep sourcing the
+  // stale cache.
+  if (!rootCommand.subCommands?.["__refresh-completion"]) {
+    const refreshExtra: {
+      cacheDir?: string;
+      programVersion?: string;
+      globalArgsSchema?: ArgsSchema;
+    } = {};
+    if (cacheDir !== undefined) refreshExtra.cacheDir = cacheDir;
+    if (programVersion !== undefined) refreshExtra.programVersion = programVersion;
+    if (globalArgsSchema !== undefined) refreshExtra.globalArgsSchema = globalArgsSchema;
+    rootCommand.subCommands = {
+      ...rootCommand.subCommands,
+      "__refresh-completion": createRefreshCompletionCommand(
+        rootCommand,
+        resolvedProgramName,
+        refreshExtra,
+      ),
+    };
+  }
 
   return defineCommand({
     name: "completion",

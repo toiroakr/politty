@@ -637,4 +637,32 @@ describe("runMain internal subcommand bypass", () => {
     exitSpy.mockRestore();
     process.argv = originalArgv;
   });
+
+  it("does not bypass when `__name` appears as a global option *value*", async () => {
+    // `--name __internal` is a value for --name, not the subcommand
+    // token. Without schema-aware scanning, the naive
+    // "first non-flag token" check would mistakenly bypass lifecycle
+    // for ordinary invocations whose option values happen to start
+    // with `__`.
+    process.argv = ["node", "test", "--name", "__internal"];
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const setup = vi.fn();
+    const internal = defineCommand({ name: "__internal", run: () => {} });
+    const cmd = defineCommand({
+      name: "test",
+      run: () => {},
+      subCommands: { __internal: internal },
+    });
+
+    await runMain(cmd, {
+      setup,
+      globalArgs: z.object({ name: arg(z.string().optional(), {}) }),
+    });
+
+    expect(setup).toHaveBeenCalled();
+
+    exitSpy.mockRestore();
+    process.argv = originalArgv;
+  });
 });
