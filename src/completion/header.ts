@@ -77,8 +77,7 @@ export interface HeaderOptions {
  * marker.
  */
 export function buildHeaderLines(opts: HeaderOptions): string[] {
-  const binPath = resolveBinPath(opts.programName, opts.binPath);
-  const sig = binPath ? computeBinSig(binPath) : "0";
+  const sig = computeBinSig(resolveBinPath(opts.programName, opts.binPath));
   const lines = [
     `# politty-completion-version: ${COMPLETION_VERSION}`,
     `# politty-bin-sig: ${sig}`,
