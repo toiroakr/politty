@@ -204,8 +204,9 @@ export function createCompletionCommand(
       }
 
       if (args.install) {
+        let target: string;
         try {
-          const target = installCompletion(
+          target = installCompletion(
             {
               rootCommand,
               programName: resolvedProgramName,
@@ -215,35 +216,32 @@ export function createCompletionCommand(
             },
             shellType,
           );
-          console.error(`installed: ${target}`);
-          if (shellType !== "fish") {
-            console.error("");
-            console.error(`Add to your ~/.${shellType}rc:`);
-            console.error("");
-            console.error(
-              generateLoader({
-                programName: resolvedProgramName,
-                shell: shellType,
-                ...(cacheDir !== undefined && { cacheDir }),
-              })
-                .trim()
-                .replace(/^/gm, "    "),
-            );
-          }
         } catch (e) {
-          console.error(`install failed: ${e instanceof Error ? e.message : String(e)}`);
-          process.exitCode = 1;
+          throw new Error(`install failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        console.error(`installed: ${target}`);
+        if (shellType !== "fish") {
+          console.error("");
+          console.error(`Add to your ~/.${shellType}rc:`);
+          console.error("");
+          console.error(
+            generateLoader({
+              programName: resolvedProgramName,
+              shell: shellType,
+              ...(cacheDir !== undefined && { cacheDir }),
+            })
+              .trim()
+              .replace(/^/gm, "    "),
+          );
         }
         return;
       }
 
       if (args.loader) {
         if (shellType === "fish") {
-          console.error(
+          throw new Error(
             "fish does not use an rc loader. Run `<program> completion fish --install` to write the self-refreshing autoload file instead.",
           );
-          process.exitCode = 1;
-          return;
         }
         process.stdout.write(
           generateLoader({
