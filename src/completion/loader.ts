@@ -77,12 +77,13 @@ function generateBashLoader(opts: LoaderOptions): string {
     _sig=$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null) || return 0
     _hdr="# politty-bin-sig: $_sig"
     if [[ ! -f "$_cache" ]] || ! head -5 "$_cache" 2>/dev/null | grep -qF "$_hdr"; then
-        mkdir -p "$(dirname "$_cache")" 2>/dev/null
-        if "$_bin" completion bash > "$_cache.tmp.$$" 2>/dev/null; then
-            mv "$_cache.tmp.$$" "$_cache" 2>/dev/null
-        else
-            rm -f "$_cache.tmp.$$" 2>/dev/null
-        fi
+        # Use the hidden __refresh-completion subcommand instead of
+        # \`$_bin completion bash\`: the foreground completion command
+        # is subject to user setup/cleanup/prompt and required
+        # globalArgs validation, which can silently fail or block when
+        # invoked from rc; runMain bypasses those for __-prefixed
+        # internal subcommands.
+        "$_bin" __refresh-completion bash 2>/dev/null
     fi
     # If regen failed but a stale cache survived from a previous run,
     # source it anyway — a stale completion is preferable to no
@@ -112,12 +113,9 @@ function generateZshLoader(opts: LoaderOptions): string {
     _sig=$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null) || return 0
     _hdr="# politty-bin-sig: $_sig"
     if [[ ! -f "$_cache" ]] || ! head -5 "$_cache" 2>/dev/null | grep -qF "$_hdr"; then
-        mkdir -p "$_cache:h" 2>/dev/null
-        if "$_bin" completion zsh > "$_cache.tmp.$$" 2>/dev/null; then
-            mv "$_cache.tmp.$$" "$_cache" 2>/dev/null
-        else
-            rm -f "$_cache.tmp.$$" 2>/dev/null
-        fi
+        # See bash loader for why we use __refresh-completion instead
+        # of \`$_bin completion zsh\`.
+        "$_bin" __refresh-completion zsh 2>/dev/null
     fi
     # See bash loader: keep stale completion over no completion.
     [[ -f "$_cache" ]] || return 0

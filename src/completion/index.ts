@@ -33,6 +33,7 @@ import { createDynamicCompleteCommand } from "./dynamic/index.js";
 import { generateFishCompletion } from "./fish.js";
 import {
   detectShellEnv,
+  hasManagedCache,
   install as installCompletion,
   refreshIfStale,
   spawnBackgroundRefresh,
@@ -373,7 +374,11 @@ export function withCompletionCommand<T extends AnyCommand>(
   };
 
   wrappedCommand.runMainHook = (argv) => {
-    maybeSpawnRefresh(argv);
+    const refreshCtx: { programName: string; cacheDir?: string } = {
+      programName: resolvedProgramName,
+    };
+    if (cacheDir !== undefined) refreshCtx.cacheDir = cacheDir;
+    maybeSpawnRefresh(argv, refreshCtx);
   };
 
   return wrappedCommand;
@@ -388,8 +393,15 @@ export function withCompletionCommand<T extends AnyCommand>(
  *   - $SHELL doesn't resolve to a known shell
  *   - the user opted out via $POLITTY_NO_COMPLETION_REFRESH
  *   - process.argv[1] is missing (shouldn't happen for normal CLIs)
+ *   - no politty-managed cache exists yet — i.e. the user hasn't
+ *     installed completion. Without this gate the detached child would
+ *     create a fish autoload (or any cache file) on every CLI run,
+ *     even though the user never opted in via `--install` or the rc loader.
  */
-function maybeSpawnRefresh(argv: readonly string[]): void {
+function maybeSpawnRefresh(
+  argv: readonly string[],
+  ctx: { programName: string; cacheDir?: string | undefined },
+): void {
   if (process.env.POLITTY_NO_COMPLETION_REFRESH) return;
 
   const firstPositional = argv.find((a) => !a.startsWith("-"));
@@ -405,6 +417,7 @@ function maybeSpawnRefresh(argv: readonly string[]): void {
   if (!shell) return;
   const argv0 = process.argv[1];
   if (!argv0) return;
+  if (!hasManagedCache(ctx, shell)) return;
 
   spawnBackgroundRefresh(argv0, shell);
 }

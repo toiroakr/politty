@@ -1,12 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  statSync,
-  utimesSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -23,7 +15,12 @@ import {
   parseCompletionContext,
   withCompletionCommand,
 } from "../src/completion/index.js";
-import { install, installPath, refreshIfStale } from "../src/completion/install.js";
+import {
+  hasManagedCache,
+  install,
+  installPath,
+  refreshIfStale,
+} from "../src/completion/install.js";
 import { defaultCacheDir, generateLoader } from "../src/completion/loader.js";
 import {
   arg,
@@ -1597,26 +1594,20 @@ describe("Completion", () => {
       ).not.toThrow();
     });
 
-    it("refreshIfStale skips when the cache file does not exist", () => {
-      const target = installPath("mycli", "bash", cacheDir);
-      expect(existsSync(target)).toBe(false);
-      refreshIfStale(
-        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
-        "bash",
-      );
-      expect(existsSync(target)).toBe(false);
+    it("hasManagedCache returns false when the cache file does not exist", () => {
+      expect(hasManagedCache({ programName: "mycli", cacheDir }, "bash")).toBe(false);
     });
 
-    it("refreshIfStale leaves a non-politty cache file alone", () => {
+    it("hasManagedCache returns false for a non-politty cache file", () => {
       const target = installPath("mycli", "bash", cacheDir);
       mkdirSync(dirname(target), { recursive: true });
-      const original = "# user-managed\ncomplete -c mycli\n";
-      writeFileSync(target, original);
-      refreshIfStale(
-        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
-        "bash",
-      );
-      expect(readFileSync(target, "utf8")).toBe(original);
+      writeFileSync(target, "# user-managed\ncomplete -c mycli\n");
+      expect(hasManagedCache({ programName: "mycli", cacheDir }, "bash")).toBe(false);
+    });
+
+    it("hasManagedCache returns true once install has run", () => {
+      install({ rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin }, "bash");
+      expect(hasManagedCache({ programName: "mycli", cacheDir }, "bash")).toBe(true);
     });
   });
 

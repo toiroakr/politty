@@ -271,9 +271,16 @@ export function generateFishCompletion(
   // from `$__fish_config_dir/completions/<prog>.fish` lazily, so the
   // refresh check has to live in the file itself. When the binary's
   // mtime no longer matches the embedded sig, we regenerate the file
-  // in place and let the next autoload pick up the new content.
-  // Failures are silent — a stale completion is preferable to a
-  // shell-startup error.
+  // in place via the hidden __refresh-completion subcommand, then
+  // `source` the rewritten file so the *current* session picks up the
+  // new definitions (without `source`, fish would keep using the stale
+  // function bodies it already loaded). Failures are silent — a stale
+  // completion is preferable to a shell-startup error.
+  //
+  // We invoke __refresh-completion (internal) instead of
+  // `<bin> completion fish`: the foreground completion command runs
+  // user setup/cleanup/prompt and validates required globalArgs, which
+  // can fail or block when triggered from autoload.
   const sig = computeBinSig(resolveBinPath(programName, options.binPath));
   const refreshFn = `__${fn}_refresh_completion`;
   lines.push(`function ${refreshFn} --no-scope-shadowing`);
@@ -288,12 +295,8 @@ export function generateFishCompletion(
   );
   lines.push(`    test "$_sig" = "${sig}"; and return`);
   lines.push(`    set -l _target "$__fish_config_dir/completions/${programName}.fish"`);
-  // Per-PID tmp suffix so two concurrent fish sessions can't clobber
-  // each other's atomic write.
-  lines.push(`    set -l _tmp "$_target.tmp.$fish_pid"`);
-  lines.push(`    "$_bin" completion fish > "$_tmp" 2>/dev/null`);
-  lines.push(`    and mv "$_tmp" "$_target"`);
-  lines.push(`    or rm -f "$_tmp" 2>/dev/null`);
+  lines.push(`    "$_bin" __refresh-completion fish 2>/dev/null`);
+  lines.push(`    and source "$_target" 2>/dev/null`);
   lines.push(`end`);
   lines.push(`${refreshFn}`);
   lines.push(`functions -e ${refreshFn}`);
