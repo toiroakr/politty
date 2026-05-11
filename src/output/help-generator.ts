@@ -234,9 +234,26 @@ export function renderOptions(
     }
 
     lines.push(formatOption(flags, desc));
+
+    // Render the custom negation as a separate line when a description is provided
+    const negationLine = formatNegationLine(opt);
+    if (negationLine) {
+      lines.push(negationLine);
+    }
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Render a separate line for the custom negation option when a
+ * `negationDescription` is provided. When no description is given, the
+ * negation is shown inline by `formatFlags`.
+ */
+function formatNegationLine(opt: ResolvedFieldMeta): string | null {
+  if (!opt.negation || !opt.negationDescription) return null;
+  const flag = styles.option(`--${opt.negation}`);
+  return formatOption(flag, opt.negationDescription);
 }
 
 /**
@@ -294,6 +311,8 @@ function renderDiscriminatedUnionOptions(
         desc += ` ${envInfo}`;
       }
       lines.push(formatOption(flags, desc));
+      const negationLine = formatNegationLine(field);
+      if (negationLine) lines.push(negationLine);
     }
   }
 
@@ -325,6 +344,8 @@ function renderDiscriminatedUnionOptions(
           desc += ` ${envInfo}`;
         }
         lines.push(formatOption(`  ${flags}`, desc));
+        const negationLine = formatNegationLine(field);
+        if (negationLine) lines.push(`  ${negationLine}`);
       }
     }
   }
@@ -373,6 +394,8 @@ function renderUnionOptions(
         desc += ` ${envInfo}`;
       }
       lines.push(formatOption(flags, desc));
+      const negationLine = formatNegationLine(field);
+      if (negationLine) lines.push(negationLine);
     }
   }
 
@@ -403,6 +426,8 @@ function renderUnionOptions(
           desc += ` ${envInfo}`;
         }
         lines.push(formatOption(`  ${flags}`, desc));
+        const negationLine = formatNegationLine(field);
+        if (negationLine) lines.push(`  ${negationLine}`);
       }
     } else {
       lines.push("");
@@ -419,13 +444,15 @@ function renderUnionOptions(
  * Uses cliName (kebab-case) for display
  */
 function formatFlags(opt: ResolvedFieldMeta): string {
-  const parts: string[] = [];
+  // Aliases (including the canonical long flag) are joined with `, `.
+  // The custom negation is joined with ` / ` so it stays visually distinct.
+  const aliasParts: string[] = [];
 
   // Short aliases first (e.g., -v)
   if (opt.alias) {
     for (const alias of opt.alias) {
       if (alias.length === 1) {
-        parts.push(styles.option(`-${alias}`));
+        aliasParts.push(styles.option(`-${alias}`));
       }
     }
   }
@@ -439,7 +466,7 @@ function formatFlags(opt: ResolvedFieldMeta): string {
     longFlag += ` ${styles.placeholder(`<${placeholder}>`)}`;
   }
 
-  parts.push(longFlag);
+  aliasParts.push(longFlag);
 
   // Long aliases (e.g., --to-be), with the same placeholder for non-boolean options
   if (opt.alias) {
@@ -450,12 +477,21 @@ function formatFlags(opt: ResolvedFieldMeta): string {
           const placeholder = opt.placeholder ?? opt.cliName.toUpperCase();
           longAlias += ` ${styles.placeholder(`<${placeholder}>`)}`;
         }
-        parts.push(longAlias);
+        aliasParts.push(longAlias);
       }
     }
   }
 
-  return parts.join(", ");
+  const aliasStr = aliasParts.join(", ");
+
+  // Custom negation for boolean fields (shown inline when no separate
+  // negationDescription is provided). Separated by ` / ` to distinguish
+  // negation from aliases, matching the inline form used in generated docs.
+  if (opt.type === "boolean" && opt.negation && !opt.negationDescription) {
+    return `${aliasStr} / ${styles.option(`--${opt.negation}`)}`;
+  }
+
+  return aliasStr;
 }
 
 /**

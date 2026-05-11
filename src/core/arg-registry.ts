@@ -164,6 +164,34 @@ export interface BaseArgMeta<TValue = unknown> {
    */
   prompt?: PromptMeta;
   /**
+   * Custom name for the boolean negation option.
+   *
+   * Boolean fields automatically accept `--no-<cliName>` (and the camelCase
+   * `--no<Name>` form) to set the value to `false`. When `negation` is
+   * provided, the custom name replaces these auto-generated forms; the
+   * default `--no-*` is no longer recognized.
+   *
+   * The value follows the same naming conventions as `cliName` (kebab-case is
+   * recommended). Only applies to boolean fields; ignored for other types.
+   *
+   * @example
+   * ```ts
+   * cache: arg(z.boolean().default(true), {
+   *   description: "Enable caching",
+   *   negation: "disable-cache",
+   * })
+   * // Accepts: --cache (true), --disable-cache (false)
+   * // No longer accepts: --no-cache
+   * ```
+   */
+  negation?: string;
+  /**
+   * Description shown for the negation option in help and generated docs.
+   * Only meaningful when `negation` is set. If omitted, the negation option
+   * is displayed alongside the positive option without a separate description.
+   */
+  negationDescription?: string;
+  /**
    * Side-effect callback executed after argument parsing and validation.
    * Runs before the command lifecycle (setup/run/cleanup).
    * Use Zod .transform() for value transformation instead.
@@ -271,29 +299,58 @@ type ReservedAliasTypeError<M> = {
   __typeError: "Alias 'h' or 'H' requires overrideBuiltinAlias: true";
 };
 
+type NegationTypeError<M> = {
+  [K in keyof M]: M[K];
+} & {
+  __typeError: "negation/negationDescription can only be used on boolean fields";
+};
+
 type AliasFieldOf<M> = M extends { alias: infer A } ? A : never;
 type HiddenAliasFieldOf<M> = M extends { hiddenAlias: infer H } ? H : never;
+
+/**
+ * Check whether a Zod output type is a (possibly optional) boolean.
+ * Strips `undefined` to allow `z.boolean().optional()`.
+ */
+type IsBooleanField<T> = [NonNullable<T>] extends [boolean] ? true : false;
+
+/**
+ * Reject `negation` / `negationDescription` on non-boolean fields.
+ * `[Extract<keyof M, "negation" | "negationDescription">] extends [never]`
+ * is true when neither key is present on the meta literal.
+ */
+type ValidateNegation<M, TValue> = [Extract<keyof M, "negation" | "negationDescription">] extends [
+  never,
+]
+  ? M
+  : IsBooleanField<TValue> extends true
+    ? M
+    : NegationTypeError<M>;
 
 /**
  * Type helper to validate ArgMeta.
  * Forces a type error when a reserved alias ("h" / "H") is used without
  * `overrideBuiltinAlias: true`, whether the alias is provided as a string
  * or as part of an array, and whether it appears in `alias` or `hiddenAlias`.
+ * Also rejects `negation` / `negationDescription` on non-boolean fields.
  */
-type ValidateArgMeta<M> = M extends { overrideBuiltinAlias: true }
-  ? M
+type ValidateArgMeta<M, TValue = unknown> = M extends { overrideBuiltinAlias: true }
+  ? ValidateNegation<M, TValue>
   : ContainsReservedAlias<AliasFieldOf<M>> extends true
     ? ReservedAliasTypeError<M>
     : ContainsReservedAlias<HiddenAliasFieldOf<M>> extends true
       ? ReservedAliasTypeError<M>
-      : M;
+      : ValidateNegation<M, TValue>;
 
 export function arg<T extends z.ZodType>(schema: T): T;
 export function arg<T extends z.ZodType, M extends ArgMeta<z.output<T>>>(
   schema: T,
-  meta: ValidateArgMeta<M>,
+  meta: ValidateArgMeta<M, z.output<T>>,
 ): T;
-export function arg<T extends z.ZodType>(schema: T, meta?: ValidateArgMeta<ArgMeta>): T {
+export function arg<T extends z.ZodType>(
+  schema: T,
+  meta?: ValidateArgMeta<ArgMeta, z.output<T>>,
+): T {
   if (meta) {
     argRegistry.add(schema, meta as ArgMeta);
   }

@@ -786,4 +786,153 @@ describe("E2E Tests", () => {
       expect(output).toEqual(["debug", "debug"]);
     });
   });
+
+  describe("Custom negation", () => {
+    it("should accept custom negation name and set field to false", async () => {
+      const captured: Record<string, unknown> = {};
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          cache: arg(z.boolean().default(true), {
+            description: "Enable cache",
+            negation: "disable-cache",
+          }),
+        }),
+        run: (args) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--disable-cache"]);
+      expect(result.success).toBe(true);
+      expect(captured).toEqual({ cache: false });
+    });
+
+    it("should accept camelCase variant of custom negation", async () => {
+      const captured: Record<string, unknown> = {};
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          cache: arg(z.boolean().default(true), {
+            negation: "disable-cache",
+          }),
+        }),
+        run: (args) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--disableCache"]);
+      expect(result.success).toBe(true);
+      expect(captured).toEqual({ cache: false });
+    });
+
+    it("should suppress default --no-X when negation is configured", async () => {
+      const captured: Record<string, unknown> = {};
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          cache: arg(z.boolean().default(true), {
+            negation: "disable-cache",
+          }),
+        }),
+        run: (args) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--no-cache"]);
+      expect(result.success).toBe(true);
+      expect(captured.cache).toBe(true);
+    });
+
+    it("should show custom negation in help output", async () => {
+      const console = spyOnConsoleLog();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          cache: arg(z.boolean().default(true), {
+            description: "Enable cache",
+            negation: "disable-cache",
+          }),
+        }),
+      });
+
+      await runCommand(cmd, ["--help"]);
+      const output = console.getLogs()[0] ?? "";
+
+      expect(output).toContain("--cache");
+      expect(output).toContain("--disable-cache");
+      expect(output).not.toContain("--no-cache");
+
+      console.mockRestore();
+    });
+
+    it("should show custom negation description on a separate line", async () => {
+      const console = spyOnConsoleLog();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          cache: arg(z.boolean().default(true), {
+            description: "Enable cache",
+            negation: "disable-cache",
+            negationDescription: "Disable cache",
+          }),
+        }),
+      });
+
+      await runCommand(cmd, ["--help"]);
+      const output = console.getLogs()[0] ?? "";
+
+      expect(output).toContain("--cache");
+      expect(output).toContain("--disable-cache");
+      expect(output).toContain("Disable cache");
+
+      console.mockRestore();
+    });
+
+    it("should throw when negation is used on a non-boolean field", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          // @ts-expect-error -- type-level rejection of negation on non-boolean field
+          count: arg(z.number().default(1), {
+            negation: "no-count",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, []);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(String(result.error)).toMatch(/negation can only be used on boolean fields/);
+      }
+    });
+
+    it("should work as a global flag", async () => {
+      const captured: Record<string, unknown> = {};
+      const globalArgs = z.object({
+        cache: arg(z.boolean().default(true), {
+          negation: "disable-cache",
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "test",
+        run: (args: Record<string, unknown>) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--disable-cache"], { globalArgs });
+      expect(result.success).toBe(true);
+      expect(captured.cache).toBe(false);
+    });
+  });
 });

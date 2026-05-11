@@ -64,6 +64,8 @@ function fieldToOption(field: ResolvedFieldMeta): CompletableOption {
     name: field.name,
     cliName: field.cliName,
     alias: field.alias,
+    negation: field.negation,
+    negationDescription: field.negationDescription,
     description: field.description,
     // Booleans are flags that don't require a value
     takesValue: field.type !== "boolean",

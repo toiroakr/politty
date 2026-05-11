@@ -13,6 +13,10 @@ export interface GlobalFlagLookup {
   cliNames: Set<string>;
   /** single-char (short) aliases */
   aliases: Set<string>;
+  /** custom negation names mapped to their target field name */
+  negationMap: Map<string, string>;
+  /** fields with a custom `negation` configured */
+  customNegatedFields: Set<string>;
 }
 
 /**
@@ -20,7 +24,12 @@ export interface GlobalFlagLookup {
  * Shared by scanForSubcommand, separateGlobalArgs, and findFirstPositional.
  */
 export function buildGlobalFlagLookup(globalExtracted: ExtractedFields): GlobalFlagLookup {
-  const { aliasMap = new Map(), booleanFlags = new Set() } = buildParserOptions(globalExtracted);
+  const {
+    aliasMap = new Map(),
+    booleanFlags = new Set(),
+    negationMap = new Map(),
+    customNegatedFields = new Set(),
+  } = buildParserOptions(globalExtracted);
   const shortAliases = new Set<string>();
   for (const field of globalExtracted.fields) {
     for (const alias of getAllAliases(field)) {
@@ -33,25 +42,45 @@ export function buildGlobalFlagLookup(globalExtracted: ExtractedFields): GlobalF
     flagNames: new Set(globalExtracted.fields.map((f) => f.name)),
     cliNames: new Set(globalExtracted.fields.map((f) => f.cliName)),
     aliases: shortAliases,
+    negationMap,
+    customNegatedFields,
   };
 }
 
 /**
- * Resolve a long option (--flag, --flag=value, --no-flag) against global flag lookup.
- * Returns the resolved camelCase name and whether it is a known global flag.
+ * Resolve a long option (--flag, --flag=value, --no-flag, --custom-negation)
+ * against global flag lookup. Returns the resolved camelCase name and whether
+ * it is a known global flag.
  */
 export function resolveGlobalLongOption(
   arg: string,
   lookup: GlobalFlagLookup,
 ): { resolvedName: string; withoutDashes: string; isNegated: boolean; isGlobal: boolean } {
   const withoutDashes = arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : arg.slice(2);
-  const isNegated = withoutDashes.startsWith("no-");
-  const flagName = isNegated ? withoutDashes.slice(3) : withoutDashes;
+
+  // Custom negation: `--disable-cache` (or its camelCase variant) → cache=false
+  const customNegated = !arg.includes("=") ? lookup.negationMap.get(withoutDashes) : undefined;
+  if (customNegated) {
+    return {
+      resolvedName: customNegated,
+      withoutDashes,
+      isNegated: true,
+      isGlobal: lookup.flagNames.has(customNegated),
+    };
+  }
+
+  const defaultIsNegated = withoutDashes.startsWith("no-");
+  const flagName = defaultIsNegated ? withoutDashes.slice(3) : withoutDashes;
   const resolvedName = lookup.aliasMap.get(flagName) ?? flagName;
+  // When the target field has a custom negation, the default `--no-X` form
+  // is suppressed: treat it as if it were not a known global flag.
+  const suppressDefaultNegation = defaultIsNegated && lookup.customNegatedFields.has(resolvedName);
+  const isNegated = defaultIsNegated && !suppressDefaultNegation;
   const isGlobal =
-    lookup.flagNames.has(resolvedName) ||
-    lookup.cliNames.has(withoutDashes) ||
-    lookup.cliNames.has(flagName);
+    !suppressDefaultNegation &&
+    (lookup.flagNames.has(resolvedName) ||
+      lookup.cliNames.has(withoutDashes) ||
+      lookup.cliNames.has(flagName));
   return { resolvedName, withoutDashes, isNegated, isGlobal };
 }
 

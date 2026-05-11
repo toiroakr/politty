@@ -29,6 +29,18 @@ export interface ParserOptions {
    * boolean negation of `flag`.
    */
   definedNames?: Set<string>;
+  /**
+   * Map from a custom negation CLI name (and camelCase variant) to the
+   * canonical field name. Used to recognize user-defined boolean negation
+   * options (e.g. `--disable-cache` → `{ cache: false }`).
+   */
+  negationMap?: Map<string, string>;
+  /**
+   * Canonical field names that have a custom `negation` configured.
+   * For these fields the default `--no-<name>` / `--no<Name>` negation
+   * forms are suppressed.
+   */
+  customNegatedFields?: Set<string>;
 }
 
 /**
@@ -58,6 +70,8 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     booleanFlags = new Set(),
     arrayFlags = new Set(),
     definedNames = new Set(),
+    negationMap = new Map(),
+    customNegatedFields = new Set(),
   } = options;
 
   const result: ParsedArgv = {
@@ -109,13 +123,25 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     if (arg.startsWith("--")) {
       const withoutDashes = arg.slice(2);
 
+      // Handle custom negation names (e.g. --disable-cache → cache=false)
+      // Only matches the bare form `--<negation>` (no `=` value), since
+      // negation is a boolean shortcut that does not carry a value.
+      if (!withoutDashes.includes("=")) {
+        const negatedField = negationMap.get(withoutDashes);
+        if (negatedField && booleanFlags.has(negatedField)) {
+          setOption(negatedField, false);
+          i++;
+          continue;
+        }
+      }
+
       // Handle --no-flag for boolean negation (kebab-case only)
       if (withoutDashes.startsWith("no-")) {
         const flagName = withoutDashes.slice(3);
         // Block mixed form: --no-dryRun (kebab prefix + camelCase)
         if (flagName === flagName.toLowerCase()) {
           const resolvedName = aliasMap.get(flagName) ?? flagName;
-          if (booleanFlags.has(resolvedName)) {
+          if (booleanFlags.has(resolvedName) && !customNegatedFields.has(resolvedName)) {
             // "no-dry-run" itself is a defined field → treat as that field, not negation
             const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
             if (!definedNames.has(asIsResolved)) {
@@ -135,7 +161,7 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
       ) {
         const camelFlagName = withoutDashes[2]!.toLowerCase() + withoutDashes.slice(3);
         const resolvedName = aliasMap.get(camelFlagName) ?? camelFlagName;
-        if (booleanFlags.has(resolvedName)) {
+        if (booleanFlags.has(resolvedName) && !customNegatedFields.has(resolvedName)) {
           // "noDryRun" itself is a defined field → treat as that field, not negation
           const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
           if (!definedNames.has(asIsResolved)) {
@@ -235,6 +261,8 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
   const booleanFlags = new Set<string>();
   const arrayFlags = new Set<string>();
   const definedNames = new Set<string>();
+  const negationMap = new Map<string, string>();
+  const customNegatedFields = new Set<string>();
 
   // First pass: collect all canonical field names
   for (const field of extracted.fields) {
@@ -280,9 +308,22 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
     if (field.type === "array") {
       arrayFlags.add(field.name);
     }
+
+    // Register custom negation names for boolean fields
+    if (field.type === "boolean" && field.negation) {
+      customNegatedFields.add(field.name);
+      negationMap.set(field.negation, field.name);
+      // Also accept the camelCase variant if the negation name is hyphenated
+      if (field.negation.includes("-")) {
+        const camelNegation = toCamelCase(field.negation);
+        if (camelNegation !== field.negation) {
+          negationMap.set(camelNegation, field.name);
+        }
+      }
+    }
   }
 
-  return { aliasMap, booleanFlags, arrayFlags, definedNames };
+  return { aliasMap, booleanFlags, arrayFlags, definedNames, negationMap, customNegatedFields };
 }
 
 /**

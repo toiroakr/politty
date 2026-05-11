@@ -316,7 +316,10 @@ function separateGlobalArgs(
         arg,
         lookup,
       );
-      const flagName = isNegated ? withoutDashes.slice(3) : withoutDashes;
+      // Use resolvedName for local collision check so that both default
+      // (`--no-cache` → cache) and custom (`--disable-cache` → cache)
+      // negation forms shadow correctly when `cache` is defined locally.
+      const flagName = resolvedName;
 
       // If also defined locally (field name, cliName, alias, or their camelCase
       // variants), let the local parser handle it

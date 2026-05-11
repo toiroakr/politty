@@ -142,10 +142,15 @@ function renderFilteredTable(
       switch (col) {
         case "option": {
           const placeholder = opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
-          const optionName =
-            opt.type === "boolean"
-              ? `\`--${opt.cliName}\``
-              : `\`--${opt.cliName} <${placeholder}>\``;
+          let optionName: string;
+          if (opt.type === "boolean") {
+            optionName = `\`--${opt.cliName}\``;
+            if (opt.negation && !opt.negationDescription) {
+              optionName += ` / \`--${opt.negation}\``;
+            }
+          } else {
+            optionName = `\`--${opt.cliName} <${placeholder}>\``;
+          }
           cells.push(optionName);
           break;
         }
@@ -178,6 +183,30 @@ function renderFilteredTable(
     }
 
     lines.push(`| ${cells.join(" | ")} |`);
+
+    // Append a separate row for the negation when description is provided
+    if (opt.type === "boolean" && opt.negation && opt.negationDescription) {
+      const negCells: string[] = [];
+      for (const col of columns) {
+        switch (col) {
+          case "option":
+            negCells.push(`\`--${opt.negation}\``);
+            break;
+          case "description":
+            negCells.push(escapeTableCell(opt.negationDescription));
+            break;
+          case "required":
+            negCells.push("No");
+            break;
+          case "alias":
+          case "default":
+          case "env":
+            negCells.push("-");
+            break;
+        }
+      }
+      lines.push(`| ${negCells.join(" | ")} |`);
+    }
   }
 
   return lines.join("\n");

@@ -81,6 +81,16 @@ export interface ResolvedFieldMeta {
   completion?: CompletionMeta | undefined;
   /** Prompt metadata from arg() for interactive input */
   prompt?: PromptMeta | undefined;
+  /**
+   * Custom CLI name used to negate this boolean field
+   * (e.g. `"disable-cache"` for `--disable-cache`). When set, the default
+   * `--no-<cliName>` form is suppressed and only this name is accepted.
+   *
+   * Only applies to boolean fields; populated as `undefined` otherwise.
+   */
+  negation?: string | undefined;
+  /** Description shown for the negation option in help/docs. */
+  negationDescription?: string | undefined;
   /** Side-effect callback from arg() metadata */
   effect?: ((value: unknown, context: EffectContext) => void | PromiseLike<void>) | undefined;
 }
@@ -454,6 +464,35 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   const hiddenAlias = hiddenAliasRaw?.filter((a) => !visibleSet.has(a));
   const hiddenAliasFinal = hiddenAlias && hiddenAlias.length > 0 ? hiddenAlias : undefined;
 
+  const fieldType = detectType(schema);
+
+  // Validate and normalize `negation` (only meaningful for boolean fields).
+  // Accepts a single string that becomes the custom negation CLI name.
+  const rawNegation = (argMeta as { negation?: unknown } | undefined)?.negation;
+  let negation: string | undefined;
+  if (rawNegation !== undefined && rawNegation !== null) {
+    if (typeof rawNegation !== "string") {
+      throw new Error(
+        `Invalid negation for field "${name}": expected string, received ${typeof rawNegation}.`,
+      );
+    }
+    const candidate = rawNegation.trim().replace(/^-+/, "");
+    if (candidate.length === 0 || !aliasPattern.test(candidate)) {
+      throw new Error(
+        `Invalid negation "${rawNegation}" for field "${name}": negation names must match ${aliasPattern}.`,
+      );
+    }
+    if (fieldType !== "boolean") {
+      throw new Error(
+        `Invalid negation for field "${name}": negation can only be used on boolean fields.`,
+      );
+    }
+    negation = candidate;
+  }
+
+  const negationDescription = (argMeta as { negationDescription?: unknown } | undefined)
+    ?.negationDescription;
+
   const meta: ResolvedFieldMeta = {
     name,
     cliName,
@@ -465,11 +504,13 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
     env: argMeta?.env,
     required: isRequired(schema),
     defaultValue: extractDefaultValue(schema),
-    type: detectType(schema),
+    type: fieldType,
     schema,
     enumValues,
     completion: argMeta?.completion,
     prompt: argMeta?.prompt,
+    negation,
+    negationDescription: typeof negationDescription === "string" ? negationDescription : undefined,
     effect: argMeta?.effect,
   };
 
