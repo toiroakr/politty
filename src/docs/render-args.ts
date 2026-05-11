@@ -145,8 +145,8 @@ function renderFilteredTable(
           let optionName: string;
           if (opt.type === "boolean") {
             optionName = `\`--${opt.cliName}\``;
-            if (opt.negation && !opt.negationDescription) {
-              optionName += ` / \`--${opt.negation}\``;
+            if (opt.negationDisplay && !opt.negationDescription) {
+              optionName += ` / \`--${opt.negationDisplay}\``;
             }
           } else {
             optionName = `\`--${opt.cliName} <${placeholder}>\``;
@@ -185,12 +185,12 @@ function renderFilteredTable(
     lines.push(`| ${cells.join(" | ")} |`);
 
     // Append a separate row for the negation when description is provided
-    if (opt.type === "boolean" && opt.negation && opt.negationDescription) {
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
       const negCells: string[] = [];
       for (const col of columns) {
         switch (col) {
           case "option":
-            negCells.push(`\`--${opt.negation}\``);
+            negCells.push(`\`--${opt.negationDisplay}\``);
             break;
           case "description":
             negCells.push(escapeTableCell(opt.negationDescription));

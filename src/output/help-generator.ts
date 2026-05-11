@@ -251,8 +251,8 @@ export function renderOptions(
  * negation is shown inline by `formatFlags`.
  */
 function formatNegationLine(opt: ResolvedFieldMeta): string | null {
-  if (!opt.negation || !opt.negationDescription) return null;
-  const flag = styles.option(`--${opt.negation}`);
+  if (!opt.negationDisplay || !opt.negationDescription) return null;
+  const flag = styles.option(`--${opt.negationDisplay}`);
   return formatOption(flag, opt.negationDescription);
 }
 
@@ -487,8 +487,8 @@ function formatFlags(opt: ResolvedFieldMeta): string {
   // Custom negation for boolean fields (shown inline when no separate
   // negationDescription is provided). Separated by ` / ` to distinguish
   // negation from aliases, matching the inline form used in generated docs.
-  if (opt.type === "boolean" && opt.negation && !opt.negationDescription) {
-    return `${aliasStr} / ${styles.option(`--${opt.negation}`)}`;
+  if (opt.type === "boolean" && opt.negationDisplay && !opt.negationDescription) {
+    return `${aliasStr} / ${styles.option(`--${opt.negationDisplay}`)}`;
   }
 
   return aliasStr;

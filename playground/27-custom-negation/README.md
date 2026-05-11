@@ -29,6 +29,7 @@ build [options]
 | `--cache` / `--disable-cache` | -     | Use the build cache                       | No       | `true`  |
 | `--color`                     | -     | Colorize output                           | No       | `true`  |
 | `--monochrome`                | -     | Disable colorized output                  | No       | -       |
+| `--pretty` / `--no-pretty`    | -     | Format output for humans                  | No       | `true`  |
 | `--verbose`                   | -     | Enable verbose logging (no negation flag) | No       | `false` |
 
 <!-- politty:command::options:end -->

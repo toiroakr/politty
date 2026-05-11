@@ -164,19 +164,22 @@ export interface BaseArgMeta<TValue = unknown> {
    */
   prompt?: PromptMeta;
   /**
-   * Custom name for the boolean negation option, or `false` to disable
-   * negation entirely.
+   * Control the boolean negation option.
    *
    * Boolean fields automatically accept `--no-<cliName>` (and the camelCase
-   * `--no<Name>` form) to set the value to `false`. This option overrides
-   * that behavior:
+   * `--no<Name>` form) to set the value to `false`. By default this form is
+   * accepted by the parser but hidden from help, generated docs, and shell
+   * completions. This option lets you customize or expose that behavior:
    *
-   * - When set to a string, the custom name replaces the auto-generated
-   *   `--no-*` forms; the default `--no-*` is no longer recognized.
-   * - When set to `false`, no negation flag is accepted (neither the
-   *   default `--no-*` nor any custom name).
+   * - `string` — replaces the auto-generated `--no-*` form with a custom
+   *   name. The default `--no-*` is no longer recognized.
+   * - `true`  — opt-in to advertising the default `--no-<cliName>` form in
+   *   help, generated docs, and shell completions. Parser behavior is
+   *   unchanged.
+   * - `false` — disables negation entirely; neither the default `--no-*`
+   *   nor any custom name is accepted.
    *
-   * The string value follows the same naming conventions as `cliName`
+   * String values follow the same naming conventions as `cliName`
    * (kebab-case is recommended). Only applies to boolean fields.
    *
    * @example
@@ -189,19 +192,25 @@ export interface BaseArgMeta<TValue = unknown> {
    * // Accepts: --cache (true), --disable-cache (false)
    * // No longer accepts: --no-cache
    *
-   * // Disable negation entirely
+   * // Expose default `--no-X` in help/docs/completion
    * verbose: arg(z.boolean().default(false), {
+   *   negation: true,
+   * })
+   * // Help shows `--verbose / --no-verbose`
+   *
+   * // Disable negation entirely
+   * dryRun: arg(z.boolean().default(false), {
    *   negation: false,
    * })
-   * // Accepts: --verbose (true)
-   * // No longer accepts: --no-verbose
+   * // Accepts: --dry-run (true)
+   * // No longer accepts: --no-dry-run
    * ```
    */
-  negation?: string | false;
+  negation?: string | boolean;
   /**
    * Description shown for the negation option in help and generated docs.
-   * Only meaningful when `negation` is set to a custom name string. Ignored
-   * for the default `--no-*` form, and disallowed when `negation` is `false`.
+   * Only meaningful when `negation` is set to a custom name string or `true`.
+   * Disallowed when `negation` is `false`.
    */
   negationDescription?: string;
   /**

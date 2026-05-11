@@ -309,10 +309,14 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
       arrayFlags.add(field.name);
     }
 
-    // Register custom negation names for boolean fields.
-    // `negation: false` suppresses the default `--no-X` form without
-    // registering any custom name (so only `--X` itself is accepted).
-    if (field.type === "boolean" && field.negation !== undefined) {
+    // Register negation behavior for boolean fields.
+    //   - string: replace default `--no-X` with the custom name.
+    //   - false:  suppress default `--no-X` entirely.
+    //   - true / undefined: parser accepts default `--no-X` (no change needed).
+    if (
+      field.type === "boolean" &&
+      (typeof field.negation === "string" || field.negation === false)
+    ) {
       customNegatedFields.add(field.name);
       if (typeof field.negation === "string") {
         negationMap.set(field.negation, field.name);

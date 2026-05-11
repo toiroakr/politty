@@ -935,6 +935,46 @@ describe("E2E Tests", () => {
       expect(captured.cache).toBe(false);
     });
 
+    it("advertises default --no-X in help when negation is true", async () => {
+      const console = spyOnConsoleLog();
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          pretty: arg(z.boolean().default(true), {
+            description: "Pretty-print output",
+            negation: true,
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["--help"]);
+      expect(result.success).toBe(true);
+      const output = console.getLogs().join("\n");
+      expect(output).toMatch(/--pretty\s+\/\s+--no-pretty/);
+
+      console.mockRestore();
+    });
+
+    it("still accepts default --no-X when negation is true (parser unchanged)", async () => {
+      const captured: Record<string, unknown> = {};
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          pretty: arg(z.boolean().default(true), {
+            negation: true,
+          }),
+        }),
+        run: (args) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--no-pretty"]);
+      expect(result.success).toBe(true);
+      expect(captured.pretty).toBe(false);
+    });
+
     it("suppresses both default --no-X and custom negation when negation is false", async () => {
       const console = spyOnConsoleLog();
       const captured: Record<string, unknown> = {};

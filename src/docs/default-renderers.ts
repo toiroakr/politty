@@ -126,8 +126,8 @@ function formatOptionName(opt: ResolvedFieldMeta): string {
   const placeholder = resolvePlaceholder(opt);
   if (opt.type === "boolean") {
     const positive = `\`--${opt.cliName}\``;
-    if (opt.negation && !opt.negationDescription) {
-      return `${positive} / \`--${opt.negation}\``;
+    if (opt.negationDisplay && !opt.negationDescription) {
+      return `${positive} / \`--${opt.negationDisplay}\``;
     }
     return positive;
   }
@@ -154,8 +154,8 @@ function formatOptionFlags(opt: ResolvedFieldMeta): string {
       if (a.length > 1) parts.push(`\`--${a}\``);
     }
   }
-  if (opt.type === "boolean" && opt.negation && !opt.negationDescription) {
-    parts.push(`\`--${opt.negation}\``);
+  if (opt.type === "boolean" && opt.negationDisplay && !opt.negationDescription) {
+    parts.push(`\`--${opt.negationDisplay}\``);
   }
   return parts.join(", ");
 }
@@ -227,8 +227,8 @@ export function renderOptionsTable(info: CommandInfo): string {
     }
 
     // Add a separate row for the negation when a description is provided
-    if (opt.type === "boolean" && opt.negation && opt.negationDescription) {
-      const negName = `\`--${opt.negation}\``;
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      const negName = `\`--${opt.negationDisplay}\``;
       const negDesc = escapeTableCell(opt.negationDescription);
       if (hasEnv) {
         lines.push(`| ${negName} | - | ${negDesc} | No | - | - |`);
@@ -266,8 +266,8 @@ export function renderOptionsList(info: CommandInfo): string {
       opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
     const envInfo = formatEnvInfo(opt.env);
     lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
-    if (opt.type === "boolean" && opt.negation && opt.negationDescription) {
-      lines.push(`- \`--${opt.negation}\` - ${opt.negationDescription}`);
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      lines.push(`- \`--${opt.negationDisplay}\` - ${opt.negationDescription}`);
     }
   }
 
@@ -334,8 +334,8 @@ export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): strin
       lines.push(`| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} |`);
     }
 
-    if (opt.type === "boolean" && opt.negation && opt.negationDescription) {
-      const negName = `\`--${opt.negation}\``;
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      const negName = `\`--${opt.negationDisplay}\``;
       const negDesc = escapeTableCell(opt.negationDescription);
       if (hasEnv) {
         lines.push(`| ${negName} | - | ${negDesc} | No | - | - |`);
@@ -505,8 +505,8 @@ export function renderOptionsListFromArray(options: ResolvedFieldMeta[]): string
       opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
     const envInfo = formatEnvInfo(opt.env);
     lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
-    if (opt.type === "boolean" && opt.negation && opt.negationDescription) {
-      lines.push(`- \`--${opt.negation}\` - ${opt.negationDescription}`);
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      lines.push(`- \`--${opt.negationDisplay}\` - ${opt.negationDescription}`);
     }
   }
 

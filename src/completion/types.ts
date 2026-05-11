@@ -57,11 +57,10 @@ export interface CompletableOption {
    */
   alias?: string[] | undefined;
   /**
-   * Custom negation for boolean fields.
-   * - String: replaces the default `--no-*` with a custom name.
-   * - `false`: disables negation entirely (no `--no-*` accepted).
+   * Negation name to advertise in shell completions (no `--` prefix),
+   * or `undefined` to hide the negation. Mirrors `ResolvedFieldMeta.negationDisplay`.
    */
-  negation?: string | false | undefined;
+  negation?: string | undefined;
   /** Description for the negation option (when distinct from the main description) */
   negationDescription?: string | undefined;
   /** Description for completion */

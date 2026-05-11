@@ -35,6 +35,7 @@ describe("27-custom-negation", () => {
       expect(result.exitCode).toBe(0);
       expect(consoleSpy).toHaveBeenCalledWith("cache: true");
       expect(consoleSpy).toHaveBeenCalledWith("color: true");
+      expect(consoleSpy).toHaveBeenCalledWith("pretty: true");
       expect(consoleSpy).toHaveBeenCalledWith("verbose: false");
     });
 
@@ -74,6 +75,13 @@ describe("27-custom-negation", () => {
 
       expect(result.exitCode).toBe(0);
       expect(consoleSpy).toHaveBeenCalledWith("verbose: true");
+    });
+
+    it("accepts --no-pretty (advertised default negation) when negation: true", async () => {
+      const result = await runCommand(cli, ["--no-pretty"]);
+
+      expect(result.exitCode).toBe(0);
+      expect(consoleSpy).toHaveBeenCalledWith("pretty: false");
     });
 
     it("ignores --no-verbose when negation: false suppresses the default form", async () => {
@@ -122,6 +130,15 @@ describe("27-custom-negation", () => {
       expect(output).not.toContain("--no-verbose");
       // No `/` separator should appear next to --verbose
       expect(output).not.toMatch(/--verbose\s+\//);
+    });
+
+    it("advertises --pretty / --no-pretty in help when negation: true", async () => {
+      const result = await runCommand(cli, ["--help"]);
+
+      expect(result.exitCode).toBe(0);
+      const output = consoleSpy.getLogs().join("\n");
+
+      expect(output).toMatch(/--pretty\s+\/\s+--no-pretty/);
     });
   });
 

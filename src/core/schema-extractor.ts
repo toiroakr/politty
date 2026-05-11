@@ -82,18 +82,27 @@ export interface ResolvedFieldMeta {
   /** Prompt metadata from arg() for interactive input */
   prompt?: PromptMeta | undefined;
   /**
-   * Custom CLI name used to negate this boolean field, or `false` to
-   * disable negation entirely.
+   * Negation configuration for this boolean field.
    *
    * - String (e.g. `"disable-cache"`): the default `--no-<cliName>` form is
    *   suppressed and only `--<negation>` (plus its camelCase variant) is
    *   accepted as the negation flag.
+   * - `true`: the default `--no-<cliName>` form is accepted **and** shown in
+   *   help, generated docs, and shell completions.
    * - `false`: neither the default `--no-<cliName>` nor any custom name is
    *   accepted; the field only responds to the positive flag.
+   * - `undefined`: the default `--no-<cliName>` is accepted by the parser
+   *   but hidden from help/docs/completions.
    *
    * Only applies to boolean fields; populated as `undefined` otherwise.
    */
-  negation?: string | false | undefined;
+  negation?: string | boolean | undefined;
+  /**
+   * Derived display name (no `--` prefix) for the negation flag in help,
+   * generated docs, and shell completions. `undefined` means the negation
+   * is hidden from those surfaces. Computed from `negation` + `cliName`.
+   */
+  negationDisplay?: string | undefined;
   /** Description shown for the negation option in help/docs. */
   negationDescription?: string | undefined;
   /** Side-effect callback from arg() metadata */
@@ -472,22 +481,24 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   const fieldType = detectType(schema);
 
   // Validate and normalize `negation` (only meaningful for boolean fields).
-  // Accepts either a string (custom negation CLI name) or `false`
-  // (disable negation entirely, including the default `--no-*` form).
+  // Accepts:
+  //   - string: custom negation CLI name (suppresses default `--no-*`)
+  //   - true:   keep default `--no-*` and advertise it in help/docs/completion
+  //   - false:  disable negation entirely (default `--no-*` also rejected)
   const rawNegation = (argMeta as { negation?: unknown } | undefined)?.negation;
-  let negation: string | false | undefined;
+  let negation: string | boolean | undefined;
   if (rawNegation !== undefined && rawNegation !== null) {
-    if (rawNegation === false) {
+    if (typeof rawNegation === "boolean") {
       if (fieldType !== "boolean") {
         throw new Error(
           `Invalid negation for field "${name}": negation can only be used on boolean fields.`,
         );
       }
-      negation = false;
+      negation = rawNegation;
     } else {
       if (typeof rawNegation !== "string") {
         throw new Error(
-          `Invalid negation for field "${name}": expected string or false, received ${typeof rawNegation}.`,
+          `Invalid negation for field "${name}": expected string or boolean, received ${typeof rawNegation}.`,
         );
       }
       const candidate = rawNegation.trim().replace(/^-+/, "");
@@ -513,6 +524,11 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
     );
   }
 
+  // Compute the displayed negation name (without leading `--`) for help,
+  // generated docs, and shell completions. `undefined` means hidden.
+  const negationDisplay: string | undefined =
+    typeof negation === "string" ? negation : negation === true ? `no-${cliName}` : undefined;
+
   const meta: ResolvedFieldMeta = {
     name,
     cliName,
@@ -530,6 +546,7 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
     completion: argMeta?.completion,
     prompt: argMeta?.prompt,
     negation,
+    negationDisplay,
     negationDescription: typeof negationDescription === "string" ? negationDescription : undefined,
     effect: argMeta?.effect,
   };

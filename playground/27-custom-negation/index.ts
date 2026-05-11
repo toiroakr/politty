@@ -1,26 +1,31 @@
 /**
  * 27-custom-negation.ts - Custom negation option name
  *
- * Demonstrates how to customize the boolean negation form. `negation` accepts
- * two shapes:
+ * Demonstrates how to control the boolean negation form. `negation` accepts:
  *
  * - `string` — replace the default `--no-<name>` with a custom name.
  *   The default `--no-<cliName>` (and camelCase `--no<Name>`) forms are
  *   suppressed; only the custom name is recognized.
+ * - `true`   — keep the default `--no-<cliName>` form **and** advertise it
+ *   in help, generated docs, and shell completions.
  * - `false`  — disable negation entirely. Neither `--no-<cliName>` nor any
  *   custom name is accepted, so the boolean can only be flipped on.
+ * - (unset)  — parser still accepts `--no-<cliName>` but the form stays
+ *   hidden from help/docs/completions (the current default).
  *
  * Optionally, `negationDescription` can be provided alongside a string
- * `negation` to render the negation option on its own line in help and as a
- * separate row in generated docs. `negationDescription` is not allowed when
- * `negation: false`.
+ * `negation` or `negation: true` to render the negation option on its own
+ * line in help and as a separate row in generated docs. `negationDescription`
+ * is not allowed when `negation: false`.
  *
  * How to run:
  *   pnpx tsx playground/27-custom-negation --help
- *   pnpx tsx playground/27-custom-negation                        # cache=true, color=true, verbose=false
+ *   pnpx tsx playground/27-custom-negation                        # defaults
  *   pnpx tsx playground/27-custom-negation --disable-cache        # cache=false
  *   pnpx tsx playground/27-custom-negation --disableCache         # same (camelCase variant)
  *   pnpx tsx playground/27-custom-negation --monochrome           # color=false
+ *   pnpx tsx playground/27-custom-negation --pretty               # pretty=true
+ *   pnpx tsx playground/27-custom-negation --no-pretty            # pretty=false (advertised)
  *   pnpx tsx playground/27-custom-negation --verbose              # verbose=true
  *   pnpx tsx playground/27-custom-negation --no-cache             # WARN: unknown option
  *   pnpx tsx playground/27-custom-negation --no-verbose           # WARN: unknown option
@@ -46,6 +51,11 @@ export const cli = defineCommand({
       negation: "monochrome",
       negationDescription: "Disable colorized output",
     }),
+    // Opt-in to advertising the default `--no-pretty` in help/docs/completion.
+    pretty: arg(z.boolean().default(true), {
+      description: "Format output for humans",
+      negation: true,
+    }),
     // Negation disabled: only `--verbose` is accepted; `--no-verbose` is
     // treated as an unknown option.
     verbose: arg(z.boolean().default(false), {
@@ -56,6 +66,7 @@ export const cli = defineCommand({
   run: (args) => {
     console.log(`cache: ${args.cache}`);
     console.log(`color: ${args.color}`);
+    console.log(`pretty: ${args.pretty}`);
     console.log(`verbose: ${args.verbose}`);
   },
 });
