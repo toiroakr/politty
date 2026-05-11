@@ -13,7 +13,7 @@ import {
   getVisibleSubs,
   sanitize,
 } from "./extractor.js";
-import { buildHeaderLines, computeBinSig } from "./header.js";
+import { buildHeaderLines, computeBinSig, resolveBinPath } from "./header.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -271,24 +271,44 @@ export function generateFishCompletion(
   // from `$__fish_config_dir/completions/<prog>.fish` lazily, so the
   // refresh check has to live in the file itself. When the binary's
   // mtime no longer matches the embedded sig, we regenerate the file
-  // in place and let the next autoload pick up the new content.
+  // in place via the hidden __refresh-completion subcommand, then
+  // `source` the rewritten file so the *current* session picks up the
+  // new definitions, and `return` from this script so the rest of the
+  // *old* file (stale helper functions and `complete` registrations)
+  // doesn't run on top of the freshly sourced new definitions.
   // Failures are silent — a stale completion is preferable to a
   // shell-startup error.
-  const sig = computeBinSig(options.binPath ?? process.argv[1] ?? "");
+  //
+  // We invoke __refresh-completion (internal) instead of
+  // `<bin> completion fish`: the foreground completion command runs
+  // user setup/cleanup/prompt and validates required globalArgs, which
+  // can fail or block when triggered from autoload.
+  const sig = computeBinSig(resolveBinPath(programName, options.binPath));
   const refreshFn = `__${fn}_refresh_completion`;
   lines.push(`function ${refreshFn} --no-scope-shadowing`);
   lines.push(`    set -l _bin (command -v ${programName})`);
-  lines.push(`    test -z "$_bin"; and return`);
+  lines.push(`    test -z "$_bin"; and return 1`);
+  // `-L` follows symlinks so the shell-side mtime matches Node's
+  // `fs.statSync`, mirroring the bash/zsh loader. Probe order matches
+  // the bash/zsh loader: GNU (`-c`) first because `-f` is filesystem
+  // mode there and would otherwise dump filesystem info into `_sig`.
   lines.push(
-    `    set -l _sig (stat -f '%m' "$_bin" 2>/dev/null; or stat -c '%Y' "$_bin" 2>/dev/null)`,
+    `    set -l _sig (stat -L -c '%Y' "$_bin" 2>/dev/null; or stat -L -f '%m' "$_bin" 2>/dev/null)`,
   );
-  lines.push(`    test "$_sig" = "${sig}"; and return`);
+  lines.push(`    test "$_sig" = "${sig}"; and return 1`);
   lines.push(`    set -l _target "$__fish_config_dir/completions/${programName}.fish"`);
-  lines.push(`    "$_bin" completion fish > "$_target.tmp" 2>/dev/null`);
-  lines.push(`    and mv "$_target.tmp" "$_target"`);
+  lines.push(`    "$_bin" __refresh-completion fish 2>/dev/null`);
+  lines.push(`    and source "$_target" 2>/dev/null`);
+  lines.push(`    and return 0`);
+  lines.push(`    return 1`);
   lines.push(`end`);
   lines.push(`${refreshFn}`);
+  lines.push(`set -l _politty_refreshed $status`);
   lines.push(`functions -e ${refreshFn}`);
+  // `return` from a sourced fish script aborts the rest of the source
+  // call, so the stale `complete -c` lines below do not execute when
+  // the fresh script has already been sourced.
+  lines.push(`test $_politty_refreshed -eq 0; and return`);
   lines.push(``);
 
   // Helper: check if option is already used

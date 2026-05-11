@@ -15,7 +15,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { AnyCommand, ArgsSchema } from "../types.js";
-import { computeBinSig } from "./header.js";
+import { resolveBinPath } from "./header.js";
 import { generateCompletion } from "./index.js";
 import { defaultCacheDir } from "./loader.js";
 import type { ShellType } from "./types.js";
@@ -91,16 +91,21 @@ function readCachedSig(path: string): string | null {
 
 /**
  * Rewrite the cache only when stale. Used by:
- *   - `<program> __refresh-completion <shell>` (the hidden subcommand)
- *   - the background spawn from runMain
+ *   - `<program> __refresh-completion <shell>` (the hidden subcommand
+ *     spawned both by the rc loader and by the runMain background hook)
  *
- * Both call paths must never throw — a stale completion is fine, a
- * crash isn't.
+ * Caller is responsible for gating: the runMain hook (`maybeSpawnRefresh`)
+ * checks `hasManagedCache` before spawning so we don't silently create
+ * a fish autoload the user never opted into. The rc loader / fish
+ * autoload only run after the user has installed completion in the
+ * first place, so they're allowed to refresh unconditionally.
+ *
+ * Must never throw — a stale completion is fine, a crash isn't.
  */
 export function refreshIfStale(ctx: InstallContext, shell: ShellType): void {
   try {
     const target = installPath(ctx.programName, shell, ctx.cacheDir);
-    const binPath = ctx.binPath ?? process.argv[1] ?? "";
+    const binPath = resolveBinPath(ctx.programName, ctx.binPath);
     if (!binPath) return;
     let currentSig: string;
     try {
@@ -116,15 +121,19 @@ export function refreshIfStale(ctx: InstallContext, shell: ShellType): void {
 }
 
 /**
- * Detect the user's shell from $SHELL. Returns null if it isn't one of
- * the supported shells; callers should treat that as "skip refresh."
+ * Returns true when a politty-managed cache file already exists on disk
+ * for the given shell — i.e. the user has installed completion via
+ * `<program> completion <shell> --install` or the rc loader has already
+ * sourced one. Used by the runMain background hook to avoid spawning
+ * the refresher (and thereby silently creating files) on plain CLI runs
+ * the user never opted into.
  */
-export function detectShellEnv(): ShellType | null {
-  const shell = (process.env.SHELL ?? "").split("/").pop()?.toLowerCase() ?? "";
-  if (shell.includes("bash")) return "bash";
-  if (shell.includes("zsh")) return "zsh";
-  if (shell.includes("fish")) return "fish";
-  return null;
+export function hasManagedCache(
+  ctx: { programName: string; cacheDir?: string | undefined },
+  shell: ShellType,
+): boolean {
+  const target = installPath(ctx.programName, shell, ctx.cacheDir);
+  return readCachedSig(target) !== null;
 }
 
 /**
@@ -135,7 +144,7 @@ export function detectShellEnv(): ShellType | null {
  * Caller is expected to gate this on the right conditions (interactive
  * shell, not running inside `__complete` itself, etc.).
  *
- * Re-exports `void` and never throws — even spawn failures are absorbed.
+ * Returns `void` and never throws — even spawn failures are absorbed.
  */
 export function spawnBackgroundRefresh(programArgv0: string, shell: ShellType): void {
   try {
@@ -149,6 +158,3 @@ export function spawnBackgroundRefresh(programArgv0: string, shell: ShellType): 
     // Best-effort.
   }
 }
-
-/** computeBinSig is re-exported so install.ts is self-contained for callers. */
-export { computeBinSig };

@@ -156,12 +156,41 @@ export async function runCommand<TResult = unknown>(
 }
 
 /**
+ * Hidden internal subcommands (e.g. `__refresh-completion`) are spawned
+ * by background hooks and must not run user-provided
+ * `setup`/`cleanup`/`prompt` or required `globalArgs`. Those exist for
+ * the foreground CLI run; replaying them in a detached child causes
+ * duplicate side effects, stuck prompts, and validation failures the
+ * user never opted into.
+ *
+ * We treat any registered subcommand whose name starts with `__` as
+ * internal. We use `findFirstPositional` (schema-aware) instead of the
+ * naive "first non-flag token" so an option *value* like
+ * `--name __refresh-completion` doesn't trip the bypass — that would
+ * silently skip lifecycle hooks for ordinary invocations.
+ */
+function isInternalSubcommandInvocation(
+  command: AnyCommand,
+  argv: string[],
+  globalExtracted?: ExtractedFields,
+): boolean {
+  const firstPositional = findFirstPositional(argv, globalExtracted);
+  if (!firstPositional || !firstPositional.startsWith("__")) return false;
+  return Boolean(command.subCommands?.[firstPositional]);
+}
+
+/**
  * Run a CLI command as the main entry point
  *
  * This function:
  * - Uses process.argv for arguments
  * - Handles SIGINT/SIGTERM signals
  * - Calls process.exit with the appropriate exit code
+ * - Invokes `command.runMainHook` once before parsing if set, so plug-ins
+ *   like `withCompletionCommand` can fire detached background work
+ * - Bypasses user `setup`/`cleanup`/`prompt` and required `globalArgs`
+ *   for registered hidden subcommands whose name starts with `__`
+ *   (e.g. `__refresh-completion`)
  *
  * @param command - The command to run
  * @param options - Main options (version, debug)
@@ -190,17 +219,45 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     }
   }
 
-  const globalExtracted = extractAndValidateGlobal(options);
+  const argv = process.argv.slice(2);
+  // Extract the global schema once *before* the bypass check so
+  // `findFirstPositional` can correctly skip option values. We re-use
+  // the same `globalExtracted` for the actual run when the call is
+  // foreground.
+  let globalExtractedForBypass: ExtractedFields | undefined;
+  if (options.globalArgs) {
+    try {
+      globalExtractedForBypass = extractFields(options.globalArgs);
+    } catch {
+      // If the schema is malformed we'll error later; for the bypass
+      // check fall back to the no-schema scan (conservative — option
+      // values may be misclassified, but that only over-bypasses the
+      // detection, never under-bypasses it for ordinary invocations).
+    }
+  }
+  // For internal subcommands, drop user lifecycle hooks and the
+  // globalArgs schema. The internal command implements its own
+  // best-effort behavior and should not be subject to user policies.
+  // Note: under exactOptionalPropertyTypes we must omit the keys (not
+  // assign undefined), since `globalArgs?: ArgsSchema` does not accept
+  // `undefined` as a value.
+  let effectiveOptions: MainOptions = options;
+  if (isInternalSubcommandInvocation(command, argv, globalExtractedForBypass)) {
+    const { setup: _s, cleanup: _c, prompt: _p, globalArgs: _g, ...rest } = options;
+    effectiveOptions = rest;
+  }
+
+  const globalExtracted = extractAndValidateGlobal(effectiveOptions);
 
   // Global setup
-  if (options.setup) {
+  if (effectiveOptions.setup) {
     try {
-      await options.setup({});
+      await effectiveOptions.setup({});
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
-      if (options.cleanup) {
+      if (effectiveOptions.cleanup) {
         try {
-          await options.cleanup({ error });
+          await effectiveOptions.cleanup({ error });
         } catch {
           // Swallow cleanup error when setup already failed
         }
@@ -209,37 +266,37 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     }
   }
 
-  const result = await runCommandInternal(command, process.argv.slice(2), {
-    debug: options.debug,
-    captureLogs: options.captureLogs,
-    skipValidation: options.skipValidation,
+  const result = await runCommandInternal(command, argv, {
+    debug: effectiveOptions.debug,
+    captureLogs: effectiveOptions.captureLogs,
+    skipValidation: effectiveOptions.skipValidation,
     handleSignals: true,
-    logger: options.logger,
-    globalArgs: options.globalArgs,
-    prompt: options.prompt,
+    logger: effectiveOptions.logger,
+    globalArgs: effectiveOptions.globalArgs,
+    prompt: effectiveOptions.prompt,
     _globalExtracted: globalExtracted,
-    _globalCleanup: options.cleanup,
+    _globalCleanup: effectiveOptions.cleanup,
     _context: {
       commandPath: [],
       rootName: command.name,
-      rootVersion: options.version,
+      rootVersion: effectiveOptions.version,
       globalExtracted,
     },
   });
 
   // Display errors (controlled by displayErrors option, default: true)
-  if ((options.displayErrors ?? true) && !result.success && result.error) {
-    const errorLogger = options.logger ?? defaultLogger;
-    errorLogger.error(formatRuntimeError(result.error, options.debug ?? false));
+  if ((effectiveOptions.displayErrors ?? true) && !result.success && result.error) {
+    const errorLogger = effectiveOptions.logger ?? defaultLogger;
+    errorLogger.error(formatRuntimeError(result.error, effectiveOptions.debug ?? false));
   }
 
   // Global cleanup (always)
-  if (options.cleanup) {
+  if (effectiveOptions.cleanup) {
     const cleanupCtx: GlobalCleanupContext = {
       error: !result.success ? result.error : undefined,
     };
     try {
-      await options.cleanup(cleanupCtx);
+      await effectiveOptions.cleanup(cleanupCtx);
     } catch {
       // Swallow - we're about to exit anyway
     }

@@ -32,7 +32,7 @@ import { generateBashCompletion } from "./bash.js";
 import { createDynamicCompleteCommand } from "./dynamic/index.js";
 import { generateFishCompletion } from "./fish.js";
 import {
-  detectShellEnv,
+  hasManagedCache,
   install as installCompletion,
   refreshIfStale,
   spawnBackgroundRefresh,
@@ -182,10 +182,47 @@ export function createCompletionCommand(
   const resolvedProgramName = programName ?? rootCommand.name;
   const { cacheDir, programVersion } = extra;
 
+  // Build the option fragments once. Under exactOptionalPropertyTypes
+  // we can't pass `undefined` values directly, so we omit absent keys.
+  const refreshExtra: {
+    cacheDir?: string;
+    programVersion?: string;
+    globalArgsSchema?: ArgsSchema;
+  } = {
+    ...(cacheDir !== undefined && { cacheDir }),
+    ...(programVersion !== undefined && { programVersion }),
+    ...(globalArgsSchema !== undefined && { globalArgsSchema }),
+  };
+  const installCtxBase: Omit<Parameters<typeof installCompletion>[0], "rootCommand"> = {
+    programName: resolvedProgramName,
+    ...refreshExtra,
+  };
+  const loaderOptsBase = {
+    programName: resolvedProgramName,
+    ...(cacheDir !== undefined && { cacheDir }),
+  };
+
   if (!rootCommand.subCommands?.__complete) {
     rootCommand.subCommands = {
       ...rootCommand.subCommands,
       __complete: createDynamicCompleteCommand(rootCommand, resolvedProgramName),
+    };
+  }
+  // Register `__refresh-completion` here too so callers using
+  // `createCompletionCommand` directly (rather than
+  // `withCompletionCommand`) still expose the subcommand the generated
+  // rc loaders / fish autoload expect to invoke after the binary's
+  // mtime changes. Without it, the loaders would call an unknown
+  // subcommand with stderr swallowed and silently keep sourcing the
+  // stale cache.
+  if (!rootCommand.subCommands?.["__refresh-completion"]) {
+    rootCommand.subCommands = {
+      ...rootCommand.subCommands,
+      "__refresh-completion": createRefreshCompletionCommand(
+        rootCommand,
+        resolvedProgramName,
+        refreshExtra,
+      ),
     };
   }
 
@@ -204,54 +241,33 @@ export function createCompletionCommand(
       }
 
       if (args.install) {
+        let target: string;
         try {
-          const target = installCompletion(
-            {
-              rootCommand,
-              programName: resolvedProgramName,
-              ...(programVersion !== undefined && { programVersion }),
-              ...(cacheDir !== undefined && { cacheDir }),
-              ...(globalArgsSchema !== undefined && { globalArgsSchema }),
-            },
-            shellType,
-          );
-          console.error(`installed: ${target}`);
-          if (shellType !== "fish") {
-            console.error("");
-            console.error(`Add to your ~/.${shellType}rc:`);
-            console.error("");
-            console.error(
-              generateLoader({
-                programName: resolvedProgramName,
-                shell: shellType,
-                ...(cacheDir !== undefined && { cacheDir }),
-              })
-                .trim()
-                .replace(/^/gm, "    "),
-            );
-          }
+          target = installCompletion({ rootCommand, ...installCtxBase }, shellType);
         } catch (e) {
-          console.error(`install failed: ${e instanceof Error ? e.message : String(e)}`);
-          process.exitCode = 1;
+          throw new Error(`install failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        console.error(`installed: ${target}`);
+        if (shellType !== "fish") {
+          console.error("");
+          console.error(`Add to your ~/.${shellType}rc:`);
+          console.error("");
+          console.error(
+            generateLoader({ ...loaderOptsBase, shell: shellType })
+              .trim()
+              .replace(/^/gm, "    "),
+          );
         }
         return;
       }
 
       if (args.loader) {
         if (shellType === "fish") {
-          console.error(
+          throw new Error(
             "fish does not use an rc loader. Run `<program> completion fish --install` to write the self-refreshing autoload file instead.",
           );
-          process.exitCode = 1;
-          return;
         }
-        process.stdout.write(
-          generateLoader({
-            programName: resolvedProgramName,
-            shell: shellType,
-            ...(cacheDir !== undefined && { cacheDir }),
-          }),
-        );
+        process.stdout.write(generateLoader({ ...loaderOptsBase, shell: shellType }));
         return;
       }
 
@@ -289,16 +305,7 @@ export function createRefreshCompletionCommand(
     description: "(internal) Refresh the on-disk completion cache if stale.",
     args: refreshArgsSchema,
     run(args) {
-      refreshIfStale(
-        {
-          rootCommand,
-          programName,
-          ...(extra.programVersion !== undefined && { programVersion: extra.programVersion }),
-          ...(extra.cacheDir !== undefined && { cacheDir: extra.cacheDir }),
-          ...(extra.globalArgsSchema !== undefined && { globalArgsSchema: extra.globalArgsSchema }),
-        },
-        args.shell,
-      );
+      refreshIfStale({ rootCommand, programName, ...extra }, args.shell);
     },
   });
 }
@@ -352,10 +359,11 @@ export function withCompletionCommand<T extends AnyCommand>(
 
   const { programName, globalArgsSchema, cacheDir, programVersion } = opts;
   const resolvedProgramName = programName ?? command.name;
-  const extra: { cacheDir?: string; programVersion?: string; globalArgsSchema?: ArgsSchema } = {};
-  if (cacheDir !== undefined) extra.cacheDir = cacheDir;
-  if (programVersion !== undefined) extra.programVersion = programVersion;
-  if (globalArgsSchema !== undefined) extra.globalArgsSchema = globalArgsSchema;
+  const extra: { cacheDir?: string; programVersion?: string; globalArgsSchema?: ArgsSchema } = {
+    ...(cacheDir !== undefined && { cacheDir }),
+    ...(programVersion !== undefined && { programVersion }),
+    ...(globalArgsSchema !== undefined && { globalArgsSchema }),
+  };
 
   const wrappedCommand = {
     ...command,
@@ -375,7 +383,10 @@ export function withCompletionCommand<T extends AnyCommand>(
   };
 
   wrappedCommand.runMainHook = (argv) => {
-    maybeSpawnRefresh(argv);
+    maybeSpawnRefresh(argv, {
+      programName: resolvedProgramName,
+      ...(cacheDir !== undefined && { cacheDir }),
+    });
   };
 
   return wrappedCommand;
@@ -390,8 +401,15 @@ export function withCompletionCommand<T extends AnyCommand>(
  *   - $SHELL doesn't resolve to a known shell
  *   - the user opted out via $POLITTY_NO_COMPLETION_REFRESH
  *   - process.argv[1] is missing (shouldn't happen for normal CLIs)
+ *   - no politty-managed cache exists yet — i.e. the user hasn't
+ *     installed completion. Without this gate the detached child would
+ *     create a fish autoload (or any cache file) on every CLI run,
+ *     even though the user never opted in via `--install` or the rc loader.
  */
-function maybeSpawnRefresh(argv: readonly string[]): void {
+function maybeSpawnRefresh(
+  argv: readonly string[],
+  ctx: { programName: string; cacheDir?: string | undefined },
+): void {
   if (process.env.POLITTY_NO_COMPLETION_REFRESH) return;
 
   const firstPositional = argv.find((a) => !a.startsWith("-"));
@@ -403,10 +421,11 @@ function maybeSpawnRefresh(argv: readonly string[]): void {
     return;
   }
 
-  const shell = detectShellEnv();
+  const shell = detectShell();
   if (!shell) return;
   const argv0 = process.argv[1];
   if (!argv0) return;
+  if (!hasManagedCache(ctx, shell)) return;
 
   spawnBackgroundRefresh(argv0, shell);
 }
