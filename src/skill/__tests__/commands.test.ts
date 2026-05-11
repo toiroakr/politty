@@ -395,43 +395,43 @@ describe("createSkillSyncCommand", () => {
     }
   });
 
-  it("should warn about --exclude values that don't match any source skill", () => {
+  it("should throw when --exclude lists a name not in source", () => {
     // A typo'd `--exclude nonexitent` previously did nothing silently, so
-    // the user couldn't tell their flag was inert. Sync still proceeds — a
-    // typo shouldn't block reconciliation — but a stderr warning makes the
-    // misuse visible.
+    // the user couldn't tell their flag was inert. Now sync aborts before
+    // any install side effect, listing every unknown name in one error so
+    // the user can fix the whole invocation in one round-trip.
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    try {
-      const command = createSkillSyncCommand(opts(tempDir), CLI);
-      command.run!({ exclude: ["nonexitent"], verbose: false });
-
-      const warnings = warnSpy.mock.calls.map((c) => c[0] as string).join("\n");
-      expect(warnings).toContain('--exclude "nonexitent"');
-      expect(warnings).toContain("no such skill in source");
-      // Sync still ran the install for unrelated skills — exclude of an
-      // unknown name is a no-op, not a hard stop.
-      expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
-    } finally {
-      warnSpy.mockRestore();
-    }
+    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    expect(() => command.run!({ exclude: ["nonexitent"], verbose: false })).toThrow(
+      /not found in source directory/,
+    );
+    expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 
-  it("should not warn when --exclude lists a name that is in source", () => {
+  it("should list every unknown --exclude name in one error", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    try {
+      command.run!({ exclude: ["typo1", "typo2"], verbose: false });
+      expect.fail("expected throw");
+    } catch (e) {
+      const message = (e as Error).message;
+      expect(message).toContain('"typo1"');
+      expect(message).toContain('"typo2"');
+      expect(message).toContain("Skills");
+    }
+    expect(mockedInstallSkill).not.toHaveBeenCalled();
+  });
+
+  it("should accept --exclude values that match source skills", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    try {
-      const command = createSkillSyncCommand(opts(tempDir), CLI);
-      command.run!({ exclude: ["commit"], verbose: false });
-
-      const warnings = warnSpy.mock.calls.map((c) => c[0] as string).join("\n");
-      expect(warnings).not.toContain("no such skill in source");
-    } finally {
-      warnSpy.mockRestore();
-    }
+    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    expect(() => command.run!({ exclude: ["commit"], verbose: false })).not.toThrow();
+    expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
   });
 });
 

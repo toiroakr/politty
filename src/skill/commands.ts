@@ -95,19 +95,35 @@ export function createSkillSyncCommand(options: SkillCommandOptions, cliName: st
     }),
     run(args) {
       const { skills: allSkills, errors } = loadSkills(resolved);
-      // Surface --exclude typos as warnings (not errors): sync's job is to
-      // make installs match source, and one stray name shouldn't block the
-      // whole reconciliation. Skipping silently was hiding real typos
-      // (e.g. `--exclude nonexitent`) that did nothing useful.
+      const stamp = ownershipFor(resolved, cliName);
+      // Pre-validate every `--exclude` value before any install side
+      // effect. A typo (e.g. `--exclude nonexitent`) previously slid
+      // through as a no-op; now it aborts the run with a single error
+      // listing every unknown name so the user can fix the whole
+      // invocation in one round-trip. Mirrors `skills add`'s unknown-name
+      // handling.
+      //
+      // `--exclude` does double duty: it skips installation of a source
+      // skill *and* protects an installed orphan (a skill this CLI owns
+      // but no longer ships) from sync's removal pass. Both names are
+      // legitimate, so accept either match before raising.
       const sourceNamesAll = new Set(allSkills.map((s) => s.frontmatter.name));
-      for (const name of new Set(args.exclude)) {
-        if (!sourceNamesAll.has(name)) {
-          logger.warn(`--exclude ${JSON.stringify(name)}: no such skill in source.`);
-        }
+      const ownedInstalled = new Set(findOwnedInstalledSkills(stamp, resolved.cwd));
+      const requestedExclude = Array.from(new Set(args.exclude));
+      const unknownExclude = requestedExclude.filter(
+        (n) => !sourceNamesAll.has(n) && !ownedInstalled.has(n),
+      );
+      if (unknownExclude.length > 0) {
+        const available = allSkills.map((s) => s.frontmatter.name).join(", ") || "<none>";
+        const subject = unknownExclude.length === 1 ? "Skill" : "Skills";
+        const quoted = unknownExclude.map((n) => JSON.stringify(n)).join(", ");
+        throw new Error(
+          `--exclude: ${subject} ${quoted} not found in source directory ` +
+            `or among installed skills. Source: ${available}`,
+        );
       }
       const excluded = new Set(args.exclude);
       const skills = allSkills.filter((s) => !excluded.has(s.frontmatter.name));
-      const stamp = ownershipFor(resolved, cliName);
 
       // Refuse orphan reconciliation when the scan itself could not produce
       // an authoritative view of "what this CLI bundles":
