@@ -100,12 +100,11 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
         (n) => !sourceNamesAll.has(n) && !ownedInstalled.has(n),
       );
       if (unknownExclude.length > 0) {
-        const available = allSkills.map((s) => s.frontmatter.name).join(", ") || "<none>";
         const subject = unknownExclude.length === 1 ? "Skill" : "Skills";
         const quoted = unknownExclude.map((n) => JSON.stringify(n)).join(", ");
         throw new Error(
           `--exclude: ${subject} ${quoted} not found in source directory ` +
-            `or among installed skills. Source: ${available}`,
+            `or among installed skills. ${formatSkillUniverse(allSkills, ownedInstalled)}`,
         );
       }
       const excluded = new Set(args.exclude);
@@ -203,11 +202,12 @@ export function createSkillAddCommand(resolved: ResolvedSkillOptions) {
         const requested = Array.from(new Set(args.name));
         const unknown = requested.filter((n) => !known.has(n));
         if (unknown.length > 0) {
-          const available = sourceSkills.map((s) => s.frontmatter.name).join(", ") || "<none>";
           const subject = unknown.length === 1 ? "Skill" : "Skills";
           const quoted = unknown.map((n) => JSON.stringify(n)).join(", ");
+          const installed = new Set(findOwnedInstalledSkills(stamp, resolved.cwd));
           throw new Error(
-            `${subject} ${quoted} not found in source directory. Available: ${available}`,
+            `${subject} ${quoted} not found in source directory. ` +
+              formatSkillUniverse(sourceSkills, installed),
           );
         }
         // Preserve source order for deterministic install logs even when
@@ -276,7 +276,11 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
                 `refusing to remove. Remove .agents/skills/${args.name} manually if intended.`,
             );
           } else {
-            logger.info(`${args.name} is not installed; nothing to remove.`);
+            const installed = new Set(findOwnedInstalledSkills(stamp, resolved.cwd));
+            logger.info(
+              `${args.name} is not installed; nothing to remove. ` +
+                formatSkillUniverse(sourceSkills, installed),
+            );
           }
         }
         return;
@@ -406,6 +410,23 @@ function findOrThrow(skills: DiscoveredSkill[], name: string): DiscoveredSkill {
     throw new Error(`Skill "${name}" not found in source directory. Available: ${available}`);
   }
   return skill;
+}
+
+/**
+ * Render the universe of skill names known to this CLI for typo-error
+ * diagnostics: source skills (valid `add` targets, valid `sync --exclude`
+ * targets) and installed-but-owned skills (valid `sync --exclude` targets
+ * for orphans this CLI used to ship). Empty sections render as `<none>`
+ * so the user can distinguish "I don't know about any" from "the message
+ * forgot a section".
+ */
+function formatSkillUniverse(
+  sourceSkills: DiscoveredSkill[],
+  installed: ReadonlySet<string>,
+): string {
+  const source = sourceSkills.map((s) => s.frontmatter.name).join(", ") || "<none>";
+  const installedList = [...installed].sort().join(", ") || "<none>";
+  return `Source: ${source}; Installed: ${installedList}`;
 }
 
 function addSkill(

@@ -432,6 +432,25 @@ describe("createSkillSyncCommand", () => {
     expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 
+  it("should list both source and installed skills in --exclude typo errors", () => {
+    // The error tells the user what valid targets are. `--exclude` accepts
+    // either a source skill (skip its install) or an owned installed skill
+    // (an orphan this CLI used to ship — `--exclude` keeps `sync` from
+    // reaping it). Listing only "Source: …" hid the second category and
+    // left the user to grep .agents/skills/ by hand.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const command = createSkillSyncCommand(resolve(opts(tempDir)));
+    try {
+      command.run!({ exclude: ["typo"], verbose: false });
+      expect.fail("expected throw");
+    } catch (e) {
+      const message = (e as Error).message;
+      expect(message).toContain("Source: commit");
+      expect(message).toContain("Installed: <none>");
+    }
+  });
+
   it("should accept --exclude values that match source skills", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
@@ -537,6 +556,26 @@ describe("createSkillAddCommand", () => {
     expect(() => command.run!({ name: ["typo1", "typo2"], verbose: false })).toThrow(
       /Skills "typo1", "typo2" not found/,
     );
+  });
+
+  it("should include source and installed lists in the unknown-name error", () => {
+    // Symmetry with `sync --exclude`: the user typed a name the CLI can't
+    // resolve, so spell out the universe instead of making them grep
+    // .agents/skills/ by hand. Installed-only skills aren't valid `add`
+    // targets, but listing them tells the user "this name was already
+    // installed by a previous version of the CLI".
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
+
+    try {
+      command.run!({ name: ["typo"], verbose: false });
+      expect.fail("expected throw");
+    } catch (e) {
+      const message = (e as Error).message;
+      expect(message).toContain("Source: commit");
+      expect(message).toContain("Installed: <none>");
+    }
   });
 
   it("should throw even when source dir is empty and a name was requested", () => {
