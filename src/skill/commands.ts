@@ -104,7 +104,7 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
         const quoted = unknownExclude.map((n) => JSON.stringify(n)).join(", ");
         throw new Error(
           `--exclude: ${subject} ${quoted} not found in source directory ` +
-            `or among installed skills. ` +
+            `or among installed skills.\n` +
             formatSkillUniverse({ source: allSkills, installed: ownedInstalled }),
         );
       }
@@ -206,7 +206,7 @@ export function createSkillAddCommand(resolved: ResolvedSkillOptions) {
           const subject = unknown.length === 1 ? "Skill" : "Skills";
           const quoted = unknown.map((n) => JSON.stringify(n)).join(", ");
           throw new Error(
-            `${subject} ${quoted} not found in source directory. ` +
+            `${subject} ${quoted} not found in source directory.\n` +
               formatSkillUniverse({ source: sourceSkills }),
           );
         }
@@ -278,7 +278,7 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
           } else {
             const installed = new Set(findOwnedInstalledSkills(stamp, resolved.cwd));
             logger.info(
-              `${args.name} is not installed; nothing to remove. ` +
+              `${args.name} is not installed; nothing to remove.\n` +
                 formatSkillUniverse({ installed }),
             );
           }
@@ -429,12 +429,12 @@ function formatSkillUniverse(opts: {
 }): string {
   const parts: string[] = [];
   if (opts.source !== undefined) {
-    parts.push(`Source: ${opts.source.map((s) => s.frontmatter.name).join(", ") || "<none>"}`);
+    parts.push(`  Source: ${opts.source.map((s) => s.frontmatter.name).join(", ") || "<none>"}`);
   }
   if (opts.installed !== undefined) {
-    parts.push(`Installed: ${[...opts.installed].sort().join(", ") || "<none>"}`);
+    parts.push(`  Installed: ${[...opts.installed].sort().join(", ") || "<none>"}`);
   }
-  return parts.join("; ");
+  return parts.join("\n");
 }
 
 function addSkill(
