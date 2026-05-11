@@ -115,16 +115,15 @@ export function withSkillCommand<T extends AnyCommand>(
     );
   }
 
-  const cliName = command.name;
-  const resolved = resolveSkillOptions(options, cliName);
+  const resolved = resolveSkillOptions(options, command.name);
   const skillsSubCommand = defineCommand({
     name: "skills",
     description: "Manage agent skills",
     subCommands: {
-      sync: createSkillSyncCommand(options, cliName),
-      add: createSkillAddCommand(options, cliName),
-      remove: createSkillRemoveCommand(options, cliName),
-      list: createSkillListCommand(options, cliName),
+      sync: createSkillSyncCommand(resolved),
+      add: createSkillAddCommand(resolved),
+      remove: createSkillRemoveCommand(resolved),
+      list: createSkillListCommand(resolved),
     },
   });
 

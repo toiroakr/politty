@@ -8,6 +8,8 @@ import {
   createSkillRemoveCommand,
   createSkillSyncCommand,
 } from "../commands.js";
+import { resolveSkillOptions } from "../options.js";
+import type { SkillCommandOptions } from "../types.js";
 
 vi.mock("../installer.js", () => ({
   installSkill: vi.fn(),
@@ -30,6 +32,11 @@ const OWNERSHIP = `${PACKAGE}:${CLI}`;
 
 function opts(sourceDir: string) {
   return { sourceDir, package: PACKAGE };
+}
+
+/** Test-side mirror of `withSkillCommand`'s one-shot resolve. */
+function resolve(options: SkillCommandOptions = opts("/tmp")) {
+  return resolveSkillOptions(options, CLI);
 }
 
 function createTempDir(): string {
@@ -76,7 +83,7 @@ describe("createSkillListCommand", () => {
   });
 
   it("should output empty JSON array when no skills found with --json", () => {
-    const command = createSkillListCommand(opts(tempDir), CLI);
+    const command = createSkillListCommand(resolve(opts(tempDir)));
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
@@ -94,7 +101,7 @@ describe("createSkillListCommand", () => {
     });
     mockedReadOwnership.mockReturnValue(OWNERSHIP);
 
-    const command = createSkillListCommand(opts(tempDir), CLI);
+    const command = createSkillListCommand(resolve(opts(tempDir)));
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
@@ -122,7 +129,7 @@ describe("createSkillListCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     mockedReadOwnership.mockReturnValue("other-pkg:other-cli");
 
-    const command = createSkillListCommand(opts(tempDir), CLI);
+    const command = createSkillListCommand(resolve(opts(tempDir)));
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
@@ -139,7 +146,7 @@ describe("createSkillListCommand", () => {
     mockedReadOwnership.mockReturnValue(null);
     mockedHasInstalledSkill.mockReturnValue(true);
 
-    const command = createSkillListCommand(opts(tempDir), CLI);
+    const command = createSkillListCommand(resolve(opts(tempDir)));
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
@@ -156,7 +163,7 @@ describe("createSkillListCommand", () => {
     mockedReadOwnership.mockReturnValue(null);
     mockedHasInstalledSkill.mockReturnValue(false);
 
-    const command = createSkillListCommand(opts(tempDir), CLI);
+    const command = createSkillListCommand(resolve(opts(tempDir)));
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
@@ -191,7 +198,7 @@ describe("createSkillSyncCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
 
-    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    const command = createSkillSyncCommand(resolve(opts(tempDir)));
     command.run!({ exclude: [], verbose: false });
 
     const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
@@ -207,7 +214,7 @@ describe("createSkillSyncCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
 
-    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    const command = createSkillSyncCommand(resolve(opts(tempDir)));
     command.run!({ exclude: ["commit"], verbose: false });
 
     const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
@@ -221,14 +228,14 @@ describe("createSkillSyncCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     mockedReadOwnership.mockReturnValue("other-pkg:other-cli");
 
-    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    const command = createSkillSyncCommand(resolve(opts(tempDir)));
 
     expect(() => command.run!({ exclude: [], verbose: false })).toThrow(/Refusing to install/);
     expect(mockedInstallSkill).not.toHaveBeenCalled();
   });
 
   it("should proceed when source directory has no skills (CLI dropped all)", () => {
-    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    const command = createSkillSyncCommand(resolve(opts(tempDir)));
 
     expect(() => command.run!({ exclude: [], verbose: false })).not.toThrow();
     expect(mockedInstallSkill).not.toHaveBeenCalled();
@@ -237,7 +244,7 @@ describe("createSkillSyncCommand", () => {
   it("should skip orphan cleanup when source directory is missing", () => {
     // A typo'd sourceDir must not be treated as "CLI dropped every skill"
     // and silently wipe every install owned by this CLI.
-    const command = createSkillSyncCommand(opts("/nonexistent/source"), CLI);
+    const command = createSkillSyncCommand(resolve(opts("/nonexistent/source")));
 
     expect(() => command.run!({ exclude: [], verbose: false })).not.toThrow();
     expect(mockedUninstallSkill).not.toHaveBeenCalled();
@@ -271,7 +278,7 @@ describe("createSkillSyncCommand", () => {
     const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(projectDir);
 
     try {
-      const command = createSkillSyncCommand(opts(tempDir), CLI);
+      const command = createSkillSyncCommand(resolve(opts(tempDir)));
       command.run!({ exclude: [], verbose: false });
 
       const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
@@ -296,7 +303,7 @@ describe("createSkillSyncCommand", () => {
     const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(projectDir);
 
     try {
-      const command = createSkillSyncCommand(opts(tempDir), CLI);
+      const command = createSkillSyncCommand(resolve(opts(tempDir)));
       command.run!({ exclude: ["orphan"], verbose: false });
 
       const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
@@ -327,7 +334,7 @@ describe("createSkillSyncCommand", () => {
     const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(projectDir);
 
     try {
-      const command = createSkillSyncCommand(opts(tempDir), CLI);
+      const command = createSkillSyncCommand(resolve(opts(tempDir)));
       command.run!({ exclude: [], verbose: false });
 
       expect(mockedUninstallSkill).not.toHaveBeenCalled();
@@ -340,7 +347,7 @@ describe("createSkillSyncCommand", () => {
   it("should thread options.mode through sync as well as add", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const command = createSkillSyncCommand({ ...opts(tempDir), mode: "symlink" }, CLI);
+    const command = createSkillSyncCommand(resolve({ ...opts(tempDir), mode: "symlink" }));
     command.run!({ exclude: [], verbose: false });
 
     expect(mockedInstallSkill.mock.calls[0]![2]).toEqual({ mode: "symlink" });
@@ -355,7 +362,7 @@ describe("createSkillSyncCommand", () => {
     mkdirSync(badDir, { recursive: true });
     writeFileSync(join(badDir, "SKILL.md"), "---\nname: broken\n---\n# missing description\n");
 
-    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    const command = createSkillSyncCommand(resolve(opts(tempDir)));
     command.run!({ exclude: [], verbose: false });
 
     const installNames = mockedInstallSkill.mock.calls.map((c) => c[0].frontmatter.name);
@@ -385,7 +392,7 @@ describe("createSkillSyncCommand", () => {
     const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(projectDir);
 
     try {
-      const command = createSkillSyncCommand(opts(tempDir), CLI);
+      const command = createSkillSyncCommand(resolve(opts(tempDir)));
       command.run!({ exclude: ["commit"], verbose: false });
 
       const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
@@ -402,7 +409,7 @@ describe("createSkillSyncCommand", () => {
     // the user can fix the whole invocation in one round-trip.
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    const command = createSkillSyncCommand(resolve(opts(tempDir)));
     expect(() => command.run!({ exclude: ["nonexitent"], verbose: false })).toThrow(
       /not found in source directory/,
     );
@@ -412,7 +419,7 @@ describe("createSkillSyncCommand", () => {
   it("should list every unknown --exclude name in one error", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    const command = createSkillSyncCommand(resolve(opts(tempDir)));
     try {
       command.run!({ exclude: ["typo1", "typo2"], verbose: false });
       expect.fail("expected throw");
@@ -429,7 +436,7 @@ describe("createSkillSyncCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
 
-    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    const command = createSkillSyncCommand(resolve(opts(tempDir)));
     expect(() => command.run!({ exclude: ["commit"], verbose: false })).not.toThrow();
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
   });
@@ -456,7 +463,7 @@ describe("createSkillAddCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
     command.run!({ name: [], verbose: false });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(2);
@@ -466,7 +473,7 @@ describe("createSkillAddCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
     command.run!({ name: ["commit"], verbose: false });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
@@ -478,7 +485,7 @@ describe("createSkillAddCommand", () => {
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
     writeSkillMd(tempDir, "lint", { name: "lint", description: "Lint skill" });
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
     command.run!({ name: ["commit", "lint"], verbose: false });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(2);
@@ -489,7 +496,7 @@ describe("createSkillAddCommand", () => {
   it("should dedupe duplicate names in a single invocation", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
     command.run!({ name: ["commit", "commit"], verbose: false });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
@@ -498,7 +505,7 @@ describe("createSkillAddCommand", () => {
   it("should throw when requested skill name is not in source dir", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
 
     expect(() => command.run!({ name: ["nonexistent"], verbose: false })).toThrow(/not found/);
     expect(mockedInstallSkill).not.toHaveBeenCalled();
@@ -509,7 +516,7 @@ describe("createSkillAddCommand", () => {
     // invalid sibling aborts the run.
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
 
     expect(() => command.run!({ name: ["commit", "nonexistent"], verbose: false })).toThrow(
       /"nonexistent" not found/,
@@ -525,7 +532,7 @@ describe("createSkillAddCommand", () => {
   it("should list every unknown name when several are unknown", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
 
     expect(() => command.run!({ name: ["typo1", "typo2"], verbose: false })).toThrow(
       /Skills "typo1", "typo2" not found/,
@@ -533,7 +540,7 @@ describe("createSkillAddCommand", () => {
   });
 
   it("should throw even when source dir is empty and a name was requested", () => {
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
 
     expect(() => command.run!({ name: ["commit"], verbose: false })).toThrow(/not found/);
     expect(mockedInstallSkill).not.toHaveBeenCalled();
@@ -543,7 +550,7 @@ describe("createSkillAddCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     mockedReadOwnership.mockReturnValue("other-pkg:other-cli");
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
 
     expect(() => command.run!({ name: ["commit"], verbose: false })).toThrow(/Refusing to install/);
     expect(mockedInstallSkill).not.toHaveBeenCalled();
@@ -553,7 +560,7 @@ describe("createSkillAddCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     mockedReadOwnership.mockReturnValue(OWNERSHIP);
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
     command.run!({ name: ["commit"], verbose: false });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
@@ -562,7 +569,7 @@ describe("createSkillAddCommand", () => {
   it("should thread options.mode through to installSkill", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const command = createSkillAddCommand({ ...opts(tempDir), mode: "copy" }, CLI);
+    const command = createSkillAddCommand(resolve({ ...opts(tempDir), mode: "copy" }));
     command.run!({ name: ["commit"], verbose: false });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
@@ -572,7 +579,7 @@ describe("createSkillAddCommand", () => {
   it("should default to not passing a mode option when none is configured", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
     command.run!({ name: ["commit"], verbose: false });
 
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
@@ -590,7 +597,7 @@ describe("createSkillAddCommand", () => {
       { ownership: null },
     );
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
 
     expect(() => command.run!({ name: ["commit"], verbose: false })).toThrow(
       /source SKILL\.md declares/,
@@ -606,7 +613,7 @@ describe("createSkillAddCommand", () => {
       { ownership: "wrong-pkg:wrong-cli" },
     );
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
 
     expect(() => command.run!({ name: ["commit"], verbose: false })).toThrow(
       /source SKILL\.md declares/,
@@ -623,7 +630,7 @@ describe("createSkillAddCommand", () => {
     mockedReadOwnership.mockReturnValue(null);
     mockedHasInstalledSkill.mockReturnValue(true);
 
-    const command = createSkillAddCommand(opts(tempDir), CLI);
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
 
     expect(() => command.run!({ name: ["commit"], verbose: false })).toThrow(
       /without a politty-cli stamp/,
@@ -650,7 +657,7 @@ describe("createSkillRemoveCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
 
-    const command = createSkillRemoveCommand(opts(tempDir), CLI);
+    const command = createSkillRemoveCommand(resolve(opts(tempDir)));
     command.run!({ name: undefined });
 
     expect(mockedUninstallSkill).toHaveBeenCalledTimes(2);
@@ -659,7 +666,7 @@ describe("createSkillRemoveCommand", () => {
   it("should remove specific skill by name", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const command = createSkillRemoveCommand(opts(tempDir), CLI);
+    const command = createSkillRemoveCommand(resolve(opts(tempDir)));
     command.run!({ name: "commit" });
 
     expect(mockedUninstallSkill).toHaveBeenCalledTimes(1);
@@ -673,7 +680,7 @@ describe("createSkillRemoveCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     mockedReadOwnership.mockReturnValue("other-pkg:other-cli");
 
-    const command = createSkillRemoveCommand(opts(tempDir), CLI);
+    const command = createSkillRemoveCommand(resolve(opts(tempDir)));
 
     expect(() => command.run!({ name: "commit" })).toThrow(/Refusing to remove/);
     expect(mockedUninstallSkill).not.toHaveBeenCalled();
@@ -681,7 +688,7 @@ describe("createSkillRemoveCommand", () => {
 
   it("should allow direct-by-name removal when source dir has dropped the skill", () => {
     // Empty source dir, but the skill was previously installed by us.
-    const command = createSkillRemoveCommand(opts(tempDir), CLI);
+    const command = createSkillRemoveCommand(resolve(opts(tempDir)));
     command.run!({ name: "orphan" });
 
     // The second arg is the resolved cwd (find-up project root from
@@ -697,7 +704,7 @@ describe("createSkillRemoveCommand", () => {
     // Source dir has other skills, but not "orphan" — should still remove it.
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const command = createSkillRemoveCommand(opts(tempDir), CLI);
+    const command = createSkillRemoveCommand(resolve(opts(tempDir)));
     command.run!({ name: "orphan" });
 
     expect(mockedUninstallSkill).toHaveBeenCalledWith("orphan", expect.any(String), {
@@ -709,7 +716,7 @@ describe("createSkillRemoveCommand", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     mockedReadOwnership.mockReturnValue(null);
 
-    const command = createSkillRemoveCommand(opts(tempDir), CLI);
+    const command = createSkillRemoveCommand(resolve(opts(tempDir)));
     command.run!({ name: "commit" });
 
     expect(mockedUninstallSkill).not.toHaveBeenCalled();
@@ -731,7 +738,7 @@ describe("flag overrides", () => {
   });
 
   it("should default the exclude alias to -x", () => {
-    const command = createSkillSyncCommand(opts(tempDir), CLI);
+    const command = createSkillSyncCommand(resolve(opts(tempDir)));
     // The arg() metadata is registered on the schema; the alias-config
     // round-trip is verified through politty's normal arg parser elsewhere.
     // Here we assert the schema accepts the default short-flag form.
@@ -740,16 +747,14 @@ describe("flag overrides", () => {
 
   it("should drop the short alias when flags.exclude.alias is false", () => {
     const command = createSkillSyncCommand(
-      { ...opts(tempDir), flags: { exclude: { alias: false } } },
-      CLI,
+      resolve({ ...opts(tempDir), flags: { exclude: { alias: false } } }),
     );
     expect(command.args).toBeDefined();
   });
 
   it("should accept a custom alias string", () => {
     const command = createSkillSyncCommand(
-      { ...opts(tempDir), flags: { exclude: { alias: "X" } } },
-      CLI,
+      resolve({ ...opts(tempDir), flags: { exclude: { alias: "X" } } }),
     );
     expect(command.args).toBeDefined();
   });
@@ -775,7 +780,7 @@ describe("cwd resolution", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     const projectRoot = createTempDir();
 
-    const command = createSkillAddCommand({ ...opts(tempDir), cwd: projectRoot }, CLI);
+    const command = createSkillAddCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
     command.run!({ name: ["commit"], verbose: false });
 
     // Second arg is the resolved cwd. With an explicit override we expect
@@ -808,7 +813,7 @@ describe("--verbose output", () => {
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
-      const command = createSkillAddCommand({ ...opts(tempDir), mode: "copy" }, CLI);
+      const command = createSkillAddCommand(resolve({ ...opts(tempDir), mode: "copy" }));
       command.run!({ name: ["commit"], verbose: true });
 
       // Normalise to forward slashes so the assertion works on Windows runners
@@ -826,7 +831,7 @@ describe("--verbose output", () => {
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
-      const command = createSkillAddCommand(opts(tempDir), CLI);
+      const command = createSkillAddCommand(resolve(opts(tempDir)));
       command.run!({ name: ["commit"], verbose: false });
 
       const lines = consoleSpy.mock.calls.map((c) => c[0] as string);
@@ -859,7 +864,7 @@ describe("no-op summaries", () => {
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
-      const command = createSkillSyncCommand(opts(tempDir), CLI);
+      const command = createSkillSyncCommand(resolve(opts(tempDir)));
       command.run!({ exclude: ["commit"], verbose: false });
 
       const lines = consoleSpy.mock.calls.map((c) => c[0] as string);
@@ -876,7 +881,7 @@ describe("no-op summaries", () => {
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
-      const command = createSkillRemoveCommand(opts(tempDir), CLI);
+      const command = createSkillRemoveCommand(resolve(opts(tempDir)));
       command.run!({ name: undefined });
 
       const lines = consoleSpy.mock.calls.map((c) => c[0] as string);
@@ -891,7 +896,7 @@ describe("no-op summaries", () => {
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
-      const command = createSkillSyncCommand(opts(tempDir), CLI);
+      const command = createSkillSyncCommand(resolve(opts(tempDir)));
       command.run!({ exclude: [], verbose: false });
 
       const lines = consoleSpy.mock.calls.map((c) => c[0] as string);

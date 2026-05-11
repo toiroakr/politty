@@ -23,6 +23,12 @@ export interface ResolvedSkillOptions {
   excludeAlias: string | undefined;
   /** Either the literal append string, or `false` to leave the description untouched. */
   descriptionAppend: string | false;
+  /**
+   * Ownership stamp `"{package}:{cliName}"` stored on installed skills and
+   * checked before install/remove. Precomputed so subcommand factories
+   * never see `cliName` directly.
+   */
+  stamp: string;
 }
 
 /**
@@ -46,6 +52,7 @@ export function resolveSkillOptions(
     cwd: resolveCwd(options.cwd),
     excludeAlias: resolveExcludeAlias(options.flags?.exclude?.alias),
     descriptionAppend: resolveDescriptionAppend(options.descriptionAppend, cliName),
+    stamp: `${options.package}:${cliName}`,
   };
 }
 

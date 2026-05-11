@@ -12,23 +12,9 @@ import {
   readInstalledOwnership,
   uninstallSkill,
 } from "./installer.js";
-import { resolveSkillOptions, type ResolvedSkillOptions } from "./options.js";
+import type { ResolvedSkillOptions } from "./options.js";
 import { scanSourceDir } from "./scanner.js";
-import type {
-  DiscoveredSkill,
-  InstallMode,
-  ScanError,
-  ScanResult,
-  SkillCommandOptions,
-} from "./types.js";
-
-/**
- * Build the `"{package}:{cli}"` ownership stamp stored in the installed
- * SKILL.md's `metadata["politty-cli"]`.
- */
-function ownershipFor(options: ResolvedSkillOptions, cliName: string): string {
-  return `${options.package}:${cliName}`;
-}
+import type { DiscoveredSkill, InstallMode, ScanError, ScanResult } from "./types.js";
 
 /**
  * Stream scan errors. Per-error `logger.warn` writes to stderr (so a
@@ -81,8 +67,7 @@ function excludeArgMeta(options: ResolvedSkillOptions): RegularArgMeta<string[]>
  * by this CLI that are no longer present in sourceDir are also removed so
  * stale skills do not linger after the CLI drops them from its bundle.
  */
-export function createSkillSyncCommand(options: SkillCommandOptions, cliName: string) {
-  const resolved = resolveSkillOptions(options, cliName);
+export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
   return defineCommand({
     name: "sync",
     description: "Remove and reinstall all skills from source",
@@ -95,7 +80,7 @@ export function createSkillSyncCommand(options: SkillCommandOptions, cliName: st
     }),
     run(args) {
       const { skills: allSkills, errors } = loadSkills(resolved);
-      const stamp = ownershipFor(resolved, cliName);
+      const stamp = resolved.stamp;
       // Pre-validate every `--exclude` value before any install side
       // effect. A typo (e.g. `--exclude nonexitent`) previously slid
       // through as a no-op; now it aborts the run with a single error
@@ -189,8 +174,7 @@ export function createSkillSyncCommand(options: SkillCommandOptions, cliName: st
  * proceeds with the valid neighbours — a single unknown name aborts the run
  * and lists every unknown name at once. Duplicates are deduplicated.
  */
-export function createSkillAddCommand(options: SkillCommandOptions, cliName: string) {
-  const resolved = resolveSkillOptions(options, cliName);
+export function createSkillAddCommand(resolved: ResolvedSkillOptions) {
   return defineCommand({
     name: "add",
     description: "Install skills from source",
@@ -207,7 +191,7 @@ export function createSkillAddCommand(options: SkillCommandOptions, cliName: str
     }),
     run(args) {
       const { skills: sourceSkills } = loadSkills(resolved);
-      const stamp = ownershipFor(resolved, cliName);
+      const stamp = resolved.stamp;
 
       if (args.name.length > 0) {
         // Pre-validate every requested name in one pass. A single unknown
@@ -256,8 +240,7 @@ export function createSkillAddCommand(options: SkillCommandOptions, cliName: str
  * (`metadata["politty-cli"] === "{package}:{cli}"`) are removed — skills
  * another tool installed are left untouched.
  */
-export function createSkillRemoveCommand(options: SkillCommandOptions, cliName: string) {
-  const resolved = resolveSkillOptions(options, cliName);
+export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
   return defineCommand({
     name: "remove",
     description: "Remove installed skills",
@@ -270,7 +253,7 @@ export function createSkillRemoveCommand(options: SkillCommandOptions, cliName: 
     }),
     run(args) {
       const { skills: sourceSkills } = loadSkills(resolved);
-      const stamp = ownershipFor(resolved, cliName);
+      const stamp = resolved.stamp;
 
       if (args.name) {
         // If sourceDir still knows this specific name, validate it for a
@@ -365,8 +348,7 @@ function slotPresent(name: string, cwd: string): boolean {
  *
  * Lists available skills from the source directory.
  */
-export function createSkillListCommand(options: SkillCommandOptions, cliName: string) {
-  const resolved = resolveSkillOptions(options, cliName);
+export function createSkillListCommand(resolved: ResolvedSkillOptions) {
   return defineCommand({
     name: "list",
     description: "List available skills from source",
@@ -377,7 +359,7 @@ export function createSkillListCommand(options: SkillCommandOptions, cliName: st
     }),
     run(args) {
       const { skills: sourceSkills } = loadSkills(resolved);
-      const stamp = ownershipFor(resolved, cliName);
+      const stamp = resolved.stamp;
 
       if (args.json) {
         console.log(
