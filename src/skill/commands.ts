@@ -10,6 +10,7 @@ import {
   installSkill,
   OWNERSHIP_METADATA_KEY,
   readInstalledOwnership,
+  SYMLINK_TARGETS,
   uninstallSkill,
 } from "./installer.js";
 import type { ResolvedSkillOptions } from "./options.js";
@@ -512,7 +513,7 @@ function cleanupBrokenSlot(name: string, cwd: string): boolean {
   // Best-effort sweep of agent-specific slots — they're symlinks back to
   // the canonical, so they're broken too once the canonical is gone (and
   // were already broken when the canonical's target disappeared).
-  for (const target of AGENT_SLOT_DIRS) {
+  for (const target of SYMLINK_TARGETS) {
     const agentSlot = resolve(cwd, target, name);
     if (isDanglingSymlink(agentSlot)) unlinkSync(agentSlot);
   }
@@ -530,13 +531,6 @@ function isDanglingSymlink(path: string): boolean {
   // existsSync follows symlinks; false here ⇒ target is gone.
   return !existsSync(path);
 }
-
-/**
- * Agent-specific slot directories that mirror `AGENTS_SKILLS_DIR`. Kept
- * in sync with installer.ts's `SYMLINK_TARGETS` — the list is duplicated
- * because that module's constant is intentionally not exported.
- */
-const AGENT_SLOT_DIRS = [".claude/skills"] as const;
 
 /**
  * Enumerate installed skills that should be reconciled by `sync`'s orphan

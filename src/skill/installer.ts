@@ -26,8 +26,11 @@ export const AGENTS_SKILLS_DIR = ".agents/skills";
 /**
  * Agent directories that get symlinks to the canonical skill directory.
  * Universal agents (Cursor, Cline, etc.) read from .agents/skills/ directly.
+ *
+ * Exported as the single source of truth shared with `commands.ts`'s
+ * dangling-symlink reaper so the two stay in lock-step.
  */
-const SYMLINK_TARGETS = [".claude/skills"] as const;
+export const SYMLINK_TARGETS = [".claude/skills"] as const;
 
 /**
  * Key used to read provenance off an installed skill. The SKILL.md's

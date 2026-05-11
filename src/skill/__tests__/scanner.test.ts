@@ -77,6 +77,25 @@ describe("scanSourceDir", () => {
     expect(errors[0]!.path).toBe(skillDir);
   });
 
+  it("should surface a YAML parse error in the parse-failed message", () => {
+    // A malformed frontmatter fence used to surface as "name: Required"
+    // (the downstream Zod failure on the empty data object) rather than
+    // the actual YAML cause, which is what the user needs to fix.
+    const skillDir = join(tempDir, "broken-yaml");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(
+      join(skillDir, "SKILL.md"),
+      '---\nname: broken-yaml\ndescription: "unterminated\n---\nbody\n',
+    );
+
+    const { skills, errors } = scanSourceDir(tempDir);
+
+    expect(skills).toHaveLength(0);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.reason).toBe("parse-failed");
+    expect(errors[0]!.message).toMatch(/YAML parse error/);
+  });
+
   it("should surface a name-mismatch error when frontmatter name != dir", () => {
     const skillDir = join(tempDir, "renamed");
     mkdirSync(skillDir, { recursive: true });

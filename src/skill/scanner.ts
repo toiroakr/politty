@@ -66,11 +66,23 @@ export function scanSourceDir(sourceDir: string): ScanResult {
     const entries = readdirSync(sourceDir, { withFileTypes: true });
     for (const entry of entries) {
       const skillDir = join(sourceDir, entry.name);
+      let isDir: boolean;
       try {
-        if (!statSync(skillDir).isDirectory()) continue;
-      } catch {
+        isDir = statSync(skillDir).isDirectory();
+      } catch (error) {
+        // Permission/IO errors on a single entry must not hide the rest of
+        // the source dir. ENOENT is the one case we genuinely want to skip
+        // silently — a racing remove that vanished the entry between
+        // readdir and stat isn't a scan error worth surfacing.
+        if (isNodeError(error) && error.code === "ENOENT") continue;
+        errors.push({
+          path: skillDir,
+          reason: "read-failed",
+          message: `Failed to stat ${skillDir}: ${errorMessage(error)}`,
+        });
         continue;
       }
+      if (!isDir) continue;
       if (!skillMdPresent(join(skillDir, SKILL_MD))) continue;
 
       pushResult(tryParseSkillDir(skillDir, { enforceParentMatch: true }), skills, errors);
@@ -106,7 +118,14 @@ function tryParseSkillDir(
     };
   }
 
-  const { data } = parseFrontmatter(content);
+  const { data, parseError } = parseFrontmatter(content);
+  if (parseError !== undefined) {
+    return {
+      path: dir,
+      reason: "parse-failed",
+      message: `Invalid SKILL.md frontmatter in ${dir}: YAML parse error: ${parseError}`,
+    };
+  }
   const result = skillFrontmatterSchema.safeParse(data);
   if (!result.success) {
     return {
@@ -150,6 +169,10 @@ function pushResult(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && typeof (error as NodeJS.ErrnoException).code === "string";
 }
 
 /**

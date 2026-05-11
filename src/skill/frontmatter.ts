@@ -68,6 +68,13 @@ const FRONTMATTER_PATTERN = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r
 /**
  * Parse YAML frontmatter from a SKILL.md string.
  *
+ * `parseError` is set when the frontmatter fence was present but the YAML
+ * inside failed to parse, so the scanner can distinguish "invalid YAML"
+ * from "missing required field" in its diagnostics. A non-object root
+ * (e.g. a top-level YAML list) also returns empty `data` without
+ * `parseError` — Zod's schema validation surfaces that case clearly
+ * enough on its own.
+ *
  * @example
  * ```typescript
  * const result = parseFrontmatter(`---
@@ -82,6 +89,7 @@ const FRONTMATTER_PATTERN = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r
 export function parseFrontmatter(content: string): {
   data: Record<string, unknown>;
   body: string;
+  parseError?: string;
 } {
   const match = content.match(FRONTMATTER_PATTERN);
   if (!match) {
@@ -97,8 +105,12 @@ export function parseFrontmatter(content: string): {
       return { data: {}, body };
     }
     return { data, body };
-  } catch {
-    return { data: {}, body };
+  } catch (error) {
+    return {
+      data: {},
+      body,
+      parseError: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
