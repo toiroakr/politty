@@ -82,13 +82,18 @@ export interface ResolvedFieldMeta {
   /** Prompt metadata from arg() for interactive input */
   prompt?: PromptMeta | undefined;
   /**
-   * Custom CLI name used to negate this boolean field
-   * (e.g. `"disable-cache"` for `--disable-cache`). When set, the default
-   * `--no-<cliName>` form is suppressed and only this name is accepted.
+   * Custom CLI name used to negate this boolean field, or `false` to
+   * disable negation entirely.
+   *
+   * - String (e.g. `"disable-cache"`): the default `--no-<cliName>` form is
+   *   suppressed and only `--<negation>` (plus its camelCase variant) is
+   *   accepted as the negation flag.
+   * - `false`: neither the default `--no-<cliName>` nor any custom name is
+   *   accepted; the field only responds to the positive flag.
    *
    * Only applies to boolean fields; populated as `undefined` otherwise.
    */
-  negation?: string | undefined;
+  negation?: string | false | undefined;
   /** Description shown for the negation option in help/docs. */
   negationDescription?: string | undefined;
   /** Side-effect callback from arg() metadata */
@@ -467,31 +472,46 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   const fieldType = detectType(schema);
 
   // Validate and normalize `negation` (only meaningful for boolean fields).
-  // Accepts a single string that becomes the custom negation CLI name.
+  // Accepts either a string (custom negation CLI name) or `false`
+  // (disable negation entirely, including the default `--no-*` form).
   const rawNegation = (argMeta as { negation?: unknown } | undefined)?.negation;
-  let negation: string | undefined;
+  let negation: string | false | undefined;
   if (rawNegation !== undefined && rawNegation !== null) {
-    if (typeof rawNegation !== "string") {
-      throw new Error(
-        `Invalid negation for field "${name}": expected string, received ${typeof rawNegation}.`,
-      );
+    if (rawNegation === false) {
+      if (fieldType !== "boolean") {
+        throw new Error(
+          `Invalid negation for field "${name}": negation can only be used on boolean fields.`,
+        );
+      }
+      negation = false;
+    } else {
+      if (typeof rawNegation !== "string") {
+        throw new Error(
+          `Invalid negation for field "${name}": expected string or false, received ${typeof rawNegation}.`,
+        );
+      }
+      const candidate = rawNegation.trim().replace(/^-+/, "");
+      if (candidate.length === 0 || !aliasPattern.test(candidate)) {
+        throw new Error(
+          `Invalid negation "${rawNegation}" for field "${name}": negation names must match ${aliasPattern}.`,
+        );
+      }
+      if (fieldType !== "boolean") {
+        throw new Error(
+          `Invalid negation for field "${name}": negation can only be used on boolean fields.`,
+        );
+      }
+      negation = candidate;
     }
-    const candidate = rawNegation.trim().replace(/^-+/, "");
-    if (candidate.length === 0 || !aliasPattern.test(candidate)) {
-      throw new Error(
-        `Invalid negation "${rawNegation}" for field "${name}": negation names must match ${aliasPattern}.`,
-      );
-    }
-    if (fieldType !== "boolean") {
-      throw new Error(
-        `Invalid negation for field "${name}": negation can only be used on boolean fields.`,
-      );
-    }
-    negation = candidate;
   }
 
   const negationDescription = (argMeta as { negationDescription?: unknown } | undefined)
     ?.negationDescription;
+  if (negation === false && typeof negationDescription === "string") {
+    throw new Error(
+      `Invalid negationDescription for field "${name}": negationDescription cannot be used when negation is false.`,
+    );
+  }
 
   const meta: ResolvedFieldMeta = {
     name,

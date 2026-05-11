@@ -35,6 +35,7 @@ describe("27-custom-negation", () => {
       expect(result.exitCode).toBe(0);
       expect(consoleSpy).toHaveBeenCalledWith("cache: true");
       expect(consoleSpy).toHaveBeenCalledWith("color: true");
+      expect(consoleSpy).toHaveBeenCalledWith("verbose: false");
     });
 
     it("accepts --disable-cache as the negation of --cache", async () => {
@@ -67,6 +68,21 @@ describe("27-custom-negation", () => {
       expect(result.exitCode).toBe(0);
       expect(consoleSpy).toHaveBeenCalledWith("cache: true");
     });
+
+    it("flips verbose on via --verbose when negation is disabled", async () => {
+      const result = await runCommand(cli, ["--verbose"]);
+
+      expect(result.exitCode).toBe(0);
+      expect(consoleSpy).toHaveBeenCalledWith("verbose: true");
+    });
+
+    it("ignores --no-verbose when negation: false suppresses the default form", async () => {
+      const result = await runCommand(cli, ["--no-verbose"]);
+
+      // Unknown option is a warning, not an error; verbose stays at its default
+      expect(result.exitCode).toBe(0);
+      expect(consoleSpy).toHaveBeenCalledWith("verbose: false");
+    });
   });
 
   describe("help", () => {
@@ -94,6 +110,18 @@ describe("27-custom-negation", () => {
       expect(output).toContain("Disable colorized output");
       // The monochrome line is rendered separately from the --color line
       expect(output).not.toMatch(/--color\s+\/\s+--monochrome/);
+    });
+
+    it("shows only --verbose without any negation form when negation: false", async () => {
+      const result = await runCommand(cli, ["--help"]);
+
+      expect(result.exitCode).toBe(0);
+      const output = consoleSpy.getLogs().join("\n");
+
+      expect(output).toContain("--verbose");
+      expect(output).not.toContain("--no-verbose");
+      // No `/` separator should appear next to --verbose
+      expect(output).not.toMatch(/--verbose\s+\//);
     });
   });
 

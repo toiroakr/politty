@@ -56,8 +56,12 @@ export interface CompletableOption {
    * 1-char entries are short (`-v`); multi-char entries are long (`--to-be`).
    */
   alias?: string[] | undefined;
-  /** Custom negation name for boolean fields (replaces default `--no-*`) */
-  negation?: string | undefined;
+  /**
+   * Custom negation for boolean fields.
+   * - String: replaces the default `--no-*` with a custom name.
+   * - `false`: disables negation entirely (no `--no-*` accepted).
+   */
+  negation?: string | false | undefined;
   /** Description for the negation option (when distinct from the main description) */
   negationDescription?: string | undefined;
   /** Description for completion */

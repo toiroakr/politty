@@ -934,5 +934,108 @@ describe("E2E Tests", () => {
       expect(result.success).toBe(true);
       expect(captured.cache).toBe(false);
     });
+
+    it("suppresses both default --no-X and custom negation when negation is false", async () => {
+      const console = spyOnConsoleLog();
+      const captured: Record<string, unknown> = {};
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            description: "Enable verbose output",
+            negation: false,
+          }),
+        }),
+        run: (args) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const positive = await runCommand(cmd, ["--verbose"]);
+      expect(positive.success).toBe(true);
+      expect(captured.verbose).toBe(true);
+
+      // `--no-verbose` is no longer recognized as negation; warning only, default preserved.
+      const captured2: Record<string, unknown> = {};
+      const cmd2 = defineCommand({
+        name: "test",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            negation: false,
+          }),
+        }),
+        run: (args) => {
+          Object.assign(captured2, args);
+        },
+      });
+      const negated = await runCommand(cmd2, ["--no-verbose"]);
+      expect(negated.success).toBe(true);
+      expect(captured2.verbose).toBe(false); // default preserved (unknown flag warned)
+
+      console.mockRestore();
+    });
+
+    it("hides the default --no-X from help when negation is false", async () => {
+      const console = spyOnConsoleLog();
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            description: "Enable verbose output",
+            negation: false,
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["--help"]);
+      expect(result.success).toBe(true);
+      const output = console.getLogs().join("\n");
+      expect(output).toContain("--verbose");
+      expect(output).not.toContain("--no-verbose");
+      expect(output).not.toMatch(/--verbose\s+\//);
+
+      console.mockRestore();
+    });
+
+    it("throws when negationDescription is combined with negation: false", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            negation: false,
+            negationDescription: "should not be allowed",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, []);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(String(result.error)).toMatch(
+          /negationDescription cannot be used when negation is false/,
+        );
+      }
+    });
+
+    it("rejects negation: false on a non-boolean field at the type level", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          // @ts-expect-error -- type-level rejection of negation on non-boolean field
+          count: arg(z.number().default(1), {
+            negation: false,
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, []);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(String(result.error)).toMatch(/negation can only be used on boolean fields/);
+      }
+    });
   });
 });

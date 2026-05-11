@@ -309,15 +309,19 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
       arrayFlags.add(field.name);
     }
 
-    // Register custom negation names for boolean fields
-    if (field.type === "boolean" && field.negation) {
+    // Register custom negation names for boolean fields.
+    // `negation: false` suppresses the default `--no-X` form without
+    // registering any custom name (so only `--X` itself is accepted).
+    if (field.type === "boolean" && field.negation !== undefined) {
       customNegatedFields.add(field.name);
-      negationMap.set(field.negation, field.name);
-      // Also accept the camelCase variant if the negation name is hyphenated
-      if (field.negation.includes("-")) {
-        const camelNegation = toCamelCase(field.negation);
-        if (camelNegation !== field.negation) {
-          negationMap.set(camelNegation, field.name);
+      if (typeof field.negation === "string") {
+        negationMap.set(field.negation, field.name);
+        // Also accept the camelCase variant if the negation name is hyphenated
+        if (field.negation.includes("-")) {
+          const camelNegation = toCamelCase(field.negation);
+          if (camelNegation !== field.negation) {
+            negationMap.set(camelNegation, field.name);
+          }
         }
       }
     }
