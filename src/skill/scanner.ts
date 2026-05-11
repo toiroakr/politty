@@ -55,7 +55,17 @@ export function scanSourceDir(sourceDir: string): ScanResult {
     // present and surfaces as a `read-failed` scan error, not silently
     // treated as "no SKILL.md here" (which would flip a single-skill source
     // into an empty bundle).
-    if (skillMdPresent(join(sourceDir, SKILL_MD))) {
+    const rootSkillMdPath = join(sourceDir, SKILL_MD);
+    const rootCheck = skillMdPresent(rootSkillMdPath);
+    if (rootCheck.kind === "error") {
+      errors.push({
+        path: sourceDir,
+        reason: "read-failed",
+        message: `Failed to check ${rootSkillMdPath}: ${rootCheck.message}`,
+      });
+      return { skills, errors };
+    }
+    if (rootCheck.kind === "present") {
       pushResult(tryParseSkillDir(sourceDir, { enforceParentMatch: false }), skills, errors);
       return { skills, errors };
     }
@@ -71,19 +81,35 @@ export function scanSourceDir(sourceDir: string): ScanResult {
         isDir = statSync(skillDir).isDirectory();
       } catch (error) {
         // Permission/IO errors on a single entry must not hide the rest of
-        // the source dir. ENOENT is the one case we genuinely want to skip
-        // silently — a racing remove that vanished the entry between
-        // readdir and stat isn't a scan error worth surfacing.
-        if (isNodeError(error) && error.code === "ENOENT") continue;
+        // the source dir. ENOENT for a non-symlink entry is a racing
+        // remove between readdir and stat — skip silently. ENOENT for a
+        // symlink entry is a dangling link (a real misconfiguration, e.g.
+        // a stale monorepo path); surface it as `read-failed` so the
+        // entry doesn't disappear from the scan without a trace.
+        if (isNodeError(error) && error.code === "ENOENT" && !entry.isSymbolicLink()) {
+          continue;
+        }
         errors.push({
           path: skillDir,
           reason: "read-failed",
-          message: `Failed to stat ${skillDir}: ${errorMessage(error)}`,
+          message: entry.isSymbolicLink()
+            ? `Dangling symlink at ${skillDir}: ${errorMessage(error)}`
+            : `Failed to stat ${skillDir}: ${errorMessage(error)}`,
         });
         continue;
       }
       if (!isDir) continue;
-      if (!skillMdPresent(join(skillDir, SKILL_MD))) continue;
+      const skillMdPath = join(skillDir, SKILL_MD);
+      const childCheck = skillMdPresent(skillMdPath);
+      if (childCheck.kind === "error") {
+        errors.push({
+          path: skillDir,
+          reason: "read-failed",
+          message: `Failed to check ${skillMdPath}: ${childCheck.message}`,
+        });
+        continue;
+      }
+      if (childCheck.kind === "absent") continue;
 
       pushResult(tryParseSkillDir(skillDir, { enforceParentMatch: true }), skills, errors);
     }
@@ -176,16 +202,23 @@ function isNodeError(error: unknown): error is NodeJS.ErrnoException {
 }
 
 /**
- * Presence check that treats a broken symlink as "present" so downstream
- * parsing can report it as a `read-failed` scan error instead of silently
- * skipping the candidate. `existsSync` follows symlinks and returns false
- * for broken ones, which is the wrong default for scan reporting.
+ * Tri-state presence check for `SKILL.md`. A broken symlink resolves to
+ * `present` so downstream parsing can still report it as a `read-failed`
+ * scan error rather than silently skipping the candidate. Permission /
+ * IO errors resolve to `error` so the caller can surface them as
+ * `read-failed` — swallowing them as `absent` would let an unreadable
+ * source directory disappear from the scan without a trace.
+ * `existsSync` follows symlinks and returns false for broken ones, which
+ * is the wrong default for scan reporting.
  */
-function skillMdPresent(path: string): boolean {
+type PresenceCheck = { kind: "present" } | { kind: "absent" } | { kind: "error"; message: string };
+
+function skillMdPresent(path: string): PresenceCheck {
   try {
     lstatSync(path);
-    return true;
-  } catch {
-    return false;
+    return { kind: "present" };
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") return { kind: "absent" };
+    return { kind: "error", message: errorMessage(error) };
   }
 }

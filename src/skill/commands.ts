@@ -19,15 +19,19 @@ import type { DiscoveredSkill, InstallMode, ScanError, ScanResult } from "./type
 
 /**
  * Stream scan errors. Per-error `logger.warn` writes to stderr (so a
- * malformed source SKILL.md is always loud), and a single trailing
- * `logger.info` summary echoes the count to stdout — important for
- * pipelines that consume only stdout from the CLI.
+ * malformed source SKILL.md is always loud), and trailing `logger.info`
+ * summary lines echo to stdout — important for pipelines that consume
+ * only stdout from the CLI. Directory-level failures (`missing-source`,
+ * or per-entry failures on the source directory itself) get their own
+ * stdout summary so a stdout-only consumer can tell apart "scan failed"
+ * from a legitimate empty bundle.
  */
 function logScanErrors(errors: ScanError[]): void {
   let skipped = 0;
+  let directoryFailed = false;
   for (const err of errors) {
     if (err.reason === "missing-source") {
-      // Directory-level failure; not a per-skill skip.
+      directoryFailed = true;
       logger.warn(`Failed to scan source directory ${err.path}: ${err.message}`);
       continue;
     }
@@ -39,6 +43,25 @@ function logScanErrors(errors: ScanError[]): void {
       `${symbols.warning} Skipped ${skipped} skill(s) due to scan errors (see warnings above).`,
     );
   }
+  if (directoryFailed) {
+    logger.info(
+      `${symbols.warning} Source directory scan failed (see warnings above); subsequent operations may be skipped.`,
+    );
+  }
+}
+
+/**
+ * Did the scan fail authoritatively at the directory level? Used by
+ * commands to distinguish "legitimately empty source" from "scan
+ * couldn't enumerate the source", so success-path summaries
+ * ("No skills found", "no skills bundled") don't mask a config error.
+ */
+function scanFailedAtRoot(result: ScanResult, sourceDir: string): boolean {
+  const directoryScanFailed = result.errors.some(
+    (e) => e.reason === "missing-source" || e.path === sourceDir,
+  );
+  const allSkillsInvalid = result.errors.length > 0 && result.skills.length === 0;
+  return directoryScanFailed || allSkillsInvalid;
 }
 
 function loadSkills(options: ResolvedSkillOptions): ScanResult {
@@ -127,13 +150,10 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
       // Per-skill errors on *subdirectories* alongside at least one valid
       // skill do not block cleanup: the valid siblings still provide an
       // authoritative bundle listing.
-      const directoryScanFailed = errors.some(
-        (e) => e.reason === "missing-source" || e.path === resolved.sourceDir,
-      );
-      const allSkillsInvalid = errors.length > 0 && allSkills.length === 0;
+      const rootScanFailed = scanFailedAtRoot({ skills: allSkills, errors }, resolved.sourceDir);
 
       let removed = 0;
-      if (!directoryScanFailed && !allSkillsInvalid) {
+      if (!rootScanFailed) {
         // Remove skills we previously owned that the CLI no longer bundles.
         const sourceNames = new Set(skills.map((s) => s.frontmatter.name));
         for (const orphan of findOwnedInstalledSkills(stamp, resolved.cwd)) {
@@ -154,10 +174,15 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
 
       // Sync is the canonical "make it match the bundle" operation; an
       // empty bundle or a fully-excluded run was previously silent. Always
-      // print a summary so users know the no-op was intentional.
+      // print a summary so users know the no-op was intentional, and
+      // differentiate the scan-failure case so a stdout-only pipeline
+      // doesn't misread "no skills bundled" as an intentional empty bundle.
       if (installed === 0 && removed === 0) {
-        const reason =
-          allSkills.length > 0 && skills.length === 0 ? "all skills excluded" : "no skills bundled";
+        const reason = rootScanFailed
+          ? "source directory scan failed; see warnings"
+          : allSkills.length > 0 && skills.length === 0
+            ? "all skills excluded"
+            : "no skills bundled";
         logger.info(`No skills installed (${reason}).`);
       } else {
         logger.info(`Sync complete: ${installed} installed, ${removed} removed.`);
