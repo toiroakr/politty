@@ -6,6 +6,7 @@ import {
   readlinkSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -107,6 +108,44 @@ describe("installSkill", () => {
     const linkTarget = readlinkSync(claudePath);
     expect(linkTarget).toBe(join("..", "..", ".agents/skills/commit"));
     expect(readFileSync(join(claudePath, "SKILL.md"), "utf-8")).toContain("name: commit");
+  });
+
+  it("should produce a working install when the project path traverses a symlink shortcut", () => {
+    // Contract test: a project root reached via a symlink (macOS `/tmp →
+    // /private/tmp`, a symlinked checkout, a pnpm shortcut, etc.) must
+    // still produce dereferenceable canonical and agent slots. The
+    // installer realpaths both endpoints when computing the link, so the
+    // relative target stays self-consistent and the resolved slot reads
+    // back the source content.
+    const realDeepDir = join(
+      tmpdir(),
+      `politty-deep-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      "a",
+      "b",
+      "c",
+    );
+    mkdirSync(realDeepDir, { recursive: true });
+    const shortcut = join(
+      tmpdir(),
+      `politty-short-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    symlinkSync(realDeepDir, shortcut, "dir");
+    try {
+      const skill = createSkillFixture(sourceDir, "commit");
+
+      installSkill(skill, shortcut);
+
+      const canonicalContent = readFileSync(
+        join(shortcut, ".agents/skills/commit/SKILL.md"),
+        "utf-8",
+      );
+      expect(canonicalContent).toContain("name: commit");
+      const agentContent = readFileSync(join(shortcut, ".claude/skills/commit/SKILL.md"), "utf-8");
+      expect(agentContent).toContain("name: commit");
+    } finally {
+      unlinkSync(shortcut);
+      rmSync(resolve(realDeepDir, "..", "..", ".."), { recursive: true, force: true });
+    }
   });
 
   it("should reflect source updates live via the symlink", () => {

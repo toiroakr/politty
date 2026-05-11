@@ -97,12 +97,13 @@ export function installSkill(
   const canonicalParent = resolve(cwd, AGENTS_SKILLS_DIR);
   mkdirSync(canonicalParent, { recursive: true });
 
-  const canonicalDir = join(canonicalParent, name);
-  clearInstallSlot(canonicalDir, expectedStamp);
-  // Use realpath of both endpoints so the relative link stays correct when
-  // either the agent dir or the project path includes symlink components
-  // (e.g. CLI invoked from a symlinked checkout).
+  // Resolve the parent before computing both `linkPath` and `linkTarget` so
+  // they share the same prefix style. Mixing realpath'd and un-realpath'd
+  // sides (e.g. macOS `/tmp` ↔ `/private/tmp`) leaves the link pointing
+  // through an extra hop or, worse, at a non-existent location.
   const resolvedParent = realpathSync(canonicalParent);
+  const canonicalDir = join(resolvedParent, name);
+  clearInstallSlot(canonicalDir, expectedStamp);
   const resolvedSource = realpathSync(skill.sourcePath);
   symlinkOrCopy({
     linkTarget: relative(resolvedParent, resolvedSource),
@@ -370,15 +371,16 @@ function populateAgentDirs(
     const targetParent = resolve(cwd, target);
     mkdirSync(targetParent, { recursive: true });
 
-    const targetDir = join(targetParent, name);
-    clearInstallSlot(targetDir, expectedStamp);
-
     // realpath the PARENT directories only. Resolving `canonicalDir` itself
     // would dereference it to the source path (in symlink mode), baking the
     // source location into every agent link; the agent link should route
     // through the canonical slot instead so a single `skills sync`
-    // replaces both hops at once.
+    // replaces both hops at once. The link is created at the realpath'd
+    // parent so `linkPath` and `linkTarget` share the same prefix style.
     const resolvedTargetParent = realpathSync(targetParent);
+    const targetDir = join(resolvedTargetParent, name);
+    clearInstallSlot(targetDir, expectedStamp);
+
     const resolvedCanonicalParent = realpathSync(resolve(canonicalDir, ".."));
     const linkTarget = join(relative(resolvedTargetParent, resolvedCanonicalParent), name);
     symlinkOrCopy({
