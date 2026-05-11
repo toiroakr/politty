@@ -11,7 +11,7 @@ import {
   symlinkSync,
   unlinkSync,
 } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
 import type {
   DiscoveredSkill,
@@ -228,6 +228,19 @@ function symlinkOrCopy(args: {
   if (mode === "copy") {
     copyDirRecursive(copyFrom, linkPath);
     return;
+  }
+  // `path.relative` returns an absolute path on Windows when the two
+  // endpoints live on different drive letters. Producing an absolute
+  // symlink target would silently break the "relative target" contract —
+  // the install becomes non-portable across volume mounts and surprises
+  // anyone copying the project tree. Force the caller toward `mode: "copy"`
+  // instead of writing the absolute target.
+  if (isAbsolute(linkTarget)) {
+    throw new Error(
+      `Refusing to write an absolute symlink target at ${linkPath} → ${linkTarget}. ` +
+        `The skill source and install root appear to live on different ` +
+        `filesystem roots (e.g. different Windows drive letters); retry with mode: "copy".`,
+    );
   }
   try {
     symlinkSync(linkTarget, linkPath, "dir");
