@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync, type Dirent } from "node:fs";
+import { existsSync, lstatSync, readdirSync, unlinkSync, type Dirent } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
 import { arg, type RegularArgMeta } from "../core/arg-registry.js";
@@ -266,7 +266,18 @@ export function createSkillRemoveCommand(options: SkillCommandOptions, cliName: 
         }
         const removed = removeOwnedSkill(args.name, stamp, resolved.cwd);
         if (!removed) {
-          logger.info(`${args.name} is not installed; nothing to remove.`);
+          // `removeOwnedSkill` already cleaned up dangling-symlink slots,
+          // so a `false` return with `slotPresent` true means the slot is
+          // a real directory (or live symlink) without a recognisable
+          // stamp — a legacy or manual install we won't touch.
+          if (slotPresent(args.name, resolved.cwd)) {
+            logger.info(
+              `${args.name} is installed without a ${OWNERSHIP_METADATA_KEY} stamp this CLI recognises; ` +
+                `refusing to remove. Remove .agents/skills/${args.name} manually if intended.`,
+            );
+          } else {
+            logger.info(`${args.name} is not installed; nothing to remove.`);
+          }
         }
         return;
       }
@@ -455,12 +466,28 @@ function addSkill(
  * `false` when the skill was not installed (allowing callers to surface a
  * "nothing to remove" message).
  *
+ * A broken canonical symlink (`.agents/skills/<name>` exists as a symlink
+ * but its target does not) is also cleaned up here, even though
+ * `readInstalledOwnership` returns `null` in that case — the slot is in
+ * this CLI's namespace and unlinking a dangling symlink can never delete
+ * user data. This matches the `status: "missing"` listed by `skills list`.
+ *
  * Throws when the skill exists but is owned by someone else — callers
  * like `sync` that iterate silently would otherwise clobber user data.
  */
 function removeOwnedSkill(name: string, expectedOwnership: string, cwd: string): boolean {
   const actual = readInstalledOwnership(name, cwd);
-  if (actual === null) return false;
+  if (actual === null) {
+    // `actual === null` covers (a) not installed, (b) broken canonical
+    // symlink, (c) installed-but-unstamped real directory. Only (b) is
+    // safe to clean up here — (a) is already a no-op, (c) belongs to
+    // someone else.
+    if (cleanupBrokenSlot(name, cwd)) {
+      logger.info(`${symbols.success} Removed ${name} (broken symlink)`);
+      return true;
+    }
+    return false;
+  }
   if (actual !== expectedOwnership) {
     throw new Error(
       `Refusing to remove "${name}": owned by ${JSON.stringify(actual)}, ` +
@@ -474,9 +501,50 @@ function removeOwnedSkill(name: string, expectedOwnership: string, cwd: string):
 }
 
 /**
- * Enumerate installed skills that carry this CLI's ownership stamp.
- * Used by `sync` to find orphans (skills the CLI previously bundled but
- * has since dropped).
+ * If `.agents/skills/<name>` exists as a dangling symlink, unlink it (and
+ * any agent-specific dangling-symlink slots that route through it).
+ * Returns `true` when at least the canonical slot was cleaned. A live
+ * symlink (target still resolves) is left alone — those go through the
+ * normal stamp-checked path.
+ */
+function cleanupBrokenSlot(name: string, cwd: string): boolean {
+  const canonical = resolve(cwd, AGENTS_SKILLS_DIR, name);
+  if (!isDanglingSymlink(canonical)) return false;
+  unlinkSync(canonical);
+  // Best-effort sweep of agent-specific slots — they're symlinks back to
+  // the canonical, so they're broken too once the canonical is gone (and
+  // were already broken when the canonical's target disappeared).
+  for (const target of AGENT_SLOT_DIRS) {
+    const agentSlot = resolve(cwd, target, name);
+    if (isDanglingSymlink(agentSlot)) unlinkSync(agentSlot);
+  }
+  return true;
+}
+
+function isDanglingSymlink(path: string): boolean {
+  let stat;
+  try {
+    stat = lstatSync(path);
+  } catch {
+    return false;
+  }
+  if (!stat.isSymbolicLink()) return false;
+  // existsSync follows symlinks; false here ⇒ target is gone.
+  return !existsSync(path);
+}
+
+/**
+ * Agent-specific slot directories that mirror `AGENTS_SKILLS_DIR`. Kept
+ * in sync with installer.ts's `SYMLINK_TARGETS` — the list is duplicated
+ * because that module's constant is intentionally not exported.
+ */
+const AGENT_SLOT_DIRS = [".claude/skills"] as const;
+
+/**
+ * Enumerate installed skills that should be reconciled by `sync`'s orphan
+ * cleanup: skills carrying this CLI's ownership stamp, plus dangling
+ * canonical symlinks (which were almost certainly left behind by a
+ * previous install of this CLI and are safe to unlink).
  */
 function findOwnedInstalledSkills(expectedOwnership: string, cwd: string): string[] {
   const base = resolve(cwd, AGENTS_SKILLS_DIR);
@@ -500,6 +568,14 @@ function findOwnedInstalledSkills(expectedOwnership: string, cwd: string): strin
       continue;
     }
     if (owner === expectedOwnership) {
+      owned.push(entry.name);
+      continue;
+    }
+    // Owner is unreadable. If the slot is a dangling symlink it's almost
+    // certainly a leftover from a previous install of this CLI (real
+    // directories never end up dangling). Include it so `sync` can clean
+    // it up via `cleanupBrokenSlot`.
+    if (owner === null && isDanglingSymlink(resolve(base, entry.name))) {
       owned.push(entry.name);
     }
   }
