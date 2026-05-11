@@ -104,7 +104,8 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
         const quoted = unknownExclude.map((n) => JSON.stringify(n)).join(", ");
         throw new Error(
           `--exclude: ${subject} ${quoted} not found in source directory ` +
-            `or among installed skills. ${formatSkillUniverse(allSkills, ownedInstalled)}`,
+            `or among installed skills. ` +
+            formatSkillUniverse({ source: allSkills, installed: ownedInstalled }),
         );
       }
       const excluded = new Set(args.exclude);
@@ -204,10 +205,9 @@ export function createSkillAddCommand(resolved: ResolvedSkillOptions) {
         if (unknown.length > 0) {
           const subject = unknown.length === 1 ? "Skill" : "Skills";
           const quoted = unknown.map((n) => JSON.stringify(n)).join(", ");
-          const installed = new Set(findOwnedInstalledSkills(stamp, resolved.cwd));
           throw new Error(
             `${subject} ${quoted} not found in source directory. ` +
-              formatSkillUniverse(sourceSkills, installed),
+              formatSkillUniverse({ source: sourceSkills }),
           );
         }
         // Preserve source order for deterministic install logs even when
@@ -279,7 +279,7 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
             const installed = new Set(findOwnedInstalledSkills(stamp, resolved.cwd));
             logger.info(
               `${args.name} is not installed; nothing to remove. ` +
-                formatSkillUniverse(sourceSkills, installed),
+                formatSkillUniverse({ installed }),
             );
           }
         }
@@ -413,20 +413,28 @@ function findOrThrow(skills: DiscoveredSkill[], name: string): DiscoveredSkill {
 }
 
 /**
- * Render the universe of skill names known to this CLI for typo-error
- * diagnostics: source skills (valid `add` targets, valid `sync --exclude`
- * targets) and installed-but-owned skills (valid `sync --exclude` targets
- * for orphans this CLI used to ship). Empty sections render as `<none>`
- * so the user can distinguish "I don't know about any" from "the message
- * forgot a section".
+ * Render skill-name lists for typo-error diagnostics. Each command lists
+ * only the universe its argument actually accepts so the suggestions
+ * match what the user can legitimately retype:
+ *   - `add` — source only.
+ *   - `remove` — installed only.
+ *   - `sync --exclude` — both (a source skill skips its install, an
+ *     installed-owned orphan is preserved from removal).
+ * Empty sections render as `<none>` so the user can tell apart "I don't
+ * know about any" from "the message forgot a section".
  */
-function formatSkillUniverse(
-  sourceSkills: DiscoveredSkill[],
-  installed: ReadonlySet<string>,
-): string {
-  const source = sourceSkills.map((s) => s.frontmatter.name).join(", ") || "<none>";
-  const installedList = [...installed].sort().join(", ") || "<none>";
-  return `Source: ${source}; Installed: ${installedList}`;
+function formatSkillUniverse(opts: {
+  source?: DiscoveredSkill[];
+  installed?: ReadonlySet<string>;
+}): string {
+  const parts: string[] = [];
+  if (opts.source !== undefined) {
+    parts.push(`Source: ${opts.source.map((s) => s.frontmatter.name).join(", ") || "<none>"}`);
+  }
+  if (opts.installed !== undefined) {
+    parts.push(`Installed: ${[...opts.installed].sort().join(", ") || "<none>"}`);
+  }
+  return parts.join("; ");
 }
 
 function addSkill(

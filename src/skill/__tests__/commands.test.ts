@@ -558,12 +558,11 @@ describe("createSkillAddCommand", () => {
     );
   });
 
-  it("should include source and installed lists in the unknown-name error", () => {
-    // Symmetry with `sync --exclude`: the user typed a name the CLI can't
-    // resolve, so spell out the universe instead of making them grep
-    // .agents/skills/ by hand. Installed-only skills aren't valid `add`
-    // targets, but listing them tells the user "this name was already
-    // installed by a previous version of the CLI".
+  it("should list source skills (only) in the unknown-name error", () => {
+    // Only source skills are valid `add` targets, so the suggestion list
+    // matches what the user can legitimately retype. Mentioning the
+    // installed list here would be misdirection — those names won't work
+    // with `add`.
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
     const command = createSkillAddCommand(resolve(opts(tempDir)));
@@ -574,7 +573,7 @@ describe("createSkillAddCommand", () => {
     } catch (e) {
       const message = (e as Error).message;
       expect(message).toContain("Source: commit");
-      expect(message).toContain("Installed: <none>");
+      expect(message).not.toContain("Installed:");
     }
   });
 
@@ -759,6 +758,29 @@ describe("createSkillRemoveCommand", () => {
     command.run!({ name: "commit" });
 
     expect(mockedUninstallSkill).not.toHaveBeenCalled();
+  });
+
+  it("should list installed skills (only) in the not-installed message", () => {
+    // Only installed names are valid `remove` targets, so the suggestion
+    // is restricted to that universe. Source listing here would be
+    // misdirection — a source skill that isn't installed isn't a
+    // remove target either.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    mockedReadOwnership.mockReturnValue(null);
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      const command = createSkillRemoveCommand(resolve(opts(tempDir)));
+      command.run!({ name: "typo" });
+
+      const lines = consoleSpy.mock.calls.map((c) => c[0] as string);
+      const message = lines.find((l) => l.includes("nothing to remove"));
+      expect(message).toBeDefined();
+      expect(message).toContain("Installed:");
+      expect(message).not.toContain("Source:");
+    } finally {
+      consoleSpy.mockRestore();
+    }
   });
 });
 
