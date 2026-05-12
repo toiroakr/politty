@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
-import { renderOptionsTableFromArray } from "./default-renderers.js";
+import { negationRelationMarker, renderOptionsTableFromArray } from "./default-renderers.js";
 
 /**
  * Args shape type (Record of string keys to Zod schemas)
@@ -193,7 +193,9 @@ function renderFilteredTable(
             negCells.push(`\`--${opt.negationDisplay}\``);
             break;
           case "description":
-            negCells.push(escapeTableCell(opt.negationDescription));
+            negCells.push(
+              `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`,
+            );
             break;
           case "required":
             negCells.push(opt.required ? "Yes" : "No");

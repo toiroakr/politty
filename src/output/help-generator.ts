@@ -253,7 +253,8 @@ export function renderOptions(
 function formatNegationLine(opt: ResolvedFieldMeta, indent = 0): string | null {
   if (!opt.negationDisplay || !opt.negationDescription) return null;
   const flag = styles.option(`--${opt.negationDisplay}`);
-  return formatOption(flag, opt.negationDescription, indent);
+  const desc = `${opt.negationDescription} ${styles.dim(`(↔ --${opt.cliName})`)}`;
+  return formatOption(flag, desc, indent);
 }
 
 /**

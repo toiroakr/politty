@@ -27,6 +27,14 @@ function escapeTableCell(str: string): string {
 }
 
 /**
+ * Marker appended to a custom negation row/line so readers can see which
+ * positive flag it negates (e.g. `--monochrome` → `(↔ \`--color\`)`).
+ */
+export function negationRelationMarker(opt: ResolvedFieldMeta): string {
+  return `(↔ \`--${opt.cliName}\`)`;
+}
+
+/**
  * Format default value for display
  */
 function formatDefaultValue(value: unknown): string {
@@ -233,7 +241,7 @@ export function renderOptionsTable(info: CommandInfo): string {
     // Add a separate row for the negation when a description is provided
     if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
       const negName = `\`--${opt.negationDisplay}\``;
-      const negDesc = escapeTableCell(opt.negationDescription);
+      const negDesc = `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`;
       if (hasEnv) {
         lines.push(`| ${negName} | - | ${negDesc} | ${required} | - | - |`);
       } else {
@@ -271,7 +279,9 @@ export function renderOptionsList(info: CommandInfo): string {
     const envInfo = formatEnvInfo(opt.env);
     lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
     if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
-      lines.push(`- \`--${opt.negationDisplay}\` - ${opt.negationDescription}`);
+      lines.push(
+        `- \`--${opt.negationDisplay}\` - ${opt.negationDescription} ${negationRelationMarker(opt)}`,
+      );
     }
   }
 
@@ -340,7 +350,7 @@ export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): strin
 
     if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
       const negName = `\`--${opt.negationDisplay}\``;
-      const negDesc = escapeTableCell(opt.negationDescription);
+      const negDesc = `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`;
       if (hasEnv) {
         lines.push(`| ${negName} | - | ${negDesc} | ${required} | - | - |`);
       } else {
@@ -510,7 +520,9 @@ export function renderOptionsListFromArray(options: ResolvedFieldMeta[]): string
     const envInfo = formatEnvInfo(opt.env);
     lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
     if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
-      lines.push(`- \`--${opt.negationDisplay}\` - ${opt.negationDescription}`);
+      lines.push(
+        `- \`--${opt.negationDisplay}\` - ${opt.negationDescription} ${negationRelationMarker(opt)}`,
+      );
     }
   }
 
