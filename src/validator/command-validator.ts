@@ -175,25 +175,7 @@ function checkDuplicateAliases(
 }
 
 /**
- * Check for collisions involving custom boolean `negation` names.
- *
- * A negation name (and its derived camelCase variant when hyphenated) must
- * be unique across the schema. It must not collide with:
- *   - any field's `name` (camelCase), including its own — `negation: <own
- *     name>` makes the positive flag unreachable because the parser checks
- *     `negationMap` before normal option resolution
- *   - any field's `cliName` (kebab-case), including its own
- *   - any visible or hidden alias of any field (including derived
- *     camelCase variants of hyphenated long aliases)
- *   - another field's implicit default negation (`no-<cliName>` /
- *     `no<Name>`) when that field still accepts the default form
- *     (`negation` is `undefined` or `true`); without this check, a custom
- *     `negation: "no-X"` would silently shadow X's default negation
- *   - another field's `negation` (including its derived camelCase variant)
- *
- * Only `negation: string` is checked. `negation: true` reuses the default
- * `--no-<cliName>` parsing path, which is already disambiguated by the
- * existing `customNegatedFields` logic.
+ * Check for collisions involving custom boolean `negation` names
  */
 function checkDuplicateNegations(
   extracted: ExtractedFields,
@@ -201,8 +183,6 @@ function checkDuplicateNegations(
 ): CommandValidationError[] {
   const errors: CommandValidationError[] = [];
 
-  // Build the set of already-claimed option names (excluding the negation
-  // names themselves, which are added incrementally below).
   type ClaimKind = "field" | "cliName" | "alias" | "default negation";
   const claimed = new Map<string, { field: string; kind: ClaimKind }>();
   for (const field of extracted.fields) {
@@ -220,10 +200,8 @@ function checkDuplicateNegations(
       }
     }
 
-    // Reserve implicit default negation tokens (`no-<cliName>` / `no<Name>`)
-    // for boolean fields that still accept the default form (i.e. `negation`
-    // is `undefined` or `true`). Without this, another field's custom
-    // `negation: "no-<cliName>"` would silently shadow the default.
+    // Reserve implicit default negation tokens so a custom `negation: "no-X"`
+    // cannot silently shadow another field's default `--no-X`.
     if (
       field.type === "boolean" &&
       field.negation !== false &&
@@ -241,11 +219,6 @@ function checkDuplicateNegations(
   const seenNegations = new Map<string, string>();
 
   const register = (name: string, fieldName: string, isDerived: boolean) => {
-    // Collision with any claimed token (field name / cliName / alias /
-    // another field's implicit default negation). Same-field collisions
-    // (e.g. `negation: <own name>`) are also flagged because the parser's
-    // `negationMap` lookup precedes normal option resolution and would
-    // make the positive flag unreachable.
     const claim = claimed.get(name);
     if (claim) {
       const qualifier = isDerived ? " (derived camelCase variant)" : "";
@@ -261,7 +234,6 @@ function checkDuplicateNegations(
       });
     }
 
-    // Collision with another field's negation
     const existing = seenNegations.get(name);
     if (existing && existing !== fieldName) {
       const qualifier = isDerived ? " (derived camelCase variant)" : "";
@@ -457,9 +429,7 @@ export function validateReservedAliases(
 }
 
 /**
- * Validate that custom boolean negation names do not collide with field
- * names, cliNames, aliases, or other negations (including derived
- * camelCase variants of hyphenated values).
+ * Validate that custom boolean negation names do not collide with anything
  *
  * @param extracted - Extracted fields from schema
  * @throws {DuplicateNegationError} If a colliding negation is found
