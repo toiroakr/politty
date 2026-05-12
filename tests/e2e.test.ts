@@ -1077,5 +1077,58 @@ describe("E2E Tests", () => {
         expect(String(result.error)).toMatch(/negation can only be used on boolean fields/);
       }
     });
+
+    it("renders custom negation with description in Global Options help section", async () => {
+      const console = spyOnConsoleLog();
+      const globalArgs = z.object({
+        color: arg(z.boolean().default(true), {
+          description: "Colorize output",
+          negation: "monochrome",
+          negationDescription: "Disable colorized output",
+        }),
+      });
+      const cmd = defineCommand({
+        name: "test",
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["--help"], { globalArgs });
+      expect(result.success).toBe(true);
+      const output = console.getLogs().join("\n");
+      expect(output).toContain("--color");
+      expect(output).toContain("--monochrome");
+      expect(output).toContain("Disable colorized output");
+
+      console.mockRestore();
+    });
+
+    it("renders custom negation with description in --help-all compact subcommand view", async () => {
+      const console = spyOnConsoleLog();
+      const cmd = defineCommand({
+        name: "root",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              color: arg(z.boolean().default(true), {
+                description: "Colorize output",
+                negation: "monochrome",
+                negationDescription: "Disable colorized output",
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      const result = await runCommand(cmd, ["--help-all"]);
+      expect(result.success).toBe(true);
+      const output = console.getLogs().join("\n");
+      expect(output).toContain("--color");
+      expect(output).toContain("--monochrome");
+      expect(output).toContain("Disable colorized output");
+
+      console.mockRestore();
+    });
   });
 });

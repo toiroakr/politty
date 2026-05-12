@@ -574,10 +574,14 @@ function formatFieldLine(opt: ResolvedFieldMeta, indent = 0, extraDescPadding = 
  * Render global options section
  */
 function renderGlobalOptions(globalExtracted: ExtractedFields): string {
-  return globalExtracted.fields
-    .filter((a) => !a.positional)
-    .map((opt) => formatFieldLine(opt))
-    .join("\n");
+  const lines: string[] = [];
+  for (const opt of globalExtracted.fields) {
+    if (opt.positional) continue;
+    lines.push(formatFieldLine(opt));
+    const negationLine = formatNegationLine(opt);
+    if (negationLine) lines.push(negationLine);
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -600,6 +604,8 @@ function renderSubcommandOptionsCompact(command: AnyCommand, indent: number): st
         desc += ` ${envInfo}`;
       }
       lines.push(formatOption(flags, desc, indent, 2));
+      const negationLine = formatNegationLine(opt, indent);
+      if (negationLine) lines.push(negationLine);
     }
   }
 
