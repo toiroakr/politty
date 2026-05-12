@@ -181,6 +181,7 @@ my-agent skills list --json
 - `foreign` — installed but stamped by another CLI; `add`/`sync` will refuse to overwrite it.
 - `unstamped` — installed without a `politty-cli` stamp (legacy or manual install); `add` refuses to clobber it.
 - `missing` — slot exists but the canonical symlink is broken (the source package was uninstalled).
+- `unreadable` — slot's SKILL.md exists but reading it failed (EACCES / EPERM / IO). Distinct from `unstamped` so the underlying cause (permissions, broken file) is actionable; a warning is also logged.
 
 ## Programmatic API
 

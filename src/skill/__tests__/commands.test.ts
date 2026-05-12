@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,6 +18,10 @@ vi.mock("../installer.js", () => ({
   hasInstalledSkill: vi.fn(() => false),
   OWNERSHIP_METADATA_KEY: "politty-cli",
   AGENTS_SKILLS_DIR: ".agents/skills",
+  // Mirrors the real export so `cleanupBrokenSlot`'s iteration doesn't
+  // crash under test with `TypeError: SYMLINK_TARGETS is not iterable`.
+  // Keep in sync with `installer.ts`.
+  SYMLINK_TARGETS: [".claude/skills"],
 }));
 
 const installer = await import("../installer.js");
@@ -781,6 +785,81 @@ describe("createSkillRemoveCommand", () => {
     } finally {
       consoleSpy.mockRestore();
     }
+  });
+});
+
+describe("dangling-symlink cleanup", () => {
+  // Exercises `cleanupBrokenSlot` / `isDanglingSymlink` directly via
+  // `skills remove <name>` when the canonical slot is a broken symlink
+  // (target gone) and `readInstalledOwnership` consequently returns null.
+  // Without this reaping, `skills list`'s `status: "missing"` slots would
+  // accumulate over time even when the user asks `remove` to clean them up.
+  let tempDir: string;
+  let projectRoot: string;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+    projectRoot = createTempDir();
+    mockedUninstallSkill.mockReset();
+    mockedReadOwnership.mockReset();
+    mockedReadOwnership.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+    rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  function makeDanglingSlot(parent: string, name: string): string {
+    mkdirSync(parent, { recursive: true });
+    const slot = join(parent, name);
+    symlinkSync(join(parent, "does-not-exist"), slot, "dir");
+    return slot;
+  }
+
+  it("should unlink dangling canonical and agent-slot symlinks on remove <name>", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const canonical = makeDanglingSlot(join(projectRoot, ".agents/skills"), "commit");
+    const agentSlot = makeDanglingSlot(join(projectRoot, ".claude/skills"), "commit");
+    // sanity: both slots are present-but-broken before the command runs.
+    expect(lstatSync(canonical).isSymbolicLink()).toBe(true);
+    expect(lstatSync(agentSlot).isSymbolicLink()).toBe(true);
+    expect(existsSync(canonical)).toBe(false);
+    expect(existsSync(agentSlot)).toBe(false);
+
+    const command = createSkillRemoveCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
+    command.run!({ name: "commit" });
+
+    expect(existsSync(canonical)).toBe(false);
+    expect(existsSync(agentSlot)).toBe(false);
+    // The broken slot was never owned by anything readable, so the real
+    // uninstaller path must NOT fire — cleanup is purely the dangling-symlink
+    // reaper.
+    expect(mockedUninstallSkill).not.toHaveBeenCalled();
+    // And the slot itself is gone (not merely a still-broken symlink).
+    expect(() => lstatSync(canonical)).toThrow();
+    expect(() => lstatSync(agentSlot)).toThrow();
+  });
+
+  it("should leave a live canonical symlink alone (no false-positive cleanup)", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    // Create a real target then symlink to it so the canonical is *live*.
+    const liveTarget = join(projectRoot, "live-target");
+    mkdirSync(liveTarget, { recursive: true });
+    writeFileSync(join(liveTarget, "marker.txt"), "alive");
+    mkdirSync(join(projectRoot, ".agents/skills"), { recursive: true });
+    const canonical = join(projectRoot, ".agents/skills", "commit");
+    symlinkSync(liveTarget, canonical, "dir");
+    expect(existsSync(canonical)).toBe(true);
+
+    const command = createSkillRemoveCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
+    command.run!({ name: "commit" });
+
+    // Live symlink stays put — only the dangling reaper would have touched it,
+    // and `readInstalledOwnership` mocked to null means no other path fires.
+    expect(lstatSync(canonical).isSymbolicLink()).toBe(true);
+    expect(existsSync(canonical)).toBe(true);
   });
 });
 

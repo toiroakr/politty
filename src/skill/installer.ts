@@ -97,6 +97,21 @@ export function installSkill(
   const mode: InstallMode = options.mode ?? "symlink";
   const expectedStamp = skill.frontmatter.metadata?.[OWNERSHIP_METADATA_KEY] ?? null;
 
+  // Copy-mode installs replace an existing real directory in place by
+  // matching the on-disk SKILL.md stamp against `expectedStamp`. Without a
+  // stamp on the source, the first install creates a real directory but
+  // every subsequent install throws "Refusing to replace non-symlink…",
+  // because `clearInstallSlot` only rm-rf's when `expectedStamp !== null`
+  // and matches. Surface this as an actionable packaging error here rather
+  // than letting a second `installSkill` look like a regression.
+  if (mode === "copy" && expectedStamp === null) {
+    throw new Error(
+      `Refusing to install "${skill.frontmatter.name}" in copy mode without an ` +
+        `ownership stamp. Add metadata.${OWNERSHIP_METADATA_KEY}="{package}:{cli}" ` +
+        `to the source SKILL.md so subsequent installs can replace the copy in place.`,
+    );
+  }
+
   const canonicalParent = resolve(cwd, AGENTS_SKILLS_DIR);
   mkdirSync(canonicalParent, { recursive: true });
 

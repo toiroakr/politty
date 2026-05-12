@@ -318,6 +318,21 @@ describe("installSkill", () => {
 
     expect(() => installSkill(skill, projectDir, { mode: "copy" })).toThrow(/cyclic/i);
   });
+
+  it("should refuse a copy-mode install without an ownership stamp", () => {
+    // Without a stamp on the source SKILL.md, `clearInstallSlot` can never
+    // match its `expectedStamp` on a re-install. The first install would
+    // succeed and every subsequent one would throw
+    // "Refusing to replace non-symlink…" with no actionable hint. Fail fast
+    // up-front with a message that names the missing field.
+    const skill = createSkillFixture(sourceDir, "noowner", null);
+
+    expect(() => installSkill(skill, projectDir, { mode: "copy" })).toThrow(
+      /copy mode without an ownership stamp/i,
+    );
+    // And nothing was written to the install root.
+    expect(() => lstatSync(join(projectDir, ".agents/skills/noowner"))).toThrow();
+  });
 });
 
 describe("uninstallSkill", () => {

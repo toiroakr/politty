@@ -1217,10 +1217,14 @@ Returns `null` if the frontmatter is missing or fails validation.
 
 ### `parseFrontmatter`
 
-Parses YAML frontmatter from a markdown string. Tolerates a leading UTF-8 BOM. Returns `{ data: {}, body: content }` when no fence is found.
+Parses YAML frontmatter from a markdown string. Tolerates a leading UTF-8 BOM. Returns `{ data: {}, body: content }` when no fence is found. When a fence is present but the YAML inside fails to parse, `data` falls back to `{}` and `parseError` contains the underlying YAML error message — `scanSourceDir` includes this in the `parse-failed` ScanError so users see the actual cause instead of a downstream "name: Required" Zod failure.
 
 ```typescript
-function parseFrontmatter(content: string): { data: Record<string, unknown>; body: string };
+function parseFrontmatter(content: string): {
+  data: Record<string, unknown>;
+  body: string;
+  parseError?: string;
+};
 ```
 
 ---

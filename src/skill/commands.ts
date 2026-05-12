@@ -216,7 +216,8 @@ export function createSkillAddCommand(resolved: ResolvedSkillOptions) {
       }),
     }),
     run(args) {
-      const { skills: sourceSkills } = loadSkills(resolved);
+      const scanResult = loadSkills(resolved);
+      const sourceSkills = scanResult.skills;
       const stamp = resolved.stamp;
 
       if (args.name.length > 0) {
@@ -247,7 +248,14 @@ export function createSkillAddCommand(resolved: ResolvedSkillOptions) {
       }
 
       if (sourceSkills.length === 0) {
-        logger.info("No skills found in source directory.");
+        // Differentiate a directory-level scan failure from a legitimately
+        // empty source so a stdout-only consumer doesn't read a misconfigured
+        // sourceDir as "we have no skills to install".
+        if (scanFailedAtRoot(scanResult, resolved.sourceDir)) {
+          logger.info("No skills installed (source directory scan failed; see warnings).");
+        } else {
+          logger.info("No skills found in source directory.");
+        }
         return;
       }
 
@@ -340,17 +348,29 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
  *   manual install); `add` refuses to clobber it.
  * - `missing` — `.agents/skills/<name>` exists but the canonical symlink
  *   is broken (source package uninstalled).
+ * - `unreadable` — `.agents/skills/<name>/SKILL.md` exists but could not
+ *   be read (EACCES / EPERM / IO). Distinguished from `unstamped` so users
+ *   can tell apart "no stamp" from "cannot read the file at all".
  */
-type ListStatus = "installed" | "not-installed" | "foreign" | "unstamped" | "missing";
+type ListStatus =
+  | "installed"
+  | "not-installed"
+  | "foreign"
+  | "unstamped"
+  | "missing"
+  | "unreadable";
 
 function listStatus(name: string, expectedOwnership: string, cwd: string): ListStatus {
   let owner: string | null;
   try {
     owner = readInstalledOwnership(name, cwd);
-  } catch {
-    // Permission errors etc. — treat as unstamped so the user sees a
-    // surfaceable signal in the list rather than a hard crash.
-    return "unstamped";
+  } catch (error) {
+    // IO errors (EACCES / EPERM / generic read failure) on the SKILL.md
+    // are not the same thing as a missing stamp. Surface as a distinct
+    // status with a warning so the user can act on the root cause rather
+    // than silently misreading it as "unstamped".
+    logger.warn(`Failed to read ownership for installed skill ${name}: ${errorMessage(error)}`);
+    return "unreadable";
   }
   if (owner === expectedOwnership) return "installed";
   if (owner !== null) return "foreign";
@@ -362,6 +382,10 @@ function listStatus(name: string, expectedOwnership: string, cwd: string): ListS
     return slotPresent(name, cwd) ? "missing" : "not-installed";
   }
   return "unstamped";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function slotPresent(name: string, cwd: string): boolean {
@@ -388,7 +412,8 @@ export function createSkillListCommand(resolved: ResolvedSkillOptions) {
       }),
     }),
     run(args) {
-      const { skills: sourceSkills } = loadSkills(resolved);
+      const scanResult = loadSkills(resolved);
+      const sourceSkills = scanResult.skills;
       const stamp = resolved.stamp;
 
       if (args.json) {
@@ -413,7 +438,14 @@ export function createSkillListCommand(resolved: ResolvedSkillOptions) {
       }
 
       if (sourceSkills.length === 0) {
-        logger.info("No skills found in source directory.");
+        // Same rationale as `skills add`: a stdout-only consumer must be
+        // able to tell apart a legitimately empty source from a misconfigured
+        // sourceDir that failed to scan.
+        if (scanFailedAtRoot(scanResult, resolved.sourceDir)) {
+          logger.info("Source directory scan failed; see warnings.");
+        } else {
+          logger.info("No skills found in source directory.");
+        }
         return;
       }
 
