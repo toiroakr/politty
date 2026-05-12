@@ -209,7 +209,11 @@ function checkDuplicateNegations(
     ) {
       const defaultKebab = `no-${field.cliName}`;
       claimed.set(defaultKebab, { field: field.name, kind: "default negation" });
-      const defaultCamel = `no${field.name[0]?.toUpperCase() ?? ""}${field.name.slice(1)}`;
+      // Derive the camelCase form from cliName via toCamelCase so kebab-case
+      // field keys (e.g. `"dry-run"`) reserve `noDryRun`, matching the form
+      // the argv parser actually recognizes — not literal `noDry-run`.
+      const camelBase = toCamelCase(field.cliName);
+      const defaultCamel = `no${camelBase[0]?.toUpperCase() ?? ""}${camelBase.slice(1)}`;
       if (defaultCamel !== defaultKebab) {
         claimed.set(defaultCamel, { field: field.name, kind: "default negation" });
       }

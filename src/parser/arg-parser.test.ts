@@ -817,6 +817,19 @@ describe("ArgParser", () => {
       expect(() => parseArgs([], cmd)).toThrow(/conflicts with default negation "noColor"/);
     });
 
+    it("should throw when custom negation shadows kebab-case field's implicit `--noX` (camelCase derived from cliName)", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          "dry-run": arg(z.boolean().default(true)),
+          cache: arg(z.boolean().default(true), { negation: "noDryRun" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(/conflicts with default negation "noDryRun"/);
+    });
+
     it("should allow custom negation that shadows a field with explicit `negation: false`", () => {
       const cmd = defineCommand({
         name: "test-cmd",

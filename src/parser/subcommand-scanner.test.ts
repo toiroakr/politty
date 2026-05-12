@@ -134,6 +134,24 @@ describe("scanForSubcommand", () => {
     expect(result.globalTokensBefore).toEqual(["--no-verbose"]);
   });
 
+  it("handles --noFlag camelCase negation for boolean global", () => {
+    const result = scanForSubcommand(["--noVerbose", "build"], subCommandNames, globalExtracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual(["--noVerbose"]);
+  });
+
+  it("handles camelCase negation for kebab-case field name", () => {
+    const schemaWithKebab = z.object({
+      "dry-run": arg(z.boolean().default(false), { description: "Dry run" }),
+    });
+    const extracted = extractFields(schemaWithKebab);
+    const result = scanForSubcommand(["--noDryRun", "build"], subCommandNames, extracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual(["--noDryRun"]);
+  });
+
   it("ignores non-subcommand positional argument", () => {
     const result = scanForSubcommand(["unknown-cmd"], subCommandNames, globalExtracted);
 

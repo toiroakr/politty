@@ -69,8 +69,21 @@ export function resolveGlobalLongOption(
     };
   }
 
-  const defaultIsNegated = withoutDashes.startsWith("no-");
-  const flagName = defaultIsNegated ? withoutDashes.slice(3) : withoutDashes;
+  // Default negation matches both `--no-flag` (kebab) and `--noFlag` (camelCase),
+  // mirroring argv-parser. Without the camelCase branch, scanning would stop on
+  // `--noDryRun` before reaching the subcommand even though the parser accepts it.
+  const kebabNegated = withoutDashes.startsWith("no-");
+  const camelNegated =
+    !kebabNegated &&
+    withoutDashes.length > 2 &&
+    withoutDashes.startsWith("no") &&
+    /[A-Z]/.test(withoutDashes[2]!);
+  const defaultIsNegated = kebabNegated || camelNegated;
+  const flagName = kebabNegated
+    ? withoutDashes.slice(3)
+    : camelNegated
+      ? withoutDashes[2]!.toLowerCase() + withoutDashes.slice(3)
+      : withoutDashes;
   const resolvedName = lookup.aliasMap.get(flagName) ?? flagName;
   // When the target field has a custom negation, the default `--no-X` form
   // is suppressed: treat it as if it were not a known global flag.
