@@ -1078,6 +1078,27 @@ describe("E2E Tests", () => {
       }
     });
 
+    it.each(["help", "help-all", "version"])(
+      "rejects reserved built-in flag %s as a custom negation name",
+      async (reserved) => {
+        const cmd = defineCommand({
+          name: "test",
+          args: z.object({
+            flag: arg(z.boolean().default(true), {
+              negation: reserved,
+            }),
+          }),
+          run: () => {},
+        });
+
+        const result = await runCommand(cmd, []);
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(String(result.error)).toMatch(/reserved built-in flag/);
+        }
+      },
+    );
+
     it("renders custom negation with description in Global Options help section", async () => {
       const console = spyOnConsoleLog();
       const globalArgs = z.object({

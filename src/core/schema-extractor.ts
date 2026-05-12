@@ -36,6 +36,12 @@ function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
 }
 
 /**
+ * Long flag names reserved for built-in handling (parseArgs / scanForSubcommand
+ * intercept these before option parsing), so custom negation names must avoid them.
+ */
+const RESERVED_NEGATION_NAMES: ReadonlySet<string> = new Set(["help", "help-all", "version"]);
+
+/**
  * Resolved metadata for an argument field
  */
 export interface ResolvedFieldMeta {
@@ -505,6 +511,15 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
       if (candidate.length === 0 || !aliasPattern.test(candidate)) {
         throw new Error(
           `Invalid negation "${rawNegation}" for field "${name}": negation names must match ${aliasPattern}.`,
+        );
+      }
+      if (RESERVED_NEGATION_NAMES.has(candidate)) {
+        throw new Error(
+          `Invalid negation "${rawNegation}" for field "${name}": negation cannot use reserved built-in flag names (${[
+            ...RESERVED_NEGATION_NAMES,
+          ]
+            .map((n) => `--${n}`)
+            .join(", ")}).`,
         );
       }
       if (fieldType !== "boolean") {
