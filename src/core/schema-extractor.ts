@@ -516,9 +516,14 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
     }
   }
 
-  const negationDescription = (argMeta as { negationDescription?: unknown } | undefined)
+  const rawNegationDescription = (argMeta as { negationDescription?: unknown } | undefined)
     ?.negationDescription;
-  if (typeof negationDescription === "string") {
+  if (rawNegationDescription !== undefined && rawNegationDescription !== null) {
+    if (typeof rawNegationDescription !== "string") {
+      throw new Error(
+        `Invalid negationDescription for field "${name}": expected string, received ${typeof rawNegationDescription}.`,
+      );
+    }
     if (negation === false) {
       throw new Error(
         `Invalid negationDescription for field "${name}": negationDescription cannot be used when negation is false.`,
@@ -530,6 +535,8 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
       );
     }
   }
+  const negationDescription =
+    typeof rawNegationDescription === "string" ? rawNegationDescription : undefined;
 
   // Compute the displayed negation name (without leading `--`) for help,
   // generated docs, and shell completions. `undefined` means hidden.
@@ -554,7 +561,7 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
     prompt: argMeta?.prompt,
     negation,
     negationDisplay,
-    negationDescription: typeof negationDescription === "string" ? negationDescription : undefined,
+    negationDescription,
     effect: argMeta?.effect,
   };
 

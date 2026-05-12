@@ -179,14 +179,17 @@ function checkDuplicateAliases(
  *
  * A negation name (and its derived camelCase variant when hyphenated) must
  * be unique across the schema. It must not collide with:
- *   - another field's `name` (camelCase)
- *   - another field's `cliName` (kebab-case)
+ *   - any field's `name` (camelCase), including its own — `negation: <own
+ *     name>` makes the positive flag unreachable because the parser checks
+ *     `negationMap` before normal option resolution
+ *   - any field's `cliName` (kebab-case), including its own
  *   - any visible or hidden alias of any field (including derived
  *     camelCase variants of hyphenated long aliases)
+ *   - another field's implicit default negation (`no-<cliName>` /
+ *     `no<Name>`) when that field still accepts the default form
+ *     (`negation` is `undefined` or `true`); without this check, a custom
+ *     `negation: "no-X"` would silently shadow X's default negation
  *   - another field's `negation` (including its derived camelCase variant)
- *
- * The parser's `negationMap` is consulted before normal option resolution,
- * so any of these collisions can make a flag ambiguous or unreachable.
  *
  * Only `negation: string` is checked. `negation: true` reuses the default
  * `--no-<cliName>` parsing path, which is already disambiguated by the
@@ -200,7 +203,8 @@ function checkDuplicateNegations(
 
   // Build the set of already-claimed option names (excluding the negation
   // names themselves, which are added incrementally below).
-  const claimed = new Map<string, { field: string; kind: "field" | "cliName" | "alias" }>();
+  type ClaimKind = "field" | "cliName" | "alias" | "default negation";
+  const claimed = new Map<string, { field: string; kind: ClaimKind }>();
   for (const field of extracted.fields) {
     claimed.set(field.name, { field: field.name, kind: "field" });
     if (field.cliName !== field.name) {
@@ -215,19 +219,44 @@ function checkDuplicateNegations(
         }
       }
     }
+
+    // Reserve implicit default negation tokens (`no-<cliName>` / `no<Name>`)
+    // for boolean fields that still accept the default form (i.e. `negation`
+    // is `undefined` or `true`). Without this, another field's custom
+    // `negation: "no-<cliName>"` would silently shadow the default.
+    if (
+      field.type === "boolean" &&
+      field.negation !== false &&
+      typeof field.negation !== "string"
+    ) {
+      const defaultKebab = `no-${field.cliName}`;
+      claimed.set(defaultKebab, { field: field.name, kind: "default negation" });
+      const defaultCamel = `no${field.name[0]?.toUpperCase() ?? ""}${field.name.slice(1)}`;
+      if (defaultCamel !== defaultKebab) {
+        claimed.set(defaultCamel, { field: field.name, kind: "default negation" });
+      }
+    }
   }
 
   const seenNegations = new Map<string, string>();
 
   const register = (name: string, fieldName: string, isDerived: boolean) => {
-    // Collision with a field name / cliName / alias from another field
+    // Collision with any claimed token (field name / cliName / alias /
+    // another field's implicit default negation). Same-field collisions
+    // (e.g. `negation: <own name>`) are also flagged because the parser's
+    // `negationMap` lookup precedes normal option resolution and would
+    // make the positive flag unreachable.
     const claim = claimed.get(name);
-    if (claim && claim.field !== fieldName) {
+    if (claim) {
       const qualifier = isDerived ? " (derived camelCase variant)" : "";
+      const conflict =
+        claim.field === fieldName
+          ? `the same field's own ${claim.kind} "${name}"`
+          : `${claim.kind} "${name}" of field "${claim.field}"`;
       errors.push({
         commandPath,
         type: "duplicate_negation",
-        message: `Negation "${name}"${qualifier} for field "${fieldName}" conflicts with ${claim.kind} "${name}" of field "${claim.field}".`,
+        message: `Negation "${name}"${qualifier} for field "${fieldName}" conflicts with ${conflict}.`,
         field: fieldName,
       });
     }

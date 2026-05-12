@@ -235,9 +235,9 @@ export function renderOptionsTable(info: CommandInfo): string {
       const negName = `\`--${opt.negationDisplay}\``;
       const negDesc = escapeTableCell(opt.negationDescription);
       if (hasEnv) {
-        lines.push(`| ${negName} | - | ${negDesc} | No | - | - |`);
+        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - | - |`);
       } else {
-        lines.push(`| ${negName} | - | ${negDesc} | No | - |`);
+        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - |`);
       }
     }
   }

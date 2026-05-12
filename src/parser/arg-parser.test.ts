@@ -751,6 +751,86 @@ describe("ArgParser", () => {
       expect(result.rawArgs.color).toBe(false);
     });
 
+    it("should throw when negation equals its own field name", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: "cache" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Negation "cache" for field "cache" conflicts with the same field's own field "cache"/,
+      );
+    });
+
+    it("should throw when negation equals its own cliName", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          dryRun: arg(z.boolean().default(true), { negation: "dry-run" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(/conflicts with the same field's own cliName/);
+    });
+
+    it("should throw when negation equals its own alias", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { alias: "no-buffer", negation: "no-buffer" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(/conflicts with the same field's own alias/);
+    });
+
+    it("should throw when custom negation shadows another field's implicit `--no-X`", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          color: arg(z.boolean().default(true)),
+          cache: arg(z.boolean().default(true), { negation: "no-color" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Negation "no-color" for field "cache" conflicts with default negation "no-color" of field "color"/,
+      );
+    });
+
+    it("should throw when custom negation shadows another field's implicit `--noX` (camelCase)", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          color: arg(z.boolean().default(true)),
+          cache: arg(z.boolean().default(true), { negation: "noColor" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(/conflicts with default negation "noColor"/);
+    });
+
+    it("should allow custom negation that shadows a field with explicit `negation: false`", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          color: arg(z.boolean().default(true), { negation: false }),
+          cache: arg(z.boolean().default(true), { negation: "no-color" }),
+        }),
+      });
+
+      // Should not throw — `color` has opted out of default negation entirely
+      const result = parseArgs(["--no-color"], cmd);
+      expect(result.rawArgs.cache).toBe(false);
+    });
+
     it("should allow `negation: true` on multiple fields (uses default --no-X prefix)", () => {
       const cmd = defineCommand({
         name: "test-cmd",

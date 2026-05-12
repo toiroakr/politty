@@ -196,7 +196,7 @@ function renderFilteredTable(
             negCells.push(escapeTableCell(opt.negationDescription));
             break;
           case "required":
-            negCells.push("No");
+            negCells.push(opt.required ? "Yes" : "No");
             break;
           case "alias":
           case "default":
