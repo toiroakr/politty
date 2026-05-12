@@ -23,6 +23,7 @@ import {
   validateCaseVariantCollisions,
   validateDuplicateAliases,
   validateDuplicateFields,
+  validateDuplicateNegations,
   validateReservedAliases,
 } from "../validator/command-validator.js";
 import {
@@ -532,6 +533,7 @@ function extractAndValidateGlobal(options: {
     validateDuplicateFields(extracted);
     validateCaseVariantCollisions(extracted);
     validateDuplicateAliases(extracted);
+    validateDuplicateNegations(extracted);
     validateReservedAliases(extracted, true);
     const positionalNames = extracted.fields.filter((f) => f.positional).map((f) => f.name);
     if (positionalNames.length > 0) {

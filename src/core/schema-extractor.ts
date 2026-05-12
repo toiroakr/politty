@@ -518,10 +518,17 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
 
   const negationDescription = (argMeta as { negationDescription?: unknown } | undefined)
     ?.negationDescription;
-  if (negation === false && typeof negationDescription === "string") {
-    throw new Error(
-      `Invalid negationDescription for field "${name}": negationDescription cannot be used when negation is false.`,
-    );
+  if (typeof negationDescription === "string") {
+    if (negation === false) {
+      throw new Error(
+        `Invalid negationDescription for field "${name}": negationDescription cannot be used when negation is false.`,
+      );
+    }
+    if (negation === undefined) {
+      throw new Error(
+        `Invalid negationDescription for field "${name}": negationDescription requires \`negation\` to be set (string or true).`,
+      );
+    }
   }
 
   // Compute the displayed negation name (without leading `--`) for help,

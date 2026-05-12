@@ -180,7 +180,9 @@ export interface BaseArgMeta<TValue = unknown> {
    *   nor any custom name is accepted.
    *
    * String values follow the same naming conventions as `cliName`
-   * (kebab-case is recommended). Only applies to boolean fields.
+   * (kebab-case is recommended). Only valid on boolean fields; setting
+   * `negation` on a non-boolean field is a type error and raises a
+   * runtime error during command parsing.
    *
    * @example
    * ```ts
@@ -337,17 +339,35 @@ type HiddenAliasFieldOf<M> = M extends { hiddenAlias: infer H } ? H : never;
 type IsBooleanField<T> = [NonNullable<T>] extends [boolean] ? true : false;
 
 /**
- * Reject `negation` / `negationDescription` on non-boolean fields.
- * `[Extract<keyof M, "negation" | "negationDescription">] extends [never]`
- * is true when neither key is present on the meta literal.
+ * Detect whether `M` has `K` set to a non-undefined value.
+ *
+ * When `M` is inferred from a literal such as `{ negation: "off" }`,
+ * `M["negation"]` is `"off"` (without `undefined`), so this returns `true`.
+ * When `M` is the wider `ArgMeta` type, `M["negation"]` is
+ * `string | boolean | undefined`, so this returns `false` and avoids
+ * false-positive type errors on broadly-typed meta values.
  */
-type ValidateNegation<M, TValue> = [Extract<keyof M, "negation" | "negationDescription">] extends [
-  never,
-]
-  ? M
-  : IsBooleanField<TValue> extends true
-    ? M
-    : NegationTypeError<M>;
+type HasExplicit<M, K extends string> = K extends keyof M
+  ? undefined extends M[K]
+    ? false
+    : true
+  : false;
+
+/**
+ * Reject `negation` / `negationDescription` on non-boolean fields.
+ * Uses {@link HasExplicit} so the error only fires when the user explicitly
+ * sets the field on a narrowly-inferred meta literal.
+ */
+type ValidateNegation<M, TValue> =
+  HasExplicit<M, "negation"> extends true
+    ? IsBooleanField<TValue> extends true
+      ? M
+      : NegationTypeError<M>
+    : HasExplicit<M, "negationDescription"> extends true
+      ? IsBooleanField<TValue> extends true
+        ? M
+        : NegationTypeError<M>
+      : M;
 
 /**
  * Type helper to validate ArgMeta.

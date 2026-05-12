@@ -135,7 +135,10 @@ function formatOptionName(opt: ResolvedFieldMeta): string {
 }
 
 /**
- * Format option flags for list display (uses kebab-case cliName)
+ * Format option flags for list display (uses kebab-case cliName).
+ * Aliases are joined with `, `; the inline negation (when no separate
+ * `negationDescription` is set) is appended with ` / ` so it stays
+ * visually distinct from aliases, matching help and table output.
  */
 function formatOptionFlags(opt: ResolvedFieldMeta): string {
   const placeholder = resolvePlaceholder(opt);
@@ -154,10 +157,11 @@ function formatOptionFlags(opt: ResolvedFieldMeta): string {
       if (a.length > 1) parts.push(`\`--${a}\``);
     }
   }
+  const aliasJoined = parts.join(", ");
   if (opt.type === "boolean" && opt.negationDisplay && !opt.negationDescription) {
-    parts.push(`\`--${opt.negationDisplay}\``);
+    return `${aliasJoined} / \`--${opt.negationDisplay}\``;
   }
-  return parts.join(", ");
+  return aliasJoined;
 }
 
 /**

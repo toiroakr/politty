@@ -6,6 +6,7 @@ import {
   validateCrossSchemaCollisions,
   validateDuplicateAliases,
   validateDuplicateFields,
+  validateDuplicateNegations,
   validatePositionalConfig,
   validateReservedAliases,
 } from "../validator/command-validator.js";
@@ -124,6 +125,7 @@ export function parseArgs(
       validateDuplicateFields(extracted);
       validateCaseVariantCollisions(extracted);
       validateDuplicateAliases(extracted);
+      validateDuplicateNegations(extracted);
       validatePositionalConfig(extracted);
       validateReservedAliases(extracted, hasSubCommands);
       if (options.globalExtracted) {

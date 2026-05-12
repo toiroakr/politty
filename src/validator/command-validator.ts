@@ -11,6 +11,7 @@ import {
   CaseVariantCollisionError,
   DuplicateAliasError,
   DuplicateFieldError,
+  DuplicateNegationError,
   PositionalConfigError,
   ReservedAliasError,
 } from "./validation-errors.js";
@@ -20,6 +21,7 @@ export {
   CaseVariantCollisionError,
   DuplicateAliasError,
   DuplicateFieldError,
+  DuplicateNegationError,
   PositionalConfigError,
   ReservedAliasError,
 };
@@ -37,7 +39,8 @@ export interface CommandValidationError {
     | "invalid_alias"
     | "positional_config"
     | "reserved_alias"
-    | "case_variant_collision";
+    | "case_variant_collision"
+    | "duplicate_negation";
   /** Error message */
   message: string;
   /** Related field name (if applicable) */
@@ -168,6 +171,92 @@ function checkDuplicateAliases(
       }
     }
   }
+  return errors;
+}
+
+/**
+ * Check for collisions involving custom boolean `negation` names.
+ *
+ * A negation name (and its derived camelCase variant when hyphenated) must
+ * be unique across the schema. It must not collide with:
+ *   - another field's `name` (camelCase)
+ *   - another field's `cliName` (kebab-case)
+ *   - any visible or hidden alias of any field (including derived
+ *     camelCase variants of hyphenated long aliases)
+ *   - another field's `negation` (including its derived camelCase variant)
+ *
+ * The parser's `negationMap` is consulted before normal option resolution,
+ * so any of these collisions can make a flag ambiguous or unreachable.
+ *
+ * Only `negation: string` is checked. `negation: true` reuses the default
+ * `--no-<cliName>` parsing path, which is already disambiguated by the
+ * existing `customNegatedFields` logic.
+ */
+function checkDuplicateNegations(
+  extracted: ExtractedFields,
+  commandPath: string[],
+): CommandValidationError[] {
+  const errors: CommandValidationError[] = [];
+
+  // Build the set of already-claimed option names (excluding the negation
+  // names themselves, which are added incrementally below).
+  const claimed = new Map<string, { field: string; kind: "field" | "cliName" | "alias" }>();
+  for (const field of extracted.fields) {
+    claimed.set(field.name, { field: field.name, kind: "field" });
+    if (field.cliName !== field.name) {
+      claimed.set(field.cliName, { field: field.name, kind: "cliName" });
+    }
+    for (const alias of getAllAliases(field)) {
+      claimed.set(alias, { field: field.name, kind: "alias" });
+      if (alias.length > 1 && alias.includes("-")) {
+        const camelVariant = toCamelCase(alias);
+        if (camelVariant !== alias) {
+          claimed.set(camelVariant, { field: field.name, kind: "alias" });
+        }
+      }
+    }
+  }
+
+  const seenNegations = new Map<string, string>();
+
+  const register = (name: string, fieldName: string, isDerived: boolean) => {
+    // Collision with a field name / cliName / alias from another field
+    const claim = claimed.get(name);
+    if (claim && claim.field !== fieldName) {
+      const qualifier = isDerived ? " (derived camelCase variant)" : "";
+      errors.push({
+        commandPath,
+        type: "duplicate_negation",
+        message: `Negation "${name}"${qualifier} for field "${fieldName}" conflicts with ${claim.kind} "${name}" of field "${claim.field}".`,
+        field: fieldName,
+      });
+    }
+
+    // Collision with another field's negation
+    const existing = seenNegations.get(name);
+    if (existing && existing !== fieldName) {
+      const qualifier = isDerived ? " (derived camelCase variant)" : "";
+      errors.push({
+        commandPath,
+        type: "duplicate_negation",
+        message: `Duplicate negation "${name}"${qualifier} detected. Both "${existing}" and "${fieldName}" use the same negation name.`,
+        field: fieldName,
+      });
+    }
+    seenNegations.set(name, fieldName);
+  };
+
+  for (const field of extracted.fields) {
+    if (typeof field.negation !== "string") continue;
+    register(field.negation, field.name, false);
+    if (field.negation.includes("-")) {
+      const camelVariant = toCamelCase(field.negation);
+      if (camelVariant !== field.negation) {
+        register(camelVariant, field.name, true);
+      }
+    }
+  }
+
   return errors;
 }
 
@@ -339,6 +428,22 @@ export function validateReservedAliases(
 }
 
 /**
+ * Validate that custom boolean negation names do not collide with field
+ * names, cliNames, aliases, or other negations (including derived
+ * camelCase variants of hyphenated values).
+ *
+ * @param extracted - Extracted fields from schema
+ * @throws {DuplicateNegationError} If a colliding negation is found
+ */
+export function validateDuplicateNegations(extracted: ExtractedFields): void {
+  const errors = checkDuplicateNegations(extracted, []);
+  if (errors.length > 0) {
+    const err = errors[0]!;
+    throw new DuplicateNegationError(err.message);
+  }
+}
+
+/**
  * Validate that no case-variant collisions exist
  *
  * @param extracted - Extracted fields from schema
@@ -397,6 +502,7 @@ function collectSchemaErrors(
     ...checkDuplicateFields(extracted, commandPath),
     ...checkCaseVariantCollisions(extracted, commandPath),
     ...checkDuplicateAliases(extracted, commandPath),
+    ...checkDuplicateNegations(extracted, commandPath),
     ...checkPositionalConfig(extracted, commandPath),
     ...checkReservedAliases(extracted, commandPath),
   ];
