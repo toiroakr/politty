@@ -78,6 +78,23 @@ export function resolveGlobalLongOption(
     withoutDashes.length > 2 &&
     withoutDashes.startsWith("no") &&
     /[A-Z]/.test(withoutDashes[2]!);
+
+  // argv-parser only treats `--no-foo` / `--noFoo` as negation when the literal
+  // name is not itself a defined option (see argv-parser.ts:147/167). Mirror
+  // that disambiguation so a global flag literally named `no-foo` isn't
+  // misclassified as the negation of a (possibly non-existent) `foo`.
+  if (kebabNegated || camelNegated) {
+    const literalResolved = lookup.aliasMap.get(withoutDashes) ?? withoutDashes;
+    if (lookup.flagNames.has(literalResolved) || lookup.cliNames.has(withoutDashes)) {
+      return {
+        resolvedName: literalResolved,
+        withoutDashes,
+        isNegated: false,
+        isGlobal: true,
+      };
+    }
+  }
+
   const defaultIsNegated = kebabNegated || camelNegated;
   const flagName = kebabNegated
     ? withoutDashes.slice(3)

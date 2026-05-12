@@ -152,6 +152,31 @@ describe("scanForSubcommand", () => {
     expect(result.globalTokensBefore).toEqual(["--noDryRun"]);
   });
 
+  it("treats --no-foo as a positive flag when a global is literally named 'no-foo'", () => {
+    // Mirrors argv-parser's `definedNames` disambiguation: when the literal
+    // token `no-foo` matches a real global option, it should not be treated
+    // as the negation of an imagined `foo` field.
+    const schemaLiteralNo = z.object({
+      "no-foo": arg(z.boolean().default(false), { description: "No foo" }),
+    });
+    const extracted = extractFields(schemaLiteralNo);
+    const result = scanForSubcommand(["--no-foo", "build"], subCommandNames, extracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual(["--no-foo"]);
+  });
+
+  it("treats --noBar as a positive flag when a global is literally named 'noBar'", () => {
+    const schemaLiteralCamel = z.object({
+      noBar: arg(z.boolean().default(false), { description: "No bar" }),
+    });
+    const extracted = extractFields(schemaLiteralCamel);
+    const result = scanForSubcommand(["--noBar", "build"], subCommandNames, extracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual(["--noBar"]);
+  });
+
   it("ignores non-subcommand positional argument", () => {
     const result = scanForSubcommand(["unknown-cmd"], subCommandNames, globalExtracted);
 

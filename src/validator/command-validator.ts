@@ -215,21 +215,23 @@ function checkDuplicateNegations(
     }
 
     // Reserve implicit default negation tokens so a custom `negation: "no-X"`
-    // cannot silently shadow another field's default `--no-X`.
+    // cannot silently shadow another field's default `--no-X`. Uses the
+    // first-wins `claim()` helper so an earlier, higher-priority field/cliName
+    // claim isn't replaced by a default negation slot.
     if (
       field.type === "boolean" &&
       field.negation !== false &&
       typeof field.negation !== "string"
     ) {
       const defaultKebab = `no-${field.cliName}`;
-      claimed.set(defaultKebab, { field: field.name, kind: "default negation" });
+      claim(defaultKebab, field.name, "default negation");
       // Derive the camelCase form from cliName via toCamelCase so kebab-case
       // field keys (e.g. `"dry-run"`) reserve `noDryRun`, matching the form
       // the argv parser actually recognizes — not literal `noDry-run`.
       const camelBase = toCamelCase(field.cliName);
       const defaultCamel = `no${camelBase[0]?.toUpperCase() ?? ""}${camelBase.slice(1)}`;
       if (defaultCamel !== defaultKebab) {
-        claimed.set(defaultCamel, { field: field.name, kind: "default negation" });
+        claim(defaultCamel, field.name, "default negation");
       }
     }
   }
