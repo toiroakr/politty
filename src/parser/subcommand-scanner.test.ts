@@ -166,6 +166,38 @@ describe("scanForSubcommand", () => {
     expect(result.globalTokensBefore).toEqual(["--no-foo"]);
   });
 
+  it("keeps scanning past suppressed default --no-X when the field has a custom negation", () => {
+    // When a global boolean is configured with `negation: "disable-cache"`,
+    // the default `--no-cache` token is suppressed (no longer negates the
+    // field) but must not stop subcommand scanning — otherwise routing for
+    // `cli --no-cache build` would break.
+    const schemaWithCustomNegation = z.object({
+      cache: arg(z.boolean().default(true), {
+        description: "Enable cache",
+        negation: "disable-cache",
+      }),
+    });
+    const extracted = extractFields(schemaWithCustomNegation);
+    const result = scanForSubcommand(["--no-cache", "build"], subCommandNames, extracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual(["--no-cache"]);
+  });
+
+  it("keeps scanning past suppressed camelCase --noX when the field has a custom negation", () => {
+    const schemaWithCustomNegation = z.object({
+      dryRun: arg(z.boolean().default(false), {
+        description: "Dry run",
+        negation: "execute",
+      }),
+    });
+    const extracted = extractFields(schemaWithCustomNegation);
+    const result = scanForSubcommand(["--noDryRun", "build"], subCommandNames, extracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual(["--noDryRun"]);
+  });
+
   it("treats --noBar as a positive flag when a global is literally named 'noBar'", () => {
     const schemaLiteralCamel = z.object({
       noBar: arg(z.boolean().default(false), { description: "No bar" }),

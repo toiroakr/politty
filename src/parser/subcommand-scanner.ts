@@ -51,11 +51,22 @@ export function buildGlobalFlagLookup(globalExtracted: ExtractedFields): GlobalF
  * Resolve a long option (--flag, --flag=value, --no-flag, --custom-negation)
  * against global flag lookup. Returns the resolved camelCase name and whether
  * it is a known global flag.
+ *
+ * `isSuppressedNegation` is true when the token matches a default `--no-X`
+ * form that has been suppressed by a custom `negation` on the target field.
+ * The caller may use this to keep argv scanning past such tokens (so a
+ * trailing subcommand is still detected) even though they no longer negate.
  */
 export function resolveGlobalLongOption(
   arg: string,
   lookup: GlobalFlagLookup,
-): { resolvedName: string; withoutDashes: string; isNegated: boolean; isGlobal: boolean } {
+): {
+  resolvedName: string;
+  withoutDashes: string;
+  isNegated: boolean;
+  isGlobal: boolean;
+  isSuppressedNegation: boolean;
+} {
   const withoutDashes = arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : arg.slice(2);
 
   // Custom negation: `--disable-cache` (or its camelCase variant) → cache=false
@@ -66,6 +77,7 @@ export function resolveGlobalLongOption(
       withoutDashes,
       isNegated: true,
       isGlobal: lookup.flagNames.has(customNegated),
+      isSuppressedNegation: false,
     };
   }
 
@@ -91,6 +103,7 @@ export function resolveGlobalLongOption(
         withoutDashes,
         isNegated: false,
         isGlobal: true,
+        isSuppressedNegation: false,
       };
     }
   }
@@ -111,7 +124,13 @@ export function resolveGlobalLongOption(
     (lookup.flagNames.has(resolvedName) ||
       lookup.cliNames.has(withoutDashes) ||
       lookup.cliNames.has(flagName));
-  return { resolvedName, withoutDashes, isNegated, isGlobal };
+  return {
+    resolvedName,
+    withoutDashes,
+    isNegated,
+    isGlobal,
+    isSuppressedNegation: suppressDefaultNegation,
+  };
 }
 
 /**
@@ -217,7 +236,10 @@ export function scanForSubcommand(
 
     // Long option: --flag or --flag=value or --no-flag
     if (arg.startsWith("--")) {
-      const { resolvedName, isNegated, isGlobal } = resolveGlobalLongOption(arg, lookup);
+      const { resolvedName, isNegated, isGlobal, isSuppressedNegation } = resolveGlobalLongOption(
+        arg,
+        lookup,
+      );
 
       if (isGlobal) {
         i += collectGlobalFlag(
@@ -225,6 +247,22 @@ export function scanForSubcommand(
           i,
           resolvedName,
           isNegated,
+          lookup.booleanFlags,
+          globalTokensBefore,
+        );
+        continue;
+      }
+
+      // Suppressed default `--no-X` for a field with custom negation: keep
+      // scanning so a trailing subcommand is still detected. The token is
+      // forwarded to globalTokensBefore so the downstream parser handles it
+      // consistently (argv-parser's own suppression drops it from the result).
+      if (isSuppressedNegation) {
+        i += collectGlobalFlag(
+          argv,
+          i,
+          resolvedName,
+          false,
           lookup.booleanFlags,
           globalTokensBefore,
         );

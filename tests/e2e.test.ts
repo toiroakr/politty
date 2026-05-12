@@ -954,6 +954,34 @@ describe("E2E Tests", () => {
       expect(captured.cache).toBe(false);
     });
 
+    it("keeps routing past suppressed default --no-X global before a subcommand", async () => {
+      // Regression: when a global boolean has a custom negation, the
+      // suppressed default `--no-<name>` token must not stop subcommand
+      // scanning — otherwise `cli --no-cache build` would never reach
+      // `build`.
+      let buildRan = false;
+      const globalArgs = z.object({
+        cache: arg(z.boolean().default(true), {
+          negation: "disable-cache",
+        }),
+      });
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            run: () => {
+              buildRan = true;
+            },
+          }),
+        },
+      });
+
+      const result = await runCommand(cmd, ["--no-cache", "build"], { globalArgs });
+      expect(result.success).toBe(true);
+      expect(buildRan).toBe(true);
+    });
+
     it("advertises default --no-X in help when negation is true", async () => {
       const console = spyOnConsoleLog();
       const cmd = defineCommand({
