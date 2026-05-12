@@ -250,11 +250,15 @@ export function renderOptions(
  * `negationDescription` is provided. When no description is given, the
  * negation is shown inline by `formatFlags`.
  */
-function formatNegationLine(opt: ResolvedFieldMeta, indent = 0): string | null {
+function formatNegationLine(
+  opt: ResolvedFieldMeta,
+  indent = 0,
+  extraDescPadding = 0,
+): string | null {
   if (!opt.negationDisplay || !opt.negationDescription) return null;
   const flag = styles.option(`--${opt.negationDisplay}`);
   const desc = `${opt.negationDescription} ${styles.dim(`(↔ --${opt.cliName})`)}`;
-  return formatOption(flag, desc, indent);
+  return formatOption(flag, desc, indent, extraDescPadding);
 }
 
 /**
@@ -604,7 +608,7 @@ function renderSubcommandOptionsCompact(command: AnyCommand, indent: number): st
         desc += ` ${envInfo}`;
       }
       lines.push(formatOption(flags, desc, indent, 2));
-      const negationLine = formatNegationLine(opt, indent);
+      const negationLine = formatNegationLine(opt, indent, 2);
       if (negationLine) lines.push(negationLine);
     }
   }

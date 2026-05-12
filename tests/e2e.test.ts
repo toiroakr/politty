@@ -915,6 +915,25 @@ describe("E2E Tests", () => {
       }
     });
 
+    it("rejects negation on a boolean|string union at the type level", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          // @ts-expect-error -- type-level rejection of negation on a non-pure-boolean field
+          flag: arg(z.union([z.boolean(), z.string()]).default(true), {
+            negation: "no-flag",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, []);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(String(result.error)).toMatch(/negation can only be used on boolean fields/);
+      }
+    });
+
     it("should work as a global flag", async () => {
       const captured: Record<string, unknown> = {};
       const globalArgs = z.object({
