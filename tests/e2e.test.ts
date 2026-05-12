@@ -1106,6 +1106,27 @@ describe("E2E Tests", () => {
       }
     });
 
+    it("throws when negationDescription is an empty or whitespace-only string", async () => {
+      for (const value of ["", "   ", "\t\n"]) {
+        const cmd = defineCommand({
+          name: "test",
+          args: z.object({
+            cache: arg(z.boolean().default(true), {
+              negation: "disable-cache",
+              negationDescription: value,
+            }),
+          }),
+          run: () => {},
+        });
+
+        const result = await runCommand(cmd, []);
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(String(result.error)).toMatch(/negationDescription must be a non-empty string/);
+        }
+      }
+    });
+
     it("rejects negation: false on a non-boolean field at the type level", async () => {
       const cmd = defineCommand({
         name: "test",

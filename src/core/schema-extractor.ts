@@ -533,6 +533,7 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
 
   const rawNegationDescription = (argMeta as { negationDescription?: unknown } | undefined)
     ?.negationDescription;
+  let negationDescription: string | undefined;
   if (rawNegationDescription !== undefined && rawNegationDescription !== null) {
     if (typeof rawNegationDescription !== "string") {
       throw new Error(
@@ -549,9 +550,17 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
         `Invalid negationDescription for field "${name}": negationDescription requires \`negation\` to be set (string or true).`,
       );
     }
+    // Reject blank strings: downstream rendering treats falsy values as
+    // "no description provided" and collapses to the inline `/` form, so
+    // an empty/whitespace-only string would be silently ignored.
+    const trimmed = rawNegationDescription.trim();
+    if (trimmed.length === 0) {
+      throw new Error(
+        `Invalid negationDescription for field "${name}": negationDescription must be a non-empty string.`,
+      );
+    }
+    negationDescription = trimmed;
   }
-  const negationDescription =
-    typeof rawNegationDescription === "string" ? rawNegationDescription : undefined;
 
   // Compute the displayed negation name (without leading `--`) for help,
   // generated docs, and shell completions. `undefined` means hidden.
