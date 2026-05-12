@@ -982,6 +982,63 @@ describe("E2E Tests", () => {
       expect(buildRan).toBe(true);
     });
 
+    it("surfaces suppressed --no-X before a subcommand via the global unknownKeysMode", async () => {
+      // Suppressed default `--no-cache` tokens before a subcommand must
+      // honour the global schema's `unknownKeysMode` — otherwise users opting
+      // into strict mode would silently lose unknown-flag detection for them.
+      const subCmd = defineCommand({
+        name: "build",
+        run: () => {},
+      });
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: subCmd },
+      });
+
+      const strictGlobal = z
+        .object({
+          cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+        })
+        .strict();
+      const strictResult = await runCommand(cmd, ["--no-cache", "build"], {
+        globalArgs: strictGlobal,
+      });
+      expect(strictResult.success).toBe(false);
+      if (!strictResult.success) {
+        expect(String(strictResult.error)).toMatch(/Unknown flags:.*no-cache/);
+      }
+
+      const stripGlobal = z.object({
+        cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+      });
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const stripResult = await runCommand(cmd, ["--no-cache", "build"], {
+          globalArgs: stripGlobal,
+        });
+        expect(stripResult.success).toBe(true);
+        expect(errSpy.mock.calls.some((c) => String(c[0]).includes("no-cache"))).toBe(true);
+      } finally {
+        errSpy.mockRestore();
+      }
+
+      const passthroughGlobal = z
+        .object({
+          cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+        })
+        .passthrough();
+      const errSpy2 = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const passResult = await runCommand(cmd, ["--no-cache", "build"], {
+          globalArgs: passthroughGlobal,
+        });
+        expect(passResult.success).toBe(true);
+        expect(errSpy2.mock.calls.some((c) => String(c[0]).includes("no-cache"))).toBe(false);
+      } finally {
+        errSpy2.mockRestore();
+      }
+    });
+
     it("advertises default --no-X in help when negation is true", async () => {
       const console = spyOnConsoleLog();
       const cmd = defineCommand({

@@ -343,6 +343,30 @@ async function runCommandInternal<TResult = unknown>(
 
     // Handle subcommand
     if (parseResult.subCommand) {
+      // Surface unknown flags from the pre-subcommand portion of argv before
+      // descending. Currently these are suppressed default `--no-X` tokens
+      // for global fields that declared a custom `negation`; they belong to
+      // the global schema, so use the global `unknownKeysMode`.
+      if (parseResult.unknownFlags.length > 0) {
+        const globalMode = context.globalExtracted?.unknownKeysMode ?? "strip";
+        if (globalMode === "strict") {
+          collector?.stop();
+          return {
+            success: false,
+            error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
+            exitCode: 1,
+            logs: getCurrentLogs(),
+          };
+        }
+        if (globalMode === "strip") {
+          const knownGlobalFlags = context.globalExtracted?.fields.map((f) => f.name) ?? [];
+          for (const flag of parseResult.unknownFlags) {
+            logger.error(formatUnknownFlagWarning(flag, knownGlobalFlags));
+          }
+        }
+        // passthrough: silently ignore
+      }
+
       const resolved = await resolveSubcommandWithAlias(command, parseResult.subCommand);
       if (resolved) {
         // Build new context for subcommand

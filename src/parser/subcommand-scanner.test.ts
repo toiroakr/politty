@@ -166,11 +166,12 @@ describe("scanForSubcommand", () => {
     expect(result.globalTokensBefore).toEqual(["--no-foo"]);
   });
 
-  it("keeps scanning past suppressed default --no-X when the field has a custom negation", () => {
+  it("keeps scanning past suppressed default --no-X and surfaces it as a suppressed token", () => {
     // When a global boolean is configured with `negation: "disable-cache"`,
     // the default `--no-cache` token is suppressed (no longer negates the
     // field) but must not stop subcommand scanning — otherwise routing for
-    // `cli --no-cache build` would break.
+    // `cli --no-cache build` would break. The token is reported separately
+    // via `suppressedTokens` so the caller can surface it as an unknown flag.
     const schemaWithCustomNegation = z.object({
       cache: arg(z.boolean().default(true), {
         description: "Enable cache",
@@ -181,10 +182,11 @@ describe("scanForSubcommand", () => {
     const result = scanForSubcommand(["--no-cache", "build"], subCommandNames, extracted);
 
     expect(result.subCommandIndex).toBe(1);
-    expect(result.globalTokensBefore).toEqual(["--no-cache"]);
+    expect(result.globalTokensBefore).toEqual([]);
+    expect(result.suppressedTokens).toEqual(["no-cache"]);
   });
 
-  it("keeps scanning past suppressed camelCase --noX when the field has a custom negation", () => {
+  it("keeps scanning past suppressed camelCase --noX and surfaces it as a suppressed token", () => {
     const schemaWithCustomNegation = z.object({
       dryRun: arg(z.boolean().default(false), {
         description: "Dry run",
@@ -195,7 +197,8 @@ describe("scanForSubcommand", () => {
     const result = scanForSubcommand(["--noDryRun", "build"], subCommandNames, extracted);
 
     expect(result.subCommandIndex).toBe(1);
-    expect(result.globalTokensBefore).toEqual(["--noDryRun"]);
+    expect(result.globalTokensBefore).toEqual([]);
+    expect(result.suppressedTokens).toEqual(["noDryRun"]);
   });
 
   it("treats --noBar as a positive flag when a global is literally named 'noBar'", () => {

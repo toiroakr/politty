@@ -93,7 +93,7 @@ export function parseArgs(
           remainingArgs: scanResult.tokensAfterSubcommand,
           rawArgs: {},
           positionals: [],
-          unknownFlags: [],
+          unknownFlags: scanResult.suppressedTokens,
           rawGlobalArgs,
         };
       }

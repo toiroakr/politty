@@ -185,6 +185,14 @@ export interface ScanResult {
   globalTokensBefore: string[];
   /** All tokens after the subcommand (the subcommand itself is excluded) */
   tokensAfterSubcommand: string[];
+  /**
+   * Default `--no-X` tokens that were skipped because the target field has a
+   * custom negation configured. They are unknown long flags from the parser's
+   * point of view, so the caller should surface them through `unknownFlags`
+   * to keep `unknownKeysMode` ("strict" / "strip" / "passthrough") consistent
+   * with flags that appear after the subcommand.
+   */
+  suppressedTokens: string[];
 }
 
 /**
@@ -215,6 +223,7 @@ export function scanForSubcommand(
   const lookup = buildGlobalFlagLookup(globalExtracted);
   const subCommandNameSet = new Set(subCommandNames);
   const globalTokensBefore: string[] = [];
+  const suppressedTokens: string[] = [];
 
   let i = 0;
   while (i < argv.length) {
@@ -231,6 +240,7 @@ export function scanForSubcommand(
         subCommandIndex: i,
         globalTokensBefore,
         tokensAfterSubcommand: argv.slice(i + 1),
+        suppressedTokens,
       };
     }
 
@@ -254,20 +264,13 @@ export function scanForSubcommand(
       }
 
       // Suppressed default `--no-X` for a field with custom negation: keep
-      // scanning so a trailing subcommand is still detected. The token is
-      // forwarded to globalTokensBefore so the downstream parser handles it
-      // consistently — argv-parser parses it as an unknown long option
-      // (`options["no-X"] = true`), which Zod's schema parsing then strips
-      // when validating the global args.
+      // scanning so a trailing subcommand is still detected, but record the
+      // token in `suppressedTokens` (not `globalTokensBefore`). The caller
+      // surfaces these as unknown flags so that `unknownKeysMode` applies
+      // consistently with flags placed after the subcommand.
       if (isSuppressedNegation) {
-        i += collectGlobalFlag(
-          argv,
-          i,
-          resolvedName,
-          false,
-          lookup.booleanFlags,
-          globalTokensBefore,
-        );
+        suppressedTokens.push(arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : arg.slice(2));
+        i++;
         continue;
       }
 
@@ -309,6 +312,7 @@ export function scanForSubcommand(
     subCommandIndex: -1,
     globalTokensBefore,
     tokensAfterSubcommand: [],
+    suppressedTokens,
   };
 }
 
