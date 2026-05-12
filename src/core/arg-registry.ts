@@ -334,9 +334,12 @@ type HiddenAliasFieldOf<M> = M extends { hiddenAlias: infer H } ? H : never;
 
 /**
  * Check whether a Zod output type is a (possibly optional) boolean.
- * Strips `undefined` to allow `z.boolean().optional()`.
+ * Strips `undefined` to allow `z.boolean().optional()`. Uses
+ * `boolean extends NonNullable<T>` (rather than the reverse) so boolean
+ * literal types such as `z.literal(true)` are rejected — only the full
+ * `boolean` domain can host a custom negation.
  */
-type IsBooleanField<T> = [NonNullable<T>] extends [boolean] ? true : false;
+type IsBooleanField<T> = boolean extends NonNullable<T> ? true : false;
 
 /**
  * Detect whether `M` has `K` set to a non-undefined value.

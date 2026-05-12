@@ -250,10 +250,10 @@ export function renderOptions(
  * `negationDescription` is provided. When no description is given, the
  * negation is shown inline by `formatFlags`.
  */
-function formatNegationLine(opt: ResolvedFieldMeta): string | null {
+function formatNegationLine(opt: ResolvedFieldMeta, indent = 0): string | null {
   if (!opt.negationDisplay || !opt.negationDescription) return null;
   const flag = styles.option(`--${opt.negationDisplay}`);
-  return formatOption(flag, opt.negationDescription);
+  return formatOption(flag, opt.negationDescription, indent);
 }
 
 /**
@@ -343,9 +343,9 @@ function renderDiscriminatedUnionOptions(
         if (envInfo) {
           desc += ` ${envInfo}`;
         }
-        lines.push(formatOption(`  ${flags}`, desc));
-        const negationLine = formatNegationLine(field);
-        if (negationLine) lines.push(`  ${negationLine}`);
+        lines.push(formatOption(flags, desc, 1));
+        const negationLine = formatNegationLine(field, 1);
+        if (negationLine) lines.push(negationLine);
       }
     }
   }
@@ -425,9 +425,9 @@ function renderUnionOptions(
         if (envInfo) {
           desc += ` ${envInfo}`;
         }
-        lines.push(formatOption(`  ${flags}`, desc));
-        const negationLine = formatNegationLine(field);
-        if (negationLine) lines.push(`  ${negationLine}`);
+        lines.push(formatOption(flags, desc, 1));
+        const negationLine = formatNegationLine(field, 1);
+        if (negationLine) lines.push(negationLine);
       }
     } else {
       lines.push("");

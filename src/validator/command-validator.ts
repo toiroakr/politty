@@ -185,17 +185,31 @@ function checkDuplicateNegations(
 
   type ClaimKind = "field" | "cliName" | "alias" | "default negation";
   const claimed = new Map<string, { field: string; kind: ClaimKind }>();
+  const claim = (name: string, fieldName: string, kind: ClaimKind) => {
+    if (!claimed.has(name)) claimed.set(name, { field: fieldName, kind });
+  };
   for (const field of extracted.fields) {
-    claimed.set(field.name, { field: field.name, kind: "field" });
+    claim(field.name, field.name, "field");
+    if (field.name.includes("-")) {
+      // The argv parser also accepts the camelCase form of a kebab-case field
+      // key (e.g. `--dryRun` for `"dry-run"`). Reserve that variant so a custom
+      // negation cannot shadow another field's implicit positive flag.
+      const camelName = toCamelCase(field.name);
+      if (camelName !== field.name) claim(camelName, field.name, "field");
+    }
     if (field.cliName !== field.name) {
-      claimed.set(field.cliName, { field: field.name, kind: "cliName" });
+      claim(field.cliName, field.name, "cliName");
+    }
+    if (field.cliName.includes("-")) {
+      const camelCli = toCamelCase(field.cliName);
+      if (camelCli !== field.cliName) claim(camelCli, field.name, "cliName");
     }
     for (const alias of getAllAliases(field)) {
-      claimed.set(alias, { field: field.name, kind: "alias" });
+      claim(alias, field.name, "alias");
       if (alias.length > 1 && alias.includes("-")) {
         const camelVariant = toCamelCase(alias);
         if (camelVariant !== alias) {
-          claimed.set(camelVariant, { field: field.name, kind: "alias" });
+          claim(camelVariant, field.name, "alias");
         }
       }
     }

@@ -830,6 +830,22 @@ describe("ArgParser", () => {
       expect(() => parseArgs([], cmd)).toThrow(/conflicts with default negation "noDryRun"/);
     });
 
+    it("should throw when custom negation shadows another field's implicit camelCase positive flag", () => {
+      // `"dry-run"` is accepted by the parser as both `--dry-run` and `--dryRun`,
+      // so a custom `negation: "dryRun"` on another field would silently steal
+      // the positive form. Validator must reject this.
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          "dry-run": arg(z.boolean().default(true)),
+          cache: arg(z.boolean().default(true), { negation: "dryRun" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(/conflicts with field "dryRun" of field "dry-run"/);
+    });
+
     it("should allow custom negation that shadows a field with explicit `negation: false`", () => {
       const cmd = defineCommand({
         name: "test-cmd",
