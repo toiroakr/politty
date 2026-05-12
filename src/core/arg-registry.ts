@@ -307,5 +307,10 @@ export function arg<T extends z.ZodType>(schema: T, meta?: ValidateArgMeta<ArgMe
  * @returns The metadata if registered, undefined otherwise
  */
 export function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
-  return argRegistry.get(schema);
+  // Zod's `$replace<Meta, S>` recursively rewrites the meta type, which mangles
+  // the generic `then` signature of `PromiseLike<void>` inside `effect`'s return
+  // type under newer TypeScript builds (@typescript/native-preview ≥ 20260504).
+  // The runtime value is always the original ArgMeta we stored, so we restore
+  // the static type at the boundary.
+  return argRegistry.get(schema) as ArgMeta | undefined;
 }
