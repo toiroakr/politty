@@ -256,7 +256,9 @@ export function scanForSubcommand(
       // Suppressed default `--no-X` for a field with custom negation: keep
       // scanning so a trailing subcommand is still detected. The token is
       // forwarded to globalTokensBefore so the downstream parser handles it
-      // consistently (argv-parser's own suppression drops it from the result).
+      // consistently — argv-parser parses it as an unknown long option
+      // (`options["no-X"] = true`), which Zod's schema parsing then strips
+      // when validating the global args.
       if (isSuppressedNegation) {
         i += collectGlobalFlag(
           argv,

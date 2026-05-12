@@ -705,7 +705,7 @@ describe("ArgParser", () => {
 
       expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
       expect(() => parseArgs([], cmd)).toThrow(
-        /Negation "output" for field "cache" conflicts with field "output"/,
+        /Negation "output" for field "cache" conflicts with field name "output"/,
       );
     });
 
@@ -761,7 +761,7 @@ describe("ArgParser", () => {
 
       expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
       expect(() => parseArgs([], cmd)).toThrow(
-        /Negation "cache" for field "cache" conflicts with the same field's own field "cache"/,
+        /Negation "cache" for field "cache" conflicts with the same field's own field name "cache"/,
       );
     });
 
@@ -774,7 +774,7 @@ describe("ArgParser", () => {
       });
 
       expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
-      expect(() => parseArgs([], cmd)).toThrow(/conflicts with the same field's own cliName/);
+      expect(() => parseArgs([], cmd)).toThrow(/conflicts with the same field's own CLI name/);
     });
 
     it("should throw when negation equals its own alias", () => {
@@ -843,7 +843,9 @@ describe("ArgParser", () => {
       });
 
       expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
-      expect(() => parseArgs([], cmd)).toThrow(/conflicts with field "dryRun" of field "dry-run"/);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /conflicts with field name "dryRun" of field "dry-run"/,
+      );
     });
 
     it("should allow custom negation that shadows a field with explicit `negation: false`", () => {
