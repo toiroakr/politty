@@ -233,6 +233,9 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
 
     if (context.usedOptions.has(opt.cliName)) return false;
     if (opt.alias && opt.alias.some((a) => context.usedOptions.has(a))) return false;
+    // The negation form shares the field's "used" slot: if either the positive
+    // flag or its negation has already been typed, suppress both.
+    if (opt.negation && context.usedOptions.has(opt.negation)) return false;
     return true;
   });
 
@@ -242,6 +245,13 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
       description: opt.description,
       type: "option",
     });
+    if (opt.negation) {
+      candidates.push({
+        value: `--${opt.negation}`,
+        description: opt.negationDescription ?? opt.description,
+        type: "option",
+      });
+    }
   }
 
   // Add help option if not already used

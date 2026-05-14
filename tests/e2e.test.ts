@@ -786,4 +786,495 @@ describe("E2E Tests", () => {
       expect(output).toEqual(["debug", "debug"]);
     });
   });
+
+  describe("Custom negation", () => {
+    it("should accept custom negation name and set field to false", async () => {
+      const captured: Record<string, unknown> = {};
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          cache: arg(z.boolean().default(true), {
+            description: "Enable cache",
+            negation: "disable-cache",
+          }),
+        }),
+        run: (args) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--disable-cache"]);
+      expect(result.success).toBe(true);
+      expect(captured).toEqual({ cache: false });
+    });
+
+    it("should accept camelCase variant of custom negation", async () => {
+      const captured: Record<string, unknown> = {};
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          cache: arg(z.boolean().default(true), {
+            negation: "disable-cache",
+          }),
+        }),
+        run: (args) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--disableCache"]);
+      expect(result.success).toBe(true);
+      expect(captured).toEqual({ cache: false });
+    });
+
+    it("should suppress default --no-X when negation is configured", async () => {
+      const captured: Record<string, unknown> = {};
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          cache: arg(z.boolean().default(true), {
+            negation: "disable-cache",
+          }),
+        }),
+        run: (args) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--no-cache"]);
+      expect(result.success).toBe(true);
+      expect(captured.cache).toBe(true);
+    });
+
+    it("should show custom negation in help output", async () => {
+      const console = spyOnConsoleLog();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          cache: arg(z.boolean().default(true), {
+            description: "Enable cache",
+            negation: "disable-cache",
+          }),
+        }),
+      });
+
+      await runCommand(cmd, ["--help"]);
+      const output = console.getLogs()[0] ?? "";
+
+      expect(output).toContain("--cache");
+      expect(output).toContain("--disable-cache");
+      expect(output).not.toContain("--no-cache");
+
+      console.mockRestore();
+    });
+
+    it("should show custom negation description on a separate line", async () => {
+      const console = spyOnConsoleLog();
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          cache: arg(z.boolean().default(true), {
+            description: "Enable cache",
+            negation: "disable-cache",
+            negationDescription: "Disable cache",
+          }),
+        }),
+      });
+
+      await runCommand(cmd, ["--help"]);
+      const output = console.getLogs()[0] ?? "";
+
+      expect(output).toContain("--cache");
+      expect(output).toContain("--disable-cache");
+      expect(output).toContain("Disable cache");
+
+      console.mockRestore();
+    });
+
+    it("should throw when negation is used on a non-boolean field", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          // @ts-expect-error -- type-level rejection of negation on non-boolean field
+          count: arg(z.number().default(1), {
+            negation: "no-count",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, []);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(String(result.error)).toMatch(/negation can only be used on boolean fields/);
+      }
+    });
+
+    it("rejects negation on a boolean|string union at the type level", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          // @ts-expect-error -- type-level rejection of negation on a non-pure-boolean field
+          flag: arg(z.union([z.boolean(), z.string()]).default(true), {
+            negation: "no-flag",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, []);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(String(result.error)).toMatch(/negation can only be used on boolean fields/);
+      }
+    });
+
+    it("should work as a global flag", async () => {
+      const captured: Record<string, unknown> = {};
+      const globalArgs = z.object({
+        cache: arg(z.boolean().default(true), {
+          negation: "disable-cache",
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "test",
+        run: (args: Record<string, unknown>) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--disable-cache"], { globalArgs });
+      expect(result.success).toBe(true);
+      expect(captured.cache).toBe(false);
+    });
+
+    it("keeps routing past suppressed default --no-X global before a subcommand", async () => {
+      // Regression: when a global boolean has a custom negation, the
+      // suppressed default `--no-<name>` token must not stop subcommand
+      // scanning — otherwise `cli --no-cache build` would never reach
+      // `build`.
+      let buildRan = false;
+      const globalArgs = z.object({
+        cache: arg(z.boolean().default(true), {
+          negation: "disable-cache",
+        }),
+      });
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            run: () => {
+              buildRan = true;
+            },
+          }),
+        },
+      });
+
+      const result = await runCommand(cmd, ["--no-cache", "build"], { globalArgs });
+      expect(result.success).toBe(true);
+      expect(buildRan).toBe(true);
+    });
+
+    it("surfaces suppressed --no-X before a subcommand via the global unknownKeysMode", async () => {
+      // Suppressed default `--no-cache` tokens before a subcommand must
+      // honour the global schema's `unknownKeysMode` — otherwise users opting
+      // into strict mode would silently lose unknown-flag detection for them.
+      const subCmd = defineCommand({
+        name: "build",
+        run: () => {},
+      });
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: subCmd },
+      });
+
+      const strictGlobal = z
+        .object({
+          cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+        })
+        .strict();
+      const strictResult = await runCommand(cmd, ["--no-cache", "build"], {
+        globalArgs: strictGlobal,
+      });
+      expect(strictResult.success).toBe(false);
+      if (!strictResult.success) {
+        expect(String(strictResult.error)).toMatch(/Unknown flags:.*no-cache/);
+      }
+
+      const stripGlobal = z.object({
+        cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+      });
+      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const stripResult = await runCommand(cmd, ["--no-cache", "build"], {
+          globalArgs: stripGlobal,
+        });
+        expect(stripResult.success).toBe(true);
+        expect(errSpy.mock.calls.some((c) => String(c[0]).includes("no-cache"))).toBe(true);
+      } finally {
+        errSpy.mockRestore();
+      }
+
+      const passthroughGlobal = z
+        .object({
+          cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+        })
+        .passthrough();
+      const errSpy2 = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const passResult = await runCommand(cmd, ["--no-cache", "build"], {
+          globalArgs: passthroughGlobal,
+        });
+        expect(passResult.success).toBe(true);
+        expect(errSpy2.mock.calls.some((c) => String(c[0]).includes("no-cache"))).toBe(false);
+      } finally {
+        errSpy2.mockRestore();
+      }
+    });
+
+    it("advertises default --no-X in help when negation is true", async () => {
+      const console = spyOnConsoleLog();
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          pretty: arg(z.boolean().default(true), {
+            description: "Pretty-print output",
+            negation: true,
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["--help"]);
+      expect(result.success).toBe(true);
+      const output = console.getLogs().join("\n");
+      expect(output).toMatch(/--pretty\s+\/\s+--no-pretty/);
+
+      console.mockRestore();
+    });
+
+    it("still accepts default --no-X when negation is true (parser unchanged)", async () => {
+      const captured: Record<string, unknown> = {};
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          pretty: arg(z.boolean().default(true), {
+            negation: true,
+          }),
+        }),
+        run: (args) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--no-pretty"]);
+      expect(result.success).toBe(true);
+      expect(captured.pretty).toBe(false);
+    });
+
+    it("suppresses both default --no-X and custom negation when negation is false", async () => {
+      const console = spyOnConsoleLog();
+      const captured: Record<string, unknown> = {};
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            description: "Enable verbose output",
+            negation: false,
+          }),
+        }),
+        run: (args) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const positive = await runCommand(cmd, ["--verbose"]);
+      expect(positive.success).toBe(true);
+      expect(captured.verbose).toBe(true);
+
+      // `--no-verbose` is no longer recognized as negation; warning only, default preserved.
+      const captured2: Record<string, unknown> = {};
+      const cmd2 = defineCommand({
+        name: "test",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            negation: false,
+          }),
+        }),
+        run: (args) => {
+          Object.assign(captured2, args);
+        },
+      });
+      const negated = await runCommand(cmd2, ["--no-verbose"]);
+      expect(negated.success).toBe(true);
+      expect(captured2.verbose).toBe(false); // default preserved (unknown flag warned)
+
+      console.mockRestore();
+    });
+
+    it("hides the default --no-X from help when negation is false", async () => {
+      const console = spyOnConsoleLog();
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            description: "Enable verbose output",
+            negation: false,
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["--help"]);
+      expect(result.success).toBe(true);
+      const output = console.getLogs().join("\n");
+      expect(output).toContain("--verbose");
+      expect(output).not.toContain("--no-verbose");
+      expect(output).not.toMatch(/--verbose\s+\//);
+
+      console.mockRestore();
+    });
+
+    it("throws when negationDescription is combined with negation: false", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            negation: false,
+            negationDescription: "should not be allowed",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, []);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(String(result.error)).toMatch(
+          /negationDescription cannot be used when negation is false/,
+        );
+      }
+    });
+
+    it("throws when negationDescription is an empty or whitespace-only string", async () => {
+      for (const value of ["", "   ", "\t\n"]) {
+        const cmd = defineCommand({
+          name: "test",
+          args: z.object({
+            cache: arg(z.boolean().default(true), {
+              negation: "disable-cache",
+              negationDescription: value,
+            }),
+          }),
+          run: () => {},
+        });
+
+        const result = await runCommand(cmd, []);
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(String(result.error)).toMatch(/negationDescription must be a non-empty string/);
+        }
+      }
+    });
+
+    it("rejects negation: false on a non-boolean field at the type level", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          // @ts-expect-error -- type-level rejection of negation on non-boolean field
+          count: arg(z.number().default(1), {
+            negation: false,
+          }),
+        }),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, []);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(String(result.error)).toMatch(/negation can only be used on boolean fields/);
+      }
+    });
+
+    it.each(["help", "help-all", "version"])(
+      "rejects reserved built-in flag %s as a custom negation name",
+      async (reserved) => {
+        const cmd = defineCommand({
+          name: "test",
+          args: z.object({
+            flag: arg(z.boolean().default(true), {
+              negation: reserved,
+            }),
+          }),
+          run: () => {},
+        });
+
+        const result = await runCommand(cmd, []);
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(String(result.error)).toMatch(/reserved built-in flag/);
+        }
+      },
+    );
+
+    it("renders custom negation with description in Global Options help section", async () => {
+      const console = spyOnConsoleLog();
+      const globalArgs = z.object({
+        color: arg(z.boolean().default(true), {
+          description: "Colorize output",
+          negation: "monochrome",
+          negationDescription: "Disable colorized output",
+        }),
+      });
+      const cmd = defineCommand({
+        name: "test",
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["--help"], { globalArgs });
+      expect(result.success).toBe(true);
+      const output = console.getLogs().join("\n");
+      expect(output).toContain("--color");
+      expect(output).toContain("--monochrome");
+      expect(output).toContain("Disable colorized output");
+
+      console.mockRestore();
+    });
+
+    it("renders custom negation with description in --help-all compact subcommand view", async () => {
+      const console = spyOnConsoleLog();
+      const cmd = defineCommand({
+        name: "root",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              color: arg(z.boolean().default(true), {
+                description: "Colorize output",
+                negation: "monochrome",
+                negationDescription: "Disable colorized output",
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      const result = await runCommand(cmd, ["--help-all"]);
+      expect(result.success).toBe(true);
+      const output = console.getLogs().join("\n");
+      expect(output).toContain("--color");
+      expect(output).toContain("--monochrome");
+      expect(output).toContain("Disable colorized output");
+
+      console.mockRestore();
+    });
+  });
 });

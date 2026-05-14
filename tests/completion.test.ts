@@ -981,6 +981,53 @@ describe("Completion", () => {
         expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
       });
 
+      it("should include custom negation as an option candidate", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            cache: arg(z.boolean().default(true), {
+              negation: "disable-cache",
+              negationDescription: "Disable the cache",
+            }),
+          }),
+          run: () => {},
+        });
+
+        const ctx = parseCompletionContext(["--"], cmd);
+        const result = generateCandidates(ctx);
+
+        const optionCandidates = result.candidates.filter((c) => c.type === "option");
+        expect(optionCandidates.some((c) => c.value === "--cache")).toBe(true);
+        const negation = optionCandidates.find((c) => c.value === "--disable-cache");
+        expect(negation).toBeDefined();
+        expect(negation?.description).toBe("Disable the cache");
+      });
+
+      it("should treat positive flag and custom negation as mutually exclusive", () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+            other: arg(z.boolean().default(false)),
+          }),
+          run: () => {},
+        });
+
+        // Typing --cache hides both --cache and --disable-cache
+        const ctx1 = parseCompletionContext(["--cache", "--"], cmd);
+        const opts1 = generateCandidates(ctx1).candidates.filter((c) => c.type === "option");
+        expect(opts1.some((c) => c.value === "--cache")).toBe(false);
+        expect(opts1.some((c) => c.value === "--disable-cache")).toBe(false);
+        expect(opts1.some((c) => c.value === "--other")).toBe(true);
+
+        // Typing --disable-cache also hides both
+        const ctx2 = parseCompletionContext(["--disable-cache", "--"], cmd);
+        const opts2 = generateCandidates(ctx2).candidates.filter((c) => c.type === "option");
+        expect(opts2.some((c) => c.value === "--cache")).toBe(false);
+        expect(opts2.some((c) => c.value === "--disable-cache")).toBe(false);
+        expect(opts2.some((c) => c.value === "--other")).toBe(true);
+      });
+
       it("should resolve shellCommand in JS instead of using markers", () => {
         const cmd = defineCommand({
           name: "mycli",

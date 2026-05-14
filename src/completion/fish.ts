@@ -136,6 +136,7 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
   const lines: string[] = [];
   for (const opt of options) {
     const desc = escapeDesc(opt.description ?? "");
+    const negDesc = opt.negationDescription ? escapeDesc(opt.negationDescription) : desc;
     if (opt.valueType === "array") {
       lines.push(`        echo "--${opt.cliName}\t${desc}"`);
     } else {
@@ -145,9 +146,17 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
           checks.push(a.length === 1 ? `"-${a}"` : `"--${a}"`);
         }
       }
+      if (opt.negation) {
+        checks.push(`"--${opt.negation}"`);
+      }
       lines.push(
         `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
       );
+      if (opt.negation) {
+        lines.push(
+          `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.negation}\t${negDesc}"`,
+        );
+      }
     }
   }
   lines.push(`        __${fn}_not_used "--help"; and echo "--help\tShow help"`);

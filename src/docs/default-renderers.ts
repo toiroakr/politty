@@ -27,6 +27,14 @@ function escapeTableCell(str: string): string {
 }
 
 /**
+ * Marker appended to a custom negation row/line so readers can see which
+ * positive flag it negates (e.g. `--monochrome` → `(↔ \`--color\`)`).
+ */
+export function negationRelationMarker(opt: ResolvedFieldMeta): string {
+  return `(↔ \`--${opt.cliName}\`)`;
+}
+
+/**
  * Format default value for display
  */
 function formatDefaultValue(value: unknown): string {
@@ -118,26 +126,50 @@ function resolvePlaceholder(opt: ResolvedFieldMeta): string {
 
 /**
  * Format option name for table display (e.g., `--dry-run` or `--port <PORT>`)
+ *
+ * Boolean fields with a custom inline `negation` (no separate description) are
+ * shown as `\`--cache\` / \`--disable-cache\``.
  */
 function formatOptionName(opt: ResolvedFieldMeta): string {
   const placeholder = resolvePlaceholder(opt);
-  return opt.type === "boolean" ? `\`--${opt.cliName}\`` : `\`--${opt.cliName} <${placeholder}>\``;
+  if (opt.type === "boolean") {
+    const positive = `\`--${opt.cliName}\``;
+    if (opt.negationDisplay && !opt.negationDescription) {
+      return `${positive} / \`--${opt.negationDisplay}\``;
+    }
+    return positive;
+  }
+  return `\`--${opt.cliName} <${placeholder}>\``;
 }
 
 /**
- * Format option flags for list display (uses kebab-case cliName)
+ * Format option flags for list display (uses kebab-case cliName).
+ * Aliases are joined with `, `; the inline negation (when no separate
+ * `negationDescription` is set) is appended with ` / ` so it stays
+ * visually distinct from aliases, matching help and table output.
  */
 function formatOptionFlags(opt: ResolvedFieldMeta): string {
   const placeholder = resolvePlaceholder(opt);
   const longFlag =
     opt.type === "boolean" ? `--${opt.cliName}` : `--${opt.cliName} <${placeholder}>`;
 
-  if (!opt.alias || opt.alias.length === 0) {
-    return `\`${longFlag}\``;
+  const parts: string[] = [];
+  if (opt.alias) {
+    for (const a of opt.alias) {
+      if (a.length === 1) parts.push(`\`-${a}\``);
+    }
   }
-  const shortParts = opt.alias.filter((a) => a.length === 1).map((a) => `\`-${a}\``);
-  const longParts = opt.alias.filter((a) => a.length > 1).map((a) => `\`--${a}\``);
-  return [...shortParts, `\`${longFlag}\``, ...longParts].join(", ");
+  parts.push(`\`${longFlag}\``);
+  if (opt.alias) {
+    for (const a of opt.alias) {
+      if (a.length > 1) parts.push(`\`--${a}\``);
+    }
+  }
+  const aliasJoined = parts.join(", ");
+  if (opt.type === "boolean" && opt.negationDisplay && !opt.negationDescription) {
+    return `${aliasJoined} / \`--${opt.negationDisplay}\``;
+  }
+  return aliasJoined;
 }
 
 /**
@@ -205,6 +237,17 @@ export function renderOptionsTable(info: CommandInfo): string {
     } else {
       lines.push(`| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} |`);
     }
+
+    // Add a separate row for the negation when a description is provided
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      const negName = `\`--${opt.negationDisplay}\``;
+      const negDesc = `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`;
+      if (hasEnv) {
+        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - | - |`);
+      } else {
+        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - |`);
+      }
+    }
   }
 
   return lines.join("\n");
@@ -235,6 +278,11 @@ export function renderOptionsList(info: CommandInfo): string {
       opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
     const envInfo = formatEnvInfo(opt.env);
     lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      lines.push(
+        `- \`--${opt.negationDisplay}\` - ${opt.negationDescription} ${negationRelationMarker(opt)}`,
+      );
+    }
   }
 
   return lines.join("\n");
@@ -298,6 +346,16 @@ export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): strin
       );
     } else {
       lines.push(`| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} |`);
+    }
+
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      const negName = `\`--${opt.negationDisplay}\``;
+      const negDesc = `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`;
+      if (hasEnv) {
+        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - | - |`);
+      } else {
+        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - |`);
+      }
     }
   }
 
@@ -461,6 +519,11 @@ export function renderOptionsListFromArray(options: ResolvedFieldMeta[]): string
       opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
     const envInfo = formatEnvInfo(opt.env);
     lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      lines.push(
+        `- \`--${opt.negationDisplay}\` - ${opt.negationDescription} ${negationRelationMarker(opt)}`,
+      );
+    }
   }
 
   return lines.join("\n");
