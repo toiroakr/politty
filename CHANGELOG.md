@@ -1,5 +1,18 @@
 # politty
 
+## 0.4.16
+
+### Patch Changes
+
+- 83ca319: Add a `negation` option for boolean fields. Set it to a string (e.g. `"disable-cache"`) to replace the default `--no-<name>` form with a custom name, to `true` to keep the default `--no-<name>` and advertise it in help/docs/completions, or to `false` to disable negation entirely (both the default `--no-*` and any custom name are rejected). An optional `negationDescription` renders a separate row in help and generated docs. Help output, generated documentation, and shell completions (bash/zsh/fish) all reflect the configuration. Non-boolean fields are rejected at the type level and at runtime.
+- 98de327: Fix Windows path separators leaking into generated docs:
+  - Cross-file Markdown links now use forward slashes (`commands/config.md#config`) instead of `commands\config.md`, so links render correctly on every Markdown renderer.
+  - Index marker scopes embedded in `rootDoc` files (`<!-- politty:index:<path>:start -->`) are normalized too, so docs generated on Windows can be regenerated on macOS/Linux without silently skipping the index update.
+
+- 5a10050: Fix typecheck failure under `@typescript/native-preview` ≥ 20260504.
+
+  Zod's registry rewrites the meta type through `$replace<Meta, S>`, and newer TypeScript builds expand the generic `then` signature on `PromiseLike<void>` inside `effect`'s return type during that rewrite, producing a structural type that is no longer assignable to the original `ArgMeta`. The runtime value is unchanged, so `getArgMeta` now restores the static type at the boundary with a localized cast.
+
 ## 0.4.15
 
 ### Patch Changes
