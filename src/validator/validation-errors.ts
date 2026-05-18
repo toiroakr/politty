@@ -47,3 +47,15 @@ export class CaseVariantCollisionError extends Error {
     this.name = "CaseVariantCollisionError";
   }
 }
+
+/**
+ * Error thrown when a custom boolean negation name collides with another
+ * field's name, cliName, alias, or another field's negation (including
+ * derived camelCase variants).
+ */
+export class DuplicateNegationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DuplicateNegationError";
+  }
+}

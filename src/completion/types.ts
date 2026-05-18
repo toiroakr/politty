@@ -74,6 +74,13 @@ export interface CompletableOption {
    * 1-char entries are short (`-v`); multi-char entries are long (`--to-be`).
    */
   alias?: string[] | undefined;
+  /**
+   * Negation name to advertise in shell completions (no `--` prefix),
+   * or `undefined` to hide the negation. Mirrors `ResolvedFieldMeta.negationDisplay`.
+   */
+  negation?: string | undefined;
+  /** Description for the negation option (when distinct from the main description) */
+  negationDescription?: string | undefined;
   /** Description for completion */
   description?: string | undefined;
   /** Whether this option takes a value */

@@ -130,6 +130,7 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
   const lines: string[] = [];
   for (const opt of options) {
     const desc = opt.description ? `:${escapeDesc(opt.description)}` : "";
+    const negDesc = opt.negationDescription ? `:${escapeDesc(opt.negationDescription)}` : desc;
     if (opt.valueType === "array") {
       lines.push(`        _opts+=("--${opt.cliName}${desc}")`);
     } else {
@@ -139,9 +140,17 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
           patterns.push(a.length === 1 ? `"-${a}"` : `"--${a}"`);
         }
       }
+      if (opt.negation) {
+        patterns.push(`"--${opt.negation}"`);
+      }
       lines.push(
         `        __${fn}_not_used ${patterns.join(" ")} && _opts+=("--${opt.cliName}${desc}")`,
       );
+      if (opt.negation) {
+        lines.push(
+          `        __${fn}_not_used ${patterns.join(" ")} && _opts+=("--${opt.negation}${negDesc}")`,
+        );
+      }
     }
   }
   lines.push(`        __${fn}_not_used "--help" && _opts+=("--help:Show help")`);

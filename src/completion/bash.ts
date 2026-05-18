@@ -209,7 +209,13 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
           patterns.push(a.length === 1 ? `"-${a}"` : `"--${a}"`);
         }
       }
+      if (opt.negation) {
+        patterns.push(`"--${opt.negation}"`);
+      }
       lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.cliName})`);
+      if (opt.negation) {
+        lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.negation})`);
+      }
     }
   }
   lines.push(`        __${fn}_not_used "--help" && _avail+=(--help)`);

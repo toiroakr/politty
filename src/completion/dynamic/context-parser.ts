@@ -79,6 +79,8 @@ function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
       name: field.name,
       cliName: field.cliName,
       alias: field.alias,
+      negation: field.negationDisplay,
+      negationDescription: field.negationDescription,
       description: field.description,
       takesValue: field.type !== "boolean",
       valueType: field.type,
@@ -210,6 +212,10 @@ function findOption(
     if (nameOrAlias.length > 1) {
       if (opt.cliName.includes("-") && toCamelCase(opt.cliName) === nameOrAlias) return true;
       if (opt.alias?.some((a) => a.includes("-") && toCamelCase(a) === nameOrAlias)) return true;
+      if (opt.negation) {
+        if (opt.negation === nameOrAlias) return true;
+        if (opt.negation.includes("-") && toCamelCase(opt.negation) === nameOrAlias) return true;
+      }
     }
     return false;
   });
@@ -301,6 +307,11 @@ export function parseCompletionContext(
         usedOptions.add(opt.cliName);
         if (opt.alias) {
           for (const a of opt.alias) usedOptions.add(a);
+        }
+        // Mark the negation as mutually exclusive with the positive flag so
+        // typing either form filters both from subsequent suggestions.
+        if (opt.negation) {
+          usedOptions.add(opt.negation);
         }
 
         if (opt.takesValue) {

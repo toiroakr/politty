@@ -6,6 +6,7 @@ import {
   validateCrossSchemaCollisions,
   validateDuplicateAliases,
   validateDuplicateFields,
+  validateDuplicateNegations,
   validatePositionalConfig,
   validateReservedAliases,
 } from "../validator/command-validator.js";
@@ -92,7 +93,7 @@ export function parseArgs(
           remainingArgs: scanResult.tokensAfterSubcommand,
           rawArgs: {},
           positionals: [],
-          unknownFlags: [],
+          unknownFlags: scanResult.suppressedTokens,
           rawGlobalArgs,
         };
       }
@@ -124,6 +125,7 @@ export function parseArgs(
       validateDuplicateFields(extracted);
       validateCaseVariantCollisions(extracted);
       validateDuplicateAliases(extracted);
+      validateDuplicateNegations(extracted);
       validatePositionalConfig(extracted);
       validateReservedAliases(extracted, hasSubCommands);
       if (options.globalExtracted) {
@@ -316,7 +318,10 @@ function separateGlobalArgs(
         arg,
         lookup,
       );
-      const flagName = isNegated ? withoutDashes.slice(3) : withoutDashes;
+      // Use resolvedName for local collision check so that both default
+      // (`--no-cache` → cache) and custom (`--disable-cache` → cache)
+      // negation forms shadow correctly when `cache` is defined locally.
+      const flagName = resolvedName;
 
       // If also defined locally (field name, cliName, alias, or their camelCase
       // variants), let the local parser handle it
