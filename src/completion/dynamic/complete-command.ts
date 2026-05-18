@@ -16,7 +16,7 @@
 import { z } from "zod";
 import { arg } from "../../core/arg-registry.js";
 import { defineCommand } from "../../core/command.js";
-import type { AnyCommand, Command } from "../../types.js";
+import type { AnyCommand, ArgsSchema, Command } from "../../types.js";
 import { generateCandidates } from "./candidate-generator.js";
 import { parseCompletionContext } from "./context-parser.js";
 import { formatForShell } from "./shell-formatter.js";
@@ -53,33 +53,38 @@ type CompleteArgs = z.infer<typeof completeArgsSchema>;
  *
  * @param rootCommand - The root command to generate completions for
  * @param programName - The program name (optional, defaults to rootCommand.name)
+ * @param globalArgsSchema - Global args schema. Forwarded to
+ *   `parseCompletionContext` so resolvers attached to global options remain
+ *   reachable at every subcommand level.
  * @returns A command that outputs completion candidates
  */
 export function createDynamicCompleteCommand(
   rootCommand: AnyCommand,
   _programName?: string,
+  globalArgsSchema?: ArgsSchema,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Command<typeof completeArgsSchema, CompleteArgs, any> {
   return defineCommand({
     name: "__complete",
     // No description - this is a hidden command
     args: completeArgsSchema,
-    run(args) {
+    async run(args) {
       // Parse the completion context
-      const context = parseCompletionContext(args.args, rootCommand);
+      const context = parseCompletionContext(args.args, rootCommand, globalArgsSchema);
 
-      // Generate candidates (shellCommand/file extensions resolved in JS)
-      const result = generateCandidates(context);
-
-      // Detect bash inline option-value prefix
+      // Detect bash inline option-value prefix and strip it from currentWord
+      // so resolvers/formatters never have to peel `--field=` off themselves.
       const inlinePrefix = detectInlinePrefix(context.currentWord);
+      const effectiveWord = inlinePrefix
+        ? context.currentWord.slice(inlinePrefix.length)
+        : context.currentWord;
 
-      // Format for the target shell
+      const generationContext = inlinePrefix ? { ...context, currentWord: effectiveWord } : context;
+      const result = await generateCandidates(generationContext, { shell: args.shell });
+
       const output = formatForShell(result, {
         shell: args.shell,
-        currentWord: inlinePrefix
-          ? context.currentWord.slice(inlinePrefix.length)
-          : context.currentWord,
+        currentWord: effectiveWord,
         inlinePrefix,
       });
 

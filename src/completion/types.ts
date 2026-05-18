@@ -2,6 +2,7 @@
  * Types for shell completion generation
  */
 
+import type { DynamicCompletionResolver } from "../core/dynamic-completion-types.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 
 /**
@@ -26,22 +27,39 @@ export interface CompletionOptions {
 }
 
 /**
- * Value completion specification for shell scripts
+ * Value completion specification for shell scripts.
+ *
+ * Discriminated by `type`. The `dynamic` variant carries a JS resolver that
+ * the static shell scripts delegate to via `<program> __complete`. All
+ * variants share the same optional metadata fields (left undefined where
+ * inapplicable) so consumers can read `vc.choices`/`vc.extensions`/etc.
+ * without narrowing first.
  */
-export type ValueCompletion = {
-  /** Completion type */
-  type: "choices" | "file" | "directory" | "command" | "none";
-  /** List of valid choices (for "choices" type) */
-  choices?: string[];
-  /** Shell command for dynamic completion (for "command" type) */
-  shellCommand?: string;
-} & (
-  | { /** File extension filters (for "file" type) */ extensions?: string[]; matcher?: never }
+export type ValueCompletion =
+  | ({
+      /** Completion type */
+      type: "choices" | "file" | "directory" | "command" | "none";
+      /** List of valid choices (for "choices" type) */
+      choices?: string[];
+      /** Shell command for dynamic completion (for "command" type) */
+      shellCommand?: string;
+      resolve?: never;
+    } & (
+      | { /** File extension filters (for "file" type) */ extensions?: string[]; matcher?: never }
+      | {
+          /** Glob patterns for file matching (for "file" type) */ matcher?: string[];
+          extensions?: never;
+        }
+    ))
   | {
-      /** Glob patterns for file matching (for "file" type) */ matcher?: string[];
+      /** In-process dynamic completion via JS callback. */
+      type: "dynamic";
+      resolve: DynamicCompletionResolver;
+      choices?: never;
+      shellCommand?: never;
       extensions?: never;
-    }
-);
+      matcher?: never;
+    };
 
 /**
  * Information about a completable option

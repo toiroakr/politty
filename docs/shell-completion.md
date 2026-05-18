@@ -61,6 +61,50 @@ branch: arg(z.string().optional(), {
 
 The command has a 5-second timeout. If it fails or times out, no candidates are shown (stderr is suppressed).
 
+### Resolve (in-process JS)
+
+Compute candidates in the same process from a TS callback that has access to **other arg values typed so far**. Useful when completion depends on prior context — e.g. fields valid for the chosen endpoint, or columns in the chosen table.
+
+```typescript
+field: arg(z.array(z.string()).default([]), {
+  alias: "f",
+  completion: {
+    custom: {
+      resolve: ({ parsedArgs, previousValues }) => {
+        const endpoint = parsedArgs.endpoint as string | undefined;
+        if (!endpoint) return { candidates: [] };
+        const all = lookupFieldsFor(endpoint);
+        // De-dup keys already supplied via earlier `--field key=value` flags.
+        const used = new Set(previousValues.map((v) => v.split("=")[0]));
+        return { candidates: all.filter((k) => !used.has(k)) };
+      },
+    },
+  },
+});
+```
+
+The callback receives a `DynamicCompletionContext`:
+
+| Field            | Description                                                                                                                                                                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `currentWord`    | Word being completed. Inline `--field=` prefix is stripped before this is set.                                                                                                                                                                 |
+| `shell`          | `"bash" \| "zsh" \| "fish"` — useful when output should differ between shells.                                                                                                                                                                 |
+| `parsedArgs`     | Best-effort parsed values of OTHER args on the same command, keyed by camelCase name. Includes positionals (string, or string[] for variadic) and options (string for scalars, string[] for array options). Zod validation is **NOT** applied. |
+| `previousValues` | Values already supplied for the option/positional being completed (for de-duping array options).                                                                                                                                               |
+| `subcommandPath` | Subcommand path leading here, e.g. `["api"]`.                                                                                                                                                                                                  |
+
+Return `{ candidates, directive? }` where `candidates` is an array of strings or `{ value, description }` objects. When `directive` is omitted it defaults to `FilterPrefix | NoFileCompletion` (matches `choices` behaviour).
+
+The resolver runs **inside the `__complete` command**, so:
+
+- Static shell scripts delegate to `<program> __complete --shell <shell>` whenever a field uses `resolve`. This is automatic — call `withCompletionCommand` and politty wires it up.
+- The resolver may be async (returning `Promise<DynamicCompletionResult>`).
+- If the resolver throws, completion silently returns no candidates (with `CompletionDirective.Error` set).
+- Dot-notation key descent (`labels.foo.bar`) and oneof exclusivity are the resolver's responsibility — politty just passes `currentWord` through and strips the `--field=` inline prefix.
+- `console.log` from inside the resolver pollutes the candidate stream; use `console.error` or a logger that writes to stderr instead.
+
+For local dev, set `MYCLI_BIN` (uppercase program name) to override the binary the static script invokes — useful when the CLI hasn't been installed on PATH yet.
+
 ### File Completion
 
 Delegate to the shell's native file completion. Optionally filter by extension:
@@ -105,7 +149,7 @@ This is useful for secrets or tokens where file suggestions would be noise.
 
 When multiple sources could provide completion values, the following priority applies:
 
-1. **Explicit `custom`** — `choices` or `shellCommand`
+1. **Explicit `custom`** — exactly one of `resolve`, `choices`, or `shellCommand`. Specifying more than one throws at command-definition time.
 2. **Explicit `type`** — `file`, `directory`, or `none`
 3. **Auto-detected** — enum values from `z.enum()`
 

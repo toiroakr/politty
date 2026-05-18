@@ -5,7 +5,7 @@
 import { extractFields, toCamelCase } from "../../core/schema-extractor.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
-import type { AnyCommand } from "../../types.js";
+import type { AnyCommand, ArgsSchema } from "../../types.js";
 import type { CompletableOption, CompletablePositional } from "../types.js";
 import { resolveValueCompletion } from "../value-completion-resolver.js";
 
@@ -46,6 +46,19 @@ export interface CompletionContext {
   usedOptions: Set<string>;
   /** Number of positional arguments already provided */
   providedPositionalCount: number;
+  /**
+   * Best-effort parsed values for the CURRENT command, keyed by camelCase
+   * field name. Includes positionals (single value or string[] for variadic
+   * positionals) and options (string for scalars, string[] for array
+   * options). Zod validation is NOT applied — values are raw strings.
+   */
+  parsedArgs: Record<string, unknown>;
+  /**
+   * Values already supplied for the option/positional currently being
+   * completed (for de-duplicating array options and oneof exclusivity in
+   * dynamic resolvers).
+   */
+  previousValues: string[];
 }
 
 /**
@@ -55,8 +68,11 @@ function extractOptions(command: AnyCommand): CompletableOption[] {
   if (!command.args) {
     return [];
   }
+  return extractOptionsFromSchema(command.args);
+}
 
-  const extracted = extractFields(command.args);
+function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
+  const extracted = extractFields(schema);
   return extracted.fields
     .filter((field) => !field.positional)
     .map((field) => ({
@@ -71,6 +87,20 @@ function extractOptions(command: AnyCommand): CompletableOption[] {
       required: field.required,
       valueCompletion: resolveValueCompletion(field),
     }));
+}
+
+/** Merge global options into local, with local shadowing on cliName collision. */
+function mergeGlobalOptions(
+  local: CompletableOption[],
+  globals: CompletableOption[],
+): CompletableOption[] {
+  if (globals.length === 0) return local;
+  const seen = new Set(local.map((o) => o.cliName));
+  const merged = [...local];
+  for (const g of globals) {
+    if (!seen.has(g.cliName)) merged.push(g);
+  }
+  return merged;
 }
 
 /**
@@ -196,20 +226,65 @@ function findOption(
  *
  * @param argv - Arguments after the program name (e.g., ["build", "--fo"])
  * @param rootCommand - The root command
+ * @param globalArgsSchema - Optional global args. When provided, options
+ *   derived from this schema are merged into every command level so dynamic
+ *   resolvers attached to global options can be reached from any subcommand.
  * @returns Completion context
  */
-export function parseCompletionContext(argv: string[], rootCommand: AnyCommand): CompletionContext {
+export function parseCompletionContext(
+  argv: string[],
+  rootCommand: AnyCommand,
+  globalArgsSchema?: ArgsSchema,
+): CompletionContext {
   // Initialize with root command
   let currentCommand = rootCommand;
   const subcommandPath: string[] = [];
+
+  const globalOptions = globalArgsSchema ? extractOptionsFromSchema(globalArgsSchema) : [];
 
   // Track used options and positional count
   const usedOptions = new Set<string>();
   let positionalCount = 0;
 
+  // Best-effort parsed values for the CURRENT command. Reset when traversing
+  // into a subcommand so dynamic resolvers only see siblings on the same
+  // command frame. Global option values live in a separate map so they
+  // survive subcommand descent — runtime accumulates globals across the
+  // command path, and resolvers attached to global options expect them
+  // visible regardless of where the option was supplied.
+  let parsedArgs: Record<string, unknown> = {};
+  let positionalValues: string[] = [];
+  const globalParsedArgs: Record<string, unknown> = {};
+
+  // Effective global options for the current frame: globals minus those
+  // shadowed by a same-cliName local option. Recomputed at each subcommand
+  // descent so a local declaration doesn't accidentally route to globals.
+  let effectiveGlobalNames = new Set<string>();
+  const refreshEffectiveGlobalNames = (cmd: AnyCommand): void => {
+    if (globalOptions.length === 0) {
+      effectiveGlobalNames = new Set();
+      return;
+    }
+    const localCliNames = new Set(extractOptions(cmd).map((o) => o.cliName));
+    effectiveGlobalNames = new Set(
+      globalOptions.filter((g) => !localCliNames.has(g.cliName)).map((g) => g.name),
+    );
+  };
+  refreshEffectiveGlobalNames(currentCommand);
+
+  const recordOptionValue = (opt: CompletableOption, value: string): void => {
+    const target = effectiveGlobalNames.has(opt.name) ? globalParsedArgs : parsedArgs;
+    if (opt.valueType === "array") {
+      const existing = target[opt.name];
+      target[opt.name] = Array.isArray(existing) ? [...existing, value] : [value];
+    } else {
+      target[opt.name] = value;
+    }
+  };
+
   // Process arguments to resolve subcommands and track state
   let i = 0;
-  let options = extractOptions(currentCommand);
+  let options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
   let afterDoubleDash = false;
 
   // Traverse subcommands
@@ -239,9 +314,15 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
           usedOptions.add(opt.negation);
         }
 
-        // Skip next word if option takes value and doesn't have inline value
-        if (opt.takesValue && !hasInlineValue(word)) {
-          i++;
+        if (opt.takesValue) {
+          if (hasInlineValue(word)) {
+            const eqIdx = word.indexOf("=");
+            recordOptionValue(opt, word.slice(eqIdx + 1));
+          } else if (i + 1 < argv.length - 1) {
+            // Skip next word if option takes value and doesn't have inline value
+            recordOptionValue(opt, argv[i + 1]!);
+            i++;
+          }
         }
       }
       i++;
@@ -253,14 +334,18 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     if (subcommand) {
       subcommandPath.push(word);
       currentCommand = subcommand;
-      options = extractOptions(currentCommand);
+      options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
+      refreshEffectiveGlobalNames(currentCommand);
       usedOptions.clear(); // Reset for new subcommand
       positionalCount = 0;
+      parsedArgs = {};
+      positionalValues = [];
       i++;
       continue;
     }
 
     // Otherwise it's a positional argument
+    positionalValues.push(word);
     positionalCount++;
     i++;
   }
@@ -272,6 +357,20 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
   // Extract data for current command
   const positionals = extractPositionalsForContext(currentCommand);
   const subcommands = getSubcommandNames(currentCommand);
+
+  // Map collected positional values to their field names so resolvers can
+  // reference them like options. The trailing variadic positional (if any)
+  // absorbs every value beyond `positionals.length - 1`.
+  for (let p = 0; p < positionals.length; p++) {
+    const pos = positionals[p]!;
+    if (pos.variadic) {
+      parsedArgs[pos.name] = positionalValues.slice(p);
+      break;
+    }
+    if (p < positionalValues.length) {
+      parsedArgs[pos.name] = positionalValues[p];
+    }
+  }
 
   // Determine completion type
   let completionType: CompletionType;
@@ -329,6 +428,30 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     }
   }
 
+  // Compute previousValues for the target of completion. Useful for resolvers
+  // that need to de-dup repeated array options or enforce oneof exclusivity.
+  let previousValues: string[] = [];
+  if (targetOption) {
+    if (targetOption.valueType === "array") {
+      const store = effectiveGlobalNames.has(targetOption.name) ? globalParsedArgs : parsedArgs;
+      const stored = store[targetOption.name];
+      previousValues = Array.isArray(stored) ? (stored as string[]) : [];
+    }
+  } else if (completionType === "positional" && positionalIndex !== undefined) {
+    // Clamp to the last positional so a variadic tail still receives the
+    // previously-supplied values when positionalIndex outruns the schema
+    // (e.g. completing the 3rd value of a single variadic positional).
+    const lastIdx = positionals.length - 1;
+    const clampedIdx = positionalIndex > lastIdx ? lastIdx : positionalIndex;
+    const pos = clampedIdx >= 0 ? positionals[clampedIdx] : undefined;
+    if (pos?.variadic) {
+      previousValues = positionalValues.slice(clampedIdx);
+    }
+  }
+
+  // Expose globals alongside locals; local args win on name collision.
+  const mergedParsedArgs: Record<string, unknown> = { ...globalParsedArgs, ...parsedArgs };
+
   return {
     subcommandPath,
     currentCommand,
@@ -342,6 +465,8 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     positionals,
     usedOptions,
     providedPositionalCount: positionalCount,
+    parsedArgs: mergedParsedArgs,
+    previousValues,
   };
 }
 

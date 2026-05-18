@@ -253,6 +253,24 @@ export function isSubcmdCaseLines(routeEntries: RouteEntry[]): string[] {
 }
 
 /**
+ * Walk a CompletableSubcommand tree and return true when any option or
+ * positional uses an in-process dynamic resolver. Used by shell generators
+ * to decide whether to emit `__<fn>_invoke_complete` delegate helpers.
+ */
+export function hasDynamicCompletion(sub: CompletableSubcommand): boolean {
+  for (const opt of sub.options) {
+    if (opt.valueCompletion?.type === "dynamic") return true;
+  }
+  for (const pos of sub.positionals) {
+    if (pos.valueCompletion?.type === "dynamic") return true;
+  }
+  for (const child of sub.subcommands) {
+    if (hasDynamicCompletion(child)) return true;
+  }
+  return false;
+}
+
+/**
  * Recursively merge global options into a subcommand and all its descendants.
  * Avoids duplicates by checking existing option names.
  */

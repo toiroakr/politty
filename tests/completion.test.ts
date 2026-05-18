@@ -855,40 +855,43 @@ describe("Completion", () => {
         },
       });
 
-      it("should generate subcommand candidates", () => {
+      const gen = (ctx: ReturnType<typeof parseCompletionContext>) =>
+        generateCandidates(ctx, { shell: "bash" });
+
+      it("should generate subcommand candidates", async () => {
         const ctx = parseCompletionContext([""], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         const subcommandCandidates = result.candidates.filter((c) => c.type === "subcommand");
         expect(subcommandCandidates.some((c) => c.value === "build")).toBe(true);
         expect(subcommandCandidates.some((c) => c.value === "test")).toBe(true);
       });
 
-      it("should generate option candidates", () => {
+      it("should generate option candidates", async () => {
         const ctx = parseCompletionContext(["--"], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         const optionCandidates = result.candidates.filter((c) => c.type === "option");
         expect(optionCandidates.some((c) => c.value === "--verbose")).toBe(true);
         expect(optionCandidates.some((c) => c.value === "--format")).toBe(true);
       });
 
-      it("should generate enum value candidates for option-value", () => {
+      it("should generate enum value candidates for option-value", async () => {
         const ctx = parseCompletionContext(["--format", ""], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         expect(result.candidates.some((c) => c.value === "json")).toBe(true);
         expect(result.candidates.some((c) => c.value === "yaml")).toBe(true);
       });
 
-      it("should set file directive for file completion without extensions", () => {
+      it("should set file directive for file completion without extensions", async () => {
         const ctx = parseCompletionContext(["--config", ""], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         expect(result.directive & CompletionDirective.FileCompletion).toBeTruthy();
       });
 
-      it("should pass file extensions to shell via metadata instead of resolving in JS", () => {
+      it("should pass file extensions to shell via metadata instead of resolving in JS", async () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -900,17 +903,14 @@ describe("Completion", () => {
         });
 
         const ctx = parseCompletionContext(["--config", ""], cmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
-        // Should NOT have any file candidates resolved in JS
         expect(result.candidates).toHaveLength(0);
-        // Should NOT have FileCompletion directive (shell uses @ext: metadata instead)
         expect(result.directive & CompletionDirective.FileCompletion).toBeFalsy();
-        // Should have fileExtensions metadata for shell-native completion
         expect(result.fileExtensions).toEqual(["json", "yaml"]);
       });
 
-      it("should pass file matchers to shell via metadata instead of resolving in JS", () => {
+      it("should pass file matchers to shell via metadata instead of resolving in JS", async () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -922,49 +922,45 @@ describe("Completion", () => {
         });
 
         const ctx = parseCompletionContext(["--env-file", ""], cmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
-        // Should NOT have any file candidates resolved in JS
         expect(result.candidates).toHaveLength(0);
-        // Should NOT have FileCompletion directive (shell uses @matcher: metadata instead)
         expect(result.directive & CompletionDirective.FileCompletion).toBeFalsy();
-        // Should have fileMatchers metadata for shell-native completion
         expect(result.fileMatchers).toEqual([".env.*"]);
-        // Should NOT have fileExtensions
         expect(result.fileExtensions).toBeUndefined();
       });
 
-      it("should set directory directive for directory completion", () => {
+      it("should set directory directive for directory completion", async () => {
         const ctx = parseCompletionContext(["--dir", ""], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         expect(result.directive & CompletionDirective.DirectoryCompletion).toBeTruthy();
       });
 
-      it("should filter out used options", () => {
+      it("should filter out used options", async () => {
         const ctx = parseCompletionContext(["--verbose", "--"], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         const optionCandidates = result.candidates.filter((c) => c.type === "option");
         expect(optionCandidates.some((c) => c.value === "--verbose")).toBe(false);
       });
 
-      it("should keep array options available after they are used", () => {
+      it("should keep array options available after they are used", async () => {
         const ctx = parseCompletionContext(["--tags", "one", "--"], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         const optionCandidates = result.candidates.filter((c) => c.type === "option");
         expect(optionCandidates.some((c) => c.value === "--tags")).toBe(true);
       });
 
-      it("should set NoFileCompletion for enum value completion", () => {
+      it("should set NoFileCompletion for enum value completion", async () => {
         const ctx = parseCompletionContext(["--format", ""], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
       });
 
-      it("should set NoFileCompletion for custom choices completion", () => {
+      it("should set NoFileCompletion for custom choices completion", async () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -976,12 +972,12 @@ describe("Completion", () => {
         });
 
         const ctx = parseCompletionContext(["--env", ""], cmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
       });
 
-      it("should include custom negation as an option candidate", () => {
+      it("should include custom negation as an option candidate", async () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -994,7 +990,7 @@ describe("Completion", () => {
         });
 
         const ctx = parseCompletionContext(["--"], cmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         const optionCandidates = result.candidates.filter((c) => c.type === "option");
         expect(optionCandidates.some((c) => c.value === "--cache")).toBe(true);
@@ -1003,7 +999,7 @@ describe("Completion", () => {
         expect(negation?.description).toBe("Disable the cache");
       });
 
-      it("should treat positive flag and custom negation as mutually exclusive", () => {
+      it("should treat positive flag and custom negation as mutually exclusive", async () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -1015,20 +1011,20 @@ describe("Completion", () => {
 
         // Typing --cache hides both --cache and --disable-cache
         const ctx1 = parseCompletionContext(["--cache", "--"], cmd);
-        const opts1 = generateCandidates(ctx1).candidates.filter((c) => c.type === "option");
+        const opts1 = (await gen(ctx1)).candidates.filter((c) => c.type === "option");
         expect(opts1.some((c) => c.value === "--cache")).toBe(false);
         expect(opts1.some((c) => c.value === "--disable-cache")).toBe(false);
         expect(opts1.some((c) => c.value === "--other")).toBe(true);
 
         // Typing --disable-cache also hides both
         const ctx2 = parseCompletionContext(["--disable-cache", "--"], cmd);
-        const opts2 = generateCandidates(ctx2).candidates.filter((c) => c.type === "option");
+        const opts2 = (await gen(ctx2)).candidates.filter((c) => c.type === "option");
         expect(opts2.some((c) => c.value === "--cache")).toBe(false);
         expect(opts2.some((c) => c.value === "--disable-cache")).toBe(false);
         expect(opts2.some((c) => c.value === "--other")).toBe(true);
       });
 
-      it("should resolve shellCommand in JS instead of using markers", () => {
+      it("should resolve shellCommand in JS instead of using markers", async () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -1042,11 +1038,9 @@ describe("Completion", () => {
         });
 
         const ctx = parseCompletionContext(["--item", ""], cmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
-        // Should NOT have __command: marker
         expect(result.candidates.some((c) => c.value.startsWith("__command:"))).toBe(false);
-        // Should have resolved candidates from the shell command
         expect(result.candidates.some((c) => c.value === "foo")).toBe(true);
         expect(result.candidates.some((c) => c.value === "bar")).toBe(true);
         expect(result.candidates.some((c) => c.value === "baz")).toBe(true);
@@ -1209,7 +1203,7 @@ describe("Completion", () => {
         expect(completeCmd.run).toBeDefined();
       });
 
-      it("should output completion candidates when run", () => {
+      it("should output completion candidates when run", async () => {
         const mainCmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -1221,7 +1215,7 @@ describe("Completion", () => {
         const completeCmd = createDynamicCompleteCommand(mainCmd);
 
         const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-        completeCmd.run?.({ shell: "fish", args: ["--format", ""] });
+        await completeCmd.run?.({ shell: "fish", args: ["--format", ""] });
 
         const output = consoleSpy.mock.calls
           .map((args) => args.map((value) => String(value)).join(" "))

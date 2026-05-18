@@ -198,9 +198,9 @@ describe("24-shell-completion", () => {
   });
 
   describe("dynamic completion (via parseCompletionContext + generateCandidates)", () => {
-    it("completes subcommands at root level", () => {
+    it("completes subcommands at root level", async () => {
       const ctx = parseCompletionContext([""], cli);
-      const result = generateCandidates(ctx);
+      const result = await generateCandidates(ctx, { shell: "bash" });
       const values = result.candidates.map((c) => c.value);
 
       expect(values).toContain("build");
@@ -208,9 +208,9 @@ describe("24-shell-completion", () => {
       expect(values).toContain("test");
     });
 
-    it("completes options for deploy subcommand", () => {
+    it("completes options for deploy subcommand", async () => {
       const ctx = parseCompletionContext(["deploy", "--"], cli);
-      const result = generateCandidates(ctx);
+      const result = await generateCandidates(ctx, { shell: "bash" });
       const values = result.candidates.map((c) => c.value);
 
       expect(values).toContain("--env");
@@ -218,9 +218,9 @@ describe("24-shell-completion", () => {
       expect(values).toContain("--dry-run");
     });
 
-    it("completes enum values for build --format", () => {
+    it("completes enum values for build --format", async () => {
       const ctx = parseCompletionContext(["build", "--format", ""], cli);
-      const result = generateCandidates(ctx);
+      const result = await generateCandidates(ctx, { shell: "bash" });
       const values = result.candidates.map((c) => c.value);
 
       expect(values).toContain("json");
@@ -228,9 +228,9 @@ describe("24-shell-completion", () => {
       expect(values).toContain("xml");
     });
 
-    it("completes custom choices for deploy --env", () => {
+    it("completes custom choices for deploy --env", async () => {
       const ctx = parseCompletionContext(["deploy", "--env", ""], cli);
-      const result = generateCandidates(ctx);
+      const result = await generateCandidates(ctx, { shell: "bash" });
       const values = result.candidates.map((c) => c.value);
 
       expect(values).toContain("development");
@@ -238,9 +238,9 @@ describe("24-shell-completion", () => {
       expect(values).toContain("production");
     });
 
-    it("resolves file completion with extensions in JS for deploy --config", () => {
+    it("resolves file completion with extensions in JS for deploy --config", async () => {
       const ctx = parseCompletionContext(["deploy", "--config", ""], cli);
-      const result = generateCandidates(ctx);
+      const result = await generateCandidates(ctx, { shell: "bash" });
 
       // deploy --config has extensions, so resolved in JS (no FileCompletion directive)
       expect(result.directive & CompletionDirective.FileCompletion).toBeFalsy();
@@ -248,16 +248,16 @@ describe("24-shell-completion", () => {
       expect(result.candidates.every((c) => !c.value.startsWith("__extensions:"))).toBe(true);
     });
 
-    it("returns directory directive for build --output", () => {
+    it("returns directory directive for build --output", async () => {
       const ctx = parseCompletionContext(["build", "--output", ""], cli);
-      const result = generateCandidates(ctx);
+      const result = await generateCandidates(ctx, { shell: "bash" });
 
       expect(result.directive & CompletionDirective.DirectoryCompletion).toBeTruthy();
     });
 
-    it("completes positional enum for test suite", () => {
+    it("completes positional enum for test suite", async () => {
       const ctx = parseCompletionContext(["test", ""], cli);
-      const result = generateCandidates(ctx);
+      const result = await generateCandidates(ctx, { shell: "bash" });
       const values = result.candidates.map((c) => c.value);
 
       expect(values).toContain("unit");
@@ -265,9 +265,9 @@ describe("24-shell-completion", () => {
       expect(values).toContain("e2e");
     });
 
-    it("filters out used options", () => {
+    it("filters out used options", async () => {
       const ctx = parseCompletionContext(["deploy", "--env", "staging", "--"], cli);
-      const result = generateCandidates(ctx);
+      const result = await generateCandidates(ctx, { shell: "bash" });
       const values = result.candidates.map((c) => c.value);
 
       expect(values).not.toContain("--env");
@@ -275,9 +275,9 @@ describe("24-shell-completion", () => {
       expect(values).toContain("--dry-run");
     });
 
-    it("formats output for shell consumption", () => {
+    it("formats output for shell consumption", async () => {
       const ctx = parseCompletionContext(["deploy", "--env", ""], cli);
-      const result = generateCandidates(ctx);
+      const result = await generateCandidates(ctx, { shell: "fish" });
       const output = formatForShell(result, { shell: "fish", currentWord: "" });
       const lines = output.split("\n");
 
