@@ -443,7 +443,7 @@ export function generateFishCompletion(
       const patterns: string[] = [`--${t.cliName}`];
       for (const a of t.longAliases ?? []) patterns.push(`--${a}`);
       for (const a of t.shortAliases ?? []) patterns.push(`-${a}`);
-      const cases = patterns.map((n) => `"${t.pathStr}:${n}"`).join(" ");
+      const cases = t.pathStrs.flatMap((p) => patterns.map((n) => `"${p}:${n}"`)).join(" ");
       lines.push(`        case ${cases}`);
       lines.push(`            set -g _arg_values_${t.fieldName} "$argv[3]"`);
     }
@@ -454,7 +454,8 @@ export function generateFishCompletion(
     lines.push(`    switch "$argv[1]:$argv[2]"`);
     for (const t of trackedFields) {
       if (!t.isPositional) continue;
-      lines.push(`        case "${t.pathStr}:${t.position}"`);
+      const cases = t.pathStrs.map((p) => `"${p}:${t.position}"`).join(" ");
+      lines.push(`        case ${cases}`);
       lines.push(`            set -g _arg_values_${t.fieldName} "$argv[3]"`);
     }
     lines.push(`    end`);
@@ -472,7 +473,9 @@ export function generateFishCompletion(
     lines.push(`function __${fn}_track_array_expand --no-scope-shadowing`);
     lines.push(`    switch "$argv[1]:$argv[2]"`);
     for (const spec of arrayExpandSpecs) {
-      const cases = spec.optionTokens.map((tok) => `"${spec.pathStr}:${tok}"`).join(" ");
+      const cases = spec.pathStrs
+        .flatMap((p) => spec.optionTokens.map((tok) => `"${p}:${tok}"`))
+        .join(" ");
       const bucket = sanitize(spec.fieldName);
       lines.push(`        case ${cases}`);
       lines.push(`            if string match -q '*=*' -- "$argv[3]"`);

@@ -313,10 +313,21 @@ export interface ExpandSpecLocation {
   /** Subcommand path from root (e.g., ["api"]). Empty array = root. */
   readonly path: readonly string[];
   /**
-   * Colon-delimited subcommand path used for case-statement matching
+   * Colon-delimited canonical subcommand path used for case-statement matching
    * (e.g., "" for root, "api" for one level, "workspace:user" for nested).
+   * For shell-side `case $_subcmd` emissions that must match the path the
+   * user actually typed (including alias names), iterate over {@link pathStrs}
+   * instead — they enumerate the canonical path plus every alias-expanded
+   * variant.
    */
   readonly pathStr: string;
+  /**
+   * Canonical path plus all alias-expanded variants. The first element is
+   * {@link pathStr}. Shell scanners need every variant when emitting tracker
+   * `case` patterns: `$_subcmd` reflects the path-as-typed, so an alias
+   * route like `a:GetApplication` must match alongside `api:GetApplication`.
+   */
+  readonly pathStrs: readonly string[];
   /**
    * Function suffix used in `__<fn>_<funcSuffix>` naming (e.g., "api",
    * "workspace_user"; "root" for the root command).
@@ -364,17 +375,18 @@ function collectOptionTokens(cliName: string, aliases: readonly string[] | undef
  */
 export function collectExpandSpecs(root: CompletableSubcommand): ExpandSpecLocation[] {
   const out: ExpandSpecLocation[] = [];
-  walk(root, [], "", "root", out);
+  walk(root, [], [""], "root", out);
   return out;
 }
 
 function walk(
   node: CompletableSubcommand,
   path: string[],
-  pathStr: string,
+  pathStrs: readonly string[],
   funcSuffix: string,
   out: ExpandSpecLocation[],
 ): void {
+  const pathStr = pathStrs[0]!;
   for (const opt of node.options) {
     const vc = opt.valueCompletion;
     if (vc?.type === "expand") {
@@ -382,6 +394,7 @@ function walk(
       out.push({
         path,
         pathStr,
+        pathStrs,
         funcSuffix,
         fieldName: opt.name,
         isPositional: false,
@@ -397,6 +410,7 @@ function walk(
       out.push({
         path,
         pathStr,
+        pathStrs,
         funcSuffix,
         fieldName: pos.name,
         isPositional: true,
@@ -408,10 +422,11 @@ function walk(
   }
   for (const child of getVisibleSubs(node.subcommands)) {
     const childPath = [...path, child.name];
-    const childPathStr = pathStr ? `${pathStr}:${child.name}` : child.name;
+    const childNames = [child.name, ...(child.aliases ?? [])];
+    const childPathStrs = pathStrs.flatMap((p) => childNames.map((n) => (p ? `${p}:${n}` : n)));
     const childFunc =
       funcSuffix === "root" ? sanitize(child.name) : `${funcSuffix}_${sanitize(child.name)}`;
-    walk(child, childPath, childPathStr, childFunc, out);
+    walk(child, childPath, childPathStrs, childFunc, out);
   }
 }
 
@@ -423,8 +438,14 @@ function walk(
 export interface TrackedFieldRef {
   /** camelCase field name; used as the `_arg_values` map key. */
   readonly fieldName: string;
-  /** Subcommand path where this field lives. */
+  /** Canonical subcommand path where this field lives. */
   readonly pathStr: string;
+  /**
+   * Canonical path plus all alias-expanded variants. The first element is
+   * {@link pathStr}. Shell tracker emitters iterate over every variant so
+   * `$_subcmd` matches whether the user typed the canonical or an alias.
+   */
+  readonly pathStrs: readonly string[];
   /** True if positional, false if option. */
   readonly isPositional: boolean;
   /** 0-based positional index (positional only). */
@@ -464,6 +485,7 @@ export function collectTrackedFields(
         out.push({
           fieldName: dep,
           pathStr: spec.pathStr,
+          pathStrs: spec.pathStrs,
           isPositional: true,
           position: posIndex,
         });
@@ -480,6 +502,7 @@ export function collectTrackedFields(
         out.push({
           fieldName: dep,
           pathStr: spec.pathStr,
+          pathStrs: spec.pathStrs,
           isPositional: false,
           cliName: opt.cliName,
           longAliases,

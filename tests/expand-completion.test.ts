@@ -293,6 +293,107 @@ describe("expand completion", () => {
       expect(script).toContain('if not contains -- "workspaceId" $_used_field_keys_field');
     });
 
+    it("emits tracker cases for every alias-expanded subcommand path", () => {
+      const cli = defineCommand({
+        name: "mycli",
+        subCommands: {
+          api: defineCommand({
+            name: "api",
+            aliases: ["a"],
+            args: z.object({
+              endpoint: arg(z.string(), {
+                positional: true,
+                completion: { custom: { choices: ENDPOINTS } },
+              }),
+              field: arg(z.array(z.string()).default([]), {
+                alias: "f",
+                completion: {
+                  custom: {
+                    expand: {
+                      dependsOn: ["endpoint"],
+                      enumerate: (deps) => {
+                        const ep = deps.endpoint ?? "";
+                        return (ENDPOINT_FIELDS[ep] ?? []).map((k) => ({ value: `${k}=` }));
+                      },
+                    },
+                  },
+                },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      const data = extractCompletionData(cli, "mycli");
+      const specs = collectExpandSpecs(data.command);
+      expect(specs[0]?.pathStrs).toEqual(["api", "a"]);
+      const tracked = collectTrackedFields(data.command, specs);
+      expect(tracked[0]?.pathStrs).toEqual(["api", "a"]);
+
+      const { script: bash } = generateBashCompletion(cli, {
+        shell: "bash",
+        programName: "mycli",
+      });
+      expect(bash).toContain(`api:0|a:0) _arg_values[endpoint]="$3"`);
+      expect(bash).toContain(`api:--field|api:-f|a:--field|a:-f)`);
+
+      const { script: zsh } = generateZshCompletion(cli, {
+        shell: "zsh",
+        programName: "mycli",
+      });
+      expect(zsh).toContain(`api:0|a:0) _arg_values[endpoint]="$3"`);
+      expect(zsh).toContain(`api:--field|api:-f|a:--field|a:-f)`);
+
+      const { script: fish } = generateFishCompletion(cli, {
+        shell: "fish",
+        programName: "mycli",
+      });
+      expect(fish).toContain(`case "api:0" "a:0"`);
+      expect(fish).toContain(`case "api:--field" "api:-f" "a:--field" "a:-f"`);
+    });
+
+    it("escapes colons in zsh expand candidate values", () => {
+      const cli = defineCommand({
+        name: "mycli",
+        subCommands: {
+          api: defineCommand({
+            name: "api",
+            args: z.object({
+              endpoint: arg(z.string(), {
+                positional: true,
+                completion: { custom: { choices: ["UrlOps"] } },
+              }),
+              field: arg(z.string(), {
+                completion: {
+                  custom: {
+                    expand: {
+                      dependsOn: ["endpoint"],
+                      enumerate: () => [
+                        { value: "https://example.com:443", description: "https:endpoint" },
+                        "ns:value",
+                      ],
+                    },
+                  },
+                },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const { script: zsh } = generateZshCompletion(cli, {
+        shell: "zsh",
+        programName: "mycli",
+      });
+      // `:` inside the candidate must be backslash-escaped so `_describe`
+      // does not parse the value's own colons as the value/description
+      // separator. The unescaped `:` between value and description is the
+      // real separator.
+      expect(zsh).toContain("https\\\\://example.com\\\\:443:https\\\\:endpoint");
+      expect(zsh).toContain("ns\\\\:value");
+    });
+
     it("scalar option with expand does not emit dedup helpers", () => {
       const scalar = defineCommand({
         name: "scalarcli",

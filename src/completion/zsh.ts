@@ -37,6 +37,17 @@ function escapeDesc(s: string): string {
     .replace(/:/g, "\\:");
 }
 
+/**
+ * Escape a candidate value for use inside a `_describe` spec. `_describe`
+ * splits each spec on the first unescaped `:` to separate value from
+ * description, so any literal `:` in the value (URLs, namespaced ids) must
+ * be backslash-escaped — and the escape itself must double up so the final
+ * string interprets `\:` as a single literal.
+ */
+function escapeDescribeValue(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/:/g, "\\:");
+}
+
 function zshExpandVar(fn: string, funcSuffix: string, fieldName: string): string {
   return `__${fn}_expand_${funcSuffix}__${sanitize(fieldName)}`;
 }
@@ -357,7 +368,10 @@ export function generateZshCompletion(
       for (const entry of spec.vc.table) {
         const key = entry.key.join("\x1f");
         const value = entry.candidates
-          .map((c) => (c.description ? `${c.value}:${escapeDesc(c.description)}` : c.value))
+          .map((c) => {
+            const escapedValue = escapeDescribeValue(c.value);
+            return c.description ? `${escapedValue}:${escapeDesc(c.description)}` : escapedValue;
+          })
           .join("\n");
         lines.push(`    ${zshAnsiC(key)} ${zshAnsiC(value)}`);
       }
@@ -453,7 +467,7 @@ export function generateZshCompletion(
       const patterns: string[] = [`--${t.cliName}`];
       for (const a of t.longAliases ?? []) patterns.push(`--${a}`);
       for (const a of t.shortAliases ?? []) patterns.push(`-${a}`);
-      const joined = patterns.map((n) => `${t.pathStr}:${n}`).join("|");
+      const joined = t.pathStrs.flatMap((p) => patterns.map((n) => `${p}:${n}`)).join("|");
       lines.push(`        ${joined}) _arg_values[${t.fieldName}]="$3" ;;`);
     }
     lines.push(`    esac`);
@@ -463,7 +477,8 @@ export function generateZshCompletion(
     lines.push(`    case "$1:$2" in`);
     for (const t of trackedFields) {
       if (!t.isPositional) continue;
-      lines.push(`        ${t.pathStr}:${t.position}) _arg_values[${t.fieldName}]="$3" ;;`);
+      const joined = t.pathStrs.map((p) => `${p}:${t.position}`).join("|");
+      lines.push(`        ${joined}) _arg_values[${t.fieldName}]="$3" ;;`);
     }
     lines.push(`    esac`);
     lines.push(`}`);
@@ -477,7 +492,9 @@ export function generateZshCompletion(
     lines.push(`__${fn}_track_array_expand() {`);
     lines.push(`    case "$1:$2" in`);
     for (const spec of arrayExpandSpecs) {
-      const joined = spec.optionTokens.map((tok) => `${spec.pathStr}:${tok}`).join("|");
+      const joined = spec.pathStrs
+        .flatMap((p) => spec.optionTokens.map((tok) => `${p}:${tok}`))
+        .join("|");
       const bucket = sanitize(spec.fieldName);
       lines.push(`        ${joined})`);
       lines.push(`            if [[ "$3" == *=* ]]; then`);

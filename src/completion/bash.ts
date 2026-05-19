@@ -509,7 +509,7 @@ export function generateBashCompletion(
       const patterns: string[] = [`--${t.cliName}`];
       for (const a of t.longAliases ?? []) patterns.push(`--${a}`);
       for (const a of t.shortAliases ?? []) patterns.push(`-${a}`);
-      const joined = patterns.map((n) => `${t.pathStr}:${n}`).join("|");
+      const joined = t.pathStrs.flatMap((p) => patterns.map((n) => `${p}:${n}`)).join("|");
       lines.push(`        ${joined}) _arg_values[${t.fieldName}]="$3" ;;`);
     }
     lines.push(`    esac`);
@@ -519,7 +519,8 @@ export function generateBashCompletion(
     lines.push(`    case "$1:$2" in`);
     for (const t of trackedFields) {
       if (!t.isPositional) continue;
-      lines.push(`        ${t.pathStr}:${t.position}) _arg_values[${t.fieldName}]="$3" ;;`);
+      const joined = t.pathStrs.map((p) => `${p}:${t.position}`).join("|");
+      lines.push(`        ${joined}) _arg_values[${t.fieldName}]="$3" ;;`);
     }
     lines.push(`    esac`);
     lines.push(`}`);
@@ -536,7 +537,9 @@ export function generateBashCompletion(
     lines.push(`__${fn}_track_array_expand() {`);
     lines.push(`    case "$1:$2" in`);
     for (const spec of arrayExpandSpecs) {
-      const joined = spec.optionTokens.map((tok) => `${spec.pathStr}:${tok}`).join("|");
+      const joined = spec.pathStrs
+        .flatMap((p) => spec.optionTokens.map((tok) => `${p}:${tok}`))
+        .join("|");
       const bucket = sanitize(spec.fieldName);
       lines.push(`        ${joined})`);
       lines.push(`            if [[ "$3" == *=* ]]; then`);
