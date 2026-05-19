@@ -462,6 +462,31 @@ describe("expand completion", () => {
       expect(zsh).toContain("ns\\\\:value");
     });
 
+    it("guards the array dedup tracker against the cursor word", () => {
+      // `-f pageDirection=<TAB>` must not mark `pageDirection` as used —
+      // otherwise the dedup guard hides the very candidates the user is
+      // trying to select.
+      const { script: bash } = generateBashCompletion(cmd, {
+        shell: "bash",
+        programName: "mycli",
+      });
+      expect(bash).toMatch(
+        /if \(\( _j \+ 2 < \$\{#_words\[@\]\} \)\); then\s*\n\s*__mycli_track_array_expand/,
+      );
+
+      const { script: zsh } = generateZshCompletion(cmd, {
+        shell: "zsh",
+        programName: "mycli",
+      });
+      expect(zsh).toMatch(/if \(\( _j \+ 1 < CURRENT \)\); then\s*\n\s*__mycli_track_array_expand/);
+
+      const { script: fish } = generateFishCompletion(cmd, {
+        shell: "fish",
+        programName: "mycli",
+      });
+      expect(fish).toMatch(/if test \$_j -lt \$_limit\s*\n\s*__mycli_track_array_expand/);
+    });
+
     it("scalar option with expand does not emit dedup helpers", () => {
       const scalar = defineCommand({
         name: "scalarcli",

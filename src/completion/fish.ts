@@ -645,7 +645,13 @@ export function generateFishCompletion(
     lines.push(`                end`);
     lines.push(`                __${fn}_track_opt "$_subcmd" "$_w" "$_next"`);
     if (hasArrayExpand) {
-      lines.push(`                __${fn}_track_array_expand "$_subcmd" "$_w" "$_next"`);
+      // Skip array-expand dedup tracking when the next token is the word
+      // being completed. Otherwise typing `-f pageDirection=<TAB>` marks
+      // the partial cursor value as already used and filters out the
+      // candidates the user is trying to select.
+      lines.push(`                if test $_j -lt $_limit`);
+      lines.push(`                    __${fn}_track_array_expand "$_subcmd" "$_w" "$_next"`);
+      lines.push(`                end`);
     }
     lines.push(`            end`);
   } else {

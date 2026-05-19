@@ -692,9 +692,15 @@ export function generateBashCompletion(
       lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then`);
       lines.push(`                _skip_next=1`);
       lines.push(`                __${fn}_track_opt "$_subcmd" "$_w" "\${_words[_j+1]:-}"`);
+      // Skip array-expand dedup tracking when the next token is the word
+      // being completed. Otherwise typing `-f pageDirection=<TAB>` marks
+      // the partial cursor value as already used and filters out the
+      // candidates the user is trying to select.
+      lines.push(`                if (( _j + 2 < \${#_words[@]} )); then`);
       lines.push(
-        `                __${fn}_track_array_expand "$_subcmd" "$_w" "\${_words[_j+1]:-}"`,
+        `                    __${fn}_track_array_expand "$_subcmd" "$_w" "\${_words[_j+1]:-}"`,
       );
+      lines.push(`                fi`);
       lines.push(`            fi`);
     } else {
       lines.push(
