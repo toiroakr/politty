@@ -105,6 +105,55 @@ The resolver runs **inside the `__complete` command**, so:
 
 For local dev, set `MYCLI_BIN` (uppercase program name) to override the binary the static script invokes — useful when the CLI hasn't been installed on PATH yet.
 
+### Expand (pre-enumerated)
+
+When all of the candidates can be computed up front from a small, known set
+of sibling arg values, use `expand` instead of `resolve`. politty walks the
+cartesian product of the `dependsOn` values at script-generation time, calls
+`enumerate(deps)` once per combination, and bakes the resulting table into
+the shell script. At TAB time the shell dispatches via a case lookup keyed
+on the runtime values of those args — **no Node process is spawned**, so
+the latency matches static `choices` (typically <10ms).
+
+```typescript
+field: arg(z.array(z.string()).default([]), {
+  alias: "f",
+  completion: {
+    custom: {
+      expand: {
+        dependsOn: ["endpoint"],
+        enumerate: ({ endpoint }) => {
+          return getFieldsFor(endpoint).map((k) => ({
+            value: `${k}=`,
+            description: `Set ${k}`,
+          }));
+        },
+      },
+    },
+  },
+});
+```
+
+Requirements:
+
+- Every name in `dependsOn` must be a **sibling arg on the same command**
+  with a static value set (an explicit `completion.custom.choices` or an
+  enum schema). Chaining `expand` specs is not supported.
+- `enumerate` must be a pure function of `deps`. politty calls it once per
+  combination at the time the user runs `<program> completion <shell>`. If
+  it throws, the error is wrapped with the offending field name and the
+  `deps` snapshot.
+- Mixing `expand` with `choices`, `shellCommand`, or `resolve` on the same
+  field throws at command-definition time.
+- For multi-dimensional `dependsOn`, the runtime lookup key is the
+  concatenation of dep values joined by U+001F. Avoid sibling choices that
+  contain that byte (none in practice).
+
+Use this whenever the dependency graph collapses cleanly to a finite,
+build-time-known set. Reach for `resolve` when the candidates depend on
+process-local state the shell cannot observe (filesystem reads, network
+calls, parsing the schema-of-the-day, etc.).
+
 ### File Completion
 
 Delegate to the shell's native file completion. Optionally filter by extension:
@@ -149,7 +198,7 @@ This is useful for secrets or tokens where file suggestions would be noise.
 
 When multiple sources could provide completion values, the following priority applies:
 
-1. **Explicit `custom`** — exactly one of `resolve`, `choices`, or `shellCommand`. Specifying more than one throws at command-definition time.
+1. **Explicit `custom`** — exactly one of `expand`, `resolve`, `choices`, or `shellCommand`. Specifying more than one throws at command-definition time.
 2. **Explicit `type`** — `file`, `directory`, or `none`
 3. **Auto-detected** — enum values from `z.enum()`
 

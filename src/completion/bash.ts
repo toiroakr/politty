@@ -8,7 +8,9 @@
 import type { AnyCommand } from "../types.js";
 import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
+  collectExpandSpecs,
   collectRouteEntries,
+  collectTrackedFields,
   extractCompletionData,
   getSubNamesWithAliases,
   getVisibleSubs,
@@ -31,14 +33,81 @@ function escapeBashDQ(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$").replace(/`/g, "\\`");
 }
 
+/** Variable name for the hoisted expand table for a (funcSuffix, fieldName). */
+function bashExpandVar(fn: string, funcSuffix: string, fieldName: string): string {
+  return `__${fn}_expand_${funcSuffix}__${sanitize(fieldName)}`;
+}
+
+/**
+ * Encode a string as an ANSI-C bash literal: `$'…'` with backslash escapes.
+ * Used for expand-table values so newlines and the unit-separator key
+ * delimiter survive intact through `mapfile` parsing.
+ */
+function bashAnsiC(s: string): string {
+  let out = "$'";
+  for (const ch of s) {
+    const code = ch.codePointAt(0)!;
+    if (ch === "\\") out += "\\\\";
+    else if (ch === "'") out += "\\'";
+    else if (ch === "\n") out += "\\n";
+    else if (ch === "\r") out += "\\r";
+    else if (ch === "\t") out += "\\t";
+    else if (code < 0x20 || code === 0x7f) out += `\\x${code.toString(16).padStart(2, "0")}`;
+    else out += ch;
+  }
+  out += "'";
+  return out;
+}
+
+/** Encode a string as a double-quoted bash literal for use inside `[...]=`. */
+function bashLiteral(s: string): string {
+  return bashAnsiC(s);
+}
+
+interface BashExpandLocation {
+  funcSuffix: string;
+  fieldName: string;
+}
+
 /**
  * Generate bash value completion code for a ValueCompletion spec.
- * Returns an array of bash lines.
+ * `location` is required when `vc.type === "expand"` (otherwise unused).
  */
-function bashValueLines(vc: ValueCompletion | undefined, inline: boolean, fn: string): string[] {
+function bashValueLines(
+  vc: ValueCompletion | undefined,
+  inline: boolean,
+  fn: string,
+  location?: BashExpandLocation,
+): string[] {
   if (!vc) return [];
 
   switch (vc.type) {
+    case "expand": {
+      if (!location) {
+        throw new Error("bashValueLines: expand variant requires a location");
+      }
+      // The expand table is hoisted as a global associative array. Build
+      // the runtime lookup key from the dependsOn values, fetch the
+      // (newline-separated) candidate list, and filter against `$_cur`.
+      const varName = bashExpandVar(fn, location.funcSuffix, location.fieldName);
+      const depKey = vc.dependsOn.map((d) => `"\${_arg_values[${d}]:-}"`).join(`$'\\x1f'`);
+      const inlineExpr = inline ? `"\${_inline_prefix}\${_c}"` : `"$_c"`;
+      return [
+        `local _key=${depKey}`,
+        `local _raw="\${${varName}[$_key]:-}"`,
+        `if [[ -n "$_raw" ]]; then`,
+        `    local -a _vals=()`,
+        `    mapfile -t _vals <<< "$_raw"`,
+        `    local _c`,
+        `    for _c in "\${_vals[@]}"; do`,
+        `        [[ -z "$_c" ]] && continue`,
+        `        [[ "$_c" == "$_cur"* ]] && COMPREPLY+=(${inlineExpr})`,
+        `    done`,
+        `    compopt -o nospace 2>/dev/null`,
+        `    compopt +o default 2>/dev/null`,
+        `fi`,
+      ];
+    }
     case "dynamic": {
       // Delegate to `<program> __complete --shell bash`; the politty bash
       // formatter already prepends the inline prefix to each candidate, so
@@ -124,11 +193,19 @@ function bashFileFilter(checks: string, inline: boolean): string[] {
 }
 
 /** Collect value-taking option patterns for case matching */
-function optionValueCases(options: CompletableOption[], inline: boolean, fn: string): string[] {
+function optionValueCases(
+  options: CompletableOption[],
+  inline: boolean,
+  fn: string,
+  funcSuffix: string,
+): string[] {
   const lines: string[] = [];
   for (const opt of options) {
     if (!opt.takesValue || !opt.valueCompletion) continue;
-    const valLines = bashValueLines(opt.valueCompletion, inline, fn);
+    const valLines = bashValueLines(opt.valueCompletion, inline, fn, {
+      funcSuffix,
+      fieldName: opt.name,
+    });
     if (valLines.length === 0) continue;
 
     const patterns: string[] = [`--${opt.cliName}`];
@@ -149,7 +226,11 @@ function optionValueCases(options: CompletableOption[], inline: boolean, fn: str
 }
 
 /** Generate positional completion block */
-function positionalBlock(positionals: CompletablePositional[], fn: string): string[] {
+function positionalBlock(
+  positionals: CompletablePositional[],
+  fn: string,
+  funcSuffix: string,
+): string[] {
   if (positionals.length === 0) return [];
   const lines: string[] = [];
   lines.push(`    case "$_pos_count" in`);
@@ -161,7 +242,10 @@ function positionalBlock(positionals: CompletablePositional[], fn: string): stri
     } else {
       lines.push(`        ${pos.position})`);
     }
-    for (const vl of bashValueLines(pos.valueCompletion, false, fn)) {
+    for (const vl of bashValueLines(pos.valueCompletion, false, fn, {
+      funcSuffix,
+      fieldName: pos.name,
+    })) {
       lines.push(`            ${vl}`);
     }
     lines.push(`            ;;`);
@@ -172,11 +256,15 @@ function positionalBlock(positionals: CompletablePositional[], fn: string): stri
 }
 
 /** Generate prev/inline value completion blocks for options */
-function valueCompletionBlocks(options: CompletableOption[], fn: string): string[] {
+function valueCompletionBlocks(
+  options: CompletableOption[],
+  fn: string,
+  funcSuffix: string,
+): string[] {
   if (!options.some((o) => o.takesValue && o.valueCompletion)) return [];
 
   const lines: string[] = [];
-  const prevCases = optionValueCases(options, false, fn);
+  const prevCases = optionValueCases(options, false, fn, funcSuffix);
   if (prevCases.length > 0) {
     lines.push(`    if [[ -z "$_inline_prefix" ]]; then`);
     lines.push(`        case "$_prev" in`);
@@ -184,7 +272,7 @@ function valueCompletionBlocks(options: CompletableOption[], fn: string): string
     lines.push(`        esac`);
     lines.push(`    fi`);
   }
-  const inlineCases = optionValueCases(options, true, fn);
+  const inlineCases = optionValueCases(options, true, fn, funcSuffix);
   if (inlineCases.length > 0) {
     lines.push(`    if [[ -n "$_inline_prefix" ]]; then`);
     lines.push(`        case "\${_inline_prefix%=}" in`);
@@ -228,7 +316,8 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
  */
 function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string[]): string[] {
   const fullPath = [...path, sub.name];
-  const funcName = `__${fn}_complete_${fullPath.map(sanitize).join("_")}`;
+  const funcSuffix = fullPath.map(sanitize).join("_");
+  const funcName = `__${fn}_complete_${funcSuffix}`;
   const visibleSubs = getVisibleSubs(sub.subcommands);
 
   const lines: string[] = [];
@@ -241,7 +330,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`${funcName}() {`);
 
   // 1. Option value completion (prev is value-taking option)
-  lines.push(...valueCompletionBlocks(sub.options, fn));
+  lines.push(...valueCompletionBlocks(sub.options, fn, funcSuffix));
 
   // Fallback: value-taking option without explicit completion → default file completion
   const fullPathStr = fullPath.join(":");
@@ -255,7 +344,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 2. After -- separator
   if (sub.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
-    lines.push(...positionalBlock(sub.positionals, fn).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(sub.positionals, fn, funcSuffix).map((l) => `    ${l}`));
     lines.push(`        return`);
     lines.push(`    fi`);
   } else {
@@ -279,7 +368,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
     lines.push(`    COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
     lines.push(`    compopt +o default 2>/dev/null`);
   } else if (sub.positionals.length > 0) {
-    lines.push(...positionalBlock(sub.positionals, fn));
+    lines.push(...positionalBlock(sub.positionals, fn, funcSuffix));
   }
 
   lines.push(`}`);
@@ -296,11 +385,30 @@ export function generateBashCompletion(
   const fn = sanitize(programName);
   const root = data.command;
   const visibleSubs = getVisibleSubs(root.subcommands);
+  const expandSpecs = collectExpandSpecs(root);
+  const trackedFields = collectTrackedFields(root, expandSpecs);
 
   const lines: string[] = [];
   lines.push(`# Bash completion for ${programName}`);
   lines.push(`# Generated by politty`);
   lines.push(``);
+
+  const hasExpand = expandSpecs.length > 0;
+
+  // Expand-completion hoisted tables. One global associative array per
+  // expand spec; entries map `dependsOn`-joined keys to newline-separated
+  // candidate lists. Declared once at script source-time so per-invocation
+  // overhead is just a hash lookup.
+  for (const spec of expandSpecs) {
+    const varName = bashExpandVar(fn, spec.funcSuffix, spec.fieldName);
+    lines.push(`declare -gA ${varName}=()`);
+    for (const entry of spec.vc.table) {
+      const key = entry.key.join("");
+      const value = entry.candidates.map((c) => c.value).join("\n");
+      lines.push(`${varName}[${bashLiteral(key)}]=${bashAnsiC(value)}`);
+    }
+    lines.push(``);
+  }
 
   // Dynamic completion delegate helpers (only when any value spec uses
   // an in-process JS resolver). The static script invokes
@@ -370,6 +478,34 @@ export function generateBashCompletion(
   lines.push(`}`);
   lines.push(``);
 
+  if (hasExpand) {
+    // Helpers: capture sibling values into _arg_values during the scan
+    // loop so the per-spec lookup can dispatch on them. `_track_opt` runs
+    // for every option-value pair; `_track_pos` runs once per positional.
+    lines.push(`__${fn}_track_opt() {`);
+    lines.push(`    case "$1:$2" in`);
+    for (const t of trackedFields) {
+      if (t.isPositional) continue;
+      const patterns: string[] = [`--${t.cliName}`];
+      for (const a of t.longAliases ?? []) patterns.push(`--${a}`);
+      for (const a of t.shortAliases ?? []) patterns.push(`-${a}`);
+      const joined = patterns.map((n) => `${t.pathStr}:${n}`).join("|");
+      lines.push(`        ${joined}) _arg_values[${t.fieldName}]="$3" ;;`);
+    }
+    lines.push(`    esac`);
+    lines.push(`}`);
+    lines.push(``);
+    lines.push(`__${fn}_track_pos() {`);
+    lines.push(`    case "$1:$2" in`);
+    for (const t of trackedFields) {
+      if (!t.isPositional) continue;
+      lines.push(`        ${t.pathStr}:${t.position}) _arg_values[${t.fieldName}]="$3" ;;`);
+    }
+    lines.push(`    esac`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
   // Collect all nested subcommand routes (used for both is_subcmd and dispatch)
   const routeEntries = collectRouteEntries(root);
 
@@ -391,7 +527,7 @@ export function generateBashCompletion(
 
   // Root handler
   lines.push(`__${fn}_complete_root() {`);
-  lines.push(...valueCompletionBlocks(root.options, fn));
+  lines.push(...valueCompletionBlocks(root.options, fn, "root"));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(
     `    if [[ -z "$_inline_prefix" ]] && __${fn}_opt_takes_value "" "$_prev"; then return; fi`,
@@ -401,7 +537,7 @@ export function generateBashCompletion(
   );
   if (root.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
-    lines.push(...positionalBlock(root.positionals, fn).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(root.positionals, fn, "root").map((l) => `    ${l}`));
     lines.push(`        return`);
     lines.push(`    fi`);
   } else {
@@ -421,7 +557,7 @@ export function generateBashCompletion(
     lines.push(`        compopt +o default 2>/dev/null`);
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
-    lines.push(...positionalBlock(root.positionals, fn).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(root.positionals, fn, "root").map((l) => `    ${l}`));
   }
   lines.push(`    fi`);
   lines.push(`}`);
@@ -462,6 +598,9 @@ export function generateBashCompletion(
   lines.push(``);
   lines.push(`    local _subcmd="" _after_dd=0 _pos_count=0 _skip_next=0`);
   lines.push(`    local -a _used_opts=()`);
+  if (hasExpand) {
+    lines.push(`    local -A _arg_values=()`);
+  }
   lines.push(``);
   lines.push(`    local _j=0`);
   lines.push(`    while (( _j < \${#_words[@]} - 1 )); do`);
@@ -469,18 +608,41 @@ export function generateBashCompletion(
   lines.push(`        if (( _skip_next )); then _skip_next=0; (( _j++ )); continue; fi`);
   lines.push(`        if [[ "$_w" == "--" ]]; then _after_dd=1; (( _j++ )); continue; fi`);
   lines.push(`        if (( _after_dd )); then (( _pos_count++ )); (( _j++ )); continue; fi`);
-  lines.push(
-    `        if [[ "$_w" == --*=* ]]; then _used_opts+=("\${_w%%=*}"); (( _j++ )); continue; fi`,
-  );
+  if (hasExpand) {
+    lines.push(`        if [[ "$_w" == --*=* ]]; then`);
+    lines.push(`            _used_opts+=("\${_w%%=*}")`);
+    lines.push(`            __${fn}_track_opt "$_subcmd" "\${_w%%=*}" "\${_w#*=}"`);
+    lines.push(`            (( _j++ )); continue`);
+    lines.push(`        fi`);
+  } else {
+    lines.push(
+      `        if [[ "$_w" == --*=* ]]; then _used_opts+=("\${_w%%=*}"); (( _j++ )); continue; fi`,
+    );
+  }
   lines.push(`        if [[ "$_w" == -* ]]; then`);
   lines.push(`            _used_opts+=("$_w")`);
-  lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
+  if (hasExpand) {
+    lines.push(
+      `            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then _skip_next=1; __${fn}_track_opt "$_subcmd" "$_w" "\${_words[_j+1]:-}"; fi`,
+    );
+  } else {
+    lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
+  }
   lines.push(`            (( _j++ )); continue`);
   lines.push(`        fi`);
   if (routeEntries.length > 0) {
-    lines.push(
-      `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else (( _pos_count++ )); fi`,
-    );
+    if (hasExpand) {
+      lines.push(
+        `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; (( _pos_count++ )); fi`,
+      );
+    } else {
+      lines.push(
+        `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else (( _pos_count++ )); fi`,
+      );
+    }
+  } else if (hasExpand) {
+    lines.push(`        __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
+    lines.push(`        (( _pos_count++ ))`);
   } else {
     lines.push(`        (( _pos_count++ ))`);
   }

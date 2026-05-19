@@ -448,7 +448,7 @@ Completion configuration for arguments.
 interface CompletionMeta {
   /** Completion type */
   type?: "file" | "directory" | "none";
-  /** Custom completion (mutually exclusive: choices | shellCommand | resolve) */
+  /** Custom completion (mutually exclusive: choices | shellCommand | resolve | expand) */
   custom?: {
     /** Static choices */
     choices?: string[];
@@ -456,6 +456,8 @@ interface CompletionMeta {
     shellCommand?: string;
     /** In-process JS resolver (see DynamicCompletionResolver) */
     resolve?: DynamicCompletionResolver;
+    /** Pre-enumerated completion baked into the static shell script (see ExpandCompletion) */
+    expand?: ExpandCompletion;
   };
   /** File extension filters (for type: "file") */
   extensions?: string[];
@@ -493,7 +495,39 @@ interface DynamicCompletionResult {
 }
 ```
 
-Specifying more than one of `choices`, `shellCommand`, or `resolve` on the same field throws at command-definition time. Static shell scripts automatically delegate to `<program> __complete --shell <shell>` when a field uses `resolve`.
+Specifying more than one of `choices`, `shellCommand`, `resolve`, or `expand` on the same field throws at command-definition time. Static shell scripts automatically delegate to `<program> __complete --shell <shell>` when a field uses `resolve`. With `expand`, the candidate table is computed at script-generation time and inlined into the script — TAB completion stays in-shell.
+
+---
+
+### `ExpandCompletion`
+
+Pre-enumerated value completion. Use when candidates can be computed up front from a finite set of sibling arg values (each must have a static `choices` or enum schema). politty walks the cartesian product of the `dependsOn` values at script-generation time, calls `enumerate` for each combination, and bakes the resulting table into the static shell script.
+
+```typescript
+interface ExpandCompletion {
+  /**
+   * Sibling arg names (camelCase, same command) whose runtime values
+   * drive the candidate set. Each must have a static `choices` or enum
+   * schema. Chaining `expand` specs is not supported.
+   */
+  dependsOn: readonly string[];
+  /**
+   * Pure function called once per combination of dependsOn values at
+   * script-generation time. Returns the candidates for that combination.
+   * Strings imply no description; objects carry an optional description
+   * surfaced by zsh and fish.
+   */
+  enumerate: (
+    deps: Readonly<Record<string, string>>,
+  ) => ReadonlyArray<string | { value: string; description?: string }>;
+}
+```
+
+Properties and constraints:
+
+- `dependsOn` must be non-empty and may not reference the field itself or any sibling without a static value set. Validation errors throw at command-definition time with the offending field name.
+- `enumerate` runs synchronously at the time the user invokes `<program> completion <shell>`. politty does not retain it for runtime use; if it throws, the error is wrapped with the field name and the offending `deps` snapshot.
+- bash and zsh emit one global associative array per spec (declared with `declare -gA` / `typeset -gA`); fish emits an inline `switch` (no associative arrays). bash drops descriptions; zsh uses `value:description` for `_describe`; fish uses tab-separated `value\tdescription`.
 
 #### Example
 

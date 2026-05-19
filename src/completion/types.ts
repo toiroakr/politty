@@ -3,7 +3,21 @@
  */
 
 import type { DynamicCompletionResolver } from "../core/dynamic-completion-types.js";
+import type { ResolvedExpandCandidate } from "../core/expand-completion-types.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
+
+/**
+ * A single resolved entry in an "expand" lookup table.
+ *
+ * `key` is the tuple of `dependsOn` values that triggers this entry, in the
+ * same order as the originating `dependsOn` array. `candidates` is the
+ * (already deduplicated) list returned by the user's `enumerate` callback
+ * for that combination.
+ */
+export interface ExpandTableEntry {
+  readonly key: readonly string[];
+  readonly candidates: readonly ResolvedExpandCandidate[];
+}
 
 /**
  * Supported shell types for completion
@@ -44,6 +58,8 @@ export type ValueCompletion =
       /** Shell command for dynamic completion (for "command" type) */
       shellCommand?: string;
       resolve?: never;
+      dependsOn?: never;
+      table?: never;
     } & (
       | { /** File extension filters (for "file" type) */ extensions?: string[]; matcher?: never }
       | {
@@ -57,6 +73,25 @@ export type ValueCompletion =
       resolve: DynamicCompletionResolver;
       choices?: never;
       shellCommand?: never;
+      extensions?: never;
+      matcher?: never;
+      dependsOn?: never;
+      table?: never;
+    }
+  | {
+      /**
+       * Pre-enumerated completion baked into the generated shell script.
+       * The `table` is the cartesian product of the `dependsOn` arg values
+       * (each having a static `choices` or enum schema). At completion time
+       * the shell dispatches on the runtime values of those args — no Node
+       * is spawned.
+       */
+      type: "expand";
+      dependsOn: readonly string[];
+      table: readonly ExpandTableEntry[];
+      choices?: never;
+      shellCommand?: never;
+      resolve?: never;
       extensions?: never;
       matcher?: never;
     };

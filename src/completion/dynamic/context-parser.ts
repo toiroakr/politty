@@ -6,8 +6,23 @@ import { extractFields, toCamelCase } from "../../core/schema-extractor.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../../types.js";
-import type { CompletableOption, CompletablePositional } from "../types.js";
-import { resolveValueCompletion } from "../value-completion-resolver.js";
+import type { CompletableOption, CompletablePositional, ValueCompletion } from "../types.js";
+import {
+  resolveValueCompletion,
+  type PendingExpandValueCompletion,
+} from "../value-completion-resolver.js";
+
+/**
+ * The dynamic completion path runs `__complete` at TAB time and never sees
+ * "expand" fields (those are handled inline by the static shell script).
+ * Strip the transient pending sentinel here so the rest of the runtime path
+ * can stay strict about handling only resolved `ValueCompletion` values.
+ */
+function stripPendingExpand(
+  vc: ValueCompletion | PendingExpandValueCompletion | undefined,
+): ValueCompletion | undefined {
+  return vc?.type === "pending-expand" ? undefined : vc;
+}
 
 /**
  * Completion type indicates what kind of completion is expected
@@ -85,7 +100,7 @@ function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
       takesValue: field.type !== "boolean",
       valueType: field.type,
       required: field.required,
-      valueCompletion: resolveValueCompletion(field),
+      valueCompletion: stripPendingExpand(resolveValueCompletion(field)),
     }));
 }
 
@@ -121,7 +136,7 @@ function extractPositionalsForContext(command: AnyCommand): CompletablePositiona
       description: field.description,
       required: field.required,
       variadic: field.type === "array",
-      valueCompletion: resolveValueCompletion(field),
+      valueCompletion: stripPendingExpand(resolveValueCompletion(field)),
     }));
 }
 

@@ -33,6 +33,11 @@ export type {
   DynamicCompletionResolver,
   DynamicCompletionResult,
 } from "./core/dynamic-completion-types.js";
+export type {
+  ExpandCandidate,
+  ExpandCompletion,
+  ResolvedExpandCandidate,
+} from "./core/expand-completion-types.js";
 export { runCommand, runMain } from "./core/runner.js";
 export {
   extractFields,

@@ -5,13 +5,35 @@
 import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
+import { resolveExpandTargets, type PendingExpandTarget } from "./expand-resolver.js";
 import type {
   CompletableOption,
   CompletablePositional,
   CompletableSubcommand,
   CompletionData,
+  ValueCompletion,
 } from "./types.js";
 import { resolveValueCompletion } from "./value-completion-resolver.js";
+
+/**
+ * Strip the transient `pending-expand` sentinel from a `resolveValueCompletion`
+ * result. The static extractor stashes pending specs into a side-channel and
+ * patches the resolved `ValueCompletion` onto the field after sibling
+ * choices are known.
+ */
+function takeResolvedValueCompletion(
+  field: ResolvedFieldMeta,
+  pending: PendingExpandTarget[],
+  describe: string,
+  set: (vc: ValueCompletion) => void,
+): ValueCompletion | undefined {
+  const raw = resolveValueCompletion(field);
+  if (raw?.type === "pending-expand") {
+    pending.push({ name: field.name, describe, set, spec: raw.spec });
+    return undefined;
+  }
+  return raw;
+}
 
 /**
  * Sanitize a name for use as a shell function/variable identifier.
@@ -57,10 +79,15 @@ export function getSubNamesWithAliases(
 }
 
 /**
- * Convert a resolved field to a completable option
+ * Convert a resolved field to a completable option. Pending expand specs
+ * are stashed in `pending` and patched onto the returned object after
+ * sibling choices are known.
  */
-function fieldToOption(field: ResolvedFieldMeta): CompletableOption {
-  return {
+function fieldToOption(
+  field: ResolvedFieldMeta,
+  pending: PendingExpandTarget[],
+): CompletableOption {
+  const opt: CompletableOption = {
     name: field.name,
     cliName: field.cliName,
     alias: field.alias,
@@ -71,14 +98,20 @@ function fieldToOption(field: ResolvedFieldMeta): CompletableOption {
     takesValue: field.type !== "boolean",
     valueType: field.type,
     required: field.required,
-    valueCompletion: resolveValueCompletion(field),
   };
+  const vc = takeResolvedValueCompletion(field, pending, `--${field.cliName}`, (next) => {
+    opt.valueCompletion = next;
+  });
+  if (vc !== undefined) {
+    opt.valueCompletion = vc;
+  }
+  return opt;
 }
 
 /**
  * Extract options from a command's args schema
  */
-function extractOptions(command: AnyCommand): CompletableOption[] {
+function extractOptions(command: AnyCommand, pending: PendingExpandTarget[]): CompletableOption[] {
   if (!command.args) {
     return [];
   }
@@ -86,7 +119,7 @@ function extractOptions(command: AnyCommand): CompletableOption[] {
   const extracted = extractFields(command.args);
   return extracted.fields
     .filter((field) => !field.positional) // Only include flags/options, not positionals
-    .map(fieldToOption);
+    .map((field) => fieldToOption(field, pending));
 }
 
 /**
@@ -102,9 +135,13 @@ export function extractPositionals(command: AnyCommand): ResolvedFieldMeta[] {
 }
 
 /**
- * Extract completable positional arguments from a command
+ * Extract completable positional arguments from a command.
+ * Pending expand specs are stashed in `pending` for later resolution.
  */
-function extractCompletablePositionals(command: AnyCommand): CompletablePositional[] {
+function extractCompletablePositionals(
+  command: AnyCommand,
+  pending: PendingExpandTarget[],
+): CompletablePositional[] {
   if (!command.args) {
     return [];
   }
@@ -112,15 +149,23 @@ function extractCompletablePositionals(command: AnyCommand): CompletablePosition
   const extracted = extractFields(command.args);
   return extracted.fields
     .filter((field) => field.positional)
-    .map((field, index) => ({
-      name: field.name,
-      cliName: field.cliName,
-      position: index,
-      description: field.description,
-      required: field.required,
-      variadic: field.type === "array",
-      valueCompletion: resolveValueCompletion(field),
-    }));
+    .map((field, index): CompletablePositional => {
+      const pos: CompletablePositional = {
+        name: field.name,
+        cliName: field.cliName,
+        position: index,
+        description: field.description,
+        required: field.required,
+        variadic: field.type === "array",
+      };
+      const vc = takeResolvedValueCompletion(field, pending, `<${field.cliName}>`, (next) => {
+        pos.valueCompletion = next;
+      });
+      if (vc !== undefined) {
+        pos.valueCompletion = vc;
+      }
+      return pos;
+    });
 }
 
 /**
@@ -148,14 +193,21 @@ function extractSubcommand(name: string, command: AnyCommand): CompletableSubcom
     }
   }
 
-  return {
+  const pending: PendingExpandTarget[] = [];
+  const node: CompletableSubcommand = {
     name,
     description: command.description,
     aliases: command.aliases,
     subcommands,
-    options: extractOptions(command),
-    positionals: extractCompletablePositionals(command),
+    options: extractOptions(command, pending),
+    positionals: extractCompletablePositionals(command, pending),
   };
+  // Resolve every `pending-expand` collected above against this subcommand's
+  // siblings, producing `{ type: "expand", table, dependsOn }`
+  // ValueCompletion entries. Throws if dependsOn references a non-static
+  // sibling or `enumerate` raises.
+  resolveExpandTargets(node, pending);
+  return node;
 }
 
 /** Join parent and child with a separator, omitting separator when parent is empty. */
@@ -253,6 +305,174 @@ export function isSubcmdCaseLines(routeEntries: RouteEntry[]): string[] {
 }
 
 /**
+ * Location of a resolved expand-completion spec inside the command tree.
+ * Emitted by {@link collectExpandSpecs}; shell generators use it to name
+ * the hoisted table variable and to scope the tracker entries.
+ */
+export interface ExpandSpecLocation {
+  /** Subcommand path from root (e.g., ["api"]). Empty array = root. */
+  readonly path: readonly string[];
+  /**
+   * Colon-delimited subcommand path used for case-statement matching
+   * (e.g., "" for root, "api" for one level, "workspace:user" for nested).
+   */
+  readonly pathStr: string;
+  /**
+   * Function suffix used in `__<fn>_<funcSuffix>` naming (e.g., "api",
+   * "workspace_user"; "root" for the root command).
+   */
+  readonly funcSuffix: string;
+  /** Field name (camelCase) of the option/positional that has the expand spec. */
+  readonly fieldName: string;
+  /** Whether the field is a positional argument. */
+  readonly isPositional: boolean;
+  /** The resolved expand spec on this field. */
+  readonly vc: Extract<ValueCompletion, { type: "expand" }>;
+}
+
+/**
+ * Walk the subcommand tree and return every resolved expand spec along
+ * with where it lives. The order is deterministic (DFS, root → leaves;
+ * options before positionals within a node).
+ */
+export function collectExpandSpecs(root: CompletableSubcommand): ExpandSpecLocation[] {
+  const out: ExpandSpecLocation[] = [];
+  walk(root, [], "", "root", out);
+  return out;
+}
+
+function walk(
+  node: CompletableSubcommand,
+  path: string[],
+  pathStr: string,
+  funcSuffix: string,
+  out: ExpandSpecLocation[],
+): void {
+  for (const opt of node.options) {
+    const vc = opt.valueCompletion;
+    if (vc?.type === "expand") {
+      out.push({
+        path,
+        pathStr,
+        funcSuffix,
+        fieldName: opt.name,
+        isPositional: false,
+        vc,
+      });
+    }
+  }
+  for (const pos of node.positionals) {
+    const vc = pos.valueCompletion;
+    if (vc?.type === "expand") {
+      out.push({
+        path,
+        pathStr,
+        funcSuffix,
+        fieldName: pos.name,
+        isPositional: true,
+        vc,
+      });
+    }
+  }
+  for (const child of getVisibleSubs(node.subcommands)) {
+    const childPath = [...path, child.name];
+    const childPathStr = pathStr ? `${pathStr}:${child.name}` : child.name;
+    const childFunc =
+      funcSuffix === "root" ? sanitize(child.name) : `${funcSuffix}_${sanitize(child.name)}`;
+    walk(child, childPath, childPathStr, childFunc, out);
+  }
+}
+
+/**
+ * Per-path information about a sibling field that an expand spec depends
+ * on. Shell generators use this to populate `_arg_values` during the main
+ * scan loop.
+ */
+export interface TrackedFieldRef {
+  /** camelCase field name; used as the `_arg_values` map key. */
+  readonly fieldName: string;
+  /** Subcommand path where this field lives. */
+  readonly pathStr: string;
+  /** True if positional, false if option. */
+  readonly isPositional: boolean;
+  /** 0-based positional index (positional only). */
+  readonly position?: number;
+  /** Long option name (without `--`, option only). */
+  readonly cliName?: string;
+  /** Long aliases (without `--`, option only). */
+  readonly longAliases?: readonly string[];
+  /** Short aliases (single chars, option only). */
+  readonly shortAliases?: readonly string[];
+}
+
+/**
+ * For every expand spec, find each `dependsOn` sibling field at the same
+ * path and return enough metadata for the shell generator to emit tracker
+ * cases. Fields that cannot be resolved are silently skipped — the static
+ * extractor already validated `dependsOn` upstream in
+ * `resolveExpandTargets`, so unresolved siblings here would indicate a
+ * programming error and would simply yield no tracker entries.
+ */
+export function collectTrackedFields(
+  root: CompletableSubcommand,
+  specs: readonly ExpandSpecLocation[],
+): TrackedFieldRef[] {
+  const out: TrackedFieldRef[] = [];
+  const seen = new Set<string>();
+  const nodeByPath = indexNodesByPath(root);
+  for (const spec of specs) {
+    const node = nodeByPath.get(spec.pathStr);
+    if (!node) continue;
+    for (const dep of spec.vc.dependsOn) {
+      const dedupKey = `${spec.pathStr}::${dep}`;
+      if (seen.has(dedupKey)) continue;
+      seen.add(dedupKey);
+      const posIndex = node.positionals.findIndex((p) => p.name === dep);
+      if (posIndex >= 0) {
+        out.push({
+          fieldName: dep,
+          pathStr: spec.pathStr,
+          isPositional: true,
+          position: posIndex,
+        });
+        continue;
+      }
+      const opt = node.options.find((o) => o.name === dep);
+      if (opt) {
+        const longAliases: string[] = [];
+        const shortAliases: string[] = [];
+        for (const a of opt.alias ?? []) {
+          if (a.length === 1) shortAliases.push(a);
+          else longAliases.push(a);
+        }
+        out.push({
+          fieldName: dep,
+          pathStr: spec.pathStr,
+          isPositional: false,
+          cliName: opt.cliName,
+          longAliases,
+          shortAliases,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+function indexNodesByPath(root: CompletableSubcommand): Map<string, CompletableSubcommand> {
+  const map = new Map<string, CompletableSubcommand>();
+  const recurse = (node: CompletableSubcommand, pathStr: string): void => {
+    map.set(pathStr, node);
+    for (const child of getVisibleSubs(node.subcommands)) {
+      const childPath = pathStr ? `${pathStr}:${child.name}` : child.name;
+      recurse(child, childPath);
+    }
+  };
+  recurse(root, "");
+  return map;
+}
+
+/**
  * Walk a CompletableSubcommand tree and return true when any option or
  * positional uses an in-process dynamic resolver. Used by shell generators
  * to decide whether to emit `__<fn>_invoke_complete` delegate helpers.
@@ -306,7 +526,21 @@ export function extractCompletionData(
   let globalOptions: CompletableOption[];
   if (globalArgsSchema) {
     const globalExtracted = extractFields(globalArgsSchema);
-    globalOptions = globalExtracted.fields.filter((field) => !field.positional).map(fieldToOption);
+    const globalPending: PendingExpandTarget[] = [];
+    globalOptions = globalExtracted.fields
+      .filter((field) => !field.positional)
+      .map((field) => fieldToOption(field, globalPending));
+    // Resolve `expand` specs on global options against the globals themselves
+    // (globals can depend on other globals but not on subcommand-local args).
+    resolveExpandTargets(
+      {
+        name: programName,
+        subcommands: [],
+        options: globalOptions,
+        positionals: [],
+      },
+      globalPending,
+    );
     // Merge global options into all subcommands recursively
     propagateGlobalOptions(rootSubcommand, globalOptions);
   } else {

@@ -8,7 +8,9 @@
 import type { AnyCommand } from "../types.js";
 import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
+  collectExpandSpecs,
   collectRouteEntries,
+  collectTrackedFields,
   extractCompletionData,
   getSubNamesWithAliases,
   getVisibleSubs,
@@ -29,6 +31,11 @@ function escapeDesc(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$");
 }
 
+/** Escape a fish `switch` case pattern (no glob expansion, quote-safe). */
+function fishCaseEscape(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$");
+}
+
 /**
  * Generate fish value completion lines for a ValueCompletion spec.
  * Each line outputs candidates via echo (tab-separated value\tdescription).
@@ -36,6 +43,30 @@ function escapeDesc(s: string): string {
 function fishValueLines(vc: ValueCompletion | undefined, fn: string): string[] {
   if (!vc) return [];
   switch (vc.type) {
+    case "expand": {
+      // Fish has no associative arrays, so emit an inline switch over the
+      // dependsOn values. For multi-dimensional dependsOn the values are
+      // concatenated with the unit-separator so they collide cleanly with
+      // the table keys we encode here. Candidates carry `value\tdescription`
+      // when a description is set, matching fish's preferred format.
+      const depKey =
+        vc.dependsOn.length === 1
+          ? `"$_arg_values_${vc.dependsOn[0]}"`
+          : vc.dependsOn.map((d) => `"$_arg_values_${d}"`).join(`\\x1f`);
+      const out: string[] = [`switch ${depKey}`];
+      for (const entry of vc.table) {
+        out.push(`    case "${entry.key.map(fishCaseEscape).join("\\x1f")}"`);
+        for (const c of entry.candidates) {
+          if (c.description) {
+            out.push(`        echo "${escapeDesc(c.value)}\t${escapeDesc(c.description)}"`);
+          } else {
+            out.push(`        echo "${escapeDesc(c.value)}"`);
+          }
+        }
+      }
+      out.push(`end`);
+      return out;
+    }
     case "dynamic": {
       // Delegate to `<program> __complete --shell fish` and pipe each line
       // through the apply helper, which interprets the trailing
@@ -272,6 +303,9 @@ export function generateFishCompletion(
   const fn = sanitize(programName);
   const root = data.command;
   const visibleSubs = getVisibleSubs(root.subcommands);
+  const expandSpecs = collectExpandSpecs(root);
+  const trackedFields = collectTrackedFields(root, expandSpecs);
+  const hasExpand = expandSpecs.length > 0;
 
   const lines: string[] = [];
   lines.push(`# Fish completion for ${programName}`);
@@ -357,6 +391,36 @@ export function generateFishCompletion(
   lines.push(`end`);
   lines.push(``);
 
+  if (hasExpand) {
+    // Trackers populate `_arg_values_<field>` global scalars during the
+    // main scan loop. Each expand spec looks up the value via the same
+    // variable to pick a case branch.
+    lines.push(`function __${fn}_track_opt --no-scope-shadowing`);
+    lines.push(`    switch "$argv[1]:$argv[2]"`);
+    for (const t of trackedFields) {
+      if (t.isPositional) continue;
+      const patterns: string[] = [`--${t.cliName}`];
+      for (const a of t.longAliases ?? []) patterns.push(`--${a}`);
+      for (const a of t.shortAliases ?? []) patterns.push(`-${a}`);
+      const cases = patterns.map((n) => `"${t.pathStr}:${n}"`).join(" ");
+      lines.push(`        case ${cases}`);
+      lines.push(`            set -g _arg_values_${t.fieldName} "$argv[3]"`);
+    }
+    lines.push(`    end`);
+    lines.push(`end`);
+    lines.push(``);
+    lines.push(`function __${fn}_track_pos --no-scope-shadowing`);
+    lines.push(`    switch "$argv[1]:$argv[2]"`);
+    for (const t of trackedFields) {
+      if (!t.isPositional) continue;
+      lines.push(`        case "${t.pathStr}:${t.position}"`);
+      lines.push(`            set -g _arg_values_${t.fieldName} "$argv[3]"`);
+    }
+    lines.push(`    end`);
+    lines.push(`end`);
+    lines.push(``);
+  }
+
   // Collect all nested subcommand routes (used for both is_subcmd and dispatch)
   const routeEntries = collectRouteEntries(root);
 
@@ -438,6 +502,13 @@ export function generateFishCompletion(
   );
   lines.push(`    set -l _used_opts`);
   lines.push(``);
+  if (hasExpand) {
+    // Clear any sibling values left over from previous completions so a
+    // partial command doesn't pick up stale values from the global scope.
+    for (const t of trackedFields) {
+      lines.push(`    set -e _arg_values_${t.fieldName}`);
+    }
+  }
   lines.push(`    set -l _j 1`);
   lines.push(`    set -l _limit (math (count $_args) - 1)`);
   lines.push(`    while test $_j -le $_limit`);
@@ -449,18 +520,54 @@ export function generateFishCompletion(
   lines.push(
     `        if test $_after_dd -eq 1; set _pos_count (math $_pos_count + 1); set _j (math $_j + 1); continue; end`,
   );
-  lines.push(
-    `        if string match -q -- '--*=*' "$_w"; set -a _used_opts (string replace -r '=.*' '' -- "$_w"); set _j (math $_j + 1); continue; end`,
-  );
+  if (hasExpand) {
+    lines.push(`        if string match -q -- '--*=*' "$_w"`);
+    lines.push(`            set -l _opt (string replace -r '=.*' '' -- "$_w")`);
+    lines.push(`            set -l _val (string replace -r '^[^=]*=' '' -- "$_w")`);
+    lines.push(`            set -a _used_opts "$_opt"`);
+    lines.push(`            __${fn}_track_opt "$_subcmd" "$_opt" "$_val"`);
+    lines.push(`            set _j (math $_j + 1); continue`);
+    lines.push(`        end`);
+  } else {
+    lines.push(
+      `        if string match -q -- '--*=*' "$_w"; set -a _used_opts (string replace -r '=.*' '' -- "$_w"); set _j (math $_j + 1); continue; end`,
+    );
+  }
   lines.push(`        if string match -q -- '-*' "$_w"`);
   lines.push(`            set -a _used_opts "$_w"`);
-  lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w"; and set _skip_next 1`);
+  if (hasExpand) {
+    lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"`);
+    lines.push(`                set _skip_next 1`);
+    lines.push(`                set -l _next ""`);
+    lines.push(`                if test (math $_j + 1) -le (count $_args)`);
+    lines.push(`                    set _next "$_args[(math $_j + 1)]"`);
+    lines.push(`                end`);
+    lines.push(`                __${fn}_track_opt "$_subcmd" "$_w" "$_next"`);
+    lines.push(`            end`);
+  } else {
+    lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w"; and set _skip_next 1`);
+  }
   lines.push(`            set _j (math $_j + 1); continue`);
   lines.push(`        end`);
   if (routeEntries.length > 0) {
-    lines.push(
-      `        if __${fn}_is_subcmd "$_subcmd" "$_w"; test -n "$_subcmd"; and set _subcmd "$_subcmd:$_w"; or set _subcmd "$_w"; set _used_opts; set _pos_count 0; else; set _pos_count (math $_pos_count + 1); end`,
-    );
+    if (hasExpand) {
+      lines.push(`        if __${fn}_is_subcmd "$_subcmd" "$_w"`);
+      lines.push(
+        `            test -n "$_subcmd"; and set _subcmd "$_subcmd:$_w"; or set _subcmd "$_w"`,
+      );
+      lines.push(`            set _used_opts; set _pos_count 0`);
+      lines.push(`        else`);
+      lines.push(`            __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
+      lines.push(`            set _pos_count (math $_pos_count + 1)`);
+      lines.push(`        end`);
+    } else {
+      lines.push(
+        `        if __${fn}_is_subcmd "$_subcmd" "$_w"; test -n "$_subcmd"; and set _subcmd "$_subcmd:$_w"; or set _subcmd "$_w"; set _used_opts; set _pos_count 0; else; set _pos_count (math $_pos_count + 1); end`,
+      );
+    }
+  } else if (hasExpand) {
+    lines.push(`        __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
+    lines.push(`        set _pos_count (math $_pos_count + 1)`);
   } else {
     lines.push(`        set _pos_count (math $_pos_count + 1)`);
   }

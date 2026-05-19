@@ -8,7 +8,9 @@
 import type { AnyCommand } from "../types.js";
 import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
+  collectExpandSpecs,
   collectRouteEntries,
+  collectTrackedFields,
   extractCompletionData,
   getSubNamesWithAliases,
   getVisibleSubs,
@@ -35,13 +37,66 @@ function escapeDesc(s: string): string {
     .replace(/:/g, "\\:");
 }
 
+function zshExpandVar(fn: string, funcSuffix: string, fieldName: string): string {
+  return `__${fn}_expand_${funcSuffix}__${sanitize(fieldName)}`;
+}
+
+/**
+ * Encode a string as an ANSI-C zsh literal (`$'…'`) so newlines, the unit
+ * separator key delimiter, and embedded `:` survive verbatim in the
+ * generated table.
+ */
+function zshAnsiC(s: string): string {
+  let out = "$'";
+  for (const ch of s) {
+    const code = ch.codePointAt(0)!;
+    if (ch === "\\") out += "\\\\";
+    else if (ch === "'") out += "\\'";
+    else if (ch === "\n") out += "\\n";
+    else if (ch === "\r") out += "\\r";
+    else if (ch === "\t") out += "\\t";
+    else if (code < 0x20 || code === 0x7f) out += `\\x${code.toString(16).padStart(2, "0")}`;
+    else out += ch;
+  }
+  out += "'";
+  return out;
+}
+
+interface ZshExpandLocation {
+  funcSuffix: string;
+  fieldName: string;
+}
+
 /**
  * Generate zsh value completion lines for a ValueCompletion spec.
  * Uses `_vals` array (must be declared in the calling function scope).
+ * `location` is required when `vc.type === "expand"`.
  */
-function zshValueLines(vc: ValueCompletion | undefined, fn: string): string[] {
+function zshValueLines(
+  vc: ValueCompletion | undefined,
+  fn: string,
+  location?: ZshExpandLocation,
+): string[] {
   if (!vc) return [];
   switch (vc.type) {
+    case "expand": {
+      if (!location) {
+        throw new Error("zshValueLines: expand variant requires a location");
+      }
+      const varName = zshExpandVar(fn, location.funcSuffix, location.fieldName);
+      const depKey = vc.dependsOn.map((d) => `"\${_arg_values[${d}]:-}"`).join(`$'\\x1f'`);
+      // _vals is split on newlines so each candidate can carry a `:desc`
+      // suffix understood by `_describe`. Empty entries (from
+      // unrecognised keys) are silently dropped by zsh's _describe.
+      return [
+        `local _key=${depKey}`,
+        `local _raw="\${${varName}[$_key]:-}"`,
+        `if [[ -n "$_raw" ]]; then`,
+        `    _vals=("\${(@f)_raw}")`,
+        `    __${fn}_cdescribe 'completions' _vals`,
+        `fi`,
+      ];
+    }
     case "dynamic": {
       // Delegate to `<program> __complete --shell zsh` and let the apply
       // helper interpret the trailing `:<directive>` line so resolver-supplied
@@ -71,11 +126,14 @@ function zshValueLines(vc: ValueCompletion | undefined, fn: string): string[] {
 }
 
 /** Generate option-value case branches */
-function optionValueCases(options: CompletableOption[], fn: string): string[] {
+function optionValueCases(options: CompletableOption[], fn: string, funcSuffix: string): string[] {
   const lines: string[] = [];
   for (const opt of options) {
     if (!opt.takesValue || !opt.valueCompletion) continue;
-    const valLines = zshValueLines(opt.valueCompletion, fn);
+    const valLines = zshValueLines(opt.valueCompletion, fn, {
+      funcSuffix,
+      fieldName: opt.name,
+    });
     if (valLines.length === 0) continue;
 
     const patterns: string[] = [`--${opt.cliName}`];
@@ -95,7 +153,11 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
 }
 
 /** Generate positional completion block */
-function positionalBlock(positionals: CompletablePositional[], fn: string): string[] {
+function positionalBlock(
+  positionals: CompletablePositional[],
+  fn: string,
+  funcSuffix: string,
+): string[] {
   if (positionals.length === 0) return [];
   const lines: string[] = [];
   lines.push(`    case "$_pos_count" in`);
@@ -105,7 +167,10 @@ function positionalBlock(positionals: CompletablePositional[], fn: string): stri
     } else {
       lines.push(`        ${pos.position})`);
     }
-    const valLines = zshValueLines(pos.valueCompletion, fn);
+    const valLines = zshValueLines(pos.valueCompletion, fn, {
+      funcSuffix,
+      fieldName: pos.name,
+    });
     for (const vl of valLines) {
       lines.push(`            ${vl}`);
     }
@@ -116,10 +181,14 @@ function positionalBlock(positionals: CompletablePositional[], fn: string): stri
 }
 
 /** Generate prev-word value completion case block */
-function valueCompletionBlock(options: CompletableOption[], fn: string): string[] {
+function valueCompletionBlock(
+  options: CompletableOption[],
+  fn: string,
+  funcSuffix: string,
+): string[] {
   if (!options.some((o) => o.takesValue && o.valueCompletion)) return [];
 
-  const prevCases = optionValueCases(options, fn);
+  const prevCases = optionValueCases(options, fn, funcSuffix);
   if (prevCases.length === 0) return [];
 
   return [`    case "\${words[CURRENT-1]}" in`, ...prevCases, `    esac`];
@@ -163,7 +232,8 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
  */
 function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string[]): string[] {
   const fullPath = [...path, sub.name];
-  const funcName = `__${fn}_complete_${fullPath.map(sanitize).join("_")}`;
+  const funcSuffix = fullPath.map(sanitize).join("_");
+  const funcName = `__${fn}_complete_${funcSuffix}`;
   const visibleSubs = getVisibleSubs(sub.subcommands);
 
   const lines: string[] = [];
@@ -177,7 +247,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`    local -a _vals=()`);
 
   // 1. Option value completion (prev word is value-taking option)
-  lines.push(...valueCompletionBlock(sub.options, fn));
+  lines.push(...valueCompletionBlock(sub.options, fn, funcSuffix));
   // Fallback: value-taking option without explicit completion → default file completion
   const fullPathStr = fullPath.join(":");
   lines.push(
@@ -187,7 +257,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 2. After -- separator
   if (sub.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
-    lines.push(...positionalBlock(sub.positionals, fn).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(sub.positionals, fn, funcSuffix).map((l) => `    ${l}`));
     lines.push(`        return 0`);
     lines.push(`    fi`);
   } else {
@@ -213,7 +283,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
     lines.push(`    local -a _subs=(${subItems})`);
     lines.push(`    __${fn}_cdescribe 'subcommands' _subs`);
   } else if (sub.positionals.length > 0) {
-    lines.push(...positionalBlock(sub.positionals, fn));
+    lines.push(...positionalBlock(sub.positionals, fn, funcSuffix));
   }
 
   lines.push(`}`);
@@ -230,6 +300,9 @@ export function generateZshCompletion(
   const fn = sanitize(programName);
   const root = data.command;
   const visibleSubs = getVisibleSubs(root.subcommands);
+  const expandSpecs = collectExpandSpecs(root);
+  const trackedFields = collectTrackedFields(root, expandSpecs);
+  const hasExpand = expandSpecs.length > 0;
 
   const lines: string[] = [];
   lines.push(`#compdef ${programName}`);
@@ -237,6 +310,30 @@ export function generateZshCompletion(
   lines.push(`# Zsh completion for ${programName}`);
   lines.push(`# Generated by politty`);
   lines.push(``);
+
+  // Expand-completion hoisted tables. One global associative array per
+  // expand spec, populated via the array-literal form (which is the only
+  // place where zsh evaluates `$'…'` for keys — subscripts treat the
+  // quoted form as the literal string). Keys are `dependsOn` values
+  // joined by U+001F; values are newline-separated `value:description`
+  // entries consumed by `_describe`.
+  for (const spec of expandSpecs) {
+    const varName = `__${fn}_expand_${spec.funcSuffix}__${sanitize(spec.fieldName)}`;
+    if (spec.vc.table.length === 0) {
+      lines.push(`typeset -gA ${varName}=()`);
+    } else {
+      lines.push(`typeset -gA ${varName}=(`);
+      for (const entry of spec.vc.table) {
+        const key = entry.key.join("\x1f");
+        const value = entry.candidates
+          .map((c) => (c.description ? `${c.value}:${escapeDesc(c.description)}` : c.value))
+          .join("\n");
+        lines.push(`    ${zshAnsiC(key)} ${zshAnsiC(value)}`);
+      }
+      lines.push(`)`);
+    }
+    lines.push(``);
+  }
 
   // Dynamic completion delegate helpers (only when any value spec uses
   // an in-process JS resolver).
@@ -315,6 +412,33 @@ export function generateZshCompletion(
   lines.push(`}`);
   lines.push(``);
 
+  if (hasExpand) {
+    // Trackers populate `_arg_values` during the main scan loop so the
+    // per-spec lookup can dispatch on sibling arg values.
+    lines.push(`__${fn}_track_opt() {`);
+    lines.push(`    case "$1:$2" in`);
+    for (const t of trackedFields) {
+      if (t.isPositional) continue;
+      const patterns: string[] = [`--${t.cliName}`];
+      for (const a of t.longAliases ?? []) patterns.push(`--${a}`);
+      for (const a of t.shortAliases ?? []) patterns.push(`-${a}`);
+      const joined = patterns.map((n) => `${t.pathStr}:${n}`).join("|");
+      lines.push(`        ${joined}) _arg_values[${t.fieldName}]="$3" ;;`);
+    }
+    lines.push(`    esac`);
+    lines.push(`}`);
+    lines.push(``);
+    lines.push(`__${fn}_track_pos() {`);
+    lines.push(`    case "$1:$2" in`);
+    for (const t of trackedFields) {
+      if (!t.isPositional) continue;
+      lines.push(`        ${t.pathStr}:${t.position}) _arg_values[${t.fieldName}]="$3" ;;`);
+    }
+    lines.push(`    esac`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
   // Collect all nested subcommand routes (used for both is_subcmd and dispatch)
   const routeEntries = collectRouteEntries(root);
 
@@ -340,12 +464,12 @@ export function generateZshCompletion(
   // inline via _inline_prefix parsing.
   lines.push(`__${fn}_complete_root() {`);
   lines.push(`    local -a _vals=()`);
-  lines.push(...valueCompletionBlock(root.options, fn));
+  lines.push(...valueCompletionBlock(root.options, fn, "root"));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(`    if __${fn}_opt_takes_value "" "\${words[CURRENT-1]}"; then return 0; fi`);
   if (root.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
-    lines.push(...positionalBlock(root.positionals, fn).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(root.positionals, fn, "root").map((l) => `    ${l}`));
     lines.push(`        return 0`);
     lines.push(`    fi`);
   } else {
@@ -367,7 +491,7 @@ export function generateZshCompletion(
     lines.push(`        __${fn}_cdescribe 'subcommands' _subs`);
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
-    lines.push(...positionalBlock(root.positionals, fn).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(root.positionals, fn, "root").map((l) => `    ${l}`));
   }
   lines.push(`    fi`);
   lines.push(`}`);
@@ -383,6 +507,9 @@ export function generateZshCompletion(
   lines.push(``);
   lines.push(`    local _subcmd="" _after_dd=0 _pos_count=0 _skip_next=0`);
   lines.push(`    local -a _used_opts=()`);
+  if (hasExpand) {
+    lines.push(`    local -A _arg_values=()`);
+  }
   lines.push(``);
   lines.push(`    local _j=2`);
   lines.push(`    while (( _j < CURRENT )); do`);
@@ -390,18 +517,41 @@ export function generateZshCompletion(
   lines.push(`        if (( _skip_next )); then _skip_next=0; (( _j++ )); continue; fi`);
   lines.push(`        if [[ "$_w" == "--" ]]; then _after_dd=1; (( _j++ )); continue; fi`);
   lines.push(`        if (( _after_dd )); then (( _pos_count++ )); (( _j++ )); continue; fi`);
-  lines.push(
-    `        if [[ "$_w" == --*=* ]]; then _used_opts+=("\${_w%%=*}"); (( _j++ )); continue; fi`,
-  );
+  if (hasExpand) {
+    lines.push(`        if [[ "$_w" == --*=* ]]; then`);
+    lines.push(`            _used_opts+=("\${_w%%=*}")`);
+    lines.push(`            __${fn}_track_opt "$_subcmd" "\${_w%%=*}" "\${_w#*=}"`);
+    lines.push(`            (( _j++ )); continue`);
+    lines.push(`        fi`);
+  } else {
+    lines.push(
+      `        if [[ "$_w" == --*=* ]]; then _used_opts+=("\${_w%%=*}"); (( _j++ )); continue; fi`,
+    );
+  }
   lines.push(`        if [[ "$_w" == -* ]]; then`);
   lines.push(`            _used_opts+=("$_w")`);
-  lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
+  if (hasExpand) {
+    lines.push(
+      `            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then _skip_next=1; __${fn}_track_opt "$_subcmd" "$_w" "\${words[_j+1]:-}"; fi`,
+    );
+  } else {
+    lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
+  }
   lines.push(`            (( _j++ )); continue`);
   lines.push(`        fi`);
   if (routeEntries.length > 0) {
-    lines.push(
-      `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else (( _pos_count++ )); fi`,
-    );
+    if (hasExpand) {
+      lines.push(
+        `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; (( _pos_count++ )); fi`,
+      );
+    } else {
+      lines.push(
+        `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else (( _pos_count++ )); fi`,
+      );
+    }
+  } else if (hasExpand) {
+    lines.push(`        __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
+    lines.push(`        (( _pos_count++ ))`);
   } else {
     lines.push(`        (( _pos_count++ ))`);
   }

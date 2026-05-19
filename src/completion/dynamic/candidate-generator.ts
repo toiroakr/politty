@@ -210,6 +210,16 @@ async function resolveValueCandidates(
       }
       break;
     }
+
+    case "expand":
+      // `expand` candidates are inlined into the static shell script at
+      // generation time, so the dynamic path never delegates to us for an
+      // expand field. This case is reachable only if a caller invokes
+      // `__complete` for an expand field directly (e.g. from tests). Return
+      // no candidates with `NoFileCompletion` to mirror the choices/none
+      // shapes.
+      directive |= CompletionDirective.NoFileCompletion;
+      break;
   }
 
   return { directive, fileExtensions, fileMatchers };

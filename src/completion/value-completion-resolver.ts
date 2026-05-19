@@ -6,7 +6,21 @@
  */
 
 import type { DynamicCompletionResolver } from "../core/dynamic-completion-types.js";
+import type { ExpandCompletion } from "../core/expand-completion-types.js";
 import type { ValueCompletion } from "./types.js";
+
+/**
+ * Sentinel returned when a field uses `completion.custom.expand`. The static
+ * extractor recognises this and replaces it with a fully resolved
+ * `{ type: "expand", ... }` ValueCompletion after sibling args' static
+ * values are known. Internal: never assigned onto `CompletableOption` /
+ * `CompletablePositional` directly; callers stash it in a side map keyed by
+ * field name and patch the resolved spec in afterwards.
+ */
+export interface PendingExpandValueCompletion {
+  type: "pending-expand";
+  spec: ExpandCompletion;
+}
 
 /**
  * Minimal field interface needed for resolving value completion.
@@ -20,6 +34,7 @@ export interface ValueCompletionField {
           choices?: string[];
           shellCommand?: string;
           resolve?: DynamicCompletionResolver;
+          expand?: ExpandCompletion;
         };
       } & ({ extensions?: string[]; matcher?: never } | { matcher?: string[]; extensions?: never }))
     | undefined;
@@ -31,30 +46,38 @@ export interface ValueCompletionField {
 /**
  * Resolve value completion from field metadata.
  *
- * Priority (within `custom`): `resolve` > `choices` > `shellCommand`.
+ * Priority (within `custom`): `expand` > `resolve` > `choices` > `shellCommand`.
  * Specifying more than one of these on the same field throws so the
  * misconfiguration surfaces at command-definition time rather than at
- * completion time.
+ * completion time. The `expand` variant returns a sentinel — the extractor
+ * resolves it against sibling fields and replaces the sentinel with a
+ * `{ type: "expand", table, dependsOn }` entry.
  *
  * Outside `custom`: explicit `type` (file/directory/none) > auto-detected
  * enum values from the schema.
  */
-export function resolveValueCompletion(field: ValueCompletionField): ValueCompletion | undefined {
+export function resolveValueCompletion(
+  field: ValueCompletionField,
+): ValueCompletion | PendingExpandValueCompletion | undefined {
   const meta = field.completion;
 
   if (meta?.custom) {
     const c = meta.custom;
     const definedKeys: string[] = [];
+    if (c.expand) definedKeys.push("expand");
     if (c.resolve) definedKeys.push("resolve");
     if (c.choices && c.choices.length > 0) definedKeys.push("choices");
     if (c.shellCommand) definedKeys.push("shellCommand");
 
     if (definedKeys.length > 1) {
       throw new Error(
-        `Field "${field.name ?? "<unknown>"}": completion.custom may only specify one of choices, shellCommand, resolve (got ${definedKeys.join(", ")}).`,
+        `Field "${field.name ?? "<unknown>"}": completion.custom may only specify one of choices, shellCommand, resolve, expand (got ${definedKeys.join(", ")}).`,
       );
     }
 
+    if (c.expand) {
+      return { type: "pending-expand", spec: c.expand };
+    }
     if (c.resolve) {
       return { type: "dynamic", resolve: c.resolve };
     }
