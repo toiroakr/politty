@@ -65,6 +65,13 @@ function zshAnsiC(s: string): string {
 interface ZshExpandLocation {
   funcSuffix: string;
   fieldName: string;
+  /**
+   * Enable runtime deduplication of already-consumed `key=` candidates
+   * for repeatable array options (e.g. `-f workspaceId=foo -f <TAB>`
+   * drops the `workspaceId=` slot). Always false for scalar options and
+   * positionals.
+   */
+  isArrayOption: boolean;
 }
 
 /**
@@ -88,6 +95,26 @@ function zshValueLines(
       // _vals is split on newlines so each candidate can carry a `:desc`
       // suffix understood by `_describe`. Empty entries (from
       // unrecognised keys) are silently dropped by zsh's _describe.
+      if (location.isArrayOption) {
+        const bucket = sanitize(location.fieldName);
+        return [
+          `local _key=${depKey}`,
+          `local _raw="\${${varName}[$_key]:-}"`,
+          `if [[ -n "$_raw" ]]; then`,
+          `    local -a _candidates=("\${(@f)_raw}")`,
+          `    _vals=()`,
+          `    local _c _ck`,
+          `    for _c in "\${_candidates[@]}"; do`,
+          `        if [[ "$_c" == *=* ]]; then`,
+          `            _ck="\${_c%%=*}"`,
+          `            if [[ -n "$_ck" && " \${_used_field_keys[${bucket}]:-} " == *" $_ck "* ]]; then continue; fi`,
+          `        fi`,
+          `        _vals+=("$_c")`,
+          `    done`,
+          `    __${fn}_cdescribe 'completions' _vals`,
+          `fi`,
+        ];
+      }
       return [
         `local _key=${depKey}`,
         `local _raw="\${${varName}[$_key]:-}"`,
@@ -133,6 +160,7 @@ function optionValueCases(options: CompletableOption[], fn: string, funcSuffix: 
     const valLines = zshValueLines(opt.valueCompletion, fn, {
       funcSuffix,
       fieldName: opt.name,
+      isArrayOption: opt.valueType === "array",
     });
     if (valLines.length === 0) continue;
 
@@ -170,6 +198,7 @@ function positionalBlock(
     const valLines = zshValueLines(pos.valueCompletion, fn, {
       funcSuffix,
       fieldName: pos.name,
+      isArrayOption: false,
     });
     for (const vl of valLines) {
       lines.push(`            ${vl}`);
@@ -303,6 +332,8 @@ export function generateZshCompletion(
   const expandSpecs = collectExpandSpecs(root);
   const trackedFields = collectTrackedFields(root, expandSpecs);
   const hasExpand = expandSpecs.length > 0;
+  const arrayExpandSpecs = expandSpecs.filter((s) => s.isArrayOption);
+  const hasArrayExpand = arrayExpandSpecs.length > 0;
 
   const lines: string[] = [];
   lines.push(`#compdef ${programName}`);
@@ -439,6 +470,27 @@ export function generateZshCompletion(
     lines.push(``);
   }
 
+  if (hasArrayExpand) {
+    // Separate function from `__track_opt` so that an option that is
+    // simultaneously a dependsOn target and an array expand host does
+    // not collide on the same case pattern.
+    lines.push(`__${fn}_track_array_expand() {`);
+    lines.push(`    case "$1:$2" in`);
+    for (const spec of arrayExpandSpecs) {
+      const joined = spec.optionTokens.map((tok) => `${spec.pathStr}:${tok}`).join("|");
+      const bucket = sanitize(spec.fieldName);
+      lines.push(`        ${joined})`);
+      lines.push(`            if [[ "$3" == *=* ]]; then`);
+      lines.push(`                local _k="\${3%%=*}"`);
+      lines.push(`                [[ -n "$_k" ]] && _used_field_keys[${bucket}]+=" $_k "`);
+      lines.push(`            fi`);
+      lines.push(`            ;;`);
+    }
+    lines.push(`    esac`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
   // Collect all nested subcommand routes (used for both is_subcmd and dispatch)
   const routeEntries = collectRouteEntries(root);
 
@@ -510,6 +562,9 @@ export function generateZshCompletion(
   if (hasExpand) {
     lines.push(`    local -A _arg_values=()`);
   }
+  if (hasArrayExpand) {
+    lines.push(`    local -A _used_field_keys=()`);
+  }
   lines.push(``);
   lines.push(`    local _j=2`);
   lines.push(`    while (( _j < CURRENT )); do`);
@@ -521,6 +576,9 @@ export function generateZshCompletion(
     lines.push(`        if [[ "$_w" == --*=* ]]; then`);
     lines.push(`            _used_opts+=("\${_w%%=*}")`);
     lines.push(`            __${fn}_track_opt "$_subcmd" "\${_w%%=*}" "\${_w#*=}"`);
+    if (hasArrayExpand) {
+      lines.push(`            __${fn}_track_array_expand "$_subcmd" "\${_w%%=*}" "\${_w#*=}"`);
+    }
     lines.push(`            (( _j++ )); continue`);
     lines.push(`        fi`);
   } else {
@@ -531,9 +589,17 @@ export function generateZshCompletion(
   lines.push(`        if [[ "$_w" == -* ]]; then`);
   lines.push(`            _used_opts+=("$_w")`);
   if (hasExpand) {
-    lines.push(
-      `            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then _skip_next=1; __${fn}_track_opt "$_subcmd" "$_w" "\${words[_j+1]:-}"; fi`,
-    );
+    if (hasArrayExpand) {
+      lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then`);
+      lines.push(`                _skip_next=1`);
+      lines.push(`                __${fn}_track_opt "$_subcmd" "$_w" "\${words[_j+1]:-}"`);
+      lines.push(`                __${fn}_track_array_expand "$_subcmd" "$_w" "\${words[_j+1]:-}"`);
+      lines.push(`            fi`);
+    } else {
+      lines.push(
+        `            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then _skip_next=1; __${fn}_track_opt "$_subcmd" "$_w" "\${words[_j+1]:-}"; fi`,
+      );
+    }
   } else {
     lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
   }

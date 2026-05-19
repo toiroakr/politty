@@ -154,6 +154,34 @@ build-time-known set. Reach for `resolve` when the candidates depend on
 process-local state the shell cannot observe (filesystem reads, network
 calls, parsing the schema-of-the-day, etc.).
 
+#### Array option deduplication (`-f key=value` repeats)
+
+When `expand` is attached to a repeatable **array option** (`z.array(...)`),
+the generated shell script automatically drops any candidate whose `key=`
+prefix has already been consumed on the same command line. That is, for the
+example above:
+
+```
+$ mycli api GetApplication -f workspaceId=foo -f <TAB>
+applicationName=    # workspaceId= is filtered out
+```
+
+The dedup logic:
+
+- Splits both the user-typed value and each candidate on the first `=`
+  and treats everything to the left of `=` as the slot key. There is no
+  configurable delimiter — `key=value` is the assumed shape.
+- Only fires for option fields with `valueType === "array"`. Scalar
+  options and positionals are not deduped (repeating them has different
+  semantics).
+- Candidates that contain no `=` pass through untouched (e.g. plain enum
+  values used as a repeatable list keep duplicating, since they don't
+  carry a slot key).
+
+If your CLI uses a different separator (e.g. `key:value`), this dedup
+won't engage — the candidates are still emitted correctly, you just
+won't get the automatic filtering.
+
 ### File Completion
 
 Delegate to the shell's native file completion. Optionally filter by extension:

@@ -4,12 +4,14 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   bashComplete as bashCompleteRaw,
+  bashCompleteExpand,
   bashCompleteNested,
   defineCommonTests,
   defineNestedTests,
   hasBash,
   hasExpect,
   isCI,
+  setupExpandTestContext,
   setupNestedTestContext,
   setupTestContext,
   teardownTestContext,
@@ -19,15 +21,18 @@ import {
 
 let ctx: TestContext;
 let nestedCtx: TestContext;
+let expandCtx: TestContext;
 
 beforeAll(() => {
   ctx = setupTestContext();
   nestedCtx = setupNestedTestContext();
+  expandCtx = setupExpandTestContext();
 });
 
 afterAll(() => {
   teardownTestContext(ctx);
   teardownTestContext(nestedCtx);
+  teardownTestContext(expandCtx);
 });
 
 describe.runIf(isCI)("CI: required tools are available", () => {
@@ -151,6 +156,40 @@ printf '%s\\n' "\${COMPREPLY[@]}"
     expect(values).not.toContain("build");
     expect(values).not.toContain("deploy");
     expect(values).toContain("app.json");
+  });
+});
+
+// ─── Expand array dedup ───────────────────────────────────────────────────────
+
+describe.skipIf(!hasBash)("bash expand array dedup", () => {
+  const completeE = (args: string[], opts?: ExecOptions) =>
+    bashCompleteExpand(expandCtx.testEnv, args, {
+      ...opts,
+      scriptPath: expandCtx.completionScripts.bash,
+    });
+
+  it("offers every key when none are consumed", () => {
+    const values = completeE(["api", "GetApplication", "-f", ""]);
+    expect(values).toContain("workspaceId=");
+    expect(values).toContain("applicationName=");
+  });
+
+  it("drops an already-used key from candidates", () => {
+    const values = completeE(["api", "GetApplication", "-f", "workspaceId=foo", "-f", ""]);
+    expect(values).toContain("applicationName=");
+    expect(values).not.toContain("workspaceId=");
+  });
+
+  it("dedup also applies under inline --field=KEY= form", () => {
+    const values = completeE(["api", "GetApplication", "--field=workspaceId=foo", "--field="]);
+    expect(values).toContain("--field=applicationName=");
+    expect(values).not.toContain("--field=workspaceId=");
+  });
+
+  it("prefix filter and dedup are orthogonal", () => {
+    const values = completeE(["api", "GetApplication", "-f", "workspaceId=foo", "-f", "w"]);
+    expect(values).not.toContain("workspaceId=");
+    expect(values).not.toContain("applicationName=");
   });
 });
 

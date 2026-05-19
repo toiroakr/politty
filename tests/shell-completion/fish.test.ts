@@ -4,9 +4,11 @@ import {
   defineCommonTests,
   defineNestedTests,
   fishComplete as fishCompleteRaw,
+  fishCompleteExpand,
   fishCompleteNested,
   hasFish,
   isCI,
+  setupExpandTestContext,
   setupNestedTestContext,
   setupTestContext,
   teardownTestContext,
@@ -16,15 +18,18 @@ import {
 
 let ctx: TestContext;
 let nestedCtx: TestContext;
+let expandCtx: TestContext;
 
 beforeAll(() => {
   ctx = setupTestContext();
   nestedCtx = setupNestedTestContext();
+  expandCtx = setupExpandTestContext();
 });
 
 afterAll(() => {
   teardownTestContext(ctx);
   teardownTestContext(nestedCtx);
+  teardownTestContext(expandCtx);
 });
 
 describe.runIf(isCI)("CI: required tools are available", () => {
@@ -236,5 +241,25 @@ describe.skipIf(!hasFish)("fish interactive completion (complete --do-complete)"
       cwd: ctx.testFilesDir,
     });
     expect(n).toBe(3);
+  });
+});
+
+describe.skipIf(!hasFish)("fish expand array dedup", () => {
+  const completeE = (args: string[], opts?: ExecOptions) =>
+    fishCompleteExpand(expandCtx.testEnv, args, {
+      ...opts,
+      scriptPath: expandCtx.completionScripts.fish,
+    });
+
+  it("offers every key when none are consumed", () => {
+    const values = completeE(["api", "GetApplication", "-f", ""]);
+    expect(values).toContain("workspaceId=");
+    expect(values).toContain("applicationName=");
+  });
+
+  it("drops an already-used key from candidates", () => {
+    const values = completeE(["api", "GetApplication", "-f", "workspaceId=foo", "-f", ""]);
+    expect(values).toContain("applicationName=");
+    expect(values).not.toContain("workspaceId=");
   });
 });

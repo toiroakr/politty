@@ -253,4 +253,96 @@ describe("expand completion", () => {
       expect(bash).not.toContain("__simple_track_opt");
     });
   });
+
+  describe("array option deduplication", () => {
+    const cmd = defineCommand({
+      name: "mycli",
+      subCommands: { api: makeApi() },
+    });
+
+    it("flags array expand specs on the collector", () => {
+      const data = extractCompletionData(cmd, "mycli");
+      const specs = collectExpandSpecs(data.command);
+      expect(specs[0]?.isArrayOption).toBe(true);
+      expect(specs[0]?.optionTokens).toEqual(["--field", "-f"]);
+    });
+
+    it("bash emits a separate track function and runtime dedup guard", () => {
+      const { script } = generateBashCompletion(cmd, { shell: "bash", programName: "mycli" });
+      expect(script).toContain("__mycli_track_array_expand");
+      expect(script).toContain("local -A _used_field_keys=()");
+      expect(script).toContain(`api:--field|api:-f)`);
+      expect(script).toContain(`_used_field_keys[field]+=" $_k "`);
+      expect(script).toContain(`_used_field_keys[field]:-`);
+      expect(script).toContain(`__mycli_track_array_expand "$_subcmd"`);
+    });
+
+    it("zsh emits a separate track function and runtime dedup guard", () => {
+      const { script } = generateZshCompletion(cmd, { shell: "zsh", programName: "mycli" });
+      expect(script).toContain("__mycli_track_array_expand");
+      expect(script).toContain("local -A _used_field_keys=()");
+      expect(script).toContain(`_used_field_keys[field]+=" $_k "`);
+      expect(script).toContain(`_used_field_keys[field]:-`);
+    });
+
+    it("fish emits per-field global lists and static per-candidate guards", () => {
+      const { script } = generateFishCompletion(cmd, { shell: "fish", programName: "mycli" });
+      expect(script).toContain("__mycli_track_array_expand");
+      expect(script).toContain("set -e _used_field_keys_field");
+      expect(script).toContain("set -ga _used_field_keys_field");
+      expect(script).toContain('if not contains -- "workspaceId" $_used_field_keys_field');
+    });
+
+    it("scalar option with expand does not emit dedup helpers", () => {
+      const scalar = defineCommand({
+        name: "scalarcli",
+        subCommands: {
+          api: defineCommand({
+            name: "api",
+            args: z.object({
+              endpoint: arg(z.string(), {
+                positional: true,
+                completion: { custom: { choices: ENDPOINTS } },
+              }),
+              field: arg(z.string(), {
+                alias: "f",
+                completion: {
+                  custom: {
+                    expand: {
+                      dependsOn: ["endpoint"],
+                      enumerate: (deps) => {
+                        const ep = deps.endpoint ?? "";
+                        return (ENDPOINT_FIELDS[ep] ?? []).map((k) => ({ value: `${k}=` }));
+                      },
+                    },
+                  },
+                },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const { script: bash } = generateBashCompletion(scalar, {
+        shell: "bash",
+        programName: "scalarcli",
+      });
+      expect(bash).not.toContain("_used_field_keys");
+      expect(bash).not.toContain("__scalarcli_track_array_expand");
+
+      const { script: zsh } = generateZshCompletion(scalar, {
+        shell: "zsh",
+        programName: "scalarcli",
+      });
+      expect(zsh).not.toContain("_used_field_keys");
+      expect(zsh).not.toContain("__scalarcli_track_array_expand");
+
+      const { script: fish } = generateFishCompletion(scalar, {
+        shell: "fish",
+        programName: "scalarcli",
+      });
+      expect(fish).not.toContain("_used_field_keys");
+      expect(fish).not.toContain("__scalarcli_track_array_expand");
+    });
+  });
 });

@@ -18,6 +18,11 @@ const playgroundPath = path.resolve(
 
 const nestedCommandPath = path.resolve(import.meta.dirname, "nested-command.ts");
 
+const expandCommandPath = path.resolve(
+  import.meta.dirname,
+  "../../playground/28-expand-completion/index.ts",
+);
+
 export function shellExists(shell: string): boolean {
   try {
     execSync(`which ${shell}`, { stdio: "pipe" });
@@ -100,6 +105,16 @@ export function setupTestContext(): TestContext {
 export function setupNestedTestContext(): TestContext {
   const { tmpDir, testEnv } = createWrapperContext("politty-nested-", "nestapp", nestedCommandPath);
   const completionScripts = generateCompletionScripts(tmpDir, "nestapp", testEnv);
+  return { tmpDir, testEnv, testFilesDir: tmpDir, completionScripts };
+}
+
+export function setupExpandTestContext(): TestContext {
+  const { tmpDir, testEnv } = createWrapperContext(
+    "politty-expand-",
+    "tailor-expand",
+    expandCommandPath,
+  );
+  const completionScripts = generateCompletionScripts(tmpDir, "tailor-expand", testEnv);
   return { tmpDir, testEnv, testFilesDir: tmpDir, completionScripts };
 }
 
@@ -335,6 +350,33 @@ export function fishCompleteNested(
   opts?: ExecOptions,
 ): string[] {
   return fishCompleteWith("nestapp", "nested_test", testEnv, args, opts);
+}
+
+export function bashCompleteExpand(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  return bashCompleteWith("tailor-expand", "tailor_expand", testEnv, args, opts);
+}
+
+export function zshCompleteExpand(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  return zshCompleteWith("tailor-expand", "tailor_expand", testEnv, args, {
+    ...opts,
+    filesStub: zshFilesStubSimple,
+  });
+}
+
+export function fishCompleteExpand(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  return fishCompleteWith("tailor-expand", "tailor_expand", testEnv, args, opts);
 }
 
 /**

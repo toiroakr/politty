@@ -67,6 +67,13 @@ function bashLiteral(s: string): string {
 interface BashExpandLocation {
   funcSuffix: string;
   fieldName: string;
+  /**
+   * When true, the candidate loop drops any `key=` value whose key part is
+   * already present in `_used_field_keys[<fieldName>]`. Enables `-f
+   * key=value -f <TAB>` style dedup for repeatable array options. Always
+   * false for scalar options and positionals.
+   */
+  isArrayOption: boolean;
 }
 
 /**
@@ -92,6 +99,14 @@ function bashValueLines(
       const varName = bashExpandVar(fn, location.funcSuffix, location.fieldName);
       const depKey = vc.dependsOn.map((d) => `"\${_arg_values[${d}]:-}"`).join(`$'\\x1f'`);
       const inlineExpr = inline ? `"\${_inline_prefix}\${_c}"` : `"$_c"`;
+      const dedupLines = location.isArrayOption
+        ? [
+            `        if [[ "$_c" == *=* ]]; then`,
+            `            local _ck="\${_c%%=*}"`,
+            `            if [[ -n "$_ck" && " \${_used_field_keys[${sanitize(location.fieldName)}]:-} " == *" $_ck "* ]]; then continue; fi`,
+            `        fi`,
+          ]
+        : [];
       return [
         `local _key=${depKey}`,
         `local _raw="\${${varName}[$_key]:-}"`,
@@ -101,6 +116,7 @@ function bashValueLines(
         `    local _c`,
         `    for _c in "\${_vals[@]}"; do`,
         `        [[ -z "$_c" ]] && continue`,
+        ...dedupLines,
         `        [[ "$_c" == "$_cur"* ]] && COMPREPLY+=(${inlineExpr})`,
         `    done`,
         `    compopt -o nospace 2>/dev/null`,
@@ -205,6 +221,7 @@ function optionValueCases(
     const valLines = bashValueLines(opt.valueCompletion, inline, fn, {
       funcSuffix,
       fieldName: opt.name,
+      isArrayOption: opt.valueType === "array",
     });
     if (valLines.length === 0) continue;
 
@@ -245,6 +262,7 @@ function positionalBlock(
     for (const vl of bashValueLines(pos.valueCompletion, false, fn, {
       funcSuffix,
       fieldName: pos.name,
+      isArrayOption: false,
     })) {
       lines.push(`            ${vl}`);
     }
@@ -394,6 +412,8 @@ export function generateBashCompletion(
   lines.push(``);
 
   const hasExpand = expandSpecs.length > 0;
+  const arrayExpandSpecs = expandSpecs.filter((s) => s.isArrayOption);
+  const hasArrayExpand = arrayExpandSpecs.length > 0;
 
   // Expand-completion hoisted tables. One global associative array per
   // expand spec; entries map `dependsOn`-joined keys to newline-separated
@@ -506,6 +526,30 @@ export function generateBashCompletion(
     lines.push(``);
   }
 
+  if (hasArrayExpand) {
+    // Track which `key=` slots a repeatable array option has already
+    // consumed. Stored in a separate function (and bucket) from
+    // `__track_opt` so that an option which is simultaneously a dependsOn
+    // target and an array expand host does not collide on the same case
+    // pattern. The bucket is space-padded on both ends so membership
+    // checks via `*" $_ck "*` work for the first and last entries.
+    lines.push(`__${fn}_track_array_expand() {`);
+    lines.push(`    case "$1:$2" in`);
+    for (const spec of arrayExpandSpecs) {
+      const joined = spec.optionTokens.map((tok) => `${spec.pathStr}:${tok}`).join("|");
+      const bucket = sanitize(spec.fieldName);
+      lines.push(`        ${joined})`);
+      lines.push(`            if [[ "$3" == *=* ]]; then`);
+      lines.push(`                local _k="\${3%%=*}"`);
+      lines.push(`                [[ -n "$_k" ]] && _used_field_keys[${bucket}]+=" $_k "`);
+      lines.push(`            fi`);
+      lines.push(`            ;;`);
+    }
+    lines.push(`    esac`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
   // Collect all nested subcommand routes (used for both is_subcmd and dispatch)
   const routeEntries = collectRouteEntries(root);
 
@@ -601,6 +645,9 @@ export function generateBashCompletion(
   if (hasExpand) {
     lines.push(`    local -A _arg_values=()`);
   }
+  if (hasArrayExpand) {
+    lines.push(`    local -A _used_field_keys=()`);
+  }
   lines.push(``);
   lines.push(`    local _j=0`);
   lines.push(`    while (( _j < \${#_words[@]} - 1 )); do`);
@@ -612,6 +659,9 @@ export function generateBashCompletion(
     lines.push(`        if [[ "$_w" == --*=* ]]; then`);
     lines.push(`            _used_opts+=("\${_w%%=*}")`);
     lines.push(`            __${fn}_track_opt "$_subcmd" "\${_w%%=*}" "\${_w#*=}"`);
+    if (hasArrayExpand) {
+      lines.push(`            __${fn}_track_array_expand "$_subcmd" "\${_w%%=*}" "\${_w#*=}"`);
+    }
     lines.push(`            (( _j++ )); continue`);
     lines.push(`        fi`);
   } else {
@@ -622,9 +672,19 @@ export function generateBashCompletion(
   lines.push(`        if [[ "$_w" == -* ]]; then`);
   lines.push(`            _used_opts+=("$_w")`);
   if (hasExpand) {
-    lines.push(
-      `            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then _skip_next=1; __${fn}_track_opt "$_subcmd" "$_w" "\${_words[_j+1]:-}"; fi`,
-    );
+    if (hasArrayExpand) {
+      lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then`);
+      lines.push(`                _skip_next=1`);
+      lines.push(`                __${fn}_track_opt "$_subcmd" "$_w" "\${_words[_j+1]:-}"`);
+      lines.push(
+        `                __${fn}_track_array_expand "$_subcmd" "$_w" "\${_words[_j+1]:-}"`,
+      );
+      lines.push(`            fi`);
+    } else {
+      lines.push(
+        `            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then _skip_next=1; __${fn}_track_opt "$_subcmd" "$_w" "\${_words[_j+1]:-}"; fi`,
+      );
+    }
   } else {
     lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
   }

@@ -326,8 +326,35 @@ export interface ExpandSpecLocation {
   readonly fieldName: string;
   /** Whether the field is a positional argument. */
   readonly isPositional: boolean;
+  /**
+   * True when the host field is a repeatable array option. Shell generators
+   * use this to enable runtime deduplication: as the user repeats the option
+   * (e.g. `-f workspaceId=foo -f <TAB>`), already-used `key=` candidates are
+   * filtered out. Always false for positionals (where repetition is variadic
+   * and `key=value` semantics don't apply).
+   */
+  readonly isArrayOption: boolean;
+  /**
+   * Option tokens (`--cliName`, `-a`, `--long-alias`) used by the shell
+   * scanner to recognise this option's values and update the dedup bucket.
+   * Empty when `isArrayOption` is false.
+   */
+  readonly optionTokens: readonly string[];
   /** The resolved expand spec on this field. */
   readonly vc: Extract<ValueCompletion, { type: "expand" }>;
+}
+
+/**
+ * Build the runtime token list used by shell scanners to recognise an option.
+ * Long aliases get `--`, single-char aliases get `-`, mirroring the existing
+ * tracker case patterns.
+ */
+function collectOptionTokens(cliName: string, aliases: readonly string[] | undefined): string[] {
+  const tokens: string[] = [`--${cliName}`];
+  for (const a of aliases ?? []) {
+    tokens.push(a.length === 1 ? `-${a}` : `--${a}`);
+  }
+  return tokens;
 }
 
 /**
@@ -351,12 +378,15 @@ function walk(
   for (const opt of node.options) {
     const vc = opt.valueCompletion;
     if (vc?.type === "expand") {
+      const isArrayOption = opt.valueType === "array";
       out.push({
         path,
         pathStr,
         funcSuffix,
         fieldName: opt.name,
         isPositional: false,
+        isArrayOption,
+        optionTokens: isArrayOption ? collectOptionTokens(opt.cliName, opt.alias) : [],
         vc,
       });
     }
@@ -370,6 +400,8 @@ function walk(
         funcSuffix,
         fieldName: pos.name,
         isPositional: true,
+        isArrayOption: false,
+        optionTokens: [],
         vc,
       });
     }

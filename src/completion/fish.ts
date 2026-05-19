@@ -36,14 +36,34 @@ function fishCaseEscape(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$");
 }
 
+interface FishExpandLocation {
+  fieldName: string;
+  /**
+   * Enable runtime deduplication of already-consumed `key=` candidates
+   * for repeatable array options. Always false for scalar options and
+   * positionals.
+   */
+  isArrayOption: boolean;
+}
+
 /**
  * Generate fish value completion lines for a ValueCompletion spec.
  * Each line outputs candidates via echo (tab-separated value\tdescription).
+ *
+ * `location` is required for the expand variant (carries fieldName +
+ * isArrayOption); other variants ignore it.
  */
-function fishValueLines(vc: ValueCompletion | undefined, fn: string): string[] {
+function fishValueLines(
+  vc: ValueCompletion | undefined,
+  fn: string,
+  location?: FishExpandLocation,
+): string[] {
   if (!vc) return [];
   switch (vc.type) {
     case "expand": {
+      if (!location) {
+        throw new Error("fishValueLines: expand variant requires a location");
+      }
       // Fish has no associative arrays, so emit an inline switch over the
       // dependsOn values. For multi-dimensional dependsOn the values are
       // concatenated with the unit-separator so they collide cleanly with
@@ -53,15 +73,28 @@ function fishValueLines(vc: ValueCompletion | undefined, fn: string): string[] {
         vc.dependsOn.length === 1
           ? `"$_arg_values_${vc.dependsOn[0]}"`
           : vc.dependsOn.map((d) => `"$_arg_values_${d}"`).join(`\\x1f`);
+      const bucket = sanitize(location.fieldName);
       const out: string[] = [`switch ${depKey}`];
       for (const entry of vc.table) {
         out.push(`    case "${entry.key.map(fishCaseEscape).join("\\x1f")}"`);
         for (const c of entry.candidates) {
-          if (c.description) {
-            out.push(`        echo "${escapeDesc(c.value)}\t${escapeDesc(c.description)}"`);
-          } else {
-            out.push(`        echo "${escapeDesc(c.value)}"`);
+          const echoLine = c.description
+            ? `echo "${escapeDesc(c.value)}\t${escapeDesc(c.description)}"`
+            : `echo "${escapeDesc(c.value)}"`;
+          if (location.isArrayOption && c.value.includes("=")) {
+            // Static key part is known at generation time; emit a guard so
+            // already-consumed keys are skipped at completion time.
+            const keyPart = c.value.slice(0, c.value.indexOf("="));
+            if (keyPart.length > 0) {
+              out.push(
+                `        if not contains -- "${escapeDesc(keyPart)}" $_used_field_keys_${bucket}`,
+              );
+              out.push(`            ${echoLine}`);
+              out.push(`        end`);
+              continue;
+            }
           }
+          out.push(`        ${echoLine}`);
         }
       }
       out.push(`end`);
@@ -129,7 +162,10 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
   const lines: string[] = [];
   for (const opt of options) {
     if (!opt.takesValue || !opt.valueCompletion) continue;
-    const valLines = fishValueLines(opt.valueCompletion, fn);
+    const valLines = fishValueLines(opt.valueCompletion, fn, {
+      fieldName: opt.name,
+      isArrayOption: opt.valueType === "array",
+    });
     if (valLines.length === 0) continue;
 
     const conditions: string[] = [`test "$_prev" = "--${opt.cliName}"`];
@@ -155,7 +191,10 @@ function positionalBlock(positionals: CompletablePositional[], fn: string): stri
   if (positionals.length === 0) return [];
   const lines: string[] = [];
   for (const pos of positionals) {
-    const valLines = fishValueLines(pos.valueCompletion, fn);
+    const valLines = fishValueLines(pos.valueCompletion, fn, {
+      fieldName: pos.name,
+      isArrayOption: false,
+    });
     if (valLines.length === 0) continue;
 
     if (pos.variadic) {
@@ -306,6 +345,8 @@ export function generateFishCompletion(
   const expandSpecs = collectExpandSpecs(root);
   const trackedFields = collectTrackedFields(root, expandSpecs);
   const hasExpand = expandSpecs.length > 0;
+  const arrayExpandSpecs = expandSpecs.filter((s) => s.isArrayOption);
+  const hasArrayExpand = arrayExpandSpecs.length > 0;
 
   const lines: string[] = [];
   lines.push(`# Fish completion for ${programName}`);
@@ -421,6 +462,33 @@ export function generateFishCompletion(
     lines.push(``);
   }
 
+  if (hasArrayExpand) {
+    // Track which `key=` slots a repeatable array option has already
+    // consumed. Stored in a per-field global list (one variable per
+    // expand-host fieldName) so multiple coexisting array expand options
+    // don't share a bucket. Kept separate from `__track_opt` to avoid
+    // case-pattern collisions if an option is both a dependsOn target
+    // and an array expand host.
+    lines.push(`function __${fn}_track_array_expand --no-scope-shadowing`);
+    lines.push(`    switch "$argv[1]:$argv[2]"`);
+    for (const spec of arrayExpandSpecs) {
+      const cases = spec.optionTokens.map((tok) => `"${spec.pathStr}:${tok}"`).join(" ");
+      const bucket = sanitize(spec.fieldName);
+      lines.push(`        case ${cases}`);
+      lines.push(`            if string match -q '*=*' -- "$argv[3]"`);
+      lines.push(`                set -l _k (string replace -r '=.*' '' -- "$argv[3]")`);
+      lines.push(`                if test -n "$_k"`);
+      lines.push(`                    if not contains -- "$_k" $_used_field_keys_${bucket}`);
+      lines.push(`                        set -ga _used_field_keys_${bucket} "$_k"`);
+      lines.push(`                    end`);
+      lines.push(`                end`);
+      lines.push(`            end`);
+    }
+    lines.push(`    end`);
+    lines.push(`end`);
+    lines.push(``);
+  }
+
   // Collect all nested subcommand routes (used for both is_subcmd and dispatch)
   const routeEntries = collectRouteEntries(root);
 
@@ -509,6 +577,11 @@ export function generateFishCompletion(
       lines.push(`    set -e _arg_values_${t.fieldName}`);
     }
   }
+  if (hasArrayExpand) {
+    for (const spec of arrayExpandSpecs) {
+      lines.push(`    set -e _used_field_keys_${sanitize(spec.fieldName)}`);
+    }
+  }
   lines.push(`    set -l _j 1`);
   lines.push(`    set -l _limit (math (count $_args) - 1)`);
   lines.push(`    while test $_j -le $_limit`);
@@ -526,6 +599,9 @@ export function generateFishCompletion(
     lines.push(`            set -l _val (string replace -r '^[^=]*=' '' -- "$_w")`);
     lines.push(`            set -a _used_opts "$_opt"`);
     lines.push(`            __${fn}_track_opt "$_subcmd" "$_opt" "$_val"`);
+    if (hasArrayExpand) {
+      lines.push(`            __${fn}_track_array_expand "$_subcmd" "$_opt" "$_val"`);
+    }
     lines.push(`            set _j (math $_j + 1); continue`);
     lines.push(`        end`);
   } else {
@@ -543,6 +619,9 @@ export function generateFishCompletion(
     lines.push(`                    set _next "$_args[(math $_j + 1)]"`);
     lines.push(`                end`);
     lines.push(`                __${fn}_track_opt "$_subcmd" "$_w" "$_next"`);
+    if (hasArrayExpand) {
+      lines.push(`                __${fn}_track_array_expand "$_subcmd" "$_w" "$_next"`);
+    }
     lines.push(`            end`);
   } else {
     lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w"; and set _skip_next 1`);
