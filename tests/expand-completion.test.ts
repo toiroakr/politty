@@ -360,6 +360,43 @@ describe("expand completion", () => {
       expect(fish).toContain(`case "api:--field" "api:-f" "a:--field" "a:-f"`);
     });
 
+    it("escapes glob metacharacters in fish expand case patterns", () => {
+      const cli = defineCommand({
+        name: "mycli",
+        subCommands: {
+          api: defineCommand({
+            name: "api",
+            args: z.object({
+              endpoint: arg(z.string(), {
+                positional: true,
+                completion: { custom: { choices: ["prod*", "stg?", "dev[1]"] } },
+              }),
+              field: arg(z.string().optional(), {
+                completion: {
+                  custom: {
+                    expand: {
+                      dependsOn: ["endpoint"],
+                      enumerate: () => [{ value: "x" }],
+                    },
+                  },
+                },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const { script: fish } = generateFishCompletion(cli, {
+        shell: "fish",
+        programName: "mycli",
+      });
+      // Without escaping, `case "prod*"` would also match runtime values
+      // like "production".
+      expect(fish).toContain(`case "prod\\*"`);
+      expect(fish).toContain(`case "stg\\?"`);
+      expect(fish).toContain(`case "dev\\[1\\]"`);
+    });
+
     it("escapes colons in zsh expand candidate values", () => {
       const cli = defineCommand({
         name: "mycli",

@@ -138,8 +138,13 @@ function zshValueLines(
     case "dynamic": {
       // Delegate to `<program> __complete --shell zsh` and let the apply
       // helper interpret the trailing `:<directive>` line so resolver-supplied
-      // file/directory completion still reaches the shell.
-      return [`__${fn}_apply_dynamic_output "$(__${fn}_invoke_complete zsh "\${words[@]:1}")"`];
+      // file/directory completion still reaches the shell. Slice `words` to
+      // `CURRENT` (1-based, inclusive) so the resolver does not observe
+      // tokens typed past the cursor — `parseCompletionContext` treats the
+      // last argv element as the word being completed.
+      return [
+        `__${fn}_apply_dynamic_output "$(__${fn}_invoke_complete zsh "\${(@)words[2,CURRENT]}")"`,
+      ];
     }
     case "choices": {
       const items = vc.choices!.map((c) => `"${escapeDesc(c)}"`).join(" ");

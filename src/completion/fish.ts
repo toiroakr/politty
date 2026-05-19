@@ -31,9 +31,23 @@ function escapeDesc(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$");
 }
 
-/** Escape a fish `switch` case pattern (no glob expansion, quote-safe). */
+/**
+ * Escape a fish `switch` case pattern. Fish's `case` interprets its
+ * arguments as globs even when double-quoted, so glob metacharacters
+ * (`*`, `?`, `[`, `]`) must be backslash-escaped to keep the comparison
+ * literal — otherwise a key like `prod*` would also match a runtime
+ * value of `production`. Quote/dollar/backslash are escaped first so the
+ * resulting string remains valid inside a double-quoted literal.
+ */
 function fishCaseEscape(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$");
+  return s
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\$/g, "\\$")
+    .replace(/\*/g, "\\*")
+    .replace(/\?/g, "\\?")
+    .replace(/\[/g, "\\[")
+    .replace(/]/g, "\\]");
 }
 
 interface FishExpandLocation {

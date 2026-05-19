@@ -470,6 +470,16 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(dyn).toContain("_files");
     });
 
+    it("zsh: invokes __complete with words sliced to CURRENT", () => {
+      // Passing the whole `words` array would leak tokens typed after the
+      // cursor into the resolver context. The delegate must slice via
+      // `${(@)words[2,CURRENT]}` so `parseCompletionContext` sees only
+      // the prefix up to the position being completed.
+      const dyn = generateCompletion(dynamicCmd, { shell: "zsh", programName: "mycli" }).script;
+      expect(dyn).toContain("${(@)words[2,CURRENT]}");
+      expect(dyn).not.toContain("${words[@]:1}");
+    });
+
     it("fish: dispatches resolver directive bits to __fish_complete_path", () => {
       const dyn = generateCompletion(dynamicCmd, { shell: "fish", programName: "mycli" }).script;
       expect(dyn).toContain("$_directive & 32");
