@@ -297,6 +297,22 @@ export function parseCompletionContext(
     }
   };
 
+  /**
+   * Record a boolean flag the user typed. The positive form sets `true`;
+   * the negation form (`--no-foo` or a custom `negationDisplay`) sets
+   * `false`. Dynamic resolvers depend on these values to switch candidates
+   * based on flag state, so the absence of a writer here used to hide
+   * boolean siblings entirely.
+   */
+  const recordBooleanFlag = (opt: CompletableOption, nameOrAlias: string): void => {
+    const target = effectiveGlobalNames.has(opt.name) ? globalParsedArgs : parsedArgs;
+    const isNegation =
+      opt.negation !== undefined &&
+      (opt.negation === nameOrAlias ||
+        (opt.negation.includes("-") && toCamelCase(opt.negation) === nameOrAlias));
+    target[opt.name] = !isNegation;
+  };
+
   // Process arguments to resolve subcommands and track state
   let i = 0;
   let options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
@@ -338,6 +354,8 @@ export function parseCompletionContext(
             recordOptionValue(opt, argv[i + 1]!);
             i++;
           }
+        } else {
+          recordBooleanFlag(opt, optName);
         }
       }
       i++;

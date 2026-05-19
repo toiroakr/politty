@@ -109,6 +109,10 @@ function bashValueLines(
         : [];
       return [
         `local _key=${depKey}`,
+        // Guard against an empty subscript — bash treats `${arr[]}` as an
+        // error, which corrupts COMPREPLY when a sibling dep has not been
+        // typed yet (e.g. `cli -f <TAB>` before the positional endpoint).
+        `if [[ -z "$_key" ]]; then return; fi`,
         `local _raw="\${${varName}[$_key]:-}"`,
         `if [[ -n "$_raw" ]]; then`,
         `    local -a _vals=()`,

@@ -140,6 +140,29 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.currentWord).toBe("tailor.yml");
     });
 
+    it("records boolean flags as `true` in parsedArgs", () => {
+      const ctx = parseCompletionContext(["foo", "--verbose", "--field", ""], cmd);
+      expect(ctx.parsedArgs.verbose).toBe(true);
+    });
+
+    it("records short boolean aliases as `true` in parsedArgs", () => {
+      const ctx = parseCompletionContext(["foo", "-v", "--field", ""], cmd);
+      expect(ctx.parsedArgs.verbose).toBe(true);
+    });
+
+    it("records negation flags as `false` in parsedArgs", () => {
+      const negCmd = defineCommand({
+        name: "negcli",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: true }),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const ctx = parseCompletionContext(["--no-cache", "--field", ""], negCmd);
+      expect(ctx.parsedArgs.cache).toBe(false);
+    });
+
     it("resets parsedArgs when descending into a subcommand", () => {
       const parent = defineCommand({
         name: "mycli",

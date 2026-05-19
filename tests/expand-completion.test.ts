@@ -223,6 +223,13 @@ describe("expand completion", () => {
       expect(script).toContain("local -A _arg_values=()");
     });
 
+    it("bash guards against an empty subscript when the dep is unset", () => {
+      const { script } = generateBashCompletion(cmd, { shell: "bash", programName: "mycli" });
+      // Without this guard, `api -f <TAB>` (endpoint not typed yet) would
+      // dereference `${arr[]}` and bash errors out with `bad array subscript`.
+      expect(script).toMatch(/if \[\[ -z "\$_key" \]\]; then return; fi/);
+    });
+
     it("zsh inlines a hoisted associative array with descriptions", () => {
       const { script } = generateZshCompletion(cmd, { shell: "zsh", programName: "mycli" });
       expect(script).toContain("typeset -gA __mycli_expand_api__field=(");
