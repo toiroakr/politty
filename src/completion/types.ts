@@ -116,6 +116,15 @@ export interface CompletableOption {
   negation?: string | undefined;
   /** Description for the negation option (when distinct from the main description) */
   negationDescription?: string | undefined;
+  /**
+   * Whether the runtime parser accepts the implicit `--no-<cliName>` (and
+   * camelCase) form for this boolean option. False when the user set
+   * `negation: false` (suppressed) or `negation: <custom name>` (only the
+   * custom name is accepted). Used by the completion context parser so
+   * dynamic resolvers see the same `parsedArgs` state the runtime would
+   * compute.
+   */
+  defaultNegationAccepted?: boolean;
   /** Description for completion */
   description?: string | undefined;
   /** Whether this option takes a value */

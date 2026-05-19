@@ -163,6 +163,52 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.cache).toBe(false);
     });
 
+    it("does not record an implicit negation when the user opted out via `negation: false`", () => {
+      const cmd = defineCommand({
+        name: "negfalse",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: false }),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const ctx = parseCompletionContext(["--no-cache", "--field", ""], cmd);
+      expect(ctx.parsedArgs.cache).toBeUndefined();
+    });
+
+    it("does not record an implicit negation when a custom-string negation is set", () => {
+      const cmd = defineCommand({
+        name: "negcustom",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      // Default `--no-cache` must be ignored; only the custom name flips.
+      const ctxImplicit = parseCompletionContext(["--no-cache", "--field", ""], cmd);
+      expect(ctxImplicit.parsedArgs.cache).toBeUndefined();
+
+      const ctxCustom = parseCompletionContext(["--disable-cache", "--field", ""], cmd);
+      expect(ctxCustom.parsedArgs.cache).toBe(false);
+    });
+
+    it("prefers an explicit field named `noFoo` over implicit `foo` negation", () => {
+      const cmd = defineCommand({
+        name: "shadowcli",
+        args: z.object({
+          foo: arg(z.boolean().default(false)),
+          noFoo: arg(z.string().optional()),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      // `--no-foo bar` must populate `noFoo`, not flip `foo`.
+      const ctx = parseCompletionContext(["--no-foo", "bar", "--field", ""], cmd);
+      expect(ctx.parsedArgs.foo).toBeUndefined();
+      expect(ctx.parsedArgs.noFoo).toBe("bar");
+    });
+
     it("records the implicit `--no-<flag>` negation even without opt-in", () => {
       // Runtime parser accepts the implicit form regardless of `negation`
       // metadata, so dynamic resolvers must see the same value.

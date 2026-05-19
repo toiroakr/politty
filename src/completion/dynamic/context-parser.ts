@@ -100,6 +100,10 @@ function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
       takesValue: field.type !== "boolean",
       valueType: field.type,
       required: field.required,
+      // Mirror runtime: default `--no-<cliName>` is accepted unless the
+      // user opted out via `negation: false` or a custom-string negation.
+      defaultNegationAccepted:
+        field.type === "boolean" && (field.negation === undefined || field.negation === true),
       valueCompletion: stripPendingExpand(resolveValueCompletion(field)),
     }));
 }
@@ -214,42 +218,47 @@ function hasInlineValue(word: string): boolean {
 
 /**
  * For boolean options, the runtime parser accepts the implicit
- * `--no-<cliName>` (and camelCase `--noCliName`) form even when the user
- * has not opted into advertising it via `negation: true`. The completion
- * parser must mirror that so dynamic resolvers see the correct flag state
- * when the user typed an implicit negation upstream.
+ * `--no-<cliName>` (and camelCase `--noCliName`) form unless the user
+ * opted out via `negation: false` or supplied a custom-string negation
+ * (which suppresses the default form). The completion parser must mirror
+ * that so dynamic resolvers see the correct flag state.
  */
 function isImplicitBooleanNegation(opt: CompletableOption, nameOrAlias: string): boolean {
   if (opt.valueType !== "boolean") return false;
+  if (opt.defaultNegationAccepted === false) return false;
   const hyphenated = `no-${opt.cliName}`;
   if (nameOrAlias === hyphenated) return true;
   if (nameOrAlias === toCamelCase(hyphenated)) return true;
   return false;
 }
 
+/** Match by cliName, alias, camelCase variants, or an explicit negation name. */
+function matchesExplicit(opt: CompletableOption, nameOrAlias: string): boolean {
+  if (opt.cliName === nameOrAlias) return true;
+  if (opt.alias?.includes(nameOrAlias)) return true;
+  if (nameOrAlias.length <= 1) return false;
+  if (opt.cliName.includes("-") && toCamelCase(opt.cliName) === nameOrAlias) return true;
+  if (opt.alias?.some((a) => a.includes("-") && toCamelCase(a) === nameOrAlias)) return true;
+  if (opt.negation) {
+    if (opt.negation === nameOrAlias) return true;
+    if (opt.negation.includes("-") && toCamelCase(opt.negation) === nameOrAlias) return true;
+  }
+  return false;
+}
+
 /**
- * Find option by name or alias
+ * Find option by name or alias. Tried in two passes so that a real field
+ * literally named `noFoo` always wins over `--no-foo` being interpreted as
+ * the implicit negation of a sibling `foo` field — the runtime parser
+ * resolves the explicit field first as well.
  */
 function findOption(
   options: CompletableOption[],
   nameOrAlias: string,
 ): CompletableOption | undefined {
-  return options.find((opt) => {
-    if (opt.cliName === nameOrAlias) return true;
-    if (opt.alias?.includes(nameOrAlias)) return true;
-    // Also match camelCase variants of hyphenated aliases/cliName so that
-    // e.g. --toBe is recognised when alias: "to-be" is defined.
-    if (nameOrAlias.length > 1) {
-      if (opt.cliName.includes("-") && toCamelCase(opt.cliName) === nameOrAlias) return true;
-      if (opt.alias?.some((a) => a.includes("-") && toCamelCase(a) === nameOrAlias)) return true;
-      if (opt.negation) {
-        if (opt.negation === nameOrAlias) return true;
-        if (opt.negation.includes("-") && toCamelCase(opt.negation) === nameOrAlias) return true;
-      }
-      if (isImplicitBooleanNegation(opt, nameOrAlias)) return true;
-    }
-    return false;
-  });
+  const explicit = options.find((opt) => matchesExplicit(opt, nameOrAlias));
+  if (explicit) return explicit;
+  return options.find((opt) => isImplicitBooleanNegation(opt, nameOrAlias));
 }
 
 /**
