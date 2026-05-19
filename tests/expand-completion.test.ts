@@ -223,6 +223,30 @@ describe("expand completion", () => {
       expect(script).toContain("local -A _arg_values=()");
     });
 
+    it("tracks positionals supplied after `--` so expand deps still resolve", () => {
+      const { script: bash } = generateBashCompletion(cmd, {
+        shell: "bash",
+        programName: "mycli",
+      });
+      expect(bash).toContain(`__mycli_track_pos "$_subcmd" "$_pos_count" "$_w"`);
+      // The scanner's `if (( _after_dd ))` branch should call __track_pos
+      // before incrementing the count, otherwise `cli -- GetApplication
+      // <TAB>` yields no expand candidates.
+      expect(bash).toMatch(/if \(\( _after_dd \)\); then __mycli_track_pos[^\n]*_pos_count\+\+/);
+
+      const { script: zsh } = generateZshCompletion(cmd, {
+        shell: "zsh",
+        programName: "mycli",
+      });
+      expect(zsh).toMatch(/if \(\( _after_dd \)\); then __mycli_track_pos[^\n]*_pos_count\+\+/);
+
+      const { script: fish } = generateFishCompletion(cmd, {
+        shell: "fish",
+        programName: "mycli",
+      });
+      expect(fish).toMatch(/if test \$_after_dd -eq 1; __mycli_track_pos[^\n]*math \$_pos_count/);
+    });
+
     it("bash guards against an empty subscript when the dep is unset", () => {
       const { script } = generateBashCompletion(cmd, { shell: "bash", programName: "mycli" });
       // Without this guard, `api -f <TAB>` (endpoint not typed yet) would

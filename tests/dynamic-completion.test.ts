@@ -163,6 +163,24 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.cache).toBe(false);
     });
 
+    it("records the implicit `--no-<flag>` negation even without opt-in", () => {
+      // Runtime parser accepts the implicit form regardless of `negation`
+      // metadata, so dynamic resolvers must see the same value.
+      const implicitCmd = defineCommand({
+        name: "implicitcli",
+        args: z.object({
+          cache: arg(z.boolean().default(true)),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const ctxHyphen = parseCompletionContext(["--no-cache", "--field", ""], implicitCmd);
+      expect(ctxHyphen.parsedArgs.cache).toBe(false);
+
+      const ctxCamel = parseCompletionContext(["--noCache", "--field", ""], implicitCmd);
+      expect(ctxCamel.parsedArgs.cache).toBe(false);
+    });
+
     it("resets parsedArgs when descending into a subcommand", () => {
       const parent = defineCommand({
         name: "mycli",
@@ -468,6 +486,19 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(dyn).toContain("_files -/");
       expect(dyn).toContain("(( _directive & 16 ))");
       expect(dyn).toContain("_files");
+    });
+
+    it("does not filter resolver candidates that look like file-completion sentinels", () => {
+      // `@ext:` and `@matcher:` are markers from the shellCommand pipeline
+      // — they cannot appear from a dynamic resolver's perspective, so the
+      // delegate apply helper must not drop them. Otherwise a resolver
+      // returning a candidate literally named `@ext:tsx` would disappear.
+      const bash = generateCompletion(dynamicCmd, { shell: "bash", programName: "mycli" }).script;
+      expect(bash).not.toContain(`"@ext:"*|"@matcher:"*`);
+      const zsh = generateCompletion(dynamicCmd, { shell: "zsh", programName: "mycli" }).script;
+      expect(zsh).not.toContain("@ext:*|@matcher:*");
+      const fish = generateCompletion(dynamicCmd, { shell: "fish", programName: "mycli" }).script;
+      expect(fish).not.toContain("'@ext:*' '@matcher:*'");
     });
 
     it("zsh: invokes __complete with words sliced to CURRENT", () => {

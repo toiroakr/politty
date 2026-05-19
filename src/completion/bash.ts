@@ -460,11 +460,12 @@ export function generateBashCompletion(
     lines.push(`    fi`);
     lines.push(`    local _line`);
     lines.push(`    for _line in "\${_lines[@]}"; do`);
-    lines.push(`        case "$_line" in`);
-    lines.push(`            "@ext:"*|"@matcher:"*) ;;`);
-    lines.push(`            "") ;;`);
-    lines.push(`            *) COMPREPLY+=("$_line") ;;`);
-    lines.push(`        esac`);
+    // Skip only blanks. The `@ext:`/`@matcher:` sentinels are produced by
+    // the static shellCommand pipeline, not by dynamic resolvers — filtering
+    // them here would silently drop resolver candidates that happen to
+    // start with those literal strings.
+    lines.push(`        [[ -z "$_line" ]] && continue`);
+    lines.push(`        COMPREPLY+=("$_line")`);
     lines.push(`    done`);
     // Apply resolver-supplied directive bits. DirectoryCompletion takes
     // precedence over FileCompletion when both are set; NoSpace stacks.
@@ -661,7 +662,15 @@ export function generateBashCompletion(
   lines.push(`        local _w="\${_words[_j]}"`);
   lines.push(`        if (( _skip_next )); then _skip_next=0; (( _j++ )); continue; fi`);
   lines.push(`        if [[ "$_w" == "--" ]]; then _after_dd=1; (( _j++ )); continue; fi`);
-  lines.push(`        if (( _after_dd )); then (( _pos_count++ )); (( _j++ )); continue; fi`);
+  if (hasExpand) {
+    // After `--`, all remaining words are positionals. Track them so an
+    // expand spec that depends on a positional still sees the value.
+    lines.push(
+      `        if (( _after_dd )); then __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; (( _pos_count++ )); (( _j++ )); continue; fi`,
+    );
+  } else {
+    lines.push(`        if (( _after_dd )); then (( _pos_count++ )); (( _j++ )); continue; fi`);
+  }
   if (hasExpand) {
     lines.push(`        if [[ "$_w" == --*=* ]]; then`);
     lines.push(`            _used_opts+=("\${_w%%=*}")`);

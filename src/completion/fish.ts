@@ -388,12 +388,14 @@ export function generateFishCompletion(
     // start with `:` in intermediate positions.
     lines.push(`    set -l _prev ""`);
     lines.push(`    set -l _has_prev 0`);
+    // Skip only blanks. The `@ext:`/`@matcher:` sentinels are produced by
+    // the static shellCommand pipeline, not by dynamic resolvers — filtering
+    // them here would silently drop resolver candidates that happen to
+    // start with those literal strings.
     lines.push(`    while read -l _l`);
     lines.push(`        if test $_has_prev -eq 1`);
-    lines.push(`            switch $_prev`);
-    lines.push(`                case '@ext:*' '@matcher:*' ''`);
-    lines.push(`                case '*'`);
-    lines.push(`                    echo $_prev`);
+    lines.push(`            if test -n "$_prev"`);
+    lines.push(`                echo $_prev`);
     lines.push(`            end`);
     lines.push(`        end`);
     lines.push(`        set _prev $_l`);
@@ -403,10 +405,8 @@ export function generateFishCompletion(
     lines.push(`        if string match -qr '^:[0-9]+$' -- $_prev`);
     lines.push(`            set _directive (string sub -s 2 -- $_prev)`);
     lines.push(`        else`);
-    lines.push(`            switch $_prev`);
-    lines.push(`                case '@ext:*' '@matcher:*' ''`);
-    lines.push(`                case '*'`);
-    lines.push(`                    echo $_prev`);
+    lines.push(`            if test -n "$_prev"`);
+    lines.push(`                echo $_prev`);
     lines.push(`            end`);
     lines.push(`        end`);
     lines.push(`    end`);
@@ -607,9 +607,17 @@ export function generateFishCompletion(
     `        if test $_skip_next -eq 1; set _skip_next 0; set _j (math $_j + 1); continue; end`,
   );
   lines.push(`        if test "$_w" = "--"; set _after_dd 1; set _j (math $_j + 1); continue; end`);
-  lines.push(
-    `        if test $_after_dd -eq 1; set _pos_count (math $_pos_count + 1); set _j (math $_j + 1); continue; end`,
-  );
+  if (hasExpand) {
+    // After `--`, all remaining words are positionals. Track them so an
+    // expand spec that depends on a positional still sees the value.
+    lines.push(
+      `        if test $_after_dd -eq 1; __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; set _pos_count (math $_pos_count + 1); set _j (math $_j + 1); continue; end`,
+    );
+  } else {
+    lines.push(
+      `        if test $_after_dd -eq 1; set _pos_count (math $_pos_count + 1); set _j (math $_j + 1); continue; end`,
+    );
+  }
   if (hasExpand) {
     lines.push(`        if string match -q -- '--*=*' "$_w"`);
     lines.push(`            set -l _opt (string replace -r '=.*' '' -- "$_w")`);

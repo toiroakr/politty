@@ -213,6 +213,21 @@ function hasInlineValue(word: string): boolean {
 }
 
 /**
+ * For boolean options, the runtime parser accepts the implicit
+ * `--no-<cliName>` (and camelCase `--noCliName`) form even when the user
+ * has not opted into advertising it via `negation: true`. The completion
+ * parser must mirror that so dynamic resolvers see the correct flag state
+ * when the user typed an implicit negation upstream.
+ */
+function isImplicitBooleanNegation(opt: CompletableOption, nameOrAlias: string): boolean {
+  if (opt.valueType !== "boolean") return false;
+  const hyphenated = `no-${opt.cliName}`;
+  if (nameOrAlias === hyphenated) return true;
+  if (nameOrAlias === toCamelCase(hyphenated)) return true;
+  return false;
+}
+
+/**
  * Find option by name or alias
  */
 function findOption(
@@ -231,6 +246,7 @@ function findOption(
         if (opt.negation === nameOrAlias) return true;
         if (opt.negation.includes("-") && toCamelCase(opt.negation) === nameOrAlias) return true;
       }
+      if (isImplicitBooleanNegation(opt, nameOrAlias)) return true;
     }
     return false;
   });
@@ -306,10 +322,11 @@ export function parseCompletionContext(
    */
   const recordBooleanFlag = (opt: CompletableOption, nameOrAlias: string): void => {
     const target = effectiveGlobalNames.has(opt.name) ? globalParsedArgs : parsedArgs;
-    const isNegation =
+    const matchesExplicitNegation =
       opt.negation !== undefined &&
       (opt.negation === nameOrAlias ||
         (opt.negation.includes("-") && toCamelCase(opt.negation) === nameOrAlias));
+    const isNegation = matchesExplicitNegation || isImplicitBooleanNegation(opt, nameOrAlias);
     target[opt.name] = !isNegation;
   };
 
