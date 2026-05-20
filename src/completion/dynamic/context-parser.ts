@@ -302,6 +302,11 @@ function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong:
   return false;
 }
 
+/** True when `source` is hyphenated and its camelCase form equals `name`. */
+function matchesCamelCase(source: string | undefined, name: string): boolean {
+  return source !== undefined && source.includes("-") && toCamelCase(source) === name;
+}
+
 /**
  * Match by cliName, alias, camelCase variants, or an explicit negation
  * name. `isLong` separates the short (`-x`) and long (`--xxx`) token
@@ -323,11 +328,10 @@ function matchesExplicit(opt: CompletableOption, name: string, isLong: boolean):
   // Custom negation names always belong to the long-form token space —
   // runtime only matches them via the `--<negation>` route.
   if (isLong && opt.negation === name) return true;
-  if (name.length <= 1) return false;
-  if (isLong && opt.cliName.includes("-") && toCamelCase(opt.cliName) === name) return true;
-  if (isLong && opt.alias?.some((a) => a.includes("-") && toCamelCase(a) === name)) return true;
-  if (isLong && opt.negation?.includes("-") && toCamelCase(opt.negation) === name) return true;
-  return false;
+  if (!isLong || name.length <= 1) return false;
+  if (matchesCamelCase(opt.cliName, name)) return true;
+  if (opt.alias?.some((a) => matchesCamelCase(a, name))) return true;
+  return matchesCamelCase(opt.negation, name);
 }
 
 /**
@@ -446,10 +450,9 @@ export function parseCompletionContext(
   const recordBooleanFlag = (opt: CompletableOption, parsed: ParsedOption): void => {
     const target = opt.isGlobal === true ? globalParsedArgs : parsedArgs;
     const matchesExplicitNegation =
-      opt.negation !== undefined &&
       parsed.isLong &&
-      (opt.negation === parsed.name ||
-        (opt.negation.includes("-") && toCamelCase(opt.negation) === parsed.name));
+      opt.negation !== undefined &&
+      (opt.negation === parsed.name || matchesCamelCase(opt.negation, parsed.name));
     const isNegation =
       matchesExplicitNegation || isImplicitBooleanNegation(opt, parsed.name, parsed.isLong);
     target[opt.name] = !isNegation;
