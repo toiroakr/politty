@@ -233,47 +233,66 @@ function expandChildPathStrs(pathStrs: readonly string[], child: CompletableSubc
 }
 
 /**
+ * A single (parentPath, tokens) row for a value-taking option, emitted by
+ * {@link walkOptTakesValueRows} as the shell-agnostic intermediate form.
+ * Bash/zsh format it as `parentPath:token) return 0 ;;`; fish quotes each
+ * `"parentPath:token"` in a `case` head. Multiple tokens share a row when
+ * the runtime accepts more than one spelling for the option.
+ */
+export interface OptTakesValueRow {
+  readonly parentPath: string;
+  readonly tokens: readonly string[];
+}
+
+/**
+ * Walk the subcommand tree and yield a row per value-taking option, with
+ * the path-aware token set the runtime would actually route here. Used by
+ * all three shell generators — bash/zsh format these as `|`-joined case
+ * patterns, fish wraps each pattern in a quoted glob.
+ *
+ * At ANCESTOR frames (those with further subcommand children) the runtime's
+ * `scanForSubcommand` consults globals only — local-precedence does NOT
+ * apply, so a global value option keeps every alias even when a local at
+ * the frame claims the same short token. At LEAF frames, the leaf parser's
+ * `separateGlobalArgs` applies local-precedence so `effectiveOptionTokens`
+ * is the correct filter.
+ */
+export function walkOptTakesValueRows(
+  sub: CompletableSubcommand,
+  parentPath: string,
+): OptTakesValueRow[] {
+  const rows: OptTakesValueRow[] = [];
+  const isAncestor = getVisibleSubs(sub.subcommands).length > 0;
+  for (const opt of sub.options) {
+    if (!opt.takesValue) continue;
+    const tokens =
+      isAncestor && opt.isGlobal === true
+        ? collectOptionTokens(opt.cliName, opt.alias)
+        : effectiveOptionTokens(opt, sub.options);
+    if (tokens.length === 0) continue;
+    rows.push({ parentPath, tokens });
+  }
+  for (const child of getVisibleSubs(sub.subcommands)) {
+    rows.push(...walkOptTakesValueRows(child, joinPrefix(parentPath, child.name, ":")));
+    if (child.aliases) {
+      for (const alias of child.aliases) {
+        rows.push(...walkOptTakesValueRows(child, joinPrefix(parentPath, alias, ":")));
+      }
+    }
+  }
+  return rows;
+}
+
+/**
  * Collect opt-takes-value case entries for a subcommand tree.
  * Used by bash and zsh generators (identical case syntax: `path:--opt) return 0 ;;`).
  * parentPath is a colon-delimited path (e.g., "" for root, "workspace:user" for nested).
  */
 export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: string): string[] {
-  const lines: string[] = [];
-  const isAncestor = getVisibleSubs(sub.subcommands).length > 0;
-  for (const opt of sub.options) {
-    if (opt.takesValue) {
-      // Reuse the full token set used by tracker emission so the
-      // takes-value lookup table accepts every form runtime's aliasMap
-      // does (1-char cliName `-x`, 1-char alias long form `--f`,
-      // camelCase variants of hyphenated names). Without this the
-      // scanner skips the value of a valid option spelling.
-      //
-      // At ANCESTOR frames (frames with further subcommand children),
-      // the runtime's `scanForSubcommand` routes pre-sub tokens with
-      // the global schema only — local-precedence does NOT apply, so a
-      // global value option keeps every alias even when a local at the
-      // frame claims the same short token. At LEAF frames, the leaf
-      // parser's `separateGlobalArgs` applies local-precedence so the
-      // filter via `effectiveOptionTokens` is correct.
-      const tokens =
-        isAncestor && opt.isGlobal === true
-          ? collectOptionTokens(opt.cliName, opt.alias)
-          : effectiveOptionTokens(opt, sub.options);
-      if (tokens.length === 0) continue;
-      const patterns = tokens.map((t) => `${parentPath}:${t}`);
-      lines.push(`        ${patterns.join("|")}) return 0 ;;`);
-    }
-  }
-  for (const child of getVisibleSubs(sub.subcommands)) {
-    lines.push(...optTakesValueEntries(child, joinPrefix(parentPath, child.name, ":")));
-    // Also generate opt-takes-value entries under alias paths
-    if (child.aliases) {
-      for (const alias of child.aliases) {
-        lines.push(...optTakesValueEntries(child, joinPrefix(parentPath, alias, ":")));
-      }
-    }
-  }
-  return lines;
+  return walkOptTakesValueRows(sub, parentPath).map((row) => {
+    const patterns = row.tokens.map((t) => `${row.parentPath}:${t}`);
+    return `        ${patterns.join("|")}) return 0 ;;`;
+  });
 }
 
 /**

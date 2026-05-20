@@ -18,9 +18,9 @@ import {
   getVisibleSubs,
   hasDynamicCompletion,
   sanitize,
+  walkOptTakesValueRows,
 } from "./extractor.js";
 import {
-  collectOptionTokens,
   optionExpandLocation,
   positionalExpandLocation,
   quotedAvailabilityTokens,
@@ -395,36 +395,10 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
 /** Generate opt-takes-value entries for fish switch cases */
 function optTakesValueCases(sub: CompletableSubcommand, parentPath: string): string[] {
   const lines: string[] = [];
-  const isAncestor = getVisibleSubs(sub.subcommands).length > 0;
-  for (const opt of sub.options) {
-    if (opt.takesValue) {
-      // Use the same full token set as bash/zsh — runtime's aliasMap
-      // accepts every spelling these tokens cover, so the takes-value
-      // switch must enumerate them all. At ancestor frames keep every
-      // global alias even when a local at the frame would claim it at a
-      // leaf — `scanForSubcommand` consults globals only, so the static
-      // scanner must mirror that to know `prod` is `-p`'s value when the
-      // user descends into a child subcommand.
-      const tokens =
-        isAncestor && opt.isGlobal === true
-          ? collectOptionTokens(opt.cliName, opt.alias)
-          : effectiveOptionTokens(opt, sub.options);
-      if (tokens.length === 0) continue;
-      const patterns = tokens.map((t) => `"${parentPath}:${t}"`);
-      lines.push(`        case ${patterns.join(" ")}`);
-      lines.push(`            return 0`);
-    }
-  }
-  for (const child of getVisibleSubs(sub.subcommands)) {
-    const childPath = parentPath ? `${parentPath}:${child.name}` : child.name;
-    lines.push(...optTakesValueCases(child, childPath));
-    // Also generate opt-takes-value cases under alias paths
-    if (child.aliases) {
-      for (const alias of child.aliases) {
-        const aliasPath = parentPath ? `${parentPath}:${alias}` : alias;
-        lines.push(...optTakesValueCases(child, aliasPath));
-      }
-    }
+  for (const row of walkOptTakesValueRows(sub, parentPath)) {
+    const patterns = row.tokens.map((t) => `"${row.parentPath}:${t}"`);
+    lines.push(`        case ${patterns.join(" ")}`);
+    lines.push(`            return 0`);
   }
   return lines;
 }
