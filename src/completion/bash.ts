@@ -797,27 +797,39 @@ export function generateBashCompletion(
   lines.push(`        if [[ "$_w" == -* ]]; then`);
   lines.push(`            _used_opts+=("$_w")`);
   if (hasExpand) {
+    // Mirror the runtime parser: a token starting with `-` is the next
+    // option, not this option's value, so don't skip/track it. Otherwise
+    // `--config --env prod --field <TAB>` treats `--env` as `--config`'s
+    // value and the expand dep is lost.
     if (hasArrayExpand) {
       lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then`);
-      lines.push(`                _skip_next=1`);
-      lines.push(`                __${fn}_track_opt "$_subcmd" "$_w" "\${_words[_j+1]:-}"`);
+      lines.push(`                local _next="\${_words[_j+1]:-}"`);
+      lines.push(`                if [[ -n "$_next" && "$_next" != -* ]]; then`);
+      lines.push(`                    _skip_next=1`);
+      lines.push(`                    __${fn}_track_opt "$_subcmd" "$_w" "$_next"`);
       // Skip array-expand dedup tracking when the next token is the word
       // being completed. Otherwise typing `-f pageDirection=<TAB>` marks
       // the partial cursor value as already used and filters out the
       // candidates the user is trying to select.
-      lines.push(`                if (( _j + 2 < \${#_words[@]} )); then`);
-      lines.push(
-        `                    __${fn}_track_array_expand "$_subcmd" "$_w" "\${_words[_j+1]:-}"`,
-      );
+      lines.push(`                    if (( _j + 2 < \${#_words[@]} )); then`);
+      lines.push(`                        __${fn}_track_array_expand "$_subcmd" "$_w" "$_next"`);
+      lines.push(`                    fi`);
       lines.push(`                fi`);
       lines.push(`            fi`);
     } else {
-      lines.push(
-        `            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then _skip_next=1; __${fn}_track_opt "$_subcmd" "$_w" "\${_words[_j+1]:-}"; fi`,
-      );
+      lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then`);
+      lines.push(`                local _next="\${_words[_j+1]:-}"`);
+      lines.push(`                if [[ -n "$_next" && "$_next" != -* ]]; then`);
+      lines.push(`                    _skip_next=1`);
+      lines.push(`                    __${fn}_track_opt "$_subcmd" "$_w" "$_next"`);
+      lines.push(`                fi`);
+      lines.push(`            fi`);
     }
   } else {
-    lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w" && _skip_next=1`);
+    lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then`);
+    lines.push(`                local _next="\${_words[_j+1]:-}"`);
+    lines.push(`                if [[ -n "$_next" && "$_next" != -* ]]; then _skip_next=1; fi`);
+    lines.push(`            fi`);
   }
   lines.push(`            (( _j++ )); continue`);
   lines.push(`        fi`);

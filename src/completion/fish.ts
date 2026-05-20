@@ -710,24 +710,33 @@ export function generateFishCompletion(
   lines.push(`            set -a _used_opts "$_w"`);
   if (hasExpand) {
     lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"`);
-    lines.push(`                set _skip_next 1`);
     lines.push(`                set -l _next ""`);
     lines.push(`                if test (math $_j + 1) -le (count $_args)`);
     lines.push(`                    set _next "$_args[(math $_j + 1)]"`);
     lines.push(`                end`);
-    lines.push(`                __${fn}_track_opt "$_subcmd" "$_w" "$_next"`);
+    // Mirror the runtime parser: a token starting with `-` is the next
+    // option, not this option's value. Skip/track only when the next
+    // token looks like a value.
+    lines.push(`                if test -n "$_next"; and not string match -q -- '-*' "$_next"`);
+    lines.push(`                    set _skip_next 1`);
+    lines.push(`                    __${fn}_track_opt "$_subcmd" "$_w" "$_next"`);
     if (hasArrayExpand) {
-      // Skip array-expand dedup tracking when the next token is the word
-      // being completed. Otherwise typing `-f pageDirection=<TAB>` marks
-      // the partial cursor value as already used and filters out the
-      // candidates the user is trying to select.
-      lines.push(`                if test $_j -lt $_limit`);
-      lines.push(`                    __${fn}_track_array_expand "$_subcmd" "$_w" "$_next"`);
-      lines.push(`                end`);
+      lines.push(`                    if test $_j -lt $_limit`);
+      lines.push(`                        __${fn}_track_array_expand "$_subcmd" "$_w" "$_next"`);
+      lines.push(`                    end`);
     }
+    lines.push(`                end`);
     lines.push(`            end`);
   } else {
-    lines.push(`            __${fn}_opt_takes_value "$_subcmd" "$_w"; and set _skip_next 1`);
+    lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"`);
+    lines.push(`                set -l _next ""`);
+    lines.push(`                if test (math $_j + 1) -le (count $_args)`);
+    lines.push(`                    set _next "$_args[(math $_j + 1)]"`);
+    lines.push(`                end`);
+    lines.push(`                if test -n "$_next"; and not string match -q -- '-*' "$_next"`);
+    lines.push(`                    set _skip_next 1`);
+    lines.push(`                end`);
+    lines.push(`            end`);
   }
   lines.push(`            set _j (math $_j + 1); continue`);
   lines.push(`        end`);

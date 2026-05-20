@@ -475,8 +475,12 @@ async function runCommandInternal<TResult = unknown>(
     if (!command.args) {
       // No schema, run with global args (or empty args)
       const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
-      // Run effects for global args (after all validations succeed)
-      if (options._globalExtracted) {
+      // Run effects for global args (after all validations succeed).
+      // Skip during `__complete` because the partial command line that
+      // shells invoke completion with often omits required globals, and
+      // firing user-supplied effects with undefined values would either
+      // crash or surface unintended side effects mid-TAB.
+      if (options._globalExtracted && !isCompletionInvocation) {
         await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
       }
       collector?.stop();
@@ -515,11 +519,13 @@ async function runCommandInternal<TResult = unknown>(
     );
     const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
 
-    // Run effects after all validations succeed (global effects first, then command effects)
-    if (options._globalExtracted) {
+    // Run effects after all validations succeed (global effects first,
+    // then command effects). Skip during `__complete` so completion
+    // never triggers user-supplied side effects mid-TAB.
+    if (options._globalExtracted && !isCompletionInvocation) {
       await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
     }
-    if (parseResult.extractedFields) {
+    if (parseResult.extractedFields && !isCompletionInvocation) {
       await runEffects(proxiedCommandArgs, parseResult.extractedFields, proxiedGlobalArgs);
     }
 
