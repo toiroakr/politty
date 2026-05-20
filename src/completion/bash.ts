@@ -525,15 +525,28 @@ export function generateBashCompletion(
     lines.push(`    done`);
     // Apply resolver-supplied directive bits. DirectoryCompletion takes
     // precedence over FileCompletion when both are set; NoSpace stacks.
+    // bash's `-o default` / `-o dirnames` only fire when COMPREPLY is
+    // empty, so when the resolver returned both candidates and a
+    // file/dir directive we append filesystem matches manually instead.
     lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
-    // The script is registered with `complete -o default`; switch off the
-    // file fallback before enabling directory-only completion so the
-    // resolver-requested DirectoryCompletion isn't diluted by regular
-    // file matches.
     lines.push(`        compopt +o default 2>/dev/null`);
-    lines.push(`        compopt -o dirnames 2>/dev/null`);
+    lines.push(`        if (( \${#COMPREPLY[@]} > 0 )); then`);
+    lines.push(`            local _d`);
+    lines.push(
+      `            while IFS= read -r _d; do COMPREPLY+=("$_d"); done < <(compgen -d -- "$_cur")`,
+    );
+    lines.push(`        else`);
+    lines.push(`            compopt -o dirnames 2>/dev/null`);
+    lines.push(`        fi`);
     lines.push(`    elif (( _directive & ${CompletionDirective.FileCompletion} )); then`);
-    lines.push(`        compopt -o default 2>/dev/null`);
+    lines.push(`        if (( \${#COMPREPLY[@]} > 0 )); then`);
+    lines.push(`            local _f`);
+    lines.push(
+      `            while IFS= read -r _f; do COMPREPLY+=("$_f"); done < <(compgen -f -- "$_cur")`,
+    );
+    lines.push(`        else`);
+    lines.push(`            compopt -o default 2>/dev/null`);
+    lines.push(`        fi`);
     lines.push(`    else`);
     lines.push(`        compopt +o default 2>/dev/null`);
     lines.push(`    fi`);
