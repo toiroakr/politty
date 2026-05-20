@@ -274,7 +274,7 @@ describe("Dynamic completion (in-process resolver)", () => {
       // mapping, and the long-form path consults the same map. So
       // `--f value` is valid for `alias: "f"`. The completion parser
       // must classify both forms as option-value to surface the
-      // resolver for `__complete -- --f <TAB>`.
+      // resolver for `__complete --shell bash -- --f <TAB>`.
       const cmd = defineCommand({
         name: "mycli",
         args: z.object({

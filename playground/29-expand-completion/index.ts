@@ -1,5 +1,5 @@
 /**
- * 28-expand-completion.ts - Pre-enumerated value completion ("expand")
+ * 29-expand-completion.ts - Pre-enumerated value completion ("expand")
  *
  * Demonstrates `completion.custom.expand`, which pre-enumerates candidates
  * at script-generation time and bakes them into the static shell script.
@@ -11,12 +11,12 @@
  * the available `--field` keys depend on the chosen `endpoint` positional.
  *
  * How to run:
- *   pnpx tsx playground/28-expand-completion/index.ts --help
+ *   pnpx tsx playground/29-expand-completion/index.ts --help
  *
  *   # Generate completion scripts
- *   pnpx tsx playground/28-expand-completion/index.ts completion bash
- *   pnpx tsx playground/28-expand-completion/index.ts completion zsh
- *   pnpx tsx playground/28-expand-completion/index.ts completion fish
+ *   pnpx tsx playground/29-expand-completion/index.ts completion bash
+ *   pnpx tsx playground/29-expand-completion/index.ts completion zsh
+ *   pnpx tsx playground/29-expand-completion/index.ts completion fish
  */
 
 import { z } from "zod";
@@ -104,6 +104,6 @@ export const cli = withCompletionCommand(
   }),
 );
 
-if (process.argv[1]?.includes("28-expand-completion")) {
+if (process.argv[1]?.includes("29-expand-completion")) {
   runMain(cli, { version: "1.0.0" });
 }

@@ -11,7 +11,7 @@ async function complete(argv: string[]): Promise<string[]> {
   return output.split("\n").filter((l) => !l.startsWith(":") && !l.startsWith("@") && l.length > 0);
 }
 
-describe("playground/27-dynamic-completion", () => {
+describe("playground/28-dynamic-completion", () => {
   it("returns empty candidates when endpoint not yet typed", async () => {
     const lines = await complete(["api", "--field", ""]);
     expect(lines).toEqual([]);

@@ -20,7 +20,7 @@ const nestedCommandPath = path.resolve(import.meta.dirname, "nested-command.ts")
 
 const expandCommandPath = path.resolve(
   import.meta.dirname,
-  "../../playground/28-expand-completion/index.ts",
+  "../../playground/29-expand-completion/index.ts",
 );
 
 export function shellExists(shell: string): boolean {

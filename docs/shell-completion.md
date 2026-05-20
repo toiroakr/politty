@@ -9,15 +9,22 @@ For quick setup, see the [README](../README.md#shell-completion). For type signa
 `withCompletionCommand` adds two subcommands to your CLI:
 
 - **`completion <shell>`** — Generates a shell script that users source in their shell config
-- **`__complete`** (hidden) — The dynamic completion engine, called on every TAB press
+- **`__complete`** (hidden) — The dynamic completion engine used by `completion.custom.resolve`
 
-The generated shell scripts are thin wrappers. When a user presses TAB, the shell calls:
+The generated shell scripts embed static metadata for subcommands, options,
+`choices`, file/directory completion, and `expand` tables. These paths stay
+inside the shell at TAB time.
+
+When a field uses `completion.custom.resolve`, the generated script delegates
+that value completion to the hidden command:
 
 ```
 mycli __complete --shell bash -- <partial-tokens>
 ```
 
-All logic runs in JavaScript: parsing the command line context, resolving candidates, and returning results with directives that tell the shell how to present them.
+That command runs in JavaScript: it parses the partial command line, calls the
+resolver, and returns candidates with directives that tell the shell how to
+present them.
 
 Command aliases defined via `aliases` in `defineCommand()` are automatically included in both static completion scripts and dynamic completion candidates.
 

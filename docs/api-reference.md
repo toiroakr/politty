@@ -286,7 +286,7 @@ const mainCommand = withCompletionCommand(
 
 // Now includes:
 // - mycli completion bash|zsh|fish
-// - mycli __complete -- <args>
+// - mycli __complete --shell <shell> -- <args>
 
 runMain(mainCommand);
 ```
@@ -359,7 +359,7 @@ The `__complete` command is automatically added by `withCompletionCommand`. It c
 
 ```bash
 # Get completions for "mycli build --"
-mycli __complete -- build --
+mycli __complete --shell fish -- build --
 
 # Output (tab-separated: value\tdescription)
 --watch	Watch mode

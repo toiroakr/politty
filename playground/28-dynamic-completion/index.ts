@@ -1,5 +1,5 @@
 /**
- * 27-dynamic-completion.ts - In-process dynamic completion example
+ * 28-dynamic-completion.ts - In-process dynamic completion example
  *
  * Demonstrates `completion.custom.resolve` callbacks that compute candidates
  * from other arg values typed so far. Modeled after `tailor-sdk api
@@ -8,18 +8,18 @@
  *
  * How to run:
  *   # Show help
- *   pnpx tsx playground/27-dynamic-completion/index.ts --help
+ *   pnpx tsx playground/28-dynamic-completion/index.ts --help
  *
  *   # Generate completion scripts
- *   pnpx tsx playground/27-dynamic-completion/index.ts completion bash
+ *   pnpx tsx playground/28-dynamic-completion/index.ts completion bash
  *
  *   # Test the dynamic resolver via __complete (simulates what the shell calls)
- *   pnpx tsx playground/27-dynamic-completion/index.ts __complete --shell bash -- "GetApplication" "-f" ""
- *   pnpx tsx playground/27-dynamic-completion/index.ts __complete --shell bash -- "CreateApplication" "-f" "cors=https://a" "-f" ""
- *   pnpx tsx playground/27-dynamic-completion/index.ts __complete --shell bash -- "ListApplications" "--field=appli"
+ *   pnpx tsx playground/28-dynamic-completion/index.ts __complete --shell bash -- "GetApplication" "-f" ""
+ *   pnpx tsx playground/28-dynamic-completion/index.ts __complete --shell bash -- "CreateApplication" "-f" "cors=https://a" "-f" ""
+ *   pnpx tsx playground/28-dynamic-completion/index.ts __complete --shell bash -- "ListApplications" "--field=appli"
  *
  *   # Inline form
- *   pnpx tsx playground/27-dynamic-completion/index.ts __complete --shell bash -- "GetApplication" "--field="
+ *   pnpx tsx playground/28-dynamic-completion/index.ts __complete --shell bash -- "GetApplication" "--field="
  */
 
 import { z } from "zod";
@@ -98,6 +98,6 @@ export const cli = withCompletionCommand(
   }),
 );
 
-if (process.argv[1]?.includes("27-dynamic-completion")) {
+if (process.argv[1]?.includes("28-dynamic-completion")) {
   runMain(cli, { version: "1.0.0" });
 }
