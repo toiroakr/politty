@@ -21,8 +21,6 @@ import {
   sanitize,
 } from "./extractor.js";
 import {
-  globalNamesIn,
-  localFieldNamesIn,
   quotedAvailabilityTokens,
   resolveExpandDepGlobality,
   type ResolvedExpandDep,
@@ -273,7 +271,6 @@ function optionValueCases(
   fn: string,
 ): string[] {
   const lines: string[] = [];
-  const localNames = localFieldNamesIn(options, positionals);
   for (const opt of options) {
     if (!opt.takesValue || !opt.valueCompletion) continue;
     const valLines = fishValueLines(opt.valueCompletion, fn, {
@@ -283,8 +280,8 @@ function optionValueCases(
       resolvedDeps: resolveExpandDepGlobality(
         opt.valueCompletion,
         opt.isGlobal === true,
-        globalNamesIn(options),
-        localNames,
+        options,
+        positionals,
       ),
     });
     if (valLines.length === 0) continue;
@@ -317,15 +314,12 @@ function positionalBlock(
 ): string[] {
   if (positionals.length === 0) return [];
   const lines: string[] = [];
-  const localNames = localFieldNamesIn(options, positionals);
   for (const pos of positionals) {
     const valLines = fishValueLines(pos.valueCompletion, fn, {
       fieldName: pos.name,
       isArrayOption: false,
       isGlobal: false,
-      resolvedDeps: pos.valueCompletion
-        ? resolveExpandDepGlobality(pos.valueCompletion, false, globalNamesIn(options), localNames)
-        : [],
+      resolvedDeps: resolveExpandDepGlobality(pos.valueCompletion, false, options, positionals),
     });
     if (valLines.length === 0) continue;
 

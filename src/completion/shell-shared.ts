@@ -23,21 +23,6 @@ export interface ResolvedExpandDep {
 }
 
 /**
- * Build the set of global-option names from a per-frame options list.
- * Local emission paths read this when deciding whether a specific
- * \`dependsOn\` entry should look up the \`_global_arg_values_*\` bucket
- * — propagated globals retain their globality even when consumed by a
- * local expand host.
- */
-export function globalNamesIn(options: readonly CompletableOption[]): Set<string> {
-  const names = new Set<string>();
-  for (const o of options) {
-    if (o.isGlobal === true) names.add(o.name);
-  }
-  return names;
-}
-
-/**
  * Resolve each `dependsOn` entry to its globality at codegen time. A
  * global host's deps all live in the global namespace. A local host
  * may declare deps against a propagated global (its sibling index
@@ -53,29 +38,23 @@ export function globalNamesIn(options: readonly CompletableOption[]): Set<string
  * bucket and produce no candidates.
  */
 export function resolveExpandDepGlobality(
-  vc: ValueCompletion,
+  vc: ValueCompletion | undefined,
   hostIsGlobal: boolean,
-  globalOptionNames: ReadonlySet<string> = new Set(),
-  localFieldNames: ReadonlySet<string> = new Set(),
+  frameOptions: readonly CompletableOption[],
+  framePositionals: readonly { name: string }[] = [],
 ): readonly ResolvedExpandDep[] {
-  if (vc.type !== "expand") return [];
+  if (vc?.type !== "expand") return [];
+  const globalOptionNames = new Set<string>();
+  const localFieldNames = new Set<string>();
+  for (const o of frameOptions) {
+    if (o.isGlobal === true) globalOptionNames.add(o.name);
+    else localFieldNames.add(o.name);
+  }
+  for (const p of framePositionals) localFieldNames.add(p.name);
   return vc.dependsOn.map((name) => ({
     name,
     isGlobal: hostIsGlobal || (globalOptionNames.has(name) && !localFieldNames.has(name)),
   }));
-}
-
-/** Build the local-field name set used by {@link resolveExpandDepGlobality}. */
-export function localFieldNamesIn(
-  options: readonly CompletableOption[],
-  positionals: readonly { name: string }[] = [],
-): Set<string> {
-  const names = new Set<string>();
-  for (const o of options) {
-    if (o.isGlobal !== true) names.add(o.name);
-  }
-  for (const p of positionals) names.add(p.name);
-  return names;
 }
 
 /**

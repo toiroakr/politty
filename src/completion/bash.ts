@@ -27,8 +27,6 @@ import {
 } from "./extractor.js";
 import {
   ansiC,
-  globalNamesIn,
-  localFieldNamesIn,
   quotedAvailabilityTokens,
   resolveExpandDepGlobality,
   type ResolvedExpandDep,
@@ -286,7 +284,6 @@ function optionValueCases(
   funcSuffix: string,
 ): string[] {
   const lines: string[] = [];
-  const localNames = localFieldNamesIn(options, positionals);
   for (const opt of options) {
     if (!opt.takesValue || !opt.valueCompletion) continue;
     const valLines = bashValueLines(opt.valueCompletion, inline, fn, {
@@ -297,8 +294,8 @@ function optionValueCases(
       resolvedDeps: resolveExpandDepGlobality(
         opt.valueCompletion,
         opt.isGlobal === true,
-        globalNamesIn(options),
-        localNames,
+        options,
+        positionals,
       ),
     });
     if (valLines.length === 0) continue;
@@ -328,7 +325,6 @@ function positionalBlock(
   if (positionals.length === 0) return [];
   const lines: string[] = [];
   lines.push(`    case "$_pos_count" in`);
-  const localNames = localFieldNamesIn(options, positionals);
 
   for (const pos of positionals) {
     if (pos.variadic) {
@@ -342,9 +338,7 @@ function positionalBlock(
       fieldName: pos.name,
       isArrayOption: false,
       isGlobal: false,
-      resolvedDeps: pos.valueCompletion
-        ? resolveExpandDepGlobality(pos.valueCompletion, false, globalNamesIn(options), localNames)
-        : [],
+      resolvedDeps: resolveExpandDepGlobality(pos.valueCompletion, false, options, positionals),
     })) {
       lines.push(`            ${vl}`);
     }
