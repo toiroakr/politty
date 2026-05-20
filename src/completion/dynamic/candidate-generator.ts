@@ -85,9 +85,22 @@ export async function generateCandidates(
     case "option-name":
       return generateOptionNameCandidates(context);
     case "option-value":
-      return generateOptionValueCandidates(context, options);
-    case "positional":
-      return generatePositionalCandidates(context, options);
+      return generateValueCandidates(context, options, context.targetOption?.valueCompletion);
+    case "positional": {
+      // Clamp to the trailing variadic positional so a value beyond the
+      // schema's positional count still resolves to the variadic slot's
+      // completion spec.
+      const positionalIndex = context.positionalIndex ?? 0;
+      const positional =
+        context.positionals[positionalIndex] ??
+        (context.positionals.at(-1)?.variadic ? context.positionals.at(-1) : undefined);
+      return generateValueCandidates(
+        context,
+        options,
+        positional?.valueCompletion,
+        positional?.description,
+      );
+    }
   }
 }
 
@@ -434,34 +447,4 @@ async function generateValueCandidates(
       description,
     )),
   };
-}
-
-/**
- * Generate option value candidates
- */
-function generateOptionValueCandidates(
-  context: CompletionContext,
-  options: GenerateCandidatesOptions,
-): Promise<CandidateResult> {
-  return generateValueCandidates(context, options, context.targetOption?.valueCompletion);
-}
-
-/**
- * Generate positional argument candidates
- */
-function generatePositionalCandidates(
-  context: CompletionContext,
-  options: GenerateCandidatesOptions,
-): Promise<CandidateResult> {
-  // Get the positional at current index, clamping to last (variadic) positional
-  const positionalIndex = context.positionalIndex ?? 0;
-  const positional =
-    context.positionals[positionalIndex] ??
-    (context.positionals.at(-1)?.variadic ? context.positionals.at(-1) : undefined);
-  return generateValueCandidates(
-    context,
-    options,
-    positional?.valueCompletion,
-    positional?.description,
-  );
 }
