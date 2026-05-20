@@ -1144,6 +1144,46 @@ describe("expand completion", () => {
       );
     });
 
+    it("keeps a global short alias tracker at a leaf where a bare 1-char local cliName does not shadow it", () => {
+      // Global \`env\` aliased \`-e\`, leaf-local \`e\` declared via
+      // \`cliName: "e"\` only (no explicit alias). Runtime's
+      // \`separateGlobalArgs\` does NOT register \`e\` in the local
+      // aliasMap (cliName === name), so \`-e\` is harvested as global.
+      // The tracker must still write to \`_global_arg_values_env\` for
+      // \`sub:-e\` even though the local has the literal letter "e".
+      const globals = z.object({
+        env: arg(z.string(), {
+          alias: "e",
+          completion: { custom: { choices: ["prod"] } },
+        }),
+        field: arg(z.string().optional(), {
+          completion: {
+            custom: {
+              expand: { dependsOn: ["env"], enumerate: () => [{ value: "x" }] },
+            },
+          },
+        }),
+      });
+      const cli = defineCommand({
+        name: "mycli",
+        subCommands: {
+          sub: defineCommand({
+            name: "sub",
+            args: z.object({
+              e: arg(z.string(), { completion: { custom: { choices: ["a"] } } }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const { script } = generateBashCompletion(cli, {
+        shell: "bash",
+        programName: "mycli",
+        globalArgsSchema: globals,
+      });
+      expect(script).toMatch(/sub:-e\b[^\n]*_global_arg_values_env/);
+    });
+
     it("emits both `--x` and `-x` tracker cases for a single-char cliName dep", () => {
       // Runtime accepts both `--x value` and `-x value` for a 1-char
       // cliName, so the generated tracker case for an expand dep of

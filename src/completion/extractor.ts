@@ -517,6 +517,29 @@ export function collectOptionTokens(
 }
 
 /**
+ * Tokens the runtime's `separateGlobalArgs` would consider locally
+ * owned at the leaf: the long-form cliName and every EXPLICIT alias
+ * (in its emitted form). Unlike {@link collectOptionTokens}, this does
+ * NOT include the auto-derived `-x` for a 1-char cliName, because that
+ * short form is registered in the local aliasMap only when an explicit
+ * alias declares it — a bare `cliName: "x"` does not shadow a global
+ * short alias of the same letter.
+ */
+export function localShadowingTokens(
+  cliName: string,
+  aliases: readonly string[] | undefined,
+): string[] {
+  const tokens = [`--${cliName}`];
+  if (aliases) {
+    for (const a of aliases) {
+      const t = aliasToken(a);
+      if (!tokens.includes(t)) tokens.push(t);
+    }
+  }
+  return tokens;
+}
+
+/**
  * Walk the subcommand tree and return every resolved expand spec along
  * with where it lives. The order is deterministic (DFS, root → leaves;
  * options before positionals within a node).
@@ -707,7 +730,13 @@ export function collectTrackedFields(
           const claimed = new Set<string>();
           for (const o of n.options) {
             if (o.isGlobal === true) continue;
-            for (const t of collectOptionTokens(o.cliName, o.alias)) claimed.add(t);
+            // Use only the tokens the runtime's `separateGlobalArgs`
+            // would actually treat as locally-owned at this leaf: the
+            // long-form cliName and every EXPLICIT alias. A 1-char
+            // cliName like \`e\` does NOT register in the local
+            // aliasMap unless an explicit \`alias: "e"\` is declared,
+            // so it must not shadow a same-shaped global short alias.
+            for (const t of localShadowingTokens(o.cliName, o.alias)) claimed.add(t);
           }
           const remaining = allTokens.filter((t) => !claimed.has(t));
           recordLeaf(p, remaining);

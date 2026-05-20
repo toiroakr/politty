@@ -345,11 +345,27 @@ function matchesExplicit(opt: CompletableOption, name: string, isLong: boolean):
  * literally named `noFoo` always wins over `--no-foo` being interpreted as
  * the implicit negation of a sibling `foo` field — the runtime parser
  * resolves the explicit field first as well.
+ *
+ * Short-form precedence mirrors runtime's `separateGlobalArgs`: when a
+ * global owns the `-x` alias and the local does NOT explicitly declare
+ * `alias: "x"`, the global wins (a bare local `cliName: "x"` does not
+ * register `x` in the local aliasMap). Long form keeps the local-first
+ * order via the unshadowed merged list.
  */
 function findOption(
   options: CompletableOption[],
   parsed: ParsedOption,
 ): CompletableOption | undefined {
+  if (!parsed.isLong) {
+    const localWithExplicitAlias = options.find(
+      (opt) => opt.isGlobal !== true && opt.alias?.includes(parsed.name) === true,
+    );
+    if (localWithExplicitAlias) return localWithExplicitAlias;
+    const global = options.find(
+      (opt) => opt.isGlobal === true && matchesExplicit(opt, parsed.name, parsed.isLong),
+    );
+    if (global) return global;
+  }
   const explicit = options.find((opt) => matchesExplicit(opt, parsed.name, parsed.isLong));
   if (explicit) return explicit;
   return options.find((opt) => isImplicitBooleanNegation(opt, parsed.name, parsed.isLong));

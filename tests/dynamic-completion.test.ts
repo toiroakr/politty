@@ -225,6 +225,29 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.cache).toBeUndefined();
     });
 
+    it("routes `-e` to the global when the local cliName is `e` without an explicit alias", () => {
+      // Runtime's `separateGlobalArgs` harvests `-e` as the global
+      // when a global has `alias: "e"` and the local declares only
+      // `cliName: "e"` (no explicit alias — its aliasMap therefore
+      // omits "e"). The completion parser must mirror that or
+      // resolvers see the value under the local's name instead of
+      // the global's.
+      const globals = z.object({
+        env: arg(z.string().optional(), { alias: "e" }),
+      });
+      const cmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          e: arg(z.string().optional()),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const ctx = parseCompletionContext(["-e", "prod", "--field", ""], cmd, globals);
+      expect(ctx.parsedArgs.env).toBe("prod");
+      expect(ctx.parsedArgs.e).toBeUndefined();
+    });
+
     it("recognizes a single-character alias via both `-f` and `--f`", () => {
       // Runtime's `aliasMap` registers a 1-char alias as the canonical
       // mapping, and the long-form path consults the same map. So
