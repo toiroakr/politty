@@ -62,6 +62,16 @@ export function binEnvVarName(fn: string): string {
 }
 
 /**
+ * Hoisted expand-table variable name for a (funcSuffix, fieldName) at frame
+ * scope. Bash uses indirect expansion `${!var}` on per-entry scalars, zsh
+ * uses associative-array subscripts on this same base — the identifier
+ * shape is identical, so both generators share this helper.
+ */
+export function expandTableVarName(fn: string, funcSuffix: string, fieldName: string): string {
+  return `__${fn}_expand_${funcSuffix}__${sanitize(fieldName)}`;
+}
+
+/**
  * Filter subcommands to only visible (non-internal) ones.
  * Internal subcommands start with "__" and are hidden from completion/help.
  */

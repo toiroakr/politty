@@ -13,6 +13,7 @@ import {
   collectRouteEntries,
   collectTrackedFields,
   effectiveOptionTokens,
+  expandTableVarName,
   extractCompletionData,
   getSubNamesWithAliases,
   getVisibleSubs,
@@ -44,14 +45,6 @@ import type {
 /** Escape a string for use inside bash double-quotes */
 function escapeBashDQ(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$").replace(/`/g, "\\`");
-}
-
-/**
- * Variable-name base for the expand entries of a (funcSuffix, fieldName).
- * Each emitted entry appends `__<encKey>` (see {@link bashEncodeKey}).
- */
-function bashExpandVar(fn: string, funcSuffix: string, fieldName: string): string {
-  return `__${fn}_expand_${funcSuffix}__${sanitize(fieldName)}`;
 }
 
 /**
@@ -116,7 +109,7 @@ function bashValueLines(
       // per key combination). Build the encoded runtime suffix from the
       // dependsOn values via `__<fn>_enc`, then read the candidate list
       // through indirect expansion and filter against `$_cur`.
-      const varName = bashExpandVar(fn, location.funcSuffix, location.fieldName);
+      const varName = expandTableVarName(fn, location.funcSuffix, location.fieldName);
       // Per-dep lookups read from the matching prefix-scalar bucket:
       // globals from `_global_arg_values_<dep>` (preserved across
       // subcommand descent), locals from `_arg_values_<dep>` (cleared on
@@ -494,7 +487,7 @@ export function generateBashCompletion(
     lines.push(``);
   }
   for (const spec of expandSpecs) {
-    const varName = bashExpandVar(fn, spec.funcSuffix, spec.fieldName);
+    const varName = expandTableVarName(fn, spec.funcSuffix, spec.fieldName);
     for (const entry of spec.vc.table) {
       const encKey = entry.key.map(bashEncodeKey).join("_");
       const value = entry.candidates.map((c) => c.value).join("\n");

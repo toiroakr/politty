@@ -13,6 +13,7 @@ import {
   collectRouteEntries,
   collectTrackedFields,
   effectiveOptionTokens,
+  expandTableVarName,
   extractCompletionData,
   getSubNamesWithAliases,
   getVisibleSubs,
@@ -61,15 +62,11 @@ function escapeDescribeValue(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/:/g, "\\:");
 }
 
-function zshExpandVar(fn: string, funcSuffix: string, fieldName: string): string {
-  return `__${fn}_expand_${funcSuffix}__${sanitize(fieldName)}`;
-}
-
 /**
  * Zsh adds `funcSuffix` on top of the shell-agnostic `BaseExpandLocation`:
  * the hoisted associative-array variable is named
- * `__<fn>_expand_<funcSuffix>__<field>`, so each frame's emission needs to
- * know the surrounding handler.
+ * `__<fn>_expand_<funcSuffix>__<field>` (see {@link expandTableVarName}),
+ * so each frame's emission needs to know the surrounding handler.
  */
 interface ZshExpandLocation extends BaseExpandLocation {
   funcSuffix: string;
@@ -91,7 +88,7 @@ function zshValueLines(
       if (!location) {
         throw new Error("zshValueLines: expand variant requires a location");
       }
-      const varName = zshExpandVar(fn, location.funcSuffix, location.fieldName);
+      const varName = expandTableVarName(fn, location.funcSuffix, location.fieldName);
       // Per-dep lookups read from the matching bucket: globals from
       // `_global_arg_values` (preserved across subcommand descent) and
       // locals from `_arg_values` (cleared on descent).
@@ -412,7 +409,7 @@ export function generateZshCompletion(
   // joined by U+001F; values are newline-separated `value:description`
   // entries consumed by `_describe`.
   for (const spec of expandSpecs) {
-    const varName = zshExpandVar(fn, spec.funcSuffix, spec.fieldName);
+    const varName = expandTableVarName(fn, spec.funcSuffix, spec.fieldName);
     if (spec.vc.table.length === 0) {
       lines.push(`typeset -gA ${varName}=()`);
     } else {
