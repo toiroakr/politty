@@ -149,36 +149,49 @@ function findGlobalByTokenCollision(
 }
 
 /**
- * Mirror runtime `scanForSubcommand`: walk argv from the start with the
- * global schema only, populating `globalParsedArgs` with the values the
- * runtime would have routed there before any subcommand is reached.
+ * Mirror runtime `scanForSubcommand`: walk a pre-subcommand token slice
+ * with the global schema only, populating `globalParsedArgs` with the
+ * values the runtime would have routed there before the next subcommand
+ * boundary. Runs at every subcommand descent — the runtime invokes
+ * `scanForSubcommand` recursively at each frame in `parseArgs`, so the
+ * pre-sub global pass applies per descent, not just from root.
  *
  * Returns the set of global option names captured during this pre-scan.
- * Used at the first subcommand descent to skip the local→global token
- * migration for entries whose true value is already known here — a
- * value-taking global aliased the same as a parent-local boolean (for
- * example global `--profile`/`-p` and local boolean `alias: "p"`) would
- * otherwise have `true` written over the genuine `"prod"`.
+ * Used at descent to skip the local→global token migration for entries
+ * whose true value is already known here — a value-taking global
+ * aliased the same as a parent-local boolean (e.g. global `--profile`
+ * /`-p` and local boolean `alias: "p"`) would otherwise have `true`
+ * written over the genuine `"prod"`.
  */
 function parsePreSubGlobals(
-  argv: string[],
+  tokens: readonly string[],
   globalOptions: readonly CompletableOption[],
   globalParsedArgs: Record<string, unknown>,
 ): Set<string> {
   const captured = new Set<string>();
   if (globalOptions.length === 0) return captured;
+  // Mirror runtime per-frame array semantics: the first time this
+  // slice writes an array global, the value REPLACES any prior entry
+  // (matching `rawGlobalArgs`'s shallow merge); subsequent writes in
+  // the same slice append.
+  const arrayWrittenInThisSlice = new Set<string>();
   const writeGlobal = (opt: CompletableOption, value: string): void => {
     if (opt.valueType === "array") {
-      const ex = globalParsedArgs[opt.name];
-      globalParsedArgs[opt.name] = Array.isArray(ex) ? [...ex, value] : [value];
+      if (arrayWrittenInThisSlice.has(opt.name)) {
+        const ex = globalParsedArgs[opt.name];
+        globalParsedArgs[opt.name] = Array.isArray(ex) ? [...ex, value] : [value];
+      } else {
+        globalParsedArgs[opt.name] = [value];
+        arrayWrittenInThisSlice.add(opt.name);
+      }
     } else {
       globalParsedArgs[opt.name] = value;
     }
     captured.add(opt.name);
   };
   let i = 0;
-  while (i < argv.length - 1) {
-    const word = argv[i]!;
+  while (i < tokens.length) {
+    const word = tokens[i]!;
     if (word === "--") break;
     if (!word.startsWith("-")) break;
     // Combined short flags (`-fg`) freeze runtime scanForSubcommand —
@@ -204,8 +217,8 @@ function parsePreSubGlobals(
         const eqIdx = word.indexOf("=");
         writeGlobal(opt, word.slice(eqIdx + 1));
         i++;
-      } else if (i + 1 < argv.length - 1) {
-        const next = argv[i + 1]!;
+      } else if (i + 1 < tokens.length) {
+        const next = tokens[i + 1]!;
         if (next.startsWith("-")) {
           i++;
           continue;
@@ -496,13 +509,17 @@ export function parseCompletionContext(
   let positionalValues: string[] = [];
   const globalParsedArgs: Record<string, unknown> = {};
 
-  // Pre-scan pre-subcommand argv with the global-only schema. Mirrors
-  // runtime `scanForSubcommand`, which routes pre-sub tokens to globals
-  // even when a parent-local schema shadows the same alias. The migration
-  // at first descent below skips any global name captured here so an
-  // arity-mismatched local parse (boolean `-p` vs value-taking `-p`)
-  // doesn't clobber the genuine global value.
-  const globalsCapturedByPreSubScan = parsePreSubGlobals(argv, globalOptions, globalParsedArgs);
+  // Track every global name captured by the per-descent pre-sub scan.
+  // At each descent the runtime's `scanForSubcommand` routes pre-sub
+  // tokens to globals even when a parent-local schema shadows the same
+  // alias; the migration logic below skips any name in this set so a
+  // local parse (`-p` boolean) doesn't clobber the genuine global value
+  // (`-p prod` → `profile = "prod"`).
+  const globalsCapturedByPreSubScan = new Set<string>();
+  // Start-of-frame index in `argv`. The slice `[frameStartIdx, i)` at
+  // each descent is the pre-sub token range for that frame and gets
+  // re-scanned against the global schema.
+  let frameStartIdx = 0;
 
   // Names of array options written in the current command frame. Used to
   // mirror the runtime's per-frame array semantics: the first `--arr v`
@@ -647,6 +664,14 @@ export function parseCompletionContext(
       // them; once `currentCommand` flips to the child we lose access
       // to the parent's schema.
       const parentLocalOptions = extractOptions(currentCommand);
+      // Pre-scan this frame's pre-sub slice with the global schema.
+      // Runtime's `scanForSubcommand` runs at every frame in the
+      // recursive `parseArgs` descent, routing pre-sub tokens to
+      // globals — applies to nested parents too, not just root.
+      const preSubSlice = argv.slice(frameStartIdx, i);
+      for (const name of parsePreSubGlobals(preSubSlice, globalOptions, globalParsedArgs)) {
+        globalsCapturedByPreSubScan.add(name);
+      }
       currentCommand = subcommand;
       options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
       // Migrate values the parent frame recorded locally that the
@@ -662,7 +687,6 @@ export function parseCompletionContext(
       //    name → write-time still stored under the local's name, but
       //    the runtime would have surfaced the value as
       //    `globalArgs[globalOpt.name]`. Migrate to the global's name.
-      const isFirstDescent = subcommandPath.length === 1;
       for (const key of Object.keys(parsedArgs)) {
         const localOpt = parentLocalOptions.find((o) => o.name === key);
         const sameNameGlobal = globalOptions.find((g) => g.name === key);
@@ -670,10 +694,10 @@ export function parseCompletionContext(
           sameNameGlobal ??
           (localOpt ? findGlobalByTokenCollision(globalOptions, localOpt) : undefined);
         if (!tokenCollidingGlobal) continue;
-        // At first descent, `parsePreSubGlobals` already wrote the
-        // authoritative value parsed against the global schema. Don't
-        // overwrite it with an arity-adapted local value.
-        if (isFirstDescent && globalsCapturedByPreSubScan.has(tokenCollidingGlobal.name)) continue;
+        // Skip migration when this descent's (or an earlier descent's)
+        // pre-sub global scan already populated the authoritative value;
+        // overwriting with the arity-adapted local would clobber it.
+        if (globalsCapturedByPreSubScan.has(tokenCollidingGlobal.name)) continue;
         globalParsedArgs[tokenCollidingGlobal.name] = adaptValueForGlobal(
           parsedArgs[key],
           tokenCollidingGlobal,
@@ -689,6 +713,7 @@ export function parseCompletionContext(
       // in this frame replaces" rule is enforced by clearing the
       // per-frame seen-set instead of deleting the accumulator outright.
       arraysSetInCurrentFrame = new Set<string>();
+      frameStartIdx = i + 1;
       i++;
       continue;
     }

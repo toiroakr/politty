@@ -139,29 +139,37 @@ function zshValueLines(
         `if [[ -n "$_raw" ]]; then`,
         `    local -a _candidates=("\${(@f)_raw}")`,
         `    _vals=()`,
-        `    local _c _ck _vp _seen_keys=" " _desc _has_eq=0`,
+        `    local _c _ck _vp _seen_keys=" " _desc _has_eq=0 _tmp`,
         `    for _c in "\${_candidates[@]}"; do`,
+        // Replace escaped `\:` with a sentinel byte (0x01, never present
+        // in real candidate text) so the value/description split at the
+        // first UNESCAPED `:` survives values that contain literal `:`
+        // (e.g. `ns:key=value`).
+        `        _tmp="\${_c//\\\\:/$'\\x01'}"`,
         `        if [[ "$_c" == *=* ]]; then`,
         `            _ck="\${_c%%=*}"`,
         ...arrayDedupLines,
         `            if [[ "\${words[CURRENT]}" != *=* ]]; then`,
         `                [[ "$_seen_keys" == *" $_ck "* ]] && continue`,
         `                _seen_keys+="$_ck "`,
-        `                if [[ "$_c" == *:* ]]; then`,
-        `                    _desc="\${_c#*:}"`,
+        `                if [[ "$_tmp" == *:* ]]; then`,
+        // Extract desc from after the first UNESCAPED `:` (via `_tmp`),
+        // then restore the sentinel to `\:` so a literal colon inside
+        // the description survives intact.
+        `                    _desc="\${\${_tmp#*:}//$'\\x01'/\\\\:}"`,
         `                    _c="\${_ck}=:$_desc"`,
         `                else`,
         `                    _c="\${_ck}="`,
         `                fi`,
         `            else`,
         // Value stage: drop bare `key=` candidates so they do not clutter
-        // the value picker. Strip the optional `:desc` suffix first to
-        // inspect only the value part.
-        `                _vp="\${_c%%:*}"`,
+        // the value picker. Strip the optional `:desc` suffix at the
+        // first UNESCAPED `:` (via `_tmp`'s sentinel substitution).
+        `                _vp="\${_tmp%%:*}"`,
         `                [[ "$_vp" == *=?* ]] || continue`,
         `            fi`,
         `        fi`,
-        `        [[ "\${_c%%:*}" == *= ]] && _has_eq=1`,
+        `        [[ "\${_tmp%%:*}" == *= ]] && _has_eq=1`,
         `        _vals+=("$_c")`,
         `    done`,
         `    if (( _has_eq )); then`,

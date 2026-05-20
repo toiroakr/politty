@@ -249,6 +249,7 @@ function expandChildPathStrs(pathStrs: readonly string[], child: CompletableSubc
  */
 export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: string): string[] {
   const lines: string[] = [];
+  const isAncestor = getVisibleSubs(sub.subcommands).length > 0;
   for (const opt of sub.options) {
     if (opt.takesValue) {
       // Reuse the full token set used by tracker emission so the
@@ -256,9 +257,18 @@ export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: str
       // does (1-char cliName `-x`, 1-char alias long form `--f`,
       // camelCase variants of hyphenated names). Without this the
       // scanner skips the value of a valid option spelling.
-      // Filter through `effectiveOptionTokens` so a local does not
-      // claim a short token a global owns at this frame.
-      const tokens = effectiveOptionTokens(opt, sub.options);
+      //
+      // At ANCESTOR frames (frames with further subcommand children),
+      // the runtime's `scanForSubcommand` routes pre-sub tokens with
+      // the global schema only — local-precedence does NOT apply, so a
+      // global value option keeps every alias even when a local at the
+      // frame claims the same short token. At LEAF frames, the leaf
+      // parser's `separateGlobalArgs` applies local-precedence so the
+      // filter via `effectiveOptionTokens` is correct.
+      const tokens =
+        isAncestor && opt.isGlobal === true
+          ? collectOptionTokens(opt.cliName, opt.alias)
+          : effectiveOptionTokens(opt, sub.options);
       if (tokens.length === 0) continue;
       const patterns = tokens.map((t) => `${parentPath}:${t}`);
       lines.push(`        ${patterns.join("|")}) return 0 ;;`);
