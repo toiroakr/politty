@@ -408,6 +408,38 @@ describe("Dynamic completion (in-process resolver)", () => {
       await generateCandidates(ctx, { shell: "zsh" });
       expect(captured?.parsedArgs.endpoint).toBe("GetApplication");
       expect(captured?.previousValues).toEqual(["workspaceId"]);
+      // The repeatable field being completed must NOT appear in
+      // `parsedArgs` — `previousValues` is the contracted home for its
+      // already-typed values, and exposing them under both would let a
+      // resolver mistake the in-flight field for a sibling.
+      expect(captured?.parsedArgs.field).toBeUndefined();
+    });
+
+    it("hides a variadic positional's previous values from parsedArgs", async () => {
+      let captured: DynamicCompletionContext | undefined;
+      const cmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          items: arg(z.array(z.string()).default([]), {
+            positional: true,
+            variadic: true,
+            completion: {
+              custom: {
+                resolve: (c) => {
+                  captured = c;
+                  return { candidates: [] };
+                },
+              },
+            },
+          }),
+        }),
+        run: () => {},
+      });
+
+      const ctx = parseCompletionContext(["alpha", "beta", ""], cmd);
+      await generateCandidates(ctx, { shell: "bash" });
+      expect(captured?.previousValues).toEqual(["alpha", "beta"]);
+      expect(captured?.parsedArgs.items).toBeUndefined();
     });
 
     it("accepts {value, description} candidate objects", async () => {

@@ -960,5 +960,37 @@ describe("expand completion", () => {
       expect(script).toContain(`_enc_key="$(__mycli_enc "$_enc_v")"`);
       expect(script).toContain(`_enc_key+="_$(__mycli_enc "$_enc_v")"`);
     });
+
+    it("encodes `_` so dep values cannot collide with hex escapes or the join separator", () => {
+      // If `_` passed through unchanged, dep `-` (→ `_2D`) would collide
+      // with the literal dep `_2D`, and `(a, _b)` would render the same
+      // suffix as `(a_, b)` thanks to the `_` join separator. Encoding
+      // `_` as `_5F` keeps every dep tuple disjoint.
+      const cli = defineCommand({
+        name: "mycli",
+        args: z.object({
+          a: arg(z.string(), { completion: { custom: { choices: ["-", "_2D"] } } }),
+          out: arg(z.string().optional(), {
+            completion: {
+              custom: {
+                expand: {
+                  dependsOn: ["a"],
+                  enumerate: (deps) => [{ value: `out-${deps.a}` }],
+                },
+              },
+            },
+          }),
+        }),
+      });
+      const { script } = generateBashCompletion(cli, {
+        shell: "bash",
+        programName: "mycli",
+      });
+      expect(script).toContain(`__mycli_expand_root__out___2D=`);
+      expect(script).toContain(`__mycli_expand_root__out___5F2D=`);
+      // The runtime encoder must agree — only `[a-zA-Z0-9]` passes through.
+      expect(script).toContain(`[a-zA-Z0-9]) _r+="$_c" ;;`);
+      expect(script).not.toMatch(/\[a-zA-Z0-9_\]\) _r\+="\$_c"/);
+    });
   });
 });

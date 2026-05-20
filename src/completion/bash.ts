@@ -54,14 +54,17 @@ function bashExpandVar(fn: string, funcSuffix: string, fieldName: string): strin
 }
 
 /**
- * Hex-encode any character outside `[A-Za-z0-9_]` as `_HH` so the
- * resulting string is safe as a suffix of a bash identifier. Mirrors the
- * runtime `__<fn>_enc` helper emitted alongside expand tables.
+ * Hex-encode any character outside `[A-Za-z0-9]` as `_HH` so the
+ * resulting string is safe as a suffix of a bash identifier. `_` is also
+ * encoded (as `_5F`) to keep the join separator between encoded dep
+ * values unambiguous — without that, `(v1="-", v2="")` and
+ * `(v1="_2D", v2="")` would both render `_2D_`. Mirrors the runtime
+ * `__<fn>_enc` helper emitted alongside expand tables.
  */
 function bashEncodeKey(s: string): string {
   let out = "";
   for (const ch of s) {
-    if (/[A-Za-z0-9_]/.test(ch)) {
+    if (/[A-Za-z0-9]/.test(ch)) {
       out += ch;
     } else {
       const code = ch.codePointAt(0)!;
@@ -452,7 +455,7 @@ export function generateBashCompletion(
     lines.push(`    for (( _i=0; _i<\${#_s}; _i++ )); do`);
     lines.push(`        _c=\${_s:_i:1}`);
     lines.push(`        case "$_c" in`);
-    lines.push(`            [a-zA-Z0-9_]) _r+="$_c" ;;`);
+    lines.push(`            [a-zA-Z0-9]) _r+="$_c" ;;`);
     lines.push(`            *) printf -v _r '%s_%02X' "$_r" "'$_c" ;;`);
     lines.push(`        esac`);
     lines.push(`    done`);
@@ -505,17 +508,18 @@ export function generateBashCompletion(
     lines.push(`    done`);
     // Apply resolver-supplied directive bits. DirectoryCompletion takes
     // precedence over FileCompletion when both are set; NoSpace stacks.
-    // bash's `-o default` / `-o dirnames` only fire when COMPREPLY is
-    // empty, so when the resolver returned both candidates and a
-    // file/dir directive we append filesystem matches manually instead.
-    // Carry the caller's `--opt=` inline prefix onto the filesystem
-    // candidates too — resolver values already get the prefix, so
-    // omitting it here would let an accepted file match drop the
-    // option name from the command line.
+    // bash's `-o default` / `-o dirnames` fall back to filename
+    // completion only when COMPREPLY is empty, but their candidates use
+    // the *original* word — which still carries the `--opt=` prefix we
+    // stripped into `_inline_prefix`. So whenever an inline prefix is
+    // in play, expand filesystem matches manually against `$_cur` and
+    // prepend `_ip`, instead of leaving it to bash's fallback. With no
+    // inline prefix, the empty-COMPREPLY case can still rely on the
+    // builtin fallback.
     lines.push(`    local _ip="\${_inline_prefix:-}"`);
     lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
     lines.push(`        compopt +o default 2>/dev/null`);
-    lines.push(`        if (( \${#COMPREPLY[@]} > 0 )); then`);
+    lines.push(`        if (( \${#COMPREPLY[@]} > 0 )) || [[ -n "$_ip" ]]; then`);
     lines.push(`            local _d`);
     lines.push(
       `            while IFS= read -r _d; do COMPREPLY+=("\${_ip}\${_d}"); done < <(compgen -d -- "$_cur")`,
@@ -524,7 +528,7 @@ export function generateBashCompletion(
     lines.push(`            compopt -o dirnames 2>/dev/null`);
     lines.push(`        fi`);
     lines.push(`    elif (( _directive & ${CompletionDirective.FileCompletion} )); then`);
-    lines.push(`        if (( \${#COMPREPLY[@]} > 0 )); then`);
+    lines.push(`        if (( \${#COMPREPLY[@]} > 0 )) || [[ -n "$_ip" ]]; then`);
     lines.push(`            local _f`);
     lines.push(
       `            while IFS= read -r _f; do COMPREPLY+=("\${_ip}\${_f}"); done < <(compgen -f -- "$_cur")`,

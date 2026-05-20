@@ -308,7 +308,12 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
 /**
  * Build the resolver-invocation slice of CompletionContext.
  * `currentWord` is passed verbatim — the caller (`__complete`) strips inline
- * `--field=` prefixes before invoking us.
+ * `--field=` prefixes before invoking us. The target field is dropped from
+ * `parsedArgs` so resolvers can treat it as "other args": for repeatable
+ * options and variadic positionals the parser already stages already-typed
+ * values under the same key, and exposing them under both `parsedArgs` and
+ * `previousValues` would let a resolver mistake the in-flight field for a
+ * fully-supplied sibling.
  */
 function resolverContext(
   context: CompletionContext,
@@ -317,10 +322,32 @@ function resolverContext(
   return {
     currentWord: context.currentWord,
     shell: options.shell,
-    parsedArgs: context.parsedArgs,
+    parsedArgs: parsedArgsWithoutTarget(context),
     previousValues: context.previousValues,
     subcommandPath: context.subcommandPath,
   };
+}
+
+function parsedArgsWithoutTarget(context: CompletionContext): Record<string, unknown> {
+  const key = targetFieldName(context);
+  if (key === undefined || !(key in context.parsedArgs)) {
+    return context.parsedArgs;
+  }
+  const next = { ...context.parsedArgs };
+  delete next[key];
+  return next;
+}
+
+function targetFieldName(context: CompletionContext): string | undefined {
+  if (context.targetOption) {
+    return context.targetOption.name;
+  }
+  if (context.completionType !== "positional" || context.positionalIndex === undefined) {
+    return undefined;
+  }
+  const lastIdx = context.positionals.length - 1;
+  const clampedIdx = context.positionalIndex > lastIdx ? lastIdx : context.positionalIndex;
+  return clampedIdx >= 0 ? context.positionals[clampedIdx]?.name : undefined;
 }
 
 /**
