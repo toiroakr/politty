@@ -124,20 +124,6 @@ function fieldToOption(
 }
 
 /**
- * Extract options from a command's args schema
- */
-function extractOptions(command: AnyCommand, pending: PendingExpandTarget[]): CompletableOption[] {
-  if (!command.args) {
-    return [];
-  }
-
-  const extracted = extractFields(command.args);
-  return extracted.fields
-    .filter((field) => !field.positional) // Only include flags/options, not positionals
-    .map((field) => fieldToOption(field, pending));
-}
-
-/**
  * Extract positional arguments from a command
  */
 export function extractPositionals(command: AnyCommand): ResolvedFieldMeta[] {
@@ -149,20 +135,20 @@ export function extractPositionals(command: AnyCommand): ResolvedFieldMeta[] {
   return extracted.fields.filter((field) => field.positional);
 }
 
-/**
- * Extract completable positional arguments from a command.
- * Pending expand specs are stashed in `pending` for later resolution.
- */
-function extractCompletablePositionals(
-  command: AnyCommand,
+/** Convert pre-extracted fields to options. */
+function fieldsToOptions(
+  fields: readonly ResolvedFieldMeta[],
+  pending: PendingExpandTarget[],
+): CompletableOption[] {
+  return fields.filter((field) => !field.positional).map((field) => fieldToOption(field, pending));
+}
+
+/** Convert pre-extracted fields to positionals. */
+function fieldsToPositionals(
+  fields: readonly ResolvedFieldMeta[],
   pending: PendingExpandTarget[],
 ): CompletablePositional[] {
-  if (!command.args) {
-    return [];
-  }
-
-  const extracted = extractFields(command.args);
-  return extracted.fields
+  return fields
     .filter((field) => field.positional)
     .map((field, index): CompletablePositional => {
       const pos: CompletablePositional = {
@@ -210,13 +196,17 @@ function extractSubcommand(
   }
 
   const pending: PendingExpandTarget[] = [];
+  // Extract once and partition: `extractFields` walks the Zod schema (a
+  // non-trivial reflection pass for nested unions/wraps), so the prior
+  // two-call shape paid that cost twice per command frame.
+  const fields = command.args ? extractFields(command.args).fields : [];
   const node: CompletableSubcommand = {
     name,
     description: command.description,
     aliases: command.aliases,
     subcommands,
-    options: extractOptions(command, pending),
-    positionals: extractCompletablePositionals(command, pending),
+    options: fieldsToOptions(fields, pending),
+    positionals: fieldsToPositionals(fields, pending),
   };
   // Resolve every `pending-expand` collected above against this
   // subcommand's siblings (and the global schema, which runtime
