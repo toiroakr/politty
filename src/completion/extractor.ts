@@ -51,6 +51,17 @@ export function sanitize(name: string): string {
 }
 
 /**
+ * Build the override env-var name shells inspect to pick a different
+ * binary (`<NAME>_BIN`). Shell parameter names cannot begin with a
+ * digit, so prepend an underscore when the upper-cased function name
+ * starts with one — e.g. `2fa` ⇒ `_2FA_BIN`.
+ */
+export function binEnvVarName(fn: string): string {
+  const upper = fn.toUpperCase();
+  return /^[A-Z_]/.test(upper) ? `${upper}_BIN` : `_${upper}_BIN`;
+}
+
+/**
  * Filter subcommands to only visible (non-internal) ones.
  * Internal subcommands start with "__" and are hidden from completion/help.
  */

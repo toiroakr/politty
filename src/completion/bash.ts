@@ -8,6 +8,7 @@
 import type { AnyCommand } from "../types.js";
 import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
+  binEnvVarName,
   collectExpandSpecs,
   collectRouteEntries,
   collectTrackedFields,
@@ -506,7 +507,7 @@ export function generateBashCompletion(
     lines.push(`__${fn}_invoke_complete() {`);
     lines.push(`    local _shell="$1"; shift`);
     lines.push(
-      `    "\${${fn.toUpperCase()}_BIN:-${programName}}" __complete --shell "$_shell" -- "$@" 2>/dev/null`,
+      `    "\${${binEnvVarName(fn)}:-${programName}}" __complete --shell "$_shell" -- "$@" 2>/dev/null`,
     );
     lines.push(`}`);
     lines.push(``);

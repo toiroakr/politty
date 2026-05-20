@@ -399,6 +399,14 @@ export function parseCompletionContext(
       positionalCount = 0;
       parsedArgs = {};
       positionalValues = [];
+      // Mirror the runner's shallow-spread merge of `rawGlobalArgs`:
+      // each level's array global replaces the previous level's value
+      // rather than accumulating. Drop the accumulator so subsequent
+      // `--tag` values restart from an empty list in the new frame,
+      // matching the runtime's view of `globalArgs.tag`.
+      for (const g of globalOptions) {
+        if (g.valueType === "array") delete globalParsedArgs[g.name];
+      }
       i++;
       continue;
     }

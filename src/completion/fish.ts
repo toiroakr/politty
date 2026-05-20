@@ -8,6 +8,7 @@
 import type { AnyCommand } from "../types.js";
 import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
+  binEnvVarName,
   collectExpandSpecs,
   collectRouteEntries,
   collectTrackedFields,
@@ -441,8 +442,8 @@ export function generateFishCompletion(
     lines.push(`    set -l _shell $argv[1]`);
     lines.push(`    set -l _argv $argv[2..]`);
     lines.push(`    set -l _bin ${programName}`);
-    lines.push(`    if set -q ${fn.toUpperCase()}_BIN`);
-    lines.push(`        set _bin $${fn.toUpperCase()}_BIN`);
+    lines.push(`    if set -q ${binEnvVarName(fn)}`);
+    lines.push(`        set _bin $${binEnvVarName(fn)}`);
     lines.push(`    end`);
     lines.push(`    $_bin __complete --shell $_shell -- $_argv 2>/dev/null`);
     lines.push(`end`);

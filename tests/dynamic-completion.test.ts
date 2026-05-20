@@ -193,6 +193,35 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctxCustom.parsedArgs.cache).toBe(false);
     });
 
+    it("resets global array values at subcommand boundaries to mirror runtime semantics", () => {
+      // The runtime parser merges `rawGlobalArgs` per-level via shallow
+      // spread, so each level's array global replaces the previous one's
+      // value rather than accumulating. The completion parser must
+      // match that — `cli --tag a sub --tag b --field <TAB>` should see
+      // `parsedArgs.tag === ['b']` at the resolver, not `['a','b']`.
+      const globalArrayCmd = defineCommand({
+        name: "mycli",
+        subCommands: {
+          sub: defineCommand({
+            name: "sub",
+            args: z.object({
+              field: arg(z.string().optional(), {
+                completion: { custom: { resolve: () => ({ candidates: [] }) } },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const globals = z.object({ tag: arg(z.array(z.string()).default([])) });
+      const ctx = parseCompletionContext(
+        ["--tag", "a", "sub", "--tag", "b", "--field", ""],
+        globalArrayCmd,
+        globals,
+      );
+      expect(ctx.parsedArgs.tag).toEqual(["b"]);
+    });
+
     it("prefers an explicit field named `noFoo` over implicit `foo` negation", () => {
       const cmd = defineCommand({
         name: "shadowcli",
@@ -513,6 +542,27 @@ describe("Dynamic completion (in-process resolver)", () => {
     it("supports MYCLI_BIN override in bash script", () => {
       const dyn = generateCompletion(dynamicCmd, { shell: "bash", programName: "mycli" }).script;
       expect(dyn).toContain("${MYCLI_BIN:-mycli}");
+    });
+
+    it("prefixes a leading-digit programName so the BIN env var is a valid shell name", () => {
+      const cmdDigit = defineCommand({
+        name: "2fa",
+        args: z.object({
+          field: arg(z.string().optional(), {
+            completion: { custom: { resolve: () => ({ candidates: [] }) } },
+          }),
+        }),
+        run: () => {},
+      });
+      const bash = generateCompletion(cmdDigit, { shell: "bash", programName: "2fa" }).script;
+      // bash/zsh forbid digit-leading parameter names; the override env
+      // var must therefore be `_2FA_BIN`, not `2FA_BIN`.
+      expect(bash).toContain("${_2FA_BIN:-2fa}");
+      expect(bash).not.toContain("${2FA_BIN:-");
+      const zsh = generateCompletion(cmdDigit, { shell: "zsh", programName: "2fa" }).script;
+      expect(zsh).toContain("${_2FA_BIN:-2fa}");
+      const fish = generateCompletion(cmdDigit, { shell: "fish", programName: "2fa" }).script;
+      expect(fish).toContain("set -q _2FA_BIN");
     });
 
     it("bash: applies resolver-supplied directive bits via compopt", () => {
