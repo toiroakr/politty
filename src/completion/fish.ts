@@ -122,8 +122,13 @@ function fishValueLines(
       // `_arg_values_<d>`, global deps from `_global_arg_values_<d>` —
       // so a local dep is never accidentally satisfied by a same-named
       // global value supplied at a parent frame.
-      const depExpr = (d: { name: string; isGlobal: boolean }): string =>
-        d.isGlobal ? `$_global_arg_values_${d.name}` : `$_arg_values_${d.name}`;
+      const depExpr = (d: { name: string; isGlobal: boolean }): string => {
+        // Fish variable names accept only alnum + underscore; sanitize the
+        // field name so a hyphenated schema key (e.g. `env-name`) still
+        // produces a valid `$_arg_values_env_name`.
+        const safe = sanitize(d.name);
+        return d.isGlobal ? `$_global_arg_values_${safe}` : `$_arg_values_${safe}`;
+      };
       const depKey =
         location.resolvedDeps.length === 1
           ? `"${depExpr(location.resolvedDeps[0]!)}"`
@@ -511,7 +516,8 @@ export function generateFishCompletion(
   if (hasExpand) {
     // Trackers populate `_arg_values_<field>` global scalars during the
     // main scan loop. Each expand spec looks up the value via the same
-    // variable to pick a case branch.
+    // variable to pick a case branch. `sanitize` keeps the variable
+    // names valid (alnum + underscore) even for hyphenated schema keys.
     lines.push(`function __${fn}_track_opt --no-scope-shadowing`);
     lines.push(`    switch "$argv[1]:$argv[2]"`);
     for (const t of trackedFields) {
@@ -522,7 +528,7 @@ export function generateFishCompletion(
       const cases = t.pathStrs.flatMap((p) => patterns.map((n) => `"${p}:${n}"`)).join(" ");
       const prefix = t.isGlobal ? `_global_arg_values_` : `_arg_values_`;
       lines.push(`        case ${cases}`);
-      lines.push(`            set -g ${prefix}${t.fieldName} "$argv[3]"`);
+      lines.push(`            set -g ${prefix}${sanitize(t.fieldName)} "$argv[3]"`);
     }
     lines.push(`    end`);
     lines.push(`end`);
@@ -534,7 +540,7 @@ export function generateFishCompletion(
       const cases = t.pathStrs.map((p) => `"${p}:${t.position}"`).join(" ");
       const prefix = t.isGlobal ? `_global_arg_values_` : `_arg_values_`;
       lines.push(`        case ${cases}`);
-      lines.push(`            set -g ${prefix}${t.fieldName} "$argv[3]"`);
+      lines.push(`            set -g ${prefix}${sanitize(t.fieldName)} "$argv[3]"`);
     }
     lines.push(`    end`);
     lines.push(`end`);
@@ -658,8 +664,8 @@ export function generateFishCompletion(
     // Both local and global buckets are cleared because the previous
     // completion run may have populated either side.
     for (const t of trackedFields) {
-      lines.push(`    set -e _arg_values_${t.fieldName}`);
-      lines.push(`    set -e _global_arg_values_${t.fieldName}`);
+      lines.push(`    set -e _arg_values_${sanitize(t.fieldName)}`);
+      lines.push(`    set -e _global_arg_values_${sanitize(t.fieldName)}`);
     }
   }
   if (hasArrayExpand) {
@@ -743,7 +749,7 @@ export function generateFishCompletion(
       // letting a parent's `--env` bleed into a child with its own `--env`
       // would feed the wrong value into the child's expand lookup.
       for (const t of trackedFields) {
-        lines.push(`            set -e _arg_values_${t.fieldName}`);
+        lines.push(`            set -e _arg_values_${sanitize(t.fieldName)}`);
       }
       if (hasArrayExpand) {
         for (const spec of arrayExpandSpecs) {
