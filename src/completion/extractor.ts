@@ -17,23 +17,22 @@ import type {
 import { resolveValueCompletion } from "./value-completion-resolver.js";
 
 /**
- * Strip the transient `pending-expand` sentinel from a `resolveValueCompletion`
- * result. The static extractor stashes pending specs into a side-channel and
- * patches the resolved `ValueCompletion` onto the field after sibling
- * choices are known.
+ * Resolve and assign value completion to a field. Pending expand sentinels
+ * are stashed in `pending`; the eventual `resolveExpandTargets` pass replaces
+ * the sentinel with a fully-resolved `{ type: "expand", ... }` via `set`.
  */
-function takeResolvedValueCompletion(
+function assignValueCompletion(
   field: ResolvedFieldMeta,
   pending: PendingExpandTarget[],
   describe: string,
   set: (vc: ValueCompletion) => void,
-): ValueCompletion | undefined {
+): void {
   const raw = resolveValueCompletion(field);
   if (raw?.type === "pending-expand") {
     pending.push({ name: field.name, describe, set, spec: raw.spec });
-    return undefined;
+    return;
   }
-  return raw;
+  if (raw !== undefined) set(raw);
 }
 
 /**
@@ -118,12 +117,9 @@ function fieldToOption(
     required: field.required,
     defaultNegationAccepted,
   };
-  const vc = takeResolvedValueCompletion(field, pending, `--${field.cliName}`, (next) => {
+  assignValueCompletion(field, pending, `--${field.cliName}`, (next) => {
     opt.valueCompletion = next;
   });
-  if (vc !== undefined) {
-    opt.valueCompletion = vc;
-  }
   return opt;
 }
 
@@ -177,12 +173,9 @@ function extractCompletablePositionals(
         required: field.required,
         variadic: field.type === "array",
       };
-      const vc = takeResolvedValueCompletion(field, pending, `<${field.cliName}>`, (next) => {
+      assignValueCompletion(field, pending, `<${field.cliName}>`, (next) => {
         pos.valueCompletion = next;
       });
-      if (vc !== undefined) {
-        pos.valueCompletion = vc;
-      }
       return pos;
     });
 }
