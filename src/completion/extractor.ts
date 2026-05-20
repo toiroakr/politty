@@ -235,6 +235,17 @@ function joinPrefix(parent: string, child: string, sep: string): string {
 }
 
 /**
+ * Expand each parent pathStr by joining every child name (canonical plus
+ * aliases) with `:`. Used to keep alias-expanded path variants in lockstep
+ * across walkers that need to reach the same node from any path the
+ * runtime scanner can produce.
+ */
+function expandChildPathStrs(pathStrs: readonly string[], child: CompletableSubcommand): string[] {
+  const childNames = [child.name, ...(child.aliases ?? [])];
+  return pathStrs.flatMap((p) => childNames.map((n) => (p ? `${p}:${n}` : n)));
+}
+
+/**
  * Collect opt-takes-value case entries for a subcommand tree.
  * Used by bash and zsh generators (identical case syntax: `path:--opt) return 0 ;;`).
  * parentPath is a colon-delimited path (e.g., "" for root, "workspace:user" for nested).
@@ -444,8 +455,7 @@ function walk(
   }
   for (const child of getVisibleSubs(node.subcommands)) {
     const childPath = [...path, child.name];
-    const childNames = [child.name, ...(child.aliases ?? [])];
-    const childPathStrs = pathStrs.flatMap((p) => childNames.map((n) => (p ? `${p}:${n}` : n)));
+    const childPathStrs = expandChildPathStrs(pathStrs, child);
     const childFunc =
       funcSuffix === "root" ? sanitize(child.name) : `${funcSuffix}_${sanitize(child.name)}`;
     walk(child, childPath, childPathStrs, childFunc, out);
@@ -591,9 +601,7 @@ function indexNodesByPath(root: CompletableSubcommand): Map<string, CompletableS
   const recurse = (node: CompletableSubcommand, pathStrs: readonly string[]): void => {
     for (const p of pathStrs) map.set(p, node);
     for (const child of getVisibleSubs(node.subcommands)) {
-      const childNames = [child.name, ...(child.aliases ?? [])];
-      const childPathStrs = pathStrs.flatMap((p) => childNames.map((n) => (p ? `${p}:${n}` : n)));
-      recurse(child, childPathStrs);
+      recurse(child, expandChildPathStrs(pathStrs, child));
     }
   };
   recurse(root, [""]);

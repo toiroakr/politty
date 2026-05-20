@@ -320,6 +320,17 @@ export function parseCompletionContext(
   // descent below.
   let arraysSetInCurrentFrame = new Set<string>();
 
+  /**
+   * Mark the option's cliName plus every alias and (if present) negation
+   * form as consumed. The negation shares the field's "used" slot so
+   * typing either form filters both from subsequent suggestions.
+   */
+  const markUsed = (opt: CompletableOption): void => {
+    usedOptions.add(opt.cliName);
+    for (const a of opt.alias ?? []) usedOptions.add(a);
+    if (opt.negation) usedOptions.add(opt.negation);
+  };
+
   const recordOptionValue = (opt: CompletableOption, value: string): void => {
     const target = effectiveGlobalNames.has(opt.name) ? globalParsedArgs : parsedArgs;
     if (opt.valueType === "array") {
@@ -390,13 +401,7 @@ export function parseCompletionContext(
         for (let idx = 0; idx < chars.length; idx++) {
           const o = resolved[idx];
           if (!o) continue;
-          usedOptions.add(o.cliName);
-          if (o.alias) {
-            for (const a of o.alias) usedOptions.add(a);
-          }
-          if (o.negation) {
-            usedOptions.add(o.negation);
-          }
+          markUsed(o);
           recordBooleanFlag(o, chars[idx]!);
         }
         i++;
@@ -410,15 +415,7 @@ export function parseCompletionContext(
       const opt = findOption(options, optName);
 
       if (opt) {
-        usedOptions.add(opt.cliName);
-        if (opt.alias) {
-          for (const a of opt.alias) usedOptions.add(a);
-        }
-        // Mark the negation as mutually exclusive with the positive flag so
-        // typing either form filters both from subsequent suggestions.
-        if (opt.negation) {
-          usedOptions.add(opt.negation);
-        }
+        markUsed(opt);
 
         if (opt.takesValue) {
           if (hasInlineValue(word)) {
