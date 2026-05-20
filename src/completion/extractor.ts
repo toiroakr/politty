@@ -258,7 +258,9 @@ export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: str
       // scanner skips the value of a valid option spelling.
       // Filter through `effectiveOptionTokens` so a local does not
       // claim a short token a global owns at this frame.
-      const patterns = effectiveOptionTokens(opt, sub.options).map((t) => `${parentPath}:${t}`);
+      const tokens = effectiveOptionTokens(opt, sub.options);
+      if (tokens.length === 0) continue;
+      const patterns = tokens.map((t) => `${parentPath}:${t}`);
       lines.push(`        ${patterns.join("|")}) return 0 ;;`);
     }
   }
@@ -369,7 +371,7 @@ export function trackOptCaseLines(
 ): string[] {
   const lines: string[] = [];
   for (const t of trackedFields) {
-    if (t.isPositional || !t.optionTokens) continue;
+    if (t.isPositional || !t.optionTokens || t.optionTokens.length === 0) continue;
     const joined = t.pathStrs.flatMap((p) => t.optionTokens!.map((n) => `${p}:${n}`)).join("|");
     lines.push(`        ${joined}) ${trackedFieldAssign(t, shell)} ;;`);
   }
@@ -408,6 +410,7 @@ export function trackArrayExpandCaseLines(
 ): string[] {
   const lines: string[] = [];
   for (const spec of arrayExpandSpecs) {
+    if (spec.optionTokens.length === 0) continue;
     const joined = spec.pathStrs
       .flatMap((p) => spec.optionTokens.map((tok) => `${p}:${tok}`))
       .join("|");

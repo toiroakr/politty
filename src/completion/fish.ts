@@ -285,8 +285,11 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
     // runtime's aliasMap accepts so a value-completion trigger fires
     // for every valid spelling of this option (1-char cliName as `-x`,
     // 1-char alias long form `--f`, camelCase of hyphenated names).
-    const conditions = effectiveOptionTokens(opt, options).map((t) => `test "$_prev" = "${t}"`);
-    const cond = conditions.join("; or ");
+    const tokens = effectiveOptionTokens(opt, options);
+    // No surviving spelling means no condition; an empty `if`
+    // generates invalid fish syntax.
+    if (tokens.length === 0) continue;
+    const cond = tokens.map((t) => `test "$_prev" = "${t}"`).join("; or ");
 
     lines.push(`    if ${cond}`);
     for (const vl of valLines) {
@@ -419,7 +422,9 @@ function optTakesValueCases(sub: CompletableSubcommand, parentPath: string): str
       // Use the same full token set as bash/zsh — runtime's aliasMap
       // accepts every spelling these tokens cover, so the takes-value
       // switch must enumerate them all.
-      const patterns = effectiveOptionTokens(opt, sub.options).map((t) => `"${parentPath}:${t}"`);
+      const tokens = effectiveOptionTokens(opt, sub.options);
+      if (tokens.length === 0) continue;
+      const patterns = tokens.map((t) => `"${parentPath}:${t}"`);
       lines.push(`        case ${patterns.join(" ")}`);
       lines.push(`            return 0`);
     }
@@ -550,7 +555,7 @@ export function generateFishCompletion(
     lines.push(`function __${fn}_track_opt --no-scope-shadowing`);
     lines.push(`    switch "$argv[1]:$argv[2]"`);
     for (const t of trackedFields) {
-      if (t.isPositional || !t.optionTokens) continue;
+      if (t.isPositional || !t.optionTokens || t.optionTokens.length === 0) continue;
       const cases = t.pathStrs.flatMap((p) => t.optionTokens!.map((n) => `"${p}:${n}"`)).join(" ");
       const prefix = t.isGlobal ? `_global_arg_values_` : `_arg_values_`;
       lines.push(`        case ${cases}`);
@@ -583,6 +588,7 @@ export function generateFishCompletion(
     lines.push(`function __${fn}_track_array_expand --no-scope-shadowing`);
     lines.push(`    switch "$argv[1]:$argv[2]"`);
     for (const spec of arrayExpandSpecs) {
+      if (spec.optionTokens.length === 0) continue;
       const cases = spec.pathStrs
         .flatMap((p) => spec.optionTokens.map((tok) => `"${p}:${tok}"`))
         .join(" ");

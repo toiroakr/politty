@@ -223,6 +223,10 @@ function optionValueCases(options: CompletableOption[], fn: string, funcSuffix: 
     if (valLines.length === 0) continue;
 
     const patterns = effectiveOptionTokens(opt, options);
+    // An option whose every emitted spelling is shadowed by siblings at
+    // this frame has nothing to pattern-match on. Emitting an empty
+    // `)` branch would break the surrounding case.
+    if (patterns.length === 0) continue;
 
     lines.push(`            ${patterns.join("|")})`);
     for (const vl of valLines) {

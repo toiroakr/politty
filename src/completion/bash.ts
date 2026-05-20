@@ -288,9 +288,13 @@ function optionValueCases(
     });
     if (valLines.length === 0) continue;
 
-    const patternStr = effectiveOptionTokens(opt, options).join("|");
+    const patterns = effectiveOptionTokens(opt, options);
+    // An option whose every emitted spelling is shadowed by siblings at
+    // this frame has nothing to pattern-match on. Emitting an empty
+    // `)` branch would break the surrounding case.
+    if (patterns.length === 0) continue;
 
-    lines.push(`            ${patternStr})`);
+    lines.push(`            ${patterns.join("|")})`);
     for (const vl of valLines) {
       lines.push(`                ${vl}`);
     }
