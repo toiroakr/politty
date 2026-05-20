@@ -465,7 +465,10 @@ export interface ExpandSpecLocation {
  * Long aliases get `--`, single-char aliases get `-`, mirroring the existing
  * tracker case patterns.
  */
-function collectOptionTokens(cliName: string, aliases: readonly string[] | undefined): string[] {
+export function collectOptionTokens(
+  cliName: string,
+  aliases: readonly string[] | undefined,
+): string[] {
   return [`--${cliName}`, ...(aliases?.map(aliasToken) ?? [])];
 }
 

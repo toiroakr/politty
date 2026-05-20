@@ -10,6 +10,7 @@ import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
   binEnvVarName,
   collectExpandSpecs,
+  collectOptionTokens,
   collectRouteEntries,
   collectTrackedFields,
   extractCompletionData,
@@ -196,7 +197,7 @@ function optionValueCases(options: CompletableOption[], fn: string, funcSuffix: 
     });
     if (valLines.length === 0) continue;
 
-    const patterns = [`--${opt.cliName}`, ...(opt.alias?.map(aliasToken) ?? [])];
+    const patterns = collectOptionTokens(opt.cliName, opt.alias);
 
     lines.push(`            ${patterns.join("|")})`);
     for (const vl of valLines) {
