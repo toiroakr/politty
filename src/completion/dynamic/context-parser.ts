@@ -220,15 +220,21 @@ function hasInlineValue(word: string): boolean {
  * For boolean options, the runtime parser accepts the implicit
  * `--no-<cliName>` (and camelCase `--noCliName`) form unless the user
  * opted out via `negation: false` or supplied a custom-string negation
- * (which suppresses the default form). The completion parser must mirror
- * that so dynamic resolvers see the correct flag state.
+ * (which suppresses the default form). Aliases participate too: a
+ * boolean with `alias: "c"` accepts `--no-c` / `--noC` because the
+ * runtime resolves the post-`no-` segment through `aliasMap`. The
+ * completion parser must mirror that so dynamic resolvers see the
+ * correct flag state.
  */
 function isImplicitBooleanNegation(opt: CompletableOption, nameOrAlias: string): boolean {
   if (opt.valueType !== "boolean") return false;
   if (opt.defaultNegationAccepted === false) return false;
-  const hyphenated = `no-${opt.cliName}`;
-  if (nameOrAlias === hyphenated) return true;
-  if (nameOrAlias === toCamelCase(hyphenated)) return true;
+  const candidates = [opt.cliName, ...(opt.alias ?? [])];
+  for (const c of candidates) {
+    const hyphenated = `no-${c}`;
+    if (nameOrAlias === hyphenated) return true;
+    if (nameOrAlias === toCamelCase(hyphenated)) return true;
+  }
   return false;
 }
 

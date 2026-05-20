@@ -192,6 +192,26 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.cache).toBe(false);
     });
 
+    it("records alias-based implicit negation forms as `false`", () => {
+      // Runtime parser resolves the post-`no-` segment through aliasMap,
+      // so `--no-c` and `--noC` both flip a boolean `cache` declared with
+      // `alias: "c"`. The completion parser must mirror that to keep
+      // resolver-visible flag state aligned.
+      const aliasNegCmd = defineCommand({
+        name: "negaliascli",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { alias: "c" }),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const hyphenated = parseCompletionContext(["--no-c", "--field", ""], aliasNegCmd);
+      expect(hyphenated.parsedArgs.cache).toBe(false);
+
+      const camel = parseCompletionContext(["--noC", "--field", ""], aliasNegCmd);
+      expect(camel.parsedArgs.cache).toBe(false);
+    });
+
     it("does not record an implicit negation when the user opted out via `negation: false`", () => {
       const cmd = defineCommand({
         name: "negfalse",
