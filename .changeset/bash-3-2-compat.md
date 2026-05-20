@@ -4,4 +4,4 @@
 
 Generated bash completion scripts now run on Bash 3.2 — including the default `/bin/bash` shipped with macOS — even when the CLI uses `completion.custom.expand` or `completion.custom.resolve`. Associative arrays (`declare -gA`, `local -A`) used by the expand path are replaced with prefix-scalar variables read via indirect expansion (`${!varname}`); the two `mapfile` calls in the expand and resolve paths are rewritten as portable `while IFS= read -r` loops. zsh and fish output are unchanged.
 
-A new `Bash 3.2 compatibility (macOS /bin/bash)` CI job runs the bash completion test suite under `/bin/bash` to guard against regressions. Test helpers honor `POLITTY_BASH_BIN` for local verification: `POLITTY_BASH_BIN=/bin/bash pnpm test -- shell-completion/bash`.
+Regression coverage: snapshot assertions in the bash test suite guard against `declare -A` / `declare -gA` / `local -A` / `mapfile` / `readarray` leaking back into the generated script. Test helpers also honor `POLITTY_BASH_BIN` so the bash test suite can be re-run under arbitrary bash binaries (e.g. `POLITTY_BASH_BIN=/bin/bash pnpm test -- shell-completion/bash` to exercise the macOS default bash locally).
