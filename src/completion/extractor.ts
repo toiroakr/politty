@@ -833,23 +833,70 @@ export function collectTrackedFields(
       const opt = node.options.find((o) => o.name === dep);
       if (opt) {
         const optIsGlobal = opt.isGlobal === true;
-        // A local dep tracker stays bound to the host frame: locals don't
-        // propagate across subcommand boundaries the way globals do. A
-        // dep that resolves to a propagated global (host is local, dep
-        // happens to be global) still tracks at the host frame plus every
-        // ancestor — matching the global semantics for that dep.
-        const intermediatePathStrs = optIsGlobal ? spec.intermediatePathStrs : [];
-        const pathStrs = [...spec.pathStrs, ...intermediatePathStrs];
-        const key = optIsGlobal ? `g::${dep}` : `lo::${spec.pathStr}::${dep}`;
+        if (optIsGlobal) {
+          // Local expand depending on a propagated global tracks at the
+          // host frame AND every ancestor the scanner crosses. The leaf
+          // frame may have a local option whose emitted token shadows
+          // one of the global's aliases — but that shadow does NOT
+          // apply at ancestor frames, where the runtime scanner sees
+          // only globals. Mirror the `spec.isGlobal` branch above:
+          // compute per-leaf token sets, keep full tokens on ancestors,
+          // group by token-set so each unique frame group becomes its
+          // own tracker bucket.
+          const allTokens = collectOptionTokens(opt.cliName, opt.alias);
+          const groups = new Map<string, { tokens: readonly string[]; paths: string[] }>();
+          const recordLeaf = (path: string, tokens: readonly string[]): void => {
+            if (tokens.length === 0) return;
+            const tokenKey = tokens.join(" ");
+            let group = groups.get(tokenKey);
+            if (!group) {
+              group = { tokens, paths: [] };
+              groups.set(tokenKey, group);
+            }
+            group.paths.push(path);
+          };
+          for (const p of spec.pathStrs) {
+            const n = nodeByPath.get(p);
+            if (!n) continue;
+            const claimed = new Set<string>();
+            for (const o of n.options) {
+              if (o.isGlobal === true) continue;
+              for (const t of localShadowingTokens(o.cliName, o.alias)) claimed.add(t);
+            }
+            recordLeaf(
+              p,
+              allTokens.filter((t) => !claimed.has(t)),
+            );
+          }
+          for (const p of spec.intermediatePathStrs) recordLeaf(p, allTokens);
+          for (const [tokenKey, group] of groups) {
+            const key = `g::${dep}::${tokenKey}`;
+            addPath(
+              key,
+              {
+                fieldName: dep,
+                isGlobal: true,
+                isPositional: false,
+                optionTokens: group.tokens,
+              },
+              group.paths,
+            );
+          }
+          continue;
+        }
+        // A local dep tracker stays bound to the host frame: locals
+        // don't propagate across subcommand boundaries the way globals
+        // do.
+        const key = `lo::${spec.pathStr}::${dep}`;
         addPath(
           key,
           {
             fieldName: dep,
-            isGlobal: optIsGlobal,
+            isGlobal: false,
             isPositional: false,
             optionTokens: effectiveOptionTokens(opt, node.options),
           },
-          pathStrs,
+          spec.pathStrs,
         );
       }
     }

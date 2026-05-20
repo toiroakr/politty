@@ -169,7 +169,7 @@ function bashValueLines(
         `    local -a _vals=()`,
         `    local _line`,
         `    while IFS= read -r _line; do _vals+=("$_line"); done <<< "$_raw"`,
-        `    local _c _ck _seen_keys=" "`,
+        `    local _c _ck _seen_keys=" " _had_key=0`,
         `    for _c in "\${_vals[@]}"; do`,
         `        [[ -z "$_c" ]] && continue`,
         `        if [[ "$_c" == *=* ]]; then`,
@@ -179,6 +179,7 @@ function bashValueLines(
         `                [[ "$_seen_keys" == *" $_ck "* ]] && continue`,
         `                _seen_keys+="$_ck "`,
         `                _c="\${_ck}="`,
+        `                _had_key=1`,
         // Value stage: drop bare `key=` candidates so the value picker is
         // not cluttered by the key entry the user already typed.
         `            elif [[ "$_c" != *=?* ]]; then`,
@@ -187,7 +188,11 @@ function bashValueLines(
         `        fi`,
         `        [[ "$_c" == "$_cur"* ]] && COMPREPLY+=(${inlineExpr})`,
         `    done`,
-        `    compopt -o nospace 2>/dev/null`,
+        // Only the `key=` candidates need `nospace` so the user can keep
+        // typing the value after TAB. Scalar candidates and the value
+        // stage of `key=value` should accept with the usual trailing
+        // space, matching the dynamic resolver's NoSpace-gated path.
+        `    if (( _had_key )); then compopt -o nospace 2>/dev/null; fi`,
         `fi`,
         // bash 3.2 ignores the earlier `compopt +o default`, so an
         // entry-empty lookup OR a filtered-out match list both need
