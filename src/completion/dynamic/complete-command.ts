@@ -74,7 +74,14 @@ export function createDynamicCompleteCommand(
 
       // Detect bash inline option-value prefix and strip it from currentWord
       // so resolvers/formatters never have to peel `--field=` off themselves.
-      const inlinePrefix = detectInlinePrefix(context.currentWord);
+      // Only apply this stripping when we are actually completing an
+      // option value — positionals (e.g. `cli -- --foo=<TAB>`) can
+      // legitimately start with `--foo=` and the prefix is part of the
+      // value, not a sentinel to remove.
+      const inlinePrefix =
+        context.completionType === "option-value" && context.targetOption
+          ? detectInlinePrefix(context.currentWord)
+          : undefined;
       const effectiveWord = inlinePrefix
         ? context.currentWord.slice(inlinePrefix.length)
         : context.currentWord;
