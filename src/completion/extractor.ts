@@ -905,15 +905,13 @@ export function extractCompletionData(
   // every frame, so the resolved table needs to cover those keys too.
   let globalOptions: CompletableOption[] = [];
   if (globalArgsSchema) {
-    const globalExtracted = extractFields(globalArgsSchema);
     const globalPending: PendingExpandTarget[] = [];
-    globalOptions = globalExtracted.fields
-      .filter((field) => !field.positional)
-      .map((field) => {
-        const opt = fieldToOption(field, globalPending);
+    globalOptions = fieldsToOptions(extractFields(globalArgsSchema).fields, globalPending).map(
+      (opt) => {
         opt.isGlobal = true;
         return opt;
-      });
+      },
+    );
     // Resolve `expand` specs on global options against the globals themselves
     // (globals can depend on other globals but not on subcommand-local args).
     resolveExpandTargets(
