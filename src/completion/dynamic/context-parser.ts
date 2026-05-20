@@ -296,21 +296,30 @@ export function parseCompletionContext(
   let positionalValues: string[] = [];
   const globalParsedArgs: Record<string, unknown> = {};
 
-  // Effective global options for the current frame: globals minus those
-  // shadowed by a same-cliName local option. Recomputed at each subcommand
-  // descent so a local declaration doesn't accidentally route to globals.
-  let effectiveGlobalNames = new Set<string>();
-  const refreshEffectiveGlobalNames = (cmd: AnyCommand): void => {
+  // Names of every option declared by the global schema, plus a per-frame
+  // view filtered to those NOT shadowed by a local of the same cliName.
+  // The unfiltered set is consulted on subcommand descent to migrate any
+  // shadowed-global value from local `parsedArgs` into `globalParsedArgs`
+  // — runtime's `scanForSubcommand` extracts these flags as globals when
+  // they precede a subcommand (it only knows the global schema), so the
+  // value must survive descent the same way. The filtered set is used at
+  // write-time so that within a frame the unshadowed globals still go
+  // straight to `globalParsedArgs` and shadowed ones land locally (where
+  // runtime's leaf `separateGlobalArgs` lets the local win when no
+  // further descent occurs).
+  const globalOptionNames = new Set(globalOptions.map((g) => g.name));
+  let unshadowedGlobalNames = new Set<string>();
+  const refreshUnshadowedGlobalNames = (cmd: AnyCommand): void => {
     if (globalOptions.length === 0) {
-      effectiveGlobalNames = new Set();
+      unshadowedGlobalNames = new Set();
       return;
     }
     const localCliNames = new Set(extractOptions(cmd).map((o) => o.cliName));
-    effectiveGlobalNames = new Set(
+    unshadowedGlobalNames = new Set(
       globalOptions.filter((g) => !localCliNames.has(g.cliName)).map((g) => g.name),
     );
   };
-  refreshEffectiveGlobalNames(currentCommand);
+  refreshUnshadowedGlobalNames(currentCommand);
 
   // Names of array options written in the current command frame. Used to
   // mirror the runtime's per-frame array semantics: the first `--arr v`
@@ -332,7 +341,7 @@ export function parseCompletionContext(
   };
 
   const recordOptionValue = (opt: CompletableOption, value: string): void => {
-    const target = effectiveGlobalNames.has(opt.name) ? globalParsedArgs : parsedArgs;
+    const target = unshadowedGlobalNames.has(opt.name) ? globalParsedArgs : parsedArgs;
     if (opt.valueType === "array") {
       if (arraysSetInCurrentFrame.has(opt.name)) {
         const existing = target[opt.name];
@@ -354,7 +363,7 @@ export function parseCompletionContext(
    * boolean siblings entirely.
    */
   const recordBooleanFlag = (opt: CompletableOption, nameOrAlias: string): void => {
-    const target = effectiveGlobalNames.has(opt.name) ? globalParsedArgs : parsedArgs;
+    const target = unshadowedGlobalNames.has(opt.name) ? globalParsedArgs : parsedArgs;
     const matchesExplicitNegation =
       opt.negation !== undefined &&
       (opt.negation === nameOrAlias ||
@@ -447,7 +456,20 @@ export function parseCompletionContext(
       subcommandPath.push(word);
       currentCommand = subcommand;
       options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
-      refreshEffectiveGlobalNames(currentCommand);
+      // Migrate any shadowed-global value the parent frame recorded
+      // locally into `globalParsedArgs`. Runtime's `scanForSubcommand`
+      // captured the same flag as a global token when it preceded this
+      // descent (the scan only knows the global schema), so the value
+      // must persist into the child the same way. The reverse direction
+      // — moving an already-global value back to local — never applies
+      // because the shadow check at write-time only put unshadowed
+      // globals into `globalParsedArgs`.
+      for (const key of Object.keys(parsedArgs)) {
+        if (globalOptionNames.has(key)) {
+          globalParsedArgs[key] = parsedArgs[key];
+        }
+      }
+      refreshUnshadowedGlobalNames(currentCommand);
       usedOptions.clear(); // Reset for new subcommand
       positionalCount = 0;
       parsedArgs = {};
@@ -551,7 +573,7 @@ export function parseCompletionContext(
   let previousValues: string[] = [];
   if (targetOption) {
     if (targetOption.valueType === "array") {
-      const store = effectiveGlobalNames.has(targetOption.name) ? globalParsedArgs : parsedArgs;
+      const store = unshadowedGlobalNames.has(targetOption.name) ? globalParsedArgs : parsedArgs;
       const stored = store[targetOption.name];
       previousValues = Array.isArray(stored) ? (stored as string[]) : [];
     }

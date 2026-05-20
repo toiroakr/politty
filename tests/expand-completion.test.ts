@@ -961,6 +961,39 @@ describe("expand completion", () => {
       expect(script).toContain(`_enc_key+="_$(__mycli_enc "$_enc_v")"`);
     });
 
+    it("fish multi-dep case keys split each segment so `\\x1f` stays outside double quotes", () => {
+      // Fish does not interpret `\x` escapes inside double quotes, so a
+      // case pattern like `"k1\x1fk2"` waits for the literal four-character
+      // sequence `\x1f` and never matches the switch expression (which
+      // carries an actual 0x1f byte between segments). The fix joins
+      // double-quoted segments with an UNQUOTED `\x1f`, mirroring the
+      // switch expression's layout.
+      const cli = defineCommand({
+        name: "mycli",
+        args: z.object({
+          a: arg(z.string(), { completion: { custom: { choices: ["x"] } } }),
+          b: arg(z.string(), { completion: { custom: { choices: ["y"] } } }),
+          out: arg(z.string().optional(), {
+            completion: {
+              custom: {
+                expand: {
+                  dependsOn: ["a", "b"],
+                  enumerate: (deps) => [{ value: `out-${deps.a}-${deps.b}` }],
+                },
+              },
+            },
+          }),
+        }),
+      });
+      const { script } = generateFishCompletion(cli, {
+        shell: "fish",
+        programName: "mycli",
+      });
+      expect(script).toContain(`switch "$_arg_values_a"\\x1f"$_arg_values_b"`);
+      expect(script).toContain(`case "x"\\x1f"y"`);
+      expect(script).not.toMatch(/case "[^"]*\\x1f[^"]*"/);
+    });
+
     it("encodes `_` so dep values cannot collide with hex escapes or the join separator", () => {
       // If `_` passed through unchanged, dep `-` (→ `_2D`) would collide
       // with the literal dep `_2D`, and `(a, _b)` would render the same

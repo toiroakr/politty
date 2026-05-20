@@ -898,6 +898,49 @@ describe("Dynamic completion (in-process resolver)", () => {
       // the descent and is visible to the subcommand resolver.
       expect(ctx.parsedArgs.profile).toBe("prod");
     });
+
+    it("migrates a parent's shadowed-global value into globals on descent", () => {
+      // Runtime's `scanForSubcommand` only knows the global schema, so a
+      // global-named flag placed at a parent frame that has a child is
+      // harvested into globals — even when the parent redeclares the
+      // flag locally. The parser must mirror this: the shadow keeps the
+      // value local while we're still on the parent frame, but on
+      // descent the value migrates to `globalParsedArgs` so the child's
+      // resolver sees it.
+      const child = defineCommand({
+        name: "child",
+        args: z.object({
+          field: arg(z.string(), {
+            completion: {
+              custom: {
+                resolve: ({ parsedArgs }) => ({
+                  candidates: parsedArgs.profile === "prod" ? ["live"] : ["dev"],
+                }),
+              },
+            },
+          }),
+        }),
+        run: () => {},
+      });
+      const parentWithShadow = defineCommand({
+        name: "parent",
+        args: z.object({
+          // Local `profile` shadows the global at the parent frame.
+          profile: arg(z.string().optional()),
+        }),
+        subCommands: { child },
+      });
+      const root = defineCommand({
+        name: "mycli",
+        subCommands: { parent: parentWithShadow },
+      });
+      const ctx = parseCompletionContext(
+        ["parent", "--profile", "prod", "child", "--field", ""],
+        root,
+        globalArgs,
+      );
+      expect(ctx.parsedArgs.profile).toBe("prod");
+    });
   });
 
   describe("Candidate values starting with `:` survive the directive filter", () => {

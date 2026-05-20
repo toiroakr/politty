@@ -124,7 +124,13 @@ function fishValueLines(
         : `$_used_field_keys_${bucket}`;
       const out: string[] = [`switch ${depKey}`];
       for (const entry of vc.table) {
-        out.push(`    case "${entry.key.map(fishCaseEscape).join("\\x1f")}"`);
+        // Mirror `depKey`'s layout: each segment is its own double-quoted
+        // string with an UNQUOTED `\x1f` joining them. Fish does not honor
+        // `\x` escapes inside double quotes, so `case "k1\x1fk2"` would
+        // wait for a literal `\x1f` sequence and never match the switch
+        // expression (which carries the actual 0x1f byte).
+        const casePattern = entry.key.map((k) => `"${fishCaseEscape(k)}"`).join(`\\x1f`);
+        out.push(`    case ${casePattern}`);
         for (const c of entry.candidates) {
           const echoLine = c.description
             ? `echo "${escapeDesc(c.value)}\t${escapeDesc(c.description)}"`
