@@ -153,7 +153,10 @@ function adaptValueForGlobal(value: unknown, global: CompletableOption): unknown
     if (Array.isArray(value)) return value;
     return [value];
   }
-  if (Array.isArray(value)) return value[0];
+  // Runtime's argv parser uses last-wins for scalars, so picking the
+  // final element matches what `parseArgv` would have produced when
+  // multiple matching tokens reach the global scalar.
+  if (Array.isArray(value)) return value.at(-1);
   return value;
 }
 

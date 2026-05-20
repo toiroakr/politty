@@ -1118,6 +1118,36 @@ describe("expand completion", () => {
       expect(script).not.toMatch(/case "[^"]*\\x1f[^"]*"/);
     });
 
+    it("seeds an empty COMPREPLY sentinel for the no-entry bash branch so 3.2 does not file-fall-back", () => {
+      // Bash 3.2 lacks compopt, so the inline expand path's
+      // `compopt +o default 2>/dev/null` is a silent no-op. When the
+      // expand lookup yields no entry, the function must leave COMPREPLY
+      // non-empty (here: a single empty string) so the script's
+      // `complete -o default` registration does not fall back to
+      // filename completion.
+      const cli = defineCommand({
+        name: "mycli",
+        args: z.object({
+          a: arg(z.string(), { completion: { custom: { choices: ["x"] } } }),
+          out: arg(z.string().optional(), {
+            completion: {
+              custom: {
+                expand: {
+                  dependsOn: ["a"],
+                  enumerate: () => [{ value: "only" }],
+                },
+              },
+            },
+          }),
+        }),
+      });
+      const { script } = generateBashCompletion(cli, {
+        shell: "bash",
+        programName: "mycli",
+      });
+      expect(script).toMatch(/if \[\[ -n "\$_raw" \]\];[\s\S]*?else[\s\S]*?COMPREPLY=\( "" \)/);
+    });
+
     it("encodes `_` so dep values cannot collide with hex escapes or the join separator", () => {
       // If `_` passed through unchanged, dep `-` (→ `_2D`) would collide
       // with the literal dep `_2D`, and `(a, _b)` would render the same

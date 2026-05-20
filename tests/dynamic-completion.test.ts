@@ -1077,6 +1077,39 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.env).toBe("prod");
     });
 
+    it("takes the LAST element when migrating an array-typed local into a scalar global", () => {
+      // Parent declares a local array `localProfiles` aliased `-p`; the
+      // global `profile` is scalar with alias `-p`. Runtime's
+      // `parseArgv` does last-wins for scalar globals, so the migrated
+      // value the child resolver sees must be the trailing array
+      // element, not the first.
+      const globalsScalar = z.object({
+        profile: arg(z.string().optional(), { alias: "p" }),
+      });
+      const child = defineCommand({
+        name: "child",
+        args: z.object({ field: arg(z.string().optional()) }),
+        run: () => {},
+      });
+      const parent = defineCommand({
+        name: "parent",
+        args: z.object({
+          localProfiles: arg(z.array(z.string()).default([]), { alias: "p" }),
+        }),
+        subCommands: { child },
+      });
+      const root = defineCommand({
+        name: "mycli",
+        subCommands: { parent },
+      });
+      const ctx = parseCompletionContext(
+        ["parent", "-p", "dev", "-p", "prod", "child", "--field", ""],
+        root,
+        globalsScalar,
+      );
+      expect(ctx.parsedArgs.profile).toBe("prod");
+    });
+
     it("wraps a scalar-typed local value into an array when migrating to an array-typed global", () => {
       // Token collision between a parent's local scalar (`title`, alias
       // `-t`) and a global array (`tags`, alias `-t`). The runtime

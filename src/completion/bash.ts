@@ -155,14 +155,13 @@ function bashValueLines(
           ]
         : [];
       return [
-        // Suppress bash's `-o default` filename fallback before any
-        // early-return so an expand spec with no candidates does not
-        // silently degrade into file completion.
+        // Suppress bash's `-o default` filename fallback. bash 4+ honors
+        // this `compopt`; bash 3.2 silently fails the call, so the
+        // no-entry branch below ALSO seeds COMPREPLY with an empty
+        // sentinel to keep the `complete -o default` registration from
+        // falling back to filenames when no candidates are produced.
         `compopt +o default 2>/dev/null`,
         ...encLines,
-        // If no entry was emitted for this dep combination, indirect
-        // expansion yields the empty string and the block below is a
-        // no-op — no separate guard needed.
         `local _varname=${varName}__\${_enc_key}`,
         `local _raw="\${!_varname:-}"`,
         `if [[ -n "$_raw" ]]; then`,
@@ -176,6 +175,8 @@ function bashValueLines(
         `        [[ "$_c" == "$_cur"* ]] && COMPREPLY+=(${inlineExpr})`,
         `    done`,
         `    compopt -o nospace 2>/dev/null`,
+        `else`,
+        `    COMPREPLY=( "" )`,
         `fi`,
       ];
     }
@@ -537,7 +538,13 @@ export function generateBashCompletion(
     lines.push(`            compopt -o default 2>/dev/null`);
     lines.push(`        fi`);
     lines.push(`    else`);
+    // Default branch: no FileCompletion / DirectoryCompletion bit set. On
+    // bash 4+ `compopt +o default` suppresses the filename fallback; on
+    // bash 3.2 compopt is absent, so also seed an empty sentinel if no
+    // resolver candidates landed in COMPREPLY to keep
+    // `complete -o default` from falling through to filenames.
     lines.push(`        compopt +o default 2>/dev/null`);
+    lines.push(`        if (( \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
     lines.push(`    fi`);
     lines.push(`    if (( _directive & ${CompletionDirective.NoSpace} )); then`);
     lines.push(`        compopt -o nospace 2>/dev/null`);
