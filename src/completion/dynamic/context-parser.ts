@@ -190,11 +190,14 @@ function parsePreSubGlobals(
       if (withoutDash.length > 1) break;
     }
     const parsed = parseOption(word);
-    const opt = globalOptions.find(
-      (o) =>
-        matchesExplicit(o, parsed.name, parsed.isLong) ||
-        isImplicitBooleanNegation(o, parsed.name, parsed.isLong),
-    );
+    // Mirror `findOption`: explicit matches across the whole option list
+    // win over any implicit boolean negation. With a value-taking
+    // `noFoo` alongside a boolean `foo`, `--no-foo` is the runtime's
+    // explicit `noFoo` even if `foo` appears earlier in the list and
+    // would also accept `--no-foo` as its implicit negation.
+    const opt =
+      globalOptions.find((o) => matchesExplicit(o, parsed.name, parsed.isLong)) ??
+      globalOptions.find((o) => isImplicitBooleanNegation(o, parsed.name, parsed.isLong));
     if (!opt) break;
     if (opt.takesValue) {
       if (hasInlineValue(word)) {
