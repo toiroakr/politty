@@ -150,18 +150,49 @@ export function quotedAvailabilityTokens(
   }
   // Drop tokens runtime would NOT route to this option. For a LOCAL
   // option, a short token owned by a global at the same frame is
-  // never consumed locally, so guarding on it would falsely suppress
-  // the local's option-name suggestion after the global was used.
-  if (options?.isGlobal !== true && options?.frameOptions) {
-    const globalShort = globalShortTokens(options.frameOptions);
-    if (globalShort.size > 0) {
-      const localExplicitShort = new Set(
-        (aliases ?? []).filter((a) => a.length === 1).map((a) => `-${a}`),
-      );
-      for (const g of globalShort) {
-        if (!localExplicitShort.has(g)) tokens.delete(g);
+  // never consumed locally. For a GLOBAL option, every spelling a
+  // local at the frame owns (long-form cliName, explicit aliases) is
+  // routed to the local — guarding on it would falsely suppress the
+  // global's canonical suggestion after the local was used.
+  if (options?.frameOptions) {
+    if (options.isGlobal === true) {
+      for (const o of options.frameOptions) {
+        if (o.isGlobal === true) continue;
+        for (const t of localOwnedTokens(o.cliName, o.alias)) tokens.delete(t);
+      }
+    } else {
+      const globalShort = globalShortTokens(options.frameOptions);
+      if (globalShort.size > 0) {
+        const localExplicitShort = new Set(
+          (aliases ?? []).filter((a) => a.length === 1).map((a) => `-${a}`),
+        );
+        for (const g of globalShort) {
+          if (!localExplicitShort.has(g)) tokens.delete(g);
+        }
       }
     }
   }
   return [...tokens].map((t) => `"${t}"`);
+}
+
+/**
+ * Tokens the runtime's `separateGlobalArgs` would consider locally
+ * owned at the leaf — long-form cliName plus every EXPLICIT alias
+ * spelling. Mirrors `localShadowingTokens` in extractor.ts but is
+ * kept here so the availability-guard path does not pull in the
+ * extractor module. Excludes the auto-derived `-x` for a 1-char
+ * cliName because that short form lives in the local aliasMap only
+ * when an explicit alias declares it.
+ */
+function localOwnedTokens(cliName: string, aliases: readonly string[] | undefined): string[] {
+  const out = [`--${cliName}`];
+  if (cliName.includes("-")) out.push(`--${toCamelCase(cliName)}`);
+  if (aliases) {
+    for (const a of aliases) {
+      out.push(aliasToken(a));
+      if (a.length === 1) out.push(`--${a}`);
+      else if (a.includes("-")) out.push(`--${toCamelCase(a)}`);
+    }
+  }
+  return out;
 }

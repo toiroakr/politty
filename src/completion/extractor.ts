@@ -526,16 +526,15 @@ export function effectiveOptionTokens(
 ): string[] {
   const all = collectOptionTokens(opt.cliName, opt.alias);
   if (opt.isGlobal === true) {
-    // Long-form tokens claimed by a local's cliName (`--e` for
-    // \`cliName: "e"\`) or an explicit alias are routed to the local
-    // by \`separateGlobalArgs\`, so the global's value-completion case
-    // must not include them. Short forms are still owned by the
-    // global unless the local explicitly aliases them.
+    // Tokens any local at the frame owns are routed by
+    // `separateGlobalArgs` to the local, never to the global. Pull the
+    // full owned spelling set via `localShadowingTokens` so a local
+    // `alias: "e"` (which owns both `-e` and `--e`) excludes both forms
+    // from the global's value-completion case, not just one.
     const localClaimed = new Set<string>();
     for (const o of frameOptions) {
       if (o.isGlobal === true) continue;
-      localClaimed.add(`--${o.cliName}`);
-      for (const a of o.alias ?? []) localClaimed.add(a.length === 1 ? `-${a}` : `--${a}`);
+      for (const t of localShadowingTokens(o.cliName, o.alias)) localClaimed.add(t);
     }
     return all.filter((t) => !localClaimed.has(t));
   }
