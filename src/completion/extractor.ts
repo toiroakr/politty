@@ -506,21 +506,14 @@ export interface ExpandSpecLocation {
 }
 
 /**
- * Build the runtime token list used by shell scanners to recognise an option.
- * Long aliases get `--`, single-char aliases get `-`, mirroring the existing
- * tracker case patterns. A single-character cliName (e.g. \`x\`) is also
- * reachable as `-x` — runtime's `aliasMap` lookup for short flags falls
- * through to the canonical name — so emit that short form too.
- */
-/**
  * Compute the option token set the runtime would actually route to
  * `opt` at the given frame. Globals shadow LOCAL short tokens of the
- * same letter (runtime's \`separateGlobalArgs\` harvests \`-x\` for the
- * global unless the local explicitly declares \`alias: "x"\`), so a
- * local cliName \`x\` with no alias must NOT emit \`-x\` in its
+ * same letter (runtime's `separateGlobalArgs` harvests `-x` for the
+ * global unless the local explicitly declares `alias: "x"`), so a
+ * local cliName `x` with no alias must NOT emit `-x` in its
  * tracker / value-completion / takes-value cases when a global at the
- * frame owns that token. Long forms are unaffected (the codex review
- * scoped the precedence to short aliases).
+ * frame owns that token. Long forms are unaffected — precedence is
+ * scoped to short aliases.
  */
 export function effectiveOptionTokens(
   opt: CompletableOption,
