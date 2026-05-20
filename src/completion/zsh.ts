@@ -26,8 +26,8 @@ import {
   trackPosCaseLines,
 } from "./extractor.js";
 import {
-  aliasToken,
   ansiC,
+  quotedAvailabilityTokens,
   resolveExpandDepGlobality,
   type ResolvedExpandDep,
 } from "./shell-shared.js";
@@ -264,11 +264,7 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
       lines.push(`        _opts+=("--${opt.cliName}${desc}")`);
       continue;
     }
-    const patterns = [
-      `"--${opt.cliName}"`,
-      ...(opt.alias?.map((a) => `"${aliasToken(a)}"`) ?? []),
-      ...(opt.negation ? [`"--${opt.negation}"`] : []),
-    ];
+    const patterns = quotedAvailabilityTokens(opt.cliName, opt.alias, opt.negation);
     const guard = `__${fn}_not_used ${patterns.join(" ")}`;
     const negDesc = opt.negationDescription ? `:${escapeDesc(opt.negationDescription)}` : desc;
     const entries: Array<{ name: string; desc: string }> = [{ name: opt.cliName, desc }];

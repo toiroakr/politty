@@ -18,7 +18,12 @@ import {
   hasDynamicCompletion,
   sanitize,
 } from "./extractor.js";
-import { aliasToken, resolveExpandDepGlobality, type ResolvedExpandDep } from "./shell-shared.js";
+import {
+  aliasToken,
+  quotedAvailabilityTokens,
+  resolveExpandDepGlobality,
+  type ResolvedExpandDep,
+} from "./shell-shared.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -265,11 +270,7 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
       lines.push(`        echo "--${opt.cliName}\t${desc}"`);
       continue;
     }
-    const checks = [
-      `"--${opt.cliName}"`,
-      ...(opt.alias?.map((a) => `"${aliasToken(a)}"`) ?? []),
-      ...(opt.negation ? [`"--${opt.negation}"`] : []),
-    ];
+    const checks = quotedAvailabilityTokens(opt.cliName, opt.alias, opt.negation);
     const guard = `__${fn}_not_used ${checks.join(" ")}`;
     const negDesc = opt.negationDescription ? escapeDesc(opt.negationDescription) : desc;
     const entries: Array<{ name: string; desc: string }> = [{ name: opt.cliName, desc }];

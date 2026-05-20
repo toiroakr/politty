@@ -67,3 +67,21 @@ export function ansiC(s: string): string {
 export function aliasToken(alias: string): string {
   return alias.length === 1 ? `-${alias}` : `--${alias}`;
 }
+
+/**
+ * Build the quoted-token list bash/zsh/fish pass to `__<fn>_not_used` to
+ * decide whether an option (and its negation form, if any) is still
+ * available. Quoting style (`"…"`) is identical across all three shells,
+ * so the helper lives here instead of being re-derived per generator.
+ */
+export function quotedAvailabilityTokens(
+  cliName: string,
+  aliases: readonly string[] | undefined,
+  negation: string | undefined,
+): string[] {
+  return [
+    `"--${cliName}"`,
+    ...(aliases?.map((a) => `"${aliasToken(a)}"`) ?? []),
+    ...(negation ? [`"--${negation}"`] : []),
+  ];
+}
