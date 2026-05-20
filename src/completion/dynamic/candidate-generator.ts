@@ -263,20 +263,14 @@ function generateSubcommandCandidates(context: CompletionContext): CandidateResu
 
   // Add subcommands (context.subcommands already includes aliases)
   for (const name of context.subcommands) {
-    // Try direct lookup first, then alias lookup
-    let description: string | undefined;
-    const sub = context.currentCommand.subCommands?.[name];
-    if (sub) {
-      description = resolveSubCommandMeta(sub)?.description;
-    } else {
-      const canonical = resolveSubCommandAlias(context.currentCommand, name);
-      if (canonical) {
-        const resolved = context.currentCommand.subCommands?.[canonical];
-        if (resolved) {
-          description = resolveSubCommandMeta(resolved)?.description;
-        }
-      }
-    }
+    // Direct lookup first, fall back to alias resolution.
+    const subs = context.currentCommand.subCommands;
+    const direct = subs?.[name];
+    const aliasCanonical = direct
+      ? undefined
+      : resolveSubCommandAlias(context.currentCommand, name);
+    const resolved = direct ?? (aliasCanonical ? subs?.[aliasCanonical] : undefined);
+    const description = resolved ? resolveSubCommandMeta(resolved)?.description : undefined;
 
     candidates.push({
       value: name,

@@ -145,19 +145,15 @@ function normaliseCandidates(
   const out: ResolvedExpandCandidate[] = [];
   const seen = new Set<string>();
   for (const item of raw) {
-    if (typeof item === "string") {
-      if (seen.has(item)) continue;
-      seen.add(item);
-      out.push({ value: item });
-    } else {
-      if (seen.has(item.value)) continue;
-      seen.add(item.value);
-      const entry: ResolvedExpandCandidate = { value: item.value };
-      if (item.description !== undefined) {
-        entry.description = item.description;
-      }
-      out.push(entry);
+    const value = typeof item === "string" ? item : item.value;
+    if (seen.has(value)) continue;
+    seen.add(value);
+    const entry: ResolvedExpandCandidate = { value };
+    // Guarded so `exactOptionalPropertyTypes` doesn't reject `undefined`.
+    if (typeof item !== "string" && item.description !== undefined) {
+      entry.description = item.description;
     }
+    out.push(entry);
   }
   return out;
 }
