@@ -613,7 +613,23 @@ export function generateBashCompletion(
       lines.push(`        ${joined})`);
       lines.push(`            if [[ "$3" == *=* ]]; then`);
       lines.push(`                local _k="\${3%%=*}"`);
-      lines.push(`                [[ -n "$_k" ]] && ${bucketVar}[${bucket}]+=" $_k "`);
+      if (spec.isGlobal) {
+        // Mirror the runtime's per-frame array merge: the first write
+        // to a global array in this frame replaces the inherited bucket,
+        // subsequent writes append. Without this, candidates suppressed
+        // by a parent frame would stay suppressed even after the child
+        // re-declares the option.
+        lines.push(`                if [[ -n "$_k" ]]; then`);
+        lines.push(`                    if [[ -z "\${_global_arr_seen[${bucket}]:-}" ]]; then`);
+        lines.push(`                        ${bucketVar}[${bucket}]=" $_k "`);
+        lines.push(`                        _global_arr_seen[${bucket}]=1`);
+        lines.push(`                    else`);
+        lines.push(`                        ${bucketVar}[${bucket}]+=" $_k "`);
+        lines.push(`                    fi`);
+        lines.push(`                fi`);
+      } else {
+        lines.push(`                [[ -n "$_k" ]] && ${bucketVar}[${bucket}]+=" $_k "`);
+      }
       lines.push(`            fi`);
       lines.push(`            ;;`);
     }
@@ -723,6 +739,10 @@ export function generateBashCompletion(
   if (hasArrayExpand) {
     lines.push(`    local -A _used_field_keys=()`);
     lines.push(`    local -A _global_used_field_keys=()`);
+    // Per-frame seen-set: marks which global array buckets have been
+    // written in the current frame so the first write replaces the
+    // inherited entries. Cleared on every subcommand descent below.
+    lines.push(`    local -A _global_arr_seen=()`);
   }
   lines.push(``);
   lines.push(`    local _j=0`);
@@ -789,7 +809,9 @@ export function generateBashCompletion(
       // `dependsOn` is scoped to siblings on the same command frame, so
       // letting a parent's `--env` bleed into a child with its own `--env`
       // would feed the wrong value into the child's expand lookup.
-      const clearState = hasArrayExpand ? `_arg_values=(); _used_field_keys=()` : `_arg_values=()`;
+      const clearState = hasArrayExpand
+        ? `_arg_values=(); _used_field_keys=(); _global_arr_seen=()`
+        : `_arg_values=()`;
       lines.push(
         `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; ${clearState}; else __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; (( _pos_count++ )); fi`,
       );

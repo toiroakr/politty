@@ -548,9 +548,19 @@ export function generateFishCompletion(
       lines.push(`            if string match -q '*=*' -- "$argv[3]"`);
       lines.push(`                set -l _k (string replace -r '=.*' '' -- "$argv[3]")`);
       lines.push(`                if test -n "$_k"`);
-      lines.push(`                    if not contains -- "$_k" $${bucketVar}${bucket}`);
-      lines.push(`                        set -ga ${bucketVar}${bucket} "$_k"`);
-      lines.push(`                    end`);
+      if (spec.isGlobal) {
+        // Mirror runtime per-frame replace semantics for global arrays.
+        lines.push(`                    if not set -q _global_arr_seen_${bucket}`);
+        lines.push(`                        set -g ${bucketVar}${bucket} "$_k"`);
+        lines.push(`                        set -g _global_arr_seen_${bucket} 1`);
+        lines.push(`                    else if not contains -- "$_k" $${bucketVar}${bucket}`);
+        lines.push(`                        set -ga ${bucketVar}${bucket} "$_k"`);
+        lines.push(`                    end`);
+      } else {
+        lines.push(`                    if not contains -- "$_k" $${bucketVar}${bucket}`);
+        lines.push(`                        set -ga ${bucketVar}${bucket} "$_k"`);
+        lines.push(`                    end`);
+      }
       lines.push(`                end`);
       lines.push(`            end`);
     }
@@ -654,6 +664,8 @@ export function generateFishCompletion(
     for (const spec of arrayExpandSpecs) {
       lines.push(`    set -e _used_field_keys_${sanitize(spec.fieldName)}`);
       lines.push(`    set -e _global_used_field_keys_${sanitize(spec.fieldName)}`);
+      // Per-frame seen flag for global array hosts.
+      lines.push(`    set -e _global_arr_seen_${sanitize(spec.fieldName)}`);
     }
   }
   lines.push(`    set -l _j 1`);
@@ -736,6 +748,10 @@ export function generateFishCompletion(
       if (hasArrayExpand) {
         for (const spec of arrayExpandSpecs) {
           lines.push(`            set -e _used_field_keys_${sanitize(spec.fieldName)}`);
+          // Per-frame seen flag also clears so global hosts pick up the
+          // "first write replaces inherited array" semantics in the new
+          // frame.
+          lines.push(`            set -e _global_arr_seen_${sanitize(spec.fieldName)}`);
         }
       }
       lines.push(`        else`);

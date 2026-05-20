@@ -368,6 +368,42 @@ export function parseCompletionContext(
       continue;
     }
 
+    // Combined short boolean flags such as `-ab` ⇒ `-a -b`. The runtime
+    // parser unpacks these; the completion parser must do the same so a
+    // resolver sees both flags as set. Only attempted when every char in
+    // the group resolves to a value-less option, otherwise the word is
+    // ambiguous (`-cVALUE` syntax) and we fall through to the single-
+    // char path below.
+    if (
+      !afterDoubleDash &&
+      word.startsWith("-") &&
+      !word.startsWith("--") &&
+      word.length > 2 &&
+      !word.includes("=")
+    ) {
+      const chars: string[] = Array.from(word.slice(1));
+      const resolved: Array<CompletableOption | undefined> = chars.map((c) =>
+        findOption(options, c),
+      );
+      const allBoolean = resolved.every((o) => o !== undefined && !o.takesValue);
+      if (allBoolean) {
+        for (let idx = 0; idx < chars.length; idx++) {
+          const o = resolved[idx];
+          if (!o) continue;
+          usedOptions.add(o.cliName);
+          if (o.alias) {
+            for (const a of o.alias) usedOptions.add(a);
+          }
+          if (o.negation) {
+            usedOptions.add(o.negation);
+          }
+          recordBooleanFlag(o, chars[idx]!);
+        }
+        i++;
+        continue;
+      }
+    }
+
     // Skip options and their values (before "--")
     if (!afterDoubleDash && isOption(word)) {
       const optName = parseOptionName(word);

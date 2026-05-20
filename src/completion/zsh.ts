@@ -555,7 +555,19 @@ export function generateZshCompletion(
       lines.push(`        ${joined})`);
       lines.push(`            if [[ "$3" == *=* ]]; then`);
       lines.push(`                local _k="\${3%%=*}"`);
-      lines.push(`                [[ -n "$_k" ]] && ${bucketVar}[${bucket}]+=" $_k "`);
+      if (spec.isGlobal) {
+        // Mirror runtime per-frame replace semantics for global arrays.
+        lines.push(`                if [[ -n "$_k" ]]; then`);
+        lines.push(`                    if [[ -z "\${_global_arr_seen[${bucket}]:-}" ]]; then`);
+        lines.push(`                        ${bucketVar}[${bucket}]=" $_k "`);
+        lines.push(`                        _global_arr_seen[${bucket}]=1`);
+        lines.push(`                    else`);
+        lines.push(`                        ${bucketVar}[${bucket}]+=" $_k "`);
+        lines.push(`                    fi`);
+        lines.push(`                fi`);
+      } else {
+        lines.push(`                [[ -n "$_k" ]] && ${bucketVar}[${bucket}]+=" $_k "`);
+      }
       lines.push(`            fi`);
       lines.push(`            ;;`);
     }
@@ -641,6 +653,7 @@ export function generateZshCompletion(
   if (hasArrayExpand) {
     lines.push(`    local -A _used_field_keys=()`);
     lines.push(`    local -A _global_used_field_keys=()`);
+    lines.push(`    local -A _global_arr_seen=()`);
   }
   lines.push(``);
   lines.push(`    local _j=2`);
@@ -707,7 +720,9 @@ export function generateZshCompletion(
       // `dependsOn` is scoped to siblings on the same command frame, so
       // letting a parent's `--env` bleed into a child with its own `--env`
       // would feed the wrong value into the child's expand lookup.
-      const clearState = hasArrayExpand ? `_arg_values=(); _used_field_keys=()` : `_arg_values=()`;
+      const clearState = hasArrayExpand
+        ? `_arg_values=(); _used_field_keys=(); _global_arr_seen=()`
+        : `_arg_values=()`;
       lines.push(
         `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; ${clearState}; else __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; (( _pos_count++ )); fi`,
       );

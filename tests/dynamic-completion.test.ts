@@ -161,6 +161,24 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.verbose).toBe(true);
     });
 
+    it("decomposes combined short boolean flags so each char is recorded", () => {
+      // `parseArgv` accepts `-ab` as `-a -b` when both letters resolve to
+      // boolean options. The completion parser must mirror that so a
+      // resolver sees both flags as set.
+      const cmd = defineCommand({
+        name: "combinedcli",
+        args: z.object({
+          alpha: arg(z.boolean().default(false), { alias: "a" }),
+          beta: arg(z.boolean().default(false), { alias: "b" }),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const ctx = parseCompletionContext(["-ab", "--field", ""], cmd);
+      expect(ctx.parsedArgs.alpha).toBe(true);
+      expect(ctx.parsedArgs.beta).toBe(true);
+    });
+
     it("records negation flags as `false` in parsedArgs", () => {
       const negCmd = defineCommand({
         name: "negcli",
