@@ -526,14 +526,15 @@ export function generateFishCompletion(
     // main scan loop. Each expand spec looks up the value via the same
     // variable to pick a case branch. `sanitize` keeps the variable
     // names valid (alnum + underscore) even for hyphenated schema keys.
+    const trackerVar = (t: { fieldName: string; isGlobal: boolean }): string =>
+      `${t.isGlobal ? "_global_arg_values_" : "_arg_values_"}${sanitize(t.fieldName)}`;
     lines.push(`function __${fn}_track_opt --no-scope-shadowing`);
     lines.push(`    switch "$argv[1]:$argv[2]"`);
     for (const t of trackedFields) {
       if (t.isPositional || !t.optionTokens || t.optionTokens.length === 0) continue;
       const cases = t.pathStrs.flatMap((p) => t.optionTokens!.map((n) => `"${p}:${n}"`)).join(" ");
-      const prefix = t.isGlobal ? `_global_arg_values_` : `_arg_values_`;
       lines.push(`        case ${cases}`);
-      lines.push(`            set -g ${prefix}${sanitize(t.fieldName)} "$argv[3]"`);
+      lines.push(`            set -g ${trackerVar(t)} "$argv[3]"`);
     }
     lines.push(`    end`);
     lines.push(`end`);
@@ -543,9 +544,8 @@ export function generateFishCompletion(
     for (const t of trackedFields) {
       if (!t.isPositional) continue;
       const cases = t.pathStrs.map((p) => `"${p}:${t.position}"`).join(" ");
-      const prefix = t.isGlobal ? `_global_arg_values_` : `_arg_values_`;
       lines.push(`        case ${cases}`);
-      lines.push(`            set -g ${prefix}${sanitize(t.fieldName)} "$argv[3]"`);
+      lines.push(`            set -g ${trackerVar(t)} "$argv[3]"`);
     }
     lines.push(`    end`);
     lines.push(`end`);
