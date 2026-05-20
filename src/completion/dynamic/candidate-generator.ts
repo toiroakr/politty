@@ -389,60 +389,58 @@ function targetFieldName(context: CompletionContext): string | undefined {
 }
 
 /**
- * Generate option value candidates
+ * Generate value candidates for either an option or a positional. Both paths
+ * resolve the same way once their target field is identified. `description`
+ * is propagated to choices candidates (positional path supplies it; option
+ * path does not, mirroring the prior split implementations).
  */
-async function generateOptionValueCandidates(
+async function generateValueCandidates(
   context: CompletionContext,
   options: GenerateCandidatesOptions,
+  vc: ValueCompletion | undefined,
+  description?: string,
 ): Promise<CandidateResult> {
   const candidates: CompletionCandidate[] = [];
-
-  if (!context.targetOption) {
-    return { candidates, directive: CompletionDirective.FilterPrefix };
-  }
-
-  const vc = context.targetOption.valueCompletion;
   if (!vc) {
     return { candidates, directive: CompletionDirective.FilterPrefix };
   }
-
-  return {
-    candidates,
-    ...(await resolveValueCandidates(vc, candidates, resolverContext(context, options))),
-  };
-}
-
-/**
- * Generate positional argument candidates
- */
-async function generatePositionalCandidates(
-  context: CompletionContext,
-  options: GenerateCandidatesOptions,
-): Promise<CandidateResult> {
-  const candidates: CompletionCandidate[] = [];
-
-  // Get the positional at current index, clamping to last (variadic) positional
-  const positionalIndex = context.positionalIndex ?? 0;
-  const positional =
-    context.positionals[positionalIndex] ??
-    (context.positionals.at(-1)?.variadic ? context.positionals.at(-1) : undefined);
-
-  if (!positional) {
-    return { candidates, directive: CompletionDirective.FilterPrefix };
-  }
-
-  const vc = positional.valueCompletion;
-  if (!vc) {
-    return { candidates, directive: CompletionDirective.FilterPrefix };
-  }
-
   return {
     candidates,
     ...(await resolveValueCandidates(
       vc,
       candidates,
       resolverContext(context, options),
-      positional.description,
+      description,
     )),
   };
+}
+
+/**
+ * Generate option value candidates
+ */
+function generateOptionValueCandidates(
+  context: CompletionContext,
+  options: GenerateCandidatesOptions,
+): Promise<CandidateResult> {
+  return generateValueCandidates(context, options, context.targetOption?.valueCompletion);
+}
+
+/**
+ * Generate positional argument candidates
+ */
+function generatePositionalCandidates(
+  context: CompletionContext,
+  options: GenerateCandidatesOptions,
+): Promise<CandidateResult> {
+  // Get the positional at current index, clamping to last (variadic) positional
+  const positionalIndex = context.positionalIndex ?? 0;
+  const positional =
+    context.positionals[positionalIndex] ??
+    (context.positionals.at(-1)?.variadic ? context.positionals.at(-1) : undefined);
+  return generateValueCandidates(
+    context,
+    options,
+    positional?.valueCompletion,
+    positional?.description,
+  );
 }

@@ -23,15 +23,6 @@ export interface ResolvedExpandDep {
 }
 
 /**
- * Resolve each `dependsOn` entry to its globality at codegen time. A
- * global host's deps all live in the global namespace. A local host
- * may declare deps against a propagated global (its sibling index
- * includes globals); those individual deps must read from the global
- * bucket even when the host itself is local — the tracker only ever
- * writes the global value into \`_global_arg_values_<name>\`, so a
- * lookup against the local bucket would see the empty key.
- */
-/**
  * Build the set of global-option names from a per-frame options list.
  * Local emission paths read this when deciding whether a specific
  * \`dependsOn\` entry should look up the \`_global_arg_values_*\` bucket
@@ -46,6 +37,15 @@ export function globalNamesIn(options: readonly CompletableOption[]): Set<string
   return names;
 }
 
+/**
+ * Resolve each `dependsOn` entry to its globality at codegen time. A
+ * global host's deps all live in the global namespace. A local host
+ * may declare deps against a propagated global (its sibling index
+ * includes globals); those individual deps must read from the global
+ * bucket even when the host itself is local — the tracker only ever
+ * writes the global value into \`_global_arg_values_<name>\`, so a
+ * lookup against the local bucket would see the empty key.
+ */
 export function resolveExpandDepGlobality(
   vc: ValueCompletion,
   hostIsGlobal: boolean,
