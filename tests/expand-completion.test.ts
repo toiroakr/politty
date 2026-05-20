@@ -752,7 +752,11 @@ describe("expand completion", () => {
       const data = extractCompletionData(cmd, "mycli");
       const specs = collectExpandSpecs(data.command);
       expect(specs[0]?.isArrayOption).toBe(true);
-      expect(specs[0]?.optionTokens).toEqual(["--field", "-f"]);
+      // Runtime's aliasMap accepts `--f` for `alias: "f"` too, so the
+      // emitted token set lists every form that can resolve back to
+      // the field — `--field`, `-f`, and the long-form of the 1-char
+      // alias `--f`.
+      expect(specs[0]?.optionTokens).toEqual(["--field", "-f", "--f"]);
     });
 
     it("bash emits a separate track function and runtime dedup guard", () => {
@@ -851,21 +855,24 @@ describe("expand completion", () => {
         programName: "mycli",
       });
       expect(bash).toContain(`api:0|a:0) _arg_values_endpoint="$3"`);
-      expect(bash).toContain(`api:--field|api:-f|a:--field|a:-f)`);
+      // `--f` is the long-form of `alias: "f"` that runtime's aliasMap
+      // also accepts; emitting it keeps the tracker reachable from
+      // every form the user might type.
+      expect(bash).toContain(`api:--field|api:-f|api:--f|a:--field|a:-f|a:--f)`);
 
       const { script: zsh } = generateZshCompletion(cli, {
         shell: "zsh",
         programName: "mycli",
       });
       expect(zsh).toContain(`api:0|a:0) _arg_values[endpoint]="$3"`);
-      expect(zsh).toContain(`api:--field|api:-f|a:--field|a:-f)`);
+      expect(zsh).toContain(`api:--field|api:-f|api:--f|a:--field|a:-f|a:--f)`);
 
       const { script: fish } = generateFishCompletion(cli, {
         shell: "fish",
         programName: "mycli",
       });
       expect(fish).toContain(`case "api:0" "a:0"`);
-      expect(fish).toContain(`case "api:--field" "api:-f" "a:--field" "a:-f"`);
+      expect(fish).toContain(`case "api:--field" "api:-f" "api:--f" "a:--field" "a:-f" "a:--f"`);
     });
 
     it("escapes glob metacharacters in fish expand case patterns", () => {

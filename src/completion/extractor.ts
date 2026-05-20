@@ -2,7 +2,7 @@
  * Extract completion data from commands
  */
 
-import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
+import { extractFields, toCamelCase, type ResolvedFieldMeta } from "../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import { resolveExpandTargets, type PendingExpandTarget } from "./expand-resolver.js";
@@ -505,12 +505,23 @@ export function collectOptionTokens(
   cliName: string,
   aliases: readonly string[] | undefined,
 ): string[] {
+  const push = (tokens: string[], t: string): void => {
+    if (!tokens.includes(t)) tokens.push(t);
+  };
   const tokens = [`--${cliName}`];
-  if (cliName.length === 1) tokens.push(`-${cliName}`);
+  // A 1-char cliName is also reachable from `-x` at runtime.
+  if (cliName.length === 1) push(tokens, `-${cliName}`);
+  // Hyphenated cliName accepts its camelCase form (`--toBe` for
+  // `cliName: "to-be"`) via runtime's aliasMap.
+  if (cliName.includes("-")) push(tokens, `--${toCamelCase(cliName)}`);
   if (aliases) {
     for (const a of aliases) {
-      const t = aliasToken(a);
-      if (!tokens.includes(t)) tokens.push(t);
+      push(tokens, aliasToken(a));
+      // Runtime's aliasMap also registers the long form of every
+      // alias (`--f` for `alias: "f"`, `--toBe` for hyphenated long
+      // aliases), so emit those alternate tokens too.
+      if (a.length === 1) push(tokens, `--${a}`);
+      else if (a.includes("-")) push(tokens, `--${toCamelCase(a)}`);
     }
   }
   return tokens;
@@ -529,11 +540,19 @@ export function localShadowingTokens(
   cliName: string,
   aliases: readonly string[] | undefined,
 ): string[] {
+  const push = (tokens: string[], t: string): void => {
+    if (!tokens.includes(t)) tokens.push(t);
+  };
   const tokens = [`--${cliName}`];
+  if (cliName.includes("-")) push(tokens, `--${toCamelCase(cliName)}`);
   if (aliases) {
     for (const a of aliases) {
-      const t = aliasToken(a);
-      if (!tokens.includes(t)) tokens.push(t);
+      push(tokens, aliasToken(a));
+      // Runtime's local aliasMap also accepts `--f` for `alias: "f"`
+      // and `--toBe` for hyphenated long aliases, so the shadow check
+      // must treat those as locally-claimed too.
+      if (a.length === 1) push(tokens, `--${a}`);
+      else if (a.includes("-")) push(tokens, `--${toCamelCase(a)}`);
     }
   }
   return tokens;
