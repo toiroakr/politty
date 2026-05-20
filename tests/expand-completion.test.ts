@@ -1184,6 +1184,47 @@ describe("expand completion", () => {
       expect(script).toMatch(/^\s+--e\)\n[\s\S]*?_choices=\("a"\)/m);
     });
 
+    it("resolves a local expand spec whose dep is a global static-choice field", () => {
+      // Pre-fix: \`extractSubcommand\` ran \`resolveExpandTargets\`
+      // BEFORE globals were merged, so a subcommand-local expand that
+      // declared \`dependsOn: ["env"]\` against the global \`env\` field
+      // threw "not a sibling" at codegen time. Globals are now derived
+      // first and passed in so the sibling index includes them.
+      const globals = z.object({
+        env: arg(z.string(), {
+          completion: { custom: { choices: ["prod", "stg"] } },
+        }),
+      });
+      const cli = defineCommand({
+        name: "mycli",
+        subCommands: {
+          sub: defineCommand({
+            name: "sub",
+            args: z.object({
+              field: arg(z.string().optional(), {
+                completion: {
+                  custom: {
+                    expand: {
+                      dependsOn: ["env"],
+                      enumerate: (deps) => [{ value: `${deps.env}-target` }],
+                    },
+                  },
+                },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      expect(() =>
+        generateBashCompletion(cli, {
+          shell: "bash",
+          programName: "mycli",
+          globalArgsSchema: globals,
+        }),
+      ).not.toThrow();
+    });
+
     it("does not strip an inline `-D=` prefix from a positional after `--`", () => {
       // `complete -o default` registration means an empty COMPREPLY
       // falls through to filenames, but for a positional after `--`

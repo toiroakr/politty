@@ -37,9 +37,10 @@ export interface PendingExpandTarget {
 export function resolveExpandTargets(
   sub: CompletableSubcommand,
   targets: readonly PendingExpandTarget[],
+  globalOptions: readonly { name: string; valueCompletion?: ValueCompletion | undefined }[] = [],
 ): void {
   if (targets.length === 0) return;
-  const siblingIndex = buildSiblingIndex(sub);
+  const siblingIndex = buildSiblingIndex(sub, globalOptions);
   for (const target of targets) {
     target.set(resolveOne(target, siblingIndex));
   }
@@ -49,16 +50,29 @@ export function resolveExpandTargets(
  * Build a name → static-values map for siblings, using each field's already
  * resolved `valueCompletion`. Only `choices`-typed completions count;
  * referencing anything else from `dependsOn` is reported as a clean error
- * in {@link resolveOne}.
+ * in {@link resolveOne}. Global options with static choices are merged in
+ * so a local expand can declare `dependsOn: ["env"]` against a global
+ * \`env\` field — runtime propagates the global value to every frame, so
+ * the resolved table must cover those combinations too.
  */
-function buildSiblingIndex(sub: CompletableSubcommand): Map<string, readonly string[]> {
+function buildSiblingIndex(
+  sub: CompletableSubcommand,
+  globalOptions: readonly { name: string; valueCompletion?: ValueCompletion | undefined }[],
+): Map<string, readonly string[]> {
   const index = new Map<string, readonly string[]>();
-  for (const field of [...sub.options, ...sub.positionals]) {
-    const vc = field.valueCompletion;
-    if (vc?.type === "choices" && vc.choices && vc.choices.length > 0) {
-      index.set(field.name, vc.choices);
+  const visit = (
+    fields: readonly { name: string; valueCompletion?: ValueCompletion | undefined }[],
+  ): void => {
+    for (const field of fields) {
+      if (index.has(field.name)) continue;
+      const vc = field.valueCompletion;
+      if (vc?.type === "choices" && vc.choices && vc.choices.length > 0) {
+        index.set(field.name, vc.choices);
+      }
     }
-  }
+  };
+  visit([...sub.options, ...sub.positionals]);
+  visit(globalOptions);
   return index;
 }
 

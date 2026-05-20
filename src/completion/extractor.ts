@@ -183,7 +183,11 @@ function extractCompletablePositionals(
 /**
  * Extract a completable subcommand from a command
  */
-function extractSubcommand(name: string, command: AnyCommand): CompletableSubcommand {
+function extractSubcommand(
+  name: string,
+  command: AnyCommand,
+  globalOptions: readonly CompletableOption[] = [],
+): CompletableSubcommand {
   const subcommands: CompletableSubcommand[] = [];
 
   // Extract subcommands recursively (only sync subcommands for now)
@@ -191,7 +195,7 @@ function extractSubcommand(name: string, command: AnyCommand): CompletableSubcom
     for (const [subName, subCommand] of Object.entries(command.subCommands)) {
       const resolved = resolveSubCommandMeta(subCommand);
       if (resolved) {
-        subcommands.push(extractSubcommand(subName, resolved));
+        subcommands.push(extractSubcommand(subName, resolved, globalOptions));
       } else {
         // Legacy async subcommands: placeholder only
         subcommands.push({
@@ -214,11 +218,11 @@ function extractSubcommand(name: string, command: AnyCommand): CompletableSubcom
     options: extractOptions(command, pending),
     positionals: extractCompletablePositionals(command, pending),
   };
-  // Resolve every `pending-expand` collected above against this subcommand's
-  // siblings, producing `{ type: "expand", table, dependsOn }`
-  // ValueCompletion entries. Throws if dependsOn references a non-static
-  // sibling or `enumerate` raises.
-  resolveExpandTargets(node, pending);
+  // Resolve every `pending-expand` collected above against this
+  // subcommand's siblings (and the global schema, which runtime
+  // propagates to every frame). Throws if `dependsOn` references a
+  // non-static sibling or `enumerate` raises.
+  resolveExpandTargets(node, pending, globalOptions);
   return node;
 }
 
@@ -928,11 +932,12 @@ export function extractCompletionData(
   programName: string,
   globalArgsSchema?: ArgsSchema,
 ): CompletionData {
-  const rootSubcommand = extractSubcommand(programName, command);
-
-  // When globalArgsSchema is provided, derive global options from it
-  // and merge them into all subcommands so shell generators include them at every level
-  let globalOptions: CompletableOption[];
+  // Derive globals FIRST so they're available when subcommand expand
+  // specs resolve. A local expand that declares `dependsOn: ["env"]`
+  // against a global \`env\` field would otherwise fail with a "not a
+  // sibling" error at codegen time — runtime propagates the global to
+  // every frame, so the resolved table needs to cover those keys too.
+  let globalOptions: CompletableOption[] = [];
   if (globalArgsSchema) {
     const globalExtracted = extractFields(globalArgsSchema);
     const globalPending: PendingExpandTarget[] = [];
@@ -954,7 +959,13 @@ export function extractCompletionData(
       },
       globalPending,
     );
-    // Merge global options into all subcommands recursively
+  }
+
+  const rootSubcommand = extractSubcommand(programName, command, globalOptions);
+
+  if (globalArgsSchema) {
+    // Merge global options into all subcommands recursively so shell
+    // generators include them at every level.
     propagateGlobalOptions(rootSubcommand, globalOptions);
   } else {
     // Default: global options are the options defined on the root command

@@ -8,6 +8,7 @@
  * when one generator gets a fix that the others should mirror.
  */
 
+import { toCamelCase } from "../core/schema-extractor.js";
 import type { ValueCompletion } from "./types.js";
 
 /**
@@ -79,9 +80,24 @@ export function quotedAvailabilityTokens(
   aliases: readonly string[] | undefined,
   negation: string | undefined,
 ): string[] {
-  return [
-    `"--${cliName}"`,
-    ...(aliases?.map((a) => `"${aliasToken(a)}"`) ?? []),
-    ...(negation ? [`"--${negation}"`] : []),
-  ];
+  const tokens = new Set<string>([`--${cliName}`]);
+  // Mirror every spelling the runtime aliasMap accepts so the
+  // used-option guard covers each form a value-completion case (or
+  // tracker) might consume. Without this, the option-name suggestion
+  // path still offers the canonical \`--cliName\` after the user
+  // consumed it as \`-x\` / \`--f\` / \`--toBe\`.
+  if (cliName.length === 1) tokens.add(`-${cliName}`);
+  if (cliName.includes("-")) tokens.add(`--${toCamelCase(cliName)}`);
+  if (aliases) {
+    for (const a of aliases) {
+      tokens.add(aliasToken(a));
+      if (a.length === 1) tokens.add(`--${a}`);
+      else if (a.includes("-")) tokens.add(`--${toCamelCase(a)}`);
+    }
+  }
+  if (negation) {
+    tokens.add(`--${negation}`);
+    if (negation.includes("-")) tokens.add(`--${toCamelCase(negation)}`);
+  }
+  return [...tokens].map((t) => `"${t}"`);
 }
