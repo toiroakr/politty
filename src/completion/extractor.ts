@@ -335,31 +335,48 @@ export function subDispatchCaseLines(routeEntries: RouteEntry[], fn: string): st
 
 /**
  * Case-statement body lines for `__track_opt` — capture option values into
- * the per-frame `_arg_values` / `_global_arg_values` associative arrays.
- * Identical bash/zsh emission, so generators share this builder.
+ * the per-frame state. zsh uses `_arg_values` / `_global_arg_values`
+ * associative arrays; bash uses prefix-scalar variables (`_arg_values_<f>`)
+ * so the generated script runs on bash 3.2 (macOS default `/bin/bash`),
+ * which lacks associative arrays.
  */
-export function trackOptCaseLines(trackedFields: readonly TrackedFieldRef[]): string[] {
+export function trackOptCaseLines(
+  trackedFields: readonly TrackedFieldRef[],
+  shell: "bash" | "zsh",
+): string[] {
   const lines: string[] = [];
   for (const t of trackedFields) {
     if (t.isPositional || !t.optionTokens) continue;
     const joined = t.pathStrs.flatMap((p) => t.optionTokens!.map((n) => `${p}:${n}`)).join("|");
-    const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
-    lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
+    const prefix = t.isGlobal ? `_global_arg_values` : `_arg_values`;
+    const assign =
+      shell === "bash"
+        ? `${prefix}_${sanitize(t.fieldName)}="$3"`
+        : `${prefix}[${t.fieldName}]="$3"`;
+    lines.push(`        ${joined}) ${assign} ;;`);
   }
   return lines;
 }
 
 /**
  * Case-statement body lines for `__track_pos` — capture positional values
- * by `(subcmd, positional-index)`. Identical bash/zsh emission.
+ * by `(subcmd, positional-index)`. zsh uses associative arrays; bash uses
+ * prefix-scalar variables (see {@link trackOptCaseLines}).
  */
-export function trackPosCaseLines(trackedFields: readonly TrackedFieldRef[]): string[] {
+export function trackPosCaseLines(
+  trackedFields: readonly TrackedFieldRef[],
+  shell: "bash" | "zsh",
+): string[] {
   const lines: string[] = [];
   for (const t of trackedFields) {
     if (!t.isPositional) continue;
     const joined = t.pathStrs.map((p) => `${p}:${t.position}`).join("|");
-    const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
-    lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
+    const prefix = t.isGlobal ? `_global_arg_values` : `_arg_values`;
+    const assign =
+      shell === "bash"
+        ? `${prefix}_${sanitize(t.fieldName)}="$3"`
+        : `${prefix}[${t.fieldName}]="$3"`;
+    lines.push(`        ${joined}) ${assign} ;;`);
   }
   return lines;
 }
@@ -369,10 +386,12 @@ export function trackPosCaseLines(trackedFields: readonly TrackedFieldRef[]): st
  * slot the user has typed so the candidate loop can skip already-consumed
  * entries. The first write to a global array in a frame replaces the
  * inherited bucket (mirroring the runtime's per-frame array merge);
- * subsequent writes append. Identical bash/zsh emission.
+ * subsequent writes append. zsh uses associative arrays; bash uses
+ * prefix-scalar variables (see {@link trackOptCaseLines}).
  */
 export function trackArrayExpandCaseLines(
   arrayExpandSpecs: readonly ExpandSpecLocation[],
+  shell: "bash" | "zsh",
 ): string[] {
   const lines: string[] = [];
   for (const spec of arrayExpandSpecs) {
@@ -380,21 +399,26 @@ export function trackArrayExpandCaseLines(
       .flatMap((p) => spec.optionTokens.map((tok) => `${p}:${tok}`))
       .join("|");
     const bucket = sanitize(spec.fieldName);
-    const bucketVar = spec.isGlobal ? `_global_used_field_keys` : `_used_field_keys`;
+    const bucketPrefix = spec.isGlobal ? `_global_used_field_keys` : `_used_field_keys`;
+    const bucketRef = shell === "bash" ? `${bucketPrefix}_${bucket}` : `${bucketPrefix}[${bucket}]`;
+    const seenRef = shell === "bash" ? `_global_arr_seen_${bucket}` : `_global_arr_seen[${bucket}]`;
+    const assignFirst = shell === "bash" ? `${bucketRef}=" $_k "` : `${bucketRef}=" $_k "`;
+    const assignAppend = shell === "bash" ? `${bucketRef}+=" $_k "` : `${bucketRef}+=" $_k "`;
+    const seenSet = shell === "bash" ? `${seenRef}=1` : `${seenRef}=1`;
     lines.push(`        ${joined})`);
     lines.push(`            if [[ "$3" == *=* ]]; then`);
     lines.push(`                local _k="\${3%%=*}"`);
     if (spec.isGlobal) {
       lines.push(`                if [[ -n "$_k" ]]; then`);
-      lines.push(`                    if [[ -z "\${_global_arr_seen[${bucket}]:-}" ]]; then`);
-      lines.push(`                        ${bucketVar}[${bucket}]=" $_k "`);
-      lines.push(`                        _global_arr_seen[${bucket}]=1`);
+      lines.push(`                    if [[ -z "\${${seenRef}:-}" ]]; then`);
+      lines.push(`                        ${assignFirst}`);
+      lines.push(`                        ${seenSet}`);
       lines.push(`                    else`);
-      lines.push(`                        ${bucketVar}[${bucket}]+=" $_k "`);
+      lines.push(`                        ${assignAppend}`);
       lines.push(`                    fi`);
       lines.push(`                fi`);
     } else {
-      lines.push(`                [[ -n "$_k" ]] && ${bucketVar}[${bucket}]+=" $_k "`);
+      lines.push(`                [[ -n "$_k" ]] && ${assignAppend}`);
     }
     lines.push(`            fi`);
     lines.push(`            ;;`);

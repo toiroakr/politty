@@ -93,3 +93,32 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Run shell completion tests
         run: npx vitest run --project shell-${{ matrix.shell }}
+
+  bash-3-2-compat:
+    name: Bash 3.2 compatibility (macOS /bin/bash)
+    runs-on: macos-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        name: Install pnpm
+        with:
+          standalone: true
+          run_install: false
+      - name: Install Node.js
+        run: pnpm env use --global 24
+        shell: bash
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify /bin/bash is 3.x
+        run: |
+          /bin/bash --version
+          test "$(/bin/bash -c 'echo ${BASH_VERSINFO[0]}')" -lt 4
+      - name: Run bash completion tests under /bin/bash
+        env:
+          POLITTY_BASH_BIN: /bin/bash
+        run: npx vitest run --project shell-bash

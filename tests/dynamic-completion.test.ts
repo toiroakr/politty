@@ -603,6 +603,11 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(dyn).toContain("__mycli_invoke_complete");
       expect(dyn).toContain("__mycli_apply_dynamic_output");
       expect(stat).not.toContain("__mycli_invoke_complete");
+      // Bash 3.2 compatibility: the dynamic dispatch path also avoids
+      // bash 4+ builtins so the script can be sourced on macOS's
+      // default /bin/bash.
+      expect(dyn).not.toMatch(/\bmapfile\b/);
+      expect(dyn).not.toMatch(/\breadarray\b/);
     });
 
     it("zsh: emits apply helper only when dynamic specs exist", () => {

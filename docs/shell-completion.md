@@ -281,12 +281,11 @@ mycli completion bash > ~/.local/share/bash-completion/completions/mycli
 
 Reload with `source ~/.bashrc`.
 
-The generated script requires **Bash 4 or newer** when the CLI uses
-`completion.custom.expand` or `completion.custom.resolve` (both rely on
-associative arrays via `declare -gA` and the `mapfile` builtin). macOS
-ships Bash 3.2 by default — install a newer Bash (e.g.
-`brew install bash`) before sourcing the script if your CLI defines
-either of those completion variants.
+The generated bash script runs on **Bash 3.2 or newer**, including the
+default `/bin/bash` shipped with macOS. The completion machinery (both
+`completion.custom.expand` and `completion.custom.resolve`) avoids
+bash 4 builtins — associative arrays are replaced with prefix-scalar
+variables, and `mapfile` is replaced with a portable `while read` loop.
 
 ### Zsh
 

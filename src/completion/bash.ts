@@ -45,9 +45,30 @@ function escapeBashDQ(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$").replace(/`/g, "\\`");
 }
 
-/** Variable name for the hoisted expand table for a (funcSuffix, fieldName). */
+/**
+ * Variable-name base for the expand entries of a (funcSuffix, fieldName).
+ * Each emitted entry appends `__<encKey>` (see {@link bashEncodeKey}).
+ */
 function bashExpandVar(fn: string, funcSuffix: string, fieldName: string): string {
   return `__${fn}_expand_${funcSuffix}__${sanitize(fieldName)}`;
+}
+
+/**
+ * Hex-encode any character outside `[A-Za-z0-9_]` as `_HH` so the
+ * resulting string is safe as a suffix of a bash identifier. Mirrors the
+ * runtime `__<fn>_enc` helper emitted alongside expand tables.
+ */
+function bashEncodeKey(s: string): string {
+  let out = "";
+  for (const ch of s) {
+    if (/[A-Za-z0-9_]/.test(ch)) {
+      out += ch;
+    } else {
+      const code = ch.codePointAt(0)!;
+      out += `_${code.toString(16).toUpperCase().padStart(2, "0")}`;
+    }
+  }
+  return out;
 }
 
 interface BashExpandLocation {
@@ -95,26 +116,33 @@ function bashValueLines(
       if (!location) {
         throw new Error("bashValueLines: expand variant requires a location");
       }
-      // The expand table is hoisted as a global associative array. Build
-      // the runtime lookup key from the dependsOn values, fetch the
-      // (newline-separated) candidate list, and filter against `$_cur`.
+      // The expand table is hoisted as per-entry scalar variables (one
+      // per key combination). Build the encoded runtime suffix from the
+      // dependsOn values via `__<fn>_enc`, then read the candidate list
+      // through indirect expansion and filter against `$_cur`.
       const varName = bashExpandVar(fn, location.funcSuffix, location.fieldName);
-      // Per-dep lookups read from the matching bucket: globals from
-      // `_global_arg_values` (preserved across subcommand descent) and
-      // locals from `_arg_values` (cleared on descent). Mixing the two
-      // would let a global value silently substitute for a missing
-      // local dep of the same name.
-      const depKey = location.resolvedDeps
-        .map((d) =>
-          d.isGlobal ? `"\${_global_arg_values[${d.name}]:-}"` : `"\${_arg_values[${d.name}]:-}"`,
-        )
-        .join(`$'\\x1f'`);
+      // Per-dep lookups read from the matching prefix-scalar bucket:
+      // globals from `_global_arg_values_<dep>` (preserved across
+      // subcommand descent), locals from `_arg_values_<dep>` (cleared on
+      // descent). Mixing the two would let a global value silently
+      // substitute for a missing local dep of the same name.
+      const encLines: string[] = [`local _enc_key='' _enc_v`];
+      location.resolvedDeps.forEach((d, i) => {
+        const safe = sanitize(d.name);
+        const varRef = d.isGlobal ? `_global_arg_values_${safe}` : `_arg_values_${safe}`;
+        encLines.push(`_enc_v="\${${varRef}:-}"`);
+        encLines.push(
+          i === 0 ? `_enc_key="$(__${fn}_enc "$_enc_v")"` : `_enc_key+="_$(__${fn}_enc "$_enc_v")"`,
+        );
+      });
       const inlineExpr = inline ? `"\${_inline_prefix}\${_c}"` : `"$_c"`;
       // The array dedup bucket for a global expand host lives in
-      // _global_used_field_keys so already-consumed keys survive descent.
+      // _global_used_field_keys_<bucket> so already-consumed keys survive
+      // descent. Bash 3.2 prefix-scalar shape — see the table emission
+      // above for the matching writer side.
       const bucketRef = location.isGlobal
-        ? `\${_global_used_field_keys[${sanitize(location.fieldName)}]:-}`
-        : `\${_used_field_keys[${sanitize(location.fieldName)}]:-}`;
+        ? `\${_global_used_field_keys_${sanitize(location.fieldName)}:-}`
+        : `\${_used_field_keys_${sanitize(location.fieldName)}:-}`;
       const dedupLines = location.isArrayOption
         ? [
             `        if [[ "$_c" == *=* ]]; then`,
@@ -128,15 +156,16 @@ function bashValueLines(
         // early-return so an expand spec with no candidates does not
         // silently degrade into file completion.
         `compopt +o default 2>/dev/null`,
-        `local _key=${depKey}`,
-        // Guard against an empty subscript — bash treats `${arr[]}` as an
-        // error, which corrupts COMPREPLY when a sibling dep has not been
-        // typed yet (e.g. `cli -f <TAB>` before the positional endpoint).
-        `if [[ -z "$_key" ]]; then return; fi`,
-        `local _raw="\${${varName}[$_key]:-}"`,
+        ...encLines,
+        // If no entry was emitted for this dep combination, indirect
+        // expansion yields the empty string and the block below is a
+        // no-op — no separate guard needed.
+        `local _varname=${varName}__\${_enc_key}`,
+        `local _raw="\${!_varname:-}"`,
         `if [[ -n "$_raw" ]]; then`,
         `    local -a _vals=()`,
-        `    mapfile -t _vals <<< "$_raw"`,
+        `    local _line`,
+        `    while IFS= read -r _line; do _vals+=("$_line"); done <<< "$_raw"`,
         `    local _c`,
         `    for _c in "\${_vals[@]}"; do`,
         `        [[ -z "$_c" ]] && continue`,
@@ -411,17 +440,32 @@ export function generateBashCompletion(
   const arrayExpandSpecs = expandSpecs.filter((s) => s.isArrayOption);
   const hasArrayExpand = arrayExpandSpecs.length > 0;
 
-  // Expand-completion hoisted tables. One global associative array per
-  // expand spec; entries map `dependsOn`-joined keys to newline-separated
-  // candidate lists. Declared once at script source-time so per-invocation
-  // overhead is just a hash lookup.
+  // Expand-completion hoisted tables. Bash 3.2 (macOS default
+  // `/bin/bash`) has no associative arrays, so each table entry becomes a
+  // top-level scalar `<base>__<encKey>=<candidates>`. The runtime helper
+  // `__<fn>_enc` (emitted once below when `hasExpand`) builds the same
+  // encoded suffix from the user's runtime dep values; lookups read via
+  // indirect expansion `${!_varname:-}`.
+  if (hasExpand) {
+    lines.push(`__${fn}_enc() {`);
+    lines.push(`    local _s=$1 _r='' _c _i`);
+    lines.push(`    for (( _i=0; _i<\${#_s}; _i++ )); do`);
+    lines.push(`        _c=\${_s:_i:1}`);
+    lines.push(`        case "$_c" in`);
+    lines.push(`            [a-zA-Z0-9_]) _r+="$_c" ;;`);
+    lines.push(`            *) printf -v _r '%s_%02X' "$_r" "'$_c" ;;`);
+    lines.push(`        esac`);
+    lines.push(`    done`);
+    lines.push(`    printf '%s' "$_r"`);
+    lines.push(`}`);
+    lines.push(``);
+  }
   for (const spec of expandSpecs) {
     const varName = bashExpandVar(fn, spec.funcSuffix, spec.fieldName);
-    lines.push(`declare -gA ${varName}=()`);
     for (const entry of spec.vc.table) {
-      const key = entry.key.join("");
+      const encKey = entry.key.map(bashEncodeKey).join("_");
       const value = entry.candidates.map((c) => c.value).join("\n");
-      lines.push(`${varName}[${ansiC(key)}]=${ansiC(value)}`);
+      lines.push(`${varName}__${encKey}=${ansiC(value)}`);
     }
     lines.push(``);
   }
@@ -441,8 +485,9 @@ export function generateBashCompletion(
     lines.push(`    local _raw="$1"`);
     lines.push(`    COMPREPLY=()`);
     lines.push(`    local _directive=0`);
-    lines.push(`    local -a _lines`);
-    lines.push(`    mapfile -t _lines <<< "$_raw"`);
+    lines.push(`    local -a _lines=()`);
+    lines.push(`    local _line`);
+    lines.push(`    while IFS= read -r _line; do _lines+=("$_line"); done <<< "$_raw"`);
     // Only the trailing line is the directive sentinel; intermediate lines
     // beginning with `:` are legitimate candidate values.
     lines.push(`    local _last=$((\${#_lines[@]} - 1))`);
@@ -450,7 +495,6 @@ export function generateBashCompletion(
     lines.push(`        _directive="\${_lines[$_last]#:}"`);
     lines.push(`        unset '_lines[_last]'`);
     lines.push(`    fi`);
-    lines.push(`    local _line`);
     lines.push(`    for _line in "\${_lines[@]}"; do`);
     // Skip only blanks. The `@ext:`/`@matcher:` sentinels are produced by
     // the static shellCommand pipeline, not by dynamic resolvers — filtering
@@ -525,13 +569,13 @@ export function generateBashCompletion(
     // positional.
     lines.push(`__${fn}_track_opt() {`);
     lines.push(`    case "$1:$2" in`);
-    lines.push(...trackOptCaseLines(trackedFields));
+    lines.push(...trackOptCaseLines(trackedFields, "bash"));
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);
     lines.push(`__${fn}_track_pos() {`);
     lines.push(`    case "$1:$2" in`);
-    lines.push(...trackPosCaseLines(trackedFields));
+    lines.push(...trackPosCaseLines(trackedFields, "bash"));
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);
@@ -546,7 +590,7 @@ export function generateBashCompletion(
     // `*" $_ck "*` work for the first and last entries.
     lines.push(`__${fn}_track_array_expand() {`);
     lines.push(`    case "$1:$2" in`);
-    lines.push(...trackArrayExpandCaseLines(arrayExpandSpecs));
+    lines.push(...trackArrayExpandCaseLines(arrayExpandSpecs, "bash"));
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);
@@ -643,18 +687,22 @@ export function generateBashCompletion(
   lines.push(`    local _subcmd="" _after_dd=0 _pos_count=0 _skip_next=0`);
   lines.push(`    local -a _used_opts=()`);
   if (hasExpand) {
-    lines.push(`    local -A _arg_values=()`);
-    // Globals survive subcommand descent so values supplied before the
-    // subcommand (e.g. `cli --env prod sub --field <TAB>`) remain visible.
-    lines.push(`    local -A _global_arg_values=()`);
+    // Bash 3.2 has no associative arrays — trackers write per-field
+    // scalars (`_arg_values_<field>`, `_global_arg_values_<field>`).
+    // Wipe any leftovers from a previous invocation so completion state
+    // is fresh on every TAB. Globals survive subcommand descent within
+    // the same invocation (re-populated below by the scan loop) but must
+    // not bleed across invocations.
+    lines.push(`    unset $(compgen -v _arg_values_ 2>/dev/null) 2>/dev/null`);
+    lines.push(`    unset $(compgen -v _global_arg_values_ 2>/dev/null) 2>/dev/null`);
   }
   if (hasArrayExpand) {
-    lines.push(`    local -A _used_field_keys=()`);
-    lines.push(`    local -A _global_used_field_keys=()`);
+    lines.push(`    unset $(compgen -v _used_field_keys_ 2>/dev/null) 2>/dev/null`);
+    lines.push(`    unset $(compgen -v _global_used_field_keys_ 2>/dev/null) 2>/dev/null`);
     // Per-frame seen-set: marks which global array buckets have been
     // written in the current frame so the first write replaces the
     // inherited entries. Cleared on every subcommand descent below.
-    lines.push(`    local -A _global_arr_seen=()`);
+    lines.push(`    unset $(compgen -v _global_arr_seen_ 2>/dev/null) 2>/dev/null`);
   }
   lines.push(``);
   lines.push(`    local _j=0`);
@@ -711,10 +759,13 @@ export function generateBashCompletion(
   // `dependsOn` is scoped to siblings on the same command frame, so
   // letting a parent's `--env` bleed into a child with its own `--env`
   // would feed the wrong value into the child's expand lookup.
+  // Prefix-scalar equivalent of the bash 4 `_arg_values=()` reset: drop
+  // every per-field scalar written by the trackers so far. compgen -v
+  // takes a prefix and prints matching variable names; bash 3.2+.
   const clearState = hasArrayExpand
-    ? `; _arg_values=(); _used_field_keys=(); _global_arr_seen=()`
+    ? `; unset $(compgen -v _arg_values_ 2>/dev/null) $(compgen -v _used_field_keys_ 2>/dev/null) $(compgen -v _global_arr_seen_ 2>/dev/null) 2>/dev/null`
     : hasExpand
-      ? `; _arg_values=()`
+      ? `; unset $(compgen -v _arg_values_ 2>/dev/null) 2>/dev/null`
       : "";
   const posTrack = hasExpand ? `__${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; ` : "";
   if (routeEntries.length > 0) {

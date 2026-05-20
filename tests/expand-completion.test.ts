@@ -213,16 +213,18 @@ describe("expand completion", () => {
       subCommands: { api: makeApi() },
     });
 
-    it("bash inlines a hoisted associative array and a tracker case", () => {
+    it("bash inlines hoisted prefix-scalar entries and a tracker case", () => {
       const { script } = generateBashCompletion(cmd, { shell: "bash", programName: "mycli" });
-      expect(script).toContain("declare -gA __mycli_expand_api__field=()");
-      expect(script).toContain("__mycli_expand_api__field[$'GetApplication']");
+      // Bash 3.2 emits one scalar per table entry — no associative array.
+      expect(script).toContain("__mycli_expand_api__field__GetApplication=");
+      expect(script).not.toContain("declare -gA");
+      expect(script).not.toContain("local -A");
+      expect(script).not.toContain("mapfile");
       expect(script).toContain("__mycli_track_pos");
-      expect(script).toContain(`api:0) _arg_values[endpoint]="$3"`);
+      expect(script).toContain(`api:0) _arg_values_endpoint="$3"`);
       // `endpoint` is a local positional, so the lookup reads only the
-      // local bucket — no global fallback.
-      expect(script).toContain(`local _key="\${_arg_values[endpoint]:-}"`);
-      expect(script).toContain("local -A _arg_values=()");
+      // local prefix-scalar bucket — no global fallback.
+      expect(script).toContain(`_enc_v="\${_arg_values_endpoint:-}"`);
     });
 
     it("keeps global tracker cases reachable through subcommand aliases", () => {
@@ -293,8 +295,8 @@ describe("expand completion", () => {
       });
       // Only the root path's `--env` writes into `_global_arg_values`.
       // The subcommand path must NOT appear in the global tracker.
-      expect(bash).toContain(`:--env) _global_arg_values[env]="$3"`);
-      expect(bash).not.toContain(`sub:--env) _global_arg_values[env]`);
+      expect(bash).toContain(`:--env) _global_arg_values_env="$3"`);
+      expect(bash).not.toContain(`sub:--env) _global_arg_values_env`);
     });
 
     it("keeps global tracker cases at intermediate frames where a local shadows the dep", () => {
@@ -343,11 +345,11 @@ describe("expand completion", () => {
       // even though `parent` itself defines a local `env`. With the
       // intermediate-frame fix the pattern is unioned with the other
       // paths, so the action follows after the alternation.
-      expect(bash).toMatch(/(?:^|\|)parent:--env(?:\||\))[^\n]*_global_arg_values\[env\]/m);
+      expect(bash).toMatch(/(?:^|\|)parent:--env(?:\||\))[^\n]*_global_arg_values_env/m);
       // The leaf-shadowed `sub:--env` style drop still applies elsewhere
       // — `child:--env` is the deepest leaf, and child has no local
       // shadow, so its case stays in.
-      expect(bash).toMatch(/(?:^|\|)parent:child:--env(?:\||\))[^\n]*_global_arg_values\[env\]/m);
+      expect(bash).toMatch(/(?:^|\|)parent:child:--env(?:\||\))[^\n]*_global_arg_values_env/m);
 
       const { script: zsh } = generateZshCompletion(cliNested, {
         shell: "zsh",
@@ -368,7 +370,7 @@ describe("expand completion", () => {
     it("keeps a global expand spec reading from the global bucket even when a subcommand shadows the dep name", () => {
       // Global `field` depends on global `env`. The subcommand defines a
       // local `env` that shadows the global at that frame. The host's
-      // generated lookup must still read `_global_arg_values[env]`, not
+      // generated lookup must still read `_global_arg_values_env`, not
       // the shadowed local — otherwise candidates supplied before the
       // subcommand disappear.
       const globals = z.object({
@@ -399,16 +401,16 @@ describe("expand completion", () => {
         globalArgsSchema: globals,
       });
       // The global host's dep lookup must point at the global bucket.
-      expect(bash).toContain(`local _key="\${_global_arg_values[env]:-}"`);
+      expect(bash).toContain(`_enc_v="\${_global_arg_values_env:-}"`);
       // The dep tracker for the global `env` must also write to the
       // global bucket — both at root and at the `sub:--env` route.
-      expect(bash).toContain(`:--env) _global_arg_values[env]="$3"`);
+      expect(bash).toContain(`:--env) _global_arg_values_env="$3"`);
     });
 
     it("reads global deps from the global bucket and local deps from the local bucket", () => {
       // When a spec has a global dep, the lookup must read
-      // `_global_arg_values[<d>]` only; when it has a local dep, read
-      // `_arg_values[<d>]` only. A local dep falling back to a same-
+      // `_global_arg_values_<d>` only; when it has a local dep, read
+      // `_arg_values_<d>` only. A local dep falling back to a same-
       // named global would silently substitute a parent value for a
       // missing local value.
       const globalEnv = z.object({
@@ -446,10 +448,10 @@ describe("expand completion", () => {
         globalArgsSchema: globalEnv,
       });
       // The global host (feat) reads the global bucket for its dep.
-      expect(bash).toContain(`local _key="\${_global_arg_values[env]:-}"`);
+      expect(bash).toContain(`_enc_v="\${_global_arg_values_env:-}"`);
       // The local host (localField on sub) reads the local bucket for its
       // dep — no fallback to globals.
-      expect(bash).toContain(`local _key="\${_arg_values[env]:-}"`);
+      expect(bash).toContain(`_enc_v="\${_arg_values_env:-}"`);
     });
 
     it("routes global tracker writes to a bucket that survives subcommand descent", () => {
@@ -481,10 +483,10 @@ describe("expand completion", () => {
         globalArgsSchema: globalEnv,
       });
       // Global tracker writes route into _global_arg_values, which is not
-      // cleared on subcommand descent.
-      expect(bash).toContain(`_global_arg_values[env]="$3"`);
-      expect(bash).toContain(`_global_used_field_keys[field]+=" $_k "`);
-      expect(bash).toContain("local -A _global_arg_values=()");
+      // cleared on subcommand descent (bash 3.2 uses prefix-scalar vars).
+      expect(bash).toContain(`_global_arg_values_env="$3"`);
+      expect(bash).toContain(`_global_used_field_keys_field+=" $_k "`);
+      expect(bash).toContain("unset $(compgen -v _global_arg_values_");
 
       const { script: zsh } = generateZshCompletion(cliWithGlobals, {
         shell: "zsh",
@@ -530,9 +532,11 @@ describe("expand completion", () => {
         shell: "bash",
         programName: "mycli",
       });
-      // The descent branch must reset `_arg_values` so the parent's --env
-      // does not pre-populate the child's expand dep.
-      expect(bash).toContain(`_arg_values=()`);
+      // The descent branch must reset `_arg_values_*` so the parent's
+      // --env does not pre-populate the child's expand dep. Bash 3.2
+      // uses prefix-scalar vars + compgen-driven unset; zsh keeps the
+      // associative-array reset.
+      expect(bash).toContain(`unset $(compgen -v _arg_values_`);
       const { script: zsh } = generateZshCompletion(nested, {
         shell: "zsh",
         programName: "mycli",
@@ -573,17 +577,19 @@ describe("expand completion", () => {
 
     it("bash suppresses file fallback for expand specs with no candidates", () => {
       const { script } = generateBashCompletion(cmd, { shell: "bash", programName: "mycli" });
-      // The expand block must `compopt +o default` before the early return
-      // so an empty result does not silently degrade to file completion.
-      // Match the directive appearing before the `_key=` declaration.
-      expect(script).toMatch(/compopt \+o default[\s\S]*?local _key=/);
+      // The expand block must `compopt +o default` before building the
+      // encoded lookup key, so an empty result does not silently degrade
+      // to file completion. Match the directive appearing before the
+      // `_enc_key=` initialization.
+      expect(script).toMatch(/compopt \+o default[\s\S]*?local _enc_key=/);
     });
 
-    it("bash guards against an empty subscript when the dep is unset", () => {
+    it("bash handles unset deps without bad-array-subscript errors", () => {
       const { script } = generateBashCompletion(cmd, { shell: "bash", programName: "mycli" });
-      // Without this guard, `api -f <TAB>` (endpoint not typed yet) would
-      // dereference `${arr[]}` and bash errors out with `bad array subscript`.
-      expect(script).toMatch(/if \[\[ -z "\$_key" \]\]; then return; fi/);
+      // The bash 3.2 path uses indirect expansion on a per-entry scalar
+      // (`${!_varname:-}`), so an unset dep simply yields an empty
+      // candidate set — no `${arr[]}` dereference to error on.
+      expect(script).toMatch(/local _raw="\$\{!_varname:-\}"/);
     });
 
     it("zsh inlines a hoisted associative array with descriptions", () => {
@@ -635,10 +641,11 @@ describe("expand completion", () => {
     it("bash emits a separate track function and runtime dedup guard", () => {
       const { script } = generateBashCompletion(cmd, { shell: "bash", programName: "mycli" });
       expect(script).toContain("__mycli_track_array_expand");
-      expect(script).toContain("local -A _used_field_keys=()");
+      // Bash 3.2: prefix-scalar per-field bucket, not an associative array.
+      expect(script).toContain("unset $(compgen -v _used_field_keys_");
       expect(script).toContain(`api:--field|api:-f)`);
-      expect(script).toContain(`_used_field_keys[field]+=" $_k "`);
-      expect(script).toContain(`_used_field_keys[field]:-`);
+      expect(script).toContain(`_used_field_keys_field+=" $_k "`);
+      expect(script).toContain(`_used_field_keys_field:-`);
       expect(script).toContain(`__mycli_track_array_expand "$_subcmd"`);
     });
 
@@ -726,7 +733,7 @@ describe("expand completion", () => {
         shell: "bash",
         programName: "mycli",
       });
-      expect(bash).toContain(`api:0|a:0) _arg_values[endpoint]="$3"`);
+      expect(bash).toContain(`api:0|a:0) _arg_values_endpoint="$3"`);
       expect(bash).toContain(`api:--field|api:-f|a:--field|a:-f)`);
 
       const { script: zsh } = generateZshCompletion(cli, {
@@ -897,6 +904,61 @@ describe("expand completion", () => {
       });
       expect(fish).not.toContain("_used_field_keys");
       expect(fish).not.toContain("__scalarcli_track_array_expand");
+    });
+  });
+
+  describe("bash 3.2 compatibility", () => {
+    it("generated bash script for expand uses no bash 4+ idioms", () => {
+      // Sanity guard: macOS ships bash 3.2.57 and many users source the
+      // generated completion straight from /bin/bash. The expand path
+      // must avoid declare -A, declare -gA, local -A, mapfile, readarray.
+      const cli = defineCommand({
+        name: "mycli",
+        subCommands: { api: makeApi() },
+      });
+      const { script } = generateBashCompletion(cli, {
+        shell: "bash",
+        programName: "mycli",
+      });
+      expect(script).not.toMatch(/\bdeclare\s+-gA\b/);
+      expect(script).not.toMatch(/\bdeclare\s+-A\b/);
+      expect(script).not.toMatch(/\blocal\s+-A\b/);
+      expect(script).not.toMatch(/\bmapfile\b/);
+      expect(script).not.toMatch(/\breadarray\b/);
+    });
+
+    it("multi-dep expand keys encode each dep independently", () => {
+      // Two deps with shared characters could collide under a naive
+      // concat encoding (e.g. "ab" + "c" vs "a" + "bc"). The per-dep
+      // hex encoding plus `_` separator keeps the keys disjoint.
+      const cli = defineCommand({
+        name: "mycli",
+        args: z.object({
+          a: arg(z.string(), { completion: { custom: { choices: ["x"] } } }),
+          b: arg(z.string(), { completion: { custom: { choices: ["y"] } } }),
+          out: arg(z.string().optional(), {
+            completion: {
+              custom: {
+                expand: {
+                  dependsOn: ["a", "b"],
+                  enumerate: (deps) => [{ value: `${deps.a}-${deps.b}` }],
+                },
+              },
+            },
+          }),
+        }),
+      });
+      const { script } = generateBashCompletion(cli, {
+        shell: "bash",
+        programName: "mycli",
+      });
+      // Each dep value contributes one segment to the encoded key, joined
+      // with `_`. For deps ("x", "y") the suffix is "x_y".
+      expect(script).toContain(`__mycli_expand_root__out__x_y=`);
+      // Lookup composes the suffix from runtime values via `__mycli_enc`.
+      expect(script).toContain(`_enc_v="\${_arg_values_a:-}"`);
+      expect(script).toContain(`_enc_key="$(__mycli_enc "$_enc_v")"`);
+      expect(script).toContain(`_enc_key+="_$(__mycli_enc "$_enc_v")"`);
     });
   });
 });

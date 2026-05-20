@@ -475,13 +475,13 @@ export function generateZshCompletion(
     // per-spec lookup can dispatch on sibling arg values.
     lines.push(`__${fn}_track_opt() {`);
     lines.push(`    case "$1:$2" in`);
-    lines.push(...trackOptCaseLines(trackedFields));
+    lines.push(...trackOptCaseLines(trackedFields, "zsh"));
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);
     lines.push(`__${fn}_track_pos() {`);
     lines.push(`    case "$1:$2" in`);
-    lines.push(...trackPosCaseLines(trackedFields));
+    lines.push(...trackPosCaseLines(trackedFields, "zsh"));
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);
@@ -493,7 +493,7 @@ export function generateZshCompletion(
     // not collide on the same case pattern.
     lines.push(`__${fn}_track_array_expand() {`);
     lines.push(`    case "$1:$2" in`);
-    lines.push(...trackArrayExpandCaseLines(arrayExpandSpecs));
+    lines.push(...trackArrayExpandCaseLines(arrayExpandSpecs, "zsh"));
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);

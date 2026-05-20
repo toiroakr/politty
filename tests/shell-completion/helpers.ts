@@ -168,7 +168,8 @@ _${fnName}_completions 2>/dev/null
 printf '%s\\n' "\${COMPREPLY[@]}"
 `;
 
-  const result = execSync(`bash -c '${script.replace(/'/g, "'\\''")}'`, {
+  const bashBin = process.env.POLITTY_BASH_BIN ?? "bash";
+  const result = execSync(`${bashBin} -c '${script.replace(/'/g, "'\\''")}'`, {
     env: testEnv,
     encoding: "utf-8",
     timeout: 15000,
