@@ -131,6 +131,17 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.config).toBe("tailor.yml");
     });
 
+    it("does not consume the next option as a value when one option follows another", () => {
+      // `parseArgv` does not consume a `-` prefixed token as the previous
+      // option's value. Completion must mirror that — otherwise
+      // `--config --verbose --field <TAB>` records `config === "--verbose"`
+      // and leaves `verbose` unset, so the resolver sees a state the
+      // runtime never produces.
+      const ctx = parseCompletionContext(["--config", "--verbose", "--field", ""], cmd);
+      expect(ctx.parsedArgs.config).toBeUndefined();
+      expect(ctx.parsedArgs.verbose).toBe(true);
+    });
+
     it("does not consume the trailing currentWord as an option value", () => {
       // The last argv element is the word being completed. It must not be
       // recorded as `--config`'s value, otherwise resolvers see a value the

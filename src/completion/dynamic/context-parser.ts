@@ -389,9 +389,16 @@ export function parseCompletionContext(
             const eqIdx = word.indexOf("=");
             recordOptionValue(opt, word.slice(eqIdx + 1));
           } else if (i + 1 < argv.length - 1) {
-            // Skip next word if option takes value and doesn't have inline value
-            recordOptionValue(opt, argv[i + 1]!);
-            i++;
+            const next = argv[i + 1]!;
+            // Mirror the runtime parser (`parseArgv`): a token starting
+            // with `-` is treated as the next option, not as this
+            // option's value. Otherwise `--config --flag --field <TAB>`
+            // records `config === "--flag"` and leaves `flag` unset,
+            // so the resolver sees a state the runtime never produces.
+            if (!isOption(next)) {
+              recordOptionValue(opt, next);
+              i++;
+            }
           }
         } else {
           recordBooleanFlag(opt, optName);
