@@ -157,7 +157,7 @@ export function quotedAvailabilityTokens(
     if (options.isGlobal === true) {
       for (const o of options.frameOptions) {
         if (o.isGlobal === true) continue;
-        for (const t of localOwnedTokens(o.cliName, o.alias)) tokens.delete(t);
+        for (const t of localShadowingTokens(o.cliName, o.alias)) tokens.delete(t);
       }
     } else {
       const globalShort = globalShortTokens(options.frameOptions);
@@ -176,22 +176,25 @@ export function quotedAvailabilityTokens(
 
 /**
  * Tokens the runtime's `separateGlobalArgs` would consider locally
- * owned at the leaf — long-form cliName plus every EXPLICIT alias
- * spelling. Mirrors `localShadowingTokens` in extractor.ts but is
- * kept here so the availability-guard path does not pull in the
- * extractor module. Excludes the auto-derived `-x` for a 1-char
- * cliName because that short form lives in the local aliasMap only
- * when an explicit alias declares it.
+ * owned at the leaf: long-form cliName plus every EXPLICIT alias
+ * spelling (in all forms the aliasMap accepts — `-a`/`--a` for short,
+ * `--to-be`/`--toBe` for hyphenated). Excludes the auto-derived `-x`
+ * for a 1-char cliName because that short form lives in the local
+ * aliasMap only when an explicit alias declares it.
  */
-function localOwnedTokens(cliName: string, aliases: readonly string[] | undefined): string[] {
-  const out = [`--${cliName}`];
-  if (cliName.includes("-")) out.push(`--${toCamelCase(cliName)}`);
-  if (aliases) {
-    for (const a of aliases) {
-      out.push(aliasToken(a));
-      if (a.length === 1) out.push(`--${a}`);
-      else if (a.includes("-")) out.push(`--${toCamelCase(a)}`);
-    }
+export function localShadowingTokens(
+  cliName: string,
+  aliases: readonly string[] | undefined,
+): string[] {
+  const tokens = [`--${cliName}`];
+  if (cliName.includes("-")) tokens.push(`--${toCamelCase(cliName)}`);
+  for (const a of aliases ?? []) {
+    const push = (t: string): void => {
+      if (!tokens.includes(t)) tokens.push(t);
+    };
+    push(aliasToken(a));
+    if (a.length === 1) push(`--${a}`);
+    else if (a.includes("-")) push(`--${toCamelCase(a)}`);
   }
-  return out;
+  return tokens;
 }

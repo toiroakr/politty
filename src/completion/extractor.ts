@@ -6,7 +6,7 @@ import { extractFields, toCamelCase, type ResolvedFieldMeta } from "../core/sche
 import { resolveSubCommandMeta } from "../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import { resolveExpandTargets, type PendingExpandTarget } from "./expand-resolver.js";
-import { aliasToken, globalShortTokens } from "./shell-shared.js";
+import { aliasToken, globalShortTokens, localShadowingTokens } from "./shell-shared.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -584,25 +584,6 @@ export function collectOptionTokens(
   if (cliName.length === 1) tokens.push(`-${cliName}`);
   // Hyphenated cliName accepts its camelCase form (`--toBe` for
   // `cliName: "to-be"`) via runtime's aliasMap.
-  if (cliName.includes("-")) tokens.push(`--${toCamelCase(cliName)}`);
-  for (const a of aliases ?? []) pushAliasTokens(tokens, a);
-  return tokens;
-}
-
-/**
- * Tokens the runtime's `separateGlobalArgs` would consider locally
- * owned at the leaf: the long-form cliName and every EXPLICIT alias
- * (in its emitted form). Unlike {@link collectOptionTokens}, this does
- * NOT include the auto-derived `-x` for a 1-char cliName, because that
- * short form is registered in the local aliasMap only when an explicit
- * alias declares it — a bare `cliName: "x"` does not shadow a global
- * short alias of the same letter.
- */
-export function localShadowingTokens(
-  cliName: string,
-  aliases: readonly string[] | undefined,
-): string[] {
-  const tokens = [`--${cliName}`];
   if (cliName.includes("-")) tokens.push(`--${toCamelCase(cliName)}`);
   for (const a of aliases ?? []) pushAliasTokens(tokens, a);
   return tokens;
