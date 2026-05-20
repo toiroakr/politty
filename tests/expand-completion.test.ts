@@ -297,6 +297,74 @@ describe("expand completion", () => {
       expect(bash).not.toContain(`sub:--env) _global_arg_values[env]`);
     });
 
+    it("keeps global tracker cases at intermediate frames where a local shadows the dep", () => {
+      // Mirrors the iteration-18 shadow case but with a deeper command
+      // tree. When `parent` defines a local `env` AND has a descendant
+      // subcommand, the runtime's `scanForSubcommand` collects the
+      // pre-boundary `--env` into globals (the scanner ignores the
+      // parent's local schema). The generated script must keep writing
+      // `_global_arg_values[env]` for the `parent:--env` pattern so a
+      // global expand under `child` still sees the value typed before
+      // descent.
+      const globals = z.object({
+        env: arg(z.string(), { completion: { custom: { choices: ["prod"] } } }),
+        field: arg(z.string().optional(), {
+          completion: {
+            custom: {
+              expand: { dependsOn: ["env"], enumerate: () => [{ value: "x" }] },
+            },
+          },
+        }),
+      });
+      const cliNested = defineCommand({
+        name: "mycli",
+        subCommands: {
+          parent: defineCommand({
+            name: "parent",
+            args: z.object({
+              env: arg(z.string(), { completion: { custom: { choices: ["a"] } } }),
+            }),
+            subCommands: {
+              child: defineCommand({
+                name: "child",
+                args: z.object({}),
+                run: () => {},
+              }),
+            },
+          }),
+        },
+      });
+      const { script: bash } = generateBashCompletion(cliNested, {
+        shell: "bash",
+        programName: "mycli",
+        globalArgsSchema: globals,
+      });
+      // The `parent:--env` pattern must reach the global-bucket write,
+      // even though `parent` itself defines a local `env`. With the
+      // intermediate-frame fix the pattern is unioned with the other
+      // paths, so the action follows after the alternation.
+      expect(bash).toMatch(/(?:^|\|)parent:--env(?:\||\))[^\n]*_global_arg_values\[env\]/m);
+      // The leaf-shadowed `sub:--env` style drop still applies elsewhere
+      // — `child:--env` is the deepest leaf, and child has no local
+      // shadow, so its case stays in.
+      expect(bash).toMatch(/(?:^|\|)parent:child:--env(?:\||\))[^\n]*_global_arg_values\[env\]/m);
+
+      const { script: zsh } = generateZshCompletion(cliNested, {
+        shell: "zsh",
+        programName: "mycli",
+        globalArgsSchema: globals,
+      });
+      expect(zsh).toMatch(/(?:^|\|)parent:--env(?:\||\))[^\n]*_global_arg_values\[env\]/m);
+
+      const { script: fish } = generateFishCompletion(cliNested, {
+        shell: "fish",
+        programName: "mycli",
+        globalArgsSchema: globals,
+      });
+      // Fish uses space-separated case patterns and per-field scalars.
+      expect(fish).toMatch(/"parent:--env"[\s\S]*?set -g _global_arg_values_env/);
+    });
+
     it("keeps a global expand spec reading from the global bucket even when a subcommand shadows the dep name", () => {
       // Global `field` depends on global `env`. The subcommand defines a
       // local `env` that shadows the global at that frame. The host's

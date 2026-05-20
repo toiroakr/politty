@@ -427,6 +427,16 @@ export interface ExpandSpecLocation {
    */
   readonly pathStrs: readonly string[];
   /**
+   * Ancestor subcommand paths (canonical + alias variants) above this
+   * spec's host frame. Used to emit global dep trackers at every
+   * "before subcommand boundary" position: the runtime scanner collects
+   * matching global tokens at every frame on the way down regardless of
+   * the local schema, so a global dep value typed at any ancestor must
+   * still feed this spec's lookup. Empty when the spec lives at the
+   * root.
+   */
+  readonly intermediatePathStrs: readonly string[];
+  /**
    * Function suffix used in `__<fn>_<funcSuffix>` naming (e.g., "api",
    * "workspace_user"; "root" for the root command).
    */
@@ -479,7 +489,7 @@ export function collectOptionTokens(
  */
 export function collectExpandSpecs(root: CompletableSubcommand): ExpandSpecLocation[] {
   const out: ExpandSpecLocation[] = [];
-  walk(root, [], [""], "root", out);
+  walk(root, [], [""], [], "root", out);
   return out;
 }
 
@@ -487,6 +497,7 @@ function walk(
   node: CompletableSubcommand,
   path: string[],
   pathStrs: readonly string[],
+  intermediatePathStrs: readonly string[],
   funcSuffix: string,
   out: ExpandSpecLocation[],
 ): void {
@@ -499,6 +510,7 @@ function walk(
         path,
         pathStr,
         pathStrs,
+        intermediatePathStrs,
         funcSuffix,
         fieldName: opt.name,
         isGlobal: opt.isGlobal === true,
@@ -516,6 +528,7 @@ function walk(
         path,
         pathStr,
         pathStrs,
+        intermediatePathStrs,
         funcSuffix,
         fieldName: pos.name,
         isGlobal: false,
@@ -529,9 +542,14 @@ function walk(
   for (const child of getVisibleSubs(node.subcommands)) {
     const childPath = [...path, child.name];
     const childPathStrs = expandChildPathStrs(pathStrs, child);
+    // Pass the current frame's pathStrs (canonical + alias variants)
+    // down as ancestor pathStrs for descendants. The descendant spec
+    // uses these to emit global-dep tracker cases at every "before
+    // subcommand boundary" position the runtime scanner can reach.
+    const childIntermediates = [...intermediatePathStrs, ...pathStrs];
     const childFunc =
       funcSuffix === "root" ? sanitize(child.name) : `${funcSuffix}_${sanitize(child.name)}`;
-    walk(child, childPath, childPathStrs, childFunc, out);
+    walk(child, childPath, childPathStrs, childIntermediates, childFunc, out);
   }
 }
 
@@ -586,16 +604,36 @@ export function collectTrackedFields(
   specs: readonly ExpandSpecLocation[],
   globalOptions: readonly CompletableOption[] = [],
 ): TrackedFieldRef[] {
-  const out: TrackedFieldRef[] = [];
-  const seen = new Set<string>();
   const nodeByPath = indexNodesByPath(root);
+  // Aggregate per (fieldName, isGlobal, isPositional, position) — multiple
+  // specs may share the same dep (e.g. the same global dep referenced from
+  // root, parent, and parent:child specs). Unioning their pathStrs into a
+  // single case branch keeps the generated `__track_opt` body free of
+  // duplicate patterns while preserving every frame the runtime scanner can
+  // reach.
+  interface Bucket {
+    ref: Omit<TrackedFieldRef, "pathStr" | "pathStrs">;
+    pathStrs: string[];
+    seen: Set<string>;
+  }
+  const buckets = new Map<string, Bucket>();
+  const addPath = (key: string, ref: Bucket["ref"], paths: readonly string[]): void => {
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { ref, pathStrs: [], seen: new Set() };
+      buckets.set(key, bucket);
+    }
+    for (const p of paths) {
+      if (bucket.seen.has(p)) continue;
+      bucket.seen.add(p);
+      bucket.pathStrs.push(p);
+    }
+  };
+
   for (const spec of specs) {
     const node = nodeByPath.get(spec.pathStr);
     if (!node) continue;
     for (const dep of spec.vc.dependsOn) {
-      const dedupKey = `${spec.pathStr}::${dep}`;
-      if (seen.has(dedupKey)) continue;
-      seen.add(dedupKey);
       // Global expand specs are resolved against the global siblings list
       // alone (see `resolveExpandTargets` in `extractCompletionData`), so
       // their dep tracker must reference the global option metadata even
@@ -604,63 +642,92 @@ export function collectTrackedFields(
       // the tracker to the local shadow.
       if (spec.isGlobal) {
         const globalOpt = globalOptions.find((o) => o.name === dep);
-        if (globalOpt) {
-          // Drop pathStrs where a subcommand defines a local option that
-          // claims any of the global dep's CLI tokens. The runtime
-          // parser routes by `cliName` / `alias`, not the field's
-          // identifier, so a local option with a different field name
-          // but the same `--env` flag still shadows the global at that
-          // frame. Emitting the global tracker there would record the
-          // local value into `_global_arg_values`.
-          const globalTokens = new Set<string>([globalOpt.cliName, ...(globalOpt.alias ?? [])]);
-          const activePathStrs = spec.pathStrs.filter((p) => {
-            const n = nodeByPath.get(p);
-            if (!n) return false;
-            const localShadow = n.options.find(
-              (o) =>
-                o.isGlobal !== true &&
-                (o.name === dep ||
-                  globalTokens.has(o.cliName) ||
-                  o.alias?.some((a) => globalTokens.has(a)) === true),
-            );
-            return !localShadow;
-          });
-          if (activePathStrs.length === 0) continue;
-          out.push({
+        if (!globalOpt) continue;
+        // Drop spec pathStrs where the leaf subcommand defines a local
+        // option that claims any of the global dep's CLI tokens. The
+        // runtime's `separateGlobalArgs` runs at the leaf frame and
+        // routes a colliding token to the local — recording the local
+        // value into `_global_arg_values` there would diverge from the
+        // runtime. Intermediate pathStrs (ancestor frames the scanner
+        // crosses on the way down) are always kept: the runtime scanner
+        // collects matching tokens at those frames regardless of any
+        // local schema, and the resulting value remains in
+        // `_global_arg_values` for descendant specs to consume.
+        const globalTokens = new Set<string>([globalOpt.cliName, ...(globalOpt.alias ?? [])]);
+        const leafPathStrs = spec.pathStrs.filter((p) => {
+          const n = nodeByPath.get(p);
+          if (!n) return false;
+          const localShadow = n.options.find(
+            (o) =>
+              o.isGlobal !== true &&
+              (o.name === dep ||
+                globalTokens.has(o.cliName) ||
+                o.alias?.some((a) => globalTokens.has(a)) === true),
+          );
+          return !localShadow;
+        });
+        const allPathStrs = [...leafPathStrs, ...spec.intermediatePathStrs];
+        if (allPathStrs.length === 0) continue;
+        const key = `g::${dep}`;
+        addPath(
+          key,
+          {
             fieldName: dep,
             isGlobal: true,
-            pathStr: activePathStrs[0]!,
-            pathStrs: activePathStrs,
             isPositional: false,
             optionTokens: collectOptionTokens(globalOpt.cliName, globalOpt.alias),
-          });
-        }
+          },
+          allPathStrs,
+        );
         continue;
       }
       const posIndex = node.positionals.findIndex((p) => p.name === dep);
       if (posIndex >= 0) {
-        out.push({
-          fieldName: dep,
-          isGlobal: false,
-          pathStr: spec.pathStr,
-          pathStrs: spec.pathStrs,
-          isPositional: true,
-          position: posIndex,
-        });
+        const key = `lp::${spec.pathStr}::${dep}`;
+        addPath(
+          key,
+          {
+            fieldName: dep,
+            isGlobal: false,
+            isPositional: true,
+            position: posIndex,
+          },
+          spec.pathStrs,
+        );
         continue;
       }
       const opt = node.options.find((o) => o.name === dep);
       if (opt) {
-        out.push({
-          fieldName: dep,
-          isGlobal: opt.isGlobal === true,
-          pathStr: spec.pathStr,
-          pathStrs: spec.pathStrs,
-          isPositional: false,
-          optionTokens: collectOptionTokens(opt.cliName, opt.alias),
-        });
+        const optIsGlobal = opt.isGlobal === true;
+        // A local dep tracker stays bound to the host frame: locals don't
+        // propagate across subcommand boundaries the way globals do. A
+        // dep that resolves to a propagated global (host is local, dep
+        // happens to be global) still tracks at the host frame plus every
+        // ancestor — matching the global semantics for that dep.
+        const intermediatePathStrs = optIsGlobal ? spec.intermediatePathStrs : [];
+        const pathStrs = [...spec.pathStrs, ...intermediatePathStrs];
+        const key = optIsGlobal ? `g::${dep}` : `lo::${spec.pathStr}::${dep}`;
+        addPath(
+          key,
+          {
+            fieldName: dep,
+            isGlobal: optIsGlobal,
+            isPositional: false,
+            optionTokens: collectOptionTokens(opt.cliName, opt.alias),
+          },
+          pathStrs,
+        );
       }
     }
+  }
+  const out: TrackedFieldRef[] = [];
+  for (const bucket of buckets.values()) {
+    if (bucket.pathStrs.length === 0) continue;
+    out.push({
+      ...bucket.ref,
+      pathStr: bucket.pathStrs[0]!,
+      pathStrs: bucket.pathStrs,
+    });
   }
   return out;
 }
