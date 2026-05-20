@@ -252,7 +252,9 @@ export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: str
       // does (1-char cliName `-x`, 1-char alias long form `--f`,
       // camelCase variants of hyphenated names). Without this the
       // scanner skips the value of a valid option spelling.
-      const patterns = collectOptionTokens(opt.cliName, opt.alias).map((t) => `${parentPath}:${t}`);
+      // Filter through `effectiveOptionTokens` so a local does not
+      // claim a short token a global owns at this frame.
+      const patterns = effectiveOptionTokens(opt, sub.options).map((t) => `${parentPath}:${t}`);
       lines.push(`        ${patterns.join("|")}) return 0 ;;`);
     }
   }
@@ -503,6 +505,39 @@ export interface ExpandSpecLocation {
  * reachable as `-x` — runtime's `aliasMap` lookup for short flags falls
  * through to the canonical name — so emit that short form too.
  */
+/**
+ * Compute the option token set the runtime would actually route to
+ * `opt` at the given frame. Globals shadow LOCAL short tokens of the
+ * same letter (runtime's \`separateGlobalArgs\` harvests \`-x\` for the
+ * global unless the local explicitly declares \`alias: "x"\`), so a
+ * local cliName \`x\` with no alias must NOT emit \`-x\` in its
+ * tracker / value-completion / takes-value cases when a global at the
+ * frame owns that token. Long forms are unaffected (the codex review
+ * scoped the precedence to short aliases).
+ */
+export function effectiveOptionTokens(
+  opt: CompletableOption,
+  frameOptions: readonly CompletableOption[],
+): string[] {
+  const all = collectOptionTokens(opt.cliName, opt.alias);
+  if (opt.isGlobal === true) return all;
+  const globalShort = new Set<string>();
+  for (const o of frameOptions) {
+    if (o.isGlobal !== true) continue;
+    if (o.cliName.length === 1) globalShort.add(`-${o.cliName}`);
+    for (const a of o.alias ?? []) {
+      if (a.length === 1) globalShort.add(`-${a}`);
+    }
+  }
+  if (globalShort.size === 0) return all;
+  return all.filter((t) => {
+    if (!t.startsWith("-") || t.startsWith("--")) return true;
+    if (!globalShort.has(t)) return true;
+    // Keep if the local explicitly declares the matching short alias.
+    return opt.alias?.includes(t.slice(1)) === true;
+  });
+}
+
 export function collectOptionTokens(
   cliName: string,
   aliases: readonly string[] | undefined,
@@ -594,7 +629,7 @@ function walk(
         isGlobal: opt.isGlobal === true,
         isPositional: false,
         isArrayOption,
-        optionTokens: isArrayOption ? collectOptionTokens(opt.cliName, opt.alias) : [],
+        optionTokens: isArrayOption ? effectiveOptionTokens(opt, node.options) : [],
         vc,
       });
     }
@@ -811,7 +846,7 @@ export function collectTrackedFields(
             fieldName: dep,
             isGlobal: optIsGlobal,
             isPositional: false,
-            optionTokens: collectOptionTokens(opt.cliName, opt.alias),
+            optionTokens: effectiveOptionTokens(opt, node.options),
           },
           pathStrs,
         );

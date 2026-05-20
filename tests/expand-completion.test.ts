@@ -1151,6 +1151,60 @@ describe("expand completion", () => {
       );
     });
 
+    it("does not emit `-x` for a bare 1-char local cliName when a global owns the short token", () => {
+      // Global \`env\` owns alias \`-e\` at runtime; a sibling local
+      // \`e: arg(...)\` declares only \`cliName: "e"\`. \`separateGlobalArgs\`
+      // routes \`-e value\` to the global. The local's value-completion
+      // case and opt-takes-value lookup must therefore NOT list \`-e\`,
+      // otherwise completion suggests / records local values for a
+      // token the command parses as global.
+      const globals = z.object({
+        env: arg(z.string(), {
+          alias: "e",
+          completion: { custom: { choices: ["prod"] } },
+        }),
+      });
+      const cli = defineCommand({
+        name: "mycli",
+        args: z.object({
+          e: arg(z.string(), { completion: { custom: { choices: ["a"] } } }),
+        }),
+        run: () => {},
+      });
+      const { script } = generateBashCompletion(cli, {
+        shell: "bash",
+        programName: "mycli",
+        globalArgsSchema: globals,
+      });
+      // Global's value-completion case keeps its full token set
+      // (`--env`, `-e`, plus the 1-char alias long form `--e`).
+      expect(script).toMatch(/--env\|-e\|--e\)\n[\s\S]*?_choices=\("prod"\)/);
+      // Local's value-completion case is `--e)` only — the bare 1-char
+      // cliName does NOT claim `-e` because a global owns it.
+      expect(script).toMatch(/^\s+--e\)\n[\s\S]*?_choices=\("a"\)/m);
+    });
+
+    it("does not strip an inline `-D=` prefix from a positional after `--`", () => {
+      // `complete -o default` registration means an empty COMPREPLY
+      // falls through to filenames, but for a positional after `--`
+      // the cursor word should be passed verbatim. The earlier code
+      // stripped \`-D=\` as if it were an option-value prefix before
+      // \`_after_dd\` was known; moving the split after the pre-scan
+      // and guarding on \`_after_dd\` keeps the positional intact.
+      const cli = defineCommand({
+        name: "mycli",
+        args: z.object({
+          target: arg(z.string(), { positional: true }),
+        }),
+        run: () => {},
+      });
+      const { script } = generateBashCompletion(cli, {
+        shell: "bash",
+        programName: "mycli",
+      });
+      expect(script).toContain(`if (( ! _after_dd )) && [[ "$_cur" == -*=* ]]; then`);
+    });
+
     it("keeps a global short alias tracker at a leaf where a bare 1-char local cliName does not shadow it", () => {
       // Global \`env\` aliased \`-e\`, leaf-local \`e\` declared via
       // \`cliName: "e"\` only (no explicit alias). Runtime's
@@ -1210,7 +1264,7 @@ describe("expand completion", () => {
         shell: "bash",
         programName: "mycli",
       });
-      expect(script).toContain(`if [[ "$_cur" == -*=* ]]; then`);
+      expect(script).toContain(`if (( ! _after_dd )) && [[ "$_cur" == -*=* ]]; then`);
       expect(script).not.toContain(`if [[ "$_cur" == --*=* ]]; then`);
     });
 

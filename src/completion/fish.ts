@@ -10,9 +10,9 @@ import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
   binEnvVarName,
   collectExpandSpecs,
-  collectOptionTokens,
   collectRouteEntries,
   collectTrackedFields,
+  effectiveOptionTokens,
   extractCompletionData,
   getSubNamesWithAliases,
   getVisibleSubs,
@@ -230,9 +230,7 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
     // runtime's aliasMap accepts so a value-completion trigger fires
     // for every valid spelling of this option (1-char cliName as `-x`,
     // 1-char alias long form `--f`, camelCase of hyphenated names).
-    const conditions = collectOptionTokens(opt.cliName, opt.alias).map(
-      (t) => `test "$_prev" = "${t}"`,
-    );
+    const conditions = effectiveOptionTokens(opt, options).map((t) => `test "$_prev" = "${t}"`);
     const cond = conditions.join("; or ");
 
     lines.push(`    if ${cond}`);
@@ -359,9 +357,7 @@ function optTakesValueCases(sub: CompletableSubcommand, parentPath: string): str
       // Use the same full token set as bash/zsh — runtime's aliasMap
       // accepts every spelling these tokens cover, so the takes-value
       // switch must enumerate them all.
-      const patterns = collectOptionTokens(opt.cliName, opt.alias).map(
-        (t) => `"${parentPath}:${t}"`,
-      );
+      const patterns = effectiveOptionTokens(opt, sub.options).map((t) => `"${parentPath}:${t}"`);
       lines.push(`        case ${patterns.join(" ")}`);
       lines.push(`            return 0`);
     }

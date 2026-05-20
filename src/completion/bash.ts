@@ -10,9 +10,9 @@ import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
   binEnvVarName,
   collectExpandSpecs,
-  collectOptionTokens,
   collectRouteEntries,
   collectTrackedFields,
+  effectiveOptionTokens,
   extractCompletionData,
   getSubNamesWithAliases,
   getVisibleSubs,
@@ -266,7 +266,7 @@ function optionValueCases(
     });
     if (valLines.length === 0) continue;
 
-    const patternStr = collectOptionTokens(opt.cliName, opt.alias).join("|");
+    const patternStr = effectiveOptionTokens(opt, options).join("|");
 
     lines.push(`            ${patternStr})`);
     for (const vl of valLines) {
@@ -688,17 +688,12 @@ export function generateBashCompletion(
   lines.push(``);
   lines.push(`    local _cur=""`);
   lines.push(`    (( \${#_words[@]} > 0 )) && _cur="\${_words[\${#_words[@]}-1]}"`);
-  lines.push(``);
+  // _inline_prefix is computed AFTER the pre-scan loop below so we can
+  // suppress the split when the cursor word follows a `--`. Otherwise
+  // `cmd -- -D=foo<TAB>` would strip `-D=` as if it were an inline
+  // option-value prefix and feed `foo` through positional completion
+  // with `-D=` re-prepended, yielding garbage candidates.
   lines.push(`    local _inline_prefix=""`);
-  // Match both `--opt=value` and `-o=value` inline forms — the runtime
-  // parser accepts the short variant, so completion must too. The pre-
-  // scan loop below already splits both shapes for the earlier words,
-  // and the value-completion dispatch downstream keys off
-  // `_inline_prefix`/`_cur` either way.
-  lines.push(`    if [[ "$_cur" == -*=* ]]; then`);
-  lines.push(`        _inline_prefix="\${_cur%%=*}="`);
-  lines.push(`        _cur="\${_cur#*=}"`);
-  lines.push(`    fi`);
   lines.push(``);
   lines.push(`    local _prev=""`);
   lines.push(`    (( \${#_words[@]} > 1 )) && _prev="\${_words[\${#_words[@]}-2]}"`);
@@ -799,6 +794,16 @@ export function generateBashCompletion(
   }
   lines.push(`        (( _j++ ))`);
   lines.push(`    done`);
+  lines.push(``);
+  // Strip `--opt=value` / `-o=value` inline prefixes from the cursor
+  // ONLY when the cursor is not a positional after `--`. Doing this
+  // after the scan means `_after_dd` is reliable; \`cmd -- -D=foo\`
+  // keeps \`_cur="-D=foo"\` so positional completion sees the whole
+  // token instead of garbage.
+  lines.push(`    if (( ! _after_dd )) && [[ "$_cur" == -*=* ]]; then`);
+  lines.push(`        _inline_prefix="\${_cur%%=*}="`);
+  lines.push(`        _cur="\${_cur#*=}"`);
+  lines.push(`    fi`);
   lines.push(``);
   lines.push(`    case "$_subcmd" in`);
   lines.push(subRouting);
