@@ -14,13 +14,7 @@
  */
 
 import type { ExpandCompletion, ResolvedExpandCandidate } from "../core/expand-completion-types.js";
-import type {
-  CompletableOption,
-  CompletablePositional,
-  CompletableSubcommand,
-  ExpandTableEntry,
-  ValueCompletion,
-} from "./types.js";
+import type { CompletableSubcommand, ExpandTableEntry, ValueCompletion } from "./types.js";
 
 /** Information about a single field that needs its expand spec resolved. */
 export interface PendingExpandTarget {
@@ -32,11 +26,6 @@ export interface PendingExpandTarget {
   set: (vc: ValueCompletion) => void;
   /** The unresolved spec from the user. */
   spec: ExpandCompletion;
-}
-
-interface StaticSibling {
-  /** Static value list of the sibling (from `choices` or auto-detected enum). */
-  values: readonly string[];
 }
 
 /**
@@ -62,16 +51,12 @@ export function resolveExpandTargets(
  * referencing anything else from `dependsOn` is reported as a clean error
  * in {@link resolveOne}.
  */
-function buildSiblingIndex(sub: CompletableSubcommand): Map<string, StaticSibling> {
-  const index = new Map<string, StaticSibling>();
-  const fields: Array<CompletableOption | CompletablePositional> = [
-    ...sub.options,
-    ...sub.positionals,
-  ];
-  for (const field of fields) {
+function buildSiblingIndex(sub: CompletableSubcommand): Map<string, readonly string[]> {
+  const index = new Map<string, readonly string[]>();
+  for (const field of [...sub.options, ...sub.positionals]) {
     const vc = field.valueCompletion;
     if (vc?.type === "choices" && vc.choices && vc.choices.length > 0) {
-      index.set(field.name, { values: vc.choices });
+      index.set(field.name, vc.choices);
     }
   }
   return index;
@@ -79,7 +64,7 @@ function buildSiblingIndex(sub: CompletableSubcommand): Map<string, StaticSiblin
 
 function resolveOne(
   target: PendingExpandTarget,
-  siblings: Map<string, StaticSibling>,
+  siblings: Map<string, readonly string[]>,
 ): ValueCompletion {
   const { spec } = target;
   const deps = spec.dependsOn;
@@ -97,13 +82,13 @@ function resolveOne(
         `Field "${target.describe}": completion.custom.expand.dependsOn cannot reference the field itself ("${dep}").`,
       );
     }
-    const sibling = siblings.get(dep);
-    if (!sibling) {
+    const values = siblings.get(dep);
+    if (!values) {
       throw new Error(
         `Field "${target.describe}": completion.custom.expand.dependsOn references "${dep}", which is not a sibling arg with a static \`choices\`/enum schema on the same command. Chaining expand specs is not supported.`,
       );
     }
-    valueLists.push([...sibling.values]);
+    valueLists.push([...values]);
   }
 
   const table: ExpandTableEntry[] = [];

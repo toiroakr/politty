@@ -79,24 +79,15 @@ export async function generateCandidates(
   context: CompletionContext,
   options: GenerateCandidatesOptions,
 ): Promise<CandidateResult> {
-  const candidates: CompletionCandidate[] = [];
-  const directive = CompletionDirective.Default;
-
   switch (context.completionType) {
     case "subcommand":
       return generateSubcommandCandidates(context);
-
     case "option-name":
       return generateOptionNameCandidates(context);
-
     case "option-value":
       return generateOptionValueCandidates(context, options);
-
     case "positional":
       return generatePositionalCandidates(context, options);
-
-    default:
-      return { candidates, directive };
   }
 }
 
