@@ -1118,10 +1118,11 @@ describe("expand completion", () => {
       expect(script).not.toMatch(/case "[^"]*\\x1f[^"]*"/);
     });
 
-    it("seeds an empty COMPREPLY sentinel for the no-entry bash branch so 3.2 does not file-fall-back", () => {
+    it("seeds an empty COMPREPLY sentinel for empty bash expand results so 3.2 does not file-fall-back", () => {
       // Bash 3.2 lacks compopt, so the inline expand path's
-      // `compopt +o default 2>/dev/null` is a silent no-op. When the
-      // expand lookup yields no entry, the function must leave COMPREPLY
+      // `compopt +o default 2>/dev/null` is a silent no-op. Two empty
+      // outcomes — the lookup yielding no entry AND the filter loop
+      // dropping every candidate — both need COMPREPLY to be left
       // non-empty (here: a single empty string) so the script's
       // `complete -o default` registration does not fall back to
       // filename completion.
@@ -1145,7 +1146,9 @@ describe("expand completion", () => {
         shell: "bash",
         programName: "mycli",
       });
-      expect(script).toMatch(/if \[\[ -n "\$_raw" \]\];[\s\S]*?else[\s\S]*?COMPREPLY=\( "" \)/);
+      expect(script).toMatch(
+        /if \[\[ -n "\$_raw" \]\];[\s\S]*?fi\n\s*if \(\( \$\{#COMPREPLY\[@\]\} == 0 \)\); then COMPREPLY=\( "" \); fi/,
+      );
     });
 
     it("encodes `_` so dep values cannot collide with hex escapes or the join separator", () => {

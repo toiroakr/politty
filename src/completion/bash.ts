@@ -175,9 +175,12 @@ function bashValueLines(
         `        [[ "$_c" == "$_cur"* ]] && COMPREPLY+=(${inlineExpr})`,
         `    done`,
         `    compopt -o nospace 2>/dev/null`,
-        `else`,
-        `    COMPREPLY=( "" )`,
         `fi`,
+        // bash 3.2 ignores the earlier `compopt +o default`, so an
+        // entry-empty lookup OR a filtered-out match list both need
+        // the empty sentinel — set it whenever the loop above left
+        // COMPREPLY untouched.
+        `if (( \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`,
       ];
     }
     case "dynamic": {
