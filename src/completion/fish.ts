@@ -649,36 +649,27 @@ export function generateFishCompletion(
     `        if test $_skip_next -eq 1; set _skip_next 0; set _j (math $_j + 1); continue; end`,
   );
   lines.push(`        if test "$_w" = "--"; set _after_dd 1; set _j (math $_j + 1); continue; end`);
+  // After `--`, all remaining words are positionals. Track them so an
+  // expand spec that depends on a positional still sees the value.
+  const afterDdTrack = hasExpand ? `__${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; ` : "";
+  lines.push(
+    `        if test $_after_dd -eq 1; ${afterDdTrack}set _pos_count (math $_pos_count + 1); set _j (math $_j + 1); continue; end`,
+  );
+  // Match both `--opt=value` and `-o=value`: the parser accepts the
+  // short inline form too, so the scanner must split it before tracking
+  // the dep value, otherwise `-e=prod` slips past the tracker.
+  lines.push(`        if string match -q -- '-*=*' "$_w"`);
+  lines.push(`            set -l _opt (string replace -r '=.*' '' -- "$_w")`);
+  lines.push(`            set -a _used_opts "$_opt"`);
   if (hasExpand) {
-    // After `--`, all remaining words are positionals. Track them so an
-    // expand spec that depends on a positional still sees the value.
-    lines.push(
-      `        if test $_after_dd -eq 1; __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; set _pos_count (math $_pos_count + 1); set _j (math $_j + 1); continue; end`,
-    );
-  } else {
-    lines.push(
-      `        if test $_after_dd -eq 1; set _pos_count (math $_pos_count + 1); set _j (math $_j + 1); continue; end`,
-    );
-  }
-  if (hasExpand) {
-    // Match both `--opt=value` and `-o=value`: the parser accepts the
-    // short inline form too, so the scanner must split it before tracking
-    // the dep value, otherwise `-e=prod` slips past the tracker.
-    lines.push(`        if string match -q -- '-*=*' "$_w"`);
-    lines.push(`            set -l _opt (string replace -r '=.*' '' -- "$_w")`);
     lines.push(`            set -l _val (string replace -r '^[^=]*=' '' -- "$_w")`);
-    lines.push(`            set -a _used_opts "$_opt"`);
     lines.push(`            __${fn}_track_opt "$_subcmd" "$_opt" "$_val"`);
     if (hasArrayExpand) {
       lines.push(`            __${fn}_track_array_expand "$_subcmd" "$_opt" "$_val"`);
     }
-    lines.push(`            set _j (math $_j + 1); continue`);
-    lines.push(`        end`);
-  } else {
-    lines.push(
-      `        if string match -q -- '-*=*' "$_w"; set -a _used_opts (string replace -r '=.*' '' -- "$_w"); set _j (math $_j + 1); continue; end`,
-    );
   }
+  lines.push(`            set _j (math $_j + 1); continue`);
+  lines.push(`        end`);
   lines.push(`        if string match -q -- '-*' "$_w"`);
   lines.push(`            set -a _used_opts "$_w"`);
   lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"`);
@@ -704,12 +695,12 @@ export function generateFishCompletion(
   lines.push(`            set _j (math $_j + 1); continue`);
   lines.push(`        end`);
   if (routeEntries.length > 0) {
+    lines.push(`        if __${fn}_is_subcmd "$_subcmd" "$_w"`);
+    lines.push(
+      `            test -n "$_subcmd"; and set _subcmd "$_subcmd:$_w"; or set _subcmd "$_w"`,
+    );
+    lines.push(`            set _used_opts; set _pos_count 0`);
     if (hasExpand) {
-      lines.push(`        if __${fn}_is_subcmd "$_subcmd" "$_w"`);
-      lines.push(
-        `            test -n "$_subcmd"; and set _subcmd "$_subcmd:$_w"; or set _subcmd "$_w"`,
-      );
-      lines.push(`            set _used_opts; set _pos_count 0`);
       // Clear sibling-tracker state when descending into a subcommand:
       // `dependsOn` is scoped to siblings on the same command frame, so
       // letting a parent's `--env` bleed into a child with its own `--env`
@@ -726,19 +717,17 @@ export function generateFishCompletion(
           lines.push(`            set -e _global_arr_seen_${sanitize(spec.fieldName)}`);
         }
       }
-      lines.push(`        else`);
-      lines.push(`            __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
-      lines.push(`            set _pos_count (math $_pos_count + 1)`);
-      lines.push(`        end`);
-    } else {
-      lines.push(
-        `        if __${fn}_is_subcmd "$_subcmd" "$_w"; test -n "$_subcmd"; and set _subcmd "$_subcmd:$_w"; or set _subcmd "$_w"; set _used_opts; set _pos_count 0; else; set _pos_count (math $_pos_count + 1); end`,
-      );
     }
-  } else if (hasExpand) {
-    lines.push(`        __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
-    lines.push(`        set _pos_count (math $_pos_count + 1)`);
+    lines.push(`        else`);
+    if (hasExpand) {
+      lines.push(`            __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
+    }
+    lines.push(`            set _pos_count (math $_pos_count + 1)`);
+    lines.push(`        end`);
   } else {
+    if (hasExpand) {
+      lines.push(`        __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
+    }
     lines.push(`        set _pos_count (math $_pos_count + 1)`);
   }
   lines.push(`        set _j (math $_j + 1)`);

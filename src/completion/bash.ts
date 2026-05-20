@@ -720,32 +720,25 @@ export function generateBashCompletion(
   lines.push(`        local _w="\${_words[_j]}"`);
   lines.push(`        if (( _skip_next )); then _skip_next=0; (( _j++ )); continue; fi`);
   lines.push(`        if [[ "$_w" == "--" ]]; then _after_dd=1; (( _j++ )); continue; fi`);
+  // After `--`, all remaining words are positionals. Track them so an
+  // expand spec that depends on a positional still sees the value.
+  const afterDdTrack = hasExpand ? `__${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; ` : "";
+  lines.push(
+    `        if (( _after_dd )); then ${afterDdTrack}(( _pos_count++ )); (( _j++ )); continue; fi`,
+  );
+  // Match both `--opt=value` and `-o=value`: the parser accepts the
+  // short inline form too, so the scanner must split it before tracking
+  // the dep value, otherwise `-e=prod` slips past the tracker.
+  lines.push(`        if [[ "$_w" == -*=* ]]; then`);
+  lines.push(`            _used_opts+=("\${_w%%=*}")`);
   if (hasExpand) {
-    // After `--`, all remaining words are positionals. Track them so an
-    // expand spec that depends on a positional still sees the value.
-    lines.push(
-      `        if (( _after_dd )); then __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; (( _pos_count++ )); (( _j++ )); continue; fi`,
-    );
-  } else {
-    lines.push(`        if (( _after_dd )); then (( _pos_count++ )); (( _j++ )); continue; fi`);
-  }
-  if (hasExpand) {
-    // Match both `--opt=value` and `-o=value`: the parser accepts the
-    // short inline form too, so the scanner must split it before tracking
-    // the dep value, otherwise `-e=prod` slips past the tracker.
-    lines.push(`        if [[ "$_w" == -*=* ]]; then`);
-    lines.push(`            _used_opts+=("\${_w%%=*}")`);
     lines.push(`            __${fn}_track_opt "$_subcmd" "\${_w%%=*}" "\${_w#*=}"`);
     if (hasArrayExpand) {
       lines.push(`            __${fn}_track_array_expand "$_subcmd" "\${_w%%=*}" "\${_w#*=}"`);
     }
-    lines.push(`            (( _j++ )); continue`);
-    lines.push(`        fi`);
-  } else {
-    lines.push(
-      `        if [[ "$_w" == -*=* ]]; then _used_opts+=("\${_w%%=*}"); (( _j++ )); continue; fi`,
-    );
   }
+  lines.push(`            (( _j++ )); continue`);
+  lines.push(`        fi`);
   lines.push(`        if [[ "$_w" == -* ]]; then`);
   lines.push(`            _used_opts+=("$_w")`);
   // Mirror the runtime parser: a token starting with `-` is the next
@@ -772,27 +765,24 @@ export function generateBashCompletion(
   lines.push(`            fi`);
   lines.push(`            (( _j++ )); continue`);
   lines.push(`        fi`);
+  // Clear sibling-tracker state when descending into a subcommand:
+  // `dependsOn` is scoped to siblings on the same command frame, so
+  // letting a parent's `--env` bleed into a child with its own `--env`
+  // would feed the wrong value into the child's expand lookup.
+  const clearState = hasArrayExpand
+    ? `; _arg_values=(); _used_field_keys=(); _global_arr_seen=()`
+    : hasExpand
+      ? `; _arg_values=()`
+      : "";
+  const posTrack = hasExpand ? `__${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; ` : "";
   if (routeEntries.length > 0) {
-    if (hasExpand) {
-      // Clear sibling-tracker state when descending into a subcommand:
-      // `dependsOn` is scoped to siblings on the same command frame, so
-      // letting a parent's `--env` bleed into a child with its own `--env`
-      // would feed the wrong value into the child's expand lookup.
-      const clearState = hasArrayExpand
-        ? `_arg_values=(); _used_field_keys=(); _global_arr_seen=()`
-        : `_arg_values=()`;
-      lines.push(
-        `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; ${clearState}; else __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; (( _pos_count++ )); fi`,
-      );
-    } else {
-      lines.push(
-        `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else (( _pos_count++ )); fi`,
-      );
-    }
-  } else if (hasExpand) {
-    lines.push(`        __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
-    lines.push(`        (( _pos_count++ ))`);
+    lines.push(
+      `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0${clearState}; else ${posTrack}(( _pos_count++ )); fi`,
+    );
   } else {
+    if (hasExpand) {
+      lines.push(`        __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
+    }
     lines.push(`        (( _pos_count++ ))`);
   }
   lines.push(`        (( _j++ ))`);
