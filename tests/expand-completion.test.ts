@@ -764,7 +764,7 @@ describe("expand completion", () => {
       expect(script).toContain("__mycli_track_array_expand");
       // Bash 3.2: prefix-scalar per-field bucket, not an associative array.
       expect(script).toContain("unset $(compgen -v _used_field_keys_");
-      expect(script).toContain(`api:--field|api:-f)`);
+      expect(script).toContain(`api:--field|api:-f|api:--f)`);
       expect(script).toContain(`_used_field_keys_field+=" $_k "`);
       expect(script).toContain(`_used_field_keys_field:-`);
       expect(script).toContain(`__mycli_track_array_expand "$_subcmd"`);

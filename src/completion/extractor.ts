@@ -247,10 +247,12 @@ export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: str
   const lines: string[] = [];
   for (const opt of sub.options) {
     if (opt.takesValue) {
-      const patterns = [
-        `${parentPath}:--${opt.cliName}`,
-        ...(opt.alias?.map((a) => `${parentPath}:${aliasToken(a)}`) ?? []),
-      ];
+      // Reuse the full token set used by tracker emission so the
+      // takes-value lookup table accepts every form runtime's aliasMap
+      // does (1-char cliName `-x`, 1-char alias long form `--f`,
+      // camelCase variants of hyphenated names). Without this the
+      // scanner skips the value of a valid option spelling.
+      const patterns = collectOptionTokens(opt.cliName, opt.alias).map((t) => `${parentPath}:${t}`);
       lines.push(`        ${patterns.join("|")}) return 0 ;;`);
     }
   }

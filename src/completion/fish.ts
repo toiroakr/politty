@@ -10,6 +10,7 @@ import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
   binEnvVarName,
   collectExpandSpecs,
+  collectOptionTokens,
   collectRouteEntries,
   collectTrackedFields,
   extractCompletionData,
@@ -19,7 +20,6 @@ import {
   sanitize,
 } from "./extractor.js";
 import {
-  aliasToken,
   quotedAvailabilityTokens,
   resolveExpandDepGlobality,
   type ResolvedExpandDep,
@@ -226,14 +226,13 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
     });
     if (valLines.length === 0) continue;
 
-    const conditions = [
-      `test "$_prev" = "--${opt.cliName}"`,
-      // Runtime accepts `-x value` for a 1-char cliName too — its
-      // aliasMap lookup falls through to the canonical name — so the
-      // value-completion trigger must check the short form as well.
-      ...(opt.cliName.length === 1 ? [`test "$_prev" = "-${opt.cliName}"`] : []),
-      ...(opt.alias?.map((a) => `test "$_prev" = "${aliasToken(a)}"`) ?? []),
-    ];
+    // Mirror the bash/zsh tracker emission: use every CLI token the
+    // runtime's aliasMap accepts so a value-completion trigger fires
+    // for every valid spelling of this option (1-char cliName as `-x`,
+    // 1-char alias long form `--f`, camelCase of hyphenated names).
+    const conditions = collectOptionTokens(opt.cliName, opt.alias).map(
+      (t) => `test "$_prev" = "${t}"`,
+    );
     const cond = conditions.join("; or ");
 
     lines.push(`    if ${cond}`);
@@ -357,13 +356,12 @@ function optTakesValueCases(sub: CompletableSubcommand, parentPath: string): str
   const lines: string[] = [];
   for (const opt of sub.options) {
     if (opt.takesValue) {
-      const patterns = [
-        `"${parentPath}:--${opt.cliName}"`,
-        // 1-char cliName is also accepted as `-x` at runtime; include
-        // it so expand dependency tracking fires for `-x value` too.
-        ...(opt.cliName.length === 1 ? [`"${parentPath}:-${opt.cliName}"`] : []),
-        ...(opt.alias?.map((a) => `"${parentPath}:${aliasToken(a)}"`) ?? []),
-      ];
+      // Use the same full token set as bash/zsh — runtime's aliasMap
+      // accepts every spelling these tokens cover, so the takes-value
+      // switch must enumerate them all.
+      const patterns = collectOptionTokens(opt.cliName, opt.alias).map(
+        (t) => `"${parentPath}:${t}"`,
+      );
       lines.push(`        case ${patterns.join(" ")}`);
       lines.push(`            return 0`);
     }
