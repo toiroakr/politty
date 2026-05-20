@@ -6,7 +6,7 @@ import { extractFields, toCamelCase, type ResolvedFieldMeta } from "../core/sche
 import { resolveSubCommandMeta } from "../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import { resolveExpandTargets, type PendingExpandTarget } from "./expand-resolver.js";
-import { aliasToken } from "./shell-shared.js";
+import { aliasToken, globalShortTokens } from "./shell-shared.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -539,14 +539,7 @@ export function effectiveOptionTokens(
     }
     return all.filter((t) => !localClaimed.has(t));
   }
-  const globalShort = new Set<string>();
-  for (const o of frameOptions) {
-    if (o.isGlobal !== true) continue;
-    if (o.cliName.length === 1) globalShort.add(`-${o.cliName}`);
-    for (const a of o.alias ?? []) {
-      if (a.length === 1) globalShort.add(`-${a}`);
-    }
-  }
+  const globalShort = globalShortTokens(frameOptions);
   if (globalShort.size === 0) return all;
   return all.filter((t) => {
     if (!t.startsWith("-") || t.startsWith("--")) return true;

@@ -91,6 +91,24 @@ export function aliasToken(alias: string): string {
 }
 
 /**
+ * Single-character tokens (`-x`) that global options at this frame own.
+ * Shared between availability-guard and value-completion token filtering:
+ * both paths must agree on which short forms `separateGlobalArgs` routes
+ * to a global rather than a same-letter local.
+ */
+export function globalShortTokens(frameOptions: readonly CompletableOption[]): Set<string> {
+  const out = new Set<string>();
+  for (const o of frameOptions) {
+    if (o.isGlobal !== true) continue;
+    if (o.cliName.length === 1) out.add(`-${o.cliName}`);
+    for (const a of o.alias ?? []) {
+      if (a.length === 1) out.add(`-${a}`);
+    }
+  }
+  return out;
+}
+
+/**
  * Build the quoted-token list bash/zsh/fish pass to `__<fn>_not_used` to
  * decide whether an option (and its negation form, if any) is still
  * available. Quoting style (`"…"`) is identical across all three shells,
@@ -135,14 +153,7 @@ export function quotedAvailabilityTokens(
   // never consumed locally, so guarding on it would falsely suppress
   // the local's option-name suggestion after the global was used.
   if (options?.isGlobal !== true && options?.frameOptions) {
-    const globalShort = new Set<string>();
-    for (const o of options.frameOptions) {
-      if (o.isGlobal !== true) continue;
-      if (o.cliName.length === 1) globalShort.add(`-${o.cliName}`);
-      for (const a of o.alias ?? []) {
-        if (a.length === 1) globalShort.add(`-${a}`);
-      }
-    }
+    const globalShort = globalShortTokens(options.frameOptions);
     if (globalShort.size > 0) {
       const localExplicitShort = new Set(
         (aliases ?? []).filter((a) => a.length === 1).map((a) => `-${a}`),
