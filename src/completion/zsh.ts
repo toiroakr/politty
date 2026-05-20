@@ -139,7 +139,7 @@ function zshValueLines(
         `if [[ -n "$_raw" ]]; then`,
         `    local -a _candidates=("\${(@f)_raw}")`,
         `    _vals=()`,
-        `    local _c _ck _vp _seen_keys=" " _desc _has_eq=0 _tmp`,
+        `    local _c _ck _cke _vp _seen_keys=" " _desc _has_eq=0 _tmp`,
         `    for _c in "\${_candidates[@]}"; do`,
         // Replace escaped `\:` with a sentinel byte (0x01, never present
         // in real candidate text) so the value/description split at the
@@ -147,7 +147,13 @@ function zshValueLines(
         // (e.g. `ns:key=value`).
         `        _tmp="\${_c//\\\\:/$'\\x01'}"`,
         `        if [[ "$_c" == *=* ]]; then`,
-        `            _ck="\${_c%%=*}"`,
+        // Two forms of the key: the ESCAPED `_cke` keeps `\:` intact for
+        // rebuilding `_c` so `_describe`'s value:description split sees
+        // the right boundary; the UNESCAPED `_ck` (`\:` → `:`) is what
+        // the tracker recorded into `_used_field_keys` and what the
+        // dedup checks need to match.
+        `            _cke="\${_c%%=*}"`,
+        `            _ck="\${_cke//\\\\:/:}"`,
         ...arrayDedupLines,
         `            if [[ "\${words[CURRENT]}" != *=* ]]; then`,
         `                [[ "$_seen_keys" == *" $_ck "* ]] && continue`,
@@ -157,9 +163,9 @@ function zshValueLines(
         // then restore the sentinel to `\:` so a literal colon inside
         // the description survives intact.
         `                    _desc="\${\${_tmp#*:}//$'\\x01'/\\\\:}"`,
-        `                    _c="\${_ck}=:$_desc"`,
+        `                    _c="\${_cke}=:$_desc"`,
         `                else`,
-        `                    _c="\${_ck}="`,
+        `                    _c="\${_cke}="`,
         `                fi`,
         `            else`,
         // Value stage: drop bare `key=` candidates so they do not clutter
