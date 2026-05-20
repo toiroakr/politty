@@ -113,43 +113,29 @@ function executeShellCommand(command: string): CompletionCandidate[] {
 type ValueResolutionResult = Pick<CandidateResult, "directive" | "fileExtensions" | "fileMatchers">;
 
 /**
- * Two-stage `key=value` completion: when the user has not typed `=` yet,
- * collapse every `key=value` candidate to a unique `key=` entry in place so
- * the first TAB picks the key. The second TAB (after `key=`) leaves the full
- * `key=value` candidates intact so the user picks the value. Returns whether
- * any candidate ends with `=` so the caller can flip NoSpace and let the
- * user keep typing past the first TAB.
+ * Two-stage `key=value` completion. Returns the post-processed candidate
+ * list (mutates `candidates` in place to keep the caller's reference) plus
+ * whether the result contains a bare `key=` entry so the caller can flip
+ * NoSpace and let the user keep typing past the first TAB.
+ *
+ * Key stage (`=` not yet typed): collapse every `key=value` candidate to a
+ * unique `key=` entry so the first TAB picks the key.
+ *
+ * Value stage (`=` typed): drop only the bare `<key>=` candidate that
+ * echoes the prefix the user already typed. A blanket `endsWith("=")`
+ * filter would also remove legitimate values such as base64 `key=YWJj=` or
+ * value-only `YWJj=` (padding), so match the candidate string exactly
+ * against the typed key prefix.
  */
 function applyKeyValuePostProcessing(
   candidates: CompletionCandidate[],
   currentWord: string,
 ): { hasEqSuffix: boolean } {
   const keyStage = !currentWord.includes("=");
-  if (keyStage) {
-    const seen = new Set<string>();
-    const processed: CompletionCandidate[] = [];
-    for (const c of candidates) {
-      const eqIdx = c.value.indexOf("=");
-      if (eqIdx <= 0) {
-        processed.push(c);
-        continue;
-      }
-      const keyPart = c.value.slice(0, eqIdx + 1);
-      if (seen.has(keyPart)) continue;
-      seen.add(keyPart);
-      processed.push({ ...c, value: keyPart });
-    }
-    candidates.splice(0, candidates.length, ...processed);
-  } else {
-    // Value stage: drop only the bare `<key>=` candidate that echoes
-    // the prefix the user already typed. A blanket `endsWith("=")`
-    // filter would also remove legitimate values such as base64
-    // `key=YWJj=` or value-only `YWJj=` (padding), so match the
-    // candidate string exactly against the typed key prefix.
-    const keyPrefix = currentWord.slice(0, currentWord.indexOf("=") + 1);
-    const filtered = candidates.filter((c) => c.value !== keyPrefix);
-    candidates.splice(0, candidates.length, ...filtered);
-  }
+  const processed = keyStage
+    ? collapseToKeys(candidates)
+    : dropBareKeyEcho(candidates, currentWord);
+  candidates.splice(0, candidates.length, ...processed);
   // Flip NoSpace only at key stage where a candidate ending with `=`
   // really is a bare-key marker. At value stage a candidate like
   // `YWJj=` is a concrete value, so NoSpace would incorrectly suppress
@@ -157,6 +143,31 @@ function applyKeyValuePostProcessing(
   return {
     hasEqSuffix: keyStage && candidates.some((c) => c.value.endsWith("=")),
   };
+}
+
+function collapseToKeys(candidates: readonly CompletionCandidate[]): CompletionCandidate[] {
+  const seen = new Set<string>();
+  const out: CompletionCandidate[] = [];
+  for (const c of candidates) {
+    const eqIdx = c.value.indexOf("=");
+    if (eqIdx <= 0) {
+      out.push(c);
+      continue;
+    }
+    const keyPart = c.value.slice(0, eqIdx + 1);
+    if (seen.has(keyPart)) continue;
+    seen.add(keyPart);
+    out.push({ ...c, value: keyPart });
+  }
+  return out;
+}
+
+function dropBareKeyEcho(
+  candidates: readonly CompletionCandidate[],
+  currentWord: string,
+): CompletionCandidate[] {
+  const keyPrefix = currentWord.slice(0, currentWord.indexOf("=") + 1);
+  return candidates.filter((c) => c.value !== keyPrefix);
 }
 
 /**
