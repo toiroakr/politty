@@ -146,7 +146,13 @@ function zshValueLines(
         // first UNESCAPED `:` survives values that contain literal `:`
         // (e.g. `ns:key=value`).
         `        _tmp="\${_c//\\\\:/$'\\x01'}"`,
-        `        if [[ "$_c" == *=* ]]; then`,
+        // Inspect only the VALUE portion when deciding key=value. A
+        // candidate like `{value: "region", description: "format a=b"}`
+        // surfaces as `region:format a=b`, and a naive `$_c == *=*`
+        // would route it through the key=value branch on the
+        // description alone.
+        `        _vp="\${_tmp%%:*}"`,
+        `        if [[ "$_vp" == *=* ]]; then`,
         // Two forms of the key: the ESCAPED `_cke` keeps `\:` intact for
         // rebuilding `_c` so `_describe`'s value:description split sees
         // the right boundary; the UNESCAPED `_ck` (`\:` → `:`) is what
@@ -175,9 +181,8 @@ function zshValueLines(
         `                _has_eq=1`,
         `            else`,
         // Value stage: drop bare `key=` candidates so they do not clutter
-        // the value picker. Strip the optional `:desc` suffix at the
-        // first UNESCAPED `:` (via `_tmp`'s sentinel substitution).
-        `                _vp="\${_tmp%%:*}"`,
+        // the value picker. `_vp` is the value-portion of `_tmp` (already
+        // computed above) — split at the first UNESCAPED `:`.
         `                [[ "$_vp" == *=?* ]] || continue`,
         `            fi`,
         `        fi`,
@@ -507,6 +512,14 @@ export function generateZshCompletion(
     lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
     lines.push(`        _files -/`);
     lines.push(`    elif (( _directive & ${CompletionDirective.FileCompletion} )); then`);
+    lines.push(`        _files`);
+    // Default directive (0) with no resolver candidates: fall back to
+    // the documented filename completion, matching the bash apply
+    // helper. Without this, an empty `Default` result silently leaves
+    // the caller's `return 0` to suppress any file fallback.
+    lines.push(
+      `    elif (( \${#_vals[@]} == 0 )) && ! (( _directive & ${CompletionDirective.NoFileCompletion} )); then`,
+    );
     lines.push(`        _files`);
     lines.push(`    fi`);
     lines.push(`}`);

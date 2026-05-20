@@ -500,6 +500,10 @@ export function generateFishCompletion(
     lines.push(`function __${fn}_apply_dynamic_output`);
     lines.push(`    set -l _cur $argv[1]`);
     lines.push(`    set -l _directive 0`);
+    // Track emitted candidate count so the `Default` (directive 0)
+    // fallback below knows whether to layer in file completion when the
+    // resolver returned nothing.
+    lines.push(`    set -l _emitted 0`);
     // Buffer one line so we can detect the trailing `:<digits>` directive
     // sentinel without misinterpreting candidate values that legitimately
     // start with `:` in intermediate positions.
@@ -516,6 +520,7 @@ export function generateFishCompletion(
     // match a fish `echo` flag (`-n`, `-e`, `-s`, `-E`) would otherwise
     // be swallowed as an option instead of being emitted as a candidate.
     lines.push(`                printf '%s\\n' "$_prev"`);
+    lines.push(`                set _emitted (math $_emitted + 1)`);
     lines.push(`            end`);
     lines.push(`        end`);
     lines.push(`        set _prev $_l`);
@@ -527,6 +532,7 @@ export function generateFishCompletion(
     lines.push(`        else`);
     lines.push(`            if test -n "$_prev"`);
     lines.push(`                printf '%s\\n' "$_prev"`);
+    lines.push(`                set _emitted (math $_emitted + 1)`);
     lines.push(`            end`);
     lines.push(`        end`);
     lines.push(`    end`);
@@ -541,6 +547,14 @@ export function generateFishCompletion(
     lines.push(`        __fish_complete_directories "$_cur"`);
     lines.push(
       `    else if test (math "bitand($_directive, ${CompletionDirective.FileCompletion})") -ne 0`,
+    );
+    lines.push(`        __fish_complete_path "$_cur"`);
+    // Default directive (0) with no resolver candidates: fall back to
+    // filename completion, mirroring the bash/zsh apply helpers. fish's
+    // `-f` registration suppresses the automatic file fallback, so the
+    // helper has to call `__fish_complete_path` itself.
+    lines.push(
+      `    else if test $_emitted -eq 0; and test (math "bitand($_directive, ${CompletionDirective.NoFileCompletion})") -eq 0`,
     );
     lines.push(`        __fish_complete_path "$_cur"`);
     lines.push(`    end`);

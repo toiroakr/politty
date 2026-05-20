@@ -124,7 +124,8 @@ function applyKeyValuePostProcessing(
   candidates: CompletionCandidate[],
   currentWord: string,
 ): { hasEqSuffix: boolean } {
-  if (!currentWord.includes("=")) {
+  const keyStage = !currentWord.includes("=");
+  if (keyStage) {
     const seen = new Set<string>();
     const processed: CompletionCandidate[] = [];
     for (const c of candidates) {
@@ -140,14 +141,22 @@ function applyKeyValuePostProcessing(
     }
     candidates.splice(0, candidates.length, ...processed);
   } else {
-    // Value stage: a resolver may surface both `key=` and `key=value`
-    // candidates. The bare-key entry duplicates the selected key in the
-    // menu and forces NoSpace on every concrete value, so drop it once
-    // the user has typed `=` — mirroring the static expand path.
-    const filtered = candidates.filter((c) => !c.value.endsWith("="));
+    // Value stage: drop only the bare `<key>=` candidate that echoes
+    // the prefix the user already typed. A blanket `endsWith("=")`
+    // filter would also remove legitimate values such as base64
+    // `key=YWJj=` or value-only `YWJj=` (padding), so match the
+    // candidate string exactly against the typed key prefix.
+    const keyPrefix = currentWord.slice(0, currentWord.indexOf("=") + 1);
+    const filtered = candidates.filter((c) => c.value !== keyPrefix);
     candidates.splice(0, candidates.length, ...filtered);
   }
-  return { hasEqSuffix: candidates.some((c) => c.value.endsWith("=")) };
+  // Flip NoSpace only at key stage where a candidate ending with `=`
+  // really is a bare-key marker. At value stage a candidate like
+  // `YWJj=` is a concrete value, so NoSpace would incorrectly suppress
+  // the trailing space after a regular value selection.
+  return {
+    hasEqSuffix: keyStage && candidates.some((c) => c.value.endsWith("=")),
+  };
 }
 
 /**
