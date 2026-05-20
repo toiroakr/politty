@@ -193,14 +193,11 @@ function parsePreSubGlobals(
       if (withoutDash.length > 1) break;
     }
     const parsed = parseOption(word);
-    // Mirror `findOption`: explicit matches across the whole option list
-    // win over any implicit boolean negation. With a value-taking
-    // `noFoo` alongside a boolean `foo`, `--no-foo` is the runtime's
-    // explicit `noFoo` even if `foo` appears earlier in the list and
-    // would also accept `--no-foo` as its implicit negation.
-    const opt =
-      globalOptions.find((o) => matchesExplicit(o, parsed.name, parsed.isLong)) ??
-      globalOptions.find((o) => isImplicitBooleanNegation(o, parsed.name, parsed.isLong));
+    // Reuse `findOption` so the explicit > implicit-negation precedence
+    // stays in lockstep with the leaf scanner. Passing only the globals
+    // list keeps local-precedence rules dormant — there are no locals to
+    // shadow against during the pre-sub scan.
+    const opt = findOption(globalOptions, parsed);
     if (!opt) break;
     if (opt.takesValue) {
       if (hasInlineValue(word)) {
@@ -476,7 +473,7 @@ function matchesExplicit(opt: CompletableOption, name: string, isLong: boolean):
  * order via the unshadowed merged list.
  */
 function findOption(
-  options: CompletableOption[],
+  options: readonly CompletableOption[],
   parsed: ParsedOption,
 ): CompletableOption | undefined {
   if (!parsed.isLong) {
