@@ -229,13 +229,7 @@ function parsePreSubGlobals(
         break;
       }
     } else {
-      const matchesExplicitNegation =
-        parsed.isLong &&
-        opt.negation !== undefined &&
-        (opt.negation === parsed.name || matchesCamelCase(opt.negation, parsed.name));
-      const isNeg =
-        matchesExplicitNegation || isImplicitBooleanNegation(opt, parsed.name, parsed.isLong);
-      globalParsedArgs[opt.name] = !isNeg;
+      globalParsedArgs[opt.name] = !isNegationOf(opt, parsed);
       captured.add(opt.name);
       i++;
     }
@@ -411,6 +405,22 @@ function matchesCamelCase(source: string | undefined, name: string): boolean {
 }
 
 /**
+ * True when the typed token is the boolean option's negation form — either
+ * the explicit `negation` name (or its camelCase variant) or the implicit
+ * `--no-<name>` form. Long-form only; short tokens are never negations.
+ */
+function isNegationOf(opt: CompletableOption, parsed: ParsedOption): boolean {
+  if (!parsed.isLong) return false;
+  if (
+    opt.negation !== undefined &&
+    (opt.negation === parsed.name || matchesCamelCase(opt.negation, parsed.name))
+  ) {
+    return true;
+  }
+  return isImplicitBooleanNegation(opt, parsed.name, parsed.isLong);
+}
+
+/**
  * Match by cliName, alias, camelCase variants, or an explicit negation
  * name. `isLong` separates the short (`-x`) and long (`--xxx`) token
  * spaces: cliNames and explicit negations are only valid as long form,
@@ -564,13 +574,7 @@ export function parseCompletionContext(
    */
   const recordBooleanFlag = (opt: CompletableOption, parsed: ParsedOption): void => {
     const target = opt.isGlobal === true ? globalParsedArgs : parsedArgs;
-    const matchesExplicitNegation =
-      parsed.isLong &&
-      opt.negation !== undefined &&
-      (opt.negation === parsed.name || matchesCamelCase(opt.negation, parsed.name));
-    const isNegation =
-      matchesExplicitNegation || isImplicitBooleanNegation(opt, parsed.name, parsed.isLong);
-    target[opt.name] = !isNegation;
+    target[opt.name] = !isNegationOf(opt, parsed);
   };
 
   // Process arguments to resolve subcommands and track state
