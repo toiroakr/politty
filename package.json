@@ -124,7 +124,7 @@
     "@inquirer/prompts": "8.4.3",
     "@quansync/fs": "1.0.0",
     "@types/node": "25.7.0",
-    "@typescript/native-preview": "7.0.0-dev.20260512.1",
+    "@typescript/native-preview": "7.0.0-dev.20260513.1",
     "@vitest/coverage-v8": "4.1.6",
     "knip": "6.13.1",
     "lefthook": "2.1.6",
