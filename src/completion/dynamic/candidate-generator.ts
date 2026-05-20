@@ -7,7 +7,7 @@ import type { DynamicCompletionContext } from "../../core/dynamic-completion-typ
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import type { ShellType, ValueCompletion } from "../types.js";
-import type { CompletionContext } from "./context-parser.js";
+import { clampToVariadic, type CompletionContext } from "./context-parser.js";
 
 /**
  * Completion directive flags (bitwise)
@@ -89,11 +89,13 @@ export async function generateCandidates(
     case "positional": {
       // Clamp to the trailing variadic positional so a value beyond the
       // schema's positional count still resolves to the variadic slot's
-      // completion spec.
-      const positionalIndex = context.positionalIndex ?? 0;
+      // completion spec — but only when that slot IS variadic; otherwise a
+      // non-variadic last positional should not greedily absorb the value.
+      const requestedIdx = context.positionalIndex ?? 0;
+      const clampedIdx = clampToVariadic(requestedIdx, context.positionals);
+      const candidate = clampedIdx === undefined ? undefined : context.positionals[clampedIdx];
       const positional =
-        context.positionals[positionalIndex] ??
-        (context.positionals.at(-1)?.variadic ? context.positionals.at(-1) : undefined);
+        candidate && (clampedIdx === requestedIdx || candidate.variadic) ? candidate : undefined;
       return generateValueCandidates(
         context,
         options,
@@ -417,9 +419,8 @@ function targetFieldName(context: CompletionContext): string | undefined {
   if (context.completionType !== "positional" || context.positionalIndex === undefined) {
     return undefined;
   }
-  const lastIdx = context.positionals.length - 1;
-  const clampedIdx = context.positionalIndex > lastIdx ? lastIdx : context.positionalIndex;
-  return clampedIdx >= 0 ? context.positionals[clampedIdx]?.name : undefined;
+  const clampedIdx = clampToVariadic(context.positionalIndex, context.positionals);
+  return clampedIdx === undefined ? undefined : context.positionals[clampedIdx]?.name;
 }
 
 /**

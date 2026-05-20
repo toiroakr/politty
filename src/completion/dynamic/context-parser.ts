@@ -260,6 +260,21 @@ function mergeGlobalOptions(
 }
 
 /**
+ * Clamp a positional index against `positionals` so a value past the last
+ * declared positional resolves to the trailing variadic slot (if any).
+ * Returns `undefined` only when `positionals` is empty — callers can then
+ * skip the variadic/previousValues path entirely.
+ */
+export function clampToVariadic(
+  positionalIndex: number,
+  positionals: readonly CompletablePositional[],
+): number | undefined {
+  const lastIdx = positionals.length - 1;
+  if (lastIdx < 0) return undefined;
+  return positionalIndex > lastIdx ? lastIdx : positionalIndex;
+}
+
+/**
  * Extract positionals from a command
  */
 function extractPositionalsForContext(command: AnyCommand): CompletablePositional[] {
@@ -817,16 +832,13 @@ export function parseCompletionContext(
     if (targetOption.valueType === "array") {
       const store = targetOption.isGlobal === true ? globalParsedArgs : parsedArgs;
       const stored = store[targetOption.name];
-      previousValues = Array.isArray(stored) ? (stored as string[]) : [];
+      previousValues = Array.isArray(stored)
+        ? stored.filter((v): v is string => typeof v === "string")
+        : [];
     }
   } else if (completionType === "positional" && positionalIndex !== undefined) {
-    // Clamp to the last positional so a variadic tail still receives the
-    // previously-supplied values when positionalIndex outruns the schema
-    // (e.g. completing the 3rd value of a single variadic positional).
-    const lastIdx = positionals.length - 1;
-    const clampedIdx = positionalIndex > lastIdx ? lastIdx : positionalIndex;
-    const pos = clampedIdx >= 0 ? positionals[clampedIdx] : undefined;
-    if (pos?.variadic) {
+    const clampedIdx = clampToVariadic(positionalIndex, positionals);
+    if (clampedIdx !== undefined && positionals[clampedIdx]?.variadic) {
       previousValues = positionalValues.slice(clampedIdx);
     }
   }
