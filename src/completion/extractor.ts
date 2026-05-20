@@ -342,11 +342,26 @@ export function subDispatchCaseLines(routeEntries: RouteEntry[], fn: string): st
 }
 
 /**
+ * Per-shell `_arg_values` write expression. zsh uses an associative-array
+ * subscript; bash uses prefix-scalar variables so the generated script
+ * runs on bash 3.2 (macOS default `/bin/bash`), which lacks associative
+ * arrays. The `isGlobal` flag picks the bucket (`_global_arg_values_*`
+ * survives subcommand descent; `_arg_values_*` does not).
+ */
+function trackedFieldAssign(
+  t: Pick<TrackedFieldRef, "fieldName" | "isGlobal">,
+  shell: "bash" | "zsh",
+): string {
+  const prefix = t.isGlobal ? `_global_arg_values` : `_arg_values`;
+  return shell === "bash"
+    ? `${prefix}_${sanitize(t.fieldName)}="$3"`
+    : `${prefix}[${t.fieldName}]="$3"`;
+}
+
+/**
  * Case-statement body lines for `__track_opt` — capture option values into
- * the per-frame state. zsh uses `_arg_values` / `_global_arg_values`
- * associative arrays; bash uses prefix-scalar variables (`_arg_values_<f>`)
- * so the generated script runs on bash 3.2 (macOS default `/bin/bash`),
- * which lacks associative arrays.
+ * the per-frame state. See {@link trackedFieldAssign} for the per-shell
+ * assignment shape.
  */
 export function trackOptCaseLines(
   trackedFields: readonly TrackedFieldRef[],
@@ -356,20 +371,15 @@ export function trackOptCaseLines(
   for (const t of trackedFields) {
     if (t.isPositional || !t.optionTokens) continue;
     const joined = t.pathStrs.flatMap((p) => t.optionTokens!.map((n) => `${p}:${n}`)).join("|");
-    const prefix = t.isGlobal ? `_global_arg_values` : `_arg_values`;
-    const assign =
-      shell === "bash"
-        ? `${prefix}_${sanitize(t.fieldName)}="$3"`
-        : `${prefix}[${t.fieldName}]="$3"`;
-    lines.push(`        ${joined}) ${assign} ;;`);
+    lines.push(`        ${joined}) ${trackedFieldAssign(t, shell)} ;;`);
   }
   return lines;
 }
 
 /**
  * Case-statement body lines for `__track_pos` — capture positional values
- * by `(subcmd, positional-index)`. zsh uses associative arrays; bash uses
- * prefix-scalar variables (see {@link trackOptCaseLines}).
+ * by `(subcmd, positional-index)`. See {@link trackedFieldAssign} for the
+ * per-shell assignment shape.
  */
 export function trackPosCaseLines(
   trackedFields: readonly TrackedFieldRef[],
@@ -379,12 +389,7 @@ export function trackPosCaseLines(
   for (const t of trackedFields) {
     if (!t.isPositional) continue;
     const joined = t.pathStrs.map((p) => `${p}:${t.position}`).join("|");
-    const prefix = t.isGlobal ? `_global_arg_values` : `_arg_values`;
-    const assign =
-      shell === "bash"
-        ? `${prefix}_${sanitize(t.fieldName)}="$3"`
-        : `${prefix}[${t.fieldName}]="$3"`;
-    lines.push(`        ${joined}) ${assign} ;;`);
+    lines.push(`        ${joined}) ${trackedFieldAssign(t, shell)} ;;`);
   }
   return lines;
 }
