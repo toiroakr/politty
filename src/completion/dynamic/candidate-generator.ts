@@ -114,36 +114,33 @@ type ValueResolutionResult = Pick<CandidateResult, "directive" | "fileExtensions
 
 /**
  * Two-stage `key=value` completion: when the user has not typed `=` yet,
- * collapse every `key=value` candidate to a unique `key=` entry so the
- * first TAB picks the key. The second TAB (after `key=`) keeps the full
- * `key=value` candidates so the user picks the value. Returns the post-
- * processed list, whether the list was modified, and whether any
- * candidate ends with `=` (used to flip the NoSpace directive so the
- * user can keep typing after the key).
+ * collapse every `key=value` candidate to a unique `key=` entry in place so
+ * the first TAB picks the key. The second TAB (after `key=`) leaves the full
+ * `key=value` candidates intact so the user picks the value. Returns whether
+ * any candidate ends with `=` so the caller can flip NoSpace and let the
+ * user keep typing past the first TAB.
  */
 function applyKeyValuePostProcessing(
   candidates: CompletionCandidate[],
   currentWord: string,
-): { candidates: CompletionCandidate[]; hasEqSuffix: boolean } {
-  if (currentWord.includes("=")) {
-    const hasEqSuffix = candidates.some((c) => c.value.endsWith("="));
-    return { candidates, hasEqSuffix };
-  }
-  const seen = new Set<string>();
-  const processed: CompletionCandidate[] = [];
-  for (const c of candidates) {
-    const eqIdx = c.value.indexOf("=");
-    if (eqIdx > 0) {
+): { hasEqSuffix: boolean } {
+  if (!currentWord.includes("=")) {
+    const seen = new Set<string>();
+    const processed: CompletionCandidate[] = [];
+    for (const c of candidates) {
+      const eqIdx = c.value.indexOf("=");
+      if (eqIdx <= 0) {
+        processed.push(c);
+        continue;
+      }
       const keyPart = c.value.slice(0, eqIdx + 1);
       if (seen.has(keyPart)) continue;
       seen.add(keyPart);
       processed.push({ ...c, value: keyPart });
-    } else {
-      processed.push(c);
     }
+    candidates.splice(0, candidates.length, ...processed);
   }
-  const hasEqSuffix = processed.some((c) => c.value.endsWith("="));
-  return { candidates: processed, hasEqSuffix };
+  return { hasEqSuffix: candidates.some((c) => c.value.endsWith("=")) };
 }
 
 /**
@@ -250,11 +247,7 @@ async function resolveValueCandidates(
   // Two-stage key=value: collapse to keys before `=` is typed, and flip
   // NoSpace whenever a candidate ends with `=` so the user can keep
   // typing the value after the first TAB.
-  const processed = applyKeyValuePostProcessing(candidates, ctx.currentWord);
-  if (processed.candidates !== candidates) {
-    candidates.splice(0, candidates.length, ...processed.candidates);
-  }
-  if (processed.hasEqSuffix) {
+  if (applyKeyValuePostProcessing(candidates, ctx.currentWord).hasEqSuffix) {
     directive |= CompletionDirective.NoSpace;
   }
 

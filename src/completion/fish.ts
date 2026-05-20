@@ -143,43 +143,41 @@ function fishValueLines(
         const fullLines: string[] = [];
         const seenKeys = new Set<string>();
 
+        // `printf` instead of `echo` — `expand` candidates accept arbitrary
+        // strings, and a value matching one of fish's `echo` flags (`-n`,
+        // `-e`, `-s`, `-E`) would be swallowed as an option and disappear
+        // from the completion list.
+        const printfLine = (value: string, description?: string): string =>
+          description
+            ? `printf '%s\\t%s\\n' "${escapeDesc(value)}" "${escapeDesc(description)}"`
+            : `printf '%s\\n' "${escapeDesc(value)}"`;
+        // Wrap a single echo line in the array-host dedup guard when the
+        // host is repeatable AND the candidate carries a key prefix. For
+        // candidates without `=` the dedup is a no-op so the line is
+        // emitted bare.
+        const wrapWithDedup = (echoLine: string, keyPart: string): string[] =>
+          location.isArrayOption && keyPart.length > 0
+            ? [
+                `        if not contains -- "${escapeDesc(keyPart)}" ${bucketList}`,
+                `            ${echoLine}`,
+                `        end`,
+              ]
+            : [`        ${echoLine}`];
+
         for (const c of entry.candidates) {
-          // `printf` instead of `echo` — `expand` candidates accept arbitrary
-          // strings, and a value matching one of fish's `echo` flags
-          // (`-n`, `-e`, `-s`, `-E`) would be swallowed as an option and
-          // disappear from the completion list.
-          const echoLine = c.description
-            ? `printf '%s\\t%s\\n' "${escapeDesc(c.value)}" "${escapeDesc(c.description)}"`
-            : `printf '%s\\n' "${escapeDesc(c.value)}"`;
           const eqIdx = c.value.indexOf("=");
           const keyPart = eqIdx > 0 ? c.value.slice(0, eqIdx) : "";
+          const echoLine = printfLine(c.value, c.description);
 
-          const wrapWithDedup = (lines: string[]): string[] => {
-            if (location.isArrayOption && keyPart.length > 0) {
-              return [
-                `        if not contains -- "${escapeDesc(keyPart)}" ${bucketList}`,
-                ...lines.map((l) => `    ${l}`),
-                `        end`,
-              ];
-            }
-            return lines;
-          };
+          fullLines.push(...wrapWithDedup(echoLine, keyPart));
 
-          fullLines.push(...wrapWithDedup([`        ${echoLine}`]));
-
-          if (keyPart.length > 0 && !seenKeys.has(keyPart)) {
-            seenKeys.add(keyPart);
-            // Reuse the original description on the collapsed key form.
-            // If the candidate already is the bare `key=` (no value), keep
-            // the original echo line as-is so the description survives.
-            const keyOnly = `${keyPart}=`;
-            const collapsedEcho = c.description
-              ? `printf '%s\\t%s\\n' "${escapeDesc(keyOnly)}" "${escapeDesc(c.description)}"`
-              : `printf '%s\\n' "${escapeDesc(keyOnly)}"`;
-            keyOnlyLines.push(...wrapWithDedup([`        ${collapsedEcho}`]));
-          } else if (keyPart.length === 0) {
+          if (keyPart.length === 0) {
             // Candidate without `=` — same in both branches.
             keyOnlyLines.push(`        ${echoLine}`);
+          } else if (!seenKeys.has(keyPart)) {
+            seenKeys.add(keyPart);
+            // Reuse the original description on the collapsed key form.
+            keyOnlyLines.push(...wrapWithDedup(printfLine(`${keyPart}=`, c.description), keyPart));
           }
         }
 

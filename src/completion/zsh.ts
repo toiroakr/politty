@@ -125,16 +125,12 @@ function zshValueLines(
       // full `key=value` candidates so the user picks the value. Array-host
       // dedup against already-typed keys runs before the collapse so a
       // used key stays hidden at both stages.
+      const bucket = sanitize(location.fieldName);
+      const bucketRef = location.isGlobal
+        ? `\${_global_used_field_keys[${bucket}]:-}`
+        : `\${_used_field_keys[${bucket}]:-}`;
       const arrayDedupLines = location.isArrayOption
-        ? (() => {
-            const bucket = sanitize(location.fieldName);
-            const bucketRef = location.isGlobal
-              ? `\${_global_used_field_keys[${bucket}]:-}`
-              : `\${_used_field_keys[${bucket}]:-}`;
-            return [
-              `            if [[ -n "$_ck" && " ${bucketRef} " == *" $_ck "* ]]; then continue; fi`,
-            ];
-          })()
+        ? [`            if [[ -n "$_ck" && " ${bucketRef} " == *" $_ck "* ]]; then continue; fi`]
         : [];
       return [
         `local _key=${depKey}`,
