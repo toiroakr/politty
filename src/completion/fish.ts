@@ -667,8 +667,9 @@ export function generateFishCompletion(
   lines.push(`            set -a _used_opts "$_w"`);
   lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"`);
   lines.push(`                set -l _next ""`);
-  lines.push(`                if test (math $_j + 1) -le (count $_args)`);
-  lines.push(`                    set _next "$_args[(math $_j + 1)]"`);
+  lines.push(`                set -l _next_idx (math $_j + 1)`);
+  lines.push(`                if test $_next_idx -le (count $_args)`);
+  lines.push(`                    set _next "$_args[$_next_idx]"`);
   lines.push(`                end`);
   // Mirror the runtime parser: a token starting with `-` is the next
   // option, not this option's value. Skip/track only when the next
