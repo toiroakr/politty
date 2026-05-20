@@ -6,6 +6,7 @@ import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.
 import { resolveSubCommandMeta } from "../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import { resolveExpandTargets, type PendingExpandTarget } from "./expand-resolver.js";
+import { aliasToken } from "./shell-shared.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -242,12 +243,10 @@ export function optTakesValueEntries(sub: CompletableSubcommand, parentPath: str
   const lines: string[] = [];
   for (const opt of sub.options) {
     if (opt.takesValue) {
-      const patterns: string[] = [`${parentPath}:--${opt.cliName}`];
-      if (opt.alias) {
-        for (const a of opt.alias) {
-          patterns.push(`${parentPath}:${a.length === 1 ? `-${a}` : `--${a}`}`);
-        }
-      }
+      const patterns = [
+        `${parentPath}:--${opt.cliName}`,
+        ...(opt.alias?.map((a) => `${parentPath}:${aliasToken(a)}`) ?? []),
+      ];
       lines.push(`        ${patterns.join("|")}) return 0 ;;`);
     }
   }
@@ -386,11 +385,7 @@ export interface ExpandSpecLocation {
  * tracker case patterns.
  */
 function collectOptionTokens(cliName: string, aliases: readonly string[] | undefined): string[] {
-  const tokens: string[] = [`--${cliName}`];
-  for (const a of aliases ?? []) {
-    tokens.push(a.length === 1 ? `-${a}` : `--${a}`);
-  }
-  return tokens;
+  return [`--${cliName}`, ...(aliases?.map(aliasToken) ?? [])];
 }
 
 /**

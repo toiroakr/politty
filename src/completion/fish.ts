@@ -18,6 +18,7 @@ import {
   hasDynamicCompletion,
   sanitize,
 } from "./extractor.js";
+import { aliasToken, resolveExpandDepGlobality, type ResolvedExpandDep } from "./shell-shared.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -72,21 +73,7 @@ interface FishExpandLocation {
    * local deps from `_arg_values_<name>` only, global deps from
    * `_global_arg_values_<name>` only.
    */
-  resolvedDeps: ReadonlyArray<{ readonly name: string; readonly isGlobal: boolean }>;
-}
-
-/**
- * Resolve each `dependsOn` entry to its globality at codegen time so the
- * lookup reads from the correct bucket. The host's globality fully
- * determines the answer — global hosts depend on globals only, local
- * hosts on their own siblings only.
- */
-function resolveExpandDepGlobality(
-  vc: ValueCompletion,
-  hostIsGlobal: boolean,
-): ReadonlyArray<{ name: string; isGlobal: boolean }> {
-  if (vc.type !== "expand") return [];
-  return vc.dependsOn.map((name) => ({ name, isGlobal: hostIsGlobal }));
+  resolvedDeps: readonly ResolvedExpandDep[];
 }
 
 /**
@@ -227,12 +214,10 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
     });
     if (valLines.length === 0) continue;
 
-    const conditions: string[] = [`test "$_prev" = "--${opt.cliName}"`];
-    if (opt.alias) {
-      for (const a of opt.alias) {
-        conditions.push(`test "$_prev" = "${a.length === 1 ? `-${a}` : `--${a}`}"`);
-      }
-    }
+    const conditions = [
+      `test "$_prev" = "--${opt.cliName}"`,
+      ...(opt.alias?.map((a) => `test "$_prev" = "${aliasToken(a)}"`) ?? []),
+    ];
     const cond = conditions.join("; or ");
 
     lines.push(`    if ${cond}`);
@@ -283,15 +268,11 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
     if (opt.valueType === "array") {
       lines.push(`        echo "--${opt.cliName}\t${desc}"`);
     } else {
-      const checks: string[] = [`"--${opt.cliName}"`];
-      if (opt.alias) {
-        for (const a of opt.alias) {
-          checks.push(a.length === 1 ? `"-${a}"` : `"--${a}"`);
-        }
-      }
-      if (opt.negation) {
-        checks.push(`"--${opt.negation}"`);
-      }
+      const checks = [
+        `"--${opt.cliName}"`,
+        ...(opt.alias?.map((a) => `"${aliasToken(a)}"`) ?? []),
+        ...(opt.negation ? [`"--${opt.negation}"`] : []),
+      ];
       lines.push(
         `        __${fn}_not_used ${checks.join(" ")}; and echo "--${opt.cliName}\t${desc}"`,
       );
@@ -372,12 +353,10 @@ function optTakesValueCases(sub: CompletableSubcommand, parentPath: string): str
   const lines: string[] = [];
   for (const opt of sub.options) {
     if (opt.takesValue) {
-      const patterns: string[] = [`"${parentPath}:--${opt.cliName}"`];
-      if (opt.alias) {
-        for (const a of opt.alias) {
-          patterns.push(`"${parentPath}:${a.length === 1 ? `-${a}` : `--${a}`}"`);
-        }
-      }
+      const patterns = [
+        `"${parentPath}:--${opt.cliName}"`,
+        ...(opt.alias?.map((a) => `"${parentPath}:${aliasToken(a)}"`) ?? []),
+      ];
       lines.push(`        case ${patterns.join(" ")}`);
       lines.push(`            return 0`);
     }

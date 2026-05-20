@@ -20,6 +20,12 @@ import {
   optTakesValueEntries,
   sanitize,
 } from "./extractor.js";
+import {
+  aliasToken,
+  ansiC,
+  resolveExpandDepGlobality,
+  type ResolvedExpandDep,
+} from "./shell-shared.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -37,48 +43,6 @@ function escapeBashDQ(s: string): string {
 /** Variable name for the hoisted expand table for a (funcSuffix, fieldName). */
 function bashExpandVar(fn: string, funcSuffix: string, fieldName: string): string {
   return `__${fn}_expand_${funcSuffix}__${sanitize(fieldName)}`;
-}
-
-/**
- * Resolve each `dependsOn` entry to its globality at codegen time so the
- * lookup reads from the correct bucket. The host's globality fully
- * determines the answer: `resolveExpandTargets` runs separately for
- * global hosts (against the global options list, no positionals) and
- * local hosts (against the subcommand's own siblings, before global
- * propagation), so all of a host's deps share its scope.
- */
-function resolveExpandDepGlobality(
-  vc: ValueCompletion,
-  hostIsGlobal: boolean,
-): ReadonlyArray<{ name: string; isGlobal: boolean }> {
-  if (vc.type !== "expand") return [];
-  return vc.dependsOn.map((name) => ({ name, isGlobal: hostIsGlobal }));
-}
-
-/**
- * Encode a string as an ANSI-C bash literal: `$'…'` with backslash escapes.
- * Used for expand-table values so newlines and the unit-separator key
- * delimiter survive intact through `mapfile` parsing.
- */
-function bashAnsiC(s: string): string {
-  let out = "$'";
-  for (const ch of s) {
-    const code = ch.codePointAt(0)!;
-    if (ch === "\\") out += "\\\\";
-    else if (ch === "'") out += "\\'";
-    else if (ch === "\n") out += "\\n";
-    else if (ch === "\r") out += "\\r";
-    else if (ch === "\t") out += "\\t";
-    else if (code < 0x20 || code === 0x7f) out += `\\x${code.toString(16).padStart(2, "0")}`;
-    else out += ch;
-  }
-  out += "'";
-  return out;
-}
-
-/** Encode a string as a double-quoted bash literal for use inside `[...]=`. */
-function bashLiteral(s: string): string {
-  return bashAnsiC(s);
 }
 
 interface BashExpandLocation {
@@ -106,7 +70,7 @@ interface BashExpandLocation {
    * silently inherit a same-named global value supplied at a parent
    * frame.
    */
-  resolvedDeps: ReadonlyArray<{ readonly name: string; readonly isGlobal: boolean }>;
+  resolvedDeps: readonly ResolvedExpandDep[];
 }
 
 /**
@@ -281,12 +245,7 @@ function optionValueCases(
     });
     if (valLines.length === 0) continue;
 
-    const patterns: string[] = [`--${opt.cliName}`];
-    if (opt.alias) {
-      for (const a of opt.alias) {
-        patterns.push(a.length === 1 ? `-${a}` : `--${a}`);
-      }
-    }
+    const patterns = [`--${opt.cliName}`, ...(opt.alias?.map(aliasToken) ?? [])];
     const patternStr = patterns.join("|");
 
     lines.push(`            ${patternStr})`);
@@ -369,15 +328,11 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
       // Array options can be specified multiple times — always keep available
       lines.push(`        _avail+=(--${opt.cliName})`);
     } else {
-      const patterns: string[] = [`"--${opt.cliName}"`];
-      if (opt.alias) {
-        for (const a of opt.alias) {
-          patterns.push(a.length === 1 ? `"-${a}"` : `"--${a}"`);
-        }
-      }
-      if (opt.negation) {
-        patterns.push(`"--${opt.negation}"`);
-      }
+      const patterns = [
+        `"--${opt.cliName}"`,
+        ...(opt.alias?.map((a) => `"${aliasToken(a)}"`) ?? []),
+        ...(opt.negation ? [`"--${opt.negation}"`] : []),
+      ];
       lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.cliName})`);
       if (opt.negation) {
         lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.negation})`);
@@ -485,7 +440,7 @@ export function generateBashCompletion(
     for (const entry of spec.vc.table) {
       const key = entry.key.join("");
       const value = entry.candidates.map((c) => c.value).join("\n");
-      lines.push(`${varName}[${bashLiteral(key)}]=${bashAnsiC(value)}`);
+      lines.push(`${varName}[${ansiC(key)}]=${ansiC(value)}`);
     }
     lines.push(``);
   }

@@ -20,6 +20,12 @@ import {
   optTakesValueEntries,
   sanitize,
 } from "./extractor.js";
+import {
+  aliasToken,
+  ansiC,
+  resolveExpandDepGlobality,
+  type ResolvedExpandDep,
+} from "./shell-shared.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -53,27 +59,6 @@ function zshExpandVar(fn: string, funcSuffix: string, fieldName: string): string
   return `__${fn}_expand_${funcSuffix}__${sanitize(fieldName)}`;
 }
 
-/**
- * Encode a string as an ANSI-C zsh literal (`$'…'`) so newlines, the unit
- * separator key delimiter, and embedded `:` survive verbatim in the
- * generated table.
- */
-function zshAnsiC(s: string): string {
-  let out = "$'";
-  for (const ch of s) {
-    const code = ch.codePointAt(0)!;
-    if (ch === "\\") out += "\\\\";
-    else if (ch === "'") out += "\\'";
-    else if (ch === "\n") out += "\\n";
-    else if (ch === "\r") out += "\\r";
-    else if (ch === "\t") out += "\\t";
-    else if (code < 0x20 || code === 0x7f) out += `\\x${code.toString(16).padStart(2, "0")}`;
-    else out += ch;
-  }
-  out += "'";
-  return out;
-}
-
 interface ZshExpandLocation {
   funcSuffix: string;
   fieldName: string;
@@ -97,22 +82,7 @@ interface ZshExpandLocation {
    * local deps from `_arg_values` only, global deps from
    * `_global_arg_values` only.
    */
-  resolvedDeps: ReadonlyArray<{ readonly name: string; readonly isGlobal: boolean }>;
-}
-
-/**
- * Resolve each `dependsOn` entry to its globality at codegen time so the
- * lookup reads from the correct bucket. The host's globality fully
- * determines the answer — global hosts depend on globals only, local
- * hosts on their own siblings only — because `resolveExpandTargets`
- * resolves the two groups separately.
- */
-function resolveExpandDepGlobality(
-  vc: ValueCompletion,
-  hostIsGlobal: boolean,
-): ReadonlyArray<{ name: string; isGlobal: boolean }> {
-  if (vc.type !== "expand") return [];
-  return vc.dependsOn.map((name) => ({ name, isGlobal: hostIsGlobal }));
+  resolvedDeps: readonly ResolvedExpandDep[];
 }
 
 /**
@@ -222,12 +192,7 @@ function optionValueCases(options: CompletableOption[], fn: string, funcSuffix: 
     });
     if (valLines.length === 0) continue;
 
-    const patterns: string[] = [`--${opt.cliName}`];
-    if (opt.alias) {
-      for (const a of opt.alias) {
-        patterns.push(a.length === 1 ? `-${a}` : `--${a}`);
-      }
-    }
+    const patterns = [`--${opt.cliName}`, ...(opt.alias?.map(aliasToken) ?? [])];
 
     lines.push(`            ${patterns.join("|")})`);
     for (const vl of valLines) {
@@ -294,15 +259,11 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
     if (opt.valueType === "array") {
       lines.push(`        _opts+=("--${opt.cliName}${desc}")`);
     } else {
-      const patterns: string[] = [`"--${opt.cliName}"`];
-      if (opt.alias) {
-        for (const a of opt.alias) {
-          patterns.push(a.length === 1 ? `"-${a}"` : `"--${a}"`);
-        }
-      }
-      if (opt.negation) {
-        patterns.push(`"--${opt.negation}"`);
-      }
+      const patterns = [
+        `"--${opt.cliName}"`,
+        ...(opt.alias?.map((a) => `"${aliasToken(a)}"`) ?? []),
+        ...(opt.negation ? [`"--${opt.negation}"`] : []),
+      ];
       lines.push(
         `        __${fn}_not_used ${patterns.join(" ")} && _opts+=("--${opt.cliName}${desc}")`,
       );
@@ -411,7 +372,7 @@ export function generateZshCompletion(
   // joined by U+001F; values are newline-separated `value:description`
   // entries consumed by `_describe`.
   for (const spec of expandSpecs) {
-    const varName = `__${fn}_expand_${spec.funcSuffix}__${sanitize(spec.fieldName)}`;
+    const varName = zshExpandVar(fn, spec.funcSuffix, spec.fieldName);
     if (spec.vc.table.length === 0) {
       lines.push(`typeset -gA ${varName}=()`);
     } else {
@@ -424,7 +385,7 @@ export function generateZshCompletion(
             return c.description ? `${escapedValue}:${escapeDesc(c.description)}` : escapedValue;
           })
           .join("\n");
-        lines.push(`    ${zshAnsiC(key)} ${zshAnsiC(value)}`);
+        lines.push(`    ${ansiC(key)} ${ansiC(value)}`);
       }
       lines.push(`)`);
     }
