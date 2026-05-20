@@ -544,11 +544,8 @@ export function generateBashCompletion(
     lines.push(`__${fn}_track_opt() {`);
     lines.push(`    case "$1:$2" in`);
     for (const t of trackedFields) {
-      if (t.isPositional) continue;
-      const patterns: string[] = [`--${t.cliName}`];
-      for (const a of t.longAliases ?? []) patterns.push(`--${a}`);
-      for (const a of t.shortAliases ?? []) patterns.push(`-${a}`);
-      const joined = t.pathStrs.flatMap((p) => patterns.map((n) => `${p}:${n}`)).join("|");
+      if (t.isPositional || !t.optionTokens) continue;
+      const joined = t.pathStrs.flatMap((p) => t.optionTokens!.map((n) => `${p}:${n}`)).join("|");
       const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
       lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
     }

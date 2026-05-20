@@ -480,12 +480,14 @@ export interface TrackedFieldRef {
   readonly isPositional: boolean;
   /** 0-based positional index (positional only). */
   readonly position?: number;
-  /** Long option name (without `--`, option only). */
-  readonly cliName?: string;
-  /** Long aliases (without `--`, option only). */
-  readonly longAliases?: readonly string[];
-  /** Short aliases (single chars, option only). */
-  readonly shortAliases?: readonly string[];
+  /**
+   * CLI tokens this option is recognised by (`--cliName`, `--long-alias`,
+   * `-x`). Option only; empty for positionals. Emit-ready: shell tracker
+   * generators concatenate these with the per-path prefix to produce case
+   * patterns. Use {@link aliasToken} via {@link collectOptionTokens} so
+   * single-char aliases keep their `-` prefix.
+   */
+  readonly optionTokens?: readonly string[];
 }
 
 /**
@@ -520,12 +522,6 @@ export function collectTrackedFields(
       if (spec.isGlobal) {
         const globalOpt = globalOptions.find((o) => o.name === dep);
         if (globalOpt) {
-          const longAliases: string[] = [];
-          const shortAliases: string[] = [];
-          for (const a of globalOpt.alias ?? []) {
-            if (a.length === 1) shortAliases.push(a);
-            else longAliases.push(a);
-          }
           // Drop pathStrs where a subcommand defines a local option that
           // claims any of the global dep's CLI tokens. The runtime
           // parser routes by `cliName` / `alias`, not the field's
@@ -553,9 +549,7 @@ export function collectTrackedFields(
             pathStr: activePathStrs[0]!,
             pathStrs: activePathStrs,
             isPositional: false,
-            cliName: globalOpt.cliName,
-            longAliases,
-            shortAliases,
+            optionTokens: collectOptionTokens(globalOpt.cliName, globalOpt.alias),
           });
         }
         continue;
@@ -574,21 +568,13 @@ export function collectTrackedFields(
       }
       const opt = node.options.find((o) => o.name === dep);
       if (opt) {
-        const longAliases: string[] = [];
-        const shortAliases: string[] = [];
-        for (const a of opt.alias ?? []) {
-          if (a.length === 1) shortAliases.push(a);
-          else longAliases.push(a);
-        }
         out.push({
           fieldName: dep,
           isGlobal: opt.isGlobal === true,
           pathStr: spec.pathStr,
           pathStrs: spec.pathStrs,
           isPositional: false,
-          cliName: opt.cliName,
-          longAliases,
-          shortAliases,
+          optionTokens: collectOptionTokens(opt.cliName, opt.alias),
         });
       }
     }

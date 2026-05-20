@@ -103,17 +103,14 @@ function fishValueLines(
       // `_arg_values_<d>`, global deps from `_global_arg_values_<d>` —
       // so a local dep is never accidentally satisfied by a same-named
       // global value supplied at a parent frame.
-      const depExpr = (d: { name: string; isGlobal: boolean }): string => {
-        // Fish variable names accept only alnum + underscore; sanitize the
-        // field name so a hyphenated schema key (e.g. `env-name`) still
-        // produces a valid `$_arg_values_env_name`.
+      // Fish variable names accept only alnum + underscore; sanitize the
+      // field name so a hyphenated schema key (e.g. `env-name`) still
+      // produces a valid `$_arg_values_env_name`.
+      const depExpr = (d: ResolvedExpandDep): string => {
         const safe = sanitize(d.name);
         return d.isGlobal ? `$_global_arg_values_${safe}` : `$_arg_values_${safe}`;
       };
-      const depKey =
-        location.resolvedDeps.length === 1
-          ? `"${depExpr(location.resolvedDeps[0]!)}"`
-          : location.resolvedDeps.map((d) => `"${depExpr(d)}"`).join(`\\x1f`);
+      const depKey = location.resolvedDeps.map((d) => `"${depExpr(d)}"`).join(`\\x1f`);
       const bucket = sanitize(location.fieldName);
       // Array dedup bucket lookup mirrors host scope: globals read the
       // _global bucket; locals read the local bucket.
@@ -482,11 +479,8 @@ export function generateFishCompletion(
     lines.push(`function __${fn}_track_opt --no-scope-shadowing`);
     lines.push(`    switch "$argv[1]:$argv[2]"`);
     for (const t of trackedFields) {
-      if (t.isPositional) continue;
-      const patterns: string[] = [`--${t.cliName}`];
-      for (const a of t.longAliases ?? []) patterns.push(`--${a}`);
-      for (const a of t.shortAliases ?? []) patterns.push(`-${a}`);
-      const cases = t.pathStrs.flatMap((p) => patterns.map((n) => `"${p}:${n}"`)).join(" ");
+      if (t.isPositional || !t.optionTokens) continue;
+      const cases = t.pathStrs.flatMap((p) => t.optionTokens!.map((n) => `"${p}:${n}"`)).join(" ");
       const prefix = t.isGlobal ? `_global_arg_values_` : `_arg_values_`;
       lines.push(`        case ${cases}`);
       lines.push(`            set -g ${prefix}${sanitize(t.fieldName)} "$argv[3]"`);
