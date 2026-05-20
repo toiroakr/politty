@@ -6,6 +6,7 @@ import { extractFields, toCamelCase } from "../../core/schema-extractor.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../../types.js";
+import { collectOptionTokens } from "../extractor.js";
 import type { CompletableOption, CompletablePositional, ValueCompletion } from "../types.js";
 import {
   resolveValueCompletion,
@@ -110,25 +111,14 @@ function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
 
 /**
  * Build the CLI tokens an option is recognised by (`--cliName`,
- * `--long-alias`, `-x`). Mirrors `aliasToken` semantics from
- * `shell-shared`: single-char aliases get a single dash, longer aliases
- * get `--`. Kept local to avoid a cross-module import cycle.
+ * `--long-alias`, `-x`). Wraps `collectOptionTokens` so collision
+ * detection sees every spelling the runtime aliasMap accepts — including
+ * the camelCase form of hyphenated names, without which a parent-frame
+ * local that intercepts `--toBe` for a global `to-be` would silently
+ * skip the migration loop.
  */
 function optionTokenSet(opt: CompletableOption): Set<string> {
-  const tokens = new Set<string>([`--${opt.cliName}`]);
-  // A single-character cliName is also reachable from `-x` at runtime.
-  if (opt.cliName.length === 1) tokens.add(`-${opt.cliName}`);
-  // Hyphenated names accept their camelCase variant too — runtime's
-  // aliasMap registers `--to-be` AND `--toBe` for `cliName: "to-be"`.
-  // Collision detection must see both forms or a parent-frame local
-  // that intercepts the camelCase variant of a global will silently
-  // skip the migration loop.
-  if (opt.cliName.includes("-")) tokens.add(`--${toCamelCase(opt.cliName)}`);
-  for (const a of opt.alias ?? []) {
-    tokens.add(a.length === 1 ? `-${a}` : `--${a}`);
-    if (a.includes("-")) tokens.add(`--${toCamelCase(a)}`);
-  }
-  return tokens;
+  return new Set(collectOptionTokens(opt.cliName, opt.alias));
 }
 
 /**
