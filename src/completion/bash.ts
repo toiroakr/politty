@@ -27,9 +27,10 @@ import {
 } from "./extractor.js";
 import {
   ansiC,
+  optionExpandLocation,
+  positionalExpandLocation,
   quotedAvailabilityTokens,
-  resolveExpandDepGlobality,
-  type ResolvedExpandDep,
+  type BaseExpandLocation,
 } from "./shell-shared.js";
 import type {
   CompletableOption,
@@ -85,32 +86,13 @@ function bashEncodeKey(s: string): string {
   return out;
 }
 
-interface BashExpandLocation {
+/**
+ * Bash adds `funcSuffix` on top of the shell-agnostic `BaseExpandLocation`:
+ * the hoisted table variable is named `__<fn>_expand_<funcSuffix>__<field>`,
+ * so each frame's emission needs to know the surrounding handler.
+ */
+interface BashExpandLocation extends BaseExpandLocation {
   funcSuffix: string;
-  fieldName: string;
-  /**
-   * When true, the candidate loop drops any `key=` value whose key part is
-   * already present in `_used_field_keys[<fieldName>]`. Enables `-f
-   * key=value -f <TAB>` style dedup for repeatable array options. Always
-   * false for scalar options and positionals.
-   */
-  isArrayOption: boolean;
-  /**
-   * True when the host option is global. Globals keep their dedup bucket
-   * in `_global_used_field_keys` (which is not cleared on subcommand
-   * descent) so already-consumed `key=value` slots remain hidden from
-   * descendant frames.
-   */
-  isGlobal: boolean;
-  /**
-   * Resolved sibling deps in `dependsOn` order. Each entry pairs the dep
-   * name with its globality so the lookup reads from the correct bucket:
-   * local deps from `_arg_values` only, global deps from
-   * `_global_arg_values` only. Without this split, a local dep would
-   * silently inherit a same-named global value supplied at a parent
-   * frame.
-   */
-  resolvedDeps: readonly ResolvedExpandDep[];
 }
 
 /**
@@ -288,15 +270,7 @@ function optionValueCases(
     if (!opt.takesValue || !opt.valueCompletion) continue;
     const valLines = bashValueLines(opt.valueCompletion, inline, fn, {
       funcSuffix,
-      fieldName: opt.name,
-      isArrayOption: opt.valueType === "array",
-      isGlobal: opt.isGlobal === true,
-      resolvedDeps: resolveExpandDepGlobality(
-        opt.valueCompletion,
-        opt.isGlobal === true,
-        options,
-        positionals,
-      ),
+      ...optionExpandLocation(opt, options, positionals),
     });
     if (valLines.length === 0) continue;
 
@@ -335,10 +309,7 @@ function positionalBlock(
     }
     for (const vl of bashValueLines(pos.valueCompletion, false, fn, {
       funcSuffix,
-      fieldName: pos.name,
-      isArrayOption: false,
-      isGlobal: false,
-      resolvedDeps: resolveExpandDepGlobality(pos.valueCompletion, false, options, positionals),
+      ...positionalExpandLocation(pos, options, positionals),
     })) {
       lines.push(`            ${vl}`);
     }

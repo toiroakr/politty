@@ -27,9 +27,10 @@ import {
 } from "./extractor.js";
 import {
   ansiC,
+  optionExpandLocation,
+  positionalExpandLocation,
   quotedAvailabilityTokens,
-  resolveExpandDepGlobality,
-  type ResolvedExpandDep,
+  type BaseExpandLocation,
 } from "./shell-shared.js";
 import type {
   CompletableOption,
@@ -64,30 +65,14 @@ function zshExpandVar(fn: string, funcSuffix: string, fieldName: string): string
   return `__${fn}_expand_${funcSuffix}__${sanitize(fieldName)}`;
 }
 
-interface ZshExpandLocation {
+/**
+ * Zsh adds `funcSuffix` on top of the shell-agnostic `BaseExpandLocation`:
+ * the hoisted associative-array variable is named
+ * `__<fn>_expand_<funcSuffix>__<field>`, so each frame's emission needs to
+ * know the surrounding handler.
+ */
+interface ZshExpandLocation extends BaseExpandLocation {
   funcSuffix: string;
-  fieldName: string;
-  /**
-   * Enable runtime deduplication of already-consumed `key=` candidates
-   * for repeatable array options (e.g. `-f workspaceId=foo -f <TAB>`
-   * drops the `workspaceId=` slot). Always false for scalar options and
-   * positionals.
-   */
-  isArrayOption: boolean;
-  /**
-   * True when the host option is global. Globals keep their dedup bucket
-   * in `_global_used_field_keys` (which is not cleared on subcommand
-   * descent) so already-consumed `key=value` slots remain hidden from
-   * descendant frames.
-   */
-  isGlobal: boolean;
-  /**
-   * Resolved sibling deps in `dependsOn` order. Each entry pairs the dep
-   * name with its globality so the lookup reads from the correct bucket:
-   * local deps from `_arg_values` only, global deps from
-   * `_global_arg_values` only.
-   */
-  resolvedDeps: readonly ResolvedExpandDep[];
 }
 
 /**
@@ -239,15 +224,7 @@ function optionValueCases(
     if (!opt.takesValue || !opt.valueCompletion) continue;
     const valLines = zshValueLines(opt.valueCompletion, fn, {
       funcSuffix,
-      fieldName: opt.name,
-      isArrayOption: opt.valueType === "array",
-      isGlobal: opt.isGlobal === true,
-      resolvedDeps: resolveExpandDepGlobality(
-        opt.valueCompletion,
-        opt.isGlobal === true,
-        options,
-        positionals,
-      ),
+      ...optionExpandLocation(opt, options, positionals),
     });
     if (valLines.length === 0) continue;
 
@@ -284,10 +261,7 @@ function positionalBlock(
     }
     const valLines = zshValueLines(pos.valueCompletion, fn, {
       funcSuffix,
-      fieldName: pos.name,
-      isArrayOption: false,
-      isGlobal: false,
-      resolvedDeps: resolveExpandDepGlobality(pos.valueCompletion, false, options, positionals),
+      ...positionalExpandLocation(pos, options, positionals),
     });
     for (const vl of valLines) {
       lines.push(`            ${vl}`);

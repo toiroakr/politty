@@ -9,7 +9,7 @@
  */
 
 import { toCamelCase } from "../core/schema-extractor.js";
-import type { CompletableOption, ValueCompletion } from "./types.js";
+import type { CompletableOption, CompletablePositional, ValueCompletion } from "./types.js";
 
 /**
  * Resolved sibling dep used by an `expand` value completion. Paired with
@@ -20,6 +20,68 @@ import type { CompletableOption, ValueCompletion } from "./types.js";
 export interface ResolvedExpandDep {
   readonly name: string;
   readonly isGlobal: boolean;
+}
+
+/**
+ * Per-host metadata every shell's expand emission needs: which field, whether
+ * the dedup-bucket reads from the global namespace, whether the host repeats
+ * (`key=` dedup applies), and the resolved `dependsOn` slots. Bash and zsh
+ * additionally carry a `funcSuffix` to name the hoisted table variable —
+ * fish keys its lookup off `fieldName` alone, so the extension is opt-in.
+ */
+export interface BaseExpandLocation {
+  fieldName: string;
+  isArrayOption: boolean;
+  isGlobal: boolean;
+  resolvedDeps: readonly ResolvedExpandDep[];
+}
+
+/**
+ * Build the shell-agnostic part of an expand location for an option. Wraps
+ * `resolveExpandDepGlobality` so the three generators don't each repeat the
+ * `(opt.valueCompletion, opt.isGlobal === true, options, positionals)`
+ * incantation.
+ */
+export function optionExpandLocation(
+  opt: CompletableOption,
+  frameOptions: readonly CompletableOption[],
+  framePositionals: readonly CompletablePositional[],
+): BaseExpandLocation {
+  return {
+    fieldName: opt.name,
+    isArrayOption: opt.valueType === "array",
+    isGlobal: opt.isGlobal === true,
+    resolvedDeps: resolveExpandDepGlobality(
+      opt.valueCompletion,
+      opt.isGlobal === true,
+      frameOptions,
+      framePositionals,
+    ),
+  };
+}
+
+/**
+ * Shell-agnostic expand location for a positional. Positionals are never
+ * global (the runtime parser does not propagate positionals across frames)
+ * and never array-dedup hosts (`key=value` semantics don't apply), so those
+ * bits are hard-coded.
+ */
+export function positionalExpandLocation(
+  pos: CompletablePositional,
+  frameOptions: readonly CompletableOption[],
+  framePositionals: readonly CompletablePositional[],
+): BaseExpandLocation {
+  return {
+    fieldName: pos.name,
+    isArrayOption: false,
+    isGlobal: false,
+    resolvedDeps: resolveExpandDepGlobality(
+      pos.valueCompletion,
+      false,
+      frameOptions,
+      framePositionals,
+    ),
+  };
 }
 
 /**

@@ -21,8 +21,10 @@ import {
 } from "./extractor.js";
 import {
   collectOptionTokens,
+  optionExpandLocation,
+  positionalExpandLocation,
   quotedAvailabilityTokens,
-  resolveExpandDepGlobality,
+  type BaseExpandLocation,
   type ResolvedExpandDep,
 } from "./shell-shared.js";
 import type {
@@ -58,30 +60,6 @@ function fishCaseEscape(s: string): string {
     .replace(/]/g, "\\]");
 }
 
-interface FishExpandLocation {
-  fieldName: string;
-  /**
-   * Enable runtime deduplication of already-consumed `key=` candidates
-   * for repeatable array options. Always false for scalar options and
-   * positionals.
-   */
-  isArrayOption: boolean;
-  /**
-   * True when the host option is global. Globals keep their dedup bucket
-   * in `_global_used_field_keys_<bucket>` (which is not cleared on
-   * subcommand descent) so already-consumed `key=value` slots remain
-   * hidden from descendant frames.
-   */
-  isGlobal: boolean;
-  /**
-   * Resolved sibling deps in `dependsOn` order. Each entry pairs the dep
-   * name with its globality so the lookup reads from the correct bucket:
-   * local deps from `_arg_values_<name>` only, global deps from
-   * `_global_arg_values_<name>` only.
-   */
-  resolvedDeps: readonly ResolvedExpandDep[];
-}
-
 /**
  * Generate fish value completion lines for a ValueCompletion spec.
  * Each line outputs candidates via echo (tab-separated value\tdescription).
@@ -92,7 +70,7 @@ interface FishExpandLocation {
 function fishValueLines(
   vc: ValueCompletion | undefined,
   fn: string,
-  location?: FishExpandLocation,
+  location?: BaseExpandLocation,
 ): string[] {
   if (!vc) return [];
   switch (vc.type) {
@@ -273,17 +251,11 @@ function optionValueCases(
   const lines: string[] = [];
   for (const opt of options) {
     if (!opt.takesValue || !opt.valueCompletion) continue;
-    const valLines = fishValueLines(opt.valueCompletion, fn, {
-      fieldName: opt.name,
-      isArrayOption: opt.valueType === "array",
-      isGlobal: opt.isGlobal === true,
-      resolvedDeps: resolveExpandDepGlobality(
-        opt.valueCompletion,
-        opt.isGlobal === true,
-        options,
-        positionals,
-      ),
-    });
+    const valLines = fishValueLines(
+      opt.valueCompletion,
+      fn,
+      optionExpandLocation(opt, options, positionals),
+    );
     if (valLines.length === 0) continue;
 
     // Mirror the bash/zsh tracker emission: use every CLI token the
@@ -315,12 +287,11 @@ function positionalBlock(
   if (positionals.length === 0) return [];
   const lines: string[] = [];
   for (const pos of positionals) {
-    const valLines = fishValueLines(pos.valueCompletion, fn, {
-      fieldName: pos.name,
-      isArrayOption: false,
-      isGlobal: false,
-      resolvedDeps: resolveExpandDepGlobality(pos.valueCompletion, false, options, positionals),
-    });
+    const valLines = fishValueLines(
+      pos.valueCompletion,
+      fn,
+      positionalExpandLocation(pos, options, positionals),
+    );
     if (valLines.length === 0) continue;
 
     if (pos.variadic) {
