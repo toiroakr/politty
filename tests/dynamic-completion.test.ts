@@ -759,10 +759,14 @@ describe("Dynamic completion (in-process resolver)", () => {
 
     it("fish: dispatches resolver directive bits to __fish_complete_path", () => {
       const dyn = generateCompletion(dynamicCmd, { shell: "fish", programName: "mycli" }).script;
-      expect(dyn).toContain("$_directive & 32");
+      // fish's `math` rejects the `&` operator with "Logical operations
+      // are not supported"; the directive check must use the `bitand()`
+      // function instead.
+      expect(dyn).toContain(`math "bitand($_directive, 32)"`);
       expect(dyn).toContain("__fish_complete_directories");
-      expect(dyn).toContain("$_directive & 16");
+      expect(dyn).toContain(`math "bitand($_directive, 16)"`);
       expect(dyn).toContain("__fish_complete_path");
+      expect(dyn).not.toMatch(/math\s+"\$_directive\s*&/);
     });
   });
 

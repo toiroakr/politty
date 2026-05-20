@@ -436,13 +436,15 @@ export function generateFishCompletion(
     lines.push(`    end`);
     // Apply resolver-supplied directive bits. fish lacks compopt; emit
     // path/dir candidates inline (filtered by the partially-typed token)
-    // so completion still includes them.
+    // so completion still includes them. fish's `math` does not accept
+    // the `&` operator (it errors with "Logical operations are not
+    // supported"), so use the `bitand()` function form instead.
     lines.push(
-      `    if test (math "$_directive & ${CompletionDirective.DirectoryCompletion}") -ne 0`,
+      `    if test (math "bitand($_directive, ${CompletionDirective.DirectoryCompletion})") -ne 0`,
     );
     lines.push(`        __fish_complete_directories "$_cur"`);
     lines.push(
-      `    else if test (math "$_directive & ${CompletionDirective.FileCompletion}") -ne 0`,
+      `    else if test (math "bitand($_directive, ${CompletionDirective.FileCompletion})") -ne 0`,
     );
     lines.push(`        __fish_complete_path "$_cur"`);
     lines.push(`    end`);
