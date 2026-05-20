@@ -768,6 +768,16 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(dyn).toContain("__fish_complete_path");
       expect(dyn).not.toMatch(/math\s+"\$_directive\s*&/);
     });
+
+    it("fish: re-emits resolver candidates via printf so `-n`-like values survive", () => {
+      // fish's `echo` swallows leading `-n`/`-e`/`-s`/`-E`. The apply
+      // helper buffers each line from `__complete` and re-emits it; the
+      // re-emit must use `printf` so a resolver candidate equal to one
+      // of those flags is not silently dropped.
+      const dyn = generateCompletion(dynamicCmd, { shell: "fish", programName: "mycli" }).script;
+      expect(dyn).toContain(`printf '%s\\n' "$_prev"`);
+      expect(dyn).not.toMatch(/^\s*echo \$_prev$/m);
+    });
   });
 
   describe("Variadic positional previousValues", () => {

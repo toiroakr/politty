@@ -700,6 +700,38 @@ describe("expand completion", () => {
       expect(script).toContain('set -g _arg_values_endpoint "$argv[3]"');
     });
 
+    it("fish emits expand candidates via printf so `-n`-like values survive", () => {
+      // fish's `echo` swallows leading `-n`/`-e`/`-s`/`-E` as flags. A
+      // resolver-supplied or expand candidate may legitimately equal one
+      // of those, so the emitter must use `printf '%s\\n'` (or `echo --`).
+      const cli = defineCommand({
+        name: "mycli",
+        args: z.object({
+          endpoint: arg(z.string(), {
+            positional: true,
+            completion: { custom: { choices: ["GetApplication"] } },
+          }),
+          field: arg(z.string().optional(), {
+            completion: {
+              custom: {
+                expand: {
+                  dependsOn: ["endpoint"],
+                  enumerate: () => [{ value: "-n" }, { value: "-e", description: "echo flag" }],
+                },
+              },
+            },
+          }),
+        }),
+      });
+      const { script } = generateFishCompletion(cli, {
+        shell: "fish",
+        programName: "mycli",
+      });
+      expect(script).toContain(`printf '%s\\n' "-n"`);
+      expect(script).toContain(`printf '%s\\t%s\\n' "-e" "echo flag"`);
+      expect(script).not.toMatch(/^\s*echo "-n"/m);
+    });
+
     it("omits expand helpers when no expand specs are defined", () => {
       const simple = defineCommand({
         name: "simple",

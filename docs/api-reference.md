@@ -527,7 +527,7 @@ Properties and constraints:
 
 - `dependsOn` must be non-empty and may not reference the field itself or any sibling without a static value set. Validation errors throw at command-definition time with the offending field name.
 - `enumerate` runs synchronously at the time the user invokes `<program> completion <shell>`. politty does not retain it for runtime use; if it throws, the error is wrapped with the field name and the offending `deps` snapshot.
-- bash and zsh emit one global associative array per spec (declared with `declare -gA` / `typeset -gA`); fish emits an inline `switch` (no associative arrays). bash drops descriptions; zsh uses `value:description` for `_describe`; fish uses tab-separated `value\tdescription`.
+- bash emits one prefix-scalar variable per table entry (`<base>__<encKey>=<candidates>`) so the generated script runs on Bash 3.2 (macOS default `/bin/bash`) without associative arrays; zsh emits one global associative array per spec (`typeset -gA`); fish emits an inline `switch` (no associative arrays). bash drops descriptions; zsh uses `value:description` for `_describe`; fish uses tab-separated `value\tdescription`.
 
 #### Example
 

@@ -132,9 +132,13 @@ function fishValueLines(
         const casePattern = entry.key.map((k) => `"${fishCaseEscape(k)}"`).join(`\\x1f`);
         out.push(`    case ${casePattern}`);
         for (const c of entry.candidates) {
+          // `printf` instead of `echo` — `expand` candidates accept arbitrary
+          // strings, and a value matching one of fish's `echo` flags
+          // (`-n`, `-e`, `-s`, `-E`) would be swallowed as an option and
+          // disappear from the completion list.
           const echoLine = c.description
-            ? `echo "${escapeDesc(c.value)}\t${escapeDesc(c.description)}"`
-            : `echo "${escapeDesc(c.value)}"`;
+            ? `printf '%s\\t%s\\n' "${escapeDesc(c.value)}" "${escapeDesc(c.description)}"`
+            : `printf '%s\\n' "${escapeDesc(c.value)}"`;
           if (location.isArrayOption && c.value.includes("=")) {
             // Static key part is known at generation time; emit a guard so
             // already-consumed keys are skipped at completion time.
@@ -419,7 +423,10 @@ export function generateFishCompletion(
     lines.push(`    while read -l _l`);
     lines.push(`        if test $_has_prev -eq 1`);
     lines.push(`            if test -n "$_prev"`);
-    lines.push(`                echo $_prev`);
+    // `printf` rather than `echo` — a resolver candidate that happens to
+    // match a fish `echo` flag (`-n`, `-e`, `-s`, `-E`) would otherwise
+    // be swallowed as an option instead of being emitted as a candidate.
+    lines.push(`                printf '%s\\n' "$_prev"`);
     lines.push(`            end`);
     lines.push(`        end`);
     lines.push(`        set _prev $_l`);
@@ -430,7 +437,7 @@ export function generateFishCompletion(
     lines.push(`            set _directive (string sub -s 2 -- $_prev)`);
     lines.push(`        else`);
     lines.push(`            if test -n "$_prev"`);
-    lines.push(`                echo $_prev`);
+    lines.push(`                printf '%s\\n' "$_prev"`);
     lines.push(`            end`);
     lines.push(`        end`);
     lines.push(`    end`);
