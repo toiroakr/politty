@@ -342,6 +342,13 @@ export interface ExpandSpecLocation {
   readonly funcSuffix: string;
   /** Field name (camelCase) of the option/positional that has the expand spec. */
   readonly fieldName: string;
+  /**
+   * True when the host field comes from `globalArgsSchema`. Shell
+   * generators store the array-dedup bucket in a global state so the
+   * already-consumed keys survive subcommand descent — matching how the
+   * runtime parser keeps global option values visible across frames.
+   */
+  readonly isGlobal: boolean;
   /** Whether the field is a positional argument. */
   readonly isPositional: boolean;
   /**
@@ -404,6 +411,7 @@ function walk(
         pathStrs,
         funcSuffix,
         fieldName: opt.name,
+        isGlobal: opt.isGlobal === true,
         isPositional: false,
         isArrayOption,
         optionTokens: isArrayOption ? collectOptionTokens(opt.cliName, opt.alias) : [],
@@ -420,6 +428,7 @@ function walk(
         pathStrs,
         funcSuffix,
         fieldName: pos.name,
+        isGlobal: false,
         isPositional: true,
         isArrayOption: false,
         optionTokens: [],
@@ -445,6 +454,14 @@ function walk(
 export interface TrackedFieldRef {
   /** camelCase field name; used as the `_arg_values` map key. */
   readonly fieldName: string;
+  /**
+   * True when the underlying option is a global (propagated from
+   * `globalArgsSchema`). Shell generators route global trackers into a
+   * separate bucket that is not cleared on subcommand descent — matching
+   * the runtime parser's behaviour of keeping globals visible from any
+   * frame.
+   */
+  readonly isGlobal: boolean;
   /** Canonical subcommand path where this field lives. */
   readonly pathStr: string;
   /**
@@ -491,6 +508,7 @@ export function collectTrackedFields(
       if (posIndex >= 0) {
         out.push({
           fieldName: dep,
+          isGlobal: false,
           pathStr: spec.pathStr,
           pathStrs: spec.pathStrs,
           isPositional: true,
@@ -508,6 +526,7 @@ export function collectTrackedFields(
         }
         out.push({
           fieldName: dep,
+          isGlobal: opt.isGlobal === true,
           pathStr: spec.pathStr,
           pathStrs: spec.pathStrs,
           isPositional: false,
@@ -591,7 +610,11 @@ export function extractCompletionData(
     const globalPending: PendingExpandTarget[] = [];
     globalOptions = globalExtracted.fields
       .filter((field) => !field.positional)
-      .map((field) => fieldToOption(field, globalPending));
+      .map((field) => {
+        const opt = fieldToOption(field, globalPending);
+        opt.isGlobal = true;
+        return opt;
+      });
     // Resolve `expand` specs on global options against the globals themselves
     // (globals can depend on other globals but not on subcommand-local args).
     resolveExpandTargets(

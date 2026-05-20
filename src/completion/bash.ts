@@ -74,6 +74,13 @@ interface BashExpandLocation {
    * false for scalar options and positionals.
    */
   isArrayOption: boolean;
+  /**
+   * True when the host option is global. Globals keep their dedup bucket
+   * in `_global_used_field_keys` (which is not cleared on subcommand
+   * descent) so already-consumed `key=value` slots remain hidden from
+   * descendant frames.
+   */
+  isGlobal: boolean;
 }
 
 /**
@@ -97,13 +104,23 @@ function bashValueLines(
       // the runtime lookup key from the dependsOn values, fetch the
       // (newline-separated) candidate list, and filter against `$_cur`.
       const varName = bashExpandVar(fn, location.funcSuffix, location.fieldName);
-      const depKey = vc.dependsOn.map((d) => `"\${_arg_values[${d}]:-}"`).join(`$'\\x1f'`);
+      // Per-dep lookups fall back to the global bucket so globals supplied
+      // before subcommand descent (e.g. `cli --env prod sub --field <TAB>`)
+      // still resolve after the local bucket was cleared on descent.
+      const depKey = vc.dependsOn
+        .map((d) => `"\${_arg_values[${d}]:-\${_global_arg_values[${d}]:-}}"`)
+        .join(`$'\\x1f'`);
       const inlineExpr = inline ? `"\${_inline_prefix}\${_c}"` : `"$_c"`;
+      // The array dedup bucket for a global expand host lives in
+      // _global_used_field_keys so already-consumed keys survive descent.
+      const bucketRef = location.isGlobal
+        ? `\${_global_used_field_keys[${sanitize(location.fieldName)}]:-}`
+        : `\${_used_field_keys[${sanitize(location.fieldName)}]:-\${_global_used_field_keys[${sanitize(location.fieldName)}]:-}}`;
       const dedupLines = location.isArrayOption
         ? [
             `        if [[ "$_c" == *=* ]]; then`,
             `            local _ck="\${_c%%=*}"`,
-            `            if [[ -n "$_ck" && " \${_used_field_keys[${sanitize(location.fieldName)}]:-} " == *" $_ck "* ]]; then continue; fi`,
+            `            if [[ -n "$_ck" && " ${bucketRef} " == *" $_ck "* ]]; then continue; fi`,
             `        fi`,
           ]
         : [];
@@ -226,6 +243,7 @@ function optionValueCases(
       funcSuffix,
       fieldName: opt.name,
       isArrayOption: opt.valueType === "array",
+      isGlobal: opt.isGlobal === true,
     });
     if (valLines.length === 0) continue;
 
@@ -267,6 +285,7 @@ function positionalBlock(
       funcSuffix,
       fieldName: pos.name,
       isArrayOption: false,
+      isGlobal: false,
     })) {
       lines.push(`            ${vl}`);
     }
@@ -515,7 +534,8 @@ export function generateBashCompletion(
       for (const a of t.longAliases ?? []) patterns.push(`--${a}`);
       for (const a of t.shortAliases ?? []) patterns.push(`-${a}`);
       const joined = t.pathStrs.flatMap((p) => patterns.map((n) => `${p}:${n}`)).join("|");
-      lines.push(`        ${joined}) _arg_values[${t.fieldName}]="$3" ;;`);
+      const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
+      lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
     }
     lines.push(`    esac`);
     lines.push(`}`);
@@ -525,7 +545,8 @@ export function generateBashCompletion(
     for (const t of trackedFields) {
       if (!t.isPositional) continue;
       const joined = t.pathStrs.map((p) => `${p}:${t.position}`).join("|");
-      lines.push(`        ${joined}) _arg_values[${t.fieldName}]="$3" ;;`);
+      const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
+      lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
     }
     lines.push(`    esac`);
     lines.push(`}`);
@@ -546,10 +567,11 @@ export function generateBashCompletion(
         .flatMap((p) => spec.optionTokens.map((tok) => `${p}:${tok}`))
         .join("|");
       const bucket = sanitize(spec.fieldName);
+      const bucketVar = spec.isGlobal ? `_global_used_field_keys` : `_used_field_keys`;
       lines.push(`        ${joined})`);
       lines.push(`            if [[ "$3" == *=* ]]; then`);
       lines.push(`                local _k="\${3%%=*}"`);
-      lines.push(`                [[ -n "$_k" ]] && _used_field_keys[${bucket}]+=" $_k "`);
+      lines.push(`                [[ -n "$_k" ]] && ${bucketVar}[${bucket}]+=" $_k "`);
       lines.push(`            fi`);
       lines.push(`            ;;`);
     }
@@ -652,9 +674,13 @@ export function generateBashCompletion(
   lines.push(`    local -a _used_opts=()`);
   if (hasExpand) {
     lines.push(`    local -A _arg_values=()`);
+    // Globals survive subcommand descent so values supplied before the
+    // subcommand (e.g. `cli --env prod sub --field <TAB>`) remain visible.
+    lines.push(`    local -A _global_arg_values=()`);
   }
   if (hasArrayExpand) {
     lines.push(`    local -A _used_field_keys=()`);
+    lines.push(`    local -A _global_used_field_keys=()`);
   }
   lines.push(``);
   lines.push(`    local _j=0`);

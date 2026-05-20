@@ -219,8 +219,63 @@ describe("expand completion", () => {
       expect(script).toContain("__mycli_expand_api__field[$'GetApplication']");
       expect(script).toContain("__mycli_track_pos");
       expect(script).toContain(`api:0) _arg_values[endpoint]="$3"`);
-      expect(script).toContain(`local _key="\${_arg_values[endpoint]:-}"`);
+      // Dep lookup falls back to `_global_arg_values` so globals supplied
+      // before subcommand descent remain visible.
+      expect(script).toContain(
+        `local _key="\${_arg_values[endpoint]:-\${_global_arg_values[endpoint]:-}}"`,
+      );
       expect(script).toContain("local -A _arg_values=()");
+    });
+
+    it("routes global tracker writes to a bucket that survives subcommand descent", () => {
+      // A global expand spec (host + dep both global) must keep both the
+      // sibling value and the dedup bucket alive after the scanner enters
+      // a subcommand — otherwise `cli --env prod sub --field <TAB>` loses
+      // the parent-level `--env` reading and emits no candidates.
+      const globalEnv = z.object({
+        env: arg(z.string(), { completion: { custom: { choices: ["prod", "stg"] } } }),
+        field: arg(z.array(z.string()).default([]), {
+          alias: "f",
+          completion: {
+            custom: {
+              expand: { dependsOn: ["env"], enumerate: () => [{ value: "x=" }] },
+            },
+          },
+        }),
+      });
+      const cliWithGlobals = defineCommand({
+        name: "mycli",
+        subCommands: {
+          sub: defineCommand({ name: "sub", args: z.object({}), run: () => {} }),
+        },
+      });
+
+      const { script: bash } = generateBashCompletion(cliWithGlobals, {
+        shell: "bash",
+        programName: "mycli",
+        globalArgsSchema: globalEnv,
+      });
+      // Global tracker writes route into _global_arg_values, which is not
+      // cleared on subcommand descent.
+      expect(bash).toContain(`_global_arg_values[env]="$3"`);
+      expect(bash).toContain(`_global_used_field_keys[field]+=" $_k "`);
+      expect(bash).toContain("local -A _global_arg_values=()");
+
+      const { script: zsh } = generateZshCompletion(cliWithGlobals, {
+        shell: "zsh",
+        programName: "mycli",
+        globalArgsSchema: globalEnv,
+      });
+      expect(zsh).toContain(`_global_arg_values[env]="$3"`);
+      expect(zsh).toContain(`_global_used_field_keys[field]+=" $_k "`);
+
+      const { script: fish } = generateFishCompletion(cliWithGlobals, {
+        shell: "fish",
+        programName: "mycli",
+        globalArgsSchema: globalEnv,
+      });
+      expect(fish).toContain('set -g _global_arg_values_env "$argv[3]"');
+      expect(fish).toContain("set -ga _global_used_field_keys_field");
     });
 
     it("clears sibling-tracker state on subcommand descent so values do not bleed across frames", () => {
@@ -307,7 +362,12 @@ describe("expand completion", () => {
 
     it("fish emits an inline switch and tracker function", () => {
       const { script } = generateFishCompletion(cmd, { shell: "fish", programName: "mycli" });
-      expect(script).toContain('switch "$_arg_values_endpoint"');
+      // The dep expression checks the local tracker first and falls back
+      // to the global bucket so globals stay visible after subcommand
+      // descent.
+      expect(script).toContain(
+        'switch "(test -n "$_arg_values_endpoint"; and echo "$_arg_values_endpoint"; or echo "$_global_arg_values_endpoint")"',
+      );
       expect(script).toContain('case "GetApplication"');
       expect(script).toContain('set -g _arg_values_endpoint "$argv[3]"');
     });

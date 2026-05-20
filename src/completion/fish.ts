@@ -58,6 +58,13 @@ interface FishExpandLocation {
    * positionals.
    */
   isArrayOption: boolean;
+  /**
+   * True when the host option is global. Globals keep their dedup bucket
+   * in `_global_used_field_keys_<bucket>` (which is not cleared on
+   * subcommand descent) so already-consumed `key=value` slots remain
+   * hidden from descendant frames.
+   */
+  isGlobal: boolean;
 }
 
 /**
@@ -82,12 +89,22 @@ function fishValueLines(
       // dependsOn values. For multi-dimensional dependsOn the values are
       // concatenated with the unit-separator so they collide cleanly with
       // the table keys we encode here. Candidates carry `value\tdescription`
-      // when a description is set, matching fish's preferred format.
+      // when a description is set, matching fish's preferred format. Each
+      // dep falls back to its `_global_arg_values_<d>` partner so globals
+      // supplied before subcommand descent remain visible.
+      const depExpr = (d: string): string =>
+        `(test -n "$_arg_values_${d}"; and echo "$_arg_values_${d}"; or echo "$_global_arg_values_${d}")`;
       const depKey =
         vc.dependsOn.length === 1
-          ? `"$_arg_values_${vc.dependsOn[0]}"`
-          : vc.dependsOn.map((d) => `"$_arg_values_${d}"`).join(`\\x1f`);
+          ? `"${depExpr(vc.dependsOn[0]!)}"`
+          : vc.dependsOn.map((d) => `"${depExpr(d)}"`).join(`\\x1f`);
       const bucket = sanitize(location.fieldName);
+      // Array dedup bucket lookup: globals stay in the _global bucket;
+      // local hosts read local first, then fall back to global so a global
+      // key consumed earlier still hides from a local re-completion.
+      const bucketList = location.isGlobal
+        ? `$_global_used_field_keys_${bucket}`
+        : `$_used_field_keys_${bucket} $_global_used_field_keys_${bucket}`;
       const out: string[] = [`switch ${depKey}`];
       for (const entry of vc.table) {
         out.push(`    case "${entry.key.map(fishCaseEscape).join("\\x1f")}"`);
@@ -100,9 +117,7 @@ function fishValueLines(
             // already-consumed keys are skipped at completion time.
             const keyPart = c.value.slice(0, c.value.indexOf("="));
             if (keyPart.length > 0) {
-              out.push(
-                `        if not contains -- "${escapeDesc(keyPart)}" $_used_field_keys_${bucket}`,
-              );
+              out.push(`        if not contains -- "${escapeDesc(keyPart)}" ${bucketList}`);
               out.push(`            ${echoLine}`);
               out.push(`        end`);
               continue;
@@ -179,6 +194,7 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
     const valLines = fishValueLines(opt.valueCompletion, fn, {
       fieldName: opt.name,
       isArrayOption: opt.valueType === "array",
+      isGlobal: opt.isGlobal === true,
     });
     if (valLines.length === 0) continue;
 
@@ -208,6 +224,7 @@ function positionalBlock(positionals: CompletablePositional[], fn: string): stri
     const valLines = fishValueLines(pos.valueCompletion, fn, {
       fieldName: pos.name,
       isArrayOption: false,
+      isGlobal: false,
     });
     if (valLines.length === 0) continue;
 
@@ -458,8 +475,9 @@ export function generateFishCompletion(
       for (const a of t.longAliases ?? []) patterns.push(`--${a}`);
       for (const a of t.shortAliases ?? []) patterns.push(`-${a}`);
       const cases = t.pathStrs.flatMap((p) => patterns.map((n) => `"${p}:${n}"`)).join(" ");
+      const prefix = t.isGlobal ? `_global_arg_values_` : `_arg_values_`;
       lines.push(`        case ${cases}`);
-      lines.push(`            set -g _arg_values_${t.fieldName} "$argv[3]"`);
+      lines.push(`            set -g ${prefix}${t.fieldName} "$argv[3]"`);
     }
     lines.push(`    end`);
     lines.push(`end`);
@@ -469,8 +487,9 @@ export function generateFishCompletion(
     for (const t of trackedFields) {
       if (!t.isPositional) continue;
       const cases = t.pathStrs.map((p) => `"${p}:${t.position}"`).join(" ");
+      const prefix = t.isGlobal ? `_global_arg_values_` : `_arg_values_`;
       lines.push(`        case ${cases}`);
-      lines.push(`            set -g _arg_values_${t.fieldName} "$argv[3]"`);
+      lines.push(`            set -g ${prefix}${t.fieldName} "$argv[3]"`);
     }
     lines.push(`    end`);
     lines.push(`end`);
@@ -491,12 +510,13 @@ export function generateFishCompletion(
         .flatMap((p) => spec.optionTokens.map((tok) => `"${p}:${tok}"`))
         .join(" ");
       const bucket = sanitize(spec.fieldName);
+      const bucketVar = spec.isGlobal ? `_global_used_field_keys_` : `_used_field_keys_`;
       lines.push(`        case ${cases}`);
       lines.push(`            if string match -q '*=*' -- "$argv[3]"`);
       lines.push(`                set -l _k (string replace -r '=.*' '' -- "$argv[3]")`);
       lines.push(`                if test -n "$_k"`);
-      lines.push(`                    if not contains -- "$_k" $_used_field_keys_${bucket}`);
-      lines.push(`                        set -ga _used_field_keys_${bucket} "$_k"`);
+      lines.push(`                    if not contains -- "$_k" $${bucketVar}${bucket}`);
+      lines.push(`                        set -ga ${bucketVar}${bucket} "$_k"`);
       lines.push(`                    end`);
       lines.push(`                end`);
       lines.push(`            end`);
@@ -590,13 +610,17 @@ export function generateFishCompletion(
   if (hasExpand) {
     // Clear any sibling values left over from previous completions so a
     // partial command doesn't pick up stale values from the global scope.
+    // Both local and global buckets are cleared because the previous
+    // completion run may have populated either side.
     for (const t of trackedFields) {
       lines.push(`    set -e _arg_values_${t.fieldName}`);
+      lines.push(`    set -e _global_arg_values_${t.fieldName}`);
     }
   }
   if (hasArrayExpand) {
     for (const spec of arrayExpandSpecs) {
       lines.push(`    set -e _used_field_keys_${sanitize(spec.fieldName)}`);
+      lines.push(`    set -e _global_used_field_keys_${sanitize(spec.fieldName)}`);
     }
   }
   lines.push(`    set -l _j 1`);

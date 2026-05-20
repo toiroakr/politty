@@ -83,6 +83,13 @@ interface ZshExpandLocation {
    * positionals.
    */
   isArrayOption: boolean;
+  /**
+   * True when the host option is global. Globals keep their dedup bucket
+   * in `_global_used_field_keys` (which is not cleared on subcommand
+   * descent) so already-consumed `key=value` slots remain hidden from
+   * descendant frames.
+   */
+  isGlobal: boolean;
 }
 
 /**
@@ -102,12 +109,20 @@ function zshValueLines(
         throw new Error("zshValueLines: expand variant requires a location");
       }
       const varName = zshExpandVar(fn, location.funcSuffix, location.fieldName);
-      const depKey = vc.dependsOn.map((d) => `"\${_arg_values[${d}]:-}"`).join(`$'\\x1f'`);
+      // Per-dep lookup falls back to the global bucket so globals supplied
+      // before subcommand descent still resolve after the local bucket was
+      // cleared on descent.
+      const depKey = vc.dependsOn
+        .map((d) => `"\${_arg_values[${d}]:-\${_global_arg_values[${d}]:-}}"`)
+        .join(`$'\\x1f'`);
       // _vals is split on newlines so each candidate can carry a `:desc`
       // suffix understood by `_describe`. Empty entries (from
       // unrecognised keys) are silently dropped by zsh's _describe.
       if (location.isArrayOption) {
         const bucket = sanitize(location.fieldName);
+        const bucketRef = location.isGlobal
+          ? `\${_global_used_field_keys[${bucket}]:-}`
+          : `\${_used_field_keys[${bucket}]:-\${_global_used_field_keys[${bucket}]:-}}`;
         return [
           `local _key=${depKey}`,
           `local _raw="\${${varName}[$_key]:-}"`,
@@ -118,7 +133,7 @@ function zshValueLines(
           `    for _c in "\${_candidates[@]}"; do`,
           `        if [[ "$_c" == *=* ]]; then`,
           `            _ck="\${_c%%=*}"`,
-          `            if [[ -n "$_ck" && " \${_used_field_keys[${bucket}]:-} " == *" $_ck "* ]]; then continue; fi`,
+          `            if [[ -n "$_ck" && " ${bucketRef} " == *" $_ck "* ]]; then continue; fi`,
           `        fi`,
           `        _vals+=("$_c")`,
           `    done`,
@@ -177,6 +192,7 @@ function optionValueCases(options: CompletableOption[], fn: string, funcSuffix: 
       funcSuffix,
       fieldName: opt.name,
       isArrayOption: opt.valueType === "array",
+      isGlobal: opt.isGlobal === true,
     });
     if (valLines.length === 0) continue;
 
@@ -215,6 +231,7 @@ function positionalBlock(
       funcSuffix,
       fieldName: pos.name,
       isArrayOption: false,
+      isGlobal: false,
     });
     for (const vl of valLines) {
       lines.push(`            ${vl}`);
@@ -475,7 +492,8 @@ export function generateZshCompletion(
       for (const a of t.longAliases ?? []) patterns.push(`--${a}`);
       for (const a of t.shortAliases ?? []) patterns.push(`-${a}`);
       const joined = t.pathStrs.flatMap((p) => patterns.map((n) => `${p}:${n}`)).join("|");
-      lines.push(`        ${joined}) _arg_values[${t.fieldName}]="$3" ;;`);
+      const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
+      lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
     }
     lines.push(`    esac`);
     lines.push(`}`);
@@ -485,7 +503,8 @@ export function generateZshCompletion(
     for (const t of trackedFields) {
       if (!t.isPositional) continue;
       const joined = t.pathStrs.map((p) => `${p}:${t.position}`).join("|");
-      lines.push(`        ${joined}) _arg_values[${t.fieldName}]="$3" ;;`);
+      const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
+      lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
     }
     lines.push(`    esac`);
     lines.push(`}`);
@@ -503,10 +522,11 @@ export function generateZshCompletion(
         .flatMap((p) => spec.optionTokens.map((tok) => `${p}:${tok}`))
         .join("|");
       const bucket = sanitize(spec.fieldName);
+      const bucketVar = spec.isGlobal ? `_global_used_field_keys` : `_used_field_keys`;
       lines.push(`        ${joined})`);
       lines.push(`            if [[ "$3" == *=* ]]; then`);
       lines.push(`                local _k="\${3%%=*}"`);
-      lines.push(`                [[ -n "$_k" ]] && _used_field_keys[${bucket}]+=" $_k "`);
+      lines.push(`                [[ -n "$_k" ]] && ${bucketVar}[${bucket}]+=" $_k "`);
       lines.push(`            fi`);
       lines.push(`            ;;`);
     }
@@ -585,9 +605,13 @@ export function generateZshCompletion(
   lines.push(`    local -a _used_opts=()`);
   if (hasExpand) {
     lines.push(`    local -A _arg_values=()`);
+    // Globals survive subcommand descent so values supplied before the
+    // subcommand (e.g. `cli --env prod sub --field <TAB>`) remain visible.
+    lines.push(`    local -A _global_arg_values=()`);
   }
   if (hasArrayExpand) {
     lines.push(`    local -A _used_field_keys=()`);
+    lines.push(`    local -A _global_used_field_keys=()`);
   }
   lines.push(``);
   lines.push(`    local _j=2`);

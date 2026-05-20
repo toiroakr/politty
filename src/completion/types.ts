@@ -127,6 +127,13 @@ export interface CompletableOption {
   defaultNegationAccepted?: boolean;
   /** Description for completion */
   description?: string | undefined;
+  /**
+   * True when this option originates from a `globalArgsSchema` and was
+   * propagated into every subcommand frame. The runtime parser keeps
+   * global values visible across subcommand descent, so shell generators
+   * must keep their tracker buckets separate from per-frame state.
+   */
+  isGlobal?: boolean;
   /** Whether this option takes a value */
   takesValue: boolean;
   /** Type of value expected */
