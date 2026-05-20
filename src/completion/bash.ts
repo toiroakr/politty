@@ -157,21 +157,18 @@ function bashValueLines(
     }
     case "choices": {
       const items = vc.choices!.map((c) => `"${escapeBashDQ(c)}"`).join(" ");
-      if (inline) {
-        return [
-          `local -a _choices=(${items})`,
-          `COMPREPLY=()`,
-          `local _c; for _c in "\${_choices[@]}"; do [[ "$_c" == "$_cur"* ]] && COMPREPLY+=("\${_inline_prefix}\${_c}"); done`,
-          `compopt -o nospace`,
-          `compopt +o default 2>/dev/null`,
-        ];
-      }
-      return [
+      // `$_inline_prefix` is empty in non-inline mode, so the same loop
+      // handles both: a set prefix gets prepended, an empty one is a no-op.
+      // `compopt -o nospace` is inline-only — it suppresses the trailing
+      // space after `--opt=value` so the user can keep typing.
+      const lines = [
         `local -a _choices=(${items})`,
         `COMPREPLY=()`,
-        `local _c; for _c in "\${_choices[@]}"; do [[ "$_c" == "$_cur"* ]] && COMPREPLY+=("$_c"); done`,
-        `compopt +o default 2>/dev/null`,
+        `local _c; for _c in "\${_choices[@]}"; do [[ "$_c" == "$_cur"* ]] && COMPREPLY+=("\${_inline_prefix}\${_c}"); done`,
       ];
+      if (inline) lines.push(`compopt -o nospace`);
+      lines.push(`compopt +o default 2>/dev/null`);
+      return lines;
     }
     case "file": {
       if (vc.matcher?.length) {
