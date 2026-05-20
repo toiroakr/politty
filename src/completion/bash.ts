@@ -233,6 +233,18 @@ function bashValueLines(
   }
 }
 
+/**
+ * Snippet that unsets every shell variable matching `<prefix>*`. Bash 3.2
+ * has no associative arrays, so the trackers use one variable per field;
+ * the per-invocation reset clears them by enumerating with `compgen -v
+ * <prefix>` and feeding the names to `unset`. `2>/dev/null` is paired both
+ * sides so an empty enumeration result (no variables yet) doesn't print
+ * the `unset:` usage line.
+ */
+function unsetPrefixed(prefix: string): string {
+  return `unset $(compgen -v ${prefix} 2>/dev/null) 2>/dev/null`;
+}
+
 function bashFileFilter(checks: string): string[] {
   // `$_inline_prefix` is empty in non-inline mode, so the same template
   // works for both: a set prefix gets prepended, an empty one is a no-op.
@@ -728,16 +740,16 @@ export function generateBashCompletion(
     // is fresh on every TAB. Globals survive subcommand descent within
     // the same invocation (re-populated below by the scan loop) but must
     // not bleed across invocations.
-    lines.push(`    unset $(compgen -v _arg_values_ 2>/dev/null) 2>/dev/null`);
-    lines.push(`    unset $(compgen -v _global_arg_values_ 2>/dev/null) 2>/dev/null`);
+    lines.push(`    ${unsetPrefixed("_arg_values_")}`);
+    lines.push(`    ${unsetPrefixed("_global_arg_values_")}`);
   }
   if (hasArrayExpand) {
-    lines.push(`    unset $(compgen -v _used_field_keys_ 2>/dev/null) 2>/dev/null`);
-    lines.push(`    unset $(compgen -v _global_used_field_keys_ 2>/dev/null) 2>/dev/null`);
+    lines.push(`    ${unsetPrefixed("_used_field_keys_")}`);
+    lines.push(`    ${unsetPrefixed("_global_used_field_keys_")}`);
     // Per-frame seen-set: marks which global array buckets have been
     // written in the current frame so the first write replaces the
     // inherited entries. Cleared on every subcommand descent below.
-    lines.push(`    unset $(compgen -v _global_arr_seen_ 2>/dev/null) 2>/dev/null`);
+    lines.push(`    ${unsetPrefixed("_global_arr_seen_")}`);
   }
   lines.push(``);
   lines.push(`    local _j=0`);
@@ -798,9 +810,9 @@ export function generateBashCompletion(
   // every per-field scalar written by the trackers so far. compgen -v
   // takes a prefix and prints matching variable names; bash 3.2+.
   const clearState = hasArrayExpand
-    ? `; unset $(compgen -v _arg_values_ 2>/dev/null) $(compgen -v _used_field_keys_ 2>/dev/null) $(compgen -v _global_arr_seen_ 2>/dev/null) 2>/dev/null`
+    ? `; ${unsetPrefixed("_arg_values_")}; ${unsetPrefixed("_used_field_keys_")}; ${unsetPrefixed("_global_arr_seen_")}`
     : hasExpand
-      ? `; unset $(compgen -v _arg_values_ 2>/dev/null) 2>/dev/null`
+      ? `; ${unsetPrefixed("_arg_values_")}`
       : "";
   const posTrack = hasExpand ? `__${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; ` : "";
   if (routeEntries.length > 0) {
