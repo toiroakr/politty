@@ -164,7 +164,7 @@ function zshValueLines(
         `        _vals+=("$_c")`,
         `    done`,
         `    if (( _has_eq )); then`,
-        `        __${fn}_cdescribe 'completions' _vals -- -S ''`,
+        `        __${fn}_cdescribe 'completions' _vals -S ''`,
         `    else`,
         `        __${fn}_cdescribe 'completions' _vals`,
         `    fi`,
@@ -462,7 +462,7 @@ export function generateZshCompletion(
     // not append the default trailing space.
     lines.push(`    if (( \${#_vals[@]} > 0 )); then`);
     lines.push(`        if (( _directive & ${CompletionDirective.NoSpace} )); then`);
-    lines.push(`            __${fn}_cdescribe 'completions' _vals -- -S ''`);
+    lines.push(`            __${fn}_cdescribe 'completions' _vals -S ''`);
     lines.push(`        else`);
     lines.push(`            __${fn}_cdescribe 'completions' _vals`);
     lines.push(`        fi`);
