@@ -260,17 +260,16 @@ describe("expand completion", () => {
       expect(bash).toContain(`deploy:--env`);
     });
 
-    it("keeps non-colliding global tokens at a leaf where a local option only shadows a same-named sibling", () => {
-      // Global dep `env` has a single-char alias `e`, so its tokens are
-      // `--env` and `-e`. A subcommand defines a local option named `e`
-      // (cliName "e"), whose token is `--e`. The raw names overlap on
-      // "e", but the emitted CLI tokens don't — runtime still routes
-      // `--env` (and the long-form alias resolution) to the global. The
-      // generator must therefore keep `sub:--env` (the non-colliding
-      // token) in the global tracker even though it drops `sub:-e`.
+    it("keeps non-colliding global tokens at a leaf where a multi-char local only shadows a same-named sibling", () => {
+      // Global dep `env` has cliName "env" and alias "extra", so its
+      // tokens are `--env` and `--extra`. A subcommand defines a
+      // multi-char local cliName "envdiff" whose tokens are
+      // `--envdiff` only. The raw names overlap on the leading "env"
+      // segment but emitted tokens don't, so runtime still routes
+      // `--env` / `--extra` to the global at this leaf.
       const globals = z.object({
         env: arg(z.string(), {
-          alias: "e",
+          alias: "extra",
           completion: { custom: { choices: ["prod"] } },
         }),
         field: arg(z.string().optional(), {
@@ -287,9 +286,7 @@ describe("expand completion", () => {
           sub: defineCommand({
             name: "sub",
             args: z.object({
-              // Local cliName "e" → token `--e`, does NOT collide with
-              // global tokens `--env` / `-e`.
-              e: arg(z.string(), { completion: { custom: { choices: ["a"] } } }),
+              envdiff: arg(z.string(), { completion: { custom: { choices: ["a"] } } }),
             }),
             run: () => {},
           }),
@@ -300,12 +297,8 @@ describe("expand completion", () => {
         programName: "mycli",
         globalArgsSchema: globals,
       });
-      // Both global tokens land in the global tracker at `sub`. Neither
-      // collides with the local `--e` (local cliName "e" → token `--e`),
-      // so dropping the whole leaf would lose `--env` writes the runtime
-      // would still route to globals.
       expect(bash).toMatch(/sub:--env\b[^\n]*_global_arg_values_env/);
-      expect(bash).toMatch(/sub:-e\b[^\n]*_global_arg_values_env/);
+      expect(bash).toMatch(/sub:--extra\b[^\n]*_global_arg_values_env/);
     });
 
     it("drops only the colliding token when a local option overlaps one global alias", () => {
@@ -1149,6 +1142,32 @@ describe("expand completion", () => {
       expect(script).toMatch(
         /if \[\[ -n "\$_raw" \]\];[\s\S]*?fi\n\s*if \(\( \$\{#COMPREPLY\[@\]\} == 0 \)\); then COMPREPLY=\( "" \); fi/,
       );
+    });
+
+    it("emits both `--x` and `-x` tracker cases for a single-char cliName dep", () => {
+      // Runtime accepts both `--x value` and `-x value` for a 1-char
+      // cliName, so the generated tracker case for an expand dep of
+      // that shape must list both tokens. Without the short token an
+      // expand that depends on `x` works after `--x a` but not `-x a`.
+      const cli = defineCommand({
+        name: "mycli",
+        args: z.object({
+          x: arg(z.string(), { completion: { custom: { choices: ["a"] } } }),
+          out: arg(z.string().optional(), {
+            completion: {
+              custom: {
+                expand: { dependsOn: ["x"], enumerate: () => [{ value: "ok" }] },
+              },
+            },
+          }),
+        }),
+      });
+      const { script } = generateBashCompletion(cli, {
+        shell: "bash",
+        programName: "mycli",
+      });
+      expect(script).toMatch(/:--x\b[^\n]*_arg_values_x/);
+      expect(script).toMatch(/:-x\b[^\n]*_arg_values_x/);
     });
 
     it("encodes `_` so dep values cannot collide with hex escapes or the join separator", () => {

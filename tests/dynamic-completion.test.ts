@@ -225,6 +225,30 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.cache).toBeUndefined();
     });
 
+    it("recognizes a single-character cliName via both `--x` and `-x`", () => {
+      // Runtime's `parseArgv` accepts a 1-char cliName from BOTH the
+      // long form (`--x value`) and the short form (`-x value`) without
+      // requiring an explicit alias, because the aliasMap lookup for a
+      // short option falls through to the canonical name. The
+      // completion parser must mirror that or the cursor classification
+      // for `-x <TAB>` falls through to a positional / subcommand case
+      // instead of an option-value one.
+      const cmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          x: arg(z.string(), { completion: { custom: { choices: ["hello"] } } }),
+        }),
+        run: () => {},
+      });
+      const longCtx = parseCompletionContext(["--x", ""], cmd);
+      expect(longCtx.completionType).toBe("option-value");
+      expect(longCtx.targetOption?.name).toBe("x");
+
+      const shortCtx = parseCompletionContext(["-x", ""], cmd);
+      expect(shortCtx.completionType).toBe("option-value");
+      expect(shortCtx.targetOption?.name).toBe("x");
+    });
+
     it("does not flip a boolean for a short-form `-n` against a long-only custom negation `n`", () => {
       // Runtime only accepts custom negation names in long form (`--n`),
       // never via the short token `-n`. The form-aware matching keeps

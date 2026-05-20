@@ -116,6 +116,8 @@ function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
  */
 function optionTokenSet(opt: CompletableOption): Set<string> {
   const tokens = new Set<string>([`--${opt.cliName}`]);
+  // A single-character cliName is also reachable from `-x` at runtime.
+  if (opt.cliName.length === 1) tokens.add(`-${opt.cliName}`);
   for (const a of opt.alias ?? []) {
     tokens.add(a.length === 1 ? `-${a}` : `--${a}`);
   }
@@ -311,7 +313,11 @@ function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong:
  * short form because its token is `-x`).
  */
 function matchesExplicit(opt: CompletableOption, name: string, isLong: boolean): boolean {
-  if (isLong && opt.cliName === name) return true;
+  // A single-character cliName is reachable from BOTH `--x` and `-x`
+  // at runtime: long form goes through the regular flag path, short
+  // form resolves via `aliasMap` lookup that falls through to the
+  // canonical name. Multi-char cliNames are only invokable as long form.
+  if (opt.cliName === name && (isLong || opt.cliName.length === 1)) return true;
   if (opt.alias) {
     for (const a of opt.alias) {
       const aliasIsShort = a.length === 1;

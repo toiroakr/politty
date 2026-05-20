@@ -497,13 +497,23 @@ export interface ExpandSpecLocation {
 /**
  * Build the runtime token list used by shell scanners to recognise an option.
  * Long aliases get `--`, single-char aliases get `-`, mirroring the existing
- * tracker case patterns.
+ * tracker case patterns. A single-character cliName (e.g. \`x\`) is also
+ * reachable as `-x` — runtime's `aliasMap` lookup for short flags falls
+ * through to the canonical name — so emit that short form too.
  */
 export function collectOptionTokens(
   cliName: string,
   aliases: readonly string[] | undefined,
 ): string[] {
-  return [`--${cliName}`, ...(aliases?.map(aliasToken) ?? [])];
+  const tokens = [`--${cliName}`];
+  if (cliName.length === 1) tokens.push(`-${cliName}`);
+  if (aliases) {
+    for (const a of aliases) {
+      const t = aliasToken(a);
+      if (!tokens.includes(t)) tokens.push(t);
+    }
+  }
+  return tokens;
 }
 
 /**
