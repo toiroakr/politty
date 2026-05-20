@@ -39,6 +39,27 @@ function bashExpandVar(fn: string, funcSuffix: string, fieldName: string): strin
 }
 
 /**
+ * Resolve each `dependsOn` entry to its globality at codegen time so the
+ * lookup reads from the correct bucket. Positionals are never global; an
+ * option dep is global only if the corresponding option carries
+ * `isGlobal === true` (set when the option came from `globalArgsSchema`).
+ */
+function resolveExpandDepGlobality(
+  vc: ValueCompletion,
+  options: CompletableOption[],
+  positionals: CompletablePositional[],
+): ReadonlyArray<{ name: string; isGlobal: boolean }> {
+  if (vc.type !== "expand") return [];
+  return vc.dependsOn.map((dep) => {
+    if (positionals.some((p) => p.name === dep)) {
+      return { name: dep, isGlobal: false };
+    }
+    const opt = options.find((o) => o.name === dep);
+    return { name: dep, isGlobal: opt?.isGlobal === true };
+  });
+}
+
+/**
  * Encode a string as an ANSI-C bash literal: `$'…'` with backslash escapes.
  * Used for expand-table values so newlines and the unit-separator key
  * delimiter survive intact through `mapfile` parsing.
@@ -81,6 +102,15 @@ interface BashExpandLocation {
    * descendant frames.
    */
   isGlobal: boolean;
+  /**
+   * Resolved sibling deps in `dependsOn` order. Each entry pairs the dep
+   * name with its globality so the lookup reads from the correct bucket:
+   * local deps from `_arg_values` only, global deps from
+   * `_global_arg_values` only. Without this split, a local dep would
+   * silently inherit a same-named global value supplied at a parent
+   * frame.
+   */
+  resolvedDeps: ReadonlyArray<{ readonly name: string; readonly isGlobal: boolean }>;
 }
 
 /**
@@ -104,18 +134,22 @@ function bashValueLines(
       // the runtime lookup key from the dependsOn values, fetch the
       // (newline-separated) candidate list, and filter against `$_cur`.
       const varName = bashExpandVar(fn, location.funcSuffix, location.fieldName);
-      // Per-dep lookups fall back to the global bucket so globals supplied
-      // before subcommand descent (e.g. `cli --env prod sub --field <TAB>`)
-      // still resolve after the local bucket was cleared on descent.
-      const depKey = vc.dependsOn
-        .map((d) => `"\${_arg_values[${d}]:-\${_global_arg_values[${d}]:-}}"`)
+      // Per-dep lookups read from the matching bucket: globals from
+      // `_global_arg_values` (preserved across subcommand descent) and
+      // locals from `_arg_values` (cleared on descent). Mixing the two
+      // would let a global value silently substitute for a missing
+      // local dep of the same name.
+      const depKey = location.resolvedDeps
+        .map((d) =>
+          d.isGlobal ? `"\${_global_arg_values[${d.name}]:-}"` : `"\${_arg_values[${d.name}]:-}"`,
+        )
         .join(`$'\\x1f'`);
       const inlineExpr = inline ? `"\${_inline_prefix}\${_c}"` : `"$_c"`;
       // The array dedup bucket for a global expand host lives in
       // _global_used_field_keys so already-consumed keys survive descent.
       const bucketRef = location.isGlobal
         ? `\${_global_used_field_keys[${sanitize(location.fieldName)}]:-}`
-        : `\${_used_field_keys[${sanitize(location.fieldName)}]:-\${_global_used_field_keys[${sanitize(location.fieldName)}]:-}}`;
+        : `\${_used_field_keys[${sanitize(location.fieldName)}]:-}`;
       const dedupLines = location.isArrayOption
         ? [
             `        if [[ "$_c" == *=* ]]; then`,
@@ -232,6 +266,7 @@ function bashFileFilter(checks: string, inline: boolean): string[] {
 /** Collect value-taking option patterns for case matching */
 function optionValueCases(
   options: CompletableOption[],
+  positionals: CompletablePositional[],
   inline: boolean,
   fn: string,
   funcSuffix: string,
@@ -244,6 +279,7 @@ function optionValueCases(
       fieldName: opt.name,
       isArrayOption: opt.valueType === "array",
       isGlobal: opt.isGlobal === true,
+      resolvedDeps: resolveExpandDepGlobality(opt.valueCompletion, options, positionals),
     });
     if (valLines.length === 0) continue;
 
@@ -267,6 +303,7 @@ function optionValueCases(
 /** Generate positional completion block */
 function positionalBlock(
   positionals: CompletablePositional[],
+  options: CompletableOption[],
   fn: string,
   funcSuffix: string,
 ): string[] {
@@ -286,6 +323,9 @@ function positionalBlock(
       fieldName: pos.name,
       isArrayOption: false,
       isGlobal: false,
+      resolvedDeps: pos.valueCompletion
+        ? resolveExpandDepGlobality(pos.valueCompletion, options, positionals)
+        : [],
     })) {
       lines.push(`            ${vl}`);
     }
@@ -299,13 +339,14 @@ function positionalBlock(
 /** Generate prev/inline value completion blocks for options */
 function valueCompletionBlocks(
   options: CompletableOption[],
+  positionals: CompletablePositional[],
   fn: string,
   funcSuffix: string,
 ): string[] {
   if (!options.some((o) => o.takesValue && o.valueCompletion)) return [];
 
   const lines: string[] = [];
-  const prevCases = optionValueCases(options, false, fn, funcSuffix);
+  const prevCases = optionValueCases(options, positionals, false, fn, funcSuffix);
   if (prevCases.length > 0) {
     lines.push(`    if [[ -z "$_inline_prefix" ]]; then`);
     lines.push(`        case "$_prev" in`);
@@ -313,7 +354,7 @@ function valueCompletionBlocks(
     lines.push(`        esac`);
     lines.push(`    fi`);
   }
-  const inlineCases = optionValueCases(options, true, fn, funcSuffix);
+  const inlineCases = optionValueCases(options, positionals, true, fn, funcSuffix);
   if (inlineCases.length > 0) {
     lines.push(`    if [[ -n "$_inline_prefix" ]]; then`);
     lines.push(`        case "\${_inline_prefix%=}" in`);
@@ -371,7 +412,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`${funcName}() {`);
 
   // 1. Option value completion (prev is value-taking option)
-  lines.push(...valueCompletionBlocks(sub.options, fn, funcSuffix));
+  lines.push(...valueCompletionBlocks(sub.options, sub.positionals, fn, funcSuffix));
 
   // Fallback: value-taking option without explicit completion → default file completion
   const fullPathStr = fullPath.join(":");
@@ -385,7 +426,9 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 2. After -- separator
   if (sub.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
-    lines.push(...positionalBlock(sub.positionals, fn, funcSuffix).map((l) => `    ${l}`));
+    lines.push(
+      ...positionalBlock(sub.positionals, sub.options, fn, funcSuffix).map((l) => `    ${l}`),
+    );
     lines.push(`        return`);
     lines.push(`    fi`);
   } else {
@@ -409,7 +452,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
     lines.push(`    COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
     lines.push(`    compopt +o default 2>/dev/null`);
   } else if (sub.positionals.length > 0) {
-    lines.push(...positionalBlock(sub.positionals, fn, funcSuffix));
+    lines.push(...positionalBlock(sub.positionals, sub.options, fn, funcSuffix));
   }
 
   lines.push(`}`);
@@ -601,7 +644,7 @@ export function generateBashCompletion(
 
   // Root handler
   lines.push(`__${fn}_complete_root() {`);
-  lines.push(...valueCompletionBlocks(root.options, fn, "root"));
+  lines.push(...valueCompletionBlocks(root.options, root.positionals, fn, "root"));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(
     `    if [[ -z "$_inline_prefix" ]] && __${fn}_opt_takes_value "" "$_prev"; then return; fi`,
@@ -611,7 +654,9 @@ export function generateBashCompletion(
   );
   if (root.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
-    lines.push(...positionalBlock(root.positionals, fn, "root").map((l) => `    ${l}`));
+    lines.push(
+      ...positionalBlock(root.positionals, root.options, fn, "root").map((l) => `    ${l}`),
+    );
     lines.push(`        return`);
     lines.push(`    fi`);
   } else {
@@ -631,7 +676,9 @@ export function generateBashCompletion(
     lines.push(`        compopt +o default 2>/dev/null`);
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
-    lines.push(...positionalBlock(root.positionals, fn, "root").map((l) => `    ${l}`));
+    lines.push(
+      ...positionalBlock(root.positionals, root.options, fn, "root").map((l) => `    ${l}`),
+    );
   }
   lines.push(`    fi`);
   lines.push(`}`);
@@ -698,7 +745,10 @@ export function generateBashCompletion(
     lines.push(`        if (( _after_dd )); then (( _pos_count++ )); (( _j++ )); continue; fi`);
   }
   if (hasExpand) {
-    lines.push(`        if [[ "$_w" == --*=* ]]; then`);
+    // Match both `--opt=value` and `-o=value`: the parser accepts the
+    // short inline form too, so the scanner must split it before tracking
+    // the dep value, otherwise `-e=prod` slips past the tracker.
+    lines.push(`        if [[ "$_w" == -*=* ]]; then`);
     lines.push(`            _used_opts+=("\${_w%%=*}")`);
     lines.push(`            __${fn}_track_opt "$_subcmd" "\${_w%%=*}" "\${_w#*=}"`);
     if (hasArrayExpand) {
@@ -708,7 +758,7 @@ export function generateBashCompletion(
     lines.push(`        fi`);
   } else {
     lines.push(
-      `        if [[ "$_w" == --*=* ]]; then _used_opts+=("\${_w%%=*}"); (( _j++ )); continue; fi`,
+      `        if [[ "$_w" == -*=* ]]; then _used_opts+=("\${_w%%=*}"); (( _j++ )); continue; fi`,
     );
   }
   lines.push(`        if [[ "$_w" == -* ]]; then`);

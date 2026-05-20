@@ -65,6 +65,34 @@ interface FishExpandLocation {
    * hidden from descendant frames.
    */
   isGlobal: boolean;
+  /**
+   * Resolved sibling deps in `dependsOn` order. Each entry pairs the dep
+   * name with its globality so the lookup reads from the correct bucket:
+   * local deps from `_arg_values_<name>` only, global deps from
+   * `_global_arg_values_<name>` only.
+   */
+  resolvedDeps: ReadonlyArray<{ readonly name: string; readonly isGlobal: boolean }>;
+}
+
+/**
+ * Resolve each `dependsOn` entry to its globality at codegen time so the
+ * lookup reads from the correct bucket. Positionals are never global; an
+ * option dep is global only if the corresponding option carries
+ * `isGlobal === true`.
+ */
+function resolveExpandDepGlobality(
+  vc: ValueCompletion,
+  options: CompletableOption[],
+  positionals: CompletablePositional[],
+): ReadonlyArray<{ name: string; isGlobal: boolean }> {
+  if (vc.type !== "expand") return [];
+  return vc.dependsOn.map((dep) => {
+    if (positionals.some((p) => p.name === dep)) {
+      return { name: dep, isGlobal: false };
+    }
+    const opt = options.find((o) => o.name === dep);
+    return { name: dep, isGlobal: opt?.isGlobal === true };
+  });
 }
 
 /**
@@ -90,21 +118,22 @@ function fishValueLines(
       // concatenated with the unit-separator so they collide cleanly with
       // the table keys we encode here. Candidates carry `value\tdescription`
       // when a description is set, matching fish's preferred format. Each
-      // dep falls back to its `_global_arg_values_<d>` partner so globals
-      // supplied before subcommand descent remain visible.
-      const depExpr = (d: string): string =>
-        `(test -n "$_arg_values_${d}"; and echo "$_arg_values_${d}"; or echo "$_global_arg_values_${d}")`;
+      // dep reads from its matching bucket — local deps from
+      // `_arg_values_<d>`, global deps from `_global_arg_values_<d>` —
+      // so a local dep is never accidentally satisfied by a same-named
+      // global value supplied at a parent frame.
+      const depExpr = (d: { name: string; isGlobal: boolean }): string =>
+        d.isGlobal ? `$_global_arg_values_${d.name}` : `$_arg_values_${d.name}`;
       const depKey =
-        vc.dependsOn.length === 1
-          ? `"${depExpr(vc.dependsOn[0]!)}"`
-          : vc.dependsOn.map((d) => `"${depExpr(d)}"`).join(`\\x1f`);
+        location.resolvedDeps.length === 1
+          ? `"${depExpr(location.resolvedDeps[0]!)}"`
+          : location.resolvedDeps.map((d) => `"${depExpr(d)}"`).join(`\\x1f`);
       const bucket = sanitize(location.fieldName);
-      // Array dedup bucket lookup: globals stay in the _global bucket;
-      // local hosts read local first, then fall back to global so a global
-      // key consumed earlier still hides from a local re-completion.
+      // Array dedup bucket lookup mirrors host scope: globals read the
+      // _global bucket; locals read the local bucket.
       const bucketList = location.isGlobal
         ? `$_global_used_field_keys_${bucket}`
-        : `$_used_field_keys_${bucket} $_global_used_field_keys_${bucket}`;
+        : `$_used_field_keys_${bucket}`;
       const out: string[] = [`switch ${depKey}`];
       for (const entry of vc.table) {
         out.push(`    case "${entry.key.map(fishCaseEscape).join("\\x1f")}"`);
@@ -187,7 +216,11 @@ function fishExtensionLines(extensions: string[]): string[] {
 }
 
 /** Generate option-value switch cases for fish */
-function optionValueCases(options: CompletableOption[], fn: string): string[] {
+function optionValueCases(
+  options: CompletableOption[],
+  positionals: CompletablePositional[],
+  fn: string,
+): string[] {
   const lines: string[] = [];
   for (const opt of options) {
     if (!opt.takesValue || !opt.valueCompletion) continue;
@@ -195,6 +228,7 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
       fieldName: opt.name,
       isArrayOption: opt.valueType === "array",
       isGlobal: opt.isGlobal === true,
+      resolvedDeps: resolveExpandDepGlobality(opt.valueCompletion, options, positionals),
     });
     if (valLines.length === 0) continue;
 
@@ -217,7 +251,11 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
 }
 
 /** Generate positional completion block for fish */
-function positionalBlock(positionals: CompletablePositional[], fn: string): string[] {
+function positionalBlock(
+  positionals: CompletablePositional[],
+  options: CompletableOption[],
+  fn: string,
+): string[] {
   if (positionals.length === 0) return [];
   const lines: string[] = [];
   for (const pos of positionals) {
@@ -225,6 +263,9 @@ function positionalBlock(positionals: CompletablePositional[], fn: string): stri
       fieldName: pos.name,
       isArrayOption: false,
       isGlobal: false,
+      resolvedDeps: pos.valueCompletion
+        ? resolveExpandDepGlobality(pos.valueCompletion, options, positionals)
+        : [],
     });
     if (valLines.length === 0) continue;
 
@@ -275,9 +316,13 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
 }
 
 /** Generate value-option completion block if any value-taking options exist */
-function valueCompletionBlock(options: CompletableOption[], fn: string): string[] {
+function valueCompletionBlock(
+  options: CompletableOption[],
+  positionals: CompletablePositional[],
+  fn: string,
+): string[] {
   if (!options.some((o) => o.takesValue && o.valueCompletion)) return [];
-  return optionValueCases(options, fn);
+  return optionValueCases(options, positionals, fn);
 }
 
 /**
@@ -299,7 +344,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`function ${funcName} --no-scope-shadowing`);
 
   // 1. Option value completion
-  lines.push(...valueCompletionBlock(sub.options, fn));
+  lines.push(...valueCompletionBlock(sub.options, sub.positionals, fn));
   // Fallback: value-taking option without explicit completion → default file completion
   const fullPathStr = fullPath.join(":");
   lines.push(`    if __${fn}_opt_takes_value "${fullPathStr}" "$_prev"; return; end`);
@@ -307,7 +352,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 2. After -- separator
   if (sub.positionals.length > 0) {
     lines.push(`    if test $_after_dd -eq 1`);
-    lines.push(...positionalBlock(sub.positionals, fn).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(sub.positionals, sub.options, fn).map((l) => `    ${l}`));
     lines.push(`        return`);
     lines.push(`    end`);
   } else {
@@ -327,7 +372,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
       lines.push(`    echo "${s.name}\t${desc}"`);
     }
   } else if (sub.positionals.length > 0) {
-    lines.push(...positionalBlock(sub.positionals, fn));
+    lines.push(...positionalBlock(sub.positionals, sub.options, fn));
   }
 
   lines.push(`end`);
@@ -553,12 +598,12 @@ export function generateFishCompletion(
   // separate-word value completion (--opt <value>) is handled. Bash supports
   // inline via _inline_prefix parsing.
   lines.push(`function __${fn}_complete_root --no-scope-shadowing`);
-  lines.push(...valueCompletionBlock(root.options, fn));
+  lines.push(...valueCompletionBlock(root.options, root.positionals, fn));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(`    if __${fn}_opt_takes_value "" "$_prev"; return; end`);
   if (root.positionals.length > 0) {
     lines.push(`    if test $_after_dd -eq 1`);
-    lines.push(...positionalBlock(root.positionals, fn).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(root.positionals, root.options, fn).map((l) => `    ${l}`));
     lines.push(`        return`);
     lines.push(`    end`);
   } else {
@@ -574,7 +619,7 @@ export function generateFishCompletion(
     }
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
-    lines.push(...positionalBlock(root.positionals, fn));
+    lines.push(...positionalBlock(root.positionals, root.options, fn));
   }
   lines.push(`    end`);
   lines.push(`end`);
@@ -643,7 +688,10 @@ export function generateFishCompletion(
     );
   }
   if (hasExpand) {
-    lines.push(`        if string match -q -- '--*=*' "$_w"`);
+    // Match both `--opt=value` and `-o=value`: the parser accepts the
+    // short inline form too, so the scanner must split it before tracking
+    // the dep value, otherwise `-e=prod` slips past the tracker.
+    lines.push(`        if string match -q -- '-*=*' "$_w"`);
     lines.push(`            set -l _opt (string replace -r '=.*' '' -- "$_w")`);
     lines.push(`            set -l _val (string replace -r '^[^=]*=' '' -- "$_w")`);
     lines.push(`            set -a _used_opts "$_opt"`);
@@ -655,7 +703,7 @@ export function generateFishCompletion(
     lines.push(`        end`);
   } else {
     lines.push(
-      `        if string match -q -- '--*=*' "$_w"; set -a _used_opts (string replace -r '=.*' '' -- "$_w"); set _j (math $_j + 1); continue; end`,
+      `        if string match -q -- '-*=*' "$_w"; set -a _used_opts (string replace -r '=.*' '' -- "$_w"); set _j (math $_j + 1); continue; end`,
     );
   }
   lines.push(`        if string match -q -- '-*' "$_w"`);

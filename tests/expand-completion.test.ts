@@ -219,12 +219,57 @@ describe("expand completion", () => {
       expect(script).toContain("__mycli_expand_api__field[$'GetApplication']");
       expect(script).toContain("__mycli_track_pos");
       expect(script).toContain(`api:0) _arg_values[endpoint]="$3"`);
-      // Dep lookup falls back to `_global_arg_values` so globals supplied
-      // before subcommand descent remain visible.
-      expect(script).toContain(
-        `local _key="\${_arg_values[endpoint]:-\${_global_arg_values[endpoint]:-}}"`,
-      );
+      // `endpoint` is a local positional, so the lookup reads only the
+      // local bucket — no global fallback.
+      expect(script).toContain(`local _key="\${_arg_values[endpoint]:-}"`);
       expect(script).toContain("local -A _arg_values=()");
+    });
+
+    it("reads global deps from the global bucket and local deps from the local bucket", () => {
+      // When a spec has a global dep, the lookup must read
+      // `_global_arg_values[<d>]` only; when it has a local dep, read
+      // `_arg_values[<d>]` only. A local dep falling back to a same-
+      // named global would silently substitute a parent value for a
+      // missing local value.
+      const globalEnv = z.object({
+        env: arg(z.string(), { completion: { custom: { choices: ["prod", "stg"] } } }),
+        feat: arg(z.array(z.string()).default([]), {
+          completion: {
+            custom: {
+              expand: { dependsOn: ["env"], enumerate: () => [{ value: "x" }] },
+            },
+          },
+        }),
+      });
+      const cliMixed = defineCommand({
+        name: "mycli",
+        subCommands: {
+          sub: defineCommand({
+            name: "sub",
+            args: z.object({
+              env: arg(z.string(), { completion: { custom: { choices: ["a", "b"] } } }),
+              localField: arg(z.string().optional(), {
+                completion: {
+                  custom: {
+                    expand: { dependsOn: ["env"], enumerate: () => [{ value: "y" }] },
+                  },
+                },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const { script: bash } = generateBashCompletion(cliMixed, {
+        shell: "bash",
+        programName: "mycli",
+        globalArgsSchema: globalEnv,
+      });
+      // The global host (feat) reads the global bucket for its dep.
+      expect(bash).toContain(`local _key="\${_global_arg_values[env]:-}"`);
+      // The local host (localField on sub) reads the local bucket for its
+      // dep — no fallback to globals.
+      expect(bash).toContain(`local _key="\${_arg_values[env]:-}"`);
     });
 
     it("routes global tracker writes to a bucket that survives subcommand descent", () => {
@@ -362,12 +407,9 @@ describe("expand completion", () => {
 
     it("fish emits an inline switch and tracker function", () => {
       const { script } = generateFishCompletion(cmd, { shell: "fish", programName: "mycli" });
-      // The dep expression checks the local tracker first and falls back
-      // to the global bucket so globals stay visible after subcommand
-      // descent.
-      expect(script).toContain(
-        'switch "(test -n "$_arg_values_endpoint"; and echo "$_arg_values_endpoint"; or echo "$_global_arg_values_endpoint")"',
-      );
+      // `endpoint` is a local positional, so the dep expression reads
+      // only the local tracker variable.
+      expect(script).toContain('switch "$_arg_values_endpoint"');
       expect(script).toContain('case "GetApplication"');
       expect(script).toContain('set -g _arg_values_endpoint "$argv[3]"');
     });
@@ -426,6 +468,32 @@ describe("expand completion", () => {
       expect(script).toContain("set -e _used_field_keys_field");
       expect(script).toContain("set -ga _used_field_keys_field");
       expect(script).toContain('if not contains -- "workspaceId" $_used_field_keys_field');
+    });
+
+    it("accepts the short inline `-e=value` form in the scanner so `-e=prod` is tracked", () => {
+      const { script: bash } = generateBashCompletion(cmd, {
+        shell: "bash",
+        programName: "mycli",
+      });
+      // The inline-with-value branch must match `-X=value` too — the
+      // runtime parser accepts `-e=prod` and the tracker should record
+      // the dep value the same way it would for `--env=prod`.
+      expect(bash).toContain(`if [[ "$_w" == -*=* ]]; then`);
+      expect(bash).not.toContain(`if [[ "$_w" == --*=* ]]; then`);
+
+      const { script: zsh } = generateZshCompletion(cmd, {
+        shell: "zsh",
+        programName: "mycli",
+      });
+      expect(zsh).toContain(`if [[ "$_w" == -*=* ]]; then`);
+      expect(zsh).not.toContain(`if [[ "$_w" == --*=* ]]; then`);
+
+      const { script: fish } = generateFishCompletion(cmd, {
+        shell: "fish",
+        programName: "mycli",
+      });
+      expect(fish).toContain(`string match -q -- '-*=*' "$_w"`);
+      expect(fish).not.toContain(`string match -q -- '--*=*' "$_w"`);
     });
 
     it("emits tracker cases for every alias-expanded subcommand path", () => {
