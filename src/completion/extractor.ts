@@ -667,42 +667,56 @@ export function collectTrackedFields(
       if (spec.isGlobal) {
         const globalOpt = globalOptions.find((o) => o.name === dep);
         if (!globalOpt) continue;
-        // Drop spec pathStrs where the leaf subcommand defines a local
-        // option that claims any of the global dep's CLI tokens. The
-        // runtime's `separateGlobalArgs` runs at the leaf frame and
-        // routes a colliding token to the local — recording the local
-        // value into `_global_arg_values` there would diverge from the
-        // runtime. Intermediate pathStrs (ancestor frames the scanner
-        // crosses on the way down) are always kept: the runtime scanner
-        // collects matching tokens at those frames regardless of any
-        // local schema, and the resulting value remains in
-        // `_global_arg_values` for descendant specs to consume.
-        const globalTokens = new Set<string>([globalOpt.cliName, ...(globalOpt.alias ?? [])]);
-        const leafPathStrs = spec.pathStrs.filter((p) => {
+        // Per-leaf compute which CLI tokens the runtime actually delivers
+        // as global at that frame. Runtime's `separateGlobalArgs` at the
+        // leaf routes a token to the local when a local option's emitted
+        // CLI tokens overlap — but only the OVERLAPPING tokens. A global
+        // `--env` with single-char alias `-e` and a leaf-local `--e`
+        // (cliName "e") collide only on the raw name "e", not on the
+        // emitted tokens (`-e` vs `--e`), so `--env` must still be
+        // tracked at that leaf. Intermediate pathStrs (ancestor frames
+        // the scanner crosses on the way down) keep every token: the
+        // runtime scanner at those frames does not consult any local
+        // schema, so the value always lands in `_global_arg_values`
+        // there.
+        const allTokens = collectOptionTokens(globalOpt.cliName, globalOpt.alias);
+        const groups = new Map<string, { tokens: readonly string[]; paths: string[] }>();
+        const recordLeaf = (path: string, tokens: readonly string[]): void => {
+          if (tokens.length === 0) return;
+          const key = tokens.join(" ");
+          let group = groups.get(key);
+          if (!group) {
+            group = { tokens, paths: [] };
+            groups.set(key, group);
+          }
+          group.paths.push(path);
+        };
+        for (const p of spec.pathStrs) {
           const n = nodeByPath.get(p);
-          if (!n) return false;
-          const localShadow = n.options.find(
-            (o) =>
-              o.isGlobal !== true &&
-              (o.name === dep ||
-                globalTokens.has(o.cliName) ||
-                o.alias?.some((a) => globalTokens.has(a)) === true),
+          if (!n) continue;
+          const claimed = new Set<string>();
+          for (const o of n.options) {
+            if (o.isGlobal === true) continue;
+            for (const t of collectOptionTokens(o.cliName, o.alias)) claimed.add(t);
+          }
+          const remaining = allTokens.filter((t) => !claimed.has(t));
+          recordLeaf(p, remaining);
+        }
+        // Intermediate frames always carry every global token.
+        for (const p of spec.intermediatePathStrs) recordLeaf(p, allTokens);
+        for (const [tokenKey, group] of groups) {
+          const key = `g::${dep}::${tokenKey}`;
+          addPath(
+            key,
+            {
+              fieldName: dep,
+              isGlobal: true,
+              isPositional: false,
+              optionTokens: group.tokens,
+            },
+            group.paths,
           );
-          return !localShadow;
-        });
-        const allPathStrs = [...leafPathStrs, ...spec.intermediatePathStrs];
-        if (allPathStrs.length === 0) continue;
-        const key = `g::${dep}`;
-        addPath(
-          key,
-          {
-            fieldName: dep,
-            isGlobal: true,
-            isPositional: false,
-            optionTokens: collectOptionTokens(globalOpt.cliName, globalOpt.alias),
-          },
-          allPathStrs,
-        );
+        }
         continue;
       }
       const posIndex = node.positionals.findIndex((p) => p.name === dep);

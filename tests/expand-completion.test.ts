@@ -260,6 +260,98 @@ describe("expand completion", () => {
       expect(bash).toContain(`deploy:--env`);
     });
 
+    it("keeps non-colliding global tokens at a leaf where a local option only shadows a same-named sibling", () => {
+      // Global dep `env` has a single-char alias `e`, so its tokens are
+      // `--env` and `-e`. A subcommand defines a local option named `e`
+      // (cliName "e"), whose token is `--e`. The raw names overlap on
+      // "e", but the emitted CLI tokens don't — runtime still routes
+      // `--env` (and the long-form alias resolution) to the global. The
+      // generator must therefore keep `sub:--env` (the non-colliding
+      // token) in the global tracker even though it drops `sub:-e`.
+      const globals = z.object({
+        env: arg(z.string(), {
+          alias: "e",
+          completion: { custom: { choices: ["prod"] } },
+        }),
+        field: arg(z.string().optional(), {
+          completion: {
+            custom: {
+              expand: { dependsOn: ["env"], enumerate: () => [{ value: "x" }] },
+            },
+          },
+        }),
+      });
+      const cliShadow = defineCommand({
+        name: "mycli",
+        subCommands: {
+          sub: defineCommand({
+            name: "sub",
+            args: z.object({
+              // Local cliName "e" → token `--e`, does NOT collide with
+              // global tokens `--env` / `-e`.
+              e: arg(z.string(), { completion: { custom: { choices: ["a"] } } }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const { script: bash } = generateBashCompletion(cliShadow, {
+        shell: "bash",
+        programName: "mycli",
+        globalArgsSchema: globals,
+      });
+      // Both global tokens land in the global tracker at `sub`. Neither
+      // collides with the local `--e` (local cliName "e" → token `--e`),
+      // so dropping the whole leaf would lose `--env` writes the runtime
+      // would still route to globals.
+      expect(bash).toMatch(/sub:--env\b[^\n]*_global_arg_values_env/);
+      expect(bash).toMatch(/sub:-e\b[^\n]*_global_arg_values_env/);
+    });
+
+    it("drops only the colliding token when a local option overlaps one global alias", () => {
+      // Global `env` has cliName "env" and single-char alias `e`,
+      // emitting `--env` and `-e`. A subcommand defines a local option
+      // whose own alias is `-e` (single-char), so the local also emits
+      // `-e`. Runtime's `separateGlobalArgs` would route `-e` to the
+      // local; `--env` still belongs to the global. The tracker must
+      // keep `sub:--env` while dropping `sub:-e`.
+      const globals = z.object({
+        env: arg(z.string(), {
+          alias: "e",
+          completion: { custom: { choices: ["prod"] } },
+        }),
+        field: arg(z.string().optional(), {
+          completion: {
+            custom: {
+              expand: { dependsOn: ["env"], enumerate: () => [{ value: "x" }] },
+            },
+          },
+        }),
+      });
+      const cliShadow = defineCommand({
+        name: "mycli",
+        subCommands: {
+          sub: defineCommand({
+            name: "sub",
+            args: z.object({
+              extra: arg(z.string(), {
+                alias: "e",
+                completion: { custom: { choices: ["a"] } },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const { script: bash } = generateBashCompletion(cliShadow, {
+        shell: "bash",
+        programName: "mycli",
+        globalArgsSchema: globals,
+      });
+      expect(bash).toMatch(/sub:--env\b[^\n]*_global_arg_values_env/);
+      expect(bash).not.toMatch(/sub:-e\b[^\n]*_global_arg_values_env/);
+    });
+
     it("drops global tracker cases at frames where a local option shadows the global dep", () => {
       // Global `field` depends on global `env`. The subcommand defines a
       // local `env` that takes over `--env` at that frame. The bash
