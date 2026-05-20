@@ -647,36 +647,23 @@ export function generateZshCompletion(
   }
   lines.push(`        if [[ "$_w" == -* ]]; then`);
   lines.push(`            _used_opts+=("$_w")`);
+  // Mirror the runtime parser: a token starting with `-` is the next
+  // option, not this option's value. Skip/track only when the next
+  // token looks like a value.
+  lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then`);
+  lines.push(`                local _next="\${words[_j+1]:-}"`);
+  lines.push(`                if [[ -n "$_next" && "$_next" != -* ]]; then _skip_next=1; fi`);
   if (hasExpand) {
-    // Mirror the runtime parser: a token starting with `-` is the next
-    // option, not this option's value. Skip/track only when the next
-    // token looks like a value.
+    lines.push(`                if (( _skip_next )); then`);
+    lines.push(`                    __${fn}_track_opt "$_subcmd" "$_w" "$_next"`);
     if (hasArrayExpand) {
-      lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then`);
-      lines.push(`                local _next="\${words[_j+1]:-}"`);
-      lines.push(`                if [[ -n "$_next" && "$_next" != -* ]]; then`);
-      lines.push(`                    _skip_next=1`);
-      lines.push(`                    __${fn}_track_opt "$_subcmd" "$_w" "$_next"`);
       lines.push(`                    if (( _j + 1 < CURRENT )); then`);
       lines.push(`                        __${fn}_track_array_expand "$_subcmd" "$_w" "$_next"`);
       lines.push(`                    fi`);
-      lines.push(`                fi`);
-      lines.push(`            fi`);
-    } else {
-      lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then`);
-      lines.push(`                local _next="\${words[_j+1]:-}"`);
-      lines.push(`                if [[ -n "$_next" && "$_next" != -* ]]; then`);
-      lines.push(`                    _skip_next=1`);
-      lines.push(`                    __${fn}_track_opt "$_subcmd" "$_w" "$_next"`);
-      lines.push(`                fi`);
-      lines.push(`            fi`);
     }
-  } else {
-    lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"; then`);
-    lines.push(`                local _next="\${words[_j+1]:-}"`);
-    lines.push(`                if [[ -n "$_next" && "$_next" != -* ]]; then _skip_next=1; fi`);
-    lines.push(`            fi`);
+    lines.push(`                fi`);
   }
+  lines.push(`            fi`);
   lines.push(`            (( _j++ )); continue`);
   lines.push(`        fi`);
   if (routeEntries.length > 0) {
