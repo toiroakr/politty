@@ -1184,6 +1184,57 @@ describe("expand completion", () => {
       expect(script).toMatch(/sub:-e\b[^\n]*_global_arg_values_env/);
     });
 
+    it("recognizes short inline `-f=value` in the generated bash scanner", () => {
+      // Runtime accepts both \`--opt=value\` and \`-o=value\`. The bash
+      // completion's inline-prefix split was only matching `--*=*`,
+      // so completing \`-f=<TAB>\` for a value-completion option was
+      // misclassified as option-name completion. Confirm the
+      // generated script splits the short inline shape too.
+      const cli = defineCommand({
+        name: "mycli",
+        args: z.object({
+          field: arg(z.string().optional(), {
+            alias: "f",
+            completion: { custom: { choices: ["alpha"] } },
+          }),
+        }),
+      });
+      const { script } = generateBashCompletion(cli, {
+        shell: "bash",
+        programName: "mycli",
+      });
+      expect(script).toContain(`if [[ "$_cur" == -*=* ]]; then`);
+      expect(script).not.toContain(`if [[ "$_cur" == --*=* ]]; then`);
+    });
+
+    it("fish value-completion fires for a 1-char cliName via both `--x` and `-x`", () => {
+      // Runtime accepts both forms for a 1-char cliName, so the fish
+      // value-completion `if`-chain and the `opt_takes_value` switch
+      // both need to list the short token alongside `--x`. Without it,
+      // an expand whose dep is `x` only resolves after `--x value` and
+      // misses `-x value`.
+      const cli = defineCommand({
+        name: "mycli",
+        args: z.object({
+          x: arg(z.string(), { completion: { custom: { choices: ["a"] } } }),
+          out: arg(z.string().optional(), {
+            completion: {
+              custom: {
+                expand: { dependsOn: ["x"], enumerate: () => [{ value: "ok" }] },
+              },
+            },
+          }),
+        }),
+      });
+      const { script } = generateFishCompletion(cli, {
+        shell: "fish",
+        programName: "mycli",
+      });
+      expect(script).toContain(`test "$_prev" = "--x"`);
+      expect(script).toContain(`test "$_prev" = "-x"`);
+      expect(script).toMatch(/case "[^"]*:--x"[^\n]*"[^"]*:-x"/);
+    });
+
     it("emits both `--x` and `-x` tracker cases for a single-char cliName dep", () => {
       // Runtime accepts both `--x value` and `-x value` for a 1-char
       // cliName, so the generated tracker case for an expand dep of

@@ -228,6 +228,10 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
 
     const conditions = [
       `test "$_prev" = "--${opt.cliName}"`,
+      // Runtime accepts `-x value` for a 1-char cliName too — its
+      // aliasMap lookup falls through to the canonical name — so the
+      // value-completion trigger must check the short form as well.
+      ...(opt.cliName.length === 1 ? [`test "$_prev" = "-${opt.cliName}"`] : []),
       ...(opt.alias?.map((a) => `test "$_prev" = "${aliasToken(a)}"`) ?? []),
     ];
     const cond = conditions.join("; or ");
@@ -355,6 +359,9 @@ function optTakesValueCases(sub: CompletableSubcommand, parentPath: string): str
     if (opt.takesValue) {
       const patterns = [
         `"${parentPath}:--${opt.cliName}"`,
+        // 1-char cliName is also accepted as `-x` at runtime; include
+        // it so expand dependency tracking fires for `-x value` too.
+        ...(opt.cliName.length === 1 ? [`"${parentPath}:-${opt.cliName}"`] : []),
         ...(opt.alias?.map((a) => `"${parentPath}:${aliasToken(a)}"`) ?? []),
       ];
       lines.push(`        case ${patterns.join(" ")}`);

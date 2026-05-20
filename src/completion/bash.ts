@@ -690,7 +690,12 @@ export function generateBashCompletion(
   lines.push(`    (( \${#_words[@]} > 0 )) && _cur="\${_words[\${#_words[@]}-1]}"`);
   lines.push(``);
   lines.push(`    local _inline_prefix=""`);
-  lines.push(`    if [[ "$_cur" == --*=* ]]; then`);
+  // Match both `--opt=value` and `-o=value` inline forms — the runtime
+  // parser accepts the short variant, so completion must too. The pre-
+  // scan loop below already splits both shapes for the earlier words,
+  // and the value-completion dispatch downstream keys off
+  // `_inline_prefix`/`_cur` either way.
+  lines.push(`    if [[ "$_cur" == -*=* ]]; then`);
   lines.push(`        _inline_prefix="\${_cur%%=*}="`);
   lines.push(`        _cur="\${_cur#*=}"`);
   lines.push(`    fi`);
