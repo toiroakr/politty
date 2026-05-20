@@ -531,11 +531,24 @@ export function collectTrackedFields(
             if (a.length === 1) shortAliases.push(a);
             else longAliases.push(a);
           }
+          // Drop pathStrs where a subcommand defines a local option with
+          // the same name as the dep: at those frames the runtime parser
+          // routes `--env` to the local, not the global, so emitting the
+          // global tracker would record the local value into
+          // `_global_arg_values`. Restrict the case patterns to paths
+          // where the option still resolves to the global.
+          const activePathStrs = spec.pathStrs.filter((p) => {
+            const n = nodeByPath.get(p);
+            if (!n) return false;
+            const localShadow = n.options.find((o) => o.name === dep && o.isGlobal !== true);
+            return !localShadow;
+          });
+          if (activePathStrs.length === 0) continue;
           out.push({
             fieldName: dep,
             isGlobal: true,
-            pathStr: spec.pathStr,
-            pathStrs: spec.pathStrs,
+            pathStr: activePathStrs[0]!,
+            pathStrs: activePathStrs,
             isPositional: false,
             cliName: globalOpt.cliName,
             longAliases,

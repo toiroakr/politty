@@ -225,6 +225,45 @@ describe("expand completion", () => {
       expect(script).toContain("local -A _arg_values=()");
     });
 
+    it("drops global tracker cases at frames where a local option shadows the global dep", () => {
+      // Global `field` depends on global `env`. The subcommand defines a
+      // local `env` that takes over `--env` at that frame. The bash
+      // scanner must not record the local's value into
+      // `_global_arg_values.env`, otherwise the global host's lookup
+      // sees a value the runtime never wrote there.
+      const globals = z.object({
+        env: arg(z.string(), { completion: { custom: { choices: ["prod"] } } }),
+        field: arg(z.string().optional(), {
+          completion: {
+            custom: {
+              expand: { dependsOn: ["env"], enumerate: () => [{ value: "x" }] },
+            },
+          },
+        }),
+      });
+      const cliShadow = defineCommand({
+        name: "mycli",
+        subCommands: {
+          sub: defineCommand({
+            name: "sub",
+            args: z.object({
+              env: arg(z.string(), { completion: { custom: { choices: ["a"] } } }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const { script: bash } = generateBashCompletion(cliShadow, {
+        shell: "bash",
+        programName: "mycli",
+        globalArgsSchema: globals,
+      });
+      // Only the root path's `--env` writes into `_global_arg_values`.
+      // The subcommand path must NOT appear in the global tracker.
+      expect(bash).toContain(`:--env) _global_arg_values[env]="$3"`);
+      expect(bash).not.toContain(`sub:--env) _global_arg_values[env]`);
+    });
+
     it("keeps a global expand spec reading from the global bucket even when a subcommand shadows the dep name", () => {
       // Global `field` depends on global `env`. The subcommand defines a
       // local `env` that shadows the global at that frame. The host's
