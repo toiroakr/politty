@@ -126,6 +126,27 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.previousValues).toEqual(["a", "b"]);
     });
 
+    it("classifies short inline value `-f=` as option-value, not option-name", () => {
+      // Runtime accepts `-f=value` for an option with `alias: "f"`.
+      // The completion parser's Case 2 was matching `--` only, so
+      // `parseCompletionContext(["-f=fo"], ...)` fell through to
+      // option-name. Confirm the short inline shape now classifies as
+      // option-value with the right target.
+      const cmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          field: arg(z.string(), {
+            alias: "f",
+            completion: { custom: { choices: ["alpha"] } },
+          }),
+        }),
+        run: () => {},
+      });
+      const ctx = parseCompletionContext(["-f=fo"], cmd);
+      expect(ctx.completionType).toBe("option-value");
+      expect(ctx.targetOption?.name).toBe("field");
+    });
+
     it("captures inline option value (--config=foo)", () => {
       const ctx = parseCompletionContext(["foo", "--config=tailor.yml", "--field", ""], cmd);
       expect(ctx.parsedArgs.config).toBe("tailor.yml");

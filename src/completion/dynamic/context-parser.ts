@@ -651,8 +651,11 @@ export function parseCompletionContext(
       }
     }
   }
-  // Case 2: Current word is an option with inline value (--foo=)
-  else if (!afterDoubleDash && currentWord.startsWith("--") && hasInlineValue(currentWord)) {
+  // Case 2: Current word is an option with inline value (--foo= or -f=).
+  // Runtime accepts both shapes; the generated bash script's pre-scan
+  // already splits the short form for earlier words, and now the
+  // option-value classifier matches it for the current word too.
+  else if (!afterDoubleDash && currentWord.startsWith("-") && hasInlineValue(currentWord)) {
     const opt = findOption(options, parseOption(currentWord));
     if (opt && opt.takesValue) {
       completionType = "option-value";

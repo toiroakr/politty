@@ -22,13 +22,14 @@ import { parseCompletionContext } from "./context-parser.js";
 import { formatForShell } from "./shell-formatter.js";
 
 /**
- * Detect inline option-value prefix (e.g., "--format=" from "--format=json")
+ * Detect inline option-value prefix (e.g., "--format=" from
+ * "--format=json", "-f=" from "-f=json"). Runtime accepts both shapes.
  */
 function detectInlinePrefix(currentWord: string): string | undefined {
-  if (currentWord.startsWith("--") && currentWord.includes("=")) {
-    return currentWord.slice(0, currentWord.indexOf("=") + 1);
-  }
-  return undefined;
+  if (!currentWord.startsWith("-")) return undefined;
+  const eqIdx = currentWord.indexOf("=");
+  if (eqIdx <= 0) return undefined;
+  return currentWord.slice(0, eqIdx + 1);
 }
 
 /**
