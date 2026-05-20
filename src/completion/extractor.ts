@@ -531,16 +531,24 @@ export function collectTrackedFields(
             if (a.length === 1) shortAliases.push(a);
             else longAliases.push(a);
           }
-          // Drop pathStrs where a subcommand defines a local option with
-          // the same name as the dep: at those frames the runtime parser
-          // routes `--env` to the local, not the global, so emitting the
-          // global tracker would record the local value into
-          // `_global_arg_values`. Restrict the case patterns to paths
-          // where the option still resolves to the global.
+          // Drop pathStrs where a subcommand defines a local option that
+          // claims any of the global dep's CLI tokens. The runtime
+          // parser routes by `cliName` / `alias`, not the field's
+          // identifier, so a local option with a different field name
+          // but the same `--env` flag still shadows the global at that
+          // frame. Emitting the global tracker there would record the
+          // local value into `_global_arg_values`.
+          const globalTokens = new Set<string>([globalOpt.cliName, ...(globalOpt.alias ?? [])]);
           const activePathStrs = spec.pathStrs.filter((p) => {
             const n = nodeByPath.get(p);
             if (!n) return false;
-            const localShadow = n.options.find((o) => o.name === dep && o.isGlobal !== true);
+            const localShadow = n.options.find(
+              (o) =>
+                o.isGlobal !== true &&
+                (o.name === dep ||
+                  globalTokens.has(o.cliName) ||
+                  o.alias?.some((a) => globalTokens.has(a)) === true),
+            );
             return !localShadow;
           });
           if (activePathStrs.length === 0) continue;
