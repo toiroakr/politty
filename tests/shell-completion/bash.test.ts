@@ -224,6 +224,17 @@ describe.skipIf(!hasBash)("bash expand array dedup", () => {
     expect(values).not.toContain("--field=pageDirection=NEXT");
     expect(values).not.toContain("--field=pageDirection=PREVIOUS");
   });
+
+  it("drops bare `key=` from value stage so it does not clutter the value picker", () => {
+    // ListApplications has both a bare `pageDirection=` entry and value
+    // variants. Once the user types `pageDirection=`, the bare entry would
+    // just re-suggest what they already typed — only the value variants
+    // are useful at that stage.
+    const values = completeE(["api", "ListApplications", "-f", "pageDirection="]);
+    expect(values).not.toContain("pageDirection=");
+    expect(values).toContain("pageDirection=NEXT");
+    expect(values).toContain("pageDirection=PREVIOUS");
+  });
 });
 
 // ─── Bash interactive completion (expect) ─────────────────────────────────────

@@ -179,6 +179,10 @@ function bashValueLines(
         `                [[ "$_seen_keys" == *" $_ck "* ]] && continue`,
         `                _seen_keys+="$_ck "`,
         `                _c="\${_ck}="`,
+        // Value stage: drop bare `key=` candidates so the value picker is
+        // not cluttered by the key entry the user already typed.
+        `            elif [[ "$_c" != *=?* ]]; then`,
+        `                continue`,
         `            fi`,
         `        fi`,
         `        [[ "$_c" == "$_cur"* ]] && COMPREPLY+=(${inlineExpr})`,

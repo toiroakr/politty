@@ -66,12 +66,16 @@ export const apiCommand = defineCommand({
               const fields = ENDPOINT_FIELDS[endpoint] ?? [];
               const out: Array<{ value: string; description?: string }> = [];
               for (const f of fields) {
-                if (f.values) {
-                  for (const v of f.values) {
-                    out.push({ value: `${f.key}=${v}`, description: `Set ${f.key} to ${v}` });
-                  }
-                } else {
-                  out.push({ value: `${f.key}=`, description: `Set ${f.key}` });
+                // Always emit the bare `key=` entry so the framework can
+                // surface keys before the user types `=`. When the field
+                // also has known values, emit each `key=value` so the
+                // value-picker stage has concrete suggestions. Mirrors
+                // the real-world pattern (`tailor-sdk api`) where a
+                // proto descriptor pre-enumerates both the field and
+                // its enum values.
+                out.push({ value: `${f.key}=`, description: `Set ${f.key}` });
+                for (const v of f.values ?? []) {
+                  out.push({ value: `${f.key}=${v}`, description: `Set ${f.key} to ${v}` });
                 }
               }
               return out;

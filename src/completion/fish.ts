@@ -168,8 +168,14 @@ function fishValueLines(
           const eqIdx = c.value.indexOf("=");
           const keyPart = eqIdx > 0 ? c.value.slice(0, eqIdx) : "";
           const echoLine = printfLine(c.value, c.description);
+          // A candidate that ends with `=` is a bare key (no value yet).
+          // Skip it in the value-stage branch so the picker doesn't
+          // surface the key the user already typed.
+          const isBareKey = keyPart.length > 0 && c.value.length === eqIdx + 1;
 
-          fullLines.push(...wrapWithDedup(echoLine, keyPart));
+          if (!isBareKey) {
+            fullLines.push(...wrapWithDedup(echoLine, keyPart));
+          }
 
           if (keyPart.length === 0) {
             // Candidate without `=` — same in both branches.
@@ -181,7 +187,14 @@ function fishValueLines(
           }
         }
 
-        if (keyOnlyLines.length > 0 && fullLines.length > keyOnlyLines.length) {
+        // Split into two runtime branches whenever the two stages differ.
+        // They are identical only when every candidate has no `=` (no key
+        // collapse and no bare-key drop); in that case a single branch
+        // suffices.
+        const branchesDiffer =
+          fullLines.length !== keyOnlyLines.length ||
+          fullLines.some((l, i) => l !== keyOnlyLines[i]);
+        if (branchesDiffer) {
           out.push(`        if string match -q '*=*' -- "$_cur"`);
           out.push(...fullLines);
           out.push(`        else`);

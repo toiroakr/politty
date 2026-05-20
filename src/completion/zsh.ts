@@ -138,7 +138,7 @@ function zshValueLines(
         `if [[ -n "$_raw" ]]; then`,
         `    local -a _candidates=("\${(@f)_raw}")`,
         `    _vals=()`,
-        `    local _c _ck _seen_keys=" " _desc _has_eq=0`,
+        `    local _c _ck _vp _seen_keys=" " _desc _has_eq=0`,
         `    for _c in "\${_candidates[@]}"; do`,
         `        if [[ "$_c" == *=* ]]; then`,
         `            _ck="\${_c%%=*}"`,
@@ -152,6 +152,12 @@ function zshValueLines(
         `                else`,
         `                    _c="\${_ck}="`,
         `                fi`,
+        `            else`,
+        // Value stage: drop bare `key=` candidates so they do not clutter
+        // the value picker. Strip the optional `:desc` suffix first to
+        // inspect only the value part.
+        `                _vp="\${_c%%:*}"`,
+        `                [[ "$_vp" == *=?* ]] || continue`,
         `            fi`,
         `        fi`,
         `        [[ "\${_c%%:*}" == *= ]] && _has_eq=1`,
