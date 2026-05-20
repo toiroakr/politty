@@ -391,6 +391,14 @@ describe("expand completion", () => {
       expect(fish).toMatch(/if test \$_after_dd -eq 1; __mycli_track_pos[^\n]*math \$_pos_count/);
     });
 
+    it("bash suppresses file fallback for expand specs with no candidates", () => {
+      const { script } = generateBashCompletion(cmd, { shell: "bash", programName: "mycli" });
+      // The expand block must `compopt +o default` before the early return
+      // so an empty result does not silently degrade to file completion.
+      // Match the directive appearing before the `_key=` declaration.
+      expect(script).toMatch(/compopt \+o default[\s\S]*?local _key=/);
+    });
+
     it("bash guards against an empty subscript when the dep is unset", () => {
       const { script } = generateBashCompletion(cmd, { shell: "bash", programName: "mycli" });
       // Without this guard, `api -f <TAB>` (endpoint not typed yet) would

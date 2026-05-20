@@ -159,6 +159,10 @@ function bashValueLines(
           ]
         : [];
       return [
+        // Suppress bash's `-o default` filename fallback before any
+        // early-return so an expand spec with no candidates does not
+        // silently degrade into file completion.
+        `compopt +o default 2>/dev/null`,
         `local _key=${depKey}`,
         // Guard against an empty subscript — bash treats `${arr[]}` as an
         // error, which corrupts COMPREPLY when a sibling dep has not been
@@ -175,7 +179,6 @@ function bashValueLines(
         `        [[ "$_c" == "$_cur"* ]] && COMPREPLY+=(${inlineExpr})`,
         `    done`,
         `    compopt -o nospace 2>/dev/null`,
-        `    compopt +o default 2>/dev/null`,
         `fi`,
       ];
     }
