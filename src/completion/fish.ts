@@ -282,12 +282,6 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
   return lines;
 }
 
-/** Generate value-option completion block if any value-taking options exist */
-function valueCompletionBlock(options: CompletableOption[], fn: string): string[] {
-  if (!options.some((o) => o.takesValue && o.valueCompletion)) return [];
-  return optionValueCases(options, fn);
-}
-
 /**
  * Generate a per-subcommand completion function for fish.
  * Recursively generates functions for nested subcommands.
@@ -307,7 +301,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`function ${funcName} --no-scope-shadowing`);
 
   // 1. Option value completion
-  lines.push(...valueCompletionBlock(sub.options, fn));
+  lines.push(...optionValueCases(sub.options, fn));
   // Fallback: value-taking option without explicit completion → default file completion
   const fullPathStr = fullPath.join(":");
   lines.push(`    if __${fn}_opt_takes_value "${fullPathStr}" "$_prev"; return; end`);
@@ -567,7 +561,7 @@ export function generateFishCompletion(
   // separate-word value completion (--opt <value>) is handled. Bash supports
   // inline via _inline_prefix parsing.
   lines.push(`function __${fn}_complete_root --no-scope-shadowing`);
-  lines.push(...valueCompletionBlock(root.options, fn));
+  lines.push(...optionValueCases(root.options, fn));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(`    if __${fn}_opt_takes_value "" "$_prev"; return; end`);
   if (root.positionals.length > 0) {
