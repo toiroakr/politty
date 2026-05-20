@@ -176,17 +176,7 @@ function parsePreSubGlobals(
   // the same slice append.
   const arrayWrittenInThisSlice = new Set<string>();
   const writeGlobal = (opt: CompletableOption, value: string): void => {
-    if (opt.valueType === "array") {
-      if (arrayWrittenInThisSlice.has(opt.name)) {
-        const ex = globalParsedArgs[opt.name];
-        globalParsedArgs[opt.name] = Array.isArray(ex) ? [...ex, value] : [value];
-      } else {
-        globalParsedArgs[opt.name] = [value];
-        arrayWrittenInThisSlice.add(opt.name);
-      }
-    } else {
-      globalParsedArgs[opt.name] = value;
-    }
+    writeOptionValue(globalParsedArgs, opt, value, arrayWrittenInThisSlice);
     captured.add(opt.name);
   };
   let i = 0;
@@ -405,6 +395,32 @@ function matchesCamelCase(source: string | undefined, name: string): boolean {
 }
 
 /**
+ * Write `value` into `target[opt.name]` following the runtime's per-frame
+ * array semantics: the first write in a frame REPLACES any inherited value
+ * (mirroring the runtime's shallow merge of inherited globals), subsequent
+ * writes in the same frame APPEND. Scalars overwrite unconditionally.
+ * `arraysSeenInFrame` is the frame-scoped seen-set the caller maintains.
+ */
+function writeOptionValue(
+  target: Record<string, unknown>,
+  opt: CompletableOption,
+  value: string,
+  arraysSeenInFrame: Set<string>,
+): void {
+  if (opt.valueType !== "array") {
+    target[opt.name] = value;
+    return;
+  }
+  if (arraysSeenInFrame.has(opt.name)) {
+    const existing = target[opt.name];
+    target[opt.name] = Array.isArray(existing) ? [...existing, value] : [value];
+  } else {
+    target[opt.name] = [value];
+    arraysSeenInFrame.add(opt.name);
+  }
+}
+
+/**
  * True when the typed token is the boolean option's negation form — either
  * the explicit `negation` name (or its camelCase variant) or the implicit
  * `--no-<name>` form. Long-form only; short tokens are never negations.
@@ -552,17 +568,7 @@ export function parseCompletionContext(
 
   const recordOptionValue = (opt: CompletableOption, value: string): void => {
     const target = opt.isGlobal === true ? globalParsedArgs : parsedArgs;
-    if (opt.valueType === "array") {
-      if (arraysSetInCurrentFrame.has(opt.name)) {
-        const existing = target[opt.name];
-        target[opt.name] = Array.isArray(existing) ? [...existing, value] : [value];
-      } else {
-        target[opt.name] = [value];
-        arraysSetInCurrentFrame.add(opt.name);
-      }
-    } else {
-      target[opt.name] = value;
-    }
+    writeOptionValue(target, opt, value, arraysSetInCurrentFrame);
   };
 
   /**
