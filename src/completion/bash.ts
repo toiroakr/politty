@@ -311,16 +311,17 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
     if (opt.valueType === "array") {
       // Array options can be specified multiple times — always keep available
       lines.push(`        _avail+=(--${opt.cliName})`);
-    } else {
-      const patterns = [
-        `"--${opt.cliName}"`,
-        ...(opt.alias?.map((a) => `"${aliasToken(a)}"`) ?? []),
-        ...(opt.negation ? [`"--${opt.negation}"`] : []),
-      ];
-      lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.cliName})`);
-      if (opt.negation) {
-        lines.push(`        __${fn}_not_used ${patterns.join(" ")} && _avail+=(--${opt.negation})`);
-      }
+      continue;
+    }
+    const patterns = [
+      `"--${opt.cliName}"`,
+      ...(opt.alias?.map((a) => `"${aliasToken(a)}"`) ?? []),
+      ...(opt.negation ? [`"--${opt.negation}"`] : []),
+    ];
+    const guard = `__${fn}_not_used ${patterns.join(" ")}`;
+    const emitNames = opt.negation ? [opt.cliName, opt.negation] : [opt.cliName];
+    for (const name of emitNames) {
+      lines.push(`        ${guard} && _avail+=(--${name})`);
     }
   }
   lines.push(`        __${fn}_not_used "--help" && _avail+=(--help)`);

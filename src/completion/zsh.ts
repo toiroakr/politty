@@ -259,23 +259,21 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
   const lines: string[] = [];
   for (const opt of options) {
     const desc = opt.description ? `:${escapeDesc(opt.description)}` : "";
-    const negDesc = opt.negationDescription ? `:${escapeDesc(opt.negationDescription)}` : desc;
     if (opt.valueType === "array") {
       lines.push(`        _opts+=("--${opt.cliName}${desc}")`);
-    } else {
-      const patterns = [
-        `"--${opt.cliName}"`,
-        ...(opt.alias?.map((a) => `"${aliasToken(a)}"`) ?? []),
-        ...(opt.negation ? [`"--${opt.negation}"`] : []),
-      ];
-      lines.push(
-        `        __${fn}_not_used ${patterns.join(" ")} && _opts+=("--${opt.cliName}${desc}")`,
-      );
-      if (opt.negation) {
-        lines.push(
-          `        __${fn}_not_used ${patterns.join(" ")} && _opts+=("--${opt.negation}${negDesc}")`,
-        );
-      }
+      continue;
+    }
+    const patterns = [
+      `"--${opt.cliName}"`,
+      ...(opt.alias?.map((a) => `"${aliasToken(a)}"`) ?? []),
+      ...(opt.negation ? [`"--${opt.negation}"`] : []),
+    ];
+    const guard = `__${fn}_not_used ${patterns.join(" ")}`;
+    const negDesc = opt.negationDescription ? `:${escapeDesc(opt.negationDescription)}` : desc;
+    const entries: Array<{ name: string; desc: string }> = [{ name: opt.cliName, desc }];
+    if (opt.negation) entries.push({ name: opt.negation, desc: negDesc });
+    for (const e of entries) {
+      lines.push(`        ${guard} && _opts+=("--${e.name}${e.desc}")`);
     }
   }
   lines.push(`        __${fn}_not_used "--help" && _opts+=("--help:Show help")`);
