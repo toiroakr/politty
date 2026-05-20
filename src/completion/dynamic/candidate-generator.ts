@@ -139,6 +139,13 @@ function applyKeyValuePostProcessing(
       processed.push({ ...c, value: keyPart });
     }
     candidates.splice(0, candidates.length, ...processed);
+  } else {
+    // Value stage: a resolver may surface both `key=` and `key=value`
+    // candidates. The bare-key entry duplicates the selected key in the
+    // menu and forces NoSpace on every concrete value, so drop it once
+    // the user has typed `=` — mirroring the static expand path.
+    const filtered = candidates.filter((c) => !c.value.endsWith("="));
+    candidates.splice(0, candidates.length, ...filtered);
   }
   return { hasEqSuffix: candidates.some((c) => c.value.endsWith("=")) };
 }
