@@ -596,13 +596,16 @@ export function generateBashCompletion(
     lines.push(`            compopt -o default 2>/dev/null`);
     lines.push(`        fi`);
     lines.push(`    else`);
-    // Default branch: no FileCompletion / DirectoryCompletion bit set. On
-    // bash 4+ `compopt +o default` suppresses the filename fallback; on
-    // bash 3.2 compopt is absent, so also seed an empty sentinel if no
-    // resolver candidates landed in COMPREPLY to keep
-    // `complete -o default` from falling through to filenames.
-    lines.push(`        compopt +o default 2>/dev/null`);
-    lines.push(`        if (( \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
+    // Neither FileCompletion nor DirectoryCompletion is requested. Only
+    // suppress the `complete -o default` filename fallback when the
+    // resolver explicitly opted out via `NoFileCompletion` — `Default`
+    // (directive 0) leaves the documented file fallback intact. bash 4+
+    // honours `compopt +o default`; bash 3.2 lacks compopt, so a literal
+    // empty sentinel keeps the registration from falling through.
+    lines.push(`        if (( _directive & ${CompletionDirective.NoFileCompletion} )); then`);
+    lines.push(`            compopt +o default 2>/dev/null`);
+    lines.push(`            if (( \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
+    lines.push(`        fi`);
     lines.push(`    fi`);
     lines.push(`    if (( _directive & ${CompletionDirective.NoSpace} )); then`);
     lines.push(`        compopt -o nospace 2>/dev/null`);
