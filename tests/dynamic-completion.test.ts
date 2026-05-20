@@ -193,6 +193,30 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctxCustom.parsedArgs.cache).toBe(false);
     });
 
+    it("preserves an inherited global array value when the subcommand does not redeclare it", () => {
+      // The runtime parser shallow-merges `rawGlobalArgs`: the parent
+      // frame's `--tag a` survives into the child unless the child
+      // redeclares `--tag`. Completion must mirror that — clobbering on
+      // descent would hide the parent's value from the resolver.
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: {
+          sub: defineCommand({
+            name: "sub",
+            args: z.object({
+              field: arg(z.string().optional(), {
+                completion: { custom: { resolve: () => ({ candidates: [] }) } },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const globals = z.object({ tag: arg(z.array(z.string()).default([])) });
+      const ctx = parseCompletionContext(["--tag", "a", "sub", "--field", ""], cmd, globals);
+      expect(ctx.parsedArgs.tag).toEqual(["a"]);
+    });
+
     it("resets global array values at subcommand boundaries to mirror runtime semantics", () => {
       // The runtime parser merges `rawGlobalArgs` per-level via shallow
       // spread, so each level's array global replaces the previous one's
@@ -574,6 +598,11 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(dyn).toContain("compopt -o default");
       expect(dyn).toContain("(( _directive & 1 ))");
       expect(dyn).toContain("compopt -o nospace");
+      // DirectoryCompletion must also strip the script-level `-o default`
+      // fallback so file completion does not pollute a dir-only directive.
+      expect(dyn).toMatch(
+        /\(\( _directive & 32 \)\); then\s*\n\s*compopt \+o default[\s\S]*?compopt -o dirnames/,
+      );
     });
 
     it("zsh: dispatches resolver directive bits to _files", () => {

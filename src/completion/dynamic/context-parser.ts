@@ -312,11 +312,24 @@ export function parseCompletionContext(
   };
   refreshEffectiveGlobalNames(currentCommand);
 
+  // Names of array options written in the current command frame. Used to
+  // mirror the runtime's per-frame array semantics: the first `--arr v`
+  // in a frame *replaces* any value inherited from the parent frame (the
+  // runtime's shallow merge of `rawGlobalArgs`), while subsequent
+  // `--arr v` in the same frame *append*. Cleared on every subcommand
+  // descent below.
+  let arraysSetInCurrentFrame = new Set<string>();
+
   const recordOptionValue = (opt: CompletableOption, value: string): void => {
     const target = effectiveGlobalNames.has(opt.name) ? globalParsedArgs : parsedArgs;
     if (opt.valueType === "array") {
-      const existing = target[opt.name];
-      target[opt.name] = Array.isArray(existing) ? [...existing, value] : [value];
+      if (arraysSetInCurrentFrame.has(opt.name)) {
+        const existing = target[opt.name];
+        target[opt.name] = Array.isArray(existing) ? [...existing, value] : [value];
+      } else {
+        target[opt.name] = [value];
+        arraysSetInCurrentFrame.add(opt.name);
+      }
     } else {
       target[opt.name] = value;
     }
@@ -399,14 +412,12 @@ export function parseCompletionContext(
       positionalCount = 0;
       parsedArgs = {};
       positionalValues = [];
-      // Mirror the runner's shallow-spread merge of `rawGlobalArgs`:
-      // each level's array global replaces the previous level's value
-      // rather than accumulating. Drop the accumulator so subsequent
-      // `--tag` values restart from an empty list in the new frame,
-      // matching the runtime's view of `globalArgs.tag`.
-      for (const g of globalOptions) {
-        if (g.valueType === "array") delete globalParsedArgs[g.name];
-      }
+      // Mirror the runner's per-frame array semantics: keep the parent
+      // frame's value as the inherited starting point (shallow merge
+      // preserves it when the child doesn't redeclare). The "first set
+      // in this frame replaces" rule is enforced by clearing the
+      // per-frame seen-set instead of deleting the accumulator outright.
+      arraysSetInCurrentFrame = new Set<string>();
       i++;
       continue;
     }

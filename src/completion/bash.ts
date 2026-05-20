@@ -526,6 +526,11 @@ export function generateBashCompletion(
     // Apply resolver-supplied directive bits. DirectoryCompletion takes
     // precedence over FileCompletion when both are set; NoSpace stacks.
     lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
+    // The script is registered with `complete -o default`; switch off the
+    // file fallback before enabling directory-only completion so the
+    // resolver-requested DirectoryCompletion isn't diluted by regular
+    // file matches.
+    lines.push(`        compopt +o default 2>/dev/null`);
     lines.push(`        compopt -o dirnames 2>/dev/null`);
     lines.push(`    elif (( _directive & ${CompletionDirective.FileCompletion} )); then`);
     lines.push(`        compopt -o default 2>/dev/null`);
