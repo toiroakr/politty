@@ -6,7 +6,7 @@ import { execSync } from "node:child_process";
 import type { DynamicCompletionContext } from "../../core/dynamic-completion-types.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
-import type { ShellType, ValueCompletion } from "../types.js";
+import type { CompletablePositional, ShellType, ValueCompletion } from "../types.js";
 import { clampToVariadic, type CompletionContext } from "./context-parser.js";
 
 /**
@@ -87,15 +87,7 @@ export async function generateCandidates(
     case "option-value":
       return generateValueCandidates(context, options, context.targetOption?.valueCompletion);
     case "positional": {
-      // Clamp to the trailing variadic positional so a value beyond the
-      // schema's positional count still resolves to the variadic slot's
-      // completion spec — but only when that slot IS variadic; otherwise a
-      // non-variadic last positional should not greedily absorb the value.
-      const requestedIdx = context.positionalIndex ?? 0;
-      const clampedIdx = clampToVariadic(requestedIdx, context.positionals);
-      const candidate = clampedIdx === undefined ? undefined : context.positionals[clampedIdx];
-      const positional =
-        candidate && (clampedIdx === requestedIdx || candidate.variadic) ? candidate : undefined;
+      const positional = resolvePositionalTarget(context);
       return generateValueCandidates(
         context,
         options,
@@ -104,6 +96,22 @@ export async function generateCandidates(
       );
     }
   }
+}
+
+/**
+ * Pick the positional whose `valueCompletion` should drive the current
+ * cursor. Clamps to the trailing variadic positional so a value beyond
+ * the schema's positional count still resolves to the variadic slot —
+ * but only when that slot IS variadic; otherwise a non-variadic last
+ * positional must not greedily absorb the extra value.
+ */
+function resolvePositionalTarget(context: CompletionContext): CompletablePositional | undefined {
+  const requestedIdx = context.positionalIndex ?? 0;
+  const clampedIdx = clampToVariadic(requestedIdx, context.positionals);
+  if (clampedIdx === undefined) return undefined;
+  const candidate = context.positionals[clampedIdx];
+  if (!candidate) return undefined;
+  return clampedIdx === requestedIdx || candidate.variadic ? candidate : undefined;
 }
 
 /**
@@ -416,11 +424,10 @@ function targetFieldName(context: CompletionContext): string | undefined {
   if (context.targetOption) {
     return context.targetOption.name;
   }
-  if (context.completionType !== "positional" || context.positionalIndex === undefined) {
+  if (context.completionType !== "positional") {
     return undefined;
   }
-  const clampedIdx = clampToVariadic(context.positionalIndex, context.positionals);
-  return clampedIdx === undefined ? undefined : context.positionals[clampedIdx]?.name;
+  return resolvePositionalTarget(context)?.name;
 }
 
 /**
