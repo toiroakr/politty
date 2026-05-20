@@ -528,12 +528,17 @@ export function generateBashCompletion(
     // bash's `-o default` / `-o dirnames` only fire when COMPREPLY is
     // empty, so when the resolver returned both candidates and a
     // file/dir directive we append filesystem matches manually instead.
+    // Carry the caller's `--opt=` inline prefix onto the filesystem
+    // candidates too — resolver values already get the prefix, so
+    // omitting it here would let an accepted file match drop the
+    // option name from the command line.
+    lines.push(`    local _ip="\${_inline_prefix:-}"`);
     lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
     lines.push(`        compopt +o default 2>/dev/null`);
     lines.push(`        if (( \${#COMPREPLY[@]} > 0 )); then`);
     lines.push(`            local _d`);
     lines.push(
-      `            while IFS= read -r _d; do COMPREPLY+=("$_d"); done < <(compgen -d -- "$_cur")`,
+      `            while IFS= read -r _d; do COMPREPLY+=("\${_ip}\${_d}"); done < <(compgen -d -- "$_cur")`,
     );
     lines.push(`        else`);
     lines.push(`            compopt -o dirnames 2>/dev/null`);
@@ -542,7 +547,7 @@ export function generateBashCompletion(
     lines.push(`        if (( \${#COMPREPLY[@]} > 0 )); then`);
     lines.push(`            local _f`);
     lines.push(
-      `            while IFS= read -r _f; do COMPREPLY+=("$_f"); done < <(compgen -f -- "$_cur")`,
+      `            while IFS= read -r _f; do COMPREPLY+=("\${_ip}\${_f}"); done < <(compgen -f -- "$_cur")`,
     );
     lines.push(`        else`);
     lines.push(`            compopt -o default 2>/dev/null`);

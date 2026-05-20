@@ -424,9 +424,16 @@ async function runCommandInternal<TResult = unknown>(
       // passthrough mode: silently ignore unknown flags
     }
 
-    // Validate global args at the leaf command level
+    // Validate global args at the leaf command level. The internal
+    // `__complete` command is the exception: shell scripts invoke
+    // `mycli __complete --shell <s> -- <partial input>` whenever the
+    // user TABs, and the partial input may legitimately omit required
+    // globals — completion needs to fire *before* the user finishes
+    // typing them. Skip global validation here so resolvers always
+    // receive a context, even when the typed line is not yet valid.
     let validatedGlobalArgs: Record<string, unknown> = {};
-    if (options.globalArgs && options._globalExtracted) {
+    const isCompletionInvocation = command.name === "__complete";
+    if (options.globalArgs && options._globalExtracted && !isCompletionInvocation) {
       // Apply env fallbacks for global args
       for (const field of options._globalExtracted.fields) {
         if (field.env && accumulatedGlobalArgs[field.name] === undefined) {

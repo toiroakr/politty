@@ -538,6 +538,37 @@ describe("Dynamic completion (in-process resolver)", () => {
       // Trailing directive line
       expect(lines.at(-1)).toMatch(/^:\d+$/);
     });
+
+    it("returns resolver candidates even when required global args are missing", async () => {
+      // Shell scripts call `__complete` from inside any partial command
+      // line; the user has often not typed required globals yet. The
+      // runner must skip global validation for `__complete` so the
+      // completion fires regardless of those missing values.
+      const cmd = withCompletionCommand(
+        defineCommand({
+          name: "mycli",
+          args: z.object({
+            field: arg(z.string().optional(), {
+              completion: {
+                custom: { resolve: () => ({ candidates: ["alpha", "beta"] }) },
+              },
+            }),
+          }),
+          run: () => {},
+        }),
+        {
+          // `profile` is required but the completion invocation does not
+          // supply it — the resolver must still run.
+          globalArgsSchema: z.object({
+            profile: arg(z.string()),
+          }),
+        },
+      );
+
+      const lines = await runComplete(cmd, ["--field", ""]);
+      expect(lines).toContain("alpha");
+      expect(lines).toContain("beta");
+    });
   });
 
   describe("Static shell scripts", () => {
@@ -590,6 +621,17 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(dyn).toContain("__mycli_invoke_complete");
       expect(dyn).toContain("__mycli_apply_dynamic_output");
       expect(stat).not.toContain("__mycli_invoke_complete");
+    });
+
+    it("prefixes filesystem fallback candidates with the inline `--opt=` prefix", () => {
+      // When `--path=<TAB>` triggers a resolver that also returns
+      // FileCompletion, the appended filesystem matches must carry the
+      // `--path=` prefix the resolver candidates already have —
+      // otherwise accepting a file match drops the option name.
+      const dyn = generateCompletion(dynamicCmd, { shell: "bash", programName: "mycli" }).script;
+      expect(dyn).toContain(`local _ip="\${_inline_prefix:-}"`);
+      expect(dyn).toContain(`COMPREPLY+=("\${_ip}\${_d}")`);
+      expect(dyn).toContain(`COMPREPLY+=("\${_ip}\${_f}")`);
     });
 
     it("supports MYCLI_BIN override in bash script", () => {
