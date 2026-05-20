@@ -72,6 +72,22 @@ export function expandTableVarName(fn: string, funcSuffix: string, fieldName: st
 }
 
 /**
+ * Body of the `__<fn>_invoke_complete` wrapper that bash and zsh emit when
+ * any field uses an in-process JS resolver. Bytes are identical between the
+ * two shells — both use `local`, `shift`, and the `<NAME>_BIN`-override
+ * lookup — so the helper lives here. Fish has a different `function`
+ * syntax (no `local`, `set -l` instead) and emits its own version inline.
+ */
+export function dynamicInvokeCompleteBashLines(fn: string, programName: string): string[] {
+  return [
+    `__${fn}_invoke_complete() {`,
+    `    local _shell="$1"; shift`,
+    `    "\${${binEnvVarName(fn)}:-${programName}}" __complete --shell "$_shell" -- "$@" 2>/dev/null`,
+    `}`,
+  ];
+}
+
+/**
  * Filter subcommands to only visible (non-internal) ones.
  * Internal subcommands start with "__" and are hidden from completion/help.
  */

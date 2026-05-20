@@ -8,10 +8,10 @@
 import type { AnyCommand } from "../types.js";
 import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
-  binEnvVarName,
   collectExpandSpecs,
   collectRouteEntries,
   collectTrackedFields,
+  dynamicInvokeCompleteBashLines,
   effectiveOptionTokens,
   expandTableVarName,
   extractCompletionData,
@@ -432,12 +432,7 @@ export function generateZshCompletion(
   // Dynamic completion delegate helpers (only when any value spec uses
   // an in-process JS resolver).
   if (hasDynamicCompletion(root)) {
-    lines.push(`__${fn}_invoke_complete() {`);
-    lines.push(`    local _shell="$1"; shift`);
-    lines.push(
-      `    "\${${binEnvVarName(fn)}:-${programName}}" __complete --shell "$_shell" -- "$@" 2>/dev/null`,
-    );
-    lines.push(`}`);
+    lines.push(...dynamicInvokeCompleteBashLines(fn, programName));
     lines.push(``);
     lines.push(`__${fn}_apply_dynamic_output() {`);
     lines.push(`    local _raw="$1"`);
