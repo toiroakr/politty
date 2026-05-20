@@ -167,6 +167,12 @@ function zshValueLines(
         `                else`,
         `                    _c="\${_cke}="`,
         `                fi`,
+        // Key-stage candidates always end with `=`, so `_describe` needs
+        // `-S ''` to skip the trailing space and let the user type the
+        // value after TAB. Mark the flag here instead of inferring it
+        // from \`_tmp\` — `enumerate` may return only `key=value`
+        // candidates, which fold to `key=` only in `_c`.
+        `                _has_eq=1`,
         `            else`,
         // Value stage: drop bare `key=` candidates so they do not clutter
         // the value picker. Strip the optional `:desc` suffix at the
@@ -175,7 +181,6 @@ function zshValueLines(
         `                [[ "$_vp" == *=?* ]] || continue`,
         `            fi`,
         `        fi`,
-        `        [[ "\${_tmp%%:*}" == *= ]] && _has_eq=1`,
         `        _vals+=("$_c")`,
         `    done`,
         `    if (( _has_eq )); then`,
@@ -327,6 +332,10 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
     const entries: Array<{ name: string; desc: string }> = [{ name: opt.cliName, desc }];
     if (opt.negation) entries.push({ name: opt.negation, desc: negDesc });
     for (const e of entries) {
+      // Skip the suggestion when `--name`'s long form was filtered out
+      // of the routing-aware token set — emitting it would point the
+      // user at an option the runtime routes elsewhere.
+      if (!patterns.includes(`"--${e.name}"`)) continue;
       lines.push(`        ${guard} && _opts+=("--${e.name}${e.desc}")`);
     }
   }

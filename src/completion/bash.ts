@@ -400,6 +400,12 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
     const guard = `__${fn}_not_used ${patterns.join(" ")}`;
     const emitNames = opt.negation ? [opt.cliName, opt.negation] : [opt.cliName];
     for (const name of emitNames) {
+      // Skip the suggestion when `--name`'s long form was filtered out
+      // of the routing-aware token set. For a global whose canonical
+      // long form is claimed by a local at this frame, suggesting
+      // `--name` would direct the user toward an option the runtime
+      // routes elsewhere.
+      if (!patterns.includes(`"--${name}"`)) continue;
       lines.push(`        ${guard} && _avail+=(--${name})`);
     }
   }

@@ -361,6 +361,10 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
     const entries: Array<{ name: string; desc: string }> = [{ name: opt.cliName, desc }];
     if (opt.negation) entries.push({ name: opt.negation, desc: negDesc });
     for (const e of entries) {
+      // Skip the suggestion when `--name`'s long form was filtered out
+      // of the routing-aware token set — emitting it would point the
+      // user at an option the runtime routes elsewhere.
+      if (!checks.includes(`"--${e.name}"`)) continue;
       lines.push(`        ${guard}; and echo "--${e.name}\t${e.desc}"`);
     }
   }
