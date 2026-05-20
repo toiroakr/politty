@@ -408,11 +408,14 @@ export function trackArrayExpandCaseLines(
       .join("|");
     const bucket = sanitize(spec.fieldName);
     const bucketPrefix = spec.isGlobal ? `_global_used_field_keys` : `_used_field_keys`;
+    // Bash 3.2 has no associative arrays; both shells happen to share
+    // the +=/=" $_k "  append/replace syntax, so only the variable shape
+    // differs.
     const bucketRef = shell === "bash" ? `${bucketPrefix}_${bucket}` : `${bucketPrefix}[${bucket}]`;
     const seenRef = shell === "bash" ? `_global_arr_seen_${bucket}` : `_global_arr_seen[${bucket}]`;
-    const assignFirst = shell === "bash" ? `${bucketRef}=" $_k "` : `${bucketRef}=" $_k "`;
-    const assignAppend = shell === "bash" ? `${bucketRef}+=" $_k "` : `${bucketRef}+=" $_k "`;
-    const seenSet = shell === "bash" ? `${seenRef}=1` : `${seenRef}=1`;
+    const assignFirst = `${bucketRef}=" $_k "`;
+    const assignAppend = `${bucketRef}+=" $_k "`;
+    const seenSet = `${seenRef}=1`;
     lines.push(`        ${joined})`);
     lines.push(`            if [[ "$3" == *=* ]]; then`);
     lines.push(`                local _k="\${3%%=*}"`);
