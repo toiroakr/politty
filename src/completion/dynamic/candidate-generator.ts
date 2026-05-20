@@ -113,6 +113,40 @@ function executeShellCommand(command: string): CompletionCandidate[] {
 type ValueResolutionResult = Pick<CandidateResult, "directive" | "fileExtensions" | "fileMatchers">;
 
 /**
+ * Two-stage `key=value` completion: when the user has not typed `=` yet,
+ * collapse every `key=value` candidate to a unique `key=` entry so the
+ * first TAB picks the key. The second TAB (after `key=`) keeps the full
+ * `key=value` candidates so the user picks the value. Returns the post-
+ * processed list, whether the list was modified, and whether any
+ * candidate ends with `=` (used to flip the NoSpace directive so the
+ * user can keep typing after the key).
+ */
+function applyKeyValuePostProcessing(
+  candidates: CompletionCandidate[],
+  currentWord: string,
+): { candidates: CompletionCandidate[]; hasEqSuffix: boolean } {
+  if (currentWord.includes("=")) {
+    const hasEqSuffix = candidates.some((c) => c.value.endsWith("="));
+    return { candidates, hasEqSuffix };
+  }
+  const seen = new Set<string>();
+  const processed: CompletionCandidate[] = [];
+  for (const c of candidates) {
+    const eqIdx = c.value.indexOf("=");
+    if (eqIdx > 0) {
+      const keyPart = c.value.slice(0, eqIdx + 1);
+      if (seen.has(keyPart)) continue;
+      seen.add(keyPart);
+      processed.push({ ...c, value: keyPart });
+    } else {
+      processed.push(c);
+    }
+  }
+  const hasEqSuffix = processed.some((c) => c.value.endsWith("="));
+  return { candidates: processed, hasEqSuffix };
+}
+
+/**
  * Resolve value completion, executing shell commands and file lookups in JS
  */
 async function resolveValueCandidates(
@@ -211,6 +245,17 @@ async function resolveValueCandidates(
       // shapes.
       directive |= CompletionDirective.NoFileCompletion;
       break;
+  }
+
+  // Two-stage key=value: collapse to keys before `=` is typed, and flip
+  // NoSpace whenever a candidate ends with `=` so the user can keep
+  // typing the value after the first TAB.
+  const processed = applyKeyValuePostProcessing(candidates, ctx.currentWord);
+  if (processed.candidates !== candidates) {
+    candidates.splice(0, candidates.length, ...processed.candidates);
+  }
+  if (processed.hasEqSuffix) {
+    directive |= CompletionDirective.NoSpace;
   }
 
   return { directive, fileExtensions, fileMatchers };

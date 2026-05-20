@@ -684,6 +684,78 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(result.directive).toBe(CompletionDirective.KeepOrder);
     });
 
+    it("collapses key=value resolver candidates to unique key= when no `=` typed yet", async () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          field: arg(z.string(), {
+            completion: {
+              custom: {
+                resolve: () => ({
+                  candidates: ["first=NEXT", "first=PREV", "second=A", "second=B", "plain"],
+                }),
+              },
+            },
+          }),
+        }),
+        run: () => {},
+      });
+
+      const ctx = parseCompletionContext(["--field", ""], cmd);
+      const result = await generateCandidates(ctx, { shell: "bash" });
+      expect(result.candidates.map((c) => c.value)).toEqual(["first=", "second=", "plain"]);
+      expect(result.directive & CompletionDirective.NoSpace).toBeTruthy();
+    });
+
+    it("keeps full key=value resolver candidates once the user types `=`", async () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          field: arg(z.string(), {
+            completion: {
+              custom: {
+                resolve: () => ({
+                  candidates: ["first=NEXT", "first=PREV", "second=A"],
+                }),
+              },
+            },
+          }),
+        }),
+        run: () => {},
+      });
+
+      const ctx = parseCompletionContext(["--field", "first="], cmd);
+      const result = await generateCandidates(ctx, { shell: "bash" });
+      expect(result.candidates.map((c) => c.value)).toEqual([
+        "first=NEXT",
+        "first=PREV",
+        "second=A",
+      ]);
+      // None of the candidates end with `=`, so NoSpace must not be forced.
+      expect(result.directive & CompletionDirective.NoSpace).toBeFalsy();
+    });
+
+    it("sets NoSpace when resolver candidates already end with `=`", async () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          field: arg(z.string(), {
+            completion: {
+              custom: {
+                resolve: () => ({ candidates: ["workspaceId=", "applicationName="] }),
+              },
+            },
+          }),
+        }),
+        run: () => {},
+      });
+
+      const ctx = parseCompletionContext(["--field", ""], cmd);
+      const result = await generateCandidates(ctx, { shell: "bash" });
+      expect(result.candidates.map((c) => c.value)).toEqual(["workspaceId=", "applicationName="]);
+      expect(result.directive & CompletionDirective.NoSpace).toBeTruthy();
+    });
+
     it("strips inline `--field=` prefix before passing currentWord", async () => {
       let captured: DynamicCompletionContext | undefined;
       const cmd = withCompletionCommand(

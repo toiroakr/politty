@@ -119,35 +119,53 @@ function zshValueLines(
       // _vals is split on newlines so each candidate can carry a `:desc`
       // suffix understood by `_describe`. Empty entries (from
       // unrecognised keys) are silently dropped by zsh's _describe.
-      if (location.isArrayOption) {
-        const bucket = sanitize(location.fieldName);
-        const bucketRef = location.isGlobal
-          ? `\${_global_used_field_keys[${bucket}]:-}`
-          : `\${_used_field_keys[${bucket}]:-}`;
-        return [
-          `local _key=${depKey}`,
-          `local _raw="\${${varName}[$_key]:-}"`,
-          `if [[ -n "$_raw" ]]; then`,
-          `    local -a _candidates=("\${(@f)_raw}")`,
-          `    _vals=()`,
-          `    local _c _ck`,
-          `    for _c in "\${_candidates[@]}"; do`,
-          `        if [[ "$_c" == *=* ]]; then`,
-          `            _ck="\${_c%%=*}"`,
-          `            if [[ -n "$_ck" && " ${bucketRef} " == *" $_ck "* ]]; then continue; fi`,
-          `        fi`,
-          `        _vals+=("$_c")`,
-          `    done`,
-          `    __${fn}_cdescribe 'completions' _vals`,
-          `fi`,
-        ];
-      }
+      // Two-stage `key=value`: when the user has not typed `=` yet,
+      // collapse every `key=value` candidate to a unique `key=` so the
+      // first TAB picks the key. The second TAB (after `key=`) keeps the
+      // full `key=value` candidates so the user picks the value. Array-host
+      // dedup against already-typed keys runs before the collapse so a
+      // used key stays hidden at both stages.
+      const arrayDedupLines = location.isArrayOption
+        ? (() => {
+            const bucket = sanitize(location.fieldName);
+            const bucketRef = location.isGlobal
+              ? `\${_global_used_field_keys[${bucket}]:-}`
+              : `\${_used_field_keys[${bucket}]:-}`;
+            return [
+              `            if [[ -n "$_ck" && " ${bucketRef} " == *" $_ck "* ]]; then continue; fi`,
+            ];
+          })()
+        : [];
       return [
         `local _key=${depKey}`,
         `local _raw="\${${varName}[$_key]:-}"`,
         `if [[ -n "$_raw" ]]; then`,
-        `    _vals=("\${(@f)_raw}")`,
-        `    __${fn}_cdescribe 'completions' _vals`,
+        `    local -a _candidates=("\${(@f)_raw}")`,
+        `    _vals=()`,
+        `    local _c _ck _seen_keys=" " _desc _has_eq=0`,
+        `    for _c in "\${_candidates[@]}"; do`,
+        `        if [[ "$_c" == *=* ]]; then`,
+        `            _ck="\${_c%%=*}"`,
+        ...arrayDedupLines,
+        `            if [[ "\${words[CURRENT]}" != *=* ]]; then`,
+        `                [[ "$_seen_keys" == *" $_ck "* ]] && continue`,
+        `                _seen_keys+="$_ck "`,
+        `                if [[ "$_c" == *:* ]]; then`,
+        `                    _desc="\${_c#*:}"`,
+        `                    _c="\${_ck}=:$_desc"`,
+        `                else`,
+        `                    _c="\${_ck}="`,
+        `                fi`,
+        `            fi`,
+        `        fi`,
+        `        [[ "\${_c%%:*}" == *= ]] && _has_eq=1`,
+        `        _vals+=("$_c")`,
+        `    done`,
+        `    if (( _has_eq )); then`,
+        `        __${fn}_cdescribe 'completions' _vals -- -S ''`,
+        `    else`,
+        `        __${fn}_cdescribe 'completions' _vals`,
+        `    fi`,
         `fi`,
       ];
     }

@@ -147,13 +147,13 @@ function bashValueLines(
       const bucketRef = location.isGlobal
         ? `\${_global_used_field_keys_${sanitize(location.fieldName)}:-}`
         : `\${_used_field_keys_${sanitize(location.fieldName)}:-}`;
-      const dedupLines = location.isArrayOption
-        ? [
-            `        if [[ "$_c" == *=* ]]; then`,
-            `            local _ck="\${_c%%=*}"`,
-            `            if [[ -n "$_ck" && " ${bucketRef} " == *" $_ck "* ]]; then continue; fi`,
-            `        fi`,
-          ]
+      // The dedup + key-collapse loop body. When `_cur` has no `=` yet,
+      // `key=value` candidates collapse to a unique `key=` so the first
+      // TAB picks the key. Array-host dedup against already-typed keys
+      // runs before the collapse so a used key is skipped at both
+      // stages.
+      const arrayDedupLines = location.isArrayOption
+        ? [`            if [[ -n "$_ck" && " ${bucketRef} " == *" $_ck "* ]]; then continue; fi`]
         : [];
       return [
         // Suppress bash's `-o default` filename fallback. bash 4+ honors
@@ -169,10 +169,18 @@ function bashValueLines(
         `    local -a _vals=()`,
         `    local _line`,
         `    while IFS= read -r _line; do _vals+=("$_line"); done <<< "$_raw"`,
-        `    local _c`,
+        `    local _c _ck _seen_keys=" "`,
         `    for _c in "\${_vals[@]}"; do`,
         `        [[ -z "$_c" ]] && continue`,
-        ...dedupLines,
+        `        if [[ "$_c" == *=* ]]; then`,
+        `            _ck="\${_c%%=*}"`,
+        ...arrayDedupLines,
+        `            if [[ "$_cur" != *=* ]]; then`,
+        `                [[ "$_seen_keys" == *" $_ck "* ]] && continue`,
+        `                _seen_keys+="$_ck "`,
+        `                _c="\${_ck}="`,
+        `            fi`,
+        `        fi`,
         `        [[ "$_c" == "$_cur"* ]] && COMPREPLY+=(${inlineExpr})`,
         `    done`,
         `    compopt -o nospace 2>/dev/null`,

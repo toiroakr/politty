@@ -3,9 +3,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   defineCommonTests,
   defineNestedTests,
-  fishComplete as fishCompleteRaw,
   fishCompleteExpand,
   fishCompleteNested,
+  fishComplete as fishCompleteRaw,
   hasFish,
   isCI,
   setupExpandTestContext,
@@ -261,5 +261,20 @@ describe.skipIf(!hasFish)("fish expand array dedup", () => {
     const values = completeE(["api", "GetApplication", "-f", "workspaceId=foo", "-f", ""]);
     expect(values).toContain("applicationName=");
     expect(values).not.toContain("workspaceId=");
+  });
+
+  it("collapses key=value entries to unique key= when no `=` typed yet", () => {
+    const values = completeE(["api", "ListApplications", "-f", ""]);
+    expect(values).toContain("pageDirection=");
+    expect(values).not.toContain("pageDirection=NEXT");
+    expect(values).not.toContain("pageDirection=PREVIOUS");
+    expect(values).toContain("workspaceId=");
+  });
+
+  it("shows full key=value pairs once the user types `<key>=`", () => {
+    const values = completeE(["api", "ListApplications", "-f", "pageDirection="]);
+    expect(values).toContain("pageDirection=NEXT");
+    expect(values).toContain("pageDirection=PREVIOUS");
+    expect(values).not.toContain("pageDirection=");
   });
 });

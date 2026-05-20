@@ -132,6 +132,17 @@ function fishValueLines(
         // expression (which carries the actual 0x1f byte).
         const casePattern = entry.key.map((k) => `"${fishCaseEscape(k)}"`).join(`\\x1f`);
         out.push(`    case ${casePattern}`);
+
+        // Two-stage `key=value`: when the user has not typed `=` yet,
+        // emit each unique key as `key=` so the first TAB picks the
+        // key. After `=` is typed the full `key=value` candidates are
+        // emitted so the second TAB picks the value. The branch is
+        // selected at runtime via `$_cur` so the user sees only what
+        // is relevant for their current input.
+        const keyOnlyLines: string[] = [];
+        const fullLines: string[] = [];
+        const seenKeys = new Set<string>();
+
         for (const c of entry.candidates) {
           // `printf` instead of `echo` — `expand` candidates accept arbitrary
           // strings, and a value matching one of fish's `echo` flags
@@ -140,18 +151,46 @@ function fishValueLines(
           const echoLine = c.description
             ? `printf '%s\\t%s\\n' "${escapeDesc(c.value)}" "${escapeDesc(c.description)}"`
             : `printf '%s\\n' "${escapeDesc(c.value)}"`;
-          if (location.isArrayOption && c.value.includes("=")) {
-            // Static key part is known at generation time; emit a guard so
-            // already-consumed keys are skipped at completion time.
-            const keyPart = c.value.slice(0, c.value.indexOf("="));
-            if (keyPart.length > 0) {
-              out.push(`        if not contains -- "${escapeDesc(keyPart)}" ${bucketList}`);
-              out.push(`            ${echoLine}`);
-              out.push(`        end`);
-              continue;
+          const eqIdx = c.value.indexOf("=");
+          const keyPart = eqIdx > 0 ? c.value.slice(0, eqIdx) : "";
+
+          const wrapWithDedup = (lines: string[]): string[] => {
+            if (location.isArrayOption && keyPart.length > 0) {
+              return [
+                `        if not contains -- "${escapeDesc(keyPart)}" ${bucketList}`,
+                ...lines.map((l) => `    ${l}`),
+                `        end`,
+              ];
             }
+            return lines;
+          };
+
+          fullLines.push(...wrapWithDedup([`        ${echoLine}`]));
+
+          if (keyPart.length > 0 && !seenKeys.has(keyPart)) {
+            seenKeys.add(keyPart);
+            // Reuse the original description on the collapsed key form.
+            // If the candidate already is the bare `key=` (no value), keep
+            // the original echo line as-is so the description survives.
+            const keyOnly = `${keyPart}=`;
+            const collapsedEcho = c.description
+              ? `printf '%s\\t%s\\n' "${escapeDesc(keyOnly)}" "${escapeDesc(c.description)}"`
+              : `printf '%s\\n' "${escapeDesc(keyOnly)}"`;
+            keyOnlyLines.push(...wrapWithDedup([`        ${collapsedEcho}`]));
+          } else if (keyPart.length === 0) {
+            // Candidate without `=` — same in both branches.
+            keyOnlyLines.push(`        ${echoLine}`);
           }
-          out.push(`        ${echoLine}`);
+        }
+
+        if (keyOnlyLines.length > 0 && fullLines.length > keyOnlyLines.length) {
+          out.push(`        if string match -q '*=*' -- "$_cur"`);
+          out.push(...fullLines);
+          out.push(`        else`);
+          out.push(...keyOnlyLines);
+          out.push(`        end`);
+        } else {
+          out.push(...fullLines);
         }
       }
       out.push(`end`);

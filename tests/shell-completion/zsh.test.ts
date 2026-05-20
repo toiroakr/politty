@@ -11,9 +11,9 @@ import {
   setupNestedTestContext,
   setupTestContext,
   teardownTestContext,
-  zshComplete as zshCompleteRaw,
   zshCompleteExpand,
   zshCompleteNested,
+  zshComplete as zshCompleteRaw,
   type ExecOptions,
   type TestContext,
 } from "./helpers.js";
@@ -398,5 +398,20 @@ describe.skipIf(!hasZsh)("zsh expand array dedup", () => {
     const values = completeE(["api", "GetApplication", "-f", "workspaceId=foo", "-f", ""]);
     expect(values).toContain("applicationName=");
     expect(values).not.toContain("workspaceId=");
+  });
+
+  it("collapses key=value entries to unique key= when no `=` typed yet", () => {
+    const values = completeE(["api", "ListApplications", "-f", ""]);
+    expect(values).toContain("pageDirection=");
+    expect(values).not.toContain("pageDirection=NEXT");
+    expect(values).not.toContain("pageDirection=PREVIOUS");
+    expect(values).toContain("workspaceId=");
+  });
+
+  it("shows full key=value pairs once the user types `<key>=`", () => {
+    const values = completeE(["api", "ListApplications", "-f", "pageDirection="]);
+    expect(values).toContain("pageDirection=NEXT");
+    expect(values).toContain("pageDirection=PREVIOUS");
+    expect(values).not.toContain("pageDirection=");
   });
 });
