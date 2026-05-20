@@ -90,6 +90,40 @@ export function aliasToken(alias: string): string {
 }
 
 /**
+ * Append every alternate spelling runtime's aliasMap accepts for an alias:
+ * `-a` / `--a` for single-char, `--to-be` / `--toBe` for hyphenated.
+ * Shared between {@link collectOptionTokens} and {@link localShadowingTokens}.
+ */
+function pushAliasTokens(tokens: string[], a: string): void {
+  const push = (t: string): void => {
+    if (!tokens.includes(t)) tokens.push(t);
+  };
+  push(aliasToken(a));
+  if (a.length === 1) push(`--${a}`);
+  else if (a.includes("-")) push(`--${toCamelCase(a)}`);
+}
+
+/**
+ * Every CLI spelling the runtime's aliasMap routes to this option:
+ *  - `--cliName` (always),
+ *  - `-x` when `cliName` is one character,
+ *  - `--toCamelCase(cliName)` when `cliName` is hyphenated,
+ *  - and the analogous forms for each alias.
+ *
+ * The order is stable so shell-side case patterns stay diff-friendly.
+ */
+export function collectOptionTokens(
+  cliName: string,
+  aliases: readonly string[] | undefined,
+): string[] {
+  const tokens = [`--${cliName}`];
+  if (cliName.length === 1) tokens.push(`-${cliName}`);
+  if (cliName.includes("-")) tokens.push(`--${toCamelCase(cliName)}`);
+  for (const a of aliases ?? []) pushAliasTokens(tokens, a);
+  return tokens;
+}
+
+/**
  * Single-character tokens (`-x`) that global options at this frame own.
  * Shared between availability-guard and value-completion token filtering:
  * both paths must agree on which short forms `separateGlobalArgs` routes
@@ -128,21 +162,12 @@ export function quotedAvailabilityTokens(
     frameOptions?: readonly CompletableOption[];
   },
 ): string[] {
-  const tokens = new Set<string>([`--${cliName}`]);
   // Mirror every spelling the runtime aliasMap accepts so the
   // used-option guard covers each form a value-completion case (or
   // tracker) might consume. Without this, the option-name suggestion
   // path still offers the canonical \`--cliName\` after the user
   // consumed it as \`-x\` / \`--f\` / \`--toBe\`.
-  if (cliName.length === 1) tokens.add(`-${cliName}`);
-  if (cliName.includes("-")) tokens.add(`--${toCamelCase(cliName)}`);
-  if (aliases) {
-    for (const a of aliases) {
-      tokens.add(aliasToken(a));
-      if (a.length === 1) tokens.add(`--${a}`);
-      else if (a.includes("-")) tokens.add(`--${toCamelCase(a)}`);
-    }
-  }
+  const tokens = new Set<string>(collectOptionTokens(cliName, aliases));
   if (negation) {
     tokens.add(`--${negation}`);
     if (negation.includes("-")) tokens.add(`--${toCamelCase(negation)}`);
@@ -186,15 +211,12 @@ export function localShadowingTokens(
   cliName: string,
   aliases: readonly string[] | undefined,
 ): string[] {
+  // Same shape as `collectOptionTokens` minus the auto-derived `-x`
+  // short form for a bare 1-char cliName: that short form never
+  // registers in the local aliasMap unless an EXPLICIT `alias: "x"`
+  // declares it.
   const tokens = [`--${cliName}`];
   if (cliName.includes("-")) tokens.push(`--${toCamelCase(cliName)}`);
-  for (const a of aliases ?? []) {
-    const push = (t: string): void => {
-      if (!tokens.includes(t)) tokens.push(t);
-    };
-    push(aliasToken(a));
-    if (a.length === 1) push(`--${a}`);
-    else if (a.includes("-")) push(`--${toCamelCase(a)}`);
-  }
+  for (const a of aliases ?? []) pushAliasTokens(tokens, a);
   return tokens;
 }

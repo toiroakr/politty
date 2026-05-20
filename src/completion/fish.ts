@@ -10,7 +10,6 @@ import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
   binEnvVarName,
   collectExpandSpecs,
-  collectOptionTokens,
   collectRouteEntries,
   collectTrackedFields,
   effectiveOptionTokens,
@@ -21,6 +20,7 @@ import {
   sanitize,
 } from "./extractor.js";
 import {
+  collectOptionTokens,
   quotedAvailabilityTokens,
   resolveExpandDepGlobality,
   type ResolvedExpandDep,

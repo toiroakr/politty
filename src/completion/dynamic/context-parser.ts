@@ -6,7 +6,7 @@ import { extractFields, getAllAliases, toCamelCase } from "../../core/schema-ext
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../../types.js";
-import { collectOptionTokens } from "../extractor.js";
+import { collectOptionTokens } from "../shell-shared.js";
 import type { CompletableOption, CompletablePositional, ValueCompletion } from "../types.js";
 import {
   resolveValueCompletion,

@@ -2,11 +2,11 @@
  * Extract completion data from commands
  */
 
-import { extractFields, toCamelCase, type ResolvedFieldMeta } from "../core/schema-extractor.js";
+import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import { resolveExpandTargets, type PendingExpandTarget } from "./expand-resolver.js";
-import { aliasToken, globalShortTokens, localShadowingTokens } from "./shell-shared.js";
+import { collectOptionTokens, globalShortTokens, localShadowingTokens } from "./shell-shared.js";
 import type {
   CompletableOption,
   CompletablePositional,
@@ -559,34 +559,6 @@ export function effectiveOptionTokens(
     // Keep if the local explicitly declares the matching short alias.
     return opt.alias?.includes(t.slice(1)) === true;
   });
-}
-
-/**
- * Append every alternate spelling runtime's aliasMap accepts for an alias:
- * `-a` / `--a` for single-char, `--to-be` / `--toBe` for hyphenated.
- * Shared between {@link collectOptionTokens} and {@link localShadowingTokens}.
- */
-function pushAliasTokens(tokens: string[], a: string): void {
-  const push = (t: string): void => {
-    if (!tokens.includes(t)) tokens.push(t);
-  };
-  push(aliasToken(a));
-  if (a.length === 1) push(`--${a}`);
-  else if (a.includes("-")) push(`--${toCamelCase(a)}`);
-}
-
-export function collectOptionTokens(
-  cliName: string,
-  aliases: readonly string[] | undefined,
-): string[] {
-  const tokens = [`--${cliName}`];
-  // A 1-char cliName is also reachable from `-x` at runtime.
-  if (cliName.length === 1) tokens.push(`-${cliName}`);
-  // Hyphenated cliName accepts its camelCase form (`--toBe` for
-  // `cliName: "to-be"`) via runtime's aliasMap.
-  if (cliName.includes("-")) tokens.push(`--${toCamelCase(cliName)}`);
-  for (const a of aliases ?? []) pushAliasTokens(tokens, a);
-  return tokens;
 }
 
 /**
