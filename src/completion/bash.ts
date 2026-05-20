@@ -19,6 +19,9 @@ import {
   isSubcmdCaseLines,
   optTakesValueEntries,
   sanitize,
+  trackArrayExpandCaseLines,
+  trackOptCaseLines,
+  trackPosCaseLines,
 } from "./extractor.js";
 import {
   aliasToken,
@@ -521,28 +524,19 @@ export function generateBashCompletion(
   lines.push(``);
 
   if (hasExpand) {
-    // Helpers: capture sibling values into _arg_values during the scan
-    // loop so the per-spec lookup can dispatch on them. `_track_opt` runs
-    // for every option-value pair; `_track_pos` runs once per positional.
+    // Trackers populate `_arg_values` during the main scan loop so the
+    // per-spec lookup can dispatch on sibling arg values. `_track_opt`
+    // runs for every option-value pair; `_track_pos` runs once per
+    // positional.
     lines.push(`__${fn}_track_opt() {`);
     lines.push(`    case "$1:$2" in`);
-    for (const t of trackedFields) {
-      if (t.isPositional || !t.optionTokens) continue;
-      const joined = t.pathStrs.flatMap((p) => t.optionTokens!.map((n) => `${p}:${n}`)).join("|");
-      const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
-      lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
-    }
+    lines.push(...trackOptCaseLines(trackedFields));
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);
     lines.push(`__${fn}_track_pos() {`);
     lines.push(`    case "$1:$2" in`);
-    for (const t of trackedFields) {
-      if (!t.isPositional) continue;
-      const joined = t.pathStrs.map((p) => `${p}:${t.position}`).join("|");
-      const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
-      lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
-    }
+    lines.push(...trackPosCaseLines(trackedFields));
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);
@@ -550,42 +544,14 @@ export function generateBashCompletion(
 
   if (hasArrayExpand) {
     // Track which `key=` slots a repeatable array option has already
-    // consumed. Stored in a separate function (and bucket) from
-    // `__track_opt` so that an option which is simultaneously a dependsOn
-    // target and an array expand host does not collide on the same case
-    // pattern. The bucket is space-padded on both ends so membership
-    // checks via `*" $_ck "*` work for the first and last entries.
+    // consumed. Separate function (and bucket) from `__track_opt` so an
+    // option that is simultaneously a dependsOn target and an array
+    // expand host doesn't collide on the same case pattern. The bucket
+    // is space-padded on both ends so membership checks via
+    // `*" $_ck "*` work for the first and last entries.
     lines.push(`__${fn}_track_array_expand() {`);
     lines.push(`    case "$1:$2" in`);
-    for (const spec of arrayExpandSpecs) {
-      const joined = spec.pathStrs
-        .flatMap((p) => spec.optionTokens.map((tok) => `${p}:${tok}`))
-        .join("|");
-      const bucket = sanitize(spec.fieldName);
-      const bucketVar = spec.isGlobal ? `_global_used_field_keys` : `_used_field_keys`;
-      lines.push(`        ${joined})`);
-      lines.push(`            if [[ "$3" == *=* ]]; then`);
-      lines.push(`                local _k="\${3%%=*}"`);
-      if (spec.isGlobal) {
-        // Mirror the runtime's per-frame array merge: the first write
-        // to a global array in this frame replaces the inherited bucket,
-        // subsequent writes append. Without this, candidates suppressed
-        // by a parent frame would stay suppressed even after the child
-        // re-declares the option.
-        lines.push(`                if [[ -n "$_k" ]]; then`);
-        lines.push(`                    if [[ -z "\${_global_arr_seen[${bucket}]:-}" ]]; then`);
-        lines.push(`                        ${bucketVar}[${bucket}]=" $_k "`);
-        lines.push(`                        _global_arr_seen[${bucket}]=1`);
-        lines.push(`                    else`);
-        lines.push(`                        ${bucketVar}[${bucket}]+=" $_k "`);
-        lines.push(`                    fi`);
-        lines.push(`                fi`);
-      } else {
-        lines.push(`                [[ -n "$_k" ]] && ${bucketVar}[${bucket}]+=" $_k "`);
-      }
-      lines.push(`            fi`);
-      lines.push(`            ;;`);
-    }
+    lines.push(...trackArrayExpandCaseLines(arrayExpandSpecs));
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);

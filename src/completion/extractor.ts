@@ -326,6 +326,75 @@ export function isSubcmdCaseLines(routeEntries: RouteEntry[]): string[] {
 }
 
 /**
+ * Case-statement body lines for `__track_opt` — capture option values into
+ * the per-frame `_arg_values` / `_global_arg_values` associative arrays.
+ * Identical bash/zsh emission, so generators share this builder.
+ */
+export function trackOptCaseLines(trackedFields: readonly TrackedFieldRef[]): string[] {
+  const lines: string[] = [];
+  for (const t of trackedFields) {
+    if (t.isPositional || !t.optionTokens) continue;
+    const joined = t.pathStrs.flatMap((p) => t.optionTokens!.map((n) => `${p}:${n}`)).join("|");
+    const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
+    lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
+  }
+  return lines;
+}
+
+/**
+ * Case-statement body lines for `__track_pos` — capture positional values
+ * by `(subcmd, positional-index)`. Identical bash/zsh emission.
+ */
+export function trackPosCaseLines(trackedFields: readonly TrackedFieldRef[]): string[] {
+  const lines: string[] = [];
+  for (const t of trackedFields) {
+    if (!t.isPositional) continue;
+    const joined = t.pathStrs.map((p) => `${p}:${t.position}`).join("|");
+    const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
+    lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
+  }
+  return lines;
+}
+
+/**
+ * Case-statement body lines for `__track_array_expand` — record each `key=`
+ * slot the user has typed so the candidate loop can skip already-consumed
+ * entries. The first write to a global array in a frame replaces the
+ * inherited bucket (mirroring the runtime's per-frame array merge);
+ * subsequent writes append. Identical bash/zsh emission.
+ */
+export function trackArrayExpandCaseLines(
+  arrayExpandSpecs: readonly ExpandSpecLocation[],
+): string[] {
+  const lines: string[] = [];
+  for (const spec of arrayExpandSpecs) {
+    const joined = spec.pathStrs
+      .flatMap((p) => spec.optionTokens.map((tok) => `${p}:${tok}`))
+      .join("|");
+    const bucket = sanitize(spec.fieldName);
+    const bucketVar = spec.isGlobal ? `_global_used_field_keys` : `_used_field_keys`;
+    lines.push(`        ${joined})`);
+    lines.push(`            if [[ "$3" == *=* ]]; then`);
+    lines.push(`                local _k="\${3%%=*}"`);
+    if (spec.isGlobal) {
+      lines.push(`                if [[ -n "$_k" ]]; then`);
+      lines.push(`                    if [[ -z "\${_global_arr_seen[${bucket}]:-}" ]]; then`);
+      lines.push(`                        ${bucketVar}[${bucket}]=" $_k "`);
+      lines.push(`                        _global_arr_seen[${bucket}]=1`);
+      lines.push(`                    else`);
+      lines.push(`                        ${bucketVar}[${bucket}]+=" $_k "`);
+      lines.push(`                    fi`);
+      lines.push(`                fi`);
+    } else {
+      lines.push(`                [[ -n "$_k" ]] && ${bucketVar}[${bucket}]+=" $_k "`);
+    }
+    lines.push(`            fi`);
+    lines.push(`            ;;`);
+  }
+  return lines;
+}
+
+/**
  * Location of a resolved expand-completion spec inside the command tree.
  * Emitted by {@link collectExpandSpecs}; shell generators use it to name
  * the hoisted table variable and to scope the tracker entries.

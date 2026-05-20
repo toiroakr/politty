@@ -19,6 +19,9 @@ import {
   isSubcmdCaseLines,
   optTakesValueEntries,
   sanitize,
+  trackArrayExpandCaseLines,
+  trackOptCaseLines,
+  trackPosCaseLines,
 } from "./extractor.js";
 import {
   aliasToken,
@@ -476,59 +479,25 @@ export function generateZshCompletion(
     // per-spec lookup can dispatch on sibling arg values.
     lines.push(`__${fn}_track_opt() {`);
     lines.push(`    case "$1:$2" in`);
-    for (const t of trackedFields) {
-      if (t.isPositional || !t.optionTokens) continue;
-      const joined = t.pathStrs.flatMap((p) => t.optionTokens!.map((n) => `${p}:${n}`)).join("|");
-      const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
-      lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
-    }
+    lines.push(...trackOptCaseLines(trackedFields));
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);
     lines.push(`__${fn}_track_pos() {`);
     lines.push(`    case "$1:$2" in`);
-    for (const t of trackedFields) {
-      if (!t.isPositional) continue;
-      const joined = t.pathStrs.map((p) => `${p}:${t.position}`).join("|");
-      const bucket = t.isGlobal ? `_global_arg_values` : `_arg_values`;
-      lines.push(`        ${joined}) ${bucket}[${t.fieldName}]="$3" ;;`);
-    }
+    lines.push(...trackPosCaseLines(trackedFields));
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);
   }
 
   if (hasArrayExpand) {
-    // Separate function from `__track_opt` so that an option that is
+    // Separate function from `__track_opt` so an option that is
     // simultaneously a dependsOn target and an array expand host does
     // not collide on the same case pattern.
     lines.push(`__${fn}_track_array_expand() {`);
     lines.push(`    case "$1:$2" in`);
-    for (const spec of arrayExpandSpecs) {
-      const joined = spec.pathStrs
-        .flatMap((p) => spec.optionTokens.map((tok) => `${p}:${tok}`))
-        .join("|");
-      const bucket = sanitize(spec.fieldName);
-      const bucketVar = spec.isGlobal ? `_global_used_field_keys` : `_used_field_keys`;
-      lines.push(`        ${joined})`);
-      lines.push(`            if [[ "$3" == *=* ]]; then`);
-      lines.push(`                local _k="\${3%%=*}"`);
-      if (spec.isGlobal) {
-        // Mirror runtime per-frame replace semantics for global arrays.
-        lines.push(`                if [[ -n "$_k" ]]; then`);
-        lines.push(`                    if [[ -z "\${_global_arr_seen[${bucket}]:-}" ]]; then`);
-        lines.push(`                        ${bucketVar}[${bucket}]=" $_k "`);
-        lines.push(`                        _global_arr_seen[${bucket}]=1`);
-        lines.push(`                    else`);
-        lines.push(`                        ${bucketVar}[${bucket}]+=" $_k "`);
-        lines.push(`                    fi`);
-        lines.push(`                fi`);
-      } else {
-        lines.push(`                [[ -n "$_k" ]] && ${bucketVar}[${bucket}]+=" $_k "`);
-      }
-      lines.push(`            fi`);
-      lines.push(`            ;;`);
-    }
+    lines.push(...trackArrayExpandCaseLines(arrayExpandSpecs));
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);
