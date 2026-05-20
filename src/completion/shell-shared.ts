@@ -45,17 +45,37 @@ export function globalNamesIn(options: readonly CompletableOption[]): Set<string
  * bucket even when the host itself is local — the tracker only ever
  * writes the global value into \`_global_arg_values_<name>\`, so a
  * lookup against the local bucket would see the empty key.
+ *
+ * Local-precedence matches `buildSiblingIndex` in `expand-resolver.ts`:
+ * a dep name that exists on a local field (option OR positional) at the
+ * frame resolves to the local, even if a same-named global also exists.
+ * Marking such a dep as global would route the lookup at the wrong
+ * bucket and produce no candidates.
  */
 export function resolveExpandDepGlobality(
   vc: ValueCompletion,
   hostIsGlobal: boolean,
   globalOptionNames: ReadonlySet<string> = new Set(),
+  localFieldNames: ReadonlySet<string> = new Set(),
 ): readonly ResolvedExpandDep[] {
   if (vc.type !== "expand") return [];
   return vc.dependsOn.map((name) => ({
     name,
-    isGlobal: hostIsGlobal || globalOptionNames.has(name),
+    isGlobal: hostIsGlobal || (globalOptionNames.has(name) && !localFieldNames.has(name)),
   }));
+}
+
+/** Build the local-field name set used by {@link resolveExpandDepGlobality}. */
+export function localFieldNamesIn(
+  options: readonly CompletableOption[],
+  positionals: readonly { name: string }[] = [],
+): Set<string> {
+  const names = new Set<string>();
+  for (const o of options) {
+    if (o.isGlobal !== true) names.add(o.name);
+  }
+  for (const p of positionals) names.add(p.name);
+  return names;
 }
 
 /**

@@ -21,6 +21,7 @@ import {
 } from "./extractor.js";
 import {
   globalNamesIn,
+  localFieldNamesIn,
   quotedAvailabilityTokens,
   resolveExpandDepGlobality,
   type ResolvedExpandDep,
@@ -265,8 +266,13 @@ function fishExtensionLines(extensions: string[]): string[] {
 }
 
 /** Generate option-value switch cases for fish */
-function optionValueCases(options: CompletableOption[], fn: string): string[] {
+function optionValueCases(
+  options: CompletableOption[],
+  positionals: readonly CompletablePositional[],
+  fn: string,
+): string[] {
   const lines: string[] = [];
+  const localNames = localFieldNamesIn(options, positionals);
   for (const opt of options) {
     if (!opt.takesValue || !opt.valueCompletion) continue;
     const valLines = fishValueLines(opt.valueCompletion, fn, {
@@ -277,6 +283,7 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
         opt.valueCompletion,
         opt.isGlobal === true,
         globalNamesIn(options),
+        localNames,
       ),
     });
     if (valLines.length === 0) continue;
@@ -309,13 +316,14 @@ function positionalBlock(
 ): string[] {
   if (positionals.length === 0) return [];
   const lines: string[] = [];
+  const localNames = localFieldNamesIn(options, positionals);
   for (const pos of positionals) {
     const valLines = fishValueLines(pos.valueCompletion, fn, {
       fieldName: pos.name,
       isArrayOption: false,
       isGlobal: false,
       resolvedDeps: pos.valueCompletion
-        ? resolveExpandDepGlobality(pos.valueCompletion, false, globalNamesIn(options))
+        ? resolveExpandDepGlobality(pos.valueCompletion, false, globalNamesIn(options), localNames)
         : [],
     });
     if (valLines.length === 0) continue;
@@ -378,7 +386,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`function ${funcName} --no-scope-shadowing`);
 
   // 1. Option value completion
-  lines.push(...optionValueCases(sub.options, fn));
+  lines.push(...optionValueCases(sub.options, sub.positionals, fn));
   // Fallback: value-taking option without explicit completion → default file completion
   const fullPathStr = fullPath.join(":");
   lines.push(`    if __${fn}_opt_takes_value "${fullPathStr}" "$_prev"; return; end`);
@@ -646,7 +654,7 @@ export function generateFishCompletion(
   // separate-word value completion (--opt <value>) is handled. Bash supports
   // inline via _inline_prefix parsing.
   lines.push(`function __${fn}_complete_root --no-scope-shadowing`);
-  lines.push(...optionValueCases(root.options, fn));
+  lines.push(...optionValueCases(root.options, root.positionals, fn));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(`    if __${fn}_opt_takes_value "" "$_prev"; return; end`);
   if (root.positionals.length > 0) {

@@ -28,6 +28,7 @@ import {
 import {
   ansiC,
   globalNamesIn,
+  localFieldNamesIn,
   quotedAvailabilityTokens,
   resolveExpandDepGlobality,
   type ResolvedExpandDep,
@@ -268,11 +269,13 @@ function bashFileFilter(checks: string): string[] {
 /** Collect value-taking option patterns for case matching */
 function optionValueCases(
   options: CompletableOption[],
+  positionals: readonly CompletablePositional[],
   inline: boolean,
   fn: string,
   funcSuffix: string,
 ): string[] {
   const lines: string[] = [];
+  const localNames = localFieldNamesIn(options, positionals);
   for (const opt of options) {
     if (!opt.takesValue || !opt.valueCompletion) continue;
     const valLines = bashValueLines(opt.valueCompletion, inline, fn, {
@@ -284,6 +287,7 @@ function optionValueCases(
         opt.valueCompletion,
         opt.isGlobal === true,
         globalNamesIn(options),
+        localNames,
       ),
     });
     if (valLines.length === 0) continue;
@@ -313,6 +317,7 @@ function positionalBlock(
   if (positionals.length === 0) return [];
   const lines: string[] = [];
   lines.push(`    case "$_pos_count" in`);
+  const localNames = localFieldNamesIn(options, positionals);
 
   for (const pos of positionals) {
     if (pos.variadic) {
@@ -327,7 +332,7 @@ function positionalBlock(
       isArrayOption: false,
       isGlobal: false,
       resolvedDeps: pos.valueCompletion
-        ? resolveExpandDepGlobality(pos.valueCompletion, false, globalNamesIn(options))
+        ? resolveExpandDepGlobality(pos.valueCompletion, false, globalNamesIn(options), localNames)
         : [],
     })) {
       lines.push(`            ${vl}`);
@@ -342,13 +347,14 @@ function positionalBlock(
 /** Generate prev/inline value completion blocks for options */
 function valueCompletionBlocks(
   options: CompletableOption[],
+  positionals: readonly CompletablePositional[],
   fn: string,
   funcSuffix: string,
 ): string[] {
   if (!options.some((o) => o.takesValue && o.valueCompletion)) return [];
 
   const lines: string[] = [];
-  const prevCases = optionValueCases(options, false, fn, funcSuffix);
+  const prevCases = optionValueCases(options, positionals, false, fn, funcSuffix);
   if (prevCases.length > 0) {
     lines.push(`    if [[ -z "$_inline_prefix" ]]; then`);
     lines.push(`        case "$_prev" in`);
@@ -356,7 +362,7 @@ function valueCompletionBlocks(
     lines.push(`        esac`);
     lines.push(`    fi`);
   }
-  const inlineCases = optionValueCases(options, true, fn, funcSuffix);
+  const inlineCases = optionValueCases(options, positionals, true, fn, funcSuffix);
   if (inlineCases.length > 0) {
     lines.push(`    if [[ -n "$_inline_prefix" ]]; then`);
     lines.push(`        case "\${_inline_prefix%=}" in`);
@@ -410,7 +416,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`${funcName}() {`);
 
   // 1. Option value completion (prev is value-taking option)
-  lines.push(...valueCompletionBlocks(sub.options, fn, funcSuffix));
+  lines.push(...valueCompletionBlocks(sub.options, sub.positionals, fn, funcSuffix));
 
   // Fallback: value-taking option without explicit completion → default file completion
   const fullPathStr = fullPath.join(":");
@@ -663,7 +669,7 @@ export function generateBashCompletion(
 
   // Root handler
   lines.push(`__${fn}_complete_root() {`);
-  lines.push(...valueCompletionBlocks(root.options, fn, "root"));
+  lines.push(...valueCompletionBlocks(root.options, root.positionals, fn, "root"));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(
     `    if [[ -z "$_inline_prefix" ]] && __${fn}_opt_takes_value "" "$_prev"; then return; fi`,
