@@ -666,6 +666,18 @@ export function generateFishCompletion(
         `            test -n "$_subcmd"; and set _subcmd "$_subcmd:$_w"; or set _subcmd "$_w"`,
       );
       lines.push(`            set _used_opts; set _pos_count 0`);
+      // Clear sibling-tracker state when descending into a subcommand:
+      // `dependsOn` is scoped to siblings on the same command frame, so
+      // letting a parent's `--env` bleed into a child with its own `--env`
+      // would feed the wrong value into the child's expand lookup.
+      for (const t of trackedFields) {
+        lines.push(`            set -e _arg_values_${t.fieldName}`);
+      }
+      if (hasArrayExpand) {
+        for (const spec of arrayExpandSpecs) {
+          lines.push(`            set -e _used_field_keys_${sanitize(spec.fieldName)}`);
+        }
+      }
       lines.push(`        else`);
       lines.push(`            __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
       lines.push(`            set _pos_count (math $_pos_count + 1)`);

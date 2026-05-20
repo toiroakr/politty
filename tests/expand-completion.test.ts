@@ -223,6 +223,50 @@ describe("expand completion", () => {
       expect(script).toContain("local -A _arg_values=()");
     });
 
+    it("clears sibling-tracker state on subcommand descent so values do not bleed across frames", () => {
+      const nested = defineCommand({
+        name: "mycli",
+        args: z.object({
+          env: arg(z.string(), { completion: { custom: { choices: ["prod", "stg"] } } }),
+        }),
+        subCommands: {
+          deploy: defineCommand({
+            name: "deploy",
+            args: z.object({
+              env: arg(z.string(), { completion: { custom: { choices: ["prod", "stg"] } } }),
+              field: arg(z.string().optional(), {
+                completion: {
+                  custom: {
+                    expand: { dependsOn: ["env"], enumerate: () => [{ value: "x" }] },
+                  },
+                },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const { script: bash } = generateBashCompletion(nested, {
+        shell: "bash",
+        programName: "mycli",
+      });
+      // The descent branch must reset `_arg_values` so the parent's --env
+      // does not pre-populate the child's expand dep.
+      expect(bash).toContain(`_arg_values=()`);
+      const { script: zsh } = generateZshCompletion(nested, {
+        shell: "zsh",
+        programName: "mycli",
+      });
+      expect(zsh).toContain(`_arg_values=()`);
+      const { script: fish } = generateFishCompletion(nested, {
+        shell: "fish",
+        programName: "mycli",
+      });
+      // Fish stores trackers in per-field globals — clearing them on
+      // descent requires erasing each known tracked field.
+      expect(fish).toMatch(/if __mycli_is_subcmd[\s\S]*?set -e _arg_values_env/);
+    });
+
     it("tracks positionals supplied after `--` so expand deps still resolve", () => {
       const { script: bash } = generateBashCompletion(cmd, {
         shell: "bash",

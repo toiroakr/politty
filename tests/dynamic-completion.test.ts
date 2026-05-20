@@ -534,6 +534,19 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(dyn).toContain("_files");
     });
 
+    it("zsh emits resolver candidates alongside file directives instead of skipping them", () => {
+      // When the resolver returns both candidates and FileCompletion /
+      // DirectoryCompletion, zsh must surface the candidates first and
+      // then layer `_files` on top, the same way bash/fish do.
+      const zsh = generateCompletion(dynamicCmd, { shell: "zsh", programName: "mycli" }).script;
+      // Candidates are pushed via __cdescribe before the directive block
+      // handles `_files`. The new layout uses `elif` to chain directory →
+      // file without `return`-ing early.
+      expect(zsh).toMatch(
+        /__mycli_cdescribe 'completions' _vals[\s\S]*?if \(\( _directive & 32 \)\); then[\s\S]*?_files -\/[\s\S]*?elif \(\( _directive & 16 \)\); then[\s\S]*?_files\n\s*fi/,
+      );
+    });
+
     it("does not filter resolver candidates that look like file-completion sentinels", () => {
       // `@ext:` and `@matcher:` are markers from the shellCommand pipeline
       // — they cannot appear from a dynamic resolver's perspective, so the

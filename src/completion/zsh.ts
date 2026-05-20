@@ -416,17 +416,17 @@ export function generateZshCompletion(
     lines.push(`        [[ -z "$_l" ]] && continue`);
     lines.push(`        _vals+=("$_l")`);
     lines.push(`    done`);
-    // Directive precedence mirrors bash: directory > file > value list.
-    lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
-    lines.push(`        _files -/`);
-    lines.push(`        return`);
-    lines.push(`    fi`);
-    lines.push(`    if (( _directive & ${CompletionDirective.FileCompletion} )); then`);
-    lines.push(`        _files`);
-    lines.push(`        return`);
-    lines.push(`    fi`);
+    // Emit resolver candidates first, then layer on filesystem completion
+    // when the resolver requested it. `_files` adds to the candidate list
+    // rather than replacing it, so a resolver returning both names and
+    // `FileCompletion` shows both — matching the bash/fish behaviour.
     lines.push(`    if (( \${#_vals[@]} > 0 )); then`);
     lines.push(`        __${fn}_cdescribe 'completions' _vals`);
+    lines.push(`    fi`);
+    lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
+    lines.push(`        _files -/`);
+    lines.push(`    elif (( _directive & ${CompletionDirective.FileCompletion} )); then`);
+    lines.push(`        _files`);
     lines.push(`    fi`);
     lines.push(`}`);
     lines.push(``);
@@ -647,8 +647,13 @@ export function generateZshCompletion(
   lines.push(`        fi`);
   if (routeEntries.length > 0) {
     if (hasExpand) {
+      // Clear sibling-tracker state when descending into a subcommand:
+      // `dependsOn` is scoped to siblings on the same command frame, so
+      // letting a parent's `--env` bleed into a child with its own `--env`
+      // would feed the wrong value into the child's expand lookup.
+      const clearState = hasArrayExpand ? `_arg_values=(); _used_field_keys=()` : `_arg_values=()`;
       lines.push(
-        `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; (( _pos_count++ )); fi`,
+        `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; ${clearState}; else __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; (( _pos_count++ )); fi`,
       );
     } else {
       lines.push(

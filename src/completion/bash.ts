@@ -714,8 +714,13 @@ export function generateBashCompletion(
   lines.push(`        fi`);
   if (routeEntries.length > 0) {
     if (hasExpand) {
+      // Clear sibling-tracker state when descending into a subcommand:
+      // `dependsOn` is scoped to siblings on the same command frame, so
+      // letting a parent's `--env` bleed into a child with its own `--env`
+      // would feed the wrong value into the child's expand lookup.
+      const clearState = hasArrayExpand ? `_arg_values=(); _used_field_keys=()` : `_arg_values=()`;
       lines.push(
-        `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; else __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; (( _pos_count++ )); fi`,
+        `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0; ${clearState}; else __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; (( _pos_count++ )); fi`,
       );
     } else {
       lines.push(
