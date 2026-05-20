@@ -450,9 +450,16 @@ export function generateZshCompletion(
     // Emit resolver candidates first, then layer on filesystem completion
     // when the resolver requested it. `_files` adds to the candidate list
     // rather than replacing it, so a resolver returning both names and
-    // `FileCompletion` shows both — matching the bash/fish behaviour.
+    // `FileCompletion` shows both — matching the bash/fish behaviour. When
+    // the resolver flags NoSpace (e.g. `key=` candidates that the user
+    // should keep typing past), forward `-S ''` to compadd so zsh does
+    // not append the default trailing space.
     lines.push(`    if (( \${#_vals[@]} > 0 )); then`);
-    lines.push(`        __${fn}_cdescribe 'completions' _vals`);
+    lines.push(`        if (( _directive & ${CompletionDirective.NoSpace} )); then`);
+    lines.push(`            __${fn}_cdescribe 'completions' _vals -- -S ''`);
+    lines.push(`        else`);
+    lines.push(`            __${fn}_cdescribe 'completions' _vals`);
+    lines.push(`        fi`);
     lines.push(`    fi`);
     lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
     lines.push(`        _files -/`);
