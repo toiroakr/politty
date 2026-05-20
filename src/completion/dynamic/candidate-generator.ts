@@ -309,7 +309,6 @@ async function resolveValueCandidates(
  */
 function generateSubcommandCandidates(context: CompletionContext): CandidateResult {
   const candidates: CompletionCandidate[] = [];
-  let directive = CompletionDirective.FilterPrefix;
 
   // Add subcommands (context.subcommands already includes aliases)
   for (const name of context.subcommands) {
@@ -335,7 +334,7 @@ function generateSubcommandCandidates(context: CompletionContext): CandidateResu
     candidates.push(...optionResult.candidates);
   }
 
-  return { candidates, directive };
+  return { candidates, directive: CompletionDirective.FilterPrefix };
 }
 
 /**
@@ -343,7 +342,6 @@ function generateSubcommandCandidates(context: CompletionContext): CandidateResu
  */
 function generateOptionNameCandidates(context: CompletionContext): CandidateResult {
   const candidates: CompletionCandidate[] = [];
-  const directive = CompletionDirective.FilterPrefix;
 
   // Filter out already used options
   const availableOptions = context.options.filter((opt) => {
@@ -384,7 +382,7 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
     });
   }
 
-  return { candidates, directive };
+  return { candidates, directive: CompletionDirective.FilterPrefix };
 }
 
 /**
