@@ -118,8 +118,15 @@ function optionTokenSet(opt: CompletableOption): Set<string> {
   const tokens = new Set<string>([`--${opt.cliName}`]);
   // A single-character cliName is also reachable from `-x` at runtime.
   if (opt.cliName.length === 1) tokens.add(`-${opt.cliName}`);
+  // Hyphenated names accept their camelCase variant too — runtime's
+  // aliasMap registers `--to-be` AND `--toBe` for `cliName: "to-be"`.
+  // Collision detection must see both forms or a parent-frame local
+  // that intercepts the camelCase variant of a global will silently
+  // skip the migration loop.
+  if (opt.cliName.includes("-")) tokens.add(`--${toCamelCase(opt.cliName)}`);
   for (const a of opt.alias ?? []) {
     tokens.add(a.length === 1 ? `-${a}` : `--${a}`);
+    if (a.includes("-")) tokens.add(`--${toCamelCase(a)}`);
   }
   return tokens;
 }
@@ -313,15 +320,14 @@ function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong:
  * short form because its token is `-x`).
  */
 function matchesExplicit(opt: CompletableOption, name: string, isLong: boolean): boolean {
-  // A single-character cliName is reachable from BOTH `--x` and `-x`
-  // at runtime: long form goes through the regular flag path, short
-  // form resolves via `aliasMap` lookup that falls through to the
-  // canonical name. Multi-char cliNames are only invokable as long form.
+  // A single-character cliName / alias is reachable from BOTH `--x`
+  // and `-x` at runtime — short form falls through `aliasMap` to the
+  // canonical name, and long form lands in the same map. Multi-char
+  // names are only invokable as long form.
   if (opt.cliName === name && (isLong || opt.cliName.length === 1)) return true;
   if (opt.alias) {
     for (const a of opt.alias) {
-      const aliasIsShort = a.length === 1;
-      if (aliasIsShort === !isLong && a === name) return true;
+      if (a === name && (isLong || a.length === 1)) return true;
     }
   }
   // Custom negation names always belong to the long-form token space —
@@ -473,20 +479,24 @@ export function parseCompletionContext(
       !word.includes("=")
     ) {
       const chars: string[] = Array.from(word.slice(1));
-      const resolved: Array<CompletableOption | undefined> = chars.map((c) =>
-        findOption(options, { name: c, isLong: false }),
-      );
-      const allBoolean = resolved.every((o) => o !== undefined && !o.takesValue);
-      if (allBoolean) {
-        for (let idx = 0; idx < chars.length; idx++) {
-          const o = resolved[idx];
-          if (!o) continue;
-          markUsed(o);
-          recordBooleanFlag(o, { name: chars[idx]!, isLong: false });
-        }
-        i++;
-        continue;
+      // Runtime's global separation (`scanForSubcommand` /
+      // `separateGlobalArgs`) does NOT decompose combined short flags
+      // — only the leaf-level local parser does. Mirror that here by
+      // matching each char against LOCAL options only and recording
+      // every resolved boolean. A char that doesn't resolve locally
+      // (or that maps to a value-taking option) is a no-op, just like
+      // the runtime's `setOption` on an unknown short. Always consume
+      // the whole combined word so the single-option branch below
+      // does not misread `-ab` as `-a`.
+      const localOptions = options.filter((o) => o.isGlobal !== true);
+      for (const c of chars) {
+        const o = findOption(localOptions, { name: c, isLong: false });
+        if (!o || o.takesValue) continue;
+        markUsed(o);
+        recordBooleanFlag(o, { name: c, isLong: false });
       }
+      i++;
+      continue;
     }
 
     // Skip options and their values (before "--")

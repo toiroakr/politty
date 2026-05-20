@@ -225,6 +225,55 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.cache).toBeUndefined();
     });
 
+    it("recognizes a single-character alias via both `-f` and `--f`", () => {
+      // Runtime's `aliasMap` registers a 1-char alias as the canonical
+      // mapping, and the long-form path consults the same map. So
+      // `--f value` is valid for `alias: "f"`. The completion parser
+      // must classify both forms as option-value to surface the
+      // resolver for `__complete -- --f <TAB>`.
+      const cmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          field: arg(z.string(), {
+            alias: "f",
+            completion: { custom: { choices: ["alpha"] } },
+          }),
+        }),
+        run: () => {},
+      });
+      const shortCtx = parseCompletionContext(["-f", ""], cmd);
+      expect(shortCtx.completionType).toBe("option-value");
+      expect(shortCtx.targetOption?.name).toBe("field");
+
+      const longCtx = parseCompletionContext(["--f", ""], cmd);
+      expect(longCtx.completionType).toBe("option-value");
+      expect(longCtx.targetOption?.name).toBe("field");
+    });
+
+    it("does not record a global as set when typed inside a combined short flag", () => {
+      // Runtime's `scanForSubcommand` / `separateGlobalArgs` do NOT
+      // decompose combined short flags — only the leaf local parser
+      // does. So `-ab` with a global `-a` and local `-b` never actually
+      // surfaces the global at runtime. The completion parser must
+      // not record the global as `true` either.
+      const globals = z.object({
+        alpha: arg(z.boolean().default(false), { alias: "a" }),
+      });
+      const cmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          beta: arg(z.boolean().default(false), { alias: "b" }),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const ctx = parseCompletionContext(["-ab", "--field", ""], cmd, globals);
+      expect(ctx.parsedArgs.alpha).toBeUndefined();
+      // The local `beta` is decomposed via the local parser at runtime,
+      // so the completion parser is free to record it; but the global
+      // must stay unset.
+    });
+
     it("recognizes a single-character cliName via both `--x` and `-x`", () => {
       // Runtime's `parseArgv` accepts a 1-char cliName from BOTH the
       // long form (`--x value`) and the short form (`-x value`) without
