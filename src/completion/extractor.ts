@@ -326,6 +326,14 @@ export function isSubcmdCaseLines(routeEntries: RouteEntry[]): string[] {
 }
 
 /**
+ * Subcommand-dispatch case body lines for bash/zsh: each route forwards
+ * `$_subcmd` to its handler function. Identical emission between shells.
+ */
+export function subDispatchCaseLines(routeEntries: RouteEntry[], fn: string): string[] {
+  return routeEntries.map((r) => `        ${r.pathStr}) __${fn}_complete_${r.funcSuffix} ;;`);
+}
+
+/**
  * Case-statement body lines for `__track_opt` — capture option values into
  * the per-frame `_arg_values` / `_global_arg_values` associative arrays.
  * Identical bash/zsh emission, so generators share this builder.

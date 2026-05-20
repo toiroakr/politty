@@ -19,6 +19,7 @@ import {
   isSubcmdCaseLines,
   optTakesValueEntries,
   sanitize,
+  subDispatchCaseLines,
   trackArrayExpandCaseLines,
   trackOptCaseLines,
   trackPosCaseLines,
@@ -562,9 +563,7 @@ export function generateZshCompletion(
   lines.push(``);
 
   // Main completion function -- subcommand dispatch routing
-  const subRouting = routeEntries
-    .map((r) => `        ${r.pathStr}) __${fn}_complete_${r.funcSuffix} ;;`)
-    .join("\n");
+  const subRouting = subDispatchCaseLines(routeEntries, fn).join("\n");
 
   lines.push(`_${fn}() {`);
   lines.push(`    (( CURRENT )) || CURRENT=\${#words}`);
