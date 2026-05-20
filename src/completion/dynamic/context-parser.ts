@@ -242,13 +242,14 @@ function isImplicitBooleanNegation(opt: CompletableOption, nameOrAlias: string):
 function matchesExplicit(opt: CompletableOption, nameOrAlias: string): boolean {
   if (opt.cliName === nameOrAlias) return true;
   if (opt.alias?.includes(nameOrAlias)) return true;
+  // Custom negation names can be a single character (e.g. `negation: "n"`
+  // is accepted as `--n` at runtime), so the direct-equality check must
+  // run BEFORE the `<= 1` early-return that guards the camelCase paths.
+  if (opt.negation === nameOrAlias) return true;
   if (nameOrAlias.length <= 1) return false;
   if (opt.cliName.includes("-") && toCamelCase(opt.cliName) === nameOrAlias) return true;
   if (opt.alias?.some((a) => a.includes("-") && toCamelCase(a) === nameOrAlias)) return true;
-  if (opt.negation) {
-    if (opt.negation === nameOrAlias) return true;
-    if (opt.negation.includes("-") && toCamelCase(opt.negation) === nameOrAlias) return true;
-  }
+  if (opt.negation?.includes("-") && toCamelCase(opt.negation) === nameOrAlias) return true;
   return false;
 }
 

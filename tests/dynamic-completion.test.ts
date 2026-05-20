@@ -225,6 +225,23 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.cache).toBeUndefined();
     });
 
+    it("records a single-character custom negation as `false`", () => {
+      // Runtime accepts a 1-char `negation: "n"` as `--n`, but the
+      // explicit-match helper used to early-return on a 1-char input
+      // before reaching the negation comparison, so `parsedArgs.cache`
+      // stayed undefined.
+      const cmd = defineCommand({
+        name: "negshort",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: "n" }),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const ctx = parseCompletionContext(["--n", "--field", ""], cmd);
+      expect(ctx.parsedArgs.cache).toBe(false);
+    });
+
     it("does not record an implicit negation when a custom-string negation is set", () => {
       const cmd = defineCommand({
         name: "negcustom",
