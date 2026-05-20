@@ -1176,9 +1176,11 @@ describe("expand completion", () => {
         programName: "mycli",
         globalArgsSchema: globals,
       });
-      // Global's value-completion case keeps its full token set
-      // (`--env`, `-e`, plus the 1-char alias long form `--e`).
-      expect(script).toMatch(/--env\|-e\|--e\)\n[\s\S]*?_choices=\("prod"\)/);
+      // Global's value-completion case keeps the tokens runtime actually
+      // routes to it. The alias long form `--e` is dropped because the
+      // local cliName `e` owns `--e` at this frame.
+      expect(script).toMatch(/--env\|-e\)\n[\s\S]*?_choices=\("prod"\)/);
+      expect(script).not.toMatch(/--env\|-e\|--e\)/);
       // Local's value-completion case is `--e)` only — the bare 1-char
       // cliName does NOT claim `-e` because a global owns it.
       expect(script).toMatch(/^\s+--e\)\n[\s\S]*?_choices=\("a"\)/m);

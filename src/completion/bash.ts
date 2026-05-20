@@ -27,6 +27,7 @@ import {
 } from "./extractor.js";
 import {
   ansiC,
+  globalNamesIn,
   quotedAvailabilityTokens,
   resolveExpandDepGlobality,
   type ResolvedExpandDep,
@@ -262,7 +263,11 @@ function optionValueCases(
       fieldName: opt.name,
       isArrayOption: opt.valueType === "array",
       isGlobal: opt.isGlobal === true,
-      resolvedDeps: resolveExpandDepGlobality(opt.valueCompletion, opt.isGlobal === true),
+      resolvedDeps: resolveExpandDepGlobality(
+        opt.valueCompletion,
+        opt.isGlobal === true,
+        globalNamesIn(options),
+      ),
     });
     if (valLines.length === 0) continue;
 
@@ -282,6 +287,7 @@ function positionalBlock(
   positionals: CompletablePositional[],
   fn: string,
   funcSuffix: string,
+  options: readonly CompletableOption[] = [],
 ): string[] {
   if (positionals.length === 0) return [];
   const lines: string[] = [];
@@ -300,7 +306,7 @@ function positionalBlock(
       isArrayOption: false,
       isGlobal: false,
       resolvedDeps: pos.valueCompletion
-        ? resolveExpandDepGlobality(pos.valueCompletion, false)
+        ? resolveExpandDepGlobality(pos.valueCompletion, false, globalNamesIn(options))
         : [],
     })) {
       lines.push(`            ${vl}`);
@@ -349,7 +355,10 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
       lines.push(`        _avail+=(--${opt.cliName})`);
       continue;
     }
-    const patterns = quotedAvailabilityTokens(opt.cliName, opt.alias, opt.negation);
+    const patterns = quotedAvailabilityTokens(opt.cliName, opt.alias, opt.negation, {
+      isGlobal: opt.isGlobal === true,
+      frameOptions: options,
+    });
     const guard = `__${fn}_not_used ${patterns.join(" ")}`;
     const emitNames = opt.negation ? [opt.cliName, opt.negation] : [opt.cliName];
     for (const name of emitNames) {
@@ -394,7 +403,9 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 2. After -- separator
   if (sub.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
-    lines.push(...positionalBlock(sub.positionals, fn, funcSuffix).map((l) => `    ${l}`));
+    lines.push(
+      ...positionalBlock(sub.positionals, fn, funcSuffix, sub.options).map((l) => `    ${l}`),
+    );
     lines.push(`        return`);
     lines.push(`    fi`);
   } else {
@@ -418,7 +429,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
     lines.push(`    COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
     lines.push(`    compopt +o default 2>/dev/null`);
   } else if (sub.positionals.length > 0) {
-    lines.push(...positionalBlock(sub.positionals, fn, funcSuffix));
+    lines.push(...positionalBlock(sub.positionals, fn, funcSuffix, sub.options));
   }
 
   lines.push(`}`);
@@ -641,7 +652,9 @@ export function generateBashCompletion(
   );
   if (root.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
-    lines.push(...positionalBlock(root.positionals, fn, "root").map((l) => `    ${l}`));
+    lines.push(
+      ...positionalBlock(root.positionals, fn, "root", root.options).map((l) => `    ${l}`),
+    );
     lines.push(`        return`);
     lines.push(`    fi`);
   } else {
@@ -661,7 +674,9 @@ export function generateBashCompletion(
     lines.push(`        compopt +o default 2>/dev/null`);
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
-    lines.push(...positionalBlock(root.positionals, fn, "root").map((l) => `    ${l}`));
+    lines.push(
+      ...positionalBlock(root.positionals, fn, "root", root.options).map((l) => `    ${l}`),
+    );
   }
   lines.push(`    fi`);
   lines.push(`}`);

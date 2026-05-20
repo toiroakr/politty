@@ -524,7 +524,20 @@ export function effectiveOptionTokens(
   frameOptions: readonly CompletableOption[],
 ): string[] {
   const all = collectOptionTokens(opt.cliName, opt.alias);
-  if (opt.isGlobal === true) return all;
+  if (opt.isGlobal === true) {
+    // Long-form tokens claimed by a local's cliName (`--e` for
+    // \`cliName: "e"\`) or an explicit alias are routed to the local
+    // by \`separateGlobalArgs\`, so the global's value-completion case
+    // must not include them. Short forms are still owned by the
+    // global unless the local explicitly aliases them.
+    const localClaimed = new Set<string>();
+    for (const o of frameOptions) {
+      if (o.isGlobal === true) continue;
+      localClaimed.add(`--${o.cliName}`);
+      for (const a of o.alias ?? []) localClaimed.add(a.length === 1 ? `-${a}` : `--${a}`);
+    }
+    return all.filter((t) => !localClaimed.has(t));
+  }
   const globalShort = new Set<string>();
   for (const o of frameOptions) {
     if (o.isGlobal !== true) continue;

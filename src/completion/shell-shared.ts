@@ -9,7 +9,7 @@
  */
 
 import { toCamelCase } from "../core/schema-extractor.js";
-import type { ValueCompletion } from "./types.js";
+import type { CompletableOption, ValueCompletion } from "./types.js";
 
 /**
  * Resolved sibling dep used by an `expand` value completion. Paired with
@@ -23,18 +23,39 @@ export interface ResolvedExpandDep {
 }
 
 /**
- * Resolve each `dependsOn` entry to its globality at codegen time. The
- * host's globality fully determines the answer — `resolveExpandTargets`
- * resolves global hosts against the global options list (no positionals)
- * and local hosts against their own siblings (before global propagation)
- * — so all of a host's deps share its scope.
+ * Resolve each `dependsOn` entry to its globality at codegen time. A
+ * global host's deps all live in the global namespace. A local host
+ * may declare deps against a propagated global (its sibling index
+ * includes globals); those individual deps must read from the global
+ * bucket even when the host itself is local — the tracker only ever
+ * writes the global value into \`_global_arg_values_<name>\`, so a
+ * lookup against the local bucket would see the empty key.
  */
+/**
+ * Build the set of global-option names from a per-frame options list.
+ * Local emission paths read this when deciding whether a specific
+ * \`dependsOn\` entry should look up the \`_global_arg_values_*\` bucket
+ * — propagated globals retain their globality even when consumed by a
+ * local expand host.
+ */
+export function globalNamesIn(options: readonly CompletableOption[]): Set<string> {
+  const names = new Set<string>();
+  for (const o of options) {
+    if (o.isGlobal === true) names.add(o.name);
+  }
+  return names;
+}
+
 export function resolveExpandDepGlobality(
   vc: ValueCompletion,
   hostIsGlobal: boolean,
+  globalOptionNames: ReadonlySet<string> = new Set(),
 ): readonly ResolvedExpandDep[] {
   if (vc.type !== "expand") return [];
-  return vc.dependsOn.map((name) => ({ name, isGlobal: hostIsGlobal }));
+  return vc.dependsOn.map((name) => ({
+    name,
+    isGlobal: hostIsGlobal || globalOptionNames.has(name),
+  }));
 }
 
 /**
@@ -79,6 +100,16 @@ export function quotedAvailabilityTokens(
   cliName: string,
   aliases: readonly string[] | undefined,
   negation: string | undefined,
+  options?: {
+    isGlobal?: boolean;
+    /**
+     * Other options at the same frame. Used to drop short tokens that a
+     * global owns from a LOCAL's availability guard — otherwise consuming
+     * \`-e\` (routed to a global) would hide the local's still-available
+     * \`--e\` suggestion.
+     */
+    frameOptions?: readonly CompletableOption[];
+  },
 ): string[] {
   const tokens = new Set<string>([`--${cliName}`]);
   // Mirror every spelling the runtime aliasMap accepts so the
@@ -98,6 +129,28 @@ export function quotedAvailabilityTokens(
   if (negation) {
     tokens.add(`--${negation}`);
     if (negation.includes("-")) tokens.add(`--${toCamelCase(negation)}`);
+  }
+  // Drop tokens runtime would NOT route to this option. For a LOCAL
+  // option, a short token owned by a global at the same frame is
+  // never consumed locally, so guarding on it would falsely suppress
+  // the local's option-name suggestion after the global was used.
+  if (options?.isGlobal !== true && options?.frameOptions) {
+    const globalShort = new Set<string>();
+    for (const o of options.frameOptions) {
+      if (o.isGlobal !== true) continue;
+      if (o.cliName.length === 1) globalShort.add(`-${o.cliName}`);
+      for (const a of o.alias ?? []) {
+        if (a.length === 1) globalShort.add(`-${a}`);
+      }
+    }
+    if (globalShort.size > 0) {
+      const localExplicitShort = new Set(
+        (aliases ?? []).filter((a) => a.length === 1).map((a) => `-${a}`),
+      );
+      for (const g of globalShort) {
+        if (!localExplicitShort.has(g)) tokens.delete(g);
+      }
+    }
   }
   return [...tokens].map((t) => `"${t}"`);
 }

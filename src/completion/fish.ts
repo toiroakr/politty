@@ -20,6 +20,7 @@ import {
   sanitize,
 } from "./extractor.js";
 import {
+  globalNamesIn,
   quotedAvailabilityTokens,
   resolveExpandDepGlobality,
   type ResolvedExpandDep,
@@ -222,7 +223,11 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
       fieldName: opt.name,
       isArrayOption: opt.valueType === "array",
       isGlobal: opt.isGlobal === true,
-      resolvedDeps: resolveExpandDepGlobality(opt.valueCompletion, opt.isGlobal === true),
+      resolvedDeps: resolveExpandDepGlobality(
+        opt.valueCompletion,
+        opt.isGlobal === true,
+        globalNamesIn(options),
+      ),
     });
     if (valLines.length === 0) continue;
 
@@ -244,7 +249,11 @@ function optionValueCases(options: CompletableOption[], fn: string): string[] {
 }
 
 /** Generate positional completion block for fish */
-function positionalBlock(positionals: CompletablePositional[], fn: string): string[] {
+function positionalBlock(
+  positionals: CompletablePositional[],
+  fn: string,
+  options: readonly CompletableOption[] = [],
+): string[] {
   if (positionals.length === 0) return [];
   const lines: string[] = [];
   for (const pos of positionals) {
@@ -253,7 +262,7 @@ function positionalBlock(positionals: CompletablePositional[], fn: string): stri
       isArrayOption: false,
       isGlobal: false,
       resolvedDeps: pos.valueCompletion
-        ? resolveExpandDepGlobality(pos.valueCompletion, false)
+        ? resolveExpandDepGlobality(pos.valueCompletion, false, globalNamesIn(options))
         : [],
     });
     if (valLines.length === 0) continue;
@@ -281,7 +290,10 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
       lines.push(`        echo "--${opt.cliName}\t${desc}"`);
       continue;
     }
-    const checks = quotedAvailabilityTokens(opt.cliName, opt.alias, opt.negation);
+    const checks = quotedAvailabilityTokens(opt.cliName, opt.alias, opt.negation, {
+      isGlobal: opt.isGlobal === true,
+      frameOptions: options,
+    });
     const guard = `__${fn}_not_used ${checks.join(" ")}`;
     const negDesc = opt.negationDescription ? escapeDesc(opt.negationDescription) : desc;
     const entries: Array<{ name: string; desc: string }> = [{ name: opt.cliName, desc }];
@@ -321,7 +333,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 2. After -- separator
   if (sub.positionals.length > 0) {
     lines.push(`    if test $_after_dd -eq 1`);
-    lines.push(...positionalBlock(sub.positionals, fn).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(sub.positionals, fn, sub.options).map((l) => `    ${l}`));
     lines.push(`        return`);
     lines.push(`    end`);
   } else {
@@ -341,7 +353,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
       lines.push(`    echo "${s.name}\t${desc}"`);
     }
   } else if (sub.positionals.length > 0) {
-    lines.push(...positionalBlock(sub.positionals, fn));
+    lines.push(...positionalBlock(sub.positionals, fn, sub.options));
   }
 
   lines.push(`end`);
@@ -583,7 +595,7 @@ export function generateFishCompletion(
   lines.push(`    if __${fn}_opt_takes_value "" "$_prev"; return; end`);
   if (root.positionals.length > 0) {
     lines.push(`    if test $_after_dd -eq 1`);
-    lines.push(...positionalBlock(root.positionals, fn).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(root.positionals, fn, root.options).map((l) => `    ${l}`));
     lines.push(`        return`);
     lines.push(`    end`);
   } else {
@@ -599,7 +611,7 @@ export function generateFishCompletion(
     }
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
-    lines.push(...positionalBlock(root.positionals, fn));
+    lines.push(...positionalBlock(root.positionals, fn, root.options));
   }
   lines.push(`    end`);
   lines.push(`end`);

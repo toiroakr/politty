@@ -14,7 +14,12 @@
  */
 
 import type { ExpandCompletion, ResolvedExpandCandidate } from "../core/expand-completion-types.js";
-import type { CompletableSubcommand, ExpandTableEntry, ValueCompletion } from "./types.js";
+import type {
+  CompletableOption,
+  CompletableSubcommand,
+  ExpandTableEntry,
+  ValueCompletion,
+} from "./types.js";
 
 /** Information about a single field that needs its expand spec resolved. */
 export interface PendingExpandTarget {
@@ -37,7 +42,7 @@ export interface PendingExpandTarget {
 export function resolveExpandTargets(
   sub: CompletableSubcommand,
   targets: readonly PendingExpandTarget[],
-  globalOptions: readonly { name: string; valueCompletion?: ValueCompletion | undefined }[] = [],
+  globalOptions: readonly CompletableOption[] = [],
 ): void {
   if (targets.length === 0) return;
   const siblingIndex = buildSiblingIndex(sub, globalOptions);
@@ -57,7 +62,7 @@ export function resolveExpandTargets(
  */
 function buildSiblingIndex(
   sub: CompletableSubcommand,
-  globalOptions: readonly { name: string; valueCompletion?: ValueCompletion | undefined }[],
+  globalOptions: readonly CompletableOption[],
 ): Map<string, readonly string[]> {
   const index = new Map<string, readonly string[]>();
   const visit = (
