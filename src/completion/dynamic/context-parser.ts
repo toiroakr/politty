@@ -141,18 +141,36 @@ function findGlobalByTokenCollision(
   return undefined;
 }
 
-/** Merge global options into local, with local shadowing on cliName collision. */
+/**
+ * Reshape a value pulled from local storage so it matches the global's
+ * declared shape before landing in `globalParsedArgs`. Without this,
+ * migrating a local scalar into an array global would expose the
+ * resolver to `parsedArgs.tags === "foo"` instead of `["foo"]` — a
+ * state the runtime parser never produces.
+ */
+function adaptValueForGlobal(value: unknown, global: CompletableOption): unknown {
+  if (global.valueType === "array") {
+    if (Array.isArray(value)) return value;
+    return [value];
+  }
+  if (Array.isArray(value)) return value[0];
+  return value;
+}
+
+/**
+ * Append globals to local, preserving local-shadowing by list ORDER rather
+ * than by exclusion. Keeping a global in the merged list — even when a
+ * local declares the same `cliName` — lets a global's non-colliding tokens
+ * (e.g. a `-e` alias the local does not redeclare) still resolve to the
+ * global. `findOption` walks the list and returns the first match, so a
+ * token the local actually owns still wins.
+ */
 function mergeGlobalOptions(
   local: CompletableOption[],
   globals: CompletableOption[],
 ): CompletableOption[] {
   if (globals.length === 0) return local;
-  const seen = new Set(local.map((o) => o.cliName));
-  const merged = [...local];
-  for (const g of globals) {
-    if (!seen.has(g.cliName)) merged.push(g);
-  }
-  return merged;
+  return [...local, ...globals];
 }
 
 /**
@@ -227,19 +245,28 @@ function isOption(word: string): boolean {
   return word.startsWith("-");
 }
 
+interface ParsedOption {
+  name: string;
+  /** True when the user typed the long form (`--foo`), false for short (`-x`). */
+  isLong: boolean;
+}
+
 /**
- * Parse option name from word (e.g., "--foo=bar" -> "foo", "-v" -> "v")
+ * Parse option name from word, retaining the form the user typed so the
+ * lookup can keep short-form (`-x`) and long-form (`--x`) matches in
+ * separate token spaces — runtime negation, cliName, and multi-char
+ * aliases only ever appear as long form.
  */
-function parseOptionName(word: string): string {
+function parseOption(word: string): ParsedOption {
   if (word.startsWith("--")) {
     const withoutPrefix = word.slice(2);
     const eqIndex = withoutPrefix.indexOf("=");
-    return eqIndex >= 0 ? withoutPrefix.slice(0, eqIndex) : withoutPrefix;
+    return { name: eqIndex >= 0 ? withoutPrefix.slice(0, eqIndex) : withoutPrefix, isLong: true };
   }
   if (word.startsWith("-")) {
-    return word.slice(1, 2); // First char after -
+    return { name: word.slice(1, 2), isLong: false };
   }
-  return word;
+  return { name: word, isLong: true };
 }
 
 /**
@@ -255,34 +282,46 @@ function hasInlineValue(word: string): boolean {
  * opted out via `negation: false` or supplied a custom-string negation
  * (which suppresses the default form). Aliases participate too: a
  * boolean with `alias: "c"` accepts `--no-c` / `--noC` because the
- * runtime resolves the post-`no-` segment through `aliasMap`. The
- * completion parser must mirror that so dynamic resolvers see the
- * correct flag state.
+ * runtime resolves the post-`no-` segment through `aliasMap`. Implicit
+ * negation is LONG-FORM only — `-no-c` is never an accepted negation —
+ * so callers must say so via `isLong` to prevent a short option from
+ * being read as a negation.
  */
-function isImplicitBooleanNegation(opt: CompletableOption, nameOrAlias: string): boolean {
+function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong: boolean): boolean {
+  if (!isLong) return false;
   if (opt.valueType !== "boolean") return false;
   if (opt.defaultNegationAccepted === false) return false;
   const candidates = [opt.cliName, ...(opt.alias ?? [])];
   for (const c of candidates) {
     const hyphenated = `no-${c}`;
-    if (nameOrAlias === hyphenated) return true;
-    if (nameOrAlias === toCamelCase(hyphenated)) return true;
+    if (name === hyphenated) return true;
+    if (name === toCamelCase(hyphenated)) return true;
   }
   return false;
 }
 
-/** Match by cliName, alias, camelCase variants, or an explicit negation name. */
-function matchesExplicit(opt: CompletableOption, nameOrAlias: string): boolean {
-  if (opt.cliName === nameOrAlias) return true;
-  if (opt.alias?.includes(nameOrAlias)) return true;
-  // Custom negation names can be a single character (e.g. `negation: "n"`
-  // is accepted as `--n` at runtime), so the direct-equality check must
-  // run BEFORE the `<= 1` early-return that guards the camelCase paths.
-  if (opt.negation === nameOrAlias) return true;
-  if (nameOrAlias.length <= 1) return false;
-  if (opt.cliName.includes("-") && toCamelCase(opt.cliName) === nameOrAlias) return true;
-  if (opt.alias?.some((a) => a.includes("-") && toCamelCase(a) === nameOrAlias)) return true;
-  if (opt.negation?.includes("-") && toCamelCase(opt.negation) === nameOrAlias) return true;
+/**
+ * Match by cliName, alias, camelCase variants, or an explicit negation
+ * name. `isLong` separates the short (`-x`) and long (`--xxx`) token
+ * spaces: cliNames and explicit negations are only valid as long form,
+ * and aliases match their own length class (a 1-char alias only matches
+ * short form because its token is `-x`).
+ */
+function matchesExplicit(opt: CompletableOption, name: string, isLong: boolean): boolean {
+  if (isLong && opt.cliName === name) return true;
+  if (opt.alias) {
+    for (const a of opt.alias) {
+      const aliasIsShort = a.length === 1;
+      if (aliasIsShort === !isLong && a === name) return true;
+    }
+  }
+  // Custom negation names always belong to the long-form token space —
+  // runtime only matches them via the `--<negation>` route.
+  if (isLong && opt.negation === name) return true;
+  if (name.length <= 1) return false;
+  if (isLong && opt.cliName.includes("-") && toCamelCase(opt.cliName) === name) return true;
+  if (isLong && opt.alias?.some((a) => a.includes("-") && toCamelCase(a) === name)) return true;
+  if (isLong && opt.negation?.includes("-") && toCamelCase(opt.negation) === name) return true;
   return false;
 }
 
@@ -294,11 +333,11 @@ function matchesExplicit(opt: CompletableOption, nameOrAlias: string): boolean {
  */
 function findOption(
   options: CompletableOption[],
-  nameOrAlias: string,
+  parsed: ParsedOption,
 ): CompletableOption | undefined {
-  const explicit = options.find((opt) => matchesExplicit(opt, nameOrAlias));
+  const explicit = options.find((opt) => matchesExplicit(opt, parsed.name, parsed.isLong));
   if (explicit) return explicit;
-  return options.find((opt) => isImplicitBooleanNegation(opt, nameOrAlias));
+  return options.find((opt) => isImplicitBooleanNegation(opt, parsed.name, parsed.isLong));
 }
 
 /**
@@ -320,7 +359,13 @@ export function parseCompletionContext(
   let currentCommand = rootCommand;
   const subcommandPath: string[] = [];
 
-  const globalOptions = globalArgsSchema ? extractOptionsFromSchema(globalArgsSchema) : [];
+  // Tag every global-schema option with `isGlobal: true` so the
+  // value-routing logic in `recordOptionValue` / `recordBooleanFlag` can
+  // tell a global match apart from a same-shaped local match purely
+  // through the option object, without re-scanning the global schema.
+  const globalOptions: CompletableOption[] = globalArgsSchema
+    ? extractOptionsFromSchema(globalArgsSchema).map((o) => ({ ...o, isGlobal: true }))
+    : [];
 
   // Track used options and positional count
   const usedOptions = new Set<string>();
@@ -335,31 +380,6 @@ export function parseCompletionContext(
   let parsedArgs: Record<string, unknown> = {};
   let positionalValues: string[] = [];
   const globalParsedArgs: Record<string, unknown> = {};
-
-  // Names of every option declared by the global schema, plus a per-frame
-  // view filtered to those NOT shadowed by a local of the same cliName.
-  // The unfiltered set is consulted on subcommand descent to migrate any
-  // shadowed-global value from local `parsedArgs` into `globalParsedArgs`
-  // — runtime's `scanForSubcommand` extracts these flags as globals when
-  // they precede a subcommand (it only knows the global schema), so the
-  // value must survive descent the same way. The filtered set is used at
-  // write-time so that within a frame the unshadowed globals still go
-  // straight to `globalParsedArgs` and shadowed ones land locally (where
-  // runtime's leaf `separateGlobalArgs` lets the local win when no
-  // further descent occurs).
-  const globalOptionNames = new Set(globalOptions.map((g) => g.name));
-  let unshadowedGlobalNames = new Set<string>();
-  const refreshUnshadowedGlobalNames = (cmd: AnyCommand): void => {
-    if (globalOptions.length === 0) {
-      unshadowedGlobalNames = new Set();
-      return;
-    }
-    const localCliNames = new Set(extractOptions(cmd).map((o) => o.cliName));
-    unshadowedGlobalNames = new Set(
-      globalOptions.filter((g) => !localCliNames.has(g.cliName)).map((g) => g.name),
-    );
-  };
-  refreshUnshadowedGlobalNames(currentCommand);
 
   // Names of array options written in the current command frame. Used to
   // mirror the runtime's per-frame array semantics: the first `--arr v`
@@ -381,7 +401,7 @@ export function parseCompletionContext(
   };
 
   const recordOptionValue = (opt: CompletableOption, value: string): void => {
-    const target = unshadowedGlobalNames.has(opt.name) ? globalParsedArgs : parsedArgs;
+    const target = opt.isGlobal === true ? globalParsedArgs : parsedArgs;
     if (opt.valueType === "array") {
       if (arraysSetInCurrentFrame.has(opt.name)) {
         const existing = target[opt.name];
@@ -402,13 +422,15 @@ export function parseCompletionContext(
    * based on flag state, so the absence of a writer here used to hide
    * boolean siblings entirely.
    */
-  const recordBooleanFlag = (opt: CompletableOption, nameOrAlias: string): void => {
-    const target = unshadowedGlobalNames.has(opt.name) ? globalParsedArgs : parsedArgs;
+  const recordBooleanFlag = (opt: CompletableOption, parsed: ParsedOption): void => {
+    const target = opt.isGlobal === true ? globalParsedArgs : parsedArgs;
     const matchesExplicitNegation =
       opt.negation !== undefined &&
-      (opt.negation === nameOrAlias ||
-        (opt.negation.includes("-") && toCamelCase(opt.negation) === nameOrAlias));
-    const isNegation = matchesExplicitNegation || isImplicitBooleanNegation(opt, nameOrAlias);
+      parsed.isLong &&
+      (opt.negation === parsed.name ||
+        (opt.negation.includes("-") && toCamelCase(opt.negation) === parsed.name));
+    const isNegation =
+      matchesExplicitNegation || isImplicitBooleanNegation(opt, parsed.name, parsed.isLong);
     target[opt.name] = !isNegation;
   };
 
@@ -443,7 +465,7 @@ export function parseCompletionContext(
     ) {
       const chars: string[] = Array.from(word.slice(1));
       const resolved: Array<CompletableOption | undefined> = chars.map((c) =>
-        findOption(options, c),
+        findOption(options, { name: c, isLong: false }),
       );
       const allBoolean = resolved.every((o) => o !== undefined && !o.takesValue);
       if (allBoolean) {
@@ -451,7 +473,7 @@ export function parseCompletionContext(
           const o = resolved[idx];
           if (!o) continue;
           markUsed(o);
-          recordBooleanFlag(o, chars[idx]!);
+          recordBooleanFlag(o, { name: chars[idx]!, isLong: false });
         }
         i++;
         continue;
@@ -460,8 +482,8 @@ export function parseCompletionContext(
 
     // Skip options and their values (before "--")
     if (!afterDoubleDash && isOption(word)) {
-      const optName = parseOptionName(word);
-      const opt = findOption(options, optName);
+      const parsed = parseOption(word);
+      const opt = findOption(options, parsed);
 
       if (opt) {
         markUsed(opt);
@@ -483,7 +505,7 @@ export function parseCompletionContext(
             }
           }
         } else {
-          recordBooleanFlag(opt, optName);
+          recordBooleanFlag(opt, parsed);
         }
       }
       i++;
@@ -515,18 +537,17 @@ export function parseCompletionContext(
       //    the runtime would have surfaced the value as
       //    `globalArgs[globalOpt.name]`. Migrate to the global's name.
       for (const key of Object.keys(parsedArgs)) {
-        if (globalOptionNames.has(key)) {
-          globalParsedArgs[key] = parsedArgs[key];
-          continue;
-        }
         const localOpt = parentLocalOptions.find((o) => o.name === key);
-        if (!localOpt) continue;
-        const colliding = findGlobalByTokenCollision(globalOptions, localOpt);
-        if (colliding) {
-          globalParsedArgs[colliding.name] = parsedArgs[key];
-        }
+        const sameNameGlobal = globalOptions.find((g) => g.name === key);
+        const tokenCollidingGlobal =
+          sameNameGlobal ??
+          (localOpt ? findGlobalByTokenCollision(globalOptions, localOpt) : undefined);
+        if (!tokenCollidingGlobal) continue;
+        globalParsedArgs[tokenCollidingGlobal.name] = adaptValueForGlobal(
+          parsedArgs[key],
+          tokenCollidingGlobal,
+        );
       }
-      refreshUnshadowedGlobalNames(currentCommand);
       usedOptions.clear(); // Reset for new subcommand
       positionalCount = 0;
       parsedArgs = {};
@@ -576,8 +597,7 @@ export function parseCompletionContext(
 
   // Case 1: Previous word is an option that takes a value
   if (!afterDoubleDash && previousWord && isOption(previousWord) && !hasInlineValue(previousWord)) {
-    const optName = parseOptionName(previousWord);
-    const opt = findOption(options, optName);
+    const opt = findOption(options, parseOption(previousWord));
     if (opt && opt.takesValue) {
       completionType = "option-value";
       targetOption = opt;
@@ -598,8 +618,7 @@ export function parseCompletionContext(
   }
   // Case 2: Current word is an option with inline value (--foo=)
   else if (!afterDoubleDash && currentWord.startsWith("--") && hasInlineValue(currentWord)) {
-    const optName = parseOptionName(currentWord);
-    const opt = findOption(options, optName);
+    const opt = findOption(options, parseOption(currentWord));
     if (opt && opt.takesValue) {
       completionType = "option-value";
       targetOption = opt;
@@ -630,7 +649,7 @@ export function parseCompletionContext(
   let previousValues: string[] = [];
   if (targetOption) {
     if (targetOption.valueType === "array") {
-      const store = unshadowedGlobalNames.has(targetOption.name) ? globalParsedArgs : parsedArgs;
+      const store = targetOption.isGlobal === true ? globalParsedArgs : parsedArgs;
       const stored = store[targetOption.name];
       previousValues = Array.isArray(stored) ? (stored as string[]) : [];
     }

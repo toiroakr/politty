@@ -225,6 +225,23 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.cache).toBeUndefined();
     });
 
+    it("does not flip a boolean for a short-form `-n` against a long-only custom negation `n`", () => {
+      // Runtime only accepts custom negation names in long form (`--n`),
+      // never via the short token `-n`. The form-aware matching keeps
+      // those token spaces separate so a stray `-n` is not misread as
+      // the explicit negation.
+      const cmd = defineCommand({
+        name: "negshortform",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: "n" }),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const ctx = parseCompletionContext(["-n", "--field", ""], cmd);
+      expect(ctx.parsedArgs.cache).toBeUndefined();
+    });
+
     it("records a single-character custom negation as `false`", () => {
       // Runtime accepts a 1-char `negation: "n"` as `--n`, but the
       // explicit-match helper used to early-return on a 1-char input
@@ -1037,6 +1054,60 @@ describe("Dynamic completion (in-process resolver)", () => {
         globals,
       );
       expect(ctx.parsedArgs.profile).toBe("prod");
+    });
+
+    it("resolves a global's non-colliding alias even when a local owns the cliName", () => {
+      // Local cliName `env` (token `--env`) shadows the global only on
+      // that exact token. The global's `-e` alias is not shadowed, so
+      // `-e prod` must still surface as the global's value — runtime's
+      // `separateGlobalArgs` keeps that token for the global. Previously
+      // `mergeGlobalOptions` filtered the whole global out by cliName.
+      const globals = z.object({
+        env: arg(z.string().optional(), { alias: "e" }),
+      });
+      const cmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          env: arg(z.string().optional()),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const ctx = parseCompletionContext(["-e", "prod", "--field", ""], cmd, globals);
+      expect(ctx.parsedArgs.env).toBe("prod");
+    });
+
+    it("wraps a scalar-typed local value into an array when migrating to an array-typed global", () => {
+      // Token collision between a parent's local scalar (`title`, alias
+      // `-t`) and a global array (`tags`, alias `-t`). The runtime
+      // would treat `-t foo` as a single value appended to the global
+      // array, so on descent the migrated value must arrive as `["foo"]`
+      // rather than the raw scalar `"foo"`.
+      const globalsArr = z.object({
+        tags: arg(z.array(z.string()).default([]), { alias: "t" }),
+      });
+      const child = defineCommand({
+        name: "child",
+        args: z.object({ field: arg(z.string().optional()) }),
+        run: () => {},
+      });
+      const parent = defineCommand({
+        name: "parent",
+        args: z.object({
+          title: arg(z.string().optional(), { alias: "t" }),
+        }),
+        subCommands: { child },
+      });
+      const root = defineCommand({
+        name: "mycli",
+        subCommands: { parent },
+      });
+      const ctx = parseCompletionContext(
+        ["parent", "-t", "foo", "child", "--field", ""],
+        root,
+        globalsArr,
+      );
+      expect(ctx.parsedArgs.tags).toEqual(["foo"]);
     });
   });
 
