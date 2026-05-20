@@ -225,6 +225,46 @@ describe("expand completion", () => {
       expect(script).toContain("local -A _arg_values=()");
     });
 
+    it("keeps a global expand spec reading from the global bucket even when a subcommand shadows the dep name", () => {
+      // Global `field` depends on global `env`. The subcommand defines a
+      // local `env` that shadows the global at that frame. The host's
+      // generated lookup must still read `_global_arg_values[env]`, not
+      // the shadowed local — otherwise candidates supplied before the
+      // subcommand disappear.
+      const globals = z.object({
+        env: arg(z.string(), { completion: { custom: { choices: ["prod", "stg"] } } }),
+        field: arg(z.string().optional(), {
+          completion: {
+            custom: {
+              expand: { dependsOn: ["env"], enumerate: () => [{ value: "x" }] },
+            },
+          },
+        }),
+      });
+      const cliShadow = defineCommand({
+        name: "mycli",
+        subCommands: {
+          sub: defineCommand({
+            name: "sub",
+            args: z.object({
+              env: arg(z.string(), { completion: { custom: { choices: ["a"] } } }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const { script: bash } = generateBashCompletion(cliShadow, {
+        shell: "bash",
+        programName: "mycli",
+        globalArgsSchema: globals,
+      });
+      // The global host's dep lookup must point at the global bucket.
+      expect(bash).toContain(`local _key="\${_global_arg_values[env]:-}"`);
+      // The dep tracker for the global `env` must also write to the
+      // global bucket — both at root and at the `sub:--env` route.
+      expect(bash).toContain(`:--env) _global_arg_values[env]="$3"`);
+    });
+
     it("reads global deps from the global bucket and local deps from the local bucket", () => {
       // When a spec has a global dep, the lookup must read
       // `_global_arg_values[<d>]` only; when it has a local dep, read

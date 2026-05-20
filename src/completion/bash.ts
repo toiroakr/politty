@@ -41,23 +41,18 @@ function bashExpandVar(fn: string, funcSuffix: string, fieldName: string): strin
 
 /**
  * Resolve each `dependsOn` entry to its globality at codegen time so the
- * lookup reads from the correct bucket. Positionals are never global; an
- * option dep is global only if the corresponding option carries
- * `isGlobal === true` (set when the option came from `globalArgsSchema`).
+ * lookup reads from the correct bucket. The host's globality fully
+ * determines the answer: `resolveExpandTargets` runs separately for
+ * global hosts (against the global options list, no positionals) and
+ * local hosts (against the subcommand's own siblings, before global
+ * propagation), so all of a host's deps share its scope.
  */
 function resolveExpandDepGlobality(
   vc: ValueCompletion,
-  options: CompletableOption[],
-  positionals: CompletablePositional[],
+  hostIsGlobal: boolean,
 ): ReadonlyArray<{ name: string; isGlobal: boolean }> {
   if (vc.type !== "expand") return [];
-  return vc.dependsOn.map((dep) => {
-    if (positionals.some((p) => p.name === dep)) {
-      return { name: dep, isGlobal: false };
-    }
-    const opt = options.find((o) => o.name === dep);
-    return { name: dep, isGlobal: opt?.isGlobal === true };
-  });
+  return vc.dependsOn.map((name) => ({ name, isGlobal: hostIsGlobal }));
 }
 
 /**
@@ -270,7 +265,6 @@ function bashFileFilter(checks: string, inline: boolean): string[] {
 /** Collect value-taking option patterns for case matching */
 function optionValueCases(
   options: CompletableOption[],
-  positionals: CompletablePositional[],
   inline: boolean,
   fn: string,
   funcSuffix: string,
@@ -283,7 +277,7 @@ function optionValueCases(
       fieldName: opt.name,
       isArrayOption: opt.valueType === "array",
       isGlobal: opt.isGlobal === true,
-      resolvedDeps: resolveExpandDepGlobality(opt.valueCompletion, options, positionals),
+      resolvedDeps: resolveExpandDepGlobality(opt.valueCompletion, opt.isGlobal === true),
     });
     if (valLines.length === 0) continue;
 
@@ -307,7 +301,6 @@ function optionValueCases(
 /** Generate positional completion block */
 function positionalBlock(
   positionals: CompletablePositional[],
-  options: CompletableOption[],
   fn: string,
   funcSuffix: string,
 ): string[] {
@@ -328,7 +321,7 @@ function positionalBlock(
       isArrayOption: false,
       isGlobal: false,
       resolvedDeps: pos.valueCompletion
-        ? resolveExpandDepGlobality(pos.valueCompletion, options, positionals)
+        ? resolveExpandDepGlobality(pos.valueCompletion, false)
         : [],
     })) {
       lines.push(`            ${vl}`);
@@ -343,14 +336,13 @@ function positionalBlock(
 /** Generate prev/inline value completion blocks for options */
 function valueCompletionBlocks(
   options: CompletableOption[],
-  positionals: CompletablePositional[],
   fn: string,
   funcSuffix: string,
 ): string[] {
   if (!options.some((o) => o.takesValue && o.valueCompletion)) return [];
 
   const lines: string[] = [];
-  const prevCases = optionValueCases(options, positionals, false, fn, funcSuffix);
+  const prevCases = optionValueCases(options, false, fn, funcSuffix);
   if (prevCases.length > 0) {
     lines.push(`    if [[ -z "$_inline_prefix" ]]; then`);
     lines.push(`        case "$_prev" in`);
@@ -358,7 +350,7 @@ function valueCompletionBlocks(
     lines.push(`        esac`);
     lines.push(`    fi`);
   }
-  const inlineCases = optionValueCases(options, positionals, true, fn, funcSuffix);
+  const inlineCases = optionValueCases(options, true, fn, funcSuffix);
   if (inlineCases.length > 0) {
     lines.push(`    if [[ -n "$_inline_prefix" ]]; then`);
     lines.push(`        case "\${_inline_prefix%=}" in`);
@@ -416,7 +408,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`${funcName}() {`);
 
   // 1. Option value completion (prev is value-taking option)
-  lines.push(...valueCompletionBlocks(sub.options, sub.positionals, fn, funcSuffix));
+  lines.push(...valueCompletionBlocks(sub.options, fn, funcSuffix));
 
   // Fallback: value-taking option without explicit completion → default file completion
   const fullPathStr = fullPath.join(":");
@@ -430,9 +422,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 2. After -- separator
   if (sub.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
-    lines.push(
-      ...positionalBlock(sub.positionals, sub.options, fn, funcSuffix).map((l) => `    ${l}`),
-    );
+    lines.push(...positionalBlock(sub.positionals, fn, funcSuffix).map((l) => `    ${l}`));
     lines.push(`        return`);
     lines.push(`    fi`);
   } else {
@@ -456,7 +446,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
     lines.push(`    COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
     lines.push(`    compopt +o default 2>/dev/null`);
   } else if (sub.positionals.length > 0) {
-    lines.push(...positionalBlock(sub.positionals, sub.options, fn, funcSuffix));
+    lines.push(...positionalBlock(sub.positionals, fn, funcSuffix));
   }
 
   lines.push(`}`);
@@ -474,7 +464,7 @@ export function generateBashCompletion(
   const root = data.command;
   const visibleSubs = getVisibleSubs(root.subcommands);
   const expandSpecs = collectExpandSpecs(root);
-  const trackedFields = collectTrackedFields(root, expandSpecs);
+  const trackedFields = collectTrackedFields(root, expandSpecs, data.globalOptions);
 
   const lines: string[] = [];
   lines.push(`# Bash completion for ${programName}`);
@@ -648,7 +638,7 @@ export function generateBashCompletion(
 
   // Root handler
   lines.push(`__${fn}_complete_root() {`);
-  lines.push(...valueCompletionBlocks(root.options, root.positionals, fn, "root"));
+  lines.push(...valueCompletionBlocks(root.options, fn, "root"));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(
     `    if [[ -z "$_inline_prefix" ]] && __${fn}_opt_takes_value "" "$_prev"; then return; fi`,
@@ -658,9 +648,7 @@ export function generateBashCompletion(
   );
   if (root.positionals.length > 0) {
     lines.push(`    if (( _after_dd )); then`);
-    lines.push(
-      ...positionalBlock(root.positionals, root.options, fn, "root").map((l) => `    ${l}`),
-    );
+    lines.push(...positionalBlock(root.positionals, fn, "root").map((l) => `    ${l}`));
     lines.push(`        return`);
     lines.push(`    fi`);
   } else {
@@ -680,9 +668,7 @@ export function generateBashCompletion(
     lines.push(`        compopt +o default 2>/dev/null`);
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
-    lines.push(
-      ...positionalBlock(root.positionals, root.options, fn, "root").map((l) => `    ${l}`),
-    );
+    lines.push(...positionalBlock(root.positionals, fn, "root").map((l) => `    ${l}`));
   }
   lines.push(`    fi`);
   lines.push(`}`);

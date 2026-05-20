@@ -504,6 +504,7 @@ export interface TrackedFieldRef {
 export function collectTrackedFields(
   root: CompletableSubcommand,
   specs: readonly ExpandSpecLocation[],
+  globalOptions: readonly CompletableOption[] = [],
 ): TrackedFieldRef[] {
   const out: TrackedFieldRef[] = [];
   const seen = new Set<string>();
@@ -515,6 +516,34 @@ export function collectTrackedFields(
       const dedupKey = `${spec.pathStr}::${dep}`;
       if (seen.has(dedupKey)) continue;
       seen.add(dedupKey);
+      // Global expand specs are resolved against the global siblings list
+      // alone (see `resolveExpandTargets` in `extractCompletionData`), so
+      // their dep tracker must reference the global option metadata even
+      // when a subcommand later defines a local field with the same
+      // name. Looking the dep up on `node.options` would silently rebind
+      // the tracker to the local shadow.
+      if (spec.isGlobal) {
+        const globalOpt = globalOptions.find((o) => o.name === dep);
+        if (globalOpt) {
+          const longAliases: string[] = [];
+          const shortAliases: string[] = [];
+          for (const a of globalOpt.alias ?? []) {
+            if (a.length === 1) shortAliases.push(a);
+            else longAliases.push(a);
+          }
+          out.push({
+            fieldName: dep,
+            isGlobal: true,
+            pathStr: spec.pathStr,
+            pathStrs: spec.pathStrs,
+            isPositional: false,
+            cliName: globalOpt.cliName,
+            longAliases,
+            shortAliases,
+          });
+        }
+        continue;
+      }
       const posIndex = node.positionals.findIndex((p) => p.name === dep);
       if (posIndex >= 0) {
         out.push({

@@ -77,23 +77,16 @@ interface FishExpandLocation {
 
 /**
  * Resolve each `dependsOn` entry to its globality at codegen time so the
- * lookup reads from the correct bucket. Positionals are never global; an
- * option dep is global only if the corresponding option carries
- * `isGlobal === true`.
+ * lookup reads from the correct bucket. The host's globality fully
+ * determines the answer — global hosts depend on globals only, local
+ * hosts on their own siblings only.
  */
 function resolveExpandDepGlobality(
   vc: ValueCompletion,
-  options: CompletableOption[],
-  positionals: CompletablePositional[],
+  hostIsGlobal: boolean,
 ): ReadonlyArray<{ name: string; isGlobal: boolean }> {
   if (vc.type !== "expand") return [];
-  return vc.dependsOn.map((dep) => {
-    if (positionals.some((p) => p.name === dep)) {
-      return { name: dep, isGlobal: false };
-    }
-    const opt = options.find((o) => o.name === dep);
-    return { name: dep, isGlobal: opt?.isGlobal === true };
-  });
+  return vc.dependsOn.map((name) => ({ name, isGlobal: hostIsGlobal }));
 }
 
 /**
@@ -222,11 +215,7 @@ function fishExtensionLines(extensions: string[]): string[] {
 }
 
 /** Generate option-value switch cases for fish */
-function optionValueCases(
-  options: CompletableOption[],
-  positionals: CompletablePositional[],
-  fn: string,
-): string[] {
+function optionValueCases(options: CompletableOption[], fn: string): string[] {
   const lines: string[] = [];
   for (const opt of options) {
     if (!opt.takesValue || !opt.valueCompletion) continue;
@@ -234,7 +223,7 @@ function optionValueCases(
       fieldName: opt.name,
       isArrayOption: opt.valueType === "array",
       isGlobal: opt.isGlobal === true,
-      resolvedDeps: resolveExpandDepGlobality(opt.valueCompletion, options, positionals),
+      resolvedDeps: resolveExpandDepGlobality(opt.valueCompletion, opt.isGlobal === true),
     });
     if (valLines.length === 0) continue;
 
@@ -257,11 +246,7 @@ function optionValueCases(
 }
 
 /** Generate positional completion block for fish */
-function positionalBlock(
-  positionals: CompletablePositional[],
-  options: CompletableOption[],
-  fn: string,
-): string[] {
+function positionalBlock(positionals: CompletablePositional[], fn: string): string[] {
   if (positionals.length === 0) return [];
   const lines: string[] = [];
   for (const pos of positionals) {
@@ -270,7 +255,7 @@ function positionalBlock(
       isArrayOption: false,
       isGlobal: false,
       resolvedDeps: pos.valueCompletion
-        ? resolveExpandDepGlobality(pos.valueCompletion, options, positionals)
+        ? resolveExpandDepGlobality(pos.valueCompletion, false)
         : [],
     });
     if (valLines.length === 0) continue;
@@ -322,13 +307,9 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
 }
 
 /** Generate value-option completion block if any value-taking options exist */
-function valueCompletionBlock(
-  options: CompletableOption[],
-  positionals: CompletablePositional[],
-  fn: string,
-): string[] {
+function valueCompletionBlock(options: CompletableOption[], fn: string): string[] {
   if (!options.some((o) => o.takesValue && o.valueCompletion)) return [];
-  return optionValueCases(options, positionals, fn);
+  return optionValueCases(options, fn);
 }
 
 /**
@@ -350,7 +331,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   lines.push(`function ${funcName} --no-scope-shadowing`);
 
   // 1. Option value completion
-  lines.push(...valueCompletionBlock(sub.options, sub.positionals, fn));
+  lines.push(...valueCompletionBlock(sub.options, fn));
   // Fallback: value-taking option without explicit completion → default file completion
   const fullPathStr = fullPath.join(":");
   lines.push(`    if __${fn}_opt_takes_value "${fullPathStr}" "$_prev"; return; end`);
@@ -358,7 +339,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 2. After -- separator
   if (sub.positionals.length > 0) {
     lines.push(`    if test $_after_dd -eq 1`);
-    lines.push(...positionalBlock(sub.positionals, sub.options, fn).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(sub.positionals, fn).map((l) => `    ${l}`));
     lines.push(`        return`);
     lines.push(`    end`);
   } else {
@@ -378,7 +359,7 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
       lines.push(`    echo "${s.name}\t${desc}"`);
     }
   } else if (sub.positionals.length > 0) {
-    lines.push(...positionalBlock(sub.positionals, sub.options, fn));
+    lines.push(...positionalBlock(sub.positionals, fn));
   }
 
   lines.push(`end`);
@@ -425,7 +406,7 @@ export function generateFishCompletion(
   const root = data.command;
   const visibleSubs = getVisibleSubs(root.subcommands);
   const expandSpecs = collectExpandSpecs(root);
-  const trackedFields = collectTrackedFields(root, expandSpecs);
+  const trackedFields = collectTrackedFields(root, expandSpecs, data.globalOptions);
   const hasExpand = expandSpecs.length > 0;
   const arrayExpandSpecs = expandSpecs.filter((s) => s.isArrayOption);
   const hasArrayExpand = arrayExpandSpecs.length > 0;
@@ -605,12 +586,12 @@ export function generateFishCompletion(
   // separate-word value completion (--opt <value>) is handled. Bash supports
   // inline via _inline_prefix parsing.
   lines.push(`function __${fn}_complete_root --no-scope-shadowing`);
-  lines.push(...valueCompletionBlock(root.options, root.positionals, fn));
+  lines.push(...valueCompletionBlock(root.options, fn));
   // Fallback: value-taking option without explicit completion → default file completion
   lines.push(`    if __${fn}_opt_takes_value "" "$_prev"; return; end`);
   if (root.positionals.length > 0) {
     lines.push(`    if test $_after_dd -eq 1`);
-    lines.push(...positionalBlock(root.positionals, root.options, fn).map((l) => `    ${l}`));
+    lines.push(...positionalBlock(root.positionals, fn).map((l) => `    ${l}`));
     lines.push(`        return`);
     lines.push(`    end`);
   } else {
@@ -626,7 +607,7 @@ export function generateFishCompletion(
     }
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
-    lines.push(...positionalBlock(root.positionals, root.options, fn));
+    lines.push(...positionalBlock(root.positionals, fn));
   }
   lines.push(`    end`);
   lines.push(`end`);
