@@ -173,52 +173,35 @@ function bashValueLines(
     case "file": {
       if (vc.matcher?.length) {
         const checks = vc.matcher.map((p) => `[[ "\${_f##*/}" == ${p} ]]`).join(" || ");
-        return bashFileFilter(checks, inline);
+        return bashFileFilter(checks);
       }
       if (vc.extensions?.length) {
         const checks = vc.extensions.map((ext) => `[[ "$_f" == *".${ext}" ]]`).join(" || ");
-        return bashFileFilter(checks, inline);
+        return bashFileFilter(checks);
       }
-      if (inline) {
-        return [
-          `local -a _entries=($(compgen -f -- "$_cur"))`,
-          `COMPREPLY=("\${_entries[@]/#/$_inline_prefix}")`,
-          `compopt -o filenames`,
-        ];
-      }
-      return [`COMPREPLY=($(compgen -f -- "$_cur"))`, `compopt -o filenames`];
+      // `compgen -P` prepends the inline prefix when set; an empty prefix
+      // is a no-op, so the same emission works for both modes.
+      return [`COMPREPLY=($(compgen -P "$_inline_prefix" -f -- "$_cur"))`, `compopt -o filenames`];
     }
-    case "directory": {
-      if (inline) {
-        return [
-          `local -a _dirs=($(compgen -d -- "$_cur"))`,
-          `COMPREPLY=("\${_dirs[@]/#/$_inline_prefix}")`,
-          `compopt -o filenames`,
-        ];
-      }
-      return [`COMPREPLY=($(compgen -d -- "$_cur"))`, `compopt -o filenames`];
-    }
-    case "command": {
-      const cmd = vc.shellCommand!;
-      if (inline) {
-        return [`COMPREPLY=($(compgen -P "$_inline_prefix" -W "$(${cmd})" -- "$_cur"))`];
-      }
-      return [`COMPREPLY=($(compgen -W "$(${cmd})" -- "$_cur"))`];
-    }
+    case "directory":
+      return [`COMPREPLY=($(compgen -P "$_inline_prefix" -d -- "$_cur"))`, `compopt -o filenames`];
+    case "command":
+      return [`COMPREPLY=($(compgen -P "$_inline_prefix" -W "$(${vc.shellCommand!})" -- "$_cur"))`];
     case "none":
       return [`compopt +o default 2>/dev/null`];
   }
 }
 
-function bashFileFilter(checks: string, inline: boolean): string[] {
-  const prefix = inline ? `"\${_inline_prefix}$_f"` : `"$_f"`;
+function bashFileFilter(checks: string): string[] {
+  // `$_inline_prefix` is empty in non-inline mode, so the same template
+  // works for both: a set prefix gets prepended, an empty one is a no-op.
   return [
     `local -a _all_entries=($(compgen -f -- "$_cur"))`,
     `for _f in "\${_all_entries[@]}"; do`,
     `    if [[ -d "$_f" ]]; then`,
-    `        COMPREPLY+=(${prefix})`,
+    `        COMPREPLY+=("\${_inline_prefix}$_f")`,
     `    elif ${checks}; then`,
-    `        COMPREPLY+=(${prefix})`,
+    `        COMPREPLY+=("\${_inline_prefix}$_f")`,
     `    fi`,
     `done`,
     `compopt -o filenames`,
