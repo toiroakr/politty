@@ -225,6 +225,39 @@ describe("expand completion", () => {
       expect(script).toContain("local -A _arg_values=()");
     });
 
+    it("keeps global tracker cases reachable through subcommand aliases", () => {
+      const globals = z.object({
+        env: arg(z.string(), { completion: { custom: { choices: ["prod"] } } }),
+        field: arg(z.string().optional(), {
+          completion: {
+            custom: {
+              expand: { dependsOn: ["env"], enumerate: () => [{ value: "x" }] },
+            },
+          },
+        }),
+      });
+      const cliAlias = defineCommand({
+        name: "mycli",
+        subCommands: {
+          deploy: defineCommand({
+            name: "deploy",
+            aliases: ["d"],
+            args: z.object({}),
+            run: () => {},
+          }),
+        },
+      });
+      const { script: bash } = generateBashCompletion(cliAlias, {
+        shell: "bash",
+        programName: "mycli",
+        globalArgsSchema: globals,
+      });
+      // Aliased subcommand path `d:--env` must record into the global
+      // bucket just like the canonical `deploy:--env`.
+      expect(bash).toContain(`d:--env`);
+      expect(bash).toContain(`deploy:--env`);
+    });
+
     it("drops global tracker cases at frames where a local option shadows the global dep", () => {
       // Global `field` depends on global `env`. The subcommand defines a
       // local `env` that takes over `--env` at that frame. The bash

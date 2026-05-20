@@ -595,14 +595,19 @@ export function collectTrackedFields(
 
 function indexNodesByPath(root: CompletableSubcommand): Map<string, CompletableSubcommand> {
   const map = new Map<string, CompletableSubcommand>();
-  const recurse = (node: CompletableSubcommand, pathStr: string): void => {
-    map.set(pathStr, node);
+  // Walk with all alias-expanded path variants so the same node is
+  // reachable by every path the runtime scanner can produce (`d:Get`
+  // alongside `deploy:Get`). Without alias paths in the index, callers
+  // that look a node up by `$_subcmd` would miss the aliased frames.
+  const recurse = (node: CompletableSubcommand, pathStrs: readonly string[]): void => {
+    for (const p of pathStrs) map.set(p, node);
     for (const child of getVisibleSubs(node.subcommands)) {
-      const childPath = pathStr ? `${pathStr}:${child.name}` : child.name;
-      recurse(child, childPath);
+      const childNames = [child.name, ...(child.aliases ?? [])];
+      const childPathStrs = pathStrs.flatMap((p) => childNames.map((n) => (p ? `${p}:${n}` : n)));
+      recurse(child, childPathStrs);
     }
   };
-  recurse(root, "");
+  recurse(root, [""]);
   return map;
 }
 
