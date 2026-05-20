@@ -56,21 +56,32 @@ function bashExpandVar(fn: string, funcSuffix: string, fieldName: string): strin
 }
 
 /**
- * Hex-encode any character outside `[A-Za-z0-9]` as `_HH` so the
- * resulting string is safe as a suffix of a bash identifier. `_` is also
+ * Hex-encode the UTF-8 byte representation of `s` so the resulting
+ * string is safe as a suffix of a bash identifier. Each non-alnum byte
+ * becomes `_HH` (exactly 2 hex digits, always upper-case). `_` is also
  * encoded (as `_5F`) to keep the join separator between encoded dep
  * values unambiguous — without that, `(v1="-", v2="")` and
- * `(v1="_2D", v2="")` would both render `_2D_`. Mirrors the runtime
- * `__<fn>_enc` helper emitted alongside expand tables.
+ * `(v1="_2D", v2="")` would both render `_2D_`.
+ *
+ * Per-byte fixed-width encoding avoids the variable-length codepoint
+ * collision where `-A` (codepoint 0x2D + literal `A`) and `˚` (codepoint
+ * 0x02DA) would both produce `_2DA` under the previous scheme. Mirrors
+ * the runtime `__<fn>_enc` helper emitted alongside expand tables; the
+ * helper forces `LC_ALL=C` so its `${var:i:1}` iterates over the same
+ * UTF-8 bytes this encoder emits.
  */
 function bashEncodeKey(s: string): string {
   let out = "";
-  for (const ch of s) {
-    if (/[A-Za-z0-9]/.test(ch)) {
-      out += ch;
+  const bytes = new TextEncoder().encode(s);
+  for (const byte of bytes) {
+    if (
+      (byte >= 0x30 && byte <= 0x39) ||
+      (byte >= 0x41 && byte <= 0x5a) ||
+      (byte >= 0x61 && byte <= 0x7a)
+    ) {
+      out += String.fromCharCode(byte);
     } else {
-      const code = ch.codePointAt(0)!;
-      out += `_${code.toString(16).toUpperCase().padStart(2, "0")}`;
+      out += `_${byte.toString(16).toUpperCase().padStart(2, "0")}`;
     }
   }
   return out;
@@ -493,6 +504,12 @@ export function generateBashCompletion(
   // indirect expansion `${!_varname:-}`.
   if (hasExpand) {
     lines.push(`__${fn}_enc() {`);
+    // Force C locale so `${_s:_i:1}` extracts ONE BYTE per iteration and
+    // `'$_c` resolves to that byte. Without this, a multi-byte UTF-8 dep
+    // value is iterated as one char and `'$_c` is implementation-defined
+    // — the runtime suffix then disagrees with `bashEncodeKey`'s
+    // byte-wise encoding and the lookup misses.
+    lines.push(`    local LC_ALL=C`);
     lines.push(`    local _s=$1 _r='' _c _i`);
     lines.push(`    for (( _i=0; _i<\${#_s}; _i++ )); do`);
     lines.push(`        _c=\${_s:_i:1}`);

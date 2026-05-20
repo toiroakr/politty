@@ -2,7 +2,7 @@
  * Parse completion context from partial command line
  */
 
-import { extractFields, toCamelCase } from "../../core/schema-extractor.js";
+import { extractFields, getAllAliases, toCamelCase } from "../../core/schema-extractor.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../../types.js";
@@ -91,22 +91,30 @@ function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
   const extracted = extractFields(schema);
   return extracted.fields
     .filter((field) => !field.positional)
-    .map((field) => ({
-      name: field.name,
-      cliName: field.cliName,
-      alias: field.alias,
-      negation: field.negationDisplay,
-      negationDescription: field.negationDescription,
-      description: field.description,
-      takesValue: field.type !== "boolean",
-      valueType: field.type,
-      required: field.required,
-      // Mirror runtime: default `--no-<cliName>` is accepted unless the
-      // user opted out via `negation: false` or a custom-string negation.
-      defaultNegationAccepted:
-        field.type === "boolean" && (field.negation === undefined || field.negation === true),
-      valueCompletion: stripPendingExpand(resolveValueCompletion(field)),
-    }));
+    .map((field) => {
+      // Merge hiddenAlias into the matcher-visible alias list. The runtime
+      // parser accepts hidden aliases via `getAllAliases`, so the dynamic
+      // completion parser must too — otherwise typing an accepted hidden
+      // alias (`--legacy value`) leaves the sibling value unparsed and
+      // unrecognised as the target being completed.
+      const aliases = getAllAliases(field);
+      return {
+        name: field.name,
+        cliName: field.cliName,
+        alias: aliases.length > 0 ? aliases : undefined,
+        negation: field.negationDisplay,
+        negationDescription: field.negationDescription,
+        description: field.description,
+        takesValue: field.type !== "boolean",
+        valueType: field.type,
+        required: field.required,
+        // Mirror runtime: default `--no-<cliName>` is accepted unless the
+        // user opted out via `negation: false` or a custom-string negation.
+        defaultNegationAccepted:
+          field.type === "boolean" && (field.negation === undefined || field.negation === true),
+        valueCompletion: stripPendingExpand(resolveValueCompletion(field)),
+      };
+    });
 }
 
 /**

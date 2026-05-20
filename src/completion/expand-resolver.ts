@@ -65,19 +65,29 @@ function buildSiblingIndex(
   globalOptions: readonly CompletableOption[],
 ): Map<string, readonly string[]> {
   const index = new Map<string, readonly string[]>();
+  // Names a local field claims — even when the local has no static
+  // choices. Without this, a local arg shadowing a same-named global
+  // arg would silently bind the dep to the global's choices while the
+  // generated tracker still reads from the local value bucket. Reserving
+  // the name here forces `resolveOne` to throw, surfacing the schema
+  // mismatch instead of producing wrong candidates.
+  const claimedByLocal = new Set<string>();
+  for (const field of [...sub.options, ...sub.positionals]) claimedByLocal.add(field.name);
   const visit = (
     fields: readonly { name: string; valueCompletion?: ValueCompletion | undefined }[],
+    fromGlobal: boolean,
   ): void => {
     for (const field of fields) {
       if (index.has(field.name)) continue;
+      if (fromGlobal && claimedByLocal.has(field.name)) continue;
       const vc = field.valueCompletion;
       if (vc?.type === "choices" && vc.choices && vc.choices.length > 0) {
         index.set(field.name, vc.choices);
       }
     }
   };
-  visit([...sub.options, ...sub.positionals]);
-  visit(globalOptions);
+  visit([...sub.options, ...sub.positionals], false);
+  visit(globalOptions, true);
   return index;
 }
 
