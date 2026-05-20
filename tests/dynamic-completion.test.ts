@@ -992,6 +992,52 @@ describe("Dynamic completion (in-process resolver)", () => {
       );
       expect(ctx.parsedArgs.profile).toBe("prod");
     });
+
+    it("migrates a token-colliding local value (different field name) into globals on descent", () => {
+      // The parent declares a local option `localProfile` whose alias
+      // `p` happens to share its CLI token (`-p`) with the global
+      // `profile`'s alias. The completion parser's `findOption` resolves
+      // `-p` to the local first, so the value lands in
+      // `parsedArgs.localProfile`. Runtime's `scanForSubcommand` would
+      // have routed `-p prod` to `globalArgs.profile` (it only knows the
+      // global schema and harvests the matching token), so on descent
+      // the value must migrate to `globalParsedArgs.profile`.
+      const globals = z.object({
+        profile: arg(z.string(), { alias: "p" }),
+      });
+      const child = defineCommand({
+        name: "child",
+        args: z.object({
+          field: arg(z.string(), {
+            completion: {
+              custom: {
+                resolve: ({ parsedArgs }) => ({
+                  candidates: parsedArgs.profile === "prod" ? ["live"] : ["dev"],
+                }),
+              },
+            },
+          }),
+        }),
+        run: () => {},
+      });
+      const parentWithAliasCollision = defineCommand({
+        name: "parent",
+        args: z.object({
+          localProfile: arg(z.string().optional(), { alias: "p" }),
+        }),
+        subCommands: { child },
+      });
+      const root = defineCommand({
+        name: "mycli",
+        subCommands: { parent: parentWithAliasCollision },
+      });
+      const ctx = parseCompletionContext(
+        ["parent", "-p", "prod", "child", "--field", ""],
+        root,
+        globals,
+      );
+      expect(ctx.parsedArgs.profile).toBe("prod");
+    });
   });
 
   describe("Candidate values starting with `:` survive the directive filter", () => {

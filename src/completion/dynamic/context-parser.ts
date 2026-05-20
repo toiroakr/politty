@@ -108,6 +108,39 @@ function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
     }));
 }
 
+/**
+ * Build the CLI tokens an option is recognised by (`--cliName`,
+ * `--long-alias`, `-x`). Mirrors `aliasToken` semantics from
+ * `shell-shared`: single-char aliases get a single dash, longer aliases
+ * get `--`. Kept local to avoid a cross-module import cycle.
+ */
+function optionTokenSet(opt: CompletableOption): Set<string> {
+  const tokens = new Set<string>([`--${opt.cliName}`]);
+  for (const a of opt.alias ?? []) {
+    tokens.add(a.length === 1 ? `-${a}` : `--${a}`);
+  }
+  return tokens;
+}
+
+/**
+ * Find a global option whose CLI tokens overlap with `local`'s tokens.
+ * Used at subcommand descent to migrate values the runtime's
+ * `scanForSubcommand` would have routed to a global field even though
+ * the completion parser stored them under a different-named local.
+ */
+function findGlobalByTokenCollision(
+  globals: readonly CompletableOption[],
+  local: CompletableOption,
+): CompletableOption | undefined {
+  const localTokens = optionTokenSet(local);
+  for (const g of globals) {
+    for (const t of optionTokenSet(g)) {
+      if (localTokens.has(t)) return g;
+    }
+  }
+  return undefined;
+}
+
 /** Merge global options into local, with local shadowing on cliName collision. */
 function mergeGlobalOptions(
   local: CompletableOption[],
@@ -461,19 +494,36 @@ export function parseCompletionContext(
     const subcommand = afterDoubleDash ? null : resolveSubcommand(currentCommand, word);
     if (subcommand) {
       subcommandPath.push(word);
+      // Capture the parent's local options BEFORE switching frames so
+      // the migration loop below can resolve token collisions against
+      // them; once `currentCommand` flips to the child we lose access
+      // to the parent's schema.
+      const parentLocalOptions = extractOptions(currentCommand);
       currentCommand = subcommand;
       options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
-      // Migrate any shadowed-global value the parent frame recorded
-      // locally into `globalParsedArgs`. Runtime's `scanForSubcommand`
-      // captured the same flag as a global token when it preceded this
-      // descent (the scan only knows the global schema), so the value
-      // must persist into the child the same way. The reverse direction
-      // — moving an already-global value back to local — never applies
-      // because the shadow check at write-time only put unshadowed
-      // globals into `globalParsedArgs`.
+      // Migrate values the parent frame recorded locally that the
+      // runtime would have routed to a global instead. Runtime's
+      // `scanForSubcommand` only knows the global schema and harvests
+      // any flag matching a global token as global when it precedes a
+      // descent, so two shapes of collision both need to migrate:
+      //  - Same-name shadow: parent declares a local with the SAME
+      //    field name as a global → write-time used the (unshadowed)
+      //    local store; we migrate by field name here.
+      //  - Token collision: parent's local shares a CLI token (alias,
+      //    camelCase variant) with a global option of a DIFFERENT
+      //    name → write-time still stored under the local's name, but
+      //    the runtime would have surfaced the value as
+      //    `globalArgs[globalOpt.name]`. Migrate to the global's name.
       for (const key of Object.keys(parsedArgs)) {
         if (globalOptionNames.has(key)) {
           globalParsedArgs[key] = parsedArgs[key];
+          continue;
+        }
+        const localOpt = parentLocalOptions.find((o) => o.name === key);
+        if (!localOpt) continue;
+        const colliding = findGlobalByTokenCollision(globalOptions, localOpt);
+        if (colliding) {
+          globalParsedArgs[colliding.name] = parsedArgs[key];
         }
       }
       refreshUnshadowedGlobalNames(currentCommand);
