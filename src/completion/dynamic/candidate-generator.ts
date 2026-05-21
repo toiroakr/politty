@@ -84,13 +84,16 @@ export async function generateCandidates(
       return generateSubcommandCandidates(context);
     case "option-name":
       return generateOptionNameCandidates(context);
-    case "option-value":
-      return generateValueCandidates(context, options, context.targetOption?.valueCompletion);
+    case "option-value": {
+      const opt = context.targetOption;
+      return generateValueCandidates(context, options, opt?.name, opt?.valueCompletion);
+    }
     case "positional": {
       const positional = resolvePositionalTarget(context);
       return generateValueCandidates(
         context,
         options,
+        positional?.name,
         positional?.valueCompletion,
         positional?.description,
       );
@@ -398,34 +401,25 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
 function resolverContext(
   context: CompletionContext,
   options: GenerateCandidatesOptions,
+  targetFieldName: string | undefined,
 ): DynamicCompletionContext {
   return {
     currentWord: context.currentWord,
     shell: options.shell,
-    parsedArgs: parsedArgsWithoutTarget(context),
+    parsedArgs: parsedArgsWithoutTarget(context.parsedArgs, targetFieldName),
     previousValues: context.previousValues,
     subcommandPath: context.subcommandPath,
   };
 }
 
-function parsedArgsWithoutTarget(context: CompletionContext): Record<string, unknown> {
-  const key = targetFieldName(context);
-  if (key === undefined || !(key in context.parsedArgs)) {
-    return context.parsedArgs;
-  }
-  const next = { ...context.parsedArgs };
+function parsedArgsWithoutTarget(
+  parsedArgs: Record<string, unknown>,
+  key: string | undefined,
+): Record<string, unknown> {
+  if (key === undefined || !(key in parsedArgs)) return parsedArgs;
+  const next = { ...parsedArgs };
   delete next[key];
   return next;
-}
-
-function targetFieldName(context: CompletionContext): string | undefined {
-  if (context.targetOption) {
-    return context.targetOption.name;
-  }
-  if (context.completionType !== "positional") {
-    return undefined;
-  }
-  return resolvePositionalTarget(context)?.name;
 }
 
 /**
@@ -437,6 +431,7 @@ function targetFieldName(context: CompletionContext): string | undefined {
 async function generateValueCandidates(
   context: CompletionContext,
   options: GenerateCandidatesOptions,
+  targetFieldName: string | undefined,
   vc: ValueCompletion | undefined,
   description?: string,
 ): Promise<CandidateResult> {
@@ -449,7 +444,7 @@ async function generateValueCandidates(
     ...(await resolveValueCandidates(
       vc,
       candidates,
-      resolverContext(context, options),
+      resolverContext(context, options, targetFieldName),
       description,
     )),
   };
