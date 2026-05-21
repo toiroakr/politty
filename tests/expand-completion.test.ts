@@ -948,8 +948,10 @@ describe("expand completion", () => {
       // `:` inside the candidate must be backslash-escaped so `_describe`
       // does not parse the value's own colons as the value/description
       // separator. The unescaped `:` between value and description is the
-      // real separator.
-      expect(zsh).toContain("https\\\\://example.com\\\\:443:https\\\\:endpoint");
+      // real separator; once `_describe` has split on it, colons inside
+      // the description tail are not reparsed and must not pick up extra
+      // escapes (otherwise the rendered description would leak backslashes).
+      expect(zsh).toContain("https\\\\://example.com\\\\:443:https:endpoint");
       expect(zsh).toContain("ns\\\\:value");
     });
 

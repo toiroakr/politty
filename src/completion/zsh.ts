@@ -409,7 +409,14 @@ export function generateZshCompletion(
         const value = entry.candidates
           .map((c) => {
             const escapedValue = escapeDescribeValue(c.value);
-            return c.description ? `${escapedValue}:${escapeDesc(c.description)}` : escapedValue;
+            // The whole `value:description` line is wrapped in `ansiC(...)`,
+            // which handles shell-level escaping. `_describe` consumes only
+            // the first unescaped `:` to split value/description, so the
+            // description tail does not need any additional escaping —
+            // applying the double-quoted-string escaper here would leak
+            // backslashes for `$`, `"`, `` ` ``, and `:` into the rendered
+            // completion UI (e.g. `cost $5` becoming `cost \$5`).
+            return c.description ? `${escapedValue}:${c.description}` : escapedValue;
           })
           .join("\n");
         lines.push(`    ${ansiC(key)} ${ansiC(value)}`);
@@ -489,12 +496,17 @@ export function generateZshCompletion(
   lines.push(``);
 
   // Helper: _describe with compadd fallback
-  // _describe may fail to add matches when prefix starts with - (zsh tag system limitation)
+  // _describe may fail to add matches when prefix starts with - (zsh tag
+  // system limitation). When that happens we still want any trailing
+  // compadd-pass-through options (e.g. `-S ''` for NoSpace) to reach
+  // compadd so two-stage `key=` candidates keep their suffix behaviour.
   lines.push(`__${fn}_cdescribe() {`);
   lines.push(`    _describe "$@" 2>/dev/null && return 0`);
   lines.push(`    shift`);
-  lines.push(`    local -a _cd_vals=("\${(@)\${(P)1}%%:*}")`);
-  lines.push(`    compadd -a _cd_vals 2>/dev/null`);
+  lines.push(`    local _cd_arr="$1"`);
+  lines.push(`    shift`);
+  lines.push(`    local -a _cd_vals=("\${(@)\${(P)_cd_arr}%%:*}")`);
+  lines.push(`    compadd "$@" -a _cd_vals 2>/dev/null`);
   lines.push(`    return 0`);
   lines.push(`}`);
   lines.push(``);
