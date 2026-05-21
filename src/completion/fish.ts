@@ -439,9 +439,9 @@ export function generateFishCompletion(
     lines.push(`function __${fn}_apply_dynamic_output`);
     lines.push(`    set -l _cur $argv[1]`);
     lines.push(`    set -l _directive 0`);
-    // Track emitted candidate count so the `Default` (directive 0)
-    // fallback below knows whether to layer in file completion when the
-    // resolver returned nothing.
+    // Boolean flag (not a counter): the `Default` (directive 0) fallback
+    // below only branches on "any candidate emitted yet?", so a single
+    // 0/1 flip avoids a `math` invocation per resolver candidate.
     lines.push(`    set -l _emitted 0`);
     // Buffer one line so we can detect the trailing `:<digits>` directive
     // sentinel without misinterpreting candidate values that legitimately
@@ -459,7 +459,7 @@ export function generateFishCompletion(
     // match a fish `echo` flag (`-n`, `-e`, `-s`, `-E`) would otherwise
     // be swallowed as an option instead of being emitted as a candidate.
     lines.push(`                printf '%s\\n' "$_prev"`);
-    lines.push(`                set _emitted (math $_emitted + 1)`);
+    lines.push(`                set _emitted 1`);
     lines.push(`            end`);
     lines.push(`        end`);
     lines.push(`        set _prev $_l`);
@@ -471,7 +471,7 @@ export function generateFishCompletion(
     lines.push(`        else`);
     lines.push(`            if test -n "$_prev"`);
     lines.push(`                printf '%s\\n' "$_prev"`);
-    lines.push(`                set _emitted (math $_emitted + 1)`);
+    lines.push(`                set _emitted 1`);
     lines.push(`            end`);
     lines.push(`        end`);
     lines.push(`    end`);
