@@ -6,11 +6,7 @@
  */
 
 import type { ShellType } from "../types.js";
-import {
-  CompletionDirective,
-  type CandidateResult,
-  type CompletionCandidate,
-} from "./candidate-generator.js";
+import { CompletionDirective, type CandidateResult } from "./candidate-generator.js";
 
 /**
  * Options for shell-specific formatting
@@ -41,21 +37,6 @@ export function formatForShell(result: CandidateResult, options: ShellFormatOpti
 }
 
 /**
- * Check if the FilterPrefix directive is set
- */
-function shouldFilterPrefix(directive: number): boolean {
-  return (directive & CompletionDirective.FilterPrefix) !== 0;
-}
-
-/**
- * Filter candidates by prefix
- */
-function filterByPrefix(candidates: CompletionCandidate[], prefix: string): CompletionCandidate[] {
-  if (!prefix) return candidates;
-  return candidates.filter((c) => c.value.startsWith(prefix));
-}
-
-/**
  * Append extension metadata and directive to output lines
  */
 function appendMetadata(lines: string[], result: CandidateResult): void {
@@ -77,18 +58,14 @@ function appendMetadata(lines: string[], result: CandidateResult): void {
  * - Last line: :directive
  */
 function formatForBash(result: CandidateResult, options: ShellFormatOptions): string {
-  let { candidates } = result;
+  const filtered =
+    (result.directive & CompletionDirective.FilterPrefix) !== 0 && options.currentWord
+      ? result.candidates.filter((c) => c.value.startsWith(options.currentWord))
+      : result.candidates;
 
-  if (shouldFilterPrefix(result.directive)) {
-    candidates = filterByPrefix(candidates, options.currentWord);
-  }
-
-  const lines: string[] = candidates.map((c) => {
-    if (options.inlinePrefix) {
-      return `${options.inlinePrefix}${c.value}`;
-    }
-    return c.value;
-  });
+  const lines: string[] = filtered.map((c) =>
+    options.inlinePrefix ? `${options.inlinePrefix}${c.value}` : c.value,
+  );
 
   appendMetadata(lines, result);
   return lines.join("\n");
