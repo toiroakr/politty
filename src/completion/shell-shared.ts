@@ -168,12 +168,13 @@ export function aliasToken(alias: string): string {
  * Shared between {@link collectOptionTokens} and {@link localShadowingTokens}.
  */
 function pushAliasTokens(tokens: string[], a: string): void {
-  const push = (t: string): void => {
-    if (!tokens.includes(t)) tokens.push(t);
-  };
-  push(aliasToken(a));
-  if (a.length === 1) push(`--${a}`);
-  else if (a.includes("-")) push(`--${toCamelCase(a)}`);
+  pushUnique(tokens, aliasToken(a));
+  if (a.length === 1) pushUnique(tokens, `--${a}`);
+  else if (a.includes("-")) pushUnique(tokens, `--${toCamelCase(a)}`);
+}
+
+function pushUnique(tokens: string[], t: string): void {
+  if (!tokens.includes(t)) tokens.push(t);
 }
 
 /**

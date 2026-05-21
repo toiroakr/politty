@@ -11,7 +11,7 @@ import {
   collectExpandSpecs,
   collectRouteEntries,
   collectTrackedFields,
-  dynamicInvokeCompleteBashLines,
+  dynamicInvokeCompleteLines,
   effectiveOptionTokens,
   expandTableVarName,
   extractCompletionData,
@@ -422,7 +422,7 @@ export function generateZshCompletion(
   // Dynamic completion delegate helpers (only when any value spec uses
   // an in-process JS resolver).
   if (hasDynamicCompletion(root)) {
-    lines.push(...dynamicInvokeCompleteBashLines(fn, programName));
+    lines.push(...dynamicInvokeCompleteLines(fn, programName));
     lines.push(``);
     lines.push(`__${fn}_apply_dynamic_output() {`);
     lines.push(`    local _raw="$1"`);

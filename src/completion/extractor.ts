@@ -78,7 +78,7 @@ export function expandTableVarName(fn: string, funcSuffix: string, fieldName: st
  * lookup — so the helper lives here. Fish has a different `function`
  * syntax (no `local`, `set -l` instead) and emits its own version inline.
  */
-export function dynamicInvokeCompleteBashLines(fn: string, programName: string): string[] {
+export function dynamicInvokeCompleteLines(fn: string, programName: string): string[] {
   return [
     `__${fn}_invoke_complete() {`,
     `    local _shell="$1"; shift`,
@@ -255,7 +255,7 @@ function joinPrefix(parent: string, child: string, sep: string): string {
  */
 function expandChildPathStrs(pathStrs: readonly string[], child: CompletableSubcommand): string[] {
   const childNames = [child.name, ...(child.aliases ?? [])];
-  return pathStrs.flatMap((p) => childNames.map((n) => (p ? `${p}:${n}` : n)));
+  return pathStrs.flatMap((p) => childNames.map((n) => joinPrefix(p, n, ":")));
 }
 
 /**
