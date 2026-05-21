@@ -20,6 +20,9 @@ export default defineConfig({
           name: "shell-bash",
           include: ["tests/shell-completion/bash.test.ts"],
           testTimeout: 10000,
+          // beforeAll generates three full completion script sets via
+          // `tsx`/Node startup; the default 10s hook budget is too tight.
+          hookTimeout: 60000,
         },
       },
       {
@@ -27,6 +30,7 @@ export default defineConfig({
           name: "shell-zsh",
           include: ["tests/shell-completion/zsh.test.ts"],
           testTimeout: 10000,
+          hookTimeout: 60000,
         },
       },
       {
@@ -34,6 +38,7 @@ export default defineConfig({
           name: "shell-fish",
           include: ["tests/shell-completion/fish.test.ts"],
           testTimeout: 10000,
+          hookTimeout: 60000,
         },
       },
     ],
