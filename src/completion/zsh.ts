@@ -31,7 +31,7 @@ import {
   optionExpandLocation,
   positionalExpandLocation,
   quotedAvailabilityTokens,
-  type BaseExpandLocation,
+  type FuncSuffixedExpandLocation,
 } from "./shell-shared.js";
 import type {
   CompletableOption,
@@ -63,16 +63,6 @@ function escapeDescribeValue(s: string): string {
 }
 
 /**
- * Zsh adds `funcSuffix` on top of the shell-agnostic `BaseExpandLocation`:
- * the hoisted associative-array variable is named
- * `__<fn>_expand_<funcSuffix>__<field>` (see {@link expandTableVarName}),
- * so each frame's emission needs to know the surrounding handler.
- */
-interface ZshExpandLocation extends BaseExpandLocation {
-  funcSuffix: string;
-}
-
-/**
  * Generate zsh value completion lines for a ValueCompletion spec.
  * Uses `_vals` array (must be declared in the calling function scope).
  * `location` is required when `vc.type === "expand"`.
@@ -80,7 +70,7 @@ interface ZshExpandLocation extends BaseExpandLocation {
 function zshValueLines(
   vc: ValueCompletion | undefined,
   fn: string,
-  location?: ZshExpandLocation,
+  location?: FuncSuffixedExpandLocation,
 ): string[] {
   if (!vc) return [];
   switch (vc.type) {

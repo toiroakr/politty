@@ -31,7 +31,7 @@ import {
   optionExpandLocation,
   positionalExpandLocation,
   quotedAvailabilityTokens,
-  type BaseExpandLocation,
+  type FuncSuffixedExpandLocation,
 } from "./shell-shared.js";
 import type {
   CompletableOption,
@@ -80,15 +80,6 @@ function bashEncodeKey(s: string): string {
 }
 
 /**
- * Bash adds `funcSuffix` on top of the shell-agnostic `BaseExpandLocation`:
- * the hoisted table variable is named `__<fn>_expand_<funcSuffix>__<field>`,
- * so each frame's emission needs to know the surrounding handler.
- */
-interface BashExpandLocation extends BaseExpandLocation {
-  funcSuffix: string;
-}
-
-/**
  * Generate bash value completion code for a ValueCompletion spec.
  * `location` is required when `vc.type === "expand"` (otherwise unused).
  */
@@ -96,7 +87,7 @@ function bashValueLines(
   vc: ValueCompletion | undefined,
   inline: boolean,
   fn: string,
-  location?: BashExpandLocation,
+  location?: FuncSuffixedExpandLocation,
 ): string[] {
   if (!vc) return [];
 

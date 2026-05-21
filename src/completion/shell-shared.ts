@@ -27,13 +27,24 @@ export interface ResolvedExpandDep {
  * the dedup-bucket reads from the global namespace, whether the host repeats
  * (`key=` dedup applies), and the resolved `dependsOn` slots. Bash and zsh
  * additionally carry a `funcSuffix` to name the hoisted table variable —
- * fish keys its lookup off `fieldName` alone, so the extension is opt-in.
+ * fish keys its lookup off `fieldName` alone, so the extension is opt-in
+ * via {@link FuncSuffixedExpandLocation}.
  */
 export interface BaseExpandLocation {
   fieldName: string;
   isArrayOption: boolean;
   isGlobal: boolean;
   resolvedDeps: readonly ResolvedExpandDep[];
+}
+
+/**
+ * Bash and zsh both hoist their expand table as `__<fn>_expand_<funcSuffix>__<field>`
+ * — bash uses per-entry scalars (bash 3.2 has no associative arrays), zsh uses
+ * an associative-array subscript — so both need the surrounding handler's
+ * function suffix on top of the shell-agnostic {@link BaseExpandLocation}.
+ */
+export interface FuncSuffixedExpandLocation extends BaseExpandLocation {
+  funcSuffix: string;
 }
 
 /**
