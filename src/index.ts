@@ -78,24 +78,24 @@ export type {
   GlobalCleanupContext,
   GlobalSetupContext,
   LogEntry,
-  // Logger type
-  Logger,
   LogLevel,
   LogStream,
+  // Logger type
+  Logger,
   // Options and result types
   MainOptions,
   NonRunnableCommand,
   PromptResolver,
   RunCommandOptions,
-  RunnableCommand,
   RunResult,
   RunResultFailure,
   RunResultSuccess,
+  RunnableCommand,
   // Context types
   SetupContext,
+  SubCommandValue,
   // Subcommand types
   SubCommandsRecord,
-  SubCommandValue,
 } from "./types.js";
 // Command definition validation
 export {
@@ -103,9 +103,9 @@ export {
   DuplicateAliasError,
   DuplicateFieldError,
   DuplicateNegationError,
-  formatCommandValidationErrors,
   PositionalConfigError,
   ReservedAliasError,
+  formatCommandValidationErrors,
   validateCaseVariantCollisions,
   validateCommand,
   validateCrossSchemaCollisions,
