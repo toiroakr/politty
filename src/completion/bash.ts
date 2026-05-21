@@ -532,22 +532,18 @@ export function generateBashCompletion(
     // bash's `-o default` / `-o dirnames` fall back to filename
     // completion only when COMPREPLY is empty, but their candidates use
     // the *original* word — which still carries the `--opt=` prefix we
-    // stripped into `_inline_prefix`. So whenever an inline prefix is
-    // in play, expand filesystem matches manually against `$_cur` and
-    // prepend `_ip`, instead of leaving it to bash's fallback. With no
-    // inline prefix, the empty-COMPREPLY case can still rely on the
-    // builtin fallback.
+    // stripped into `_inline_prefix`. Always expand filesystem matches
+    // manually against `$_cur` (prepending `_ip` when an inline prefix
+    // is in play) instead of relying on bash's builtin fallback, since
+    // `compopt -o dirnames` is unavailable on bash 3.2 (macOS) and would
+    // otherwise let the top-level `-o default` registration leak files.
     lines.push(`    local _ip="\${_inline_prefix:-}"`);
     lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
     lines.push(`        compopt +o default 2>/dev/null`);
-    lines.push(`        if (( \${#COMPREPLY[@]} > 0 )) || [[ -n "$_ip" ]]; then`);
-    lines.push(`            local _d`);
+    lines.push(`        local _d`);
     lines.push(
-      `            while IFS= read -r _d; do COMPREPLY+=("\${_ip}\${_d}"); done < <(compgen -d -- "$_cur")`,
+      `        while IFS= read -r _d; do COMPREPLY+=("\${_ip}\${_d}"); done < <(compgen -d -- "$_cur")`,
     );
-    lines.push(`        else`);
-    lines.push(`            compopt -o dirnames 2>/dev/null`);
-    lines.push(`        fi`);
     lines.push(`    elif (( _directive & ${CompletionDirective.FileCompletion} )); then`);
     lines.push(`        if (( \${#COMPREPLY[@]} > 0 )) || [[ -n "$_ip" ]]; then`);
     lines.push(`            local _f`);

@@ -944,7 +944,9 @@ describe("Dynamic completion (in-process resolver)", () => {
       const dyn = generateCompletion(dynamicCmd, { shell: "bash", programName: "mycli" }).script;
       // DirectoryCompletion=32, FileCompletion=16, NoSpace=1
       expect(dyn).toContain("(( _directive & 32 ))");
-      expect(dyn).toContain("compopt -o dirnames");
+      // DirectoryCompletion populates COMPREPLY manually via `compgen -d`
+      // (bash 3.2 lacks `compopt -o dirnames`).
+      expect(dyn).toMatch(/compgen -d -- "\$_cur"/);
       expect(dyn).toContain("(( _directive & 16 ))");
       expect(dyn).toContain("compopt -o default");
       expect(dyn).toContain("(( _directive & 1 ))");
@@ -952,7 +954,7 @@ describe("Dynamic completion (in-process resolver)", () => {
       // DirectoryCompletion must also strip the script-level `-o default`
       // fallback so file completion does not pollute a dir-only directive.
       expect(dyn).toMatch(
-        /\(\( _directive & 32 \)\); then\s*\n\s*compopt \+o default[\s\S]*?compopt -o dirnames/,
+        /\(\( _directive & 32 \)\); then\s*\n\s*compopt \+o default[\s\S]*?compgen -d/,
       );
     });
 
