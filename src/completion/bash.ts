@@ -540,6 +540,10 @@ export function generateBashCompletion(
     lines.push(`    local _ip="\${_inline_prefix:-}"`);
     lines.push(`    if (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
     lines.push(`        compopt +o default 2>/dev/null`);
+    // `-o filenames` tells bash to treat candidates as paths so spaces
+    // and other shell metacharacters are escaped on insertion. Match
+    // what the static directory-completion branch sets.
+    lines.push(`        compopt -o filenames 2>/dev/null`);
     lines.push(`        local _d`);
     lines.push(
       `        while IFS= read -r _d; do COMPREPLY+=("\${_ip}\${_d}"); done < <(compgen -d -- "$_cur")`,
@@ -551,6 +555,9 @@ export function generateBashCompletion(
     lines.push(`        if (( \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
     lines.push(`    elif (( _directive & ${CompletionDirective.FileCompletion} )); then`);
     lines.push(`        if (( \${#COMPREPLY[@]} > 0 )) || [[ -n "$_ip" ]]; then`);
+    // Same filenames treatment as the directory branch — `compgen -f`
+    // returns raw paths, so the candidate insertion must escape spaces.
+    lines.push(`            compopt -o filenames 2>/dev/null`);
     lines.push(`            local _f`);
     lines.push(
       `            while IFS= read -r _f; do COMPREPLY+=("\${_ip}\${_f}"); done < <(compgen -f -- "$_cur")`,
