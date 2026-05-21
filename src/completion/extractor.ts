@@ -299,11 +299,12 @@ export function walkOptTakesValueRows(
     rows.push({ parentPath, tokens });
   }
   for (const child of getVisibleSubs(sub.subcommands)) {
-    rows.push(...walkOptTakesValueRows(child, joinPrefix(parentPath, child.name, ":")));
-    if (child.aliases) {
-      for (const alias of child.aliases) {
-        rows.push(...walkOptTakesValueRows(child, joinPrefix(parentPath, alias, ":")));
-      }
+    // Recurse once per name variant the runtime scanner can route to this
+    // child (canonical + every alias). All variants share the same handler
+    // body, so the only thing that changes between iterations is the path
+    // prefix passed to the recursive call.
+    for (const name of [child.name, ...(child.aliases ?? [])]) {
+      rows.push(...walkOptTakesValueRows(child, joinPrefix(parentPath, name, ":")));
     }
   }
   return rows;
@@ -346,27 +347,19 @@ export function collectRouteEntries(
 ): RouteEntry[] {
   const entries: RouteEntry[] = [];
   for (const child of getVisibleSubs(sub.subcommands)) {
-    const pathStr = joinPrefix(parentPath, child.name, ":");
+    // Canonical and aliases all share one handler (`funcSuffix` is built
+    // off the canonical name); only the path component changes, so iterate
+    // every name variant and emit the entry plus descendant routes for
+    // each.
     const funcSuffix = joinPrefix(parentFunc, sanitize(child.name), "_");
-    entries.push(...collectRouteEntries(child, pathStr, funcSuffix));
-    entries.push({
-      pathStr,
-      funcSuffix,
-      lookupPattern: `${parentPath}:${child.name}`,
-    });
-    // Add alias route entries that map to the same handler,
-    // including descendant routes so nested completion works via alias paths
-    if (child.aliases) {
-      for (const alias of child.aliases) {
-        const aliasPathStr = joinPrefix(parentPath, alias, ":");
-        // Recurse into descendants using alias path but same funcSuffix
-        entries.push(...collectRouteEntries(child, aliasPathStr, funcSuffix));
-        entries.push({
-          pathStr: aliasPathStr,
-          funcSuffix,
-          lookupPattern: `${parentPath}:${alias}`,
-        });
-      }
+    for (const name of [child.name, ...(child.aliases ?? [])]) {
+      const pathStr = joinPrefix(parentPath, name, ":");
+      entries.push(...collectRouteEntries(child, pathStr, funcSuffix));
+      entries.push({
+        pathStr,
+        funcSuffix,
+        lookupPattern: `${parentPath}:${name}`,
+      });
     }
   }
   return entries;
