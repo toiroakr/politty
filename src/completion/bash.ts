@@ -544,6 +544,11 @@ export function generateBashCompletion(
     lines.push(
       `        while IFS= read -r _d; do COMPREPLY+=("\${_ip}\${_d}"); done < <(compgen -d -- "$_cur")`,
     );
+    // On bash 3.2 `compopt +o default` is a no-op, so when no candidates
+    // and no directory matches were produced the top-level
+    // `complete -o default` fallback would leak file completions into a
+    // dir-only directive. Seed an empty sentinel to suppress it.
+    lines.push(`        if (( \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
     lines.push(`    elif (( _directive & ${CompletionDirective.FileCompletion} )); then`);
     lines.push(`        if (( \${#COMPREPLY[@]} > 0 )) || [[ -n "$_ip" ]]; then`);
     lines.push(`            local _f`);
