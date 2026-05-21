@@ -293,13 +293,24 @@ async function resolveValueCandidates(
 
   // Two-stage key=value: collapse to keys before `=` is typed, and flip
   // NoSpace whenever a candidate ends with `=` so the user can keep
-  // typing the value after the first TAB.
-  const processed = applyKeyValuePostProcessing(candidates, ctx.currentWord);
-  if (processed.hasEqSuffix) {
-    directive |= CompletionDirective.NoSpace;
+  // typing the value after the first TAB. Apply only to `dynamic` and
+  // `expand` sources — `choices`/`shellCommand` values containing `=`
+  // are concrete (e.g. `foo=bar` literal choice) and must reach the
+  // shell unchanged, matching what the static script paths emit.
+  if (vc.type === "dynamic" || vc.type === "expand") {
+    const processed = applyKeyValuePostProcessing(candidates, ctx.currentWord);
+    if (processed.hasEqSuffix) {
+      directive |= CompletionDirective.NoSpace;
+    }
+    return {
+      candidates: processed.candidates,
+      directive,
+      fileExtensions,
+      fileMatchers,
+    };
   }
 
-  return { candidates: processed.candidates, directive, fileExtensions, fileMatchers };
+  return { candidates, directive, fileExtensions, fileMatchers };
 }
 
 /**
