@@ -3,8 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
-  bashComplete as bashCompleteRaw,
   bashCompleteNested,
+  bashComplete as bashCompleteRaw,
   defineCommonTests,
   defineNestedTests,
   hasBash,

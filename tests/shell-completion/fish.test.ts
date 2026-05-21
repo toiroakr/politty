@@ -3,8 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   defineCommonTests,
   defineNestedTests,
-  fishComplete as fishCompleteRaw,
   fishCompleteNested,
+  fishComplete as fishCompleteRaw,
   hasFish,
   isCI,
   setupNestedTestContext,

@@ -10,8 +10,8 @@ import {
   setupNestedTestContext,
   setupTestContext,
   teardownTestContext,
-  zshComplete as zshCompleteRaw,
   zshCompleteNested,
+  zshComplete as zshCompleteRaw,
   type ExecOptions,
   type TestContext,
 } from "./helpers.js";
