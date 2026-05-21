@@ -17,20 +17,9 @@ import { z } from "zod";
 import { arg } from "../../core/arg-registry.js";
 import { defineCommand } from "../../core/command.js";
 import type { AnyCommand, ArgsSchema, Command } from "../../types.js";
-import { generateCandidates } from "./candidate-generator.js";
+import { detectInlineOptionPrefix, generateCandidates } from "./candidate-generator.js";
 import { parseCompletionContext } from "./context-parser.js";
 import { formatForShell } from "./shell-formatter.js";
-
-/**
- * Detect inline option-value prefix (e.g., "--format=" from
- * "--format=json", "-f=" from "-f=json"). Runtime accepts both shapes.
- */
-function detectInlinePrefix(currentWord: string): string | undefined {
-  if (!currentWord.startsWith("-")) return undefined;
-  const eqIdx = currentWord.indexOf("=");
-  if (eqIdx <= 0) return undefined;
-  return currentWord.slice(0, eqIdx + 1);
-}
 
 /**
  * Schema for the __complete command
@@ -72,20 +61,20 @@ export function createDynamicCompleteCommand(
     async run(args) {
       const context = parseCompletionContext(args.args, rootCommand, globalArgsSchema);
 
-      // Strip the inline `--opt=` prefix so resolvers/formatters never have
-      // to peel it off themselves. Only when completing an option value —
-      // positionals (e.g. `cli -- --foo=<TAB>`) can legitimately start
-      // with `--foo=` and the prefix is part of the value.
+      // Detect the inline `--opt=` prefix so the formatter can re-attach
+      // it to bash candidates. `generateCandidates` performs the same
+      // strip internally so resolvers see only the value portion;
+      // positionals (e.g. `cli -- --foo=<TAB>`) keep the prefix as part
+      // of the value and bypass this detection.
       const inlinePrefix =
         context.completionType === "option-value" && context.targetOption
-          ? detectInlinePrefix(context.currentWord)
+          ? detectInlineOptionPrefix(context.currentWord)
           : undefined;
       const effectiveWord = inlinePrefix
         ? context.currentWord.slice(inlinePrefix.length)
         : context.currentWord;
 
-      const generationContext = inlinePrefix ? { ...context, currentWord: effectiveWord } : context;
-      const result = await generateCandidates(generationContext, { shell: args.shell });
+      const result = await generateCandidates(context, { shell: args.shell });
 
       const output = formatForShell(result, {
         shell: args.shell,

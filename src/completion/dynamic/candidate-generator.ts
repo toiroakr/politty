@@ -69,11 +69,29 @@ export interface GenerateCandidatesOptions {
 }
 
 /**
+ * Detect an inline `--opt=` prefix on an option-value `currentWord`.
+ * Mirrors what the shell scripts already strip via `_inline_prefix`, so
+ * resolvers see only the value portion (e.g. `foo` for `--field=foo`).
+ * Positional words are excluded: `cli -- --foo=bar` is a legitimate
+ * positional value, not an inline option assignment.
+ */
+export function detectInlineOptionPrefix(currentWord: string): string | undefined {
+  if (!currentWord.startsWith("-")) return undefined;
+  const eqIdx = currentWord.indexOf("=");
+  if (eqIdx <= 0) return undefined;
+  return currentWord.slice(0, eqIdx + 1);
+}
+
+/**
  * Generate completion candidates based on context.
  *
  * Async because dynamic resolvers may return promises. Sync completion
  * sources (choices/file/directory/command/none, subcommand, option name)
  * still resolve synchronously and the await is a no-op for them.
+ *
+ * Inline option-value prefixes (`--field=foo`) on the option-value path
+ * are stripped here so resolvers and post-processing always see the
+ * value portion regardless of whether the caller pre-normalized.
  */
 export async function generateCandidates(
   context: CompletionContext,
@@ -86,7 +104,11 @@ export async function generateCandidates(
       return generateOptionNameCandidates(context);
     case "option-value": {
       const opt = context.targetOption;
-      return generateValueCandidates(context, options, opt?.name, opt?.valueCompletion);
+      const inlinePrefix = opt ? detectInlineOptionPrefix(context.currentWord) : undefined;
+      const effectiveContext = inlinePrefix
+        ? { ...context, currentWord: context.currentWord.slice(inlinePrefix.length) }
+        : context;
+      return generateValueCandidates(effectiveContext, options, opt?.name, opt?.valueCompletion);
     }
     case "positional": {
       const positional = resolvePositionalTarget(context);
@@ -396,13 +418,15 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
 
 /**
  * Build the resolver-invocation slice of CompletionContext.
- * `currentWord` is passed verbatim — the caller (`__complete`) strips inline
- * `--field=` prefixes before invoking us. The target field is dropped from
- * `parsedArgs` so resolvers can treat it as "other args": for repeatable
- * options and variadic positionals the parser already stages already-typed
- * values under the same key, and exposing them under both `parsedArgs` and
- * `previousValues` would let a resolver mistake the in-flight field for a
- * fully-supplied sibling.
+ * `currentWord` reaches resolvers normalized by `generateCandidates` —
+ * the option-value path strips any inline `--field=` prefix first, so
+ * resolvers and the key=value post-processing only ever see the value
+ * portion. The target field is dropped from `parsedArgs` so resolvers
+ * can treat it as "other args": for repeatable options and variadic
+ * positionals the parser already stages already-typed values under the
+ * same key, and exposing them under both `parsedArgs` and `previousValues`
+ * would let a resolver mistake the in-flight field for a fully-supplied
+ * sibling.
  */
 function resolverContext(
   context: CompletionContext,
