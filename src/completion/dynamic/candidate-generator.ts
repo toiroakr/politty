@@ -134,14 +134,8 @@ function executeShellCommand(command: string): CompletionCandidate[] {
 }
 
 /**
- * Result of resolving value candidates
- */
-type ValueResolutionResult = Pick<CandidateResult, "directive" | "fileExtensions" | "fileMatchers">;
-
-/**
- * Two-stage `key=value` completion. Returns the post-processed candidate
- * list (mutates `candidates` in place to keep the caller's reference) plus
- * whether the result contains a bare `key=` entry so the caller can flip
+ * Two-stage `key=value` post-processing. Returns the transformed candidate
+ * list plus whether it contains a bare `key=` entry so the caller can flip
  * NoSpace and let the user keep typing past the first TAB.
  *
  * Key stage (`=` not yet typed): collapse every `key=value` candidate to a
@@ -154,20 +148,20 @@ type ValueResolutionResult = Pick<CandidateResult, "directive" | "fileExtensions
  * against the typed key prefix.
  */
 function applyKeyValuePostProcessing(
-  candidates: CompletionCandidate[],
+  candidates: readonly CompletionCandidate[],
   currentWord: string,
-): { hasEqSuffix: boolean } {
+): { candidates: CompletionCandidate[]; hasEqSuffix: boolean } {
   const keyStage = !currentWord.includes("=");
   const processed = keyStage
     ? collapseToKeys(candidates)
     : dropBareKeyEcho(candidates, currentWord);
-  candidates.splice(0, candidates.length, ...processed);
   // Flip NoSpace only at key stage where a candidate ending with `=`
   // really is a bare-key marker. At value stage a candidate like
   // `YWJj=` is a concrete value, so NoSpace would incorrectly suppress
   // the trailing space after a regular value selection.
   return {
-    hasEqSuffix: keyStage && candidates.some((c) => c.value.endsWith("=")),
+    candidates: processed,
+    hasEqSuffix: keyStage && processed.some((c) => c.value.endsWith("=")),
   };
 }
 
@@ -201,10 +195,10 @@ function dropBareKeyEcho(
  */
 async function resolveValueCandidates(
   vc: ValueCompletion,
-  candidates: CompletionCandidate[],
   ctx: DynamicCompletionContext,
   description?: string,
-): Promise<ValueResolutionResult> {
+): Promise<CandidateResult> {
+  const candidates: CompletionCandidate[] = [];
   let directive: number = CompletionDirective.FilterPrefix;
   let fileExtensions: string[] | undefined;
   let fileMatchers: string[] | undefined;
@@ -300,11 +294,12 @@ async function resolveValueCandidates(
   // Two-stage key=value: collapse to keys before `=` is typed, and flip
   // NoSpace whenever a candidate ends with `=` so the user can keep
   // typing the value after the first TAB.
-  if (applyKeyValuePostProcessing(candidates, ctx.currentWord).hasEqSuffix) {
+  const processed = applyKeyValuePostProcessing(candidates, ctx.currentWord);
+  if (processed.hasEqSuffix) {
     directive |= CompletionDirective.NoSpace;
   }
 
-  return { directive, fileExtensions, fileMatchers };
+  return { candidates: processed.candidates, directive, fileExtensions, fileMatchers };
 }
 
 /**
@@ -435,17 +430,12 @@ async function generateValueCandidates(
   vc: ValueCompletion | undefined,
   description?: string,
 ): Promise<CandidateResult> {
-  const candidates: CompletionCandidate[] = [];
   if (!vc) {
-    return { candidates, directive: CompletionDirective.FilterPrefix };
+    return { candidates: [], directive: CompletionDirective.FilterPrefix };
   }
-  return {
-    candidates,
-    ...(await resolveValueCandidates(
-      vc,
-      candidates,
-      resolverContext(context, options, targetFieldName),
-      description,
-    )),
-  };
+  return resolveValueCandidates(
+    vc,
+    resolverContext(context, options, targetFieldName),
+    description,
+  );
 }
