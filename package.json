@@ -123,7 +123,7 @@
     "@clack/prompts": "1.2.0",
     "@inquirer/prompts": "8.4.3",
     "@quansync/fs": "1.0.0",
-    "@types/node": "25.8.0",
+    "@types/node": "25.9.0",
     "@typescript/native-preview": "7.0.0-dev.20260518.1",
     "@vitest/coverage-v8": "4.1.6",
     "knip": "6.14.1",
