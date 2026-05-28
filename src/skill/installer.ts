@@ -5,13 +5,14 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
   rmSync,
   statSync,
   symlinkSync,
   unlinkSync,
 } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
 import type {
   DiscoveredSkill,
@@ -190,15 +191,55 @@ export function uninstallSkill(
   assertSafeName(name);
   const expected = options.expectedOwnership ?? null;
 
+  // Agent slots (`.claude/skills/<name>` etc.) live in a shared namespace —
+  // restrict symlink unlinking to symlinks that route to our canonical slot
+  // so removing one owned canonical skill never deletes another tool's
+  // symlink at the same agent path.
+  const canonicalSlot = resolve(cwd, AGENTS_SKILLS_DIR, name);
   for (const target of SYMLINK_TARGETS) {
-    removeInstalledSlot(resolve(cwd, target, name), expected);
+    removeInstalledSlot(resolve(cwd, target, name), expected, {
+      restrictSymlinkTo: canonicalSlot,
+    });
   }
-  removeInstalledSlot(resolve(cwd, AGENTS_SKILLS_DIR, name), expected);
+  removeInstalledSlot(canonicalSlot, expected);
+}
+
+/**
+ * Does the symlink at `slot` route to `expected`?
+ *
+ * Used to gate symlink unlinking in shared-namespace agent slots
+ * (`.claude/skills/<name>` etc.) so we never silently clobber a symlink
+ * another tool installed there.
+ *
+ * Resolution rules:
+ * - Absolute symlink target → compare directly.
+ * - Relative target → resolve against the symlink's directory (lexical),
+ *   which works even for a dangling symlink we still expect to own.
+ * - When both endpoints exist, also match via `realpathSync` so a
+ *   logically-equivalent path through a parent symlink still matches.
+ */
+function symlinkRoutesTo(slot: string, expected: string): boolean {
+  let raw: string;
+  try {
+    raw = readlinkSync(slot);
+  } catch {
+    return false;
+  }
+  const resolvedTarget = isAbsolute(raw) ? raw : resolve(dirname(slot), raw);
+  if (resolvedTarget === expected) return true;
+  try {
+    return realpathSync(resolvedTarget) === realpathSync(expected);
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Remove a previously-installed slot:
- * - Symlink → unlink.
+ * - Symlink → unlink. In a shared-namespace slot (`restrictSymlinkTo`
+ *   provided), only when the symlink resolves to that target. A foreign
+ *   symlink (another tool, manual install) is left alone so removing one
+ *   owned canonical skill never deletes another tool's link.
  * - Real directory whose SKILL.md carries `expectedStamp` → rm -rf. This
  *   handles copy-mode installs that share the same canonical path as the
  *   symlink-mode installs.
@@ -210,7 +251,11 @@ export function uninstallSkill(
  * dir-symlink, but passing `recursive: true` would follow the symlink and
  * delete its target contents.
  */
-function removeInstalledSlot(path: string, expectedStamp: string | null): void {
+function removeInstalledSlot(
+  path: string,
+  expectedStamp: string | null,
+  options: { restrictSymlinkTo?: string } = {},
+): void {
   let stat;
   try {
     stat = lstatSync(path);
@@ -223,7 +268,12 @@ function removeInstalledSlot(path: string, expectedStamp: string | null): void {
     throw err;
   }
   if (stat.isSymbolicLink()) {
-    unlinkSync(path);
+    if (
+      options.restrictSymlinkTo === undefined ||
+      symlinkRoutesTo(path, options.restrictSymlinkTo)
+    ) {
+      unlinkSync(path);
+    }
     return;
   }
   if (stat.isDirectory() && expectedStamp !== null && readStampAt(path) === expectedStamp) {
@@ -235,7 +285,10 @@ function removeInstalledSlot(path: string, expectedStamp: string | null): void {
  * Clear a slot so a new install can occupy `path`.
  *
  * - Absent → no-op.
- * - Symlink (live or broken) → unlink.
+ * - Symlink (live or broken) → unlink. In a shared-namespace slot
+ *   (`restrictSymlinkTo` provided), only when the symlink resolves to that
+ *   target; a foreign symlink at the slot throws instead of being silently
+ *   replaced.
  * - Real directory whose SKILL.md carries `expectedStamp` → rm -rf. This
  *   is how a copy-mode install gets replaced in place by another install
  *   (symlink or copy); the ownership check guarantees we are only ever
@@ -245,7 +298,11 @@ function removeInstalledSlot(path: string, expectedStamp: string | null): void {
  *   reachable, but a programmatic caller or a hand-made legacy install
  *   surfaces as an actionable error here rather than silent data loss.
  */
-function clearInstallSlot(path: string, expectedStamp: string | null): void {
+function clearInstallSlot(
+  path: string,
+  expectedStamp: string | null,
+  options: { restrictSymlinkTo?: string } = {},
+): void {
   let stat;
   try {
     stat = lstatSync(path);
@@ -258,8 +315,18 @@ function clearInstallSlot(path: string, expectedStamp: string | null): void {
     throw err;
   }
   if (stat.isSymbolicLink()) {
-    unlinkSync(path);
-    return;
+    if (
+      options.restrictSymlinkTo === undefined ||
+      symlinkRoutesTo(path, options.restrictSymlinkTo)
+    ) {
+      unlinkSync(path);
+      return;
+    }
+    throw new Error(
+      `Refusing to replace symlink at ${path}: it does not route to this ` +
+        `CLI's canonical slot (${options.restrictSymlinkTo}). ` +
+        `Remove or migrate the foreign symlink before retrying.`,
+    );
   }
   if (stat.isDirectory() && expectedStamp !== null && readStampAt(path) === expectedStamp) {
     rmSync(path, { recursive: true, force: true });
@@ -454,7 +521,11 @@ function populateAgentDirs(
     // parent so `linkPath` and `linkTarget` share the same prefix style.
     const resolvedTargetParent = realpathSync(targetParent);
     const targetDir = join(resolvedTargetParent, name);
-    clearInstallSlot(targetDir, expectedStamp);
+    // Agent slot is a shared namespace; only unlink an existing symlink if
+    // it routes to our canonical slot. The canonical slot lives at the
+    // realpath-resolved parent join'd with `name`, matching what we'll
+    // write below.
+    clearInstallSlot(targetDir, expectedStamp, { restrictSymlinkTo: canonicalDir });
 
     const resolvedCanonicalParent = realpathSync(resolve(canonicalDir, ".."));
     const linkTarget = join(relative(resolvedTargetParent, resolvedCanonicalParent), name);

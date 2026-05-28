@@ -4,13 +4,14 @@ import {
   mkdirSync,
   readFileSync,
   readlinkSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   hasInstalledSkill,
@@ -211,6 +212,27 @@ describe("installSkill", () => {
     expect(() => installSkill(skill, projectDir)).toThrow(/Refusing to replace non-symlink/);
     // Legacy content must remain intact.
     expect(readFileSync(join(legacyDir, "SKILL.md"), "utf-8")).toContain("legacy");
+  });
+
+  it("should refuse to replace a foreign symlink at .claude/skills/<name>", () => {
+    // Another tool installed at the same agent path with a symlink to its
+    // own canonical. populateAgentDirs's clearInstallSlot must not silently
+    // unlink that symlink — refuse like the real-directory case.
+    const foreignTarget = join(projectDir, "foreign-tool/skills/commit");
+    mkdirSync(foreignTarget, { recursive: true });
+    writeFileSync(
+      join(foreignTarget, "SKILL.md"),
+      '---\nname: commit\ndescription: foreign\nmetadata:\n  politty-cli: "other:tool"\n---\n',
+    );
+    const claudeSlot = join(projectDir, ".claude/skills/commit");
+    mkdirSync(dirname(claudeSlot), { recursive: true });
+    symlinkSync(foreignTarget, claudeSlot, "dir");
+
+    const skill = createSkillFixture(sourceDir, "commit");
+
+    expect(() => installSkill(skill, projectDir)).toThrow(/Refusing to replace symlink/);
+    expect(lstatSync(claudeSlot).isSymbolicLink()).toBe(true);
+    expect(realpathSync(claudeSlot)).toBe(realpathSync(foreignTarget));
   });
 
   it("should refuse to replace a real .claude/skills/<name> directory", () => {
@@ -515,6 +537,29 @@ describe("uninstallSkill", () => {
 
     expect(existsSync(join(projectDir, ".agents/skills/commit"))).toBe(false);
     expect(existsSync(join(projectDir, ".claude/skills/commit"))).toBe(false);
+  });
+
+  it("should leave a foreign symlink at an agent slot untouched", () => {
+    // Another tool symlinked .claude/skills/commit to its own canonical
+    // path. Our uninstall of the canonical .agents/skills/commit must not
+    // also unlink that foreign symlink — agent slots are a shared
+    // namespace, and routing-to-our-canonical is the only safe trigger.
+    const skill = createSkillFixture(sourceDir, "commit");
+    installSkill(skill, projectDir);
+
+    const foreignTarget = join(projectDir, "foreign-tool/skills/commit");
+    mkdirSync(foreignTarget, { recursive: true });
+    const claudeSlot = join(projectDir, ".claude/skills/commit");
+    // Replace our agent-slot symlink with a foreign one pointing elsewhere.
+    unlinkSync(claudeSlot);
+    symlinkSync(foreignTarget, claudeSlot, "dir");
+
+    uninstallSkill("commit", projectDir, { expectedOwnership: OWNERSHIP });
+
+    expect(existsSync(join(projectDir, ".agents/skills/commit"))).toBe(false);
+    // Foreign symlink must remain so the other tool's install is intact.
+    expect(lstatSync(claudeSlot).isSymbolicLink()).toBe(true);
+    expect(realpathSync(claudeSlot)).toBe(realpathSync(foreignTarget));
   });
 });
 
