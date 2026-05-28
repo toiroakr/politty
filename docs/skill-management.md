@@ -146,12 +146,13 @@ withSkillCommand(cmd, {
 
 ### `skills add`
 
-Install a specific skill, or all skills when no name is given. A typo in the name errors out even if the source directory is misconfigured or empty.
+Install one or more named skills, or all skills when no name is given. Multiple positional names are pre-validated against the source directory before any install side effect — any unknown name aborts the run with a single error listing every typo, so the whole invocation can be fixed in one round-trip.
 
 ```bash
 my-agent skills add commit
-my-agent skills add            # Install all skills
-my-agent skills add --verbose  # Print install path and mode per skill
+my-agent skills add commit review-pr  # Install several at once
+my-agent skills add                   # Install all skills
+my-agent skills add --verbose         # Print install path and mode per skill
 ```
 
 ### `skills remove`

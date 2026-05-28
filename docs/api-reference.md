@@ -1163,12 +1163,12 @@ Throws if `command.subCommands.skills` already exists.
 
 #### Generated Subcommands
 
-| Command                        | Description                                               |
-| ------------------------------ | --------------------------------------------------------- |
-| `skills sync [--exclude name]` | Remove orphans and reinstall all skills owned by this CLI |
-| `skills add [name]`            | Install skill(s) from source                              |
-| `skills remove [name]`         | Remove skill(s) owned by this CLI                         |
-| `skills list [--json]`         | List available skills from source                         |
+| Command                        | Description                                                 |
+| ------------------------------ | ----------------------------------------------------------- |
+| `skills sync [--exclude name]` | Remove orphans and reinstall all skills owned by this CLI   |
+| `skills add [name ...]`        | Install one or more named skills, or all when no name given |
+| `skills remove [name]`         | Remove skill(s) owned by this CLI                           |
+| `skills list [--json]`         | List available skills from source                           |
 
 #### Example
 
