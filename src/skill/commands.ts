@@ -582,11 +582,17 @@ function addSkill(
   // SKILL.md is another (slot is occupied but `hasInstalledSkill === false`
   // because `existsSync` follows the symlink and finds no file). `listStatus`
   // already routes both to `unstamped`, so the install guard must match.
-  // The one exception is a dangling canonical symlink — almost certainly
-  // a leftover from a previous install of this CLI, and `installSkill` is
-  // expected to reap it.
+  // The one exception is a dangling canonical symlink that still routes to
+  // this CLI's `sourceDir` — almost certainly a leftover from a previous
+  // install of this CLI, and `installSkill` is expected to reap it. A
+  // dangling symlink whose target lies outside our `sourceDir` is treated
+  // like any other foreign occupant: `.agents/skills/` is shared across
+  // politty-based CLIs, and without a stamp to read the route check is the
+  // only signal that the dangling slot belongs to us.
   const canonical = resolve(cwd, AGENTS_SKILLS_DIR, name);
-  if (actual === null && slotPresent(name, cwd) && !isDanglingSymlink(canonical)) {
+  const danglingOurs =
+    isDanglingSymlink(canonical) && danglingRoutesToSource(canonical, resolved.sourceDir);
+  if (actual === null && slotPresent(name, cwd) && !danglingOurs) {
     throw new Error(
       `Refusing to install "${name}": .agents/skills/${name} exists without a ` +
         `${OWNERSHIP_METADATA_KEY} stamp, so it was not installed by this CLI. ` +

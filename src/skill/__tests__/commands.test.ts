@@ -837,7 +837,7 @@ describe("createSkillAddCommand", () => {
     try {
       const canonical = join(projectRoot, ".agents/skills/commit");
       mkdirSync(join(projectRoot, ".agents/skills"), { recursive: true });
-      symlinkSync(join(projectRoot, "does-not-exist"), canonical, "dir");
+      symlinkSync(join(tempDir, "commit-uninstalled"), canonical, "dir");
 
       const command = createSkillAddCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
       command.run!({ name: ["commit"], verbose: false });
@@ -845,6 +845,35 @@ describe("createSkillAddCommand", () => {
       expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("should refuse to install when a foreign dangling canonical symlink occupies the slot", () => {
+    // `.agents/skills/<name>` is a shared namespace; a dangling canonical
+    // pointing at *another* CLI's (now-uninstalled) source must not be
+    // silently clobbered. The clobber guard mirrors the route-to-source
+    // check used by `cleanupBrokenSlot`/`findOwnedInstalledSkills` so the
+    // three paths agree on what "our dangling" means.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReturnValue(false);
+
+    const projectRoot = createTempDir();
+    const foreignSourceDir = createTempDir();
+    try {
+      const canonical = join(projectRoot, ".agents/skills/commit");
+      mkdirSync(join(projectRoot, ".agents/skills"), { recursive: true });
+      symlinkSync(join(foreignSourceDir, "commit"), canonical, "dir");
+
+      const command = createSkillAddCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
+
+      expect(() => command.run!({ name: ["commit"], verbose: false })).toThrow(
+        /Refusing to install/,
+      );
+      expect(mockedInstallSkill).not.toHaveBeenCalled();
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(foreignSourceDir, { recursive: true, force: true });
     }
   });
 
