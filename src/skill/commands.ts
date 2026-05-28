@@ -1,5 +1,13 @@
-import { existsSync, lstatSync, readdirSync, unlinkSync, type Dirent } from "node:fs";
-import { resolve } from "node:path";
+import {
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readlinkSync,
+  realpathSync,
+  unlinkSync,
+  type Dirent,
+} from "node:fs";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { z } from "zod";
 import { arg, type RegularArgMeta } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
@@ -639,15 +647,43 @@ function removeOwnedSkill(name: string, expectedOwnership: string, cwd: string):
 function cleanupBrokenSlot(name: string, cwd: string): boolean {
   const canonical = resolve(cwd, AGENTS_SKILLS_DIR, name);
   if (!isDanglingSymlink(canonical)) return false;
+  // Resolve the canonical's routing target before unlinking it so agent-
+  // slot comparisons below can match against the same path we install to.
   unlinkSync(canonical);
-  // Best-effort sweep of agent-specific slots — they're symlinks back to
-  // the canonical, so they're broken too once the canonical is gone (and
-  // were already broken when the canonical's target disappeared).
+  // Best-effort sweep of agent-specific slots — but only those that route
+  // back to our canonical. A foreign tool's dangling symlink at the same
+  // agent path (e.g. pointing at its own canonical) lives in the same
+  // shared namespace and must not be reaped.
   for (const target of SYMLINK_TARGETS) {
     const agentSlot = resolve(cwd, target, name);
-    if (isDanglingSymlink(agentSlot)) unlinkSync(agentSlot);
+    if (!isDanglingSymlink(agentSlot)) continue;
+    if (symlinkRoutesTo(agentSlot, canonical)) {
+      unlinkSync(agentSlot);
+    }
   }
   return true;
+}
+
+/**
+ * Does the symlink at `slot` route to `expected` (lexically, with a
+ * realpath fallback)? Mirrors `symlinkRoutesTo` in `installer.ts` —
+ * deliberately a local duplicate so `commands.ts` does not depend on the
+ * installer's private helpers.
+ */
+function symlinkRoutesTo(slot: string, expected: string): boolean {
+  let raw: string;
+  try {
+    raw = readlinkSync(slot);
+  } catch {
+    return false;
+  }
+  const resolvedTarget = isAbsolute(raw) ? raw : resolve(dirname(slot), raw);
+  if (resolvedTarget === expected) return true;
+  try {
+    return realpathSync(resolvedTarget) === realpathSync(expected);
+  } catch {
+    return false;
+  }
 }
 
 function isDanglingSymlink(path: string): boolean {

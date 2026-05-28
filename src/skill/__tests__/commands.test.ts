@@ -1,4 +1,12 @@
-import { existsSync, lstatSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readlinkSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1040,7 +1048,12 @@ describe("dangling-symlink cleanup", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
     const canonical = makeDanglingSlot(join(projectRoot, ".agents/skills"), "commit");
-    const agentSlot = makeDanglingSlot(join(projectRoot, ".claude/skills"), "commit");
+    // Agent slot must route to our canonical (as a real install would write
+    // it: ../../.agents/skills/<name>) for the dangling-symlink reaper to
+    // consider it ours; otherwise the new route-check leaves it alone.
+    mkdirSync(join(projectRoot, ".claude/skills"), { recursive: true });
+    const agentSlot = join(projectRoot, ".claude/skills/commit");
+    symlinkSync("../../.agents/skills/commit", agentSlot, "dir");
     // sanity: both slots are present-but-broken before the command runs.
     expect(lstatSync(canonical).isSymbolicLink()).toBe(true);
     expect(lstatSync(agentSlot).isSymbolicLink()).toBe(true);
@@ -1059,6 +1072,35 @@ describe("dangling-symlink cleanup", () => {
     // And the slot itself is gone (not merely a still-broken symlink).
     expect(() => lstatSync(canonical)).toThrow();
     expect(() => lstatSync(agentSlot)).toThrow();
+  });
+
+  it("should leave a foreign dangling agent-slot symlink untouched", () => {
+    // The canonical .agents/skills/<name> is dangling (ours, to be reaped),
+    // but the .claude/skills/<name> symlink points at *another* tool's
+    // canonical path (e.g. .agents-other/<name>) and happens to also be
+    // dangling. Reaping it here would silently delete a foreign tool's
+    // install slot in the shared agent namespace.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const canonical = makeDanglingSlot(join(projectRoot, ".agents/skills"), "commit");
+    // Foreign agent symlink: points at a path that is NOT our canonical and
+    // happens to not exist. realpath fallback won't match either, so the
+    // route check must refuse to reap.
+    mkdirSync(join(projectRoot, ".claude/skills"), { recursive: true });
+    const foreignAgentSlot = join(projectRoot, ".claude/skills/commit");
+    symlinkSync(join(projectRoot, "foreign-tool/skills/commit"), foreignAgentSlot, "dir");
+    expect(lstatSync(foreignAgentSlot).isSymbolicLink()).toBe(true);
+    expect(existsSync(foreignAgentSlot)).toBe(false);
+
+    const command = createSkillRemoveCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
+    command.run!({ name: "commit" });
+
+    // Our canonical was reaped...
+    expect(existsSync(canonical)).toBe(false);
+    expect(() => lstatSync(canonical)).toThrow();
+    // ...but the foreign agent symlink remains untouched.
+    expect(lstatSync(foreignAgentSlot).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(foreignAgentSlot)).toContain("foreign-tool");
   });
 
   it("should leave a live canonical symlink alone (no false-positive cleanup)", () => {
