@@ -7,26 +7,31 @@ import {
   defineNestedTests,
   hasZsh,
   isCI,
+  setupExpandTestContext,
   setupNestedTestContext,
   setupTestContext,
   teardownTestContext,
-  zshComplete as zshCompleteRaw,
+  zshCompleteExpand,
   zshCompleteNested,
+  zshComplete as zshCompleteRaw,
   type ExecOptions,
   type TestContext,
 } from "./helpers.js";
 
 let ctx: TestContext;
 let nestedCtx: TestContext;
+let expandCtx: TestContext;
 
 beforeAll(() => {
   ctx = setupTestContext();
   nestedCtx = setupNestedTestContext();
+  expandCtx = setupExpandTestContext();
 });
 
 afterAll(() => {
   teardownTestContext(ctx);
   teardownTestContext(nestedCtx);
+  teardownTestContext(expandCtx);
 });
 
 describe.runIf(isCI)("CI: required tools are available", () => {
@@ -116,12 +121,17 @@ describe.skipIf(!hasZsh)("zsh interactive completion (zpty)", () => {
     const mainFile = path.join(ctx.tmpDir, `zpty-main-${ts}.zsh`);
     const command = ["myapp", ...args].join(" ");
 
+    // _test_pre / _test_cap split lets us distinguish "TAB never triggered
+    // completion" (no .pre file — test infra race) from "completion ran but
+    // produced no matches" (.pre exists, nmatches=0 — possible politty bug).
     const setupContent = [
       `export TERM=dumb`,
       `export PATH="${ctx.tmpDir}:$PATH"`,
       `autoload -Uz compinit && compinit -u 2>/dev/null`,
       `zstyle ':completion:*' completer _complete _files`,
       `source '${ctx.completionScripts.zsh}' 2>/dev/null`,
+      `compprefuncs+=( _test_pre )`,
+      `_test_pre() { echo "pre" > "${resultFile}.pre" }`,
       `comppostfuncs+=( _test_cap )`,
       `_test_cap() { echo $compstate[nmatches] > "${resultFile}" }`,
       `cd "${opts.cwd}"`,
@@ -150,7 +160,12 @@ zpty -w tp "source ${setupFile} && echo __DONE__"
 wait_output '__DONE__' 15 || { echo "FAIL:setup_timeout"; exit 1 }
 wait_output '%' 5
 
+# Avoid a TAB-vs-ZLE race where TAB arrives before zsh's line editor is
+# ready to treat it as a completion trigger (otherwise it gets inserted as
+# a literal character). Wait for the command echo (ZLE consumed input),
+# then let ZLE settle, then send TAB.
 zpty -w -n tp "${command}"
+wait_output "${command}" 5 || echo "DEBUG:command_echo_timeout"
 sleep 0.1
 zpty -w -n tp $'\\t'
 
@@ -164,6 +179,11 @@ done
 if [[ -f "${resultFile}" ]]; then
   echo "NMATCHES:$(cat ${resultFile})"
 else
+  if [[ -f "${resultFile}.pre" ]]; then
+    echo "DEBUG:pre_ran_but_post_missing"
+  else
+    echo "DEBUG:pre_never_ran"
+  fi
   echo "NMATCHES:-1"
 fi
 
@@ -177,14 +197,19 @@ zpty -d tp 2>/dev/null
         timeout: 30000,
       });
 
-      const nmatchLine = output
-        .trim()
-        .split("\n")
-        .find((l) => l.startsWith("NMATCHES:"));
-      if (!nmatchLine) return -1;
-      return Number.parseInt(nmatchLine.split(":")[1]!, 10);
+      const lines = output.trim().split("\n");
+      const nmatchLine = lines.find((l) => l.startsWith("NMATCHES:"));
+      const nmatches = nmatchLine ? Number.parseInt(nmatchLine.split(":")[1]!, 10) : -1;
+      if (nmatches === -1) {
+        // Surface flake context so future regressions can be triaged without
+        // re-instrumenting: pre_never_ran = TAB race, pre_ran_but_post_missing
+        // = completion started but didn't finish (suspect politty script).
+        const debugLine = lines.find((l) => l.startsWith("DEBUG:")) ?? "DEBUG:none";
+        console.error(`[zpty flaky] ${command} -> ${debugLine}`);
+      }
+      return nmatches;
     } finally {
-      for (const f of [resultFile, setupFile, mainFile]) {
+      for (const f of [resultFile, `${resultFile}.pre`, setupFile, mainFile]) {
         try {
           fs.unlinkSync(f);
         } catch {}
@@ -373,5 +398,40 @@ zpty -d tp 2>/dev/null
       cwd: ctx.testFilesDir,
     });
     expectDescribeMatches(nmatches, 3);
+  });
+});
+
+describe.skipIf(!hasZsh)("zsh expand array dedup", () => {
+  const completeE = (args: string[], opts?: ExecOptions) =>
+    zshCompleteExpand(expandCtx.testEnv, args, {
+      ...opts,
+      scriptPath: expandCtx.completionScripts.zsh,
+    });
+
+  it("offers every key when none are consumed", () => {
+    const values = completeE(["api", "GetApplication", "-f", ""]);
+    expect(values).toContain("workspaceId=");
+    expect(values).toContain("applicationName=");
+  });
+
+  it("drops an already-used key from candidates", () => {
+    const values = completeE(["api", "GetApplication", "-f", "workspaceId=foo", "-f", ""]);
+    expect(values).toContain("applicationName=");
+    expect(values).not.toContain("workspaceId=");
+  });
+
+  it("collapses key=value entries to unique key= when no `=` typed yet", () => {
+    const values = completeE(["api", "ListApplications", "-f", ""]);
+    expect(values).toContain("pageDirection=");
+    expect(values).not.toContain("pageDirection=NEXT");
+    expect(values).not.toContain("pageDirection=PREVIOUS");
+    expect(values).toContain("workspaceId=");
+  });
+
+  it("shows full key=value pairs once the user types `<key>=`", () => {
+    const values = completeE(["api", "ListApplications", "-f", "pageDirection="]);
+    expect(values).toContain("pageDirection=NEXT");
+    expect(values).toContain("pageDirection=PREVIOUS");
+    expect(values).not.toContain("pageDirection=");
   });
 });

@@ -1,4 +1,8 @@
-import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import type * as childProcess from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
 import {
   CompletionDirective,
@@ -13,6 +17,13 @@ import {
   withCompletionCommand,
 } from "../src/completion/index.js";
 import {
+  hasManagedCache,
+  install,
+  installPath,
+  refreshIfStale,
+} from "../src/completion/install.js";
+import { defaultCacheDir, generateLoader } from "../src/completion/loader.js";
+import {
   arg,
   defineCommand,
   isLazyCommand,
@@ -20,6 +31,19 @@ import {
   runCommand,
   type CompletionMeta,
 } from "../src/index.js";
+
+// Spy on `spawn` so the runMainHook tests below can assert gating without
+// actually spawning a child process. We must mock at module level — the
+// hook calls the destructured `spawn` import inside src/completion/install.ts,
+// so a `vi.spyOn` after the fact would not intercept it. Use `importOriginal`
+// to keep every other child_process export intact (e.g. `execSync` which
+// dynamic completion candidate generation depends on).
+vi.mock("node:child_process", async (importOriginal) => ({
+  ...(await importOriginal<typeof childProcess>()),
+  spawn: vi.fn(() => ({ unref: () => {} })),
+}));
+const childProcessMock = await import("node:child_process");
+const spawnSpy = vi.mocked(childProcessMock.spawn);
 
 describe("Completion", () => {
   describe("extractCompletionData", () => {
@@ -430,7 +454,9 @@ describe("Completion", () => {
         });
 
         expect(result.shell).toBe("bash");
-        expect(result.script).toContain("# Bash completion for mycli");
+        expect(result.script).toContain("# politty-completion-version: 1");
+        expect(result.script).toContain("# program: mycli");
+        expect(result.script).toContain("# shell: bash");
         expect(result.script).toContain("_mycli_completions()");
         expect(result.script).toContain("complete -o default -F _mycli_completions mycli");
       });
@@ -466,7 +492,9 @@ describe("Completion", () => {
 
         expect(result.shell).toBe("zsh");
         expect(result.script).toContain("#compdef mycli");
-        expect(result.script).toContain("# Zsh completion for mycli");
+        expect(result.script).toContain("# politty-completion-version: 1");
+        expect(result.script).toContain("# program: mycli");
+        expect(result.script).toContain("# shell: zsh");
         expect(result.script).toContain("_mycli()");
         expect(result.script).toContain("compdef _mycli mycli");
       });
@@ -480,7 +508,9 @@ describe("Completion", () => {
         });
 
         expect(result.shell).toBe("fish");
-        expect(result.script).toContain("# Fish completion for mycli");
+        expect(result.script).toContain("# politty-completion-version: 1");
+        expect(result.script).toContain("# program: mycli");
+        expect(result.script).toContain("# shell: fish");
         expect(result.script).toContain("complete -c mycli");
         expect(result.script).toContain("__fish_mycli_complete");
         expect(result.script).toContain("complete -c mycli -f");
@@ -855,40 +885,43 @@ describe("Completion", () => {
         },
       });
 
-      it("should generate subcommand candidates", () => {
+      const gen = (ctx: ReturnType<typeof parseCompletionContext>) =>
+        generateCandidates(ctx, { shell: "bash" });
+
+      it("should generate subcommand candidates", async () => {
         const ctx = parseCompletionContext([""], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         const subcommandCandidates = result.candidates.filter((c) => c.type === "subcommand");
         expect(subcommandCandidates.some((c) => c.value === "build")).toBe(true);
         expect(subcommandCandidates.some((c) => c.value === "test")).toBe(true);
       });
 
-      it("should generate option candidates", () => {
+      it("should generate option candidates", async () => {
         const ctx = parseCompletionContext(["--"], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         const optionCandidates = result.candidates.filter((c) => c.type === "option");
         expect(optionCandidates.some((c) => c.value === "--verbose")).toBe(true);
         expect(optionCandidates.some((c) => c.value === "--format")).toBe(true);
       });
 
-      it("should generate enum value candidates for option-value", () => {
+      it("should generate enum value candidates for option-value", async () => {
         const ctx = parseCompletionContext(["--format", ""], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         expect(result.candidates.some((c) => c.value === "json")).toBe(true);
         expect(result.candidates.some((c) => c.value === "yaml")).toBe(true);
       });
 
-      it("should set file directive for file completion without extensions", () => {
+      it("should set file directive for file completion without extensions", async () => {
         const ctx = parseCompletionContext(["--config", ""], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         expect(result.directive & CompletionDirective.FileCompletion).toBeTruthy();
       });
 
-      it("should pass file extensions to shell via metadata instead of resolving in JS", () => {
+      it("should pass file extensions to shell via metadata instead of resolving in JS", async () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -900,17 +933,14 @@ describe("Completion", () => {
         });
 
         const ctx = parseCompletionContext(["--config", ""], cmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
-        // Should NOT have any file candidates resolved in JS
         expect(result.candidates).toHaveLength(0);
-        // Should NOT have FileCompletion directive (shell uses @ext: metadata instead)
         expect(result.directive & CompletionDirective.FileCompletion).toBeFalsy();
-        // Should have fileExtensions metadata for shell-native completion
         expect(result.fileExtensions).toEqual(["json", "yaml"]);
       });
 
-      it("should pass file matchers to shell via metadata instead of resolving in JS", () => {
+      it("should pass file matchers to shell via metadata instead of resolving in JS", async () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -922,49 +952,45 @@ describe("Completion", () => {
         });
 
         const ctx = parseCompletionContext(["--env-file", ""], cmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
-        // Should NOT have any file candidates resolved in JS
         expect(result.candidates).toHaveLength(0);
-        // Should NOT have FileCompletion directive (shell uses @matcher: metadata instead)
         expect(result.directive & CompletionDirective.FileCompletion).toBeFalsy();
-        // Should have fileMatchers metadata for shell-native completion
         expect(result.fileMatchers).toEqual([".env.*"]);
-        // Should NOT have fileExtensions
         expect(result.fileExtensions).toBeUndefined();
       });
 
-      it("should set directory directive for directory completion", () => {
+      it("should set directory directive for directory completion", async () => {
         const ctx = parseCompletionContext(["--dir", ""], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         expect(result.directive & CompletionDirective.DirectoryCompletion).toBeTruthy();
       });
 
-      it("should filter out used options", () => {
+      it("should filter out used options", async () => {
         const ctx = parseCompletionContext(["--verbose", "--"], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         const optionCandidates = result.candidates.filter((c) => c.type === "option");
         expect(optionCandidates.some((c) => c.value === "--verbose")).toBe(false);
       });
 
-      it("should keep array options available after they are used", () => {
+      it("should keep array options available after they are used", async () => {
         const ctx = parseCompletionContext(["--tags", "one", "--"], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         const optionCandidates = result.candidates.filter((c) => c.type === "option");
         expect(optionCandidates.some((c) => c.value === "--tags")).toBe(true);
       });
 
-      it("should set NoFileCompletion for enum value completion", () => {
+      it("should set NoFileCompletion for enum value completion", async () => {
         const ctx = parseCompletionContext(["--format", ""], testCmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
       });
 
-      it("should set NoFileCompletion for custom choices completion", () => {
+      it("should set NoFileCompletion for custom choices completion", async () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -976,12 +1002,59 @@ describe("Completion", () => {
         });
 
         const ctx = parseCompletionContext(["--env", ""], cmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
         expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
       });
 
-      it("should resolve shellCommand in JS instead of using markers", () => {
+      it("should include custom negation as an option candidate", async () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            cache: arg(z.boolean().default(true), {
+              negation: "disable-cache",
+              negationDescription: "Disable the cache",
+            }),
+          }),
+          run: () => {},
+        });
+
+        const ctx = parseCompletionContext(["--"], cmd);
+        const result = await gen(ctx);
+
+        const optionCandidates = result.candidates.filter((c) => c.type === "option");
+        expect(optionCandidates.some((c) => c.value === "--cache")).toBe(true);
+        const negation = optionCandidates.find((c) => c.value === "--disable-cache");
+        expect(negation).toBeDefined();
+        expect(negation?.description).toBe("Disable the cache");
+      });
+
+      it("should treat positive flag and custom negation as mutually exclusive", async () => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+            other: arg(z.boolean().default(false)),
+          }),
+          run: () => {},
+        });
+
+        // Typing --cache hides both --cache and --disable-cache
+        const ctx1 = parseCompletionContext(["--cache", "--"], cmd);
+        const opts1 = (await gen(ctx1)).candidates.filter((c) => c.type === "option");
+        expect(opts1.some((c) => c.value === "--cache")).toBe(false);
+        expect(opts1.some((c) => c.value === "--disable-cache")).toBe(false);
+        expect(opts1.some((c) => c.value === "--other")).toBe(true);
+
+        // Typing --disable-cache also hides both
+        const ctx2 = parseCompletionContext(["--disable-cache", "--"], cmd);
+        const opts2 = (await gen(ctx2)).candidates.filter((c) => c.type === "option");
+        expect(opts2.some((c) => c.value === "--cache")).toBe(false);
+        expect(opts2.some((c) => c.value === "--disable-cache")).toBe(false);
+        expect(opts2.some((c) => c.value === "--other")).toBe(true);
+      });
+
+      it("should resolve shellCommand in JS instead of using markers", async () => {
         const cmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -995,11 +1068,9 @@ describe("Completion", () => {
         });
 
         const ctx = parseCompletionContext(["--item", ""], cmd);
-        const result = generateCandidates(ctx);
+        const result = await gen(ctx);
 
-        // Should NOT have __command: marker
         expect(result.candidates.some((c) => c.value.startsWith("__command:"))).toBe(false);
-        // Should have resolved candidates from the shell command
         expect(result.candidates.some((c) => c.value === "foo")).toBe(true);
         expect(result.candidates.some((c) => c.value === "bar")).toBe(true);
         expect(result.candidates.some((c) => c.value === "baz")).toBe(true);
@@ -1162,7 +1233,7 @@ describe("Completion", () => {
         expect(completeCmd.run).toBeDefined();
       });
 
-      it("should output completion candidates when run", () => {
+      it("should output completion candidates when run", async () => {
         const mainCmd = defineCommand({
           name: "mycli",
           args: z.object({
@@ -1174,7 +1245,7 @@ describe("Completion", () => {
         const completeCmd = createDynamicCompleteCommand(mainCmd);
 
         const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-        completeCmd.run?.({ shell: "fish", args: ["--format", ""] });
+        await completeCmd.run?.({ shell: "fish", args: ["--format", ""] });
 
         const output = consoleSpy.mock.calls
           .map((args) => args.map((value) => String(value)).join(" "))
@@ -1201,7 +1272,8 @@ describe("Completion", () => {
           programName: "mycli",
         });
 
-        expect(result.script).toContain("# Bash completion for mycli");
+        expect(result.script).toContain("# program: mycli");
+        expect(result.script).toContain("# shell: bash");
         expect(result.script).toContain("_mycli_completions");
         expect(result.script).toContain("complete -o default -F _mycli_completions mycli");
       });
@@ -1220,7 +1292,8 @@ describe("Completion", () => {
           programName: "mycli",
         });
 
-        expect(result.script).toContain("# Zsh completion for mycli");
+        expect(result.script).toContain("# program: mycli");
+        expect(result.script).toContain("# shell: zsh");
         expect(result.script).toContain("#compdef mycli");
         expect(result.script).toContain("compdef _mycli mycli");
       });
@@ -1239,7 +1312,8 @@ describe("Completion", () => {
           programName: "mycli",
         });
 
-        expect(result.script).toContain("# Fish completion for mycli");
+        expect(result.script).toContain("# program: mycli");
+        expect(result.script).toContain("# shell: fish");
         expect(result.script).toContain("__fish_mycli_complete");
         expect(result.script).toContain("complete -c mycli -f");
       });
@@ -1455,6 +1529,438 @@ describe("Completion", () => {
         matcher: string[];
         extensions: string[];
       }>().not.toMatchTypeOf<CompletionMeta>();
+    });
+  });
+
+  describe("static-script header", () => {
+    const cmd = defineCommand({ name: "mycli", run: () => {} });
+
+    it("embeds bin-sig + program-version in bash header when both are set", () => {
+      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+      const result = generateCompletion(cmd, {
+        shell: "bash",
+        programName: "mycli",
+        binPath: fakeBin,
+        programVersion: "1.2.3",
+      });
+      const expectedSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+      expect(result.script).toContain(`# politty-bin-sig: ${expectedSig}`);
+      expect(result.script).toContain("# program-version: 1.2.3");
+      expect(result.script).toContain("# shell: bash");
+    });
+
+    it("falls back to bin-sig 0 when binPath is unreadable", () => {
+      const result = generateCompletion(cmd, {
+        shell: "zsh",
+        programName: "mycli",
+        binPath: "/nonexistent/path/to/binary",
+      });
+      expect(result.script).toContain("# politty-bin-sig: 0");
+    });
+
+    it("does not emit program-version line when not provided", () => {
+      const result = generateCompletion(cmd, {
+        shell: "fish",
+        programName: "mycli",
+      });
+      expect(result.script).not.toContain("# program-version:");
+    });
+  });
+
+  describe("install / refreshIfStale", () => {
+    const cmd = defineCommand({ name: "mycli", run: () => {} });
+    let cacheDir: string;
+    let fakeBin: string;
+
+    beforeEach(() => {
+      const root = mkdtempSync(join(tmpdir(), "politty-install-"));
+      cacheDir = join(root, "cache");
+      fakeBin = join(root, "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+    });
+
+    it("installPath puts bash/zsh under cacheDir/completion.<shell>", () => {
+      expect(installPath("mycli", "bash", cacheDir)).toBe(join(cacheDir, "completion.bash"));
+      expect(installPath("mycli", "zsh", cacheDir)).toBe(join(cacheDir, "completion.zsh"));
+    });
+
+    it("installPath routes fish to $XDG_CONFIG_HOME/fish/completions/<prog>.fish", () => {
+      const prev = process.env.XDG_CONFIG_HOME;
+      process.env.XDG_CONFIG_HOME = "/tmp/cfg";
+      try {
+        expect(installPath("mycli", "fish")).toBe("/tmp/cfg/fish/completions/mycli.fish");
+      } finally {
+        if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
+        else process.env.XDG_CONFIG_HOME = prev;
+      }
+    });
+
+    it("install writes the script atomically with the embedded bin-sig", () => {
+      const target = install(
+        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
+        "bash",
+      );
+      expect(target).toBe(join(cacheDir, "completion.bash"));
+      const sig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+      const written = readFileSync(target, "utf8");
+      expect(written).toContain(`# politty-bin-sig: ${sig}`);
+      expect(written).toContain("_mycli_completions");
+    });
+
+    it("refreshIfStale rewrites the cache when bin-sig differs", () => {
+      const target = install(
+        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
+        "bash",
+      );
+      const originalSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+
+      // Bump the binary mtime by 5s — this should force a rewrite.
+      const bumped = new Date(statSync(fakeBin).mtimeMs + 5000);
+      utimesSync(fakeBin, bumped, bumped);
+
+      refreshIfStale(
+        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
+        "bash",
+      );
+      const after = readFileSync(target, "utf8");
+      const newSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+      expect(newSig).not.toBe(originalSig);
+      expect(after).toContain(`# politty-bin-sig: ${newSig}`);
+    });
+
+    it("refreshIfStale leaves the cache untouched when bin-sig matches", () => {
+      const target = install(
+        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
+        "zsh",
+      );
+      const beforeMtime = statSync(target).mtimeMs;
+      // Sleep-free guarantee: same bin = same sig, so nothing should be rewritten.
+      refreshIfStale({ rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin }, "zsh");
+      expect(statSync(target).mtimeMs).toBe(beforeMtime);
+    });
+
+    it("refreshIfStale never throws on a bogus binPath", () => {
+      expect(() =>
+        refreshIfStale(
+          { rootCommand: cmd, programName: "mycli", cacheDir, binPath: "/nope/missing" },
+          "bash",
+        ),
+      ).not.toThrow();
+    });
+
+    it("hasManagedCache returns false when the cache file does not exist", () => {
+      expect(hasManagedCache({ programName: "mycli", cacheDir }, "bash")).toBe(false);
+    });
+
+    it("hasManagedCache returns false for a non-politty cache file", () => {
+      const target = installPath("mycli", "bash", cacheDir);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, "# user-managed\ncomplete -c mycli\n");
+      expect(hasManagedCache({ programName: "mycli", cacheDir }, "bash")).toBe(false);
+    });
+
+    it("hasManagedCache returns true once install has run", () => {
+      install({ rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin }, "bash");
+      expect(hasManagedCache({ programName: "mycli", cacheDir }, "bash")).toBe(true);
+    });
+  });
+
+  describe("generateLoader", () => {
+    it("emits a bash loader that sources the cache file", () => {
+      const snippet = generateLoader({ programName: "mycli", shell: "bash" });
+      expect(snippet).toContain("__mycli_load_completion()");
+      expect(snippet).toContain("politty-bin-sig:");
+      expect(snippet).toContain("completion.bash");
+      expect(snippet).toContain('source "$_cache"');
+    });
+
+    it("emits a zsh loader with no_aliases and emulate -L zsh", () => {
+      const snippet = generateLoader({ programName: "mycli", shell: "zsh" });
+      expect(snippet).toContain("emulate -L zsh");
+      expect(snippet).toContain("setopt local_options no_aliases");
+      expect(snippet).toContain("completion.zsh");
+    });
+
+    it("hardcodes the cache directory when cacheDir is provided", () => {
+      const snippet = generateLoader({
+        programName: "mycli",
+        shell: "bash",
+        cacheDir: "/opt/cache",
+      });
+      expect(snippet).toContain("'/opt/cache/completion.bash'");
+      expect(snippet).not.toContain("XDG_CACHE_HOME");
+    });
+
+    it("single-quote escapes hardcoded cache paths so shell metachars stay inert", () => {
+      const snippet = generateLoader({
+        programName: "mycli",
+        shell: "bash",
+        cacheDir: "/opt/$(rm -rf)/cache's",
+      });
+      // Path appears once, fully single-quoted, with `'` escaped via `'\''`.
+      expect(snippet).toContain("'/opt/$(rm -rf)/cache'\\''s/completion.bash'");
+      // No naked `$(...)` that would run on source.
+      expect(snippet).not.toContain('"/opt/$(rm -rf)/cache');
+    });
+
+    it("throws for fish — fish uses an autoload file instead", () => {
+      expect(() => generateLoader({ programName: "mycli", shell: "fish" })).toThrow(
+        /fish does not use an rc loader/,
+      );
+    });
+  });
+
+  describe("defaultCacheDir", () => {
+    let prevXdg: string | undefined;
+    let prevHome: string | undefined;
+
+    beforeEach(() => {
+      prevXdg = process.env.XDG_CACHE_HOME;
+      prevHome = process.env.HOME;
+    });
+
+    afterEach(() => {
+      if (prevXdg === undefined) delete process.env.XDG_CACHE_HOME;
+      else process.env.XDG_CACHE_HOME = prevXdg;
+      if (prevHome === undefined) delete process.env.HOME;
+      else process.env.HOME = prevHome;
+    });
+
+    it("uses XDG_CACHE_HOME when set", () => {
+      process.env.XDG_CACHE_HOME = "/var/cache";
+      expect(defaultCacheDir("mycli")).toBe("/var/cache/mycli");
+    });
+
+    it("falls back to $HOME/.cache when XDG_CACHE_HOME is unset", () => {
+      delete process.env.XDG_CACHE_HOME;
+      process.env.HOME = "/home/alice";
+      expect(defaultCacheDir("mycli")).toBe("/home/alice/.cache/mycli");
+    });
+  });
+
+  describe("fish self-rewriting autoload", () => {
+    const cmd = defineCommand({ name: "mycli", run: () => {} });
+
+    it("invokes __refresh-completion (not `completion fish`) and bails out of the stale body on success", () => {
+      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+      const { script } = generateCompletion(cmd, {
+        shell: "fish",
+        programName: "mycli",
+        binPath: fakeBin,
+      });
+      // Refresh body uses the hidden subcommand so user setup/cleanup/prompt is skipped.
+      expect(script).toContain('"$_bin" __refresh-completion fish 2>/dev/null');
+      // The stale body must be skipped after a successful refresh.
+      expect(script).toContain("set -l _politty_refreshed $status");
+      expect(script).toContain("test $_politty_refreshed -eq 0; and return");
+      // GNU stat probed before BSD stat (otherwise BSD stat -f reports filesystem mode).
+      expect(script).toContain("stat -L -c '%Y'");
+      expect(script).toContain("stat -L -f '%m'");
+    });
+
+    it("embeds the resolved bin-sig so the refresh function can early-exit when fresh", () => {
+      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\n");
+      const sig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+      const { script } = generateCompletion(cmd, {
+        shell: "fish",
+        programName: "mycli",
+        binPath: fakeBin,
+      });
+      expect(script).toContain(`test "$_sig" = "${sig}"; and return 1`);
+    });
+  });
+
+  describe("completion subcommand --install / --loader flags", () => {
+    let cacheDir: string;
+    let fakeBin: string;
+    const cmd = defineCommand({ name: "mycli", run: () => {} });
+
+    beforeEach(() => {
+      const root = mkdtempSync(join(tmpdir(), "politty-installflag-"));
+      cacheDir = join(root, "cache");
+      fakeBin = join(root, "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+    });
+
+    it("--install writes the script to the cache and prints the loader snippet to stderr (bash)", () => {
+      const subcommand = createCompletionCommand(cmd, "mycli", undefined, { cacheDir });
+      const captured: string[] = [];
+      const errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+        captured.push(args.map(String).join(" "));
+      });
+      try {
+        subcommand.run?.({ shell: "bash", instructions: false, install: true, loader: false });
+
+        const target = join(cacheDir, "completion.bash");
+        const written = readFileSync(target, "utf8");
+        expect(written).toContain("# politty-bin-sig:");
+        expect(written).toContain("_mycli_completions");
+
+        const stderr = captured.join("\n");
+        expect(stderr).toContain(`installed: ${target}`);
+        expect(stderr).toContain("Add to your ~/.bashrc:");
+        expect(stderr).toContain("__mycli_load_completion()");
+      } finally {
+        errSpy.mockRestore();
+      }
+    });
+
+    it("--install for fish writes the autoload file and does NOT print a loader snippet", () => {
+      const cfgRoot = mkdtempSync(join(tmpdir(), "politty-fishcfg-"));
+      const prevXdg = process.env.XDG_CONFIG_HOME;
+      process.env.XDG_CONFIG_HOME = cfgRoot;
+
+      const subcommand = createCompletionCommand(cmd, "mycli", undefined, { cacheDir });
+      const captured: string[] = [];
+      const errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+        captured.push(args.map(String).join(" "));
+      });
+      try {
+        subcommand.run?.({ shell: "fish", instructions: false, install: true, loader: false });
+
+        const target = join(cfgRoot, "fish", "completions", "mycli.fish");
+        expect(readFileSync(target, "utf8")).toContain("# shell: fish");
+        const stderr = captured.join("\n");
+        expect(stderr).toContain(`installed: ${target}`);
+        // Fish has no rc-loader story; we must not tell the user to paste anything.
+        expect(stderr).not.toContain("Add to your ~/");
+      } finally {
+        errSpy.mockRestore();
+        if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+        else process.env.XDG_CONFIG_HOME = prevXdg;
+      }
+    });
+
+    it("--loader prints just the rc loader to stdout (no script body)", () => {
+      const subcommand = createCompletionCommand(cmd, "mycli", undefined, { cacheDir });
+      const captured: string[] = [];
+      const writeSpy = vi
+        .spyOn(process.stdout, "write")
+        .mockImplementation((chunk: string | Uint8Array): boolean => {
+          captured.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
+          return true;
+        });
+      try {
+        subcommand.run?.({ shell: "zsh", instructions: false, install: false, loader: true });
+
+        const out = captured.join("");
+        expect(out).toContain("__mycli_load_completion()");
+        expect(out).toContain("emulate -L zsh");
+        // Loader must NOT contain the full completion script body.
+        expect(out).not.toContain("_mycli_completions");
+        expect(out).not.toContain("#compdef mycli");
+      } finally {
+        writeSpy.mockRestore();
+      }
+    });
+
+    it("--loader for fish throws because fish uses an autoload file instead", () => {
+      const subcommand = createCompletionCommand(cmd, "mycli");
+      expect(() =>
+        subcommand.run?.({ shell: "fish", instructions: false, install: false, loader: true }),
+      ).toThrow(/fish does not use an rc loader/);
+    });
+  });
+
+  describe("__refresh-completion subcommand registration", () => {
+    it("withCompletionCommand registers __refresh-completion so the loader can call it", () => {
+      const wrapped = withCompletionCommand(defineCommand({ name: "mycli", run: () => {} }));
+      const refresh = wrapped.subCommands?.["__refresh-completion"];
+      expect(refresh).toBeDefined();
+      if (!refresh || typeof refresh === "function" || isLazyCommand(refresh)) {
+        throw new Error("expected __refresh-completion to be a registered command object");
+      }
+      expect(refresh.name).toBe("__refresh-completion");
+    });
+
+    it("createCompletionCommand also auto-registers __refresh-completion on the root", () => {
+      // Without this, host CLIs that wire `completion: createCompletionCommand(...)` directly
+      // would generate loaders that shell out to a subcommand the CLI never exposed.
+      const root = defineCommand({ name: "mycli", run: () => {} });
+      createCompletionCommand(root, "mycli");
+      expect(root.subCommands?.["__refresh-completion"]).toBeDefined();
+    });
+  });
+
+  describe("withCompletionCommand runMainHook (background refresh gates)", () => {
+    let cacheDir: string;
+    let prevShell: string | undefined;
+    let prevOptOut: string | undefined;
+    let wrapped: ReturnType<typeof withCompletionCommand>;
+
+    beforeEach(() => {
+      cacheDir = mkdtempSync(join(tmpdir(), "politty-hook-"));
+      prevShell = process.env.SHELL;
+      prevOptOut = process.env.POLITTY_NO_COMPLETION_REFRESH;
+      process.env.SHELL = "/usr/local/bin/bash";
+      delete process.env.POLITTY_NO_COMPLETION_REFRESH;
+      // Pre-populate a politty-managed cache so `hasManagedCache` returns true,
+      // letting us isolate the *other* gates one at a time.
+      const fakeBin = join(cacheDir, "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\n");
+      install(
+        {
+          rootCommand: defineCommand({ name: "mycli", run: () => {} }),
+          programName: "mycli",
+          cacheDir,
+          binPath: fakeBin,
+        },
+        "bash",
+      );
+      wrapped = withCompletionCommand(defineCommand({ name: "mycli", run: () => {} }), {
+        programName: "mycli",
+        cacheDir,
+      });
+      spawnSpy.mockClear();
+    });
+
+    afterEach(() => {
+      if (prevShell === undefined) delete process.env.SHELL;
+      else process.env.SHELL = prevShell;
+      if (prevOptOut === undefined) delete process.env.POLITTY_NO_COMPLETION_REFRESH;
+      else process.env.POLITTY_NO_COMPLETION_REFRESH = prevOptOut;
+    });
+
+    it("spawns a detached refresh child for ordinary CLI invocations", () => {
+      wrapped.runMainHook?.(["build", "--watch"]);
+      expect(spawnSpy).toHaveBeenCalledTimes(1);
+      const [, spawnArgs, opts] = spawnSpy.mock.calls[0]!;
+      expect(spawnArgs).toContain("__refresh-completion");
+      expect(spawnArgs).toContain("bash");
+      expect(opts).toMatchObject({ detached: true, stdio: "ignore" });
+    });
+
+    it("opt-out via POLITTY_NO_COMPLETION_REFRESH skips the spawn", () => {
+      process.env.POLITTY_NO_COMPLETION_REFRESH = "1";
+      wrapped.runMainHook?.(["build"]);
+      expect(spawnSpy).not.toHaveBeenCalled();
+    });
+
+    it("invocations of completion / __complete / __refresh-completion never re-spawn", () => {
+      wrapped.runMainHook?.(["completion", "bash"]);
+      wrapped.runMainHook?.(["__complete", "anything"]);
+      wrapped.runMainHook?.(["__refresh-completion", "bash"]);
+      expect(spawnSpy).not.toHaveBeenCalled();
+    });
+
+    it("skips the spawn when no managed cache exists yet (avoids creating files the user never opted into)", () => {
+      // Point at an empty cacheDir so `hasManagedCache` returns false.
+      const emptyDir = mkdtempSync(join(tmpdir(), "politty-hook-empty-"));
+      const w = withCompletionCommand(defineCommand({ name: "mycli", run: () => {} }), {
+        programName: "mycli",
+        cacheDir: emptyDir,
+      });
+      w.runMainHook?.(["build"]);
+      expect(spawnSpy).not.toHaveBeenCalled();
+    });
+
+    it("skips the spawn when $SHELL is unrecognized", () => {
+      process.env.SHELL = "/bin/dash";
+      wrapped.runMainHook?.(["build"]);
+      expect(spawnSpy).not.toHaveBeenCalled();
     });
   });
 });

@@ -26,6 +26,18 @@ export {
 export { createDualCaseProxy } from "./core/case-proxy.js";
 export type { CamelCase, KebabCase, WithCaseVariants } from "./core/case-types.js";
 export { createDefineCommand, defineCommand, type MergedArgs } from "./core/command.js";
+export type {
+  CompletionDirectiveMask,
+  DynamicCompletionCandidate,
+  DynamicCompletionContext,
+  DynamicCompletionResolver,
+  DynamicCompletionResult,
+} from "./core/dynamic-completion-types.js";
+export type {
+  ExpandCandidate,
+  ExpandCompletion,
+  ResolvedExpandCandidate,
+} from "./core/expand-completion-types.js";
 export { runCommand, runMain } from "./core/runner.js";
 export {
   extractFields,
@@ -66,38 +78,40 @@ export type {
   GlobalCleanupContext,
   GlobalSetupContext,
   LogEntry,
-  // Logger type
-  Logger,
   LogLevel,
   LogStream,
+  // Logger type
+  Logger,
   // Options and result types
   MainOptions,
   NonRunnableCommand,
   PromptResolver,
   RunCommandOptions,
-  RunnableCommand,
   RunResult,
   RunResultFailure,
   RunResultSuccess,
+  RunnableCommand,
   // Context types
   SetupContext,
+  SubCommandValue,
   // Subcommand types
   SubCommandsRecord,
-  SubCommandValue,
 } from "./types.js";
 // Command definition validation
 export {
   CaseVariantCollisionError,
   DuplicateAliasError,
   DuplicateFieldError,
-  formatCommandValidationErrors,
+  DuplicateNegationError,
   PositionalConfigError,
   ReservedAliasError,
+  formatCommandValidationErrors,
   validateCaseVariantCollisions,
   validateCommand,
   validateCrossSchemaCollisions,
   validateDuplicateAliases,
   validateDuplicateFields,
+  validateDuplicateNegations,
   validatePositionalConfig,
   validateReservedAliases,
   type CommandValidationError,

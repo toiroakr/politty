@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 import type { GlobalArgs, IsEmpty } from "../types.js";
+import type { DynamicCompletionResolver } from "./dynamic-completion-types.js";
+import type { ExpandCompletion } from "./expand-completion-types.js";
 
 /**
  * Built-in completion types
@@ -8,13 +10,32 @@ import type { GlobalArgs, IsEmpty } from "../types.js";
 export type CompletionType = "file" | "directory" | "none";
 
 /**
- * Custom completion specification
+ * Custom completion specification.
+ *
+ * `choices`, `shellCommand`, `resolve`, and `expand` are mutually exclusive —
+ * specifying more than one throws when the field metadata is resolved.
  */
 export interface CustomCompletion {
   /** Static list of choices for completion */
   choices?: string[];
   /** Shell command to execute for dynamic completion */
   shellCommand?: string;
+  /**
+   * In-process JS callback for dynamic completion. Receives parsed context
+   * (other arg values typed so far, previously supplied values for this same
+   * option) and returns candidates. Static shell scripts delegate to
+   * `<program> __complete` whenever this is set.
+   */
+  resolve?: DynamicCompletionResolver;
+  /**
+   * Pre-enumerated completion baked into the generated shell script. The
+   * candidate list is computed at script-generation time by calling
+   * `enumerate` for every combination of the sibling arg values listed in
+   * `dependsOn` (each must have a static `choices` or enum schema). The
+   * shell then dispatches via a case lookup keyed by the runtime values of
+   * those args — no Node process is spawned on TAB.
+   */
+  expand?: ExpandCompletion;
 }
 
 /**
@@ -164,6 +185,58 @@ export interface BaseArgMeta<TValue = unknown> {
    */
   prompt?: PromptMeta;
   /**
+   * Control the boolean negation option.
+   *
+   * Boolean fields automatically accept `--no-<cliName>` (and the camelCase
+   * `--no<Name>` form) to set the value to `false`. By default this form is
+   * accepted by the parser but hidden from help, generated docs, and shell
+   * completions. This option lets you customize or expose that behavior:
+   *
+   * - `string` — replaces the auto-generated `--no-*` form with a custom
+   *   name. The default `--no-*` is no longer recognized.
+   * - `true`  — opt-in to advertising the default `--no-<cliName>` form in
+   *   help, generated docs, and shell completions. Parser behavior is
+   *   unchanged.
+   * - `false` — disables negation entirely; neither the default `--no-*`
+   *   nor any custom name is accepted.
+   *
+   * String values follow the same naming conventions as `cliName`
+   * (kebab-case is recommended). Only valid on boolean fields; setting
+   * `negation` on a non-boolean field is a type error and raises a
+   * runtime error during command parsing.
+   *
+   * @example
+   * ```ts
+   * // Custom negation name
+   * cache: arg(z.boolean().default(true), {
+   *   description: "Enable caching",
+   *   negation: "disable-cache",
+   * })
+   * // Accepts: --cache (true), --disable-cache (false)
+   * // No longer accepts: --no-cache
+   *
+   * // Expose default `--no-X` in help/docs/completion
+   * verbose: arg(z.boolean().default(false), {
+   *   negation: true,
+   * })
+   * // Help shows `--verbose / --no-verbose`
+   *
+   * // Disable negation entirely
+   * dryRun: arg(z.boolean().default(false), {
+   *   negation: false,
+   * })
+   * // Accepts: --dry-run (true)
+   * // No longer accepts: --no-dry-run
+   * ```
+   */
+  negation?: string | boolean;
+  /**
+   * Description shown for the negation option in help and generated docs.
+   * Only meaningful when `negation` is set to a custom name string or `true`.
+   * Disallowed when `negation` is `false`.
+   */
+  negationDescription?: string;
+  /**
    * Side-effect callback executed after argument parsing and validation.
    * Runs before the command lifecycle (setup/run/cleanup).
    * Use Zod .transform() for value transformation instead.
@@ -271,29 +344,81 @@ type ReservedAliasTypeError<M> = {
   __typeError: "Alias 'h' or 'H' requires overrideBuiltinAlias: true";
 };
 
+type NegationTypeError<M> = {
+  [K in keyof M]: M[K];
+} & {
+  __typeError: "negation/negationDescription can only be used on boolean fields";
+};
+
 type AliasFieldOf<M> = M extends { alias: infer A } ? A : never;
 type HiddenAliasFieldOf<M> = M extends { hiddenAlias: infer H } ? H : never;
+
+/**
+ * Check whether a Zod output type is a (possibly optional) boolean.
+ * Strips `undefined` to allow `z.boolean().optional()`. Requires both
+ * `boolean extends NonNullable<T>` (so `z.literal(true)` is rejected — the full
+ * `boolean` domain is needed) and `NonNullable<T> extends boolean` (so unions
+ * such as `z.union([z.boolean(), z.string()])` are rejected at the type level
+ * to match the runtime check).
+ */
+type IsBooleanField<T> =
+  boolean extends NonNullable<T> ? ([NonNullable<T>] extends [boolean] ? true : false) : false;
+
+/**
+ * Detect whether `M` has `K` set to a non-undefined value.
+ *
+ * When `M` is inferred from a literal such as `{ negation: "off" }`,
+ * `M["negation"]` is `"off"` (without `undefined`), so this returns `true`.
+ * When `M` is the wider `ArgMeta` type, `M["negation"]` is
+ * `string | boolean | undefined`, so this returns `false` and avoids
+ * false-positive type errors on broadly-typed meta values.
+ */
+type HasExplicit<M, K extends string> = K extends keyof M
+  ? undefined extends M[K]
+    ? false
+    : true
+  : false;
+
+/**
+ * Reject `negation` / `negationDescription` on non-boolean fields.
+ * Uses {@link HasExplicit} so the error only fires when the user explicitly
+ * sets the field on a narrowly-inferred meta literal.
+ */
+type ValidateNegation<M, TValue> =
+  HasExplicit<M, "negation"> extends true
+    ? IsBooleanField<TValue> extends true
+      ? M
+      : NegationTypeError<M>
+    : HasExplicit<M, "negationDescription"> extends true
+      ? IsBooleanField<TValue> extends true
+        ? M
+        : NegationTypeError<M>
+      : M;
 
 /**
  * Type helper to validate ArgMeta.
  * Forces a type error when a reserved alias ("h" / "H") is used without
  * `overrideBuiltinAlias: true`, whether the alias is provided as a string
  * or as part of an array, and whether it appears in `alias` or `hiddenAlias`.
+ * Also rejects `negation` / `negationDescription` on non-boolean fields.
  */
-type ValidateArgMeta<M> = M extends { overrideBuiltinAlias: true }
-  ? M
+type ValidateArgMeta<M, TValue = unknown> = M extends { overrideBuiltinAlias: true }
+  ? ValidateNegation<M, TValue>
   : ContainsReservedAlias<AliasFieldOf<M>> extends true
     ? ReservedAliasTypeError<M>
     : ContainsReservedAlias<HiddenAliasFieldOf<M>> extends true
       ? ReservedAliasTypeError<M>
-      : M;
+      : ValidateNegation<M, TValue>;
 
 export function arg<T extends z.ZodType>(schema: T): T;
 export function arg<T extends z.ZodType, M extends ArgMeta<z.output<T>>>(
   schema: T,
-  meta: ValidateArgMeta<M>,
+  meta: ValidateArgMeta<M, z.output<T>>,
 ): T;
-export function arg<T extends z.ZodType>(schema: T, meta?: ValidateArgMeta<ArgMeta>): T {
+export function arg<T extends z.ZodType>(
+  schema: T,
+  meta?: ValidateArgMeta<ArgMeta, z.output<T>>,
+): T {
   if (meta) {
     argRegistry.add(schema, meta as ArgMeta);
   }
@@ -307,5 +432,10 @@ export function arg<T extends z.ZodType>(schema: T, meta?: ValidateArgMeta<ArgMe
  * @returns The metadata if registered, undefined otherwise
  */
 export function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
-  return argRegistry.get(schema);
+  // Zod's `$replace<Meta, S>` recursively rewrites the meta type, which mangles
+  // the generic `then` signature of `PromiseLike<void>` inside `effect`'s return
+  // type under newer TypeScript builds (@typescript/native-preview ≥ 20260504).
+  // The runtime value is always the original ArgMeta we stored, so we restore
+  // the static type at the boundary.
+  return argRegistry.get(schema) as ArgMeta | undefined;
 }

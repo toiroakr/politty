@@ -16,11 +16,11 @@
  *   pnpx tsx playground/24-shell-completion/index.ts completion bash -i
  *
  *   # Test __complete command directly (simulates what the shell calls)
- *   pnpx tsx playground/24-shell-completion/index.ts __complete -- ""
- *   pnpx tsx playground/24-shell-completion/index.ts __complete -- "deploy" "--"
- *   pnpx tsx playground/24-shell-completion/index.ts __complete -- "deploy" "--env" ""
- *   pnpx tsx playground/24-shell-completion/index.ts __complete -- "deploy" "--config" ""
- *   pnpx tsx playground/24-shell-completion/index.ts __complete -- "build" "--format" ""
+ *   pnpx tsx playground/24-shell-completion/index.ts __complete --shell bash -- ""
+ *   pnpx tsx playground/24-shell-completion/index.ts __complete --shell bash -- "deploy" "--"
+ *   pnpx tsx playground/24-shell-completion/index.ts __complete --shell bash -- "deploy" "--env" ""
+ *   pnpx tsx playground/24-shell-completion/index.ts __complete --shell bash -- "deploy" "--config" ""
+ *   pnpx tsx playground/24-shell-completion/index.ts __complete --shell bash -- "build" "--format" ""
  */
 
 import { z } from "zod";

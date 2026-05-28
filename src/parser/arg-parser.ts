@@ -6,6 +6,7 @@ import {
   validateCrossSchemaCollisions,
   validateDuplicateAliases,
   validateDuplicateFields,
+  validateDuplicateNegations,
   validatePositionalConfig,
   validateReservedAliases,
 } from "../validator/command-validator.js";
@@ -92,7 +93,7 @@ export function parseArgs(
           remainingArgs: scanResult.tokensAfterSubcommand,
           rawArgs: {},
           positionals: [],
-          unknownFlags: [],
+          unknownFlags: scanResult.suppressedTokens,
           rawGlobalArgs,
         };
       }
@@ -124,6 +125,7 @@ export function parseArgs(
       validateDuplicateFields(extracted);
       validateCaseVariantCollisions(extracted);
       validateDuplicateAliases(extracted);
+      validateDuplicateNegations(extracted);
       validatePositionalConfig(extracted);
       validateReservedAliases(extracted, hasSubCommands);
       if (options.globalExtracted) {
@@ -132,10 +134,15 @@ export function parseArgs(
     }
   }
 
-  // Check for help/version flags only when no subcommand is detected
-  // -h/-H are treated as --help/--help-all unless explicitly overridden by user
+  // Check for help/version flags only when no subcommand is detected.
+  // -h/-H are treated as --help/--help-all unless explicitly overridden by user.
   // Note: only the current command's overrideBuiltinAlias is checked here.
   // Global options with alias 'h'/'H' do not participate in this override check.
+  // Tokens after `--` are pure positionals, so help/version flags appearing
+  // there (e.g. `mycli __complete --shell bash -- foo --help`) must not
+  // trigger the help/version branch.
+  const ddIdx = argv.indexOf("--");
+  const flagScanArgv = ddIdx >= 0 ? argv.slice(0, ddIdx) : argv;
   const hasUserDefinedH =
     extracted?.fields.some(
       (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("H"),
@@ -144,10 +151,12 @@ export function parseArgs(
     extracted?.fields.some(
       (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("h"),
     ) ?? false;
-  const helpAllRequested = argv.includes("--help-all") || (!hasUserDefinedH && argv.includes("-H"));
+  const helpAllRequested =
+    flagScanArgv.includes("--help-all") || (!hasUserDefinedH && flagScanArgv.includes("-H"));
   const helpRequested =
-    !helpAllRequested && (argv.includes("--help") || (!hasUserDefinedh && argv.includes("-h")));
-  const versionRequested = argv.includes("--version");
+    !helpAllRequested &&
+    (flagScanArgv.includes("--help") || (!hasUserDefinedh && flagScanArgv.includes("-h")));
+  const versionRequested = flagScanArgv.includes("--version");
 
   if (helpRequested || helpAllRequested || versionRequested) {
     return {
@@ -316,7 +325,10 @@ function separateGlobalArgs(
         arg,
         lookup,
       );
-      const flagName = isNegated ? withoutDashes.slice(3) : withoutDashes;
+      // Use resolvedName for local collision check so that both default
+      // (`--no-cache` → cache) and custom (`--disable-cache` → cache)
+      // negation forms shadow correctly when `cache` is defined locally.
+      const flagName = resolvedName;
 
       // If also defined locally (field name, cliName, alias, or their camelCase
       // variants), let the local parser handle it
