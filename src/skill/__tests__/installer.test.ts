@@ -338,7 +338,7 @@ describe("installSkill", () => {
     // Single-skill source where `sourcePath` *is* the install cwd. The copy
     // mode would mkdir the destination inside the source, then walk the
     // source — including the freshly-created destination — and recurse until
-    // the path/disk limit is hit. The containment guard fails fast.
+    // the path/disk limit is hit. The overlap guard fails fast.
     writeFileSync(
       join(projectDir, "SKILL.md"),
       `---\nname: commit\ndescription: Test skill\nmetadata:\n  politty-cli: ${JSON.stringify(OWNERSHIP)}\n---\n# commit\n`,
@@ -354,10 +354,42 @@ describe("installSkill", () => {
     };
 
     expect(() => installSkill(skill, projectDir, { mode: "copy" })).toThrow(
-      /overlap|recurse infinitely/i,
+      /overlaps install destination/i,
     );
     // Nothing committed: the canonical slot must not exist.
     expect(() => lstatSync(join(projectDir, ".agents/skills/commit"))).toThrow();
+  });
+
+  it("should refuse a symlink-mode install whose source sits at an agent slot", () => {
+    // Symlink mode with `sourcePath = projectDir/.claude/skills/<name>` would
+    // pass the canonical check (canonicalDir is at `.agents/skills/<name>`,
+    // distinct from the source). But `populateAgentDirs` then iterates
+    // `SYMLINK_TARGETS`, hits `.claude/skills/<name>` (== source), matches
+    // the stamp, and rm-rf's the source out from under the install. The
+    // expanded overlap guard refuses up-front instead.
+    const agentSlotParent = join(projectDir, ".claude/skills");
+    mkdirSync(agentSlotParent, { recursive: true });
+    const agentSlot = join(agentSlotParent, "commit");
+    mkdirSync(agentSlot);
+    writeFileSync(
+      join(agentSlot, "SKILL.md"),
+      `---\nname: commit\ndescription: Test skill\nmetadata:\n  politty-cli: ${JSON.stringify(OWNERSHIP)}\n---\n# commit\n`,
+    );
+    const skill: DiscoveredSkill = {
+      frontmatter: {
+        name: "commit",
+        description: "Test skill",
+        metadata: { "politty-cli": OWNERSHIP },
+      },
+      sourcePath: agentSlot,
+      rawContent: "",
+    };
+
+    expect(() => installSkill(skill, projectDir, { mode: "symlink" })).toThrow(
+      /overlaps install destination/i,
+    );
+    // The source is still intact — no rm-rf reached it.
+    expect(existsSync(join(agentSlot, "SKILL.md"))).toBe(true);
   });
 });
 

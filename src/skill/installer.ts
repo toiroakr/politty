@@ -124,18 +124,38 @@ export function installSkill(
   const resolvedParent = realpathSync(canonicalParent);
   const canonicalDir = join(resolvedParent, name);
   const resolvedSource = realpathSync(skill.sourcePath);
-  // In copy mode, `canonicalDir` is created before `readdirSync(copyFrom)`
-  // walks the source. If the source contains (or is) the install root,
-  // the freshly-mkdir'd destination shows up as a new entry to copy back
-  // into itself, recursing until the path/disk limit is hit. The cyclic-
-  // symlink detector in `copyDirRecursive` doesn't catch this (no symlink
-  // is involved). Fail fast with an actionable error instead.
-  if (mode === "copy" && pathsOverlap(canonicalDir, resolvedSource)) {
+
+  // Collect every destination this install will write to so the source-vs-
+  // destination overlap guard covers both the canonical slot *and* every
+  // agent-specific slot. Without including `SYMLINK_TARGETS`, a source
+  // living at an agent slot (e.g. `.claude/skills/<name>`) survives the
+  // canonical check but gets rm-rf'd later by `populateAgentDirs`'s own
+  // `clearInstallSlot` once the source stamp matches — taking the original
+  // source data with it. Resolving each parent's realpath here keeps the
+  // comparison's prefix style aligned with `resolvedSource`.
+  const agentSlots: string[] = [];
+  for (const target of SYMLINK_TARGETS) {
+    const targetParent = resolve(cwd, target);
+    mkdirSync(targetParent, { recursive: true });
+    agentSlots.push(join(realpathSync(targetParent), name));
+  }
+
+  // Refuse to install when the source overlaps any destination:
+  //   - copy mode: `mkdirSync(dest)` runs before `readdirSync(copyFrom)`,
+  //     so a dest inside src would recurse forever (the cyclic-symlink
+  //     detector misses this — no symlink is involved).
+  //   - symlink mode: `clearInstallSlot` rm-rf's a real directory whose
+  //     stamp matches. If that real directory *is* the source, the source
+  //     is destroyed before the symlink is even written.
+  const overlap = [canonicalDir, ...agentSlots].find((dest) => pathsOverlap(dest, resolvedSource));
+  if (overlap !== undefined) {
     throw new Error(
-      `Refusing to copy in place: source ${resolvedSource} and destination ${canonicalDir} ` +
-        `overlap, which would recurse infinitely. Choose a sourceDir outside the install root.`,
+      `Refusing to install "${name}": source ${resolvedSource} overlaps install ` +
+        `destination ${overlap}. Choose a sourceDir outside .agents/skills/ and any ` +
+        `agent-specific slot directory (e.g. .claude/skills/).`,
     );
   }
+
   clearInstallSlot(canonicalDir, expectedStamp);
   symlinkOrCopy({
     linkTarget: relative(resolvedParent, resolvedSource),
