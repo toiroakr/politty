@@ -114,7 +114,7 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
       const { skills: allSkills, errors } = loadSkills(resolved);
       const stamp = resolved.stamp;
       // Pre-validate every `--exclude` value before any install side
-      // effect. A typo (e.g. `--exclude nonexitent`) previously slid
+      // effect. A typo (e.g. `--exclude nonexistent`) previously slid
       // through as a no-op; now it aborts the run with a single error
       // listing every unknown name so the user can fix the whole
       // invocation in one round-trip. Mirrors `skills add`'s unknown-name

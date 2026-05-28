@@ -11,7 +11,7 @@ import {
   symlinkSync,
   unlinkSync,
 } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
 import type {
   DiscoveredSkill,
@@ -467,11 +467,21 @@ function isNodeError(err: unknown): err is NodeJS.ErrnoException {
  * would recurse into each other. Inputs are expected to be `realpathSync`'d
  * absolute paths so trailing separators and symlink hops don't desynchronise
  * the comparison.
+ *
+ * Containment is boundary-aware: only `..` or `..<sep>...` counts as escaping
+ * `outer`. A relative path like `..backup` is a same-level sibling (one
+ * segment whose name happens to start with two dots), so it must NOT be
+ * treated as escape. The previous `startsWith("..")` check misclassified such
+ * names as outside, missing real overlaps with siblings whose name begins
+ * with `..`.
  */
 function pathsOverlap(a: string, b: string): boolean {
   if (a === b) return true;
-  const aInsideB = !relative(b, a).startsWith("..") && !isAbsolute(relative(b, a));
-  if (aInsideB) return true;
-  const bInsideA = !relative(a, b).startsWith("..") && !isAbsolute(relative(a, b));
-  return bInsideA;
+  const isContainedIn = (inner: string, outer: string): boolean => {
+    const rel = relative(outer, inner);
+    if (rel === "" || rel === ".") return true;
+    if (isAbsolute(rel)) return false;
+    return rel !== ".." && !rel.startsWith(`..${sep}`);
+  };
+  return isContainedIn(a, b) || isContainedIn(b, a);
 }

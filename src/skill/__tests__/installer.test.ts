@@ -391,6 +391,36 @@ describe("installSkill", () => {
     // The source is still intact — no rm-rf reached it.
     expect(existsSync(join(agentSlot, "SKILL.md"))).toBe(true);
   });
+
+  it("should refuse an install whose source sits inside a sibling whose name starts with '..'", () => {
+    // Boundary regression: the overlap check used `relative(...).startsWith("..")`
+    // to decide "outside", which misclassifies a child directory whose own name
+    // begins with `..` (e.g. `..backup`) as outside the canonical install slot.
+    // The buggy version would miss the containment, then `clearInstallSlot`
+    // would rm-rf the canonical slot — taking the source with it. With the
+    // boundary-aware check, only literal `..` and `..<sep>...` are escapes.
+    const canonicalParent = join(projectDir, ".agents/skills/commit");
+    const sourceDir = join(canonicalParent, "..backup");
+    mkdirSync(sourceDir, { recursive: true });
+    writeFileSync(
+      join(sourceDir, "SKILL.md"),
+      `---\nname: commit\ndescription: Test skill\nmetadata:\n  politty-cli: ${JSON.stringify(OWNERSHIP)}\n---\n# commit\n`,
+    );
+    const skill: DiscoveredSkill = {
+      frontmatter: {
+        name: "commit",
+        description: "Test skill",
+        metadata: { "politty-cli": OWNERSHIP },
+      },
+      sourcePath: sourceDir,
+      rawContent: "",
+    };
+
+    expect(() => installSkill(skill, projectDir, { mode: "symlink" })).toThrow(
+      /overlaps install destination/i,
+    );
+    expect(existsSync(join(sourceDir, "SKILL.md"))).toBe(true);
+  });
 });
 
 describe("uninstallSkill", () => {
