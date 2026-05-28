@@ -171,17 +171,25 @@ export function installSkill(
 /**
  * Uninstall a skill from the project's agent skill directories.
  *
- * Symlinks (at any of `.agents/skills/<name>` or `SYMLINK_TARGETS`) are
- * always safe to remove — by construction they were created by an install
- * flow. A real directory at any of those paths is only removed when
- * `options.expectedOwnership` is provided and the directory's SKILL.md
- * carries that ownership stamp (i.e. a copy-mode install this CLI owns).
- * Unstamped or foreign real directories are left alone so that legacy or
- * manual installs are not silently recursively deleted.
+ * Each slot is unlinked only when its ownership can be proven:
+ * - Agent-specific symlink slots (`.claude/skills/<name>` etc.) — a live
+ *   symlink is unlinked only when it routes to our canonical slot, so a
+ *   foreign tool's symlink at the same shared path is left untouched.
+ * - The canonical slot (`.agents/skills/<name>`) — a live symlink is
+ *   unlinked only when its routed-to SKILL.md carries
+ *   `options.expectedOwnership`, so another politty-based CLI's live
+ *   install in the same shared namespace is left untouched.
+ * - Real directories at any slot are removed only when the directory's
+ *   SKILL.md carries `options.expectedOwnership`. Unstamped or foreign
+ *   real directories are left alone so legacy/manual installs are not
+ *   silently recursively deleted.
  *
- * The `skills remove` / `skills sync` subcommands always pass
- * `expectedOwnership`. Direct programmatic callers get the conservative
- * default (symlinks only).
+ * `skills remove` / `skills sync` always pass `expectedOwnership`. Direct
+ * programmatic callers that omit it get the legacy permissive behaviour
+ * on symlinks (unconditional unlink) but the conservative behaviour on
+ * real directories (no-op). Broken (dangling) canonical symlinks are
+ * outside this function's purview — they have no SKILL.md to read, so
+ * `cleanupBrokenSlot` handles them with a routing check instead.
  */
 export function uninstallSkill(
   name: string,
@@ -236,15 +244,23 @@ function symlinkRoutesTo(slot: string, expected: string): boolean {
 
 /**
  * Remove a previously-installed slot:
- * - Symlink → unlink. In a shared-namespace slot (`restrictSymlinkTo`
- *   provided), only when the symlink resolves to that target. A foreign
+ * - Symlink at an agent-specific slot (`restrictSymlinkTo` provided) →
+ *   unlink only when the symlink resolves to that target. A foreign
  *   symlink (another tool, manual install) is left alone so removing one
  *   owned canonical skill never deletes another tool's link.
+ * - Symlink at the canonical slot (no `restrictSymlinkTo`) → unlink only
+ *   when its routed-to SKILL.md carries `expectedStamp`. `.agents/skills/`
+ *   is a namespace shared by every politty-based CLI, so unconditionally
+ *   unlinking would let a programmatic `uninstallSkill` caller delete a
+ *   foreign CLI's live install. `expectedStamp === null` preserves the
+ *   legacy permissive behaviour for callers that opt out of ownership
+ *   checks entirely (e.g. teardown helpers).
  * - Real directory whose SKILL.md carries `expectedStamp` → rm -rf. This
  *   handles copy-mode installs that share the same canonical path as the
  *   symlink-mode installs.
- * - Anything else (absent, real dir without matching stamp, real file) →
- *   no-op; caller can detect nothing changed by checking after the call.
+ * - Anything else (absent, real dir without matching stamp, real file,
+ *   broken symlink with no stamp to read) → no-op; caller can detect
+ *   nothing changed by checking after the call.
  *
  * `unlinkSync` (not `rmSync`) is required for symlinks to directories —
  * `rmSync` without `recursive: true` errors "Path is a directory" on a
@@ -268,10 +284,17 @@ function removeInstalledSlot(
     throw err;
   }
   if (stat.isSymbolicLink()) {
-    if (
-      options.restrictSymlinkTo === undefined ||
-      symlinkRoutesTo(path, options.restrictSymlinkTo)
-    ) {
+    if (options.restrictSymlinkTo !== undefined) {
+      if (symlinkRoutesTo(path, options.restrictSymlinkTo)) {
+        unlinkSync(path);
+      }
+      return;
+    }
+    // Canonical-slot symlink: verify the routed-to SKILL.md carries
+    // `expectedStamp` before unlinking. A `null` expectedStamp restores
+    // the legacy permissive behaviour for programmatic callers that opt
+    // out of ownership checks entirely.
+    if (expectedStamp === null || readStampAt(path) === expectedStamp) {
       unlinkSync(path);
     }
     return;

@@ -157,11 +157,11 @@ my-agent skills add --verbose         # Print install path and mode per skill
 
 ### `skills remove`
 
-Remove a specific skill, or all skills discovered in `sourceDir` when no name is given. Only skills whose `metadata["politty-cli"]` matches `"{package}:{cliName}"` are removed.
+Remove a specific skill, or every source skill discovered in `sourceDir` when no name is given. Only skills whose `metadata["politty-cli"]` matches `"{package}:{cliName}"` are removed. The no-argument form iterates the current source bundle, so an installed orphan (a skill this CLI previously installed but no longer ships in `sourceDir`) is **not** swept by `remove`; use `skills sync` for orphan reconciliation, or name the orphan explicitly.
 
 ```bash
 my-agent skills remove commit
-my-agent skills remove         # Remove all skills owned by this CLI
+my-agent skills remove         # Remove every skill currently in sourceDir that this CLI owns
 ```
 
 ### `skills list`

@@ -561,6 +561,35 @@ describe("uninstallSkill", () => {
     expect(lstatSync(claudeSlot).isSymbolicLink()).toBe(true);
     expect(realpathSync(claudeSlot)).toBe(realpathSync(foreignTarget));
   });
+
+  it("should leave a foreign canonical symlink untouched when expectedOwnership mismatches", () => {
+    // Another politty-based CLI installed a skill of the same name at
+    // .agents/skills/<name>, pointing at its own source carrying a
+    // *different* stamp. Calling uninstallSkill with our expectedOwnership
+    // must not unlink that foreign canonical symlink: the shared
+    // .agents/skills/ namespace is gated on the stamp.
+    const foreignSource = createTempDir();
+    try {
+      const foreignSkillDir = join(foreignSource, "commit");
+      mkdirSync(foreignSkillDir, { recursive: true });
+      writeFileSync(
+        join(foreignSkillDir, "SKILL.md"),
+        `---\nname: commit\ndescription: Foreign skill\nmetadata:\n  politty-cli: "other-pkg:other-cli"\n---\n# commit\n`,
+      );
+      mkdirSync(join(projectDir, ".agents/skills"), { recursive: true });
+      const canonicalSlot = join(projectDir, ".agents/skills/commit");
+      symlinkSync(foreignSkillDir, canonicalSlot, "dir");
+
+      uninstallSkill("commit", projectDir, { expectedOwnership: OWNERSHIP });
+
+      // Foreign canonical symlink must remain — its stamp does not match
+      // OWNERSHIP, so it belongs to another CLI in the shared namespace.
+      expect(lstatSync(canonicalSlot).isSymbolicLink()).toBe(true);
+      expect(realpathSync(canonicalSlot)).toBe(realpathSync(foreignSkillDir));
+    } finally {
+      rmSync(foreignSource, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("readInstalledOwnership", () => {
