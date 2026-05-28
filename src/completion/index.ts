@@ -41,7 +41,14 @@ import { generateLoader } from "./loader.js";
 import type { CompletionOptions, CompletionResult, ShellType } from "./types.js";
 import { generateZshCompletion } from "./zsh.js";
 
-// Re-export dynamic completion
+// Re-export dynamic completion types (in-process resolver)
+export type {
+  CompletionDirectiveMask,
+  DynamicCompletionCandidate,
+  DynamicCompletionContext,
+  DynamicCompletionResolver,
+  DynamicCompletionResult,
+} from "../core/dynamic-completion-types.js";
 export {
   CompletionDirective,
   createDynamicCompleteCommand,
@@ -205,7 +212,7 @@ export function createCompletionCommand(
   if (!rootCommand.subCommands?.__complete) {
     rootCommand.subCommands = {
       ...rootCommand.subCommands,
-      __complete: createDynamicCompleteCommand(rootCommand, resolvedProgramName),
+      __complete: createDynamicCompleteCommand(rootCommand, resolvedProgramName, globalArgsSchema),
     };
   }
   // Register `__refresh-completion` here too so callers using
@@ -372,9 +379,7 @@ export function withCompletionCommand<T extends AnyCommand>(
   wrappedCommand.subCommands = {
     ...command.subCommands,
     completion: createCompletionCommand(wrappedCommand, programName, globalArgsSchema, extra),
-    // Note: __complete (dynamic completion) does not yet receive globalArgsSchema.
-    // Static completion scripts (bash/zsh/fish) already include global options.
-    __complete: createDynamicCompleteCommand(wrappedCommand, programName),
+    __complete: createDynamicCompleteCommand(wrappedCommand, programName, globalArgsSchema),
     "__refresh-completion": createRefreshCompletionCommand(
       wrappedCommand,
       resolvedProgramName,

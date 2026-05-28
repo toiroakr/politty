@@ -2,7 +2,22 @@
  * Types for shell completion generation
  */
 
+import type { DynamicCompletionResolver } from "../core/dynamic-completion-types.js";
+import type { ResolvedExpandCandidate } from "../core/expand-completion-types.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
+
+/**
+ * A single resolved entry in an "expand" lookup table.
+ *
+ * `key` is the tuple of `dependsOn` values that triggers this entry, in the
+ * same order as the originating `dependsOn` array. `candidates` is the
+ * (already deduplicated) list returned by the user's `enumerate` callback
+ * for that combination.
+ */
+export interface ExpandTableEntry {
+  readonly key: readonly string[];
+  readonly candidates: readonly ResolvedExpandCandidate[];
+}
 
 /**
  * Supported shell types for completion
@@ -39,22 +54,60 @@ export interface CompletionOptions {
 }
 
 /**
- * Value completion specification for shell scripts
+ * Value completion specification for shell scripts.
+ *
+ * Discriminated by `type`. The `dynamic` variant carries a JS resolver that
+ * the static shell scripts delegate to via `<program> __complete`. All
+ * variants share the same optional metadata fields (left undefined where
+ * inapplicable) so consumers can read `vc.choices`/`vc.extensions`/etc.
+ * without narrowing first.
  */
-export type ValueCompletion = {
-  /** Completion type */
-  type: "choices" | "file" | "directory" | "command" | "none";
-  /** List of valid choices (for "choices" type) */
-  choices?: string[];
-  /** Shell command for dynamic completion (for "command" type) */
-  shellCommand?: string;
-} & (
-  | { /** File extension filters (for "file" type) */ extensions?: string[]; matcher?: never }
+export type ValueCompletion =
+  | ({
+      /** Completion type */
+      type: "choices" | "file" | "directory" | "command" | "none";
+      /** List of valid choices (for "choices" type) */
+      choices?: string[];
+      /** Shell command for dynamic completion (for "command" type) */
+      shellCommand?: string;
+      resolve?: never;
+      dependsOn?: never;
+      table?: never;
+    } & (
+      | { /** File extension filters (for "file" type) */ extensions?: string[]; matcher?: never }
+      | {
+          /** Glob patterns for file matching (for "file" type) */ matcher?: string[];
+          extensions?: never;
+        }
+    ))
   | {
-      /** Glob patterns for file matching (for "file" type) */ matcher?: string[];
+      /** In-process dynamic completion via JS callback. */
+      type: "dynamic";
+      resolve: DynamicCompletionResolver;
+      choices?: never;
+      shellCommand?: never;
       extensions?: never;
+      matcher?: never;
+      dependsOn?: never;
+      table?: never;
     }
-);
+  | {
+      /**
+       * Pre-enumerated completion baked into the generated shell script.
+       * The `table` is the cartesian product of the `dependsOn` arg values
+       * (each having a static `choices` or enum schema). At completion time
+       * the shell dispatches on the runtime values of those args — no Node
+       * is spawned.
+       */
+      type: "expand";
+      dependsOn: readonly string[];
+      table: readonly ExpandTableEntry[];
+      choices?: never;
+      shellCommand?: never;
+      resolve?: never;
+      extensions?: never;
+      matcher?: never;
+    };
 
 /**
  * Information about a completable option
@@ -76,8 +129,24 @@ export interface CompletableOption {
   negation?: string | undefined;
   /** Description for the negation option (when distinct from the main description) */
   negationDescription?: string | undefined;
+  /**
+   * Whether the runtime parser accepts the implicit `--no-<cliName>` (and
+   * camelCase) form for this boolean option. False when the user set
+   * `negation: false` (suppressed) or `negation: <custom name>` (only the
+   * custom name is accepted). Used by the completion context parser so
+   * dynamic resolvers see the same `parsedArgs` state the runtime would
+   * compute.
+   */
+  defaultNegationAccepted?: boolean;
   /** Description for completion */
   description?: string | undefined;
+  /**
+   * True when this option originates from a `globalArgsSchema` and was
+   * propagated into every subcommand frame. The runtime parser keeps
+   * global values visible across subcommand descent, so shell generators
+   * must keep their tracker buckets separate from per-frame state.
+   */
+  isGlobal?: boolean;
   /** Whether this option takes a value */
   takesValue: boolean;
   /** Type of value expected */

@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 import type { GlobalArgs, IsEmpty } from "../types.js";
+import type { DynamicCompletionResolver } from "./dynamic-completion-types.js";
+import type { ExpandCompletion } from "./expand-completion-types.js";
 
 /**
  * Built-in completion types
@@ -8,13 +10,32 @@ import type { GlobalArgs, IsEmpty } from "../types.js";
 export type CompletionType = "file" | "directory" | "none";
 
 /**
- * Custom completion specification
+ * Custom completion specification.
+ *
+ * `choices`, `shellCommand`, `resolve`, and `expand` are mutually exclusive —
+ * specifying more than one throws when the field metadata is resolved.
  */
 export interface CustomCompletion {
   /** Static list of choices for completion */
   choices?: string[];
   /** Shell command to execute for dynamic completion */
   shellCommand?: string;
+  /**
+   * In-process JS callback for dynamic completion. Receives parsed context
+   * (other arg values typed so far, previously supplied values for this same
+   * option) and returns candidates. Static shell scripts delegate to
+   * `<program> __complete` whenever this is set.
+   */
+  resolve?: DynamicCompletionResolver;
+  /**
+   * Pre-enumerated completion baked into the generated shell script. The
+   * candidate list is computed at script-generation time by calling
+   * `enumerate` for every combination of the sibling arg values listed in
+   * `dependsOn` (each must have a static `choices` or enum schema). The
+   * shell then dispatches via a case lookup keyed by the runtime values of
+   * those args — no Node process is spawned on TAB.
+   */
+  expand?: ExpandCompletion;
 }
 
 /**

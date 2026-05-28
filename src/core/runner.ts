@@ -492,9 +492,16 @@ async function runCommandInternal<TResult = unknown>(
       // passthrough mode: silently ignore unknown flags
     }
 
-    // Validate global args at the leaf command level
+    // Validate global args at the leaf command level. The internal
+    // `__complete` command is the exception: shell scripts invoke
+    // `mycli __complete --shell <s> -- <partial input>` whenever the
+    // user TABs, and the partial input may legitimately omit required
+    // globals — completion needs to fire *before* the user finishes
+    // typing them. Skip global validation here so resolvers always
+    // receive a context, even when the typed line is not yet valid.
     let validatedGlobalArgs: Record<string, unknown> = {};
-    if (options.globalArgs && options._globalExtracted) {
+    const isCompletionInvocation = command.name === "__complete";
+    if (options.globalArgs && options._globalExtracted && !isCompletionInvocation) {
       // Apply env fallbacks for global args
       for (const field of options._globalExtracted.fields) {
         if (field.env && accumulatedGlobalArgs[field.name] === undefined) {
@@ -536,8 +543,7 @@ async function runCommandInternal<TResult = unknown>(
     if (!command.args) {
       // No schema, run with global args (or empty args)
       const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
-      // Run effects for global args (after all validations succeed)
-      if (options._globalExtracted) {
+      if (options._globalExtracted && !isCompletionInvocation) {
         await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
       }
       collector?.stop();
@@ -577,10 +583,10 @@ async function runCommandInternal<TResult = unknown>(
     const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
 
     // Run effects after all validations succeed (global effects first, then command effects)
-    if (options._globalExtracted) {
+    if (options._globalExtracted && !isCompletionInvocation) {
       await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
     }
-    if (parseResult.extractedFields) {
+    if (parseResult.extractedFields && !isCompletionInvocation) {
       await runEffects(proxiedCommandArgs, parseResult.extractedFields, proxiedGlobalArgs);
     }
 

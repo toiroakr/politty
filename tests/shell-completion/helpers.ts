@@ -18,6 +18,11 @@ const playgroundPath = path.resolve(
 
 const nestedCommandPath = path.resolve(import.meta.dirname, "nested-command.ts");
 
+const expandCommandPath = path.resolve(
+  import.meta.dirname,
+  "../../playground/29-expand-completion/index.ts",
+);
+
 export function shellExists(shell: string): boolean {
   try {
     execSync(`which ${shell}`, { stdio: "pipe" });
@@ -103,6 +108,16 @@ export function setupNestedTestContext(): TestContext {
   return { tmpDir, testEnv, testFilesDir: tmpDir, completionScripts };
 }
 
+export function setupExpandTestContext(): TestContext {
+  const { tmpDir, testEnv } = createWrapperContext(
+    "politty-expand-",
+    "tailor-expand",
+    expandCommandPath,
+  );
+  const completionScripts = generateCompletionScripts(tmpDir, "tailor-expand", testEnv);
+  return { tmpDir, testEnv, testFilesDir: tmpDir, completionScripts };
+}
+
 /** Pre-generate completion scripts once per shell to avoid repeated tsx/Node.js startup */
 function generateCompletionScripts(
   tmpDir: string,
@@ -153,7 +168,8 @@ _${fnName}_completions 2>/dev/null
 printf '%s\\n' "\${COMPREPLY[@]}"
 `;
 
-  const result = execSync(`bash -c '${script.replace(/'/g, "'\\''")}'`, {
+  const bashBin = process.env.POLITTY_BASH_BIN ?? "bash";
+  const result = execSync(`${bashBin} -c '${script.replace(/'/g, "'\\''")}'`, {
     env: testEnv,
     encoding: "utf-8",
     timeout: 15000,
@@ -335,6 +351,33 @@ export function fishCompleteNested(
   opts?: ExecOptions,
 ): string[] {
   return fishCompleteWith("nestapp", "nested_test", testEnv, args, opts);
+}
+
+export function bashCompleteExpand(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  return bashCompleteWith("tailor-expand", "tailor_expand", testEnv, args, opts);
+}
+
+export function zshCompleteExpand(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  return zshCompleteWith("tailor-expand", "tailor_expand", testEnv, args, {
+    ...opts,
+    filesStub: zshFilesStubSimple,
+  });
+}
+
+export function fishCompleteExpand(
+  testEnv: NodeJS.ProcessEnv,
+  args: string[],
+  opts?: ExecOptions,
+): string[] {
+  return fishCompleteWith("tailor-expand", "tailor_expand", testEnv, args, opts);
 }
 
 /**

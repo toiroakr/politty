@@ -16,20 +16,10 @@
 import { z } from "zod";
 import { arg } from "../../core/arg-registry.js";
 import { defineCommand } from "../../core/command.js";
-import type { AnyCommand, Command } from "../../types.js";
-import { generateCandidates } from "./candidate-generator.js";
+import type { AnyCommand, ArgsSchema, Command } from "../../types.js";
+import { detectInlineOptionPrefix, generateCandidates } from "./candidate-generator.js";
 import { parseCompletionContext } from "./context-parser.js";
 import { formatForShell } from "./shell-formatter.js";
-
-/**
- * Detect inline option-value prefix (e.g., "--format=" from "--format=json")
- */
-function detectInlinePrefix(currentWord: string): string | undefined {
-  if (currentWord.startsWith("--") && currentWord.includes("=")) {
-    return currentWord.slice(0, currentWord.indexOf("=") + 1);
-  }
-  return undefined;
-}
 
 /**
  * Schema for the __complete command
@@ -53,33 +43,42 @@ type CompleteArgs = z.infer<typeof completeArgsSchema>;
  *
  * @param rootCommand - The root command to generate completions for
  * @param programName - The program name (optional, defaults to rootCommand.name)
+ * @param globalArgsSchema - Global args schema. Forwarded to
+ *   `parseCompletionContext` so resolvers attached to global options remain
+ *   reachable at every subcommand level.
  * @returns A command that outputs completion candidates
  */
 export function createDynamicCompleteCommand(
   rootCommand: AnyCommand,
   _programName?: string,
+  globalArgsSchema?: ArgsSchema,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Command<typeof completeArgsSchema, CompleteArgs, any> {
   return defineCommand({
     name: "__complete",
     // No description - this is a hidden command
     args: completeArgsSchema,
-    run(args) {
-      // Parse the completion context
-      const context = parseCompletionContext(args.args, rootCommand);
+    async run(args) {
+      const context = parseCompletionContext(args.args, rootCommand, globalArgsSchema);
 
-      // Generate candidates (shellCommand/file extensions resolved in JS)
-      const result = generateCandidates(context);
+      // Detect the inline `--opt=` prefix so the formatter can re-attach
+      // it to bash candidates. `generateCandidates` performs the same
+      // strip internally so resolvers see only the value portion;
+      // positionals (e.g. `cli -- --foo=<TAB>`) keep the prefix as part
+      // of the value and bypass this detection.
+      const inlinePrefix =
+        context.completionType === "option-value" && context.targetOption
+          ? detectInlineOptionPrefix(context.currentWord)
+          : undefined;
+      const effectiveWord = inlinePrefix
+        ? context.currentWord.slice(inlinePrefix.length)
+        : context.currentWord;
 
-      // Detect bash inline option-value prefix
-      const inlinePrefix = detectInlinePrefix(context.currentWord);
+      const result = await generateCandidates(context, { shell: args.shell });
 
-      // Format for the target shell
       const output = formatForShell(result, {
         shell: args.shell,
-        currentWord: inlinePrefix
-          ? context.currentWord.slice(inlinePrefix.length)
-          : context.currentWord,
+        currentWord: effectiveWord,
         inlinePrefix,
       });
 
