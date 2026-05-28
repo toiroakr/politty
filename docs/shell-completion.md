@@ -6,10 +6,11 @@ For quick setup, see the [README](../README.md#shell-completion). For type signa
 
 ## How It Works
 
-`withCompletionCommand` adds two subcommands to your CLI:
+`withCompletionCommand` adds three subcommands to your CLI:
 
-- **`completion <shell>`** — Generates a shell script that users source in their shell config
+- **`completion <shell>`** — Generates a shell script that users source in their shell config. With `--install`, writes it to its on-disk cache (bash/zsh) or autoload location (fish). With `--loader`, prints the rc-loader snippet (bash/zsh only).
 - **`__complete`** (hidden) — The dynamic completion engine used by `completion.custom.resolve`
+- **`__refresh-completion <shell>`** (hidden) — Re-installs the on-disk cache when the binary's mtime changes. Used by the rc loader and the runMain background hook.
 
 The generated shell scripts embed static metadata for subcommands, options,
 `choices`, file/directory completion, and `expand` tables. These paths stay
@@ -27,6 +28,59 @@ resolver, and returns candidates with directives that tell the shell how to
 present them.
 
 Command aliases defined via `aliases` in `defineCommand()` are automatically included in both static completion scripts and dynamic completion candidates.
+
+## Auto-refresh
+
+When the CLI binary is upgraded, the cached completion script becomes stale — for example, a renamed subcommand will no longer auto-complete. politty refreshes the cache automatically through two complementary paths:
+
+1. **rc loader** (bash/zsh) — A small snippet in `~/.bashrc` / `~/.zshrc` checks the binary's mtime against the cache header on every shell startup; if they don't match, the cache is regenerated before being sourced. This guarantees the very next shell sees a correct cache.
+2. **runMain background hook** — Every time the CLI runs (except when handling `__complete` / `__refresh-completion` / `completion` itself), `runMain` spawns a detached `__refresh-completion <shell>` child. The child does the same mtime-vs-header comparison and rewrites the cache only when stale. This keeps the cache warm even for users who never restart their shell.
+
+For fish, there's no rc loader. Instead, the autoload file written by `<program> completion fish --install` ends with a self-rewriting block that runs on every TAB press and replaces itself in place when the binary's mtime changes.
+
+All paths are best-effort: any I/O failure is silently swallowed because a stale or missing completion is preferable to a broken shell.
+
+### Setup
+
+```bash
+# Bash / zsh: install the cache once, then add the loader to your rc file.
+mycli completion bash --install
+mycli completion bash --loader >> ~/.bashrc   # or ~/.zshrc with `zsh`
+
+# Fish: just install the autoload file. Fish picks it up automatically.
+mycli completion fish --install
+```
+
+### Cache location
+
+By default the cache lives at `${XDG_CACHE_HOME:-$HOME/.cache}/<program>/completion.<shell>`. You can hardcode an alternate location at wrap-time:
+
+```typescript
+const main = withCompletionCommand(rootCommand, {
+  programName: "mycli",
+  cacheDir: "/opt/mycli/cache", // overrides the XDG default in both the loader and refresh paths
+});
+```
+
+For fish, the autoload file always lives at `${XDG_CONFIG_HOME:-$HOME/.config}/fish/completions/<program>.fish` since fish dictates that path.
+
+### Header format
+
+Every generated script starts with a small machine-readable header:
+
+```
+# politty-completion-version: 1
+# politty-bin-sig: 1730000000
+# program: mycli
+# program-version: 1.2.3
+# shell: bash
+```
+
+`politty-bin-sig` is the binary's mtime in seconds. The rc loader and `__refresh-completion` compare this against the live binary to decide whether to rewrite the cache. `program-version` is included only when you pass `programVersion` to `withCompletionCommand`.
+
+### Disabling auto-refresh
+
+Set `POLITTY_NO_COMPLETION_REFRESH=1` in your environment to disable the runMain background hook. The rc loader (bash/zsh) is unaffected by this variable; remove it from your rc file if you want to disable the loader path too.
 
 ## Completion Types
 
