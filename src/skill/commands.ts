@@ -7,7 +7,7 @@ import {
   unlinkSync,
   type Dirent,
 } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { arg, type RegularArgMeta } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
@@ -142,7 +142,9 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
       // but no longer ships) from sync's removal pass. Both names are
       // legitimate, so accept either match before raising.
       const sourceNamesAll = new Set(allSkills.map((s) => s.frontmatter.name));
-      const ownedInstalled = new Set(findOwnedInstalledSkills(stamp, resolved.cwd));
+      const ownedInstalled = new Set(
+        findOwnedInstalledSkills(stamp, resolved.cwd, resolved.sourceDir),
+      );
       const requestedExclude = Array.from(new Set(args.exclude));
       const unknownExclude = requestedExclude.filter(
         (n) => !sourceNamesAll.has(n) && !ownedInstalled.has(n),
@@ -181,9 +183,9 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
       if (!rootScanFailed) {
         // Remove skills we previously owned that the CLI no longer bundles.
         const sourceNames = new Set(skills.map((s) => s.frontmatter.name));
-        for (const orphan of findOwnedInstalledSkills(stamp, resolved.cwd)) {
+        for (const orphan of findOwnedInstalledSkills(stamp, resolved.cwd, resolved.sourceDir)) {
           if (sourceNames.has(orphan) || excluded.has(orphan)) continue;
-          removeOwnedSkill(orphan, stamp, resolved.cwd);
+          removeOwnedSkill(orphan, stamp, resolved.cwd, resolved.sourceDir);
           removed += 1;
         }
       }
@@ -323,7 +325,7 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
         if (sourceSkills.some((s) => s.frontmatter.name === args.name)) {
           findOrThrow(sourceSkills, args.name);
         }
-        const removed = removeOwnedSkill(args.name, stamp, resolved.cwd);
+        const removed = removeOwnedSkill(args.name, stamp, resolved.cwd, resolved.sourceDir);
         if (!removed) {
           // `removeOwnedSkill` already cleaned up dangling-symlink slots,
           // so a `false` return with `slotPresent` true means the slot is
@@ -335,7 +337,9 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
                 `refusing to remove. Remove .agents/skills/${args.name} manually if intended.`,
             );
           } else {
-            const installed = new Set(findOwnedInstalledSkills(stamp, resolved.cwd));
+            const installed = new Set(
+              findOwnedInstalledSkills(stamp, resolved.cwd, resolved.sourceDir),
+            );
             logger.info(
               `${args.name} is not installed; nothing to remove.\n` +
                 formatSkillUniverse({ installed }),
@@ -362,7 +366,7 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
 
       let removed = 0;
       for (const skill of sourceSkills) {
-        if (removeOwnedSkill(skill.frontmatter.name, stamp, resolved.cwd)) {
+        if (removeOwnedSkill(skill.frontmatter.name, stamp, resolved.cwd, resolved.sourceDir)) {
           removed += 1;
         }
       }
@@ -612,14 +616,19 @@ function addSkill(
  * Throws when the skill exists but is owned by someone else — callers
  * like `sync` that iterate silently would otherwise clobber user data.
  */
-function removeOwnedSkill(name: string, expectedOwnership: string, cwd: string): boolean {
+function removeOwnedSkill(
+  name: string,
+  expectedOwnership: string,
+  cwd: string,
+  sourceDir: string,
+): boolean {
   const actual = readInstalledOwnership(name, cwd);
   if (actual === null) {
     // `actual === null` covers (a) not installed, (b) broken canonical
     // symlink, (c) installed-but-unstamped real directory. Only (b) is
     // safe to clean up here — (a) is already a no-op, (c) belongs to
     // someone else.
-    if (cleanupBrokenSlot(name, cwd)) {
+    if (cleanupBrokenSlot(name, cwd, sourceDir)) {
       logger.info(`${symbols.success} Removed ${name} (broken symlink)`);
       return true;
     }
@@ -638,17 +647,22 @@ function removeOwnedSkill(name: string, expectedOwnership: string, cwd: string):
 }
 
 /**
- * If `.agents/skills/<name>` exists as a dangling symlink, unlink it (and
- * any agent-specific dangling-symlink slots that route through it).
- * Returns `true` when at least the canonical slot was cleaned. A live
- * symlink (target still resolves) is left alone — those go through the
- * normal stamp-checked path.
+ * If `.agents/skills/<name>` is a dangling symlink that still routes to
+ * this CLI's source directory, unlink it (and any agent-specific
+ * dangling-symlink slots that route through it). Returns `true` when the
+ * canonical slot was cleaned.
+ *
+ * A dangling canonical whose target lies outside our source directory
+ * (e.g. a foreign politty-based CLI's stale install in the shared
+ * `.agents/skills/` namespace) is left alone — without an ownership
+ * stamp to read, we can't prove the slot belongs to this CLI. Live
+ * symlinks (target still resolves) go through the normal stamp-checked
+ * path.
  */
-function cleanupBrokenSlot(name: string, cwd: string): boolean {
+function cleanupBrokenSlot(name: string, cwd: string, sourceDir: string): boolean {
   const canonical = resolve(cwd, AGENTS_SKILLS_DIR, name);
   if (!isDanglingSymlink(canonical)) return false;
-  // Resolve the canonical's routing target before unlinking it so agent-
-  // slot comparisons below can match against the same path we install to.
+  if (!danglingRoutesToSource(canonical, sourceDir)) return false;
   unlinkSync(canonical);
   // Best-effort sweep of agent-specific slots — but only those that route
   // back to our canonical. A foreign tool's dangling symlink at the same
@@ -662,6 +676,60 @@ function cleanupBrokenSlot(name: string, cwd: string): boolean {
     }
   }
   return true;
+}
+
+/**
+ * Does the dangling symlink at `canonical` still route into `sourceDir`?
+ * Used to confirm a stale `.agents/skills/<name>` belongs to this CLI
+ * before we unlink it in the shared namespace.
+ *
+ * The link target is resolved lexically (the path is dangling so
+ * `realpathSync` on it would fail) against the symlink's own directory.
+ * `sourceDir` is `realpathSync`'d so a project mounted through a symlink
+ * still compares cleanly. Containment uses the same boundary-aware
+ * `..`-only escape check as `installer.ts`'s `pathsOverlap` so a sibling
+ * directory whose name happens to start with `..` is not misclassified
+ * as outside.
+ */
+function danglingRoutesToSource(canonical: string, sourceDir: string): boolean {
+  let raw: string;
+  try {
+    raw = readlinkSync(canonical);
+  } catch {
+    return false;
+  }
+  const absoluteTarget = isAbsolute(raw) ? raw : resolve(dirname(canonical), raw);
+  let resolvedSource: string;
+  try {
+    resolvedSource = realpathSync(sourceDir);
+  } catch {
+    return false;
+  }
+  // The target itself is dangling so `realpathSync(absoluteTarget)` would
+  // fail. Resolve the deepest existing ancestor instead so the comparison
+  // survives realpath remapping (macOS `/tmp` → `/private/tmp`, a project
+  // mounted through a symlink, pnpm-style `node_modules`, etc).
+  const resolvedTarget = resolveDeepestExisting(absoluteTarget);
+  const rel = relative(resolvedSource, resolvedTarget);
+  if (isAbsolute(rel)) return false;
+  if (rel === ".." || rel.startsWith(`..${sep}`)) return false;
+  return true;
+}
+
+function resolveDeepestExisting(p: string): string {
+  let cur = p;
+  const tail: string[] = [];
+  while (true) {
+    try {
+      const r = realpathSync(cur);
+      return tail.length === 0 ? r : resolve(r, ...tail.reverse());
+    } catch {
+      const parent = dirname(cur);
+      if (parent === cur) return p;
+      tail.push(cur.slice(parent.length).replace(/^[/\\]+/, ""));
+      cur = parent;
+    }
+  }
 }
 
 /**
@@ -701,10 +769,17 @@ function isDanglingSymlink(path: string): boolean {
 /**
  * Enumerate installed skills that should be reconciled by `sync`'s orphan
  * cleanup: skills carrying this CLI's ownership stamp, plus dangling
- * canonical symlinks (which were almost certainly left behind by a
- * previous install of this CLI and are safe to unlink).
+ * canonical symlinks whose link target routes back to this CLI's source
+ * directory. `.agents/skills/` is a namespace shared with every other
+ * politty-based CLI, so a dangling canonical symlink without a routing
+ * match likely belongs to a foreign CLI whose source was uninstalled —
+ * including it would let `sync` unlink it under our authority.
  */
-function findOwnedInstalledSkills(expectedOwnership: string, cwd: string): string[] {
+function findOwnedInstalledSkills(
+  expectedOwnership: string,
+  cwd: string,
+  sourceDir: string,
+): string[] {
   const base = resolve(cwd, AGENTS_SKILLS_DIR);
   const owned: string[] = [];
   let entries: Dirent[];
@@ -746,11 +821,16 @@ function findOwnedInstalledSkills(expectedOwnership: string, cwd: string): strin
       owned.push(entry.name);
       continue;
     }
-    // Owner is unreadable. If the slot is a dangling symlink it's almost
-    // certainly a leftover from a previous install of this CLI (real
-    // directories never end up dangling). Include it so `sync` can clean
-    // it up via `cleanupBrokenSlot`.
-    if (owner === null && isDanglingSymlink(resolve(base, entry.name))) {
+    // Owner is unreadable. Only treat it as our orphan when the dangling
+    // canonical symlink still points at this CLI's source directory; a
+    // foreign politty-based CLI's stale install in the same namespace is
+    // not ours to reap.
+    const canonical = resolve(base, entry.name);
+    if (
+      owner === null &&
+      isDanglingSymlink(canonical) &&
+      danglingRoutesToSource(canonical, sourceDir)
+    ) {
       owned.push(entry.name);
     }
   }

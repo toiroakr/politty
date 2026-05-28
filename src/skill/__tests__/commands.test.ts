@@ -1037,17 +1037,20 @@ describe("dangling-symlink cleanup", () => {
     rmSync(projectRoot, { recursive: true, force: true });
   });
 
-  function makeDanglingSlot(parent: string, name: string): string {
+  function makeDanglingCanonical(parent: string, name: string, sourceDir: string): string {
     mkdirSync(parent, { recursive: true });
     const slot = join(parent, name);
-    symlinkSync(join(parent, "does-not-exist"), slot, "dir");
+    // Real installs symlink the canonical to <sourceDir>/<name>; reproducing
+    // that shape (with a non-existent target inside sourceDir) is what the
+    // route-to-source-dir reaper looks for.
+    symlinkSync(join(sourceDir, `${name}-uninstalled`), slot, "dir");
     return slot;
   }
 
   it("should unlink dangling canonical and agent-slot symlinks on remove <name>", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const canonical = makeDanglingSlot(join(projectRoot, ".agents/skills"), "commit");
+    const canonical = makeDanglingCanonical(join(projectRoot, ".agents/skills"), "commit", tempDir);
     // Agent slot must route to our canonical (as a real install would write
     // it: ../../.agents/skills/<name>) for the dangling-symlink reaper to
     // consider it ours; otherwise the new route-check leaves it alone.
@@ -1082,7 +1085,7 @@ describe("dangling-symlink cleanup", () => {
     // install slot in the shared agent namespace.
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
 
-    const canonical = makeDanglingSlot(join(projectRoot, ".agents/skills"), "commit");
+    const canonical = makeDanglingCanonical(join(projectRoot, ".agents/skills"), "commit", tempDir);
     // Foreign agent symlink: points at a path that is NOT our canonical and
     // happens to not exist. realpath fallback won't match either, so the
     // route check must refuse to reap.
@@ -1101,6 +1104,30 @@ describe("dangling-symlink cleanup", () => {
     // ...but the foreign agent symlink remains untouched.
     expect(lstatSync(foreignAgentSlot).isSymbolicLink()).toBe(true);
     expect(readlinkSync(foreignAgentSlot)).toContain("foreign-tool");
+  });
+
+  it("should leave a dangling canonical routing outside our source dir untouched", () => {
+    // `.agents/skills/<name>` is a namespace shared by every politty-based
+    // CLI. A foreign CLI may install there pointing at its own source
+    // (e.g. `node_modules/@foreign/skills/<name>`); if that source is later
+    // uninstalled the canonical becomes dangling but its readlink target
+    // still routes outside *our* source dir. Reaping it under this CLI's
+    // authority would silently delete a foreign install.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    mkdirSync(join(projectRoot, ".agents/skills"), { recursive: true });
+    const canonical = join(projectRoot, ".agents/skills", "commit");
+    const foreignSourceDir = join(projectRoot, "foreign-tool/skills");
+    symlinkSync(join(foreignSourceDir, "commit"), canonical, "dir");
+    expect(lstatSync(canonical).isSymbolicLink()).toBe(true);
+    expect(existsSync(canonical)).toBe(false);
+
+    const command = createSkillRemoveCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
+    command.run!({ name: "commit" });
+
+    expect(lstatSync(canonical).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(canonical)).toContain("foreign-tool");
+    expect(mockedUninstallSkill).not.toHaveBeenCalled();
   });
 
   it("should leave a live canonical symlink alone (no false-positive cleanup)", () => {
