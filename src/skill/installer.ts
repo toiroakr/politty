@@ -153,6 +153,29 @@ export function installSkill(
     );
   }
 
+  // Pre-flight every symlink target *before* any `clearInstallSlot` runs.
+  // `symlinkOrCopy` re-checks `isAbsolute(linkTarget)` inline, but by the
+  // time it fires the canonical (or an agent-slot) install has already been
+  // unlinked. On Windows, `path.relative` returns an absolute path when the
+  // endpoints sit on different drive letters; discovering that there would
+  // leave the user with no install. Resolve parents through
+  // `resolveExistingPrefix` so the check survives parents that don't exist
+  // yet (matching the overlap pre-check's prefix style).
+  if (mode === "symlink") {
+    const preflightCanonicalParent = resolveExistingPrefix(canonicalParent);
+    assertRelativeLinkTarget(
+      join(preflightCanonicalParent, name),
+      relative(preflightCanonicalParent, resolvedSource),
+    );
+    for (const target of SYMLINK_TARGETS) {
+      const preflightAgentParent = resolveExistingPrefix(resolve(cwd, target));
+      assertRelativeLinkTarget(
+        join(preflightAgentParent, name),
+        join(relative(preflightAgentParent, preflightCanonicalParent), name),
+      );
+    }
+  }
+
   // Safe to materialise the canonical parent now; `populateAgentDirs`
   // creates each agent-slot parent in its own loop.
   mkdirSync(canonicalParent, { recursive: true });
@@ -172,6 +195,25 @@ export function installSkill(
   });
 
   populateAgentDirs(cwd, name, canonicalDir, expectedStamp, mode);
+}
+
+/**
+ * Refuse to write a symlink whose target was returned absolute. On Windows
+ * `path.relative` returns an absolute path when the endpoints live on
+ * different drive letters; producing an absolute symlink target would
+ * silently break the "relative target" contract and surprise anyone
+ * copying the project tree. Used both as the pre-flight in `installSkill`
+ * (before any `clearInstallSlot`) and as the in-line guard inside
+ * `symlinkOrCopy`.
+ */
+function assertRelativeLinkTarget(linkPath: string, linkTarget: string): void {
+  if (isAbsolute(linkTarget)) {
+    throw new Error(
+      `Refusing to write an absolute symlink target at ${linkPath} → ${linkTarget}. ` +
+        `The skill source and install root appear to live on different ` +
+        `filesystem roots (e.g. different Windows drive letters); retry with mode: "copy".`,
+    );
+  }
 }
 
 /**
@@ -415,14 +457,11 @@ function symlinkOrCopy(args: {
   // symlink target would silently break the "relative target" contract —
   // the install becomes non-portable across volume mounts and surprises
   // anyone copying the project tree. Force the caller toward `mode: "copy"`
-  // instead of writing the absolute target.
-  if (isAbsolute(linkTarget)) {
-    throw new Error(
-      `Refusing to write an absolute symlink target at ${linkPath} → ${linkTarget}. ` +
-        `The skill source and install root appear to live on different ` +
-        `filesystem roots (e.g. different Windows drive letters); retry with mode: "copy".`,
-    );
-  }
+  // instead of writing the absolute target. Defense in depth: `installSkill`
+  // pre-flights every link target before any `clearInstallSlot` so a
+  // discovery here means the pre-flight got bypassed (e.g. a programmatic
+  // caller that builds its own argument set).
+  assertRelativeLinkTarget(linkPath, linkTarget);
   try {
     symlinkSync(linkTarget, linkPath, "dir");
   } catch (err) {
