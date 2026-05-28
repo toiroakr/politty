@@ -1587,9 +1587,12 @@ describe("Completion", () => {
 
     it("installPath routes fish to $XDG_CONFIG_HOME/fish/completions/<prog>.fish", () => {
       const prev = process.env.XDG_CONFIG_HOME;
-      process.env.XDG_CONFIG_HOME = "/tmp/cfg";
+      const cfgRoot = join("/tmp", "cfg");
+      process.env.XDG_CONFIG_HOME = cfgRoot;
       try {
-        expect(installPath("mycli", "fish")).toBe("/tmp/cfg/fish/completions/mycli.fish");
+        expect(installPath("mycli", "fish")).toBe(
+          join(cfgRoot, "fish", "completions", "mycli.fish"),
+        );
       } finally {
         if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
         else process.env.XDG_CONFIG_HOME = prev;
