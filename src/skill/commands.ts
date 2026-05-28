@@ -303,7 +303,8 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
       }),
     }),
     run(args) {
-      const { skills: sourceSkills } = loadSkills(resolved);
+      const scanResult = loadSkills(resolved);
+      const sourceSkills = scanResult.skills;
       const stamp = resolved.stamp;
 
       if (args.name) {
@@ -337,7 +338,17 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
       }
 
       if (sourceSkills.length === 0) {
-        logger.info("No skills found in source directory; nothing to remove.");
+        // Distinguish a legitimately empty bundle from a directory-level
+        // scan failure so a stdout-only consumer doesn't read a broken
+        // sourceDir as "we have no skills to remove" — mirrors the
+        // branching `add`/`list`/`sync` already do.
+        if (scanFailedAtRoot(scanResult, resolved.sourceDir)) {
+          logger.info(
+            "No skills found (source directory scan failed; see warnings); nothing to remove.",
+          );
+        } else {
+          logger.info("No skills found in source directory; nothing to remove.");
+        }
         return;
       }
 
