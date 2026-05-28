@@ -3,7 +3,11 @@ import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
 import { extractFields } from "../core/schema-extractor.js";
-import { DuplicateAliasError, PositionalConfigError } from "../validator/command-validator.js";
+import {
+  DuplicateAliasError,
+  DuplicateNegationError,
+  PositionalConfigError,
+} from "../validator/command-validator.js";
 import { parseArgs } from "./arg-parser.js";
 
 /**
@@ -671,6 +675,205 @@ describe("ArgParser", () => {
 
       expect(result.rawArgs.verbose).toBe(true);
       expect(result.rawArgs.output).toBe("out.txt");
+    });
+  });
+
+  describe("Duplicate negation validation", () => {
+    it("should throw when two fields use the same custom negation name", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+          color: arg(z.boolean().default(true), { negation: "disable-cache" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Duplicate negation "disable-cache".*"cache".*"color"/,
+      );
+    });
+
+    it("should throw when negation collides with an existing field name", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: "output" }),
+          output: arg(z.string()),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Negation "output" for field "cache" conflicts with field name "output"/,
+      );
+    });
+
+    it("should throw when negation collides with another field's alias", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: "no-buffer" }),
+          buffer: arg(z.string(), { alias: "no-buffer" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Negation "no-buffer" for field "cache" conflicts with alias "no-buffer" of field "buffer"/,
+      );
+    });
+
+    it("should detect camelCase variant collision between two negations", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+          color: arg(z.boolean().default(true), { negation: "disableCache" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(/Duplicate negation "disableCache"/);
+    });
+
+    it("should allow different negation names on different fields", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+          color: arg(z.boolean().default(true), { negation: "no-color" }),
+        }),
+      });
+
+      const result = parseArgs(["--disable-cache", "--no-color"], cmd);
+      expect(result.rawArgs.cache).toBe(false);
+      expect(result.rawArgs.color).toBe(false);
+    });
+
+    it("should throw when negation equals its own field name", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: "cache" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Negation "cache" for field "cache" conflicts with the same field's own field name "cache"/,
+      );
+    });
+
+    it("should throw when negation equals its own cliName", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          dryRun: arg(z.boolean().default(true), { negation: "dry-run" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(/conflicts with the same field's own CLI name/);
+    });
+
+    it("should throw when negation equals its own alias", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { alias: "no-buffer", negation: "no-buffer" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(/conflicts with the same field's own alias/);
+    });
+
+    it("should throw when custom negation shadows another field's implicit `--no-X`", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          color: arg(z.boolean().default(true)),
+          cache: arg(z.boolean().default(true), { negation: "no-color" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Negation "no-color" for field "cache" conflicts with default negation "no-color" of field "color"/,
+      );
+    });
+
+    it("should throw when custom negation shadows another field's implicit `--noX` (camelCase)", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          color: arg(z.boolean().default(true)),
+          cache: arg(z.boolean().default(true), { negation: "noColor" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(/conflicts with default negation "noColor"/);
+    });
+
+    it("should throw when custom negation shadows kebab-case field's implicit `--noX` (camelCase derived from cliName)", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          "dry-run": arg(z.boolean().default(true)),
+          cache: arg(z.boolean().default(true), { negation: "noDryRun" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(/conflicts with default negation "noDryRun"/);
+    });
+
+    it("should throw when custom negation shadows another field's implicit camelCase positive flag", () => {
+      // `"dry-run"` is accepted by the parser as both `--dry-run` and `--dryRun`,
+      // so a custom `negation: "dryRun"` on another field would silently steal
+      // the positive form. Validator must reject this.
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          "dry-run": arg(z.boolean().default(true)),
+          cache: arg(z.boolean().default(true), { negation: "dryRun" }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(DuplicateNegationError);
+      expect(() => parseArgs([], cmd)).toThrow(
+        /conflicts with field name "dryRun" of field "dry-run"/,
+      );
+    });
+
+    it("should allow custom negation that shadows a field with explicit `negation: false`", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          color: arg(z.boolean().default(true), { negation: false }),
+          cache: arg(z.boolean().default(true), { negation: "no-color" }),
+        }),
+      });
+
+      // Should not throw — `color` has opted out of default negation entirely
+      const result = parseArgs(["--no-color"], cmd);
+      expect(result.rawArgs.cache).toBe(false);
+    });
+
+    it("should allow `negation: true` on multiple fields (uses default --no-X prefix)", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: true }),
+          color: arg(z.boolean().default(true), { negation: true }),
+        }),
+      });
+
+      const result = parseArgs(["--no-cache", "--no-color"], cmd);
+      expect(result.rawArgs.cache).toBe(false);
+      expect(result.rawArgs.color).toBe(false);
     });
   });
 

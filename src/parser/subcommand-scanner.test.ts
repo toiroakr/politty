@@ -134,6 +134,84 @@ describe("scanForSubcommand", () => {
     expect(result.globalTokensBefore).toEqual(["--no-verbose"]);
   });
 
+  it("handles --noFlag camelCase negation for boolean global", () => {
+    const result = scanForSubcommand(["--noVerbose", "build"], subCommandNames, globalExtracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual(["--noVerbose"]);
+  });
+
+  it("handles camelCase negation for kebab-case field name", () => {
+    const schemaWithKebab = z.object({
+      "dry-run": arg(z.boolean().default(false), { description: "Dry run" }),
+    });
+    const extracted = extractFields(schemaWithKebab);
+    const result = scanForSubcommand(["--noDryRun", "build"], subCommandNames, extracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual(["--noDryRun"]);
+  });
+
+  it("treats --no-foo as a positive flag when a global is literally named 'no-foo'", () => {
+    // Mirrors argv-parser's `definedNames` disambiguation: when the literal
+    // token `no-foo` matches a real global option, it should not be treated
+    // as the negation of an imagined `foo` field.
+    const schemaLiteralNo = z.object({
+      "no-foo": arg(z.boolean().default(false), { description: "No foo" }),
+    });
+    const extracted = extractFields(schemaLiteralNo);
+    const result = scanForSubcommand(["--no-foo", "build"], subCommandNames, extracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual(["--no-foo"]);
+  });
+
+  it("keeps scanning past suppressed default --no-X and surfaces it as a suppressed token", () => {
+    // When a global boolean is configured with `negation: "disable-cache"`,
+    // the default `--no-cache` token is suppressed (no longer negates the
+    // field) but must not stop subcommand scanning — otherwise routing for
+    // `cli --no-cache build` would break. The token is reported separately
+    // via `suppressedTokens` so the caller can surface it as an unknown flag.
+    const schemaWithCustomNegation = z.object({
+      cache: arg(z.boolean().default(true), {
+        description: "Enable cache",
+        negation: "disable-cache",
+      }),
+    });
+    const extracted = extractFields(schemaWithCustomNegation);
+    const result = scanForSubcommand(["--no-cache", "build"], subCommandNames, extracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual([]);
+    expect(result.suppressedTokens).toEqual(["no-cache"]);
+  });
+
+  it("keeps scanning past suppressed camelCase --noX and surfaces it as a suppressed token", () => {
+    const schemaWithCustomNegation = z.object({
+      dryRun: arg(z.boolean().default(false), {
+        description: "Dry run",
+        negation: "execute",
+      }),
+    });
+    const extracted = extractFields(schemaWithCustomNegation);
+    const result = scanForSubcommand(["--noDryRun", "build"], subCommandNames, extracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual([]);
+    expect(result.suppressedTokens).toEqual(["noDryRun"]);
+  });
+
+  it("treats --noBar as a positive flag when a global is literally named 'noBar'", () => {
+    const schemaLiteralCamel = z.object({
+      noBar: arg(z.boolean().default(false), { description: "No bar" }),
+    });
+    const extracted = extractFields(schemaLiteralCamel);
+    const result = scanForSubcommand(["--noBar", "build"], subCommandNames, extracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual(["--noBar"]);
+  });
+
   it("ignores non-subcommand positional argument", () => {
     const result = scanForSubcommand(["unknown-cmd"], subCommandNames, globalExtracted);
 

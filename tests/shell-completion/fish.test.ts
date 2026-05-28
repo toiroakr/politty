@@ -3,10 +3,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   defineCommonTests,
   defineNestedTests,
-  fishComplete as fishCompleteRaw,
+  fishCompleteExpand,
   fishCompleteNested,
+  fishComplete as fishCompleteRaw,
   hasFish,
   isCI,
+  setupExpandTestContext,
   setupNestedTestContext,
   setupTestContext,
   teardownTestContext,
@@ -16,15 +18,18 @@ import {
 
 let ctx: TestContext;
 let nestedCtx: TestContext;
+let expandCtx: TestContext;
 
 beforeAll(() => {
   ctx = setupTestContext();
   nestedCtx = setupNestedTestContext();
+  expandCtx = setupExpandTestContext();
 });
 
 afterAll(() => {
   teardownTestContext(ctx);
   teardownTestContext(nestedCtx);
+  teardownTestContext(expandCtx);
 });
 
 describe.runIf(isCI)("CI: required tools are available", () => {
@@ -236,5 +241,40 @@ describe.skipIf(!hasFish)("fish interactive completion (complete --do-complete)"
       cwd: ctx.testFilesDir,
     });
     expect(n).toBe(3);
+  });
+});
+
+describe.skipIf(!hasFish)("fish expand array dedup", () => {
+  const completeE = (args: string[], opts?: ExecOptions) =>
+    fishCompleteExpand(expandCtx.testEnv, args, {
+      ...opts,
+      scriptPath: expandCtx.completionScripts.fish,
+    });
+
+  it("offers every key when none are consumed", () => {
+    const values = completeE(["api", "GetApplication", "-f", ""]);
+    expect(values).toContain("workspaceId=");
+    expect(values).toContain("applicationName=");
+  });
+
+  it("drops an already-used key from candidates", () => {
+    const values = completeE(["api", "GetApplication", "-f", "workspaceId=foo", "-f", ""]);
+    expect(values).toContain("applicationName=");
+    expect(values).not.toContain("workspaceId=");
+  });
+
+  it("collapses key=value entries to unique key= when no `=` typed yet", () => {
+    const values = completeE(["api", "ListApplications", "-f", ""]);
+    expect(values).toContain("pageDirection=");
+    expect(values).not.toContain("pageDirection=NEXT");
+    expect(values).not.toContain("pageDirection=PREVIOUS");
+    expect(values).toContain("workspaceId=");
+  });
+
+  it("shows full key=value pairs once the user types `<key>=`", () => {
+    const values = completeE(["api", "ListApplications", "-f", "pageDirection="]);
+    expect(values).toContain("pageDirection=NEXT");
+    expect(values).toContain("pageDirection=PREVIOUS");
+    expect(values).not.toContain("pageDirection=");
   });
 });

@@ -36,6 +36,12 @@ function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
 }
 
 /**
+ * Long flag names reserved for built-in handling (parseArgs / scanForSubcommand
+ * intercept these before option parsing), so custom negation names must avoid them.
+ */
+const RESERVED_NEGATION_NAMES: ReadonlySet<string> = new Set(["help", "help-all", "version"]);
+
+/**
  * Resolved metadata for an argument field
  */
 export interface ResolvedFieldMeta {
@@ -81,6 +87,30 @@ export interface ResolvedFieldMeta {
   completion?: CompletionMeta | undefined;
   /** Prompt metadata from arg() for interactive input */
   prompt?: PromptMeta | undefined;
+  /**
+   * Negation configuration for this boolean field.
+   *
+   * - String (e.g. `"disable-cache"`): the default `--no-<cliName>` form is
+   *   suppressed and only `--<negation>` (plus its camelCase variant) is
+   *   accepted as the negation flag.
+   * - `true`: the default `--no-<cliName>` form is accepted **and** shown in
+   *   help, generated docs, and shell completions.
+   * - `false`: neither the default `--no-<cliName>` nor any custom name is
+   *   accepted; the field only responds to the positive flag.
+   * - `undefined`: the default `--no-<cliName>` is accepted by the parser
+   *   but hidden from help/docs/completions.
+   *
+   * Only applies to boolean fields; populated as `undefined` otherwise.
+   */
+  negation?: string | boolean | undefined;
+  /**
+   * Derived display name (no `--` prefix) for the negation flag in help,
+   * generated docs, and shell completions. `undefined` means the negation
+   * is hidden from those surfaces. Computed from `negation` + `cliName`.
+   */
+  negationDisplay?: string | undefined;
+  /** Description shown for the negation option in help/docs. */
+  negationDescription?: string | undefined;
   /** Side-effect callback from arg() metadata */
   effect?: ((value: unknown, context: EffectContext) => void | PromiseLike<void>) | undefined;
 }
@@ -454,6 +484,89 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   const hiddenAlias = hiddenAliasRaw?.filter((a) => !visibleSet.has(a));
   const hiddenAliasFinal = hiddenAlias && hiddenAlias.length > 0 ? hiddenAlias : undefined;
 
+  const fieldType = detectType(schema);
+
+  // Validate and normalize `negation` (only meaningful for boolean fields).
+  // Accepts:
+  //   - string: custom negation CLI name (suppresses default `--no-*`)
+  //   - true:   keep default `--no-*` and advertise it in help/docs/completion
+  //   - false:  disable negation entirely (default `--no-*` also rejected)
+  const rawNegation = (argMeta as { negation?: unknown } | undefined)?.negation;
+  let negation: string | boolean | undefined;
+  if (rawNegation !== undefined && rawNegation !== null) {
+    if (typeof rawNegation === "boolean") {
+      if (fieldType !== "boolean") {
+        throw new Error(
+          `Invalid negation for field "${name}": negation can only be used on boolean fields.`,
+        );
+      }
+      negation = rawNegation;
+    } else {
+      if (typeof rawNegation !== "string") {
+        throw new Error(
+          `Invalid negation for field "${name}": expected string or boolean, received ${typeof rawNegation}.`,
+        );
+      }
+      const candidate = rawNegation.trim().replace(/^-+/, "");
+      if (candidate.length === 0 || !aliasPattern.test(candidate)) {
+        throw new Error(
+          `Invalid negation "${rawNegation}" for field "${name}": negation names must match ${aliasPattern}.`,
+        );
+      }
+      if (RESERVED_NEGATION_NAMES.has(candidate)) {
+        throw new Error(
+          `Invalid negation "${rawNegation}" for field "${name}": negation cannot use reserved built-in flag names (${[
+            ...RESERVED_NEGATION_NAMES,
+          ]
+            .map((n) => `--${n}`)
+            .join(", ")}).`,
+        );
+      }
+      if (fieldType !== "boolean") {
+        throw new Error(
+          `Invalid negation for field "${name}": negation can only be used on boolean fields.`,
+        );
+      }
+      negation = candidate;
+    }
+  }
+
+  const rawNegationDescription = (argMeta as { negationDescription?: unknown } | undefined)
+    ?.negationDescription;
+  let negationDescription: string | undefined;
+  if (rawNegationDescription !== undefined && rawNegationDescription !== null) {
+    if (typeof rawNegationDescription !== "string") {
+      throw new Error(
+        `Invalid negationDescription for field "${name}": expected string, received ${typeof rawNegationDescription}.`,
+      );
+    }
+    if (negation === false) {
+      throw new Error(
+        `Invalid negationDescription for field "${name}": negationDescription cannot be used when negation is false.`,
+      );
+    }
+    if (negation === undefined) {
+      throw new Error(
+        `Invalid negationDescription for field "${name}": negationDescription requires \`negation\` to be set (string or true).`,
+      );
+    }
+    // Reject blank strings: downstream rendering treats falsy values as
+    // "no description provided" and collapses to the inline `/` form, so
+    // an empty/whitespace-only string would be silently ignored.
+    const trimmed = rawNegationDescription.trim();
+    if (trimmed.length === 0) {
+      throw new Error(
+        `Invalid negationDescription for field "${name}": negationDescription must be a non-empty string.`,
+      );
+    }
+    negationDescription = trimmed;
+  }
+
+  // Compute the displayed negation name (without leading `--`) for help,
+  // generated docs, and shell completions. `undefined` means hidden.
+  const negationDisplay: string | undefined =
+    typeof negation === "string" ? negation : negation === true ? `no-${cliName}` : undefined;
+
   const meta: ResolvedFieldMeta = {
     name,
     cliName,
@@ -465,11 +578,14 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
     env: argMeta?.env,
     required: isRequired(schema),
     defaultValue: extractDefaultValue(schema),
-    type: detectType(schema),
+    type: fieldType,
     schema,
     enumValues,
     completion: argMeta?.completion,
     prompt: argMeta?.prompt,
+    negation,
+    negationDisplay,
+    negationDescription,
     effect: argMeta?.effect,
   };
 

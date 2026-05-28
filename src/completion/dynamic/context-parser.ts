@@ -2,12 +2,28 @@
  * Parse completion context from partial command line
  */
 
-import { extractFields, toCamelCase } from "../../core/schema-extractor.js";
+import { extractFields, getAllAliases, toCamelCase } from "../../core/schema-extractor.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
-import type { AnyCommand } from "../../types.js";
-import type { CompletableOption, CompletablePositional } from "../types.js";
-import { resolveValueCompletion } from "../value-completion-resolver.js";
+import type { AnyCommand, ArgsSchema } from "../../types.js";
+import { collectOptionTokens } from "../shell-shared.js";
+import type { CompletableOption, CompletablePositional, ValueCompletion } from "../types.js";
+import {
+  resolveValueCompletion,
+  type PendingExpandValueCompletion,
+} from "../value-completion-resolver.js";
+
+/**
+ * The dynamic completion path runs `__complete` at TAB time and never sees
+ * "expand" fields (those are handled inline by the static shell script).
+ * Strip the transient pending sentinel here so the rest of the runtime path
+ * can stay strict about handling only resolved `ValueCompletion` values.
+ */
+function stripPendingExpand(
+  vc: ValueCompletion | PendingExpandValueCompletion | undefined,
+): ValueCompletion | undefined {
+  return vc?.type === "pending-expand" ? undefined : vc;
+}
 
 /**
  * Completion type indicates what kind of completion is expected
@@ -46,6 +62,19 @@ export interface CompletionContext {
   usedOptions: Set<string>;
   /** Number of positional arguments already provided */
   providedPositionalCount: number;
+  /**
+   * Best-effort parsed values for the CURRENT command, keyed by camelCase
+   * field name. Includes positionals (single value or string[] for variadic
+   * positionals) and options (string for scalars, string[] for array
+   * options). Zod validation is NOT applied — values are raw strings.
+   */
+  parsedArgs: Record<string, unknown>;
+  /**
+   * Values already supplied for the option/positional currently being
+   * completed (for de-duplicating array options and oneof exclusivity in
+   * dynamic resolvers).
+   */
+  previousValues: string[];
 }
 
 /**
@@ -55,20 +84,194 @@ function extractOptions(command: AnyCommand): CompletableOption[] {
   if (!command.args) {
     return [];
   }
+  return extractOptionsFromSchema(command.args);
+}
 
-  const extracted = extractFields(command.args);
+function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
+  const extracted = extractFields(schema);
   return extracted.fields
     .filter((field) => !field.positional)
-    .map((field) => ({
-      name: field.name,
-      cliName: field.cliName,
-      alias: field.alias,
-      description: field.description,
-      takesValue: field.type !== "boolean",
-      valueType: field.type,
-      required: field.required,
-      valueCompletion: resolveValueCompletion(field),
-    }));
+    .map((field) => {
+      // Merge hiddenAlias into the matcher-visible alias list. The runtime
+      // parser accepts hidden aliases via `getAllAliases`, so the dynamic
+      // completion parser must too — otherwise typing an accepted hidden
+      // alias (`--legacy value`) leaves the sibling value unparsed and
+      // unrecognised as the target being completed.
+      const aliases = getAllAliases(field);
+      return {
+        name: field.name,
+        cliName: field.cliName,
+        alias: aliases.length > 0 ? aliases : undefined,
+        negation: field.negationDisplay,
+        negationDescription: field.negationDescription,
+        description: field.description,
+        takesValue: field.type !== "boolean",
+        valueType: field.type,
+        required: field.required,
+        // Mirror runtime: default `--no-<cliName>` is accepted unless the
+        // user opted out via `negation: false` or a custom-string negation.
+        defaultNegationAccepted:
+          field.type === "boolean" && (field.negation === undefined || field.negation === true),
+        valueCompletion: stripPendingExpand(resolveValueCompletion(field)),
+      };
+    });
+}
+
+/**
+ * Build the CLI tokens an option is recognised by (`--cliName`,
+ * `--long-alias`, `-x`). Wraps `collectOptionTokens` so collision
+ * detection sees every spelling the runtime aliasMap accepts — including
+ * the camelCase form of hyphenated names, without which a parent-frame
+ * local that intercepts `--toBe` for a global `to-be` would silently
+ * skip the migration loop.
+ */
+function optionTokenSet(opt: CompletableOption): Set<string> {
+  return new Set(collectOptionTokens(opt.cliName, opt.alias));
+}
+
+/**
+ * Find a global option whose CLI tokens overlap with `local`'s tokens.
+ * Used at subcommand descent to migrate values the runtime's
+ * `scanForSubcommand` would have routed to a global field even though
+ * the completion parser stored them under a different-named local.
+ */
+function findGlobalByTokenCollision(
+  globals: readonly CompletableOption[],
+  local: CompletableOption,
+): CompletableOption | undefined {
+  const localTokens = optionTokenSet(local);
+  for (const g of globals) {
+    for (const t of optionTokenSet(g)) {
+      if (localTokens.has(t)) return g;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Mirror runtime `scanForSubcommand`: walk a pre-subcommand token slice
+ * with the global schema only, populating `globalParsedArgs` with the
+ * values the runtime would have routed there before the next subcommand
+ * boundary. Runs at every subcommand descent — the runtime invokes
+ * `scanForSubcommand` recursively at each frame in `parseArgs`, so the
+ * pre-sub global pass applies per descent, not just from root.
+ *
+ * Returns the set of global option names captured during this pre-scan.
+ * Used at descent to skip the local→global token migration for entries
+ * whose true value is already known here — a value-taking global
+ * aliased the same as a parent-local boolean (e.g. global `--profile`
+ * /`-p` and local boolean `alias: "p"`) would otherwise have `true`
+ * written over the genuine `"prod"`.
+ */
+function parsePreSubGlobals(
+  tokens: readonly string[],
+  globalOptions: readonly CompletableOption[],
+  globalParsedArgs: Record<string, unknown>,
+): Set<string> {
+  const captured = new Set<string>();
+  if (globalOptions.length === 0) return captured;
+  // Mirror runtime per-frame array semantics: the first time this
+  // slice writes an array global, the value REPLACES any prior entry
+  // (matching `rawGlobalArgs`'s shallow merge); subsequent writes in
+  // the same slice append.
+  const arrayWrittenInThisSlice = new Set<string>();
+  const writeGlobal = (opt: CompletableOption, value: string): void => {
+    writeOptionValue(globalParsedArgs, opt, value, arrayWrittenInThisSlice);
+    captured.add(opt.name);
+  };
+  let i = 0;
+  while (i < tokens.length) {
+    const word = tokens[i]!;
+    if (word === "--") break;
+    if (!word.startsWith("-")) break;
+    // Combined short flags (`-fg`) freeze runtime scanForSubcommand —
+    // mirror that, otherwise pre-pass over-consumes tokens the runtime
+    // would have left for the leaf parser.
+    if (!word.startsWith("--") && word.length > 2) {
+      const eqIdx = word.indexOf("=");
+      const withoutDash = eqIdx >= 0 ? word.slice(1, eqIdx) : word.slice(1);
+      if (withoutDash.length > 1) break;
+    }
+    const parsed = parseOption(word);
+    // Reuse `findOption` so the explicit > implicit-negation precedence
+    // stays in lockstep with the leaf scanner. Passing only the globals
+    // list keeps local-precedence rules dormant — there are no locals to
+    // shadow against during the pre-sub scan.
+    const opt = findOption(globalOptions, parsed);
+    if (!opt) break;
+    if (opt.takesValue) {
+      if (hasInlineValue(word)) {
+        const eqIdx = word.indexOf("=");
+        writeGlobal(opt, word.slice(eqIdx + 1));
+        i++;
+      } else if (i + 1 < tokens.length) {
+        const next = tokens[i + 1]!;
+        if (next.startsWith("-")) {
+          i++;
+          continue;
+        }
+        writeGlobal(opt, next);
+        i += 2;
+      } else {
+        break;
+      }
+    } else {
+      globalParsedArgs[opt.name] = !isNegationOf(opt, parsed);
+      captured.add(opt.name);
+      i++;
+    }
+  }
+  return captured;
+}
+
+/**
+ * Reshape a value pulled from local storage so it matches the global's
+ * declared shape before landing in `globalParsedArgs`. Without this,
+ * migrating a local scalar into an array global would expose the
+ * resolver to `parsedArgs.tags === "foo"` instead of `["foo"]` — a
+ * state the runtime parser never produces.
+ */
+function adaptValueForGlobal(value: unknown, global: CompletableOption): unknown {
+  if (global.valueType === "array") {
+    if (Array.isArray(value)) return value;
+    return [value];
+  }
+  // Runtime's argv parser uses last-wins for scalars, so picking the
+  // final element matches what `parseArgv` would have produced when
+  // multiple matching tokens reach the global scalar.
+  if (Array.isArray(value)) return value.at(-1);
+  return value;
+}
+
+/**
+ * Append globals to local, preserving local-shadowing by list ORDER rather
+ * than by exclusion. Keeping a global in the merged list — even when a
+ * local declares the same `cliName` — lets a global's non-colliding tokens
+ * (e.g. a `-e` alias the local does not redeclare) still resolve to the
+ * global. `findOption` walks the list and returns the first match, so a
+ * token the local actually owns still wins.
+ */
+function mergeGlobalOptions(
+  local: CompletableOption[],
+  globals: CompletableOption[],
+): CompletableOption[] {
+  if (globals.length === 0) return local;
+  return [...local, ...globals];
+}
+
+/**
+ * Clamp a positional index against `positionals` so a value past the last
+ * declared positional resolves to the trailing variadic slot (if any).
+ * Returns `undefined` only when `positionals` is empty — callers can then
+ * skip the variadic/previousValues path entirely.
+ */
+export function clampToVariadic(
+  positionalIndex: number,
+  positionals: readonly CompletablePositional[],
+): number | undefined {
+  const lastIdx = positionals.length - 1;
+  if (lastIdx < 0) return undefined;
+  return positionalIndex > lastIdx ? lastIdx : positionalIndex;
 }
 
 /**
@@ -89,7 +292,7 @@ function extractPositionalsForContext(command: AnyCommand): CompletablePositiona
       description: field.description,
       required: field.required,
       variadic: field.type === "array",
-      valueCompletion: resolveValueCompletion(field),
+      valueCompletion: stripPendingExpand(resolveValueCompletion(field)),
     }));
 }
 
@@ -143,19 +346,28 @@ function isOption(word: string): boolean {
   return word.startsWith("-");
 }
 
+interface ParsedOption {
+  name: string;
+  /** True when the user typed the long form (`--foo`), false for short (`-x`). */
+  isLong: boolean;
+}
+
 /**
- * Parse option name from word (e.g., "--foo=bar" -> "foo", "-v" -> "v")
+ * Parse option name from word, retaining the form the user typed so the
+ * lookup can keep short-form (`-x`) and long-form (`--x`) matches in
+ * separate token spaces — runtime negation, cliName, and multi-char
+ * aliases only ever appear as long form.
  */
-function parseOptionName(word: string): string {
+function parseOption(word: string): ParsedOption {
   if (word.startsWith("--")) {
     const withoutPrefix = word.slice(2);
     const eqIndex = withoutPrefix.indexOf("=");
-    return eqIndex >= 0 ? withoutPrefix.slice(0, eqIndex) : withoutPrefix;
+    return { name: eqIndex >= 0 ? withoutPrefix.slice(0, eqIndex) : withoutPrefix, isLong: true };
   }
   if (word.startsWith("-")) {
-    return word.slice(1, 2); // First char after -
+    return { name: word.slice(1, 2), isLong: false };
   }
-  return word;
+  return { name: word, isLong: true };
 }
 
 /**
@@ -166,23 +378,132 @@ function hasInlineValue(word: string): boolean {
 }
 
 /**
- * Find option by name or alias
+ * For boolean options, the runtime parser accepts the implicit
+ * `--no-<cliName>` (and camelCase `--noCliName`) form unless the user
+ * opted out via `negation: false` or supplied a custom-string negation
+ * (which suppresses the default form). Aliases participate too: a
+ * boolean with `alias: "c"` accepts `--no-c` / `--noC` because the
+ * runtime resolves the post-`no-` segment through `aliasMap`. Implicit
+ * negation is LONG-FORM only — `-no-c` is never an accepted negation —
+ * so callers must say so via `isLong` to prevent a short option from
+ * being read as a negation.
+ */
+function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong: boolean): boolean {
+  if (!isLong) return false;
+  if (opt.valueType !== "boolean") return false;
+  if (opt.defaultNegationAccepted === false) return false;
+  const candidates = [opt.cliName, ...(opt.alias ?? [])];
+  for (const c of candidates) {
+    const hyphenated = `no-${c}`;
+    if (name === hyphenated) return true;
+    if (name === toCamelCase(hyphenated)) return true;
+  }
+  return false;
+}
+
+/** True when `source` is hyphenated and its camelCase form equals `name`. */
+function matchesCamelCase(source: string | undefined, name: string): boolean {
+  return source !== undefined && source.includes("-") && toCamelCase(source) === name;
+}
+
+/**
+ * Write `value` into `target[opt.name]` following the runtime's per-frame
+ * array semantics: the first write in a frame REPLACES any inherited value
+ * (mirroring the runtime's shallow merge of inherited globals), subsequent
+ * writes in the same frame APPEND. Scalars overwrite unconditionally.
+ * `arraysSeenInFrame` is the frame-scoped seen-set the caller maintains.
+ */
+function writeOptionValue(
+  target: Record<string, unknown>,
+  opt: CompletableOption,
+  value: string,
+  arraysSeenInFrame: Set<string>,
+): void {
+  if (opt.valueType !== "array") {
+    target[opt.name] = value;
+    return;
+  }
+  if (arraysSeenInFrame.has(opt.name)) {
+    const existing = target[opt.name];
+    target[opt.name] = Array.isArray(existing) ? [...existing, value] : [value];
+  } else {
+    target[opt.name] = [value];
+    arraysSeenInFrame.add(opt.name);
+  }
+}
+
+/**
+ * True when the typed token is the boolean option's negation form — either
+ * the explicit `negation` name (or its camelCase variant) or the implicit
+ * `--no-<name>` form. Long-form only; short tokens are never negations.
+ */
+function isNegationOf(opt: CompletableOption, parsed: ParsedOption): boolean {
+  if (!parsed.isLong) return false;
+  if (
+    opt.negation !== undefined &&
+    (opt.negation === parsed.name || matchesCamelCase(opt.negation, parsed.name))
+  ) {
+    return true;
+  }
+  return isImplicitBooleanNegation(opt, parsed.name, parsed.isLong);
+}
+
+/**
+ * Match by cliName, alias, camelCase variants, or an explicit negation
+ * name. `isLong` separates the short (`-x`) and long (`--xxx`) token
+ * spaces: cliNames and explicit negations are only valid as long form,
+ * and aliases match their own length class (a 1-char alias only matches
+ * short form because its token is `-x`).
+ */
+function matchesExplicit(opt: CompletableOption, name: string, isLong: boolean): boolean {
+  // A single-character cliName / alias is reachable from BOTH `--x`
+  // and `-x` at runtime — short form falls through `aliasMap` to the
+  // canonical name, and long form lands in the same map. Multi-char
+  // names are only invokable as long form.
+  if (opt.cliName === name && (isLong || opt.cliName.length === 1)) return true;
+  if (opt.alias) {
+    for (const a of opt.alias) {
+      if (a === name && (isLong || a.length === 1)) return true;
+    }
+  }
+  // Custom negation names always belong to the long-form token space —
+  // runtime only matches them via the `--<negation>` route.
+  if (isLong && opt.negation === name) return true;
+  if (!isLong || name.length <= 1) return false;
+  if (matchesCamelCase(opt.cliName, name)) return true;
+  if (opt.alias?.some((a) => matchesCamelCase(a, name))) return true;
+  return matchesCamelCase(opt.negation, name);
+}
+
+/**
+ * Find option by name or alias. Tried in two passes so that a real field
+ * literally named `noFoo` always wins over `--no-foo` being interpreted as
+ * the implicit negation of a sibling `foo` field — the runtime parser
+ * resolves the explicit field first as well.
+ *
+ * Short-form precedence mirrors runtime's `separateGlobalArgs`: when a
+ * global owns the `-x` alias and the local does NOT explicitly declare
+ * `alias: "x"`, the global wins (a bare local `cliName: "x"` does not
+ * register `x` in the local aliasMap). Long form keeps the local-first
+ * order via the unshadowed merged list.
  */
 function findOption(
-  options: CompletableOption[],
-  nameOrAlias: string,
+  options: readonly CompletableOption[],
+  parsed: ParsedOption,
 ): CompletableOption | undefined {
-  return options.find((opt) => {
-    if (opt.cliName === nameOrAlias) return true;
-    if (opt.alias?.includes(nameOrAlias)) return true;
-    // Also match camelCase variants of hyphenated aliases/cliName so that
-    // e.g. --toBe is recognised when alias: "to-be" is defined.
-    if (nameOrAlias.length > 1) {
-      if (opt.cliName.includes("-") && toCamelCase(opt.cliName) === nameOrAlias) return true;
-      if (opt.alias?.some((a) => a.includes("-") && toCamelCase(a) === nameOrAlias)) return true;
-    }
-    return false;
-  });
+  if (!parsed.isLong) {
+    const localWithExplicitAlias = options.find(
+      (opt) => opt.isGlobal !== true && opt.alias?.includes(parsed.name) === true,
+    );
+    if (localWithExplicitAlias) return localWithExplicitAlias;
+    const global = options.find(
+      (opt) => opt.isGlobal === true && matchesExplicit(opt, parsed.name, parsed.isLong),
+    );
+    if (global) return global;
+  }
+  const explicit = options.find((opt) => matchesExplicit(opt, parsed.name, parsed.isLong));
+  if (explicit) return explicit;
+  return options.find((opt) => isImplicitBooleanNegation(opt, parsed.name, parsed.isLong));
 }
 
 /**
@@ -190,20 +511,93 @@ function findOption(
  *
  * @param argv - Arguments after the program name (e.g., ["build", "--fo"])
  * @param rootCommand - The root command
+ * @param globalArgsSchema - Optional global args. When provided, options
+ *   derived from this schema are merged into every command level so dynamic
+ *   resolvers attached to global options can be reached from any subcommand.
  * @returns Completion context
  */
-export function parseCompletionContext(argv: string[], rootCommand: AnyCommand): CompletionContext {
+export function parseCompletionContext(
+  argv: string[],
+  rootCommand: AnyCommand,
+  globalArgsSchema?: ArgsSchema,
+): CompletionContext {
   // Initialize with root command
   let currentCommand = rootCommand;
   const subcommandPath: string[] = [];
+
+  // Tag every global-schema option with `isGlobal: true` so the
+  // value-routing logic in `recordOptionValue` / `recordBooleanFlag` can
+  // tell a global match apart from a same-shaped local match purely
+  // through the option object, without re-scanning the global schema.
+  const globalOptions: CompletableOption[] = globalArgsSchema
+    ? extractOptionsFromSchema(globalArgsSchema).map((o) => ({ ...o, isGlobal: true }))
+    : [];
 
   // Track used options and positional count
   const usedOptions = new Set<string>();
   let positionalCount = 0;
 
+  // Best-effort parsed values for the CURRENT command. Reset when traversing
+  // into a subcommand so dynamic resolvers only see siblings on the same
+  // command frame. Global option values live in a separate map so they
+  // survive subcommand descent — runtime accumulates globals across the
+  // command path, and resolvers attached to global options expect them
+  // visible regardless of where the option was supplied.
+  let parsedArgs: Record<string, unknown> = {};
+  let positionalValues: string[] = [];
+  const globalParsedArgs: Record<string, unknown> = {};
+
+  // Track every global name captured by the per-descent pre-sub scan.
+  // At each descent the runtime's `scanForSubcommand` routes pre-sub
+  // tokens to globals even when a parent-local schema shadows the same
+  // alias; the migration logic below skips any name in this set so a
+  // local parse (`-p` boolean) doesn't clobber the genuine global value
+  // (`-p prod` → `profile = "prod"`).
+  const globalsCapturedByPreSubScan = new Set<string>();
+  // Start-of-frame index in `argv`. The slice `[frameStartIdx, i)` at
+  // each descent is the pre-sub token range for that frame and gets
+  // re-scanned against the global schema.
+  let frameStartIdx = 0;
+
+  // Names of array options written in the current command frame. Used to
+  // mirror the runtime's per-frame array semantics: the first `--arr v`
+  // in a frame *replaces* any value inherited from the parent frame (the
+  // runtime's shallow merge of `rawGlobalArgs`), while subsequent
+  // `--arr v` in the same frame *append*. Cleared on every subcommand
+  // descent below.
+  let arraysSetInCurrentFrame = new Set<string>();
+
+  /**
+   * Mark the option's cliName plus every alias and (if present) negation
+   * form as consumed. The negation shares the field's "used" slot so
+   * typing either form filters both from subsequent suggestions.
+   */
+  const markUsed = (opt: CompletableOption): void => {
+    usedOptions.add(opt.cliName);
+    for (const a of opt.alias ?? []) usedOptions.add(a);
+    if (opt.negation) usedOptions.add(opt.negation);
+  };
+
+  const recordOptionValue = (opt: CompletableOption, value: string): void => {
+    const target = opt.isGlobal === true ? globalParsedArgs : parsedArgs;
+    writeOptionValue(target, opt, value, arraysSetInCurrentFrame);
+  };
+
+  /**
+   * Record a boolean flag the user typed. The positive form sets `true`;
+   * the negation form (`--no-foo` or a custom `negationDisplay`) sets
+   * `false`. Dynamic resolvers depend on these values to switch candidates
+   * based on flag state, so the absence of a writer here used to hide
+   * boolean siblings entirely.
+   */
+  const recordBooleanFlag = (opt: CompletableOption, parsed: ParsedOption): void => {
+    const target = opt.isGlobal === true ? globalParsedArgs : parsedArgs;
+    target[opt.name] = !isNegationOf(opt, parsed);
+  };
+
   // Process arguments to resolve subcommands and track state
   let i = 0;
-  let options = extractOptions(currentCommand);
+  let options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
   let afterDoubleDash = false;
 
   // Traverse subcommands
@@ -217,20 +611,66 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
       continue;
     }
 
+    // Combined short boolean flags such as `-ab` ⇒ `-a -b`. The runtime
+    // parser unpacks these; the completion parser must do the same so a
+    // resolver sees both flags as set. Only attempted when every char in
+    // the group resolves to a value-less option, otherwise the word is
+    // ambiguous (`-cVALUE` syntax) and we fall through to the single-
+    // char path below.
+    if (
+      !afterDoubleDash &&
+      word.startsWith("-") &&
+      !word.startsWith("--") &&
+      word.length > 2 &&
+      !word.includes("=")
+    ) {
+      const chars: string[] = Array.from(word.slice(1));
+      // Runtime's global separation (`scanForSubcommand` /
+      // `separateGlobalArgs`) does NOT decompose combined short flags
+      // — only the leaf-level local parser does. Mirror that here by
+      // matching each char against LOCAL options only and recording
+      // every resolved boolean. A char that doesn't resolve locally
+      // (or that maps to a value-taking option) is a no-op, just like
+      // the runtime's `setOption` on an unknown short. Always consume
+      // the whole combined word so the single-option branch below
+      // does not misread `-ab` as `-a`.
+      const localOptions = options.filter((o) => o.isGlobal !== true);
+      for (const c of chars) {
+        const o = findOption(localOptions, { name: c, isLong: false });
+        if (!o || o.takesValue) continue;
+        markUsed(o);
+        recordBooleanFlag(o, { name: c, isLong: false });
+      }
+      i++;
+      continue;
+    }
+
     // Skip options and their values (before "--")
     if (!afterDoubleDash && isOption(word)) {
-      const optName = parseOptionName(word);
-      const opt = findOption(options, optName);
+      const parsed = parseOption(word);
+      const opt = findOption(options, parsed);
 
       if (opt) {
-        usedOptions.add(opt.cliName);
-        if (opt.alias) {
-          for (const a of opt.alias) usedOptions.add(a);
-        }
+        markUsed(opt);
 
-        // Skip next word if option takes value and doesn't have inline value
-        if (opt.takesValue && !hasInlineValue(word)) {
-          i++;
+        if (opt.takesValue) {
+          if (hasInlineValue(word)) {
+            const eqIdx = word.indexOf("=");
+            recordOptionValue(opt, word.slice(eqIdx + 1));
+          } else if (i + 1 < argv.length - 1) {
+            const next = argv[i + 1]!;
+            // Mirror the runtime parser (`parseArgv`): a token starting
+            // with `-` is treated as the next option, not as this
+            // option's value. Otherwise `--config --flag --field <TAB>`
+            // records `config === "--flag"` and leaves `flag` unset,
+            // so the resolver sees a state the runtime never produces.
+            if (!isOption(next)) {
+              recordOptionValue(opt, next);
+              i++;
+            }
+          }
+        } else {
+          recordBooleanFlag(opt, parsed);
         }
       }
       i++;
@@ -241,15 +681,67 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     const subcommand = afterDoubleDash ? null : resolveSubcommand(currentCommand, word);
     if (subcommand) {
       subcommandPath.push(word);
+      // Capture the parent's local options BEFORE switching frames so
+      // the migration loop below can resolve token collisions against
+      // them; once `currentCommand` flips to the child we lose access
+      // to the parent's schema.
+      const parentLocalOptions = extractOptions(currentCommand);
+      // Pre-scan this frame's pre-sub slice with the global schema.
+      // Runtime's `scanForSubcommand` runs at every frame in the
+      // recursive `parseArgs` descent, routing pre-sub tokens to
+      // globals — applies to nested parents too, not just root.
+      const preSubSlice = argv.slice(frameStartIdx, i);
+      for (const name of parsePreSubGlobals(preSubSlice, globalOptions, globalParsedArgs)) {
+        globalsCapturedByPreSubScan.add(name);
+      }
       currentCommand = subcommand;
-      options = extractOptions(currentCommand);
+      options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
+      // Migrate values the parent frame recorded locally that the
+      // runtime would have routed to a global instead. Runtime's
+      // `scanForSubcommand` only knows the global schema and harvests
+      // any flag matching a global token as global when it precedes a
+      // descent, so two shapes of collision both need to migrate:
+      //  - Same-name shadow: parent declares a local with the SAME
+      //    field name as a global → write-time used the (unshadowed)
+      //    local store; we migrate by field name here.
+      //  - Token collision: parent's local shares a CLI token (alias,
+      //    camelCase variant) with a global option of a DIFFERENT
+      //    name → write-time still stored under the local's name, but
+      //    the runtime would have surfaced the value as
+      //    `globalArgs[globalOpt.name]`. Migrate to the global's name.
+      for (const key of Object.keys(parsedArgs)) {
+        const localOpt = parentLocalOptions.find((o) => o.name === key);
+        const sameNameGlobal = globalOptions.find((g) => g.name === key);
+        const tokenCollidingGlobal =
+          sameNameGlobal ??
+          (localOpt ? findGlobalByTokenCollision(globalOptions, localOpt) : undefined);
+        if (!tokenCollidingGlobal) continue;
+        // Skip migration when this descent's (or an earlier descent's)
+        // pre-sub global scan already populated the authoritative value;
+        // overwriting with the arity-adapted local would clobber it.
+        if (globalsCapturedByPreSubScan.has(tokenCollidingGlobal.name)) continue;
+        globalParsedArgs[tokenCollidingGlobal.name] = adaptValueForGlobal(
+          parsedArgs[key],
+          tokenCollidingGlobal,
+        );
+      }
       usedOptions.clear(); // Reset for new subcommand
       positionalCount = 0;
+      parsedArgs = {};
+      positionalValues = [];
+      // Mirror the runner's per-frame array semantics: keep the parent
+      // frame's value as the inherited starting point (shallow merge
+      // preserves it when the child doesn't redeclare). The "first set
+      // in this frame replaces" rule is enforced by clearing the
+      // per-frame seen-set instead of deleting the accumulator outright.
+      arraysSetInCurrentFrame = new Set<string>();
+      frameStartIdx = i + 1;
       i++;
       continue;
     }
 
     // Otherwise it's a positional argument
+    positionalValues.push(word);
     positionalCount++;
     i++;
   }
@@ -262,6 +754,20 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
   const positionals = extractPositionalsForContext(currentCommand);
   const subcommands = getSubcommandNames(currentCommand);
 
+  // Map collected positional values to their field names so resolvers can
+  // reference them like options. The trailing variadic positional (if any)
+  // absorbs every value beyond `positionals.length - 1`.
+  for (let p = 0; p < positionals.length; p++) {
+    const pos = positionals[p]!;
+    if (pos.variadic) {
+      parsedArgs[pos.name] = positionalValues.slice(p);
+      break;
+    }
+    if (p < positionalValues.length) {
+      parsedArgs[pos.name] = positionalValues[p];
+    }
+  }
+
   // Determine completion type
   let completionType: CompletionType;
   let targetOption: CompletableOption | undefined;
@@ -269,8 +775,7 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
 
   // Case 1: Previous word is an option that takes a value
   if (!afterDoubleDash && previousWord && isOption(previousWord) && !hasInlineValue(previousWord)) {
-    const optName = parseOptionName(previousWord);
-    const opt = findOption(options, optName);
+    const opt = findOption(options, parseOption(previousWord));
     if (opt && opt.takesValue) {
       completionType = "option-value";
       targetOption = opt;
@@ -289,10 +794,12 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
       }
     }
   }
-  // Case 2: Current word is an option with inline value (--foo=)
-  else if (!afterDoubleDash && currentWord.startsWith("--") && hasInlineValue(currentWord)) {
-    const optName = parseOptionName(currentWord);
-    const opt = findOption(options, optName);
+  // Case 2: Current word is an option with inline value (--foo= or -f=).
+  // Runtime accepts both shapes; the generated bash script's pre-scan
+  // already splits the short form for earlier words, and now the
+  // option-value classifier matches it for the current word too.
+  else if (!afterDoubleDash && currentWord.startsWith("-") && hasInlineValue(currentWord)) {
+    const opt = findOption(options, parseOption(currentWord));
     if (opt && opt.takesValue) {
       completionType = "option-value";
       targetOption = opt;
@@ -318,6 +825,27 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     }
   }
 
+  // Compute previousValues for the target of completion. Useful for resolvers
+  // that need to de-dup repeated array options or enforce oneof exclusivity.
+  let previousValues: string[] = [];
+  if (targetOption) {
+    if (targetOption.valueType === "array") {
+      const store = targetOption.isGlobal === true ? globalParsedArgs : parsedArgs;
+      const stored = store[targetOption.name];
+      previousValues = Array.isArray(stored)
+        ? stored.filter((v): v is string => typeof v === "string")
+        : [];
+    }
+  } else if (completionType === "positional" && positionalIndex !== undefined) {
+    const clampedIdx = clampToVariadic(positionalIndex, positionals);
+    if (clampedIdx !== undefined && positionals[clampedIdx]?.variadic) {
+      previousValues = positionalValues.slice(clampedIdx);
+    }
+  }
+
+  // Expose globals alongside locals; local args win on name collision.
+  const mergedParsedArgs: Record<string, unknown> = { ...globalParsedArgs, ...parsedArgs };
+
   return {
     subcommandPath,
     currentCommand,
@@ -331,6 +859,8 @@ export function parseCompletionContext(argv: string[], rootCommand: AnyCommand):
     positionals,
     usedOptions,
     providedPositionalCount: positionalCount,
+    parsedArgs: mergedParsedArgs,
+    previousValues,
   };
 }
 

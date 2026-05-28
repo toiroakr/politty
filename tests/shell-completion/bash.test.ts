@@ -3,13 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
-  bashComplete as bashCompleteRaw,
+  bashCompleteExpand,
   bashCompleteNested,
+  bashComplete as bashCompleteRaw,
   defineCommonTests,
   defineNestedTests,
   hasBash,
   hasExpect,
   isCI,
+  setupExpandTestContext,
   setupNestedTestContext,
   setupTestContext,
   teardownTestContext,
@@ -19,15 +21,18 @@ import {
 
 let ctx: TestContext;
 let nestedCtx: TestContext;
+let expandCtx: TestContext;
 
 beforeAll(() => {
   ctx = setupTestContext();
   nestedCtx = setupNestedTestContext();
+  expandCtx = setupExpandTestContext();
 });
 
 afterAll(() => {
   teardownTestContext(ctx);
   teardownTestContext(nestedCtx);
+  teardownTestContext(expandCtx);
 });
 
 describe.runIf(isCI)("CI: required tools are available", () => {
@@ -151,6 +156,84 @@ printf '%s\\n' "\${COMPREPLY[@]}"
     expect(values).not.toContain("build");
     expect(values).not.toContain("deploy");
     expect(values).toContain("app.json");
+  });
+});
+
+// ─── Expand array dedup ───────────────────────────────────────────────────────
+
+describe.skipIf(!hasBash)("bash expand array dedup", () => {
+  const completeE = (args: string[], opts?: ExecOptions) =>
+    bashCompleteExpand(expandCtx.testEnv, args, {
+      ...opts,
+      scriptPath: expandCtx.completionScripts.bash,
+    });
+
+  it("offers every key when none are consumed", () => {
+    const values = completeE(["api", "GetApplication", "-f", ""]);
+    expect(values).toContain("workspaceId=");
+    expect(values).toContain("applicationName=");
+  });
+
+  it("drops an already-used key from candidates", () => {
+    const values = completeE(["api", "GetApplication", "-f", "workspaceId=foo", "-f", ""]);
+    expect(values).toContain("applicationName=");
+    expect(values).not.toContain("workspaceId=");
+  });
+
+  it("dedup also applies under inline --field=KEY= form", () => {
+    const values = completeE(["api", "GetApplication", "--field=workspaceId=foo", "--field="]);
+    expect(values).toContain("--field=applicationName=");
+    expect(values).not.toContain("--field=workspaceId=");
+  });
+
+  it("prefix filter and dedup are orthogonal", () => {
+    const values = completeE(["api", "GetApplication", "-f", "workspaceId=foo", "-f", "w"]);
+    expect(values).not.toContain("workspaceId=");
+    expect(values).not.toContain("applicationName=");
+  });
+
+  // ─── Two-stage key=value: keys-only before `=` is typed, values after ─────
+
+  it("collapses key=value entries to unique key= when no `=` typed yet", () => {
+    const values = completeE(["api", "ListApplications", "-f", ""]);
+    // `pageDirection` has values NEXT and PREVIOUS in the playground table;
+    // the first TAB must surface only the bare key, never the full pair.
+    expect(values).toContain("pageDirection=");
+    expect(values).not.toContain("pageDirection=NEXT");
+    expect(values).not.toContain("pageDirection=PREVIOUS");
+    expect(values).toContain("workspaceId=");
+    expect(values).toContain("first=");
+    expect(values).toContain("after=");
+  });
+
+  it("collapses key=value entries also under a partial key prefix", () => {
+    const values = completeE(["api", "ListApplications", "-f", "pa"]);
+    expect(values).toEqual(["pageDirection="]);
+  });
+
+  it("shows full key=value pairs once the user types `<key>=`", () => {
+    const values = completeE(["api", "ListApplications", "-f", "pageDirection="]);
+    expect(values).toContain("pageDirection=NEXT");
+    expect(values).toContain("pageDirection=PREVIOUS");
+    expect(values).not.toContain("pageDirection=");
+  });
+
+  it("collapses key=value entries under inline --field= form", () => {
+    const values = completeE(["api", "ListApplications", "--field="]);
+    expect(values).toContain("--field=pageDirection=");
+    expect(values).not.toContain("--field=pageDirection=NEXT");
+    expect(values).not.toContain("--field=pageDirection=PREVIOUS");
+  });
+
+  it("drops bare `key=` from value stage so it does not clutter the value picker", () => {
+    // ListApplications has both a bare `pageDirection=` entry and value
+    // variants. Once the user types `pageDirection=`, the bare entry would
+    // just re-suggest what they already typed — only the value variants
+    // are useful at that stage.
+    const values = completeE(["api", "ListApplications", "-f", "pageDirection="]);
+    expect(values).not.toContain("pageDirection=");
+    expect(values).toContain("pageDirection=NEXT");
+    expect(values).toContain("pageDirection=PREVIOUS");
   });
 });
 

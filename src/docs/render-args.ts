@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
-import { renderOptionsTableFromArray } from "./default-renderers.js";
+import { negationRelationMarker, renderOptionsTableFromArray } from "./default-renderers.js";
 
 /**
  * Args shape type (Record of string keys to Zod schemas)
@@ -142,10 +142,15 @@ function renderFilteredTable(
       switch (col) {
         case "option": {
           const placeholder = opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
-          const optionName =
-            opt.type === "boolean"
-              ? `\`--${opt.cliName}\``
-              : `\`--${opt.cliName} <${placeholder}>\``;
+          let optionName: string;
+          if (opt.type === "boolean") {
+            optionName = `\`--${opt.cliName}\``;
+            if (opt.negationDisplay && !opt.negationDescription) {
+              optionName += ` / \`--${opt.negationDisplay}\``;
+            }
+          } else {
+            optionName = `\`--${opt.cliName} <${placeholder}>\``;
+          }
           cells.push(optionName);
           break;
         }
@@ -178,6 +183,32 @@ function renderFilteredTable(
     }
 
     lines.push(`| ${cells.join(" | ")} |`);
+
+    // Append a separate row for the negation when description is provided
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      const negCells: string[] = [];
+      for (const col of columns) {
+        switch (col) {
+          case "option":
+            negCells.push(`\`--${opt.negationDisplay}\``);
+            break;
+          case "description":
+            negCells.push(
+              `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`,
+            );
+            break;
+          case "required":
+            negCells.push(opt.required ? "Yes" : "No");
+            break;
+          case "alias":
+          case "default":
+          case "env":
+            negCells.push("-");
+            break;
+        }
+      }
+      lines.push(`| ${negCells.join(" | ")} |`);
+    }
   }
 
   return lines.join("\n");

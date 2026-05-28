@@ -109,6 +109,13 @@ export interface CommandBase<
   notes?: string | undefined;
   /** Example usages for this command */
   examples?: Example[] | undefined;
+  /**
+   * @internal
+   * Hook invoked once at the top of `runMain`, before any parsing. Used
+   * by `withCompletionCommand` to fire its detached background-refresh
+   * spawn. Best-effort; never throws.
+   */
+  runMainHook?: ((argv: readonly string[]) => void) | undefined;
 }
 
 /**
