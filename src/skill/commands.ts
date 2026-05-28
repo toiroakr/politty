@@ -7,7 +7,7 @@ import {
   unlinkSync,
   type Dirent,
 } from "node:fs";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import { arg, type RegularArgMeta } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
@@ -182,9 +182,23 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
       let removed = 0;
       if (!rootScanFailed) {
         // Remove skills we previously owned that the CLI no longer bundles.
+        // Errored source subdirectories are *retained*: an installed slot
+        // whose source SKILL.md is currently unreadable / malformed must
+        // not be reaped as an orphan — the source entry still exists, it
+        // just couldn't be scanned this run. Without this guard a transient
+        // packaging issue (one broken SKILL.md alongside healthy siblings)
+        // would silently rm-rf the install for the broken one. `basename`
+        // on a subdirectory `ScanError.path` gives the install slot name
+        // (the install was last written using the frontmatter `name`, and
+        // by spec that matches the subdirectory name).
         const sourceNames = new Set(skills.map((s) => s.frontmatter.name));
+        const erroredDirNames = new Set(
+          errors.filter((e) => e.path !== resolved.sourceDir).map((e) => basename(e.path)),
+        );
         for (const orphan of findOwnedInstalledSkills(stamp, resolved.cwd, resolved.sourceDir)) {
-          if (sourceNames.has(orphan) || excluded.has(orphan)) continue;
+          if (sourceNames.has(orphan) || excluded.has(orphan) || erroredDirNames.has(orphan)) {
+            continue;
+          }
           removeOwnedSkill(orphan, stamp, resolved.cwd, resolved.sourceDir);
           removed += 1;
         }
@@ -679,11 +693,16 @@ function cleanupBrokenSlot(name: string, cwd: string, sourceDir: string): boolea
   const canonical = resolve(cwd, AGENTS_SKILLS_DIR, name);
   if (!isDanglingSymlink(canonical)) return false;
   if (!danglingRoutesToSource(canonical, sourceDir)) return false;
-  unlinkSync(canonical);
-  // Best-effort sweep of agent-specific slots — but only those that route
-  // back to our canonical. A foreign tool's dangling symlink at the same
-  // agent path (e.g. pointing at its own canonical) lives in the same
-  // shared namespace and must not be reaped.
+  // Sweep matching agent-specific slots *before* unlinking the canonical.
+  // `symlinkRoutesTo`'s realpath fallback needs both endpoints to resolve
+  // — once the canonical is gone (e.g. when `cwd` is a symlinked project
+  // path so the install wrote realpath-resolved parents and the agent
+  // link's resolved target no longer equals `canonical` lexically), the
+  // sweep could no longer prove ownership and would leave the agent-slot
+  // dangling symlink behind. Only slots that route back to our canonical
+  // are reaped; a foreign tool's dangling symlink at the same agent path
+  // (e.g. pointing at its own canonical) lives in the same shared
+  // namespace and must not be touched.
   for (const target of SYMLINK_TARGETS) {
     const agentSlot = resolve(cwd, target, name);
     if (!isDanglingSymlink(agentSlot)) continue;
@@ -691,6 +710,7 @@ function cleanupBrokenSlot(name: string, cwd: string, sourceDir: string): boolea
       unlinkSync(agentSlot);
     }
   }
+  unlinkSync(canonical);
   return true;
 }
 
@@ -701,11 +721,15 @@ function cleanupBrokenSlot(name: string, cwd: string, sourceDir: string): boolea
  *
  * The link target is resolved lexically (the path is dangling so
  * `realpathSync` on it would fail) against the symlink's own directory.
- * `sourceDir` is `realpathSync`'d so a project mounted through a symlink
- * still compares cleanly. Containment uses the same boundary-aware
- * `..`-only escape check as `installer.ts`'s `pathsOverlap` so a sibling
- * directory whose name happens to start with `..` is not misclassified
- * as outside.
+ * `sourceDir` is resolved through `resolveDeepestExisting` so the
+ * comparison survives realpath remapping (macOS `/tmp` →
+ * `/private/tmp`, a project mounted through a symlink, etc) *and* the
+ * documented case where the configured source path itself no longer
+ * exists (the source package was uninstalled — exactly the scenario
+ * `status: "missing"` is meant to surface). Containment uses the same
+ * boundary-aware `..`-only escape check as `installer.ts`'s
+ * `pathsOverlap` so a sibling directory whose name happens to start
+ * with `..` is not misclassified as outside.
  */
 function danglingRoutesToSource(canonical: string, sourceDir: string): boolean {
   let raw: string;
@@ -715,12 +739,11 @@ function danglingRoutesToSource(canonical: string, sourceDir: string): boolean {
     return false;
   }
   const absoluteTarget = isAbsolute(raw) ? raw : resolve(dirname(canonical), raw);
-  let resolvedSource: string;
-  try {
-    resolvedSource = realpathSync(sourceDir);
-  } catch {
-    return false;
-  }
+  // The source dir itself may be gone (the source package was uninstalled
+  // — the very state `status: "missing"` is meant to surface), so resolve
+  // through the deepest existing ancestor instead of `realpathSync` to keep
+  // routing-into-sourceDir recognizable even when the directory is absent.
+  const resolvedSource = resolveDeepestExisting(resolve(sourceDir));
   // The target itself is dangling so `realpathSync(absoluteTarget)` would
   // fail. Resolve the deepest existing ancestor instead so the comparison
   // survives realpath remapping (macOS `/tmp` → `/private/tmp`, a project

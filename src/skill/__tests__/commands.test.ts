@@ -1195,6 +1195,30 @@ describe("dangling-symlink cleanup", () => {
     expect(mockedUninstallSkill).not.toHaveBeenCalled();
   });
 
+  it("should reap a dangling canonical even when sourceDir itself is gone", () => {
+    // The docs promise `status: "missing"` (and the matching cleanup path)
+    // for the case "our source package was uninstalled" — which means
+    // sourceDir itself can be absent. `danglingRoutesToSource` must not
+    // bail just because `realpathSync(sourceDir)` would fail; the
+    // deepest-existing-prefix fallback keeps the route comparison usable.
+    const missingSource = join(tempDir, "nonexistent-source");
+    const canonical = makeDanglingCanonical(
+      join(projectRoot, ".agents/skills"),
+      "commit",
+      missingSource,
+    );
+    expect(lstatSync(canonical).isSymbolicLink()).toBe(true);
+    expect(existsSync(canonical)).toBe(false);
+
+    const command = createSkillRemoveCommand(resolve({ ...opts(missingSource), cwd: projectRoot }));
+    command.run!({ name: "commit" });
+
+    // Dangling canonical was recognised as ours and reaped.
+    expect(() => lstatSync(canonical)).toThrow();
+    // No real install existed, so the uninstaller path must not fire.
+    expect(mockedUninstallSkill).not.toHaveBeenCalled();
+  });
+
   it("should leave a live canonical symlink alone (no false-positive cleanup)", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     // Create a real target then symlink to it so the canonical is *live*.
