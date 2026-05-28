@@ -787,6 +787,59 @@ describe("createSkillAddCommand", () => {
     expect(mockedInstallSkill.mock.calls[0]![2]).toEqual({});
   });
 
+  it("should refuse to overwrite a live symlink whose target lacks SKILL.md", () => {
+    // Asymmetry guard: hasInstalledSkill === false (no SKILL.md through the
+    // symlink) but the slot is still occupied by a live symlink to some
+    // foreign directory. `listStatus` classifies this as `unstamped`; the
+    // install path must refuse to clobber it for parity, otherwise
+    // `installSkill`'s `clearInstallSlot` would silently `unlinkSync` it.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReturnValue(false);
+
+    const projectRoot = createTempDir();
+    try {
+      const foreignTarget = join(projectRoot, "foreign-skill");
+      mkdirSync(foreignTarget, { recursive: true });
+      const canonical = join(projectRoot, ".agents/skills/commit");
+      mkdirSync(join(projectRoot, ".agents/skills"), { recursive: true });
+      symlinkSync(foreignTarget, canonical, "dir");
+
+      const command = createSkillAddCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
+
+      expect(() => command.run!({ name: ["commit"], verbose: false })).toThrow(
+        /Refusing to install/,
+      );
+      expect(mockedInstallSkill).not.toHaveBeenCalled();
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("should still reap a dangling canonical symlink on install", () => {
+    // A dangling canonical symlink is almost certainly a leftover from a
+    // previous install of this CLI (source package was uninstalled).
+    // `installSkill`'s `clearInstallSlot` reaps it, and the new clobber
+    // guard must not refuse the install just because the slot is "present".
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReturnValue(false);
+
+    const projectRoot = createTempDir();
+    try {
+      const canonical = join(projectRoot, ".agents/skills/commit");
+      mkdirSync(join(projectRoot, ".agents/skills"), { recursive: true });
+      symlinkSync(join(projectRoot, "does-not-exist"), canonical, "dir");
+
+      const command = createSkillAddCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
+      command.run!({ name: ["commit"], verbose: false });
+
+      expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   it("should refuse to install when source SKILL.md has no politty-cli stamp", () => {
     // Skill package forgot to declare ownership — packaging bug, surface early.
     writeSkillMd(
@@ -822,19 +875,28 @@ describe("createSkillAddCommand", () => {
 
   it("should refuse to clobber an installed but unstamped legacy skill", () => {
     // readInstalledOwnership returns null both for "not installed" and for
-    // "installed but has no (or malformed) politty-cli stamp". The scanner-
-    // level guards don't catch the latter — hasInstalledSkill resolves the
-    // ambiguity so we don't silently rmSync a user's manual install.
+    // "installed but has no (or malformed) politty-cli stamp". The slot-
+    // presence + non-dangling check resolves the ambiguity so we don't
+    // silently rmSync a user's manual install.
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     mockedReadOwnership.mockReturnValue(null);
     mockedHasInstalledSkill.mockReturnValue(true);
 
-    const command = createSkillAddCommand(resolve(opts(tempDir)));
+    const projectRoot = createTempDir();
+    try {
+      const canonical = join(projectRoot, ".agents/skills/commit");
+      mkdirSync(canonical, { recursive: true });
+      writeFileSync(join(canonical, "SKILL.md"), "---\nname: commit\ndescription: x\n---\n");
 
-    expect(() => command.run!({ name: ["commit"], verbose: false })).toThrow(
-      /without a politty-cli stamp/,
-    );
-    expect(mockedInstallSkill).not.toHaveBeenCalled();
+      const command = createSkillAddCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
+
+      expect(() => command.run!({ name: ["commit"], verbose: false })).toThrow(
+        /without a politty-cli stamp/,
+      );
+      expect(mockedInstallSkill).not.toHaveBeenCalled();
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 });
 

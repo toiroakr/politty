@@ -564,11 +564,19 @@ function addSkill(
     );
   }
   // readInstalledOwnership returns null for both "not installed" and
-  // "installed but unstamped" — we distinguish via hasInstalledSkill so
-  // we don't silently rmSync a legacy/manual install we have no claim to.
-  if (actual === null && hasInstalledSkill(name, cwd)) {
+  // "installed but unstamped" — refuse to clobber any slot we can't prove
+  // we own. A readable but unstamped SKILL.md is one such case
+  // (`hasInstalledSkill === true`); a live symlink whose target lacks a
+  // SKILL.md is another (slot is occupied but `hasInstalledSkill === false`
+  // because `existsSync` follows the symlink and finds no file). `listStatus`
+  // already routes both to `unstamped`, so the install guard must match.
+  // The one exception is a dangling canonical symlink — almost certainly
+  // a leftover from a previous install of this CLI, and `installSkill` is
+  // expected to reap it.
+  const canonical = resolve(cwd, AGENTS_SKILLS_DIR, name);
+  if (actual === null && slotPresent(name, cwd) && !isDanglingSymlink(canonical)) {
     throw new Error(
-      `Refusing to install "${name}": .agents/skills/${name}/SKILL.md exists without a ` +
+      `Refusing to install "${name}": .agents/skills/${name} exists without a ` +
         `${OWNERSHIP_METADATA_KEY} stamp, so it was not installed by this CLI. ` +
         `Remove it manually (or add the stamp to take ownership) before running "skills add".`,
     );
@@ -577,7 +585,6 @@ function addSkill(
   logger.info(`${symbols.success} Installed ${name}`);
   if (verbose) {
     const effectiveMode: InstallMode = mode ?? "symlink";
-    const canonical = resolve(cwd, AGENTS_SKILLS_DIR, name);
     logger.info(`    mode=${effectiveMode}  path=${canonical}`);
   }
 }
