@@ -30,11 +30,20 @@ import type { DiscoveredSkill, InstallMode, ScanError, ScanResult } from "./type
  * stderr warnings still fire). Used by `skills list --json` so the
  * machine-readable JSON output on stdout stays parseable.
  */
-function logScanErrors(errors: ScanError[], opts: { silentStdout?: boolean } = {}): void {
+function logScanErrors(
+  errors: ScanError[],
+  opts: { silentStdout?: boolean; sourceDir?: string } = {},
+): void {
   let skipped = 0;
   let directoryFailed = false;
   for (const err of errors) {
-    if (err.reason === "missing-source") {
+    // `missing-source` is always a directory failure. `read-failed` with
+    // `path === sourceDir` is also a directory failure (e.g. EACCES on
+    // `readdirSync(sourceDir)`); without checking the path, such errors
+    // would render as a single "Skipping skill" line and silently skip
+    // the directory-failed stdout summary — confusing a broken source
+    // directory for one malformed skill.
+    if (err.reason === "missing-source" || err.path === opts.sourceDir) {
       directoryFailed = true;
       logger.warn(`Failed to scan source directory ${err.path}: ${err.message}`);
       continue;
@@ -74,7 +83,7 @@ function loadSkills(
   logOpts: { silentStdout?: boolean } = {},
 ): ScanResult {
   const result = scanSourceDir(options.sourceDir);
-  logScanErrors(result.errors, logOpts);
+  logScanErrors(result.errors, { ...logOpts, sourceDir: options.sourceDir });
   return result;
 }
 
@@ -653,13 +662,22 @@ function findOwnedInstalledSkills(expectedOwnership: string, cwd: string): strin
   for (const entry of entries) {
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     // Legacy installs or other tools can leave spec-incompatible names in
-    // this directory; readInstalledOwnership() throws on those. Skip rather
-    // than crash sync — we only care about names this CLI could have
-    // produced, and those are all spec-compliant by construction.
+    // this directory; `readInstalledOwnership()` throws via `assertSafeName`
+    // on those. We want to silently skip those (they can't be owned by this
+    // CLI), but surface real IO failures (EACCES/EPERM/etc) instead of
+    // letting an unreadable orphan slip past `sync` without a trace.
+    // Pre-screen with the same spec-compliant pattern as `assertSafeName`
+    // (defense-in-depth duplicate, deliberately not a shared import) so
+    // the catch path is reserved for IO errors.
+    if (entry.name.length < 1 || entry.name.length > 64) continue;
+    if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(entry.name)) continue;
     let owner: string | null;
     try {
       owner = readInstalledOwnership(entry.name, cwd);
-    } catch {
+    } catch (err) {
+      logger.warn(
+        `Failed to read ownership for ${entry.name}: ${err instanceof Error ? err.message : String(err)}`,
+      );
       continue;
     }
     if (owner === expectedOwnership) {

@@ -377,6 +377,79 @@ describe("createSkillSyncCommand", () => {
     }
   });
 
+  it("should surface IO errors when reading an installed skill's ownership", () => {
+    // `readInstalledOwnership` distinguishes ENOENT/ENOTDIR (returns null)
+    // from other IO failures (throws). `findOwnedInstalledSkills` used to
+    // swallow every throw, conflating spec-incompatible legacy names with
+    // permission/IO failures and silently leaving unreadable orphans behind
+    // during `sync`. The fix pre-screens legacy names locally so the
+    // try/catch only ever catches IO errors, which now get a stderr warning.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    const projectDir = join(tempDir, ".project");
+    const installedDir = join(projectDir, ".agents/skills");
+    mkdirSync(join(installedDir, "unreadable"), { recursive: true });
+    writeFileSync(join(installedDir, "unreadable", "SKILL.md"), "irrelevant — mocked");
+
+    const ioError = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+    mockedReadOwnership.mockImplementation((n: string) => {
+      if (n === "unreadable") throw ioError;
+      return null;
+    });
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(projectDir);
+    try {
+      const command = createSkillSyncCommand(resolve(opts(tempDir)));
+      command.run!({ exclude: [], verbose: false });
+
+      // The unreadable slot was not treated as owned; sync did not uninstall it
+      // (and did not crash). The IO failure surfaced as a stderr warning.
+      const uninstallNames = mockedUninstallSkill.mock.calls.map((c) => c[0]);
+      expect(uninstallNames).not.toContain("unreadable");
+      const warned = warnSpy.mock.calls
+        .map((c) => c.join(" "))
+        .some((m) => m.includes("Failed to read ownership for unreadable"));
+      expect(warned).toBe(true);
+    } finally {
+      cwdSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
+  it("should silently skip spec-incompatible legacy names in install slots", () => {
+    // `assertSafeName` (inside `readInstalledOwnership`) throws on names that
+    // can't have been produced by this CLI. These are legacy or foreign
+    // installs and must not produce a noisy warning; the pre-screen filters
+    // them out before `readInstalledOwnership` is ever called.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    const projectDir = join(tempDir, ".project");
+    const installedDir = join(projectDir, ".agents/skills");
+    mkdirSync(join(installedDir, "Some-CAPS"), { recursive: true });
+    writeFileSync(join(installedDir, "Some-CAPS", "SKILL.md"), "irrelevant — mocked");
+
+    const ownershipCalls: string[] = [];
+    mockedReadOwnership.mockImplementation((n: string) => {
+      ownershipCalls.push(n);
+      return null;
+    });
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(projectDir);
+    try {
+      const command = createSkillSyncCommand(resolve(opts(tempDir)));
+      command.run!({ exclude: [], verbose: false });
+
+      expect(ownershipCalls).not.toContain("Some-CAPS");
+      const warned = warnSpy.mock.calls
+        .map((c) => c.join(" "))
+        .some((m) => m.includes("Some-CAPS"));
+      expect(warned).toBe(false);
+    } finally {
+      cwdSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
   it("should skip owned orphan when it is in the exclude list", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     const projectDir = join(tempDir, ".project");
