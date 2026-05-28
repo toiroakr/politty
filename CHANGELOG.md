@@ -1,5 +1,17 @@
 # politty
 
+## 0.5.0
+
+### Minor Changes
+
+- dc1afef: Add `completion.custom.resolve` for in-process JS dynamic completion. The resolver receives a `DynamicCompletionContext` (current word, shell, other parsed arg values, previously supplied values) and returns candidates synchronously or via Promise. Static shell scripts (bash/zsh/fish) now delegate to `<program> __complete --shell <shell>` whenever a field uses `resolve`; the generated bash delegate stays compatible with Bash 3.2. Specifying more than one of `choices`, `shellCommand`, `resolve`, or `expand` on the same field throws.
+
+  Type-level note: `generateCandidates(context, { shell })` now returns `Promise<CandidateResult>` and takes a required second argument. `__complete`'s internal `run` is async. Callers using only the high-level `withCompletionCommand` flow are unaffected.
+
+### Patch Changes
+
+- bbbad4f: Add `completion.custom.expand` for value completion that is pre-enumerated at script-generation time and baked into the static shell script. The user supplies `dependsOn` (sibling arg names that must have static `choices` or an enum schema) and `enumerate(deps)`; politty walks the cartesian product of the dependsOn values, calls `enumerate` for each combination, and emits Bash 3.2-compatible scalar variables, a hoisted associative array (zsh), or an inline switch (fish) keyed on those values. No Node process is spawned at TAB time — the shell dispatches via a case lookup or indirect-expansion lookup, taking the same `<10ms` path as static `choices`. Specifying more than one of `choices`, `shellCommand`, `resolve`, or `expand` on the same field throws.
+
 ## 0.4.16
 
 ### Patch Changes
