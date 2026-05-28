@@ -667,7 +667,15 @@ function findOwnedInstalledSkills(expectedOwnership: string, cwd: string): strin
   let entries: Dirent[];
   try {
     entries = readdirSync(base, { withFileTypes: true });
-  } catch {
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    // ENOENT/ENOTDIR mean the install root doesn't exist yet — that's a
+    // legitimate "no installed skills" state. Any other failure (EACCES,
+    // EPERM, IO) means the directory exists but we can't read it; treating
+    // that as "no installed skills" would silently skip orphan
+    // reconciliation and `--exclude` validation, so warn instead.
+    if (code === "ENOENT" || code === "ENOTDIR") return owned;
+    logger.warn(`Failed to enumerate ${base}: ${err instanceof Error ? err.message : String(err)}`);
     return owned;
   }
   for (const entry of entries) {

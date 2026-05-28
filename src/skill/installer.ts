@@ -214,8 +214,13 @@ function removeInstalledSlot(path: string, expectedStamp: string | null): void {
   let stat;
   try {
     stat = lstatSync(path);
-  } catch {
-    return;
+  } catch (err) {
+    // Only ENOENT/ENOTDIR mean "no slot to remove" — surface anything else
+    // (EACCES/EPERM/IO) so a permission problem doesn't masquerade as an
+    // absent install and let `uninstallSkill` report success while the
+    // unreadable slot stays in place.
+    if (isNodeError(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) return;
+    throw err;
   }
   if (stat.isSymbolicLink()) {
     unlinkSync(path);
@@ -244,8 +249,13 @@ function clearInstallSlot(path: string, expectedStamp: string | null): void {
   let stat;
   try {
     stat = lstatSync(path);
-  } catch {
-    return;
+  } catch (err) {
+    // Symmetry with `removeInstalledSlot`: only "no entry" means "nothing to
+    // clear". Other errors (EACCES/EPERM/IO) would otherwise look like an
+    // empty slot and the subsequent symlink/copy would either silently
+    // overwrite via a non-atomic race or fail with a less actionable error.
+    if (isNodeError(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) return;
+    throw err;
   }
   if (stat.isSymbolicLink()) {
     unlinkSync(path);
