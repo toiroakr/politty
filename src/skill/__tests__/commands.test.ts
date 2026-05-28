@@ -179,6 +179,90 @@ describe("createSkillListCommand", () => {
       consoleSpy.mockRestore();
     }
   });
+
+  it("should report status='missing' only for dangling canonical symlinks", () => {
+    // `missing` is the cleanable-by-remove state. A dangling canonical
+    // symlink qualifies; a real directory at the same path (e.g. a hand-
+    // made legacy install with no SKILL.md) does not — that should surface
+    // as `unstamped` so the no-clobber guard in `removeOwnedSkill` engages
+    // instead of misleadingly promising cleanup.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReturnValue(false);
+
+    const projectRoot = createTempDir();
+    try {
+      const canonical = join(projectRoot, ".agents/skills/commit");
+      mkdirSync(join(projectRoot, ".agents/skills"), { recursive: true });
+      symlinkSync(join(projectRoot, "does-not-exist"), canonical, "dir");
+
+      const command = createSkillListCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        command.run!({ json: true });
+        const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+        expect(output[0].status).toBe("missing");
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("should report status='unstamped' for a real directory slot without SKILL.md", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReturnValue(false);
+
+    const projectRoot = createTempDir();
+    try {
+      mkdirSync(join(projectRoot, ".agents/skills/commit"), { recursive: true });
+
+      const command = createSkillListCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        command.run!({ json: true });
+        const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+        // Malformed real slots are reported as `unstamped`, NOT `missing`,
+        // so `removeOwnedSkill`'s no-clobber guard engages (a real directory
+        // we did not produce must not be silently rm-rf'd).
+        expect(output[0].status).toBe("unstamped");
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("should not contaminate --json stdout with scan-error summary lines", () => {
+    // A malformed SKILL.md produces a scan error. In `--json` mode the
+    // command must still emit a single, parseable JSON payload on stdout;
+    // the per-error stderr warnings still fire, but the stdout summary
+    // ("Skipped N skill(s) due to scan errors") must not corrupt the JSON.
+    writeSkillMd(tempDir, "good", { name: "good", description: "Good skill" });
+    const badDir = join(tempDir, "bad");
+    mkdirSync(badDir, { recursive: true });
+    writeFileSync(join(badDir, "SKILL.md"), "---\nname: bad\n---\n# no description\n");
+
+    mockedReadOwnership.mockReturnValue(OWNERSHIP);
+
+    const command = createSkillListCommand(resolve(opts(tempDir)));
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      command.run!({ json: true });
+      expect(consoleSpy).toHaveBeenCalledOnce();
+      const stdout = consoleSpy.mock.calls[0]![0] as string;
+      const parsed = JSON.parse(stdout);
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed).toHaveLength(1);
+      expect(parsed[0].name).toBe("good");
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
 });
 
 describe("createSkillSyncCommand", () => {

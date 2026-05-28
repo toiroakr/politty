@@ -42,11 +42,13 @@ export const OWNERSHIP_METADATA_KEY = "politty-cli";
 
 /**
  * Defense-in-depth check against path traversal. Skill names are also
- * validated by the frontmatter schema, but we re-validate here in case a
- * caller bypasses it.
+ * validated by the frontmatter schema (1..64 chars, lowercase alphanumerics
+ * separated by single hyphens), but we re-validate here in case a caller
+ * bypasses it. The 64-char limit is intentionally duplicated rather than
+ * imported from frontmatter.ts so this check stays independent.
  */
 function assertSafeName(name: string): void {
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) {
+  if (name.length < 1 || name.length > 64 || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) {
     throw new Error(`Invalid skill name: ${JSON.stringify(name)}`);
   }
 }
@@ -121,8 +123,20 @@ export function installSkill(
   // through an extra hop or, worse, at a non-existent location.
   const resolvedParent = realpathSync(canonicalParent);
   const canonicalDir = join(resolvedParent, name);
-  clearInstallSlot(canonicalDir, expectedStamp);
   const resolvedSource = realpathSync(skill.sourcePath);
+  // In copy mode, `canonicalDir` is created before `readdirSync(copyFrom)`
+  // walks the source. If the source contains (or is) the install root,
+  // the freshly-mkdir'd destination shows up as a new entry to copy back
+  // into itself, recursing until the path/disk limit is hit. The cyclic-
+  // symlink detector in `copyDirRecursive` doesn't catch this (no symlink
+  // is involved). Fail fast with an actionable error instead.
+  if (mode === "copy" && pathsOverlap(canonicalDir, resolvedSource)) {
+    throw new Error(
+      `Refusing to copy in place: source ${resolvedSource} and destination ${canonicalDir} ` +
+        `overlap, which would recurse infinitely. Choose a sourceDir outside the install root.`,
+    );
+  }
+  clearInstallSlot(canonicalDir, expectedStamp);
   symlinkOrCopy({
     linkTarget: relative(resolvedParent, resolvedSource),
     linkPath: canonicalDir,
@@ -425,4 +439,19 @@ function populateAgentDirs(
 
 function isNodeError(err: unknown): err is NodeJS.ErrnoException {
   return err instanceof Error && typeof (err as NodeJS.ErrnoException).code === "string";
+}
+
+/**
+ * Do `a` and `b` refer to the same directory, or is one nested inside the
+ * other? Used to refuse copy-mode installs where the source and destination
+ * would recurse into each other. Inputs are expected to be `realpathSync`'d
+ * absolute paths so trailing separators and symlink hops don't desynchronise
+ * the comparison.
+ */
+function pathsOverlap(a: string, b: string): boolean {
+  if (a === b) return true;
+  const aInsideB = !relative(b, a).startsWith("..") && !isAbsolute(relative(b, a));
+  if (aInsideB) return true;
+  const bInsideA = !relative(a, b).startsWith("..") && !isAbsolute(relative(a, b));
+  return bInsideA;
 }

@@ -25,8 +25,12 @@ import type { DiscoveredSkill, InstallMode, ScanError, ScanResult } from "./type
  * or per-entry failures on the source directory itself) get their own
  * stdout summary so a stdout-only consumer can tell apart "scan failed"
  * from a legitimate empty bundle.
+ *
+ * `silentStdout` suppresses only the stdout summary lines (per-error
+ * stderr warnings still fire). Used by `skills list --json` so the
+ * machine-readable JSON output on stdout stays parseable.
  */
-function logScanErrors(errors: ScanError[]): void {
+function logScanErrors(errors: ScanError[], opts: { silentStdout?: boolean } = {}): void {
   let skipped = 0;
   let directoryFailed = false;
   for (const err of errors) {
@@ -38,6 +42,7 @@ function logScanErrors(errors: ScanError[]): void {
     skipped += 1;
     logger.warn(`Skipping skill at ${err.path}: ${err.message}`);
   }
+  if (opts.silentStdout) return;
   if (skipped > 0) {
     logger.info(
       `${symbols.warning} Skipped ${skipped} skill(s) due to scan errors (see warnings above).`,
@@ -64,9 +69,12 @@ function scanFailedAtRoot(result: ScanResult, sourceDir: string): boolean {
   return directoryScanFailed || allSkillsInvalid;
 }
 
-function loadSkills(options: ResolvedSkillOptions): ScanResult {
+function loadSkills(
+  options: ResolvedSkillOptions,
+  logOpts: { silentStdout?: boolean } = {},
+): ScanResult {
   const result = scanSourceDir(options.sourceDir);
-  logScanErrors(result.errors);
+  logScanErrors(result.errors, logOpts);
   return result;
 }
 
@@ -345,9 +353,10 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
  * - `foreign` — installed but stamped by another CLI; `add`/`sync` will
  *   refuse to overwrite it.
  * - `unstamped` — installed without any `politty-cli` stamp (legacy or
- *   manual install); `add` refuses to clobber it.
- * - `missing` — `.agents/skills/<name>` exists but the canonical symlink
- *   is broken (source package uninstalled).
+ *   manual install, or a real directory at the slot without a readable
+ *   SKILL.md); `add` refuses to clobber it.
+ * - `missing` — `.agents/skills/<name>` is a dangling canonical symlink
+ *   (source package uninstalled); `removeOwnedSkill` can clean it up.
  * - `unreadable` — `.agents/skills/<name>/SKILL.md` exists but could not
  *   be read (EACCES / EPERM / IO). Distinguished from `unstamped` so users
  *   can tell apart "no stamp" from "cannot read the file at all".
@@ -377,9 +386,14 @@ function listStatus(name: string, expectedOwnership: string, cwd: string): ListS
   // owner === null: distinguish "not installed" vs "installed unstamped"
   // vs "installed but symlink broken".
   if (!hasInstalledSkill(name, cwd)) {
-    // hasInstalledSkill returns false for both "absent" and "broken
-    // canonical symlink". Disambiguate via a direct lstat on the slot.
-    return slotPresent(name, cwd) ? "missing" : "not-installed";
+    // hasInstalledSkill returns false for "absent", "broken canonical
+    // symlink", and "real slot without a SKILL.md". Only dangling symlinks
+    // qualify as `missing`, because that's the only state `removeOwnedSkill`
+    // can clean up (via `cleanupBrokenSlot`). A real directory or file at
+    // the slot is reported as `unstamped` so it falls through to the
+    // legacy/manual-install path that refuses to clobber unowned data.
+    if (isDanglingSymlink(resolve(cwd, AGENTS_SKILLS_DIR, name))) return "missing";
+    return slotPresent(name, cwd) ? "unstamped" : "not-installed";
   }
   return "unstamped";
 }
@@ -412,7 +426,10 @@ export function createSkillListCommand(resolved: ResolvedSkillOptions) {
       }),
     }),
     run(args) {
-      const scanResult = loadSkills(resolved);
+      // In `--json` mode, suppress stdout summary lines from the scan-error
+      // logger so the JSON array on stdout stays parseable. Per-error
+      // stderr warnings still fire so the operator can see what was skipped.
+      const scanResult = loadSkills(resolved, { silentStdout: args.json });
       const sourceSkills = scanResult.skills;
       const stamp = resolved.stamp;
 

@@ -333,6 +333,32 @@ describe("installSkill", () => {
     // And nothing was written to the install root.
     expect(() => lstatSync(join(projectDir, ".agents/skills/noowner"))).toThrow();
   });
+
+  it("should refuse a copy-mode install whose source contains the install root", () => {
+    // Single-skill source where `sourcePath` *is* the install cwd. The copy
+    // mode would mkdir the destination inside the source, then walk the
+    // source — including the freshly-created destination — and recurse until
+    // the path/disk limit is hit. The containment guard fails fast.
+    writeFileSync(
+      join(projectDir, "SKILL.md"),
+      `---\nname: commit\ndescription: Test skill\nmetadata:\n  politty-cli: ${JSON.stringify(OWNERSHIP)}\n---\n# commit\n`,
+    );
+    const skill: DiscoveredSkill = {
+      frontmatter: {
+        name: "commit",
+        description: "Test skill",
+        metadata: { "politty-cli": OWNERSHIP },
+      },
+      sourcePath: projectDir,
+      rawContent: "",
+    };
+
+    expect(() => installSkill(skill, projectDir, { mode: "copy" })).toThrow(
+      /overlap|recurse infinitely/i,
+    );
+    // Nothing committed: the canonical slot must not exist.
+    expect(() => lstatSync(join(projectDir, ".agents/skills/commit"))).toThrow();
+  });
 });
 
 describe("uninstallSkill", () => {

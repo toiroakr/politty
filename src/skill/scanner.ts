@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseFrontmatter, skillFrontmatterSchema } from "./frontmatter.js";
 import type { DiscoveredSkill, ScanError, ScanResult } from "./types.js";
@@ -41,11 +41,33 @@ export function scanSourceDir(sourceDir: string): ScanResult {
     // callers (notably `sync`, which deletes orphans) can refuse to act on
     // what is almost certainly a misconfiguration rather than interpret
     // "no skills found" as a signal to remove every installed skill.
-    if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) {
+    // Use a try/catch around `statSync` (instead of `existsSync` + `statSync`)
+    // so permission/IO errors (EACCES/EPERM) surface as `read-failed`
+    // rather than being silently misclassified as `missing-source`.
+    let sourceStat;
+    try {
+      sourceStat = statSync(sourceDir);
+    } catch (error) {
+      if (isNodeError(error) && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
+        errors.push({
+          path: sourceDir,
+          reason: "missing-source",
+          message: `Source directory does not exist: ${sourceDir}`,
+        });
+      } else {
+        errors.push({
+          path: sourceDir,
+          reason: "read-failed",
+          message: `Failed to stat source directory ${sourceDir}: ${errorMessage(error)}`,
+        });
+      }
+      return { skills, errors };
+    }
+    if (!sourceStat.isDirectory()) {
       errors.push({
         path: sourceDir,
         reason: "missing-source",
-        message: `Source directory does not exist or is not a directory: ${sourceDir}`,
+        message: `Source path is not a directory: ${sourceDir}`,
       });
       return { skills, errors };
     }

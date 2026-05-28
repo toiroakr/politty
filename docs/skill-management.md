@@ -179,8 +179,8 @@ my-agent skills list --json
 - `installed` — `.agents/skills/<name>` is stamped by this CLI.
 - `not-installed` — `.agents/skills/<name>` is absent.
 - `foreign` — installed but stamped by another CLI; `add`/`sync` will refuse to overwrite it.
-- `unstamped` — installed without a `politty-cli` stamp (legacy or manual install); `add` refuses to clobber it.
-- `missing` — slot exists but the canonical symlink is broken (the source package was uninstalled).
+- `unstamped` — installed without a `politty-cli` stamp (legacy or manual install, or a real directory at the slot with no readable SKILL.md); `add` refuses to clobber it.
+- `missing` — `.agents/skills/<name>` is a dangling canonical symlink (the source package was uninstalled); `remove` / `sync` can clean it up.
 - `unreadable` — slot's SKILL.md exists but reading it failed (EACCES / EPERM / IO). Distinct from `unstamped` so the underlying cause (permissions, broken file) is actionable; a warning is also logged.
 
 ## Programmatic API

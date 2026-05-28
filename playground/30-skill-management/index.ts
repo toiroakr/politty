@@ -1,10 +1,10 @@
 /**
- * playground/26-skill-management/index.ts - Skill management with withSkillCommand
+ * playground/30-skill-management/index.ts - Skill management with withSkillCommand
  *
  * How to run:
- *   pnpx tsx playground/26-skill-management/index.ts skills list
- *   pnpx tsx playground/26-skill-management/index.ts skills list --json
- *   pnpx tsx playground/26-skill-management/index.ts skills --help
+ *   pnpx tsx playground/30-skill-management/index.ts skills list
+ *   pnpx tsx playground/30-skill-management/index.ts skills list --json
+ *   pnpx tsx playground/30-skill-management/index.ts skills --help
  */
 
 import { dirname, resolve } from "node:path";
