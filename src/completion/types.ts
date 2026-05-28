@@ -23,6 +23,19 @@ export interface CompletionOptions {
   includeDescriptions?: boolean;
   /** Global args schema for deriving global options in completion */
   globalArgsSchema?: ArgsSchema;
+  /**
+   * Path to the binary whose mtime is the freshness signature.
+   * Defaults to `process.argv[1]`.
+   */
+  binPath?: string;
+  /** Program version to embed in the script header. */
+  programVersion?: string;
+  /**
+   * Cache directory for the loader to write the regenerated script into.
+   * Defaults to `${XDG_CACHE_HOME:-$HOME/.cache}/<programName>` at runtime.
+   * Setting this hardcodes the location into the generated loader.
+   */
+  cacheDir?: string;
 }
 
 /**
