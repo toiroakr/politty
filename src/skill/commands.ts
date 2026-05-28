@@ -401,7 +401,12 @@ type ListStatus =
   | "missing"
   | "unreadable";
 
-function listStatus(name: string, expectedOwnership: string, cwd: string): ListStatus {
+function listStatus(
+  name: string,
+  expectedOwnership: string,
+  cwd: string,
+  sourceDir: string,
+): ListStatus {
   let owner: string | null;
   try {
     owner = readInstalledOwnership(name, cwd);
@@ -420,11 +425,16 @@ function listStatus(name: string, expectedOwnership: string, cwd: string): ListS
   if (!hasInstalledSkill(name, cwd)) {
     // hasInstalledSkill returns false for "absent", "broken canonical
     // symlink", and "real slot without a SKILL.md". Only dangling symlinks
-    // qualify as `missing`, because that's the only state `removeOwnedSkill`
-    // can clean up (via `cleanupBrokenSlot`). A real directory or file at
-    // the slot is reported as `unstamped` so it falls through to the
-    // legacy/manual-install path that refuses to clobber unowned data.
-    if (isDanglingSymlink(resolve(cwd, AGENTS_SKILLS_DIR, name))) return "missing";
+    // that still route into *our* `sourceDir` qualify as `missing`,
+    // because that's the only state `removeOwnedSkill`/`cleanupBrokenSlot`
+    // can actually clean up — `.agents/skills/` is a shared namespace,
+    // and a dangling symlink pointing at another politty-based CLI's
+    // (now-uninstalled) source belongs to that CLI. Reporting it as
+    // `missing` would promise a sweep the cleanup path will refuse.
+    const canonical = resolve(cwd, AGENTS_SKILLS_DIR, name);
+    if (isDanglingSymlink(canonical) && danglingRoutesToSource(canonical, sourceDir)) {
+      return "missing";
+    }
     return slotPresent(name, cwd) ? "unstamped" : "not-installed";
   }
   return "unstamped";
@@ -478,7 +488,7 @@ export function createSkillListCommand(resolved: ResolvedSkillOptions) {
               // having to re-read SKILL.md.
               owner: s.frontmatter.metadata?.[OWNERSHIP_METADATA_KEY] ?? null,
               expectedOwner: stamp,
-              status: listStatus(s.frontmatter.name, stamp, resolved.cwd),
+              status: listStatus(s.frontmatter.name, stamp, resolved.cwd, resolved.sourceDir),
               sourcePath: s.sourcePath,
             })),
           ),
@@ -500,7 +510,7 @@ export function createSkillListCommand(resolved: ResolvedSkillOptions) {
 
       logger.info("Available skills:");
       for (const skill of sourceSkills) {
-        const status = listStatus(skill.frontmatter.name, stamp, resolved.cwd);
+        const status = listStatus(skill.frontmatter.name, stamp, resolved.cwd, resolved.sourceDir);
         logger.info(
           `  ${skill.frontmatter.name.padEnd(20)} ${status.padEnd(14)} ${skill.frontmatter.description}`,
         );

@@ -116,30 +116,7 @@ export function installSkill(
   }
 
   const canonicalParent = resolve(cwd, AGENTS_SKILLS_DIR);
-  mkdirSync(canonicalParent, { recursive: true });
-
-  // Resolve the parent before computing both `linkPath` and `linkTarget` so
-  // they share the same prefix style. Mixing realpath'd and un-realpath'd
-  // sides (e.g. macOS `/tmp` ↔ `/private/tmp`) leaves the link pointing
-  // through an extra hop or, worse, at a non-existent location.
-  const resolvedParent = realpathSync(canonicalParent);
-  const canonicalDir = join(resolvedParent, name);
   const resolvedSource = realpathSync(skill.sourcePath);
-
-  // Collect every destination this install will write to so the source-vs-
-  // destination overlap guard covers both the canonical slot *and* every
-  // agent-specific slot. Without including `SYMLINK_TARGETS`, a source
-  // living at an agent slot (e.g. `.claude/skills/<name>`) survives the
-  // canonical check but gets rm-rf'd later by `populateAgentDirs`'s own
-  // `clearInstallSlot` once the source stamp matches — taking the original
-  // source data with it. Resolving each parent's realpath here keeps the
-  // comparison's prefix style aligned with `resolvedSource`.
-  const agentSlots: string[] = [];
-  for (const target of SYMLINK_TARGETS) {
-    const targetParent = resolve(cwd, target);
-    mkdirSync(targetParent, { recursive: true });
-    agentSlots.push(join(realpathSync(targetParent), name));
-  }
 
   // Refuse to install when the source overlaps any destination:
   //   - copy mode: `mkdirSync(dest)` runs before `readdirSync(copyFrom)`,
@@ -148,7 +125,26 @@ export function installSkill(
   //   - symlink mode: `clearInstallSlot` rm-rf's a real directory whose
   //     stamp matches. If that real directory *is* the source, the source
   //     is destroyed before the symlink is even written.
-  const overlap = [canonicalDir, ...agentSlots].find((dest) => pathsOverlap(dest, resolvedSource));
+  //
+  // Run the guard *before* materialising any destination parent. Otherwise
+  // an install that overlaps `cwd` (e.g. a single-skill source rooted at
+  // the project directory) still creates `.agents/skills/` (and each
+  // `SYMLINK_TARGETS` parent) inside the source tree before throwing.
+  // `resolveExistingPrefix` walks up to the deepest existing ancestor and
+  // realpath's that, then re-appends the lexical tail — so the comparison
+  // still catches /tmp ↔ /private/tmp realpath remaps when the parents
+  // don't exist yet. Without including `SYMLINK_TARGETS`, a source living
+  // at an agent slot (e.g. `.claude/skills/<name>`) survives the canonical
+  // check but gets rm-rf'd later by `populateAgentDirs`'s own
+  // `clearInstallSlot` once the source stamp matches — taking the original
+  // source data with it.
+  const canonicalDirPreCheck = join(resolveExistingPrefix(canonicalParent), name);
+  const agentSlotsPreCheck = SYMLINK_TARGETS.map((target) =>
+    join(resolveExistingPrefix(resolve(cwd, target)), name),
+  );
+  const overlap = [canonicalDirPreCheck, ...agentSlotsPreCheck].find((dest) =>
+    pathsOverlap(dest, resolvedSource),
+  );
   if (overlap !== undefined) {
     throw new Error(
       `Refusing to install "${name}": source ${resolvedSource} overlaps install ` +
@@ -156,6 +152,16 @@ export function installSkill(
         `agent-specific slot directory (e.g. .claude/skills/).`,
     );
   }
+
+  // Safe to materialise the canonical parent now; `populateAgentDirs`
+  // creates each agent-slot parent in its own loop.
+  mkdirSync(canonicalParent, { recursive: true });
+  // Resolve the parent before computing both `linkPath` and `linkTarget` so
+  // they share the same prefix style. Mixing realpath'd and un-realpath'd
+  // sides (e.g. macOS `/tmp` ↔ `/private/tmp`) leaves the link pointing
+  // through an extra hop or, worse, at a non-existent location.
+  const resolvedParent = realpathSync(canonicalParent);
+  const canonicalDir = join(resolvedParent, name);
 
   clearInstallSlot(canonicalDir, expectedStamp);
   symlinkOrCopy({
@@ -166,6 +172,29 @@ export function installSkill(
   });
 
   populateAgentDirs(cwd, name, canonicalDir, expectedStamp, mode);
+}
+
+/**
+ * Resolve `p`'s deepest existing ancestor through `realpathSync` and then
+ * re-append the lexical tail. Used to compare a not-yet-created destination
+ * path against a realpath'd source without materialising the destination —
+ * this catches /tmp ↔ /private/tmp style remaps even when the destination
+ * parents don't exist yet.
+ */
+function resolveExistingPrefix(p: string): string {
+  let cur = p;
+  const tail: string[] = [];
+  while (true) {
+    try {
+      const r = realpathSync(cur);
+      return tail.length === 0 ? r : resolve(r, ...tail.reverse());
+    } catch {
+      const parent = dirname(cur);
+      if (parent === cur) return p;
+      tail.push(cur.slice(parent.length).replace(/^[/\\]+/, ""));
+      cur = parent;
+    }
+  }
 }
 
 /**

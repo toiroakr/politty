@@ -378,8 +378,13 @@ describe("installSkill", () => {
     expect(() => installSkill(skill, projectDir, { mode: "copy" })).toThrow(
       /overlaps install destination/i,
     );
-    // Nothing committed: the canonical slot must not exist.
+    // Nothing committed: the canonical slot must not exist, and crucially
+    // neither `.agents/skills/` nor `.claude/skills/` should have been
+    // mkdir'd inside the source tree. The overlap pre-check fires before
+    // any destination parent is materialised.
     expect(() => lstatSync(join(projectDir, ".agents/skills/commit"))).toThrow();
+    expect(() => lstatSync(join(projectDir, ".agents/skills"))).toThrow();
+    expect(() => lstatSync(join(projectDir, ".claude/skills"))).toThrow();
   });
 
   it("should refuse a symlink-mode install whose source sits at an agent slot", () => {

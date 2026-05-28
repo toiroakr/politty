@@ -188,12 +188,14 @@ describe("createSkillListCommand", () => {
     }
   });
 
-  it("should report status='missing' only for dangling canonical symlinks", () => {
+  it("should report status='missing' only for dangling canonical symlinks routed to our source", () => {
     // `missing` is the cleanable-by-remove state. A dangling canonical
-    // symlink qualifies; a real directory at the same path (e.g. a hand-
-    // made legacy install with no SKILL.md) does not — that should surface
-    // as `unstamped` so the no-clobber guard in `removeOwnedSkill` engages
-    // instead of misleadingly promising cleanup.
+    // symlink whose target points back at our sourceDir qualifies; a real
+    // directory at the same path (covered by the next test), and a
+    // dangling symlink pointing at *another* CLI's sourceDir (covered by
+    // the test after that) do not — those should surface as `unstamped`
+    // so the no-clobber guard in `removeOwnedSkill`/`cleanupBrokenSlot`
+    // engages instead of misleadingly promising cleanup.
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     mockedReadOwnership.mockReturnValue(null);
     mockedHasInstalledSkill.mockReturnValue(false);
@@ -202,7 +204,7 @@ describe("createSkillListCommand", () => {
     try {
       const canonical = join(projectRoot, ".agents/skills/commit");
       mkdirSync(join(projectRoot, ".agents/skills"), { recursive: true });
-      symlinkSync(join(projectRoot, "does-not-exist"), canonical, "dir");
+      symlinkSync(join(tempDir, "commit-uninstalled"), canonical, "dir");
 
       const command = createSkillListCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
       const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -215,6 +217,40 @@ describe("createSkillListCommand", () => {
       }
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("should report a foreign dangling canonical as 'unstamped', not 'missing'", () => {
+    // `.agents/skills/` is a shared namespace; a dangling canonical
+    // pointing at another politty-based CLI's (now-uninstalled) source
+    // does NOT belong to us. `cleanupBrokenSlot` already refuses to reap
+    // it (route-to-source check), so reporting it as `missing` would
+    // promise a sweep the cleanup path will refuse. Classify it as
+    // `unstamped` so the user can see something is occupying the slot
+    // without expecting `skills remove` to clean it.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+    mockedReadOwnership.mockReturnValue(null);
+    mockedHasInstalledSkill.mockReturnValue(false);
+
+    const projectRoot = createTempDir();
+    const foreignSourceDir = createTempDir();
+    try {
+      const canonical = join(projectRoot, ".agents/skills/commit");
+      mkdirSync(join(projectRoot, ".agents/skills"), { recursive: true });
+      symlinkSync(join(foreignSourceDir, "commit"), canonical, "dir");
+
+      const command = createSkillListCommand(resolve({ ...opts(tempDir), cwd: projectRoot }));
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        command.run!({ json: true });
+        const output = JSON.parse(consoleSpy.mock.calls[0]![0] as string);
+        expect(output[0].status).toBe("unstamped");
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(foreignSourceDir, { recursive: true, force: true });
     }
   });
 
