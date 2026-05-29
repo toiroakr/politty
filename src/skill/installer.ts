@@ -669,15 +669,23 @@ function copyDirRecursive(
 
 /**
  * Read the `metadata["politty-cli"]` stamp from a SKILL.md at `<dir>/SKILL.md`.
- * Returns `null` when the file is absent, unreadable, has no frontmatter,
- * or has no string-valued stamp.
+ * Returns `null` when the file is absent (ENOENT/ENOTDIR), has no
+ * frontmatter, or has no string-valued stamp. Other read failures
+ * (EACCES/EPERM/IO) propagate — `clearInstallSlot` and
+ * `removeInstalledSlot` gate destructive `rmSync`/`unlinkSync` on the
+ * stamp matching, so silently treating an unreadable owned copy as
+ * "unstamped" would either strand an agent slot after deleting the
+ * canonical or report a misleading "legacy or manual install" message
+ * from `clearInstallSlot`'s no-clobber guard. Symmetric with
+ * `readInstalledOwnership`'s ENOENT/ENOTDIR-only carve-out.
  */
 function readStampAt(dir: string): string | null {
   let content: string;
   try {
     content = readFileSync(join(dir, "SKILL.md"), "utf-8");
-  } catch {
-    return null;
+  } catch (err) {
+    if (isNodeError(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) return null;
+    throw err;
   }
   const { data } = parseFrontmatter(content);
   const metadata = (data as { metadata?: unknown }).metadata;

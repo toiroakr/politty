@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -378,6 +379,27 @@ describe("installSkill", () => {
       "name: commit",
     );
   });
+
+  it.skipIf(process.platform === "win32")(
+    "should surface read failures on the canonical SKILL.md stamp rather than masking them as unstamped",
+    () => {
+      const skill = createSkillFixture(sourceDir, "commit");
+      installSkill(skill, projectDir, { mode: "copy" });
+
+      // Make the canonical SKILL.md unreadable so `readStampAt` hits EACCES.
+      // Without the ENOENT/ENOTDIR-only carve-out, the read failure would be
+      // swallowed as "unstamped" and `clearInstallSlot` would throw the
+      // misleading "looks like a legacy or manual install" message — masking
+      // the real IO failure and offering the user the wrong remediation.
+      const stampPath = join(projectDir, ".agents/skills/commit/SKILL.md");
+      chmodSync(stampPath, 0o000);
+      try {
+        expect(() => installSkill(skill, projectDir, { mode: "copy" })).toThrow(/EACCES|EPERM/);
+      } finally {
+        chmodSync(stampPath, 0o644);
+      }
+    },
+  );
 
   it("should refuse a copy-mode install without an ownership stamp", () => {
     // Without a stamp on the source SKILL.md, `clearInstallSlot` can never
