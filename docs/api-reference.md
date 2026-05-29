@@ -1217,6 +1217,12 @@ interface ScanError {
   path: string;
   reason: ScanErrorReason;
   message: string;
+  /**
+   * Parsed frontmatter `name`, populated only for `name-mismatch`.
+   * Lets consumers like `sync`'s orphan-retention guard protect an
+   * install at either the directory basename or the frontmatter name.
+   */
+  skillName?: string;
 }
 
 // Runtime tuple of every scan error reason (for exhaustive iteration).
@@ -1542,6 +1548,7 @@ export type {
   ScanErrorReason,
   ScanResult,
   SkillCommandOptions,
+  SkillFlagOverrides,
   SkillFrontmatter,
   UninstallSkillOptions,
 } from "./skill/types.js";
