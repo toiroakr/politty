@@ -1306,6 +1306,12 @@ Parses a SKILL.md content string and validates its frontmatter against the Agent
 
 ```typescript
 function parseSkillMd(content: string): ParsedSkillMd | null;
+
+interface ParsedSkillMd {
+  frontmatter: SkillFrontmatter;
+  body: string;
+  rawContent: string;
+}
 ```
 
 Returns `null` if the frontmatter is missing or fails validation.
@@ -1538,6 +1544,7 @@ export {
   OWNERSHIP_METADATA_KEY,
 } from "./skill/installer.js";
 export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./skill/frontmatter.js";
+export type { ParsedSkillMd } from "./skill/frontmatter.js";
 export { scanSourceDir } from "./skill/scanner.js";
 export { SCAN_ERROR_REASONS } from "./skill/types.js";
 export type {
