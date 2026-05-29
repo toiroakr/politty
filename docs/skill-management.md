@@ -230,7 +230,12 @@ hasInstalledSkill("commit"); // boolean
 
 ### Symlink target convention
 
-`installSkill` writes **relative** symlink targets, with both endpoints passed through `realpathSync` first. This survives copying or remounting the project tree at a different absolute path, and stays correct when either end traverses a symlink (a symlinked checkout, a pnpm-style `node_modules`, etc.). No absolute-path symlinks are produced.
+`installSkill` writes **relative** symlink targets so the install survives copying or remounting the project tree at a different absolute path. The two endpoints are resolved asymmetrically:
+
+- The install root (`.agents/skills/`, each agent-specific slot's parent) is passed through `realpathSync`, so a symlinked checkout or other parent-side hop doesn't bake a stale absolute path into the relative target.
+- The source path is kept **lexical** (only `path.resolve`'d). Following a source-side symlink would dereference a pnpm-style `node_modules/<pkg>` symlink down to the volatile hashed path inside `node_modules/.pnpm/<pkg>@<version>_<hash>/`, baking that hash into every install. The next `pnpm update` would then leave every installed skill dangling. Keeping the source lexical preserves the stable `node_modules/<pkg>` hop instead, so package manager updates propagate through the existing symlink.
+
+The overlap guard and the copy-mode payload still operate on the realpath'd source — the guard needs to catch a source-side symlink whose target is nested inside the install root, and the copy-mode payload reads through the symlink so a copy install doesn't leave dangling references back into `node_modules`. No absolute-path symlinks are produced.
 
 ### Atomicity & retry
 

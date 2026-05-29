@@ -69,11 +69,27 @@ function assertSafeName(name: string): void {
  *
  * **Symlink target convention.** Symlinks are written with relative
  * targets so an install survives when the project tree is copied or
- * mounted at a different absolute path. The endpoints are passed through
- * `realpathSync` first so the relative path stays correct when either
- * end traverses a symlink (a symlinked checkout, a pnpm-style
- * `node_modules`, etc.). No absolute-path symlinks are produced by this
- * function.
+ * mounted at a different absolute path. The two endpoints are resolved
+ * asymmetrically:
+ *
+ * - The install root (`.agents/skills/`, each `SYMLINK_TARGETS` parent)
+ *   is passed through `realpathSync` so a symlinked checkout doesn't
+ *   bake a stale parent path into the relative target.
+ * - The source path is kept *lexical* (only `path.resolve`'d to absolute).
+ *   Following a source-side symlink would dereference pnpm-style
+ *   `node_modules/<pkg>` (a symlink to a versioned hash path inside
+ *   `.pnpm/`) and bake the volatile hashed path into the install — the
+ *   next `pnpm update` then leaves every installed skill dangling. The
+ *   lexical source keeps the symlink itself as the link target so package
+ *   manager swaps propagate live.
+ *
+ * The overlap guard and copy-mode payload still use the *realpath'd*
+ * source: the guard must catch a source-side symlink whose target is
+ * nested inside the install root, and the copy-mode payload reads
+ * through the symlink so a copy install doesn't leave dangling
+ * references back into `node_modules`.
+ *
+ * No absolute-path symlinks are produced by this function.
  *
  * **Atomicity.** This call is *not* transactional across multi-step
  * installs. The canonical slot is cleared then written, and each
@@ -116,7 +132,18 @@ export function installSkill(
   }
 
   const canonicalParent = resolve(cwd, AGENTS_SKILLS_DIR);
+  // Two source resolutions, used asymmetrically (see function JSDoc):
+  //   - `resolvedSource` — `realpathSync`'d, used by the overlap guard
+  //     (must catch a source-side symlink whose target is nested inside
+  //     the install root) and as the copy-mode payload (so the copy
+  //     doesn't leave dangling references back into `node_modules`).
+  //   - `lexicalSource` — only `path.resolve`'d, used as the symlink
+  //     target. Keeping the source lexical preserves any package-manager
+  //     symlink (e.g. pnpm's `node_modules/<pkg>` → `.pnpm/<pkg>@<hash>/…`)
+  //     so a subsequent `pnpm update` doesn't leave the install dangling
+  //     at a stale hashed path.
   const resolvedSource = realpathSync(skill.sourcePath);
+  const lexicalSource = resolve(skill.sourcePath);
 
   // Refuse to install when the source overlaps any destination:
   //   - copy mode: `mkdirSync(dest)` runs before `readdirSync(copyFrom)`,
@@ -137,7 +164,8 @@ export function installSkill(
   // at an agent slot (e.g. `.claude/skills/<name>`) survives the canonical
   // check but gets rm-rf'd later by `populateAgentDirs`'s own
   // `clearInstallSlot` once the source stamp matches — taking the original
-  // source data with it.
+  // source data with it. Uses `resolvedSource` so a source-side symlink
+  // whose target is nested inside the install root is still caught.
   const canonicalDirPreCheck = join(resolveExistingPrefix(canonicalParent), name);
   const agentSlotsPreCheck = SYMLINK_TARGETS.map((target) =>
     join(resolveExistingPrefix(resolve(cwd, target)), name),
@@ -160,12 +188,13 @@ export function installSkill(
   // endpoints sit on different drive letters; discovering that there would
   // leave the user with no install. Resolve parents through
   // `resolveExistingPrefix` so the check survives parents that don't exist
-  // yet (matching the overlap pre-check's prefix style).
+  // yet (matching the overlap pre-check's prefix style). Uses
+  // `lexicalSource` to match the link target written below.
   if (mode === "symlink") {
     const preflightCanonicalParent = resolveExistingPrefix(canonicalParent);
     assertRelativeLinkTarget(
       join(preflightCanonicalParent, name),
-      relative(preflightCanonicalParent, resolvedSource),
+      relative(preflightCanonicalParent, lexicalSource),
     );
     for (const target of SYMLINK_TARGETS) {
       const preflightAgentParent = resolveExistingPrefix(resolve(cwd, target));
@@ -179,16 +208,18 @@ export function installSkill(
   // Safe to materialise the canonical parent now; `populateAgentDirs`
   // creates each agent-slot parent in its own loop.
   mkdirSync(canonicalParent, { recursive: true });
-  // Resolve the parent before computing both `linkPath` and `linkTarget` so
-  // they share the same prefix style. Mixing realpath'd and un-realpath'd
-  // sides (e.g. macOS `/tmp` ↔ `/private/tmp`) leaves the link pointing
-  // through an extra hop or, worse, at a non-existent location.
+  // Resolve the parent before computing `linkPath` so the link is written
+  // at the canonical path even when an ancestor of `.agents/skills/` is
+  // itself a symlink. `linkTarget` is computed from `resolvedParent` and
+  // `lexicalSource`: the realpath'd parent matches where the link actually
+  // lives on disk, and the lexical source preserves package-manager
+  // symlinks (pnpm) instead of baking a volatile hashed path in.
   const resolvedParent = realpathSync(canonicalParent);
   const canonicalDir = join(resolvedParent, name);
 
   clearInstallSlot(canonicalDir, expectedStamp);
   symlinkOrCopy({
-    linkTarget: relative(resolvedParent, resolvedSource),
+    linkTarget: relative(resolvedParent, lexicalSource),
     linkPath: canonicalDir,
     copyFrom: resolvedSource,
     mode,

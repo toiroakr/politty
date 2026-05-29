@@ -448,6 +448,71 @@ describe("installSkill", () => {
     );
     expect(existsSync(join(sourceDir, "SKILL.md"))).toBe(true);
   });
+
+  it("should preserve a package-manager source symlink in the canonical link target", () => {
+    // pnpm structure: `node_modules/<pkg>` is a symlink into
+    // `node_modules/.pnpm/<pkg>@<version>_<hash>/node_modules/<pkg>`. The
+    // hash path is volatile — a `pnpm update` swaps it for a different
+    // hash. If the installer realpath's the source, it bakes the volatile
+    // hash path into `.agents/skills/<name>`'s link target and the next
+    // update leaves every install dangling. The installer must keep the
+    // source lexical so the canonical link target stays at the stable
+    // `node_modules/<pkg>/...` path that pnpm keeps updating.
+    const pnpmDir = join(projectDir, "node_modules", ".pnpm");
+    const versionedDir = join(pnpmDir, "my-pkg@1.0.0_abc123", "node_modules", "my-pkg");
+    const skillSourceUnderVersioned = join(versionedDir, "skills", "commit");
+    mkdirSync(skillSourceUnderVersioned, { recursive: true });
+    writeFileSync(
+      join(skillSourceUnderVersioned, "SKILL.md"),
+      `---\nname: commit\ndescription: Test\nmetadata:\n  politty-cli: ${JSON.stringify(OWNERSHIP)}\n---\n# commit\n`,
+    );
+    const pkgSymlink = join(projectDir, "node_modules", "my-pkg");
+    symlinkSync(join(".pnpm", "my-pkg@1.0.0_abc123", "node_modules", "my-pkg"), pkgSymlink, "dir");
+
+    const skill: DiscoveredSkill = {
+      frontmatter: {
+        name: "commit",
+        description: "Test",
+        metadata: { "politty-cli": OWNERSHIP },
+      },
+      // Source path traverses the pnpm `node_modules/<pkg>` symlink. The
+      // installer is invoked with this lexical path (as the discovery
+      // scanner would produce).
+      sourcePath: join(projectDir, "node_modules", "my-pkg", "skills", "commit"),
+      rawContent: "",
+    };
+
+    installSkill(skill, projectDir);
+
+    const canonicalSlot = join(projectDir, ".agents/skills/commit");
+    const linkTarget = readlinkSync(canonicalSlot);
+    // The link target must route through the stable `node_modules/my-pkg`
+    // path, never the volatile `.pnpm/<hash>` realpath.
+    expect(linkTarget).toContain(join("node_modules", "my-pkg"));
+    expect(linkTarget).not.toContain(".pnpm");
+    expect(linkTarget).not.toContain("abc123");
+
+    // Simulate `pnpm update`: the hashed directory name changes and
+    // `node_modules/my-pkg` is repointed at the new version. The install
+    // must still resolve because the lexical link target tracks the stable
+    // `node_modules/my-pkg` hop.
+    const newVersionedDir = join(pnpmDir, "my-pkg@1.0.1_xyz789", "node_modules", "my-pkg");
+    const newSkillSource = join(newVersionedDir, "skills", "commit");
+    mkdirSync(newSkillSource, { recursive: true });
+    writeFileSync(
+      join(newSkillSource, "SKILL.md"),
+      `---\nname: commit\ndescription: Updated\nmetadata:\n  politty-cli: ${JSON.stringify(OWNERSHIP)}\n---\n# commit v1.0.1\n`,
+    );
+    unlinkSync(pkgSymlink);
+    symlinkSync(join(".pnpm", "my-pkg@1.0.1_xyz789", "node_modules", "my-pkg"), pkgSymlink, "dir");
+    rmSync(join(pnpmDir, "my-pkg@1.0.0_abc123"), { recursive: true, force: true });
+
+    // Reading the SKILL.md through the canonical slot now picks up the
+    // updated content via the unchanged canonical link target.
+    const content = readFileSync(join(canonicalSlot, "SKILL.md"), "utf-8");
+    expect(content).toContain("Updated");
+    expect(content).toContain("commit v1.0.1");
+  });
 });
 
 describe("uninstallSkill", () => {
