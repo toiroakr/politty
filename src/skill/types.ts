@@ -145,9 +145,12 @@ export interface SkillCommandOptions {
    * `metadata["politty-cli"]: "{package}:{cliName}"`. The `skills add` and
    * `skills sync` subcommands verify this stamp before installing — two
    * tools managing skills in the same project cannot accidentally clobber
-   * each other. `installSkill` itself performs only the symlink operation;
-   * programmatic callers that bypass `withSkillCommand` are responsible for
-   * validating ownership up front.
+   * each other. `installSkill` itself does not compare ownership;
+   * programmatic callers that bypass `withSkillCommand` are responsible
+   * for matching the stamp against their own `{package}:{cliName}` up
+   * front. (In `mode: "copy"`, `installSkill` additionally requires
+   * *some* `politty-cli` stamp on the source and throws otherwise — the
+   * caller-side ownership check naturally satisfies that precondition.)
    */
   package: string;
 

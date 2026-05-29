@@ -1242,7 +1242,7 @@ type ScanErrorReason = (typeof SCAN_ERROR_REASONS)[number];
 Populates `.agents/skills/<name>` from `skill.sourcePath` (typically `node_modules/<pkg>/skills/<name>`) and each agent-specific directory (e.g. `.claude/skills/<name>`) from the canonical slot. The materialization is controlled by `options.mode`:
 
 - `"symlink"` (default) — symlink the source into place. On `symlinkSync` failure (e.g. Windows without Developer Mode, or other filesystems that refuse symlinks) throws an error whose message names the path pair, the underlying cause, and tells the caller to retry with `mode: "copy"`. The original error is attached via the ES2022 `cause` option.
-- `"copy"` — recursive copy only; works anywhere.
+- `"copy"` — recursive copy only; works anywhere. Requires the source SKILL.md to carry a `metadata["politty-cli"]` stamp (any value): without one, the call throws an actionable error. This is necessary because `clearInstallSlot` only rm-rf's a real directory when its on-disk stamp matches, so a second copy-mode install of an unstamped source would fail with "Refusing to replace non-symlink".
 
 Never writes to the source SKILL.md; the ownership stamp is authored by the skill package, not rewritten at install time.
 
@@ -1257,7 +1257,7 @@ interface InstallSkillOptions {
 type InstallMode = "symlink" | "copy";
 ```
 
-Callers that wrap `installSkill` directly should validate `skill.frontmatter.metadata?.["politty-cli"]` against their expected `"{package}:{cliName}"` before calling; `withSkillCommand`'s `skills add` / `skills sync` do this automatically.
+Callers that wrap `installSkill` directly should validate `skill.frontmatter.metadata?.["politty-cli"]` against their expected `"{package}:{cliName}"` before calling; the primitive does not compare ownership itself. `withSkillCommand`'s `skills add` / `skills sync` do this automatically. In `mode: "copy"` the primitive additionally requires _some_ `politty-cli` stamp to be present on the source (see above), so the same caller-side ownership check naturally satisfies that precondition.
 
 ---
 
