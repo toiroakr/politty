@@ -78,6 +78,7 @@ export type {
   ScanErrorReason,
   ScanResult,
   SkillCommandOptions,
+  SkillFlagOverrides,
   SkillFrontmatter,
   UninstallSkillOptions,
 } from "./types.js";

@@ -233,9 +233,9 @@ hasInstalledSkill("commit"); // boolean
 `installSkill` writes **relative** symlink targets so the install survives copying or remounting the project tree at a different absolute path. The two endpoints are resolved asymmetrically:
 
 - The install root (`.agents/skills/`, each agent-specific slot's parent) is passed through `realpathSync`, so a symlinked checkout or other parent-side hop doesn't bake a stale absolute path into the relative target.
-- The source path is kept **lexical** (only `path.resolve`'d). Following a source-side symlink would dereference a pnpm-style `node_modules/<pkg>` symlink down to the volatile hashed path inside `node_modules/.pnpm/<pkg>@<version>_<hash>/`, baking that hash into every install. The next `pnpm update` would then leave every installed skill dangling. Keeping the source lexical preserves the stable `node_modules/<pkg>` hop instead, so package manager updates propagate through the existing symlink.
+- The source path is resolved by walking root → leaf and `realpathSync`-resolving every ancestor symlink (a symlinked checkout, macOS `/tmp` → `/private/tmp`, etc.) — **except** a `node_modules/<pkg>` (or `node_modules/@scope/<pkg>`) symlink, which is preserved verbatim from that point onward. The project-root portion ends up in the same realpath style as the install root (so a copy/remount keeps both ends in sync), but the package manager hop is kept intact so a subsequent `pnpm update` that swaps the `.pnpm/<pkg>@<version>_<hash>/...` hashed directory doesn't leave every installed skill dangling.
 
-The overlap guard and the copy-mode payload still operate on the realpath'd source — the guard needs to catch a source-side symlink whose target is nested inside the install root, and the copy-mode payload reads through the symlink so a copy install doesn't leave dangling references back into `node_modules`. No absolute-path symlinks are produced.
+The overlap guard and the copy-mode payload still operate on the fully `realpathSync`-resolved source — the guard needs to catch a source-side symlink whose target is nested inside the install root, and the copy-mode payload reads through every symlink so a copy install doesn't leave dangling references back into `node_modules`. No absolute-path symlinks are produced.
 
 ### Atomicity & retry
 

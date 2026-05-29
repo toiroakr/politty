@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   hasInstalledSkill,
@@ -512,6 +512,77 @@ describe("installSkill", () => {
     const content = readFileSync(join(canonicalSlot, "SKILL.md"), "utf-8");
     expect(content).toContain("Updated");
     expect(content).toContain("commit v1.0.1");
+  });
+
+  it("should dereference a symlinked checkout while preserving the pnpm hop", () => {
+    // Combined hazard: cwd is reached through a project-root symlink
+    // (e.g. a developer shortcut, or pnpm's own `node_modules/<pkg>/...`
+    // hop above the install root) AND the source path traverses pnpm's
+    // versioned `node_modules/<pkg>` symlink. A purely lexical source
+    // would write a relative link target that routes back through the
+    // project-root symlink — moving/copying the project then breaks the
+    // install despite the documented portability guarantee. The asymmetric
+    // source resolver must dereference the project-root portion (so the
+    // relative link target lives in the same realpath style as
+    // `resolvedParent`) while still preserving the `node_modules/<pkg>`
+    // hop so `pnpm update` doesn't strand the install.
+    const realProjectDir = join(
+      tmpdir(),
+      `politty-real-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    mkdirSync(realProjectDir, { recursive: true });
+    const shortcutDir = join(
+      tmpdir(),
+      `politty-shortcut-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    symlinkSync(realProjectDir, shortcutDir, "dir");
+    try {
+      const pnpmDir = join(realProjectDir, "node_modules", ".pnpm");
+      const versionedDir = join(pnpmDir, "my-pkg@1.0.0_abc123", "node_modules", "my-pkg");
+      const skillSourceUnderVersioned = join(versionedDir, "skills", "commit");
+      mkdirSync(skillSourceUnderVersioned, { recursive: true });
+      writeFileSync(
+        join(skillSourceUnderVersioned, "SKILL.md"),
+        `---\nname: commit\ndescription: Test\nmetadata:\n  politty-cli: ${JSON.stringify(OWNERSHIP)}\n---\n# commit\n`,
+      );
+      const pkgSymlink = join(realProjectDir, "node_modules", "my-pkg");
+      symlinkSync(
+        join(".pnpm", "my-pkg@1.0.0_abc123", "node_modules", "my-pkg"),
+        pkgSymlink,
+        "dir",
+      );
+
+      const skill: DiscoveredSkill = {
+        frontmatter: {
+          name: "commit",
+          description: "Test",
+          metadata: { "politty-cli": OWNERSHIP },
+        },
+        // Source path reaches the source via the shortcut — same lexical
+        // prefix the scanner would emit when cwd is the shortcut.
+        sourcePath: join(shortcutDir, "node_modules", "my-pkg", "skills", "commit"),
+        rawContent: "",
+      };
+
+      installSkill(skill, shortcutDir);
+
+      const canonicalSlot = join(realProjectDir, ".agents/skills/commit");
+      const linkTarget = readlinkSync(canonicalSlot);
+      // The pnpm hop must survive (so `pnpm update` doesn't break the
+      // install) and the shortcut symlink must NOT appear (so a copy of
+      // `realProjectDir` is self-contained).
+      expect(linkTarget).toContain(join("node_modules", "my-pkg"));
+      expect(linkTarget).not.toContain(".pnpm");
+      expect(linkTarget).not.toContain("abc123");
+      expect(linkTarget).not.toContain(basename(shortcutDir));
+
+      // The install reads back through the unchanged canonical/pnpm path.
+      const content = readFileSync(join(canonicalSlot, "SKILL.md"), "utf-8");
+      expect(content).toContain("name: commit");
+    } finally {
+      unlinkSync(shortcutDir);
+      rmSync(realProjectDir, { recursive: true, force: true });
+    }
   });
 });
 

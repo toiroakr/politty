@@ -12,7 +12,7 @@ import {
   symlinkSync,
   unlinkSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
 import type {
   DiscoveredSkill,
@@ -75,19 +75,23 @@ function assertSafeName(name: string): void {
  * - The install root (`.agents/skills/`, each `SYMLINK_TARGETS` parent)
  *   is passed through `realpathSync` so a symlinked checkout doesn't
  *   bake a stale parent path into the relative target.
- * - The source path is kept *lexical* (only `path.resolve`'d to absolute).
- *   Following a source-side symlink would dereference pnpm-style
- *   `node_modules/<pkg>` (a symlink to a versioned hash path inside
- *   `.pnpm/`) and bake the volatile hashed path into the install — the
- *   next `pnpm update` then leaves every installed skill dangling. The
- *   lexical source keeps the symlink itself as the link target so package
- *   manager swaps propagate live.
+ * - The source path is resolved by {@link resolveSourcePreservingPackageHop},
+ *   which walks root→leaf dereferencing every ancestor symlink (a symlinked
+ *   checkout, macOS `/tmp` → `/private/tmp`, etc.) like `realpathSync` would
+ *   — EXCEPT a `node_modules/<pkg>` (or `node_modules/@scope/<pkg>`)
+ *   symlink, which is preserved. Following the package-manager hop would
+ *   bake pnpm's volatile `node_modules/.pnpm/<pkg>@<version>_<hash>/...`
+ *   into the link target and a subsequent `pnpm update` would leave every
+ *   install dangling. Keeping the hop preserves the stable
+ *   `node_modules/<pkg>` symlink that pnpm keeps repointing, while the
+ *   project-root portion still matches the install root's realpath style
+ *   so the install survives copying or remounting the project tree.
  *
- * The overlap guard and copy-mode payload still use the *realpath'd*
- * source: the guard must catch a source-side symlink whose target is
- * nested inside the install root, and the copy-mode payload reads
- * through the symlink so a copy install doesn't leave dangling
- * references back into `node_modules`.
+ * The overlap guard and copy-mode payload still use the *fully*
+ * `realpathSync`-resolved source: the guard must catch a source-side
+ * symlink whose target is nested inside the install root, and the
+ * copy-mode payload reads through every symlink so a copy install doesn't
+ * leave dangling references back into `node_modules`.
  *
  * No absolute-path symlinks are produced by this function.
  *
@@ -133,17 +137,23 @@ export function installSkill(
 
   const canonicalParent = resolve(cwd, AGENTS_SKILLS_DIR);
   // Two source resolutions, used asymmetrically (see function JSDoc):
-  //   - `resolvedSource` — `realpathSync`'d, used by the overlap guard
-  //     (must catch a source-side symlink whose target is nested inside
-  //     the install root) and as the copy-mode payload (so the copy
-  //     doesn't leave dangling references back into `node_modules`).
-  //   - `lexicalSource` — only `path.resolve`'d, used as the symlink
-  //     target. Keeping the source lexical preserves any package-manager
-  //     symlink (e.g. pnpm's `node_modules/<pkg>` → `.pnpm/<pkg>@<hash>/…`)
-  //     so a subsequent `pnpm update` doesn't leave the install dangling
-  //     at a stale hashed path.
+  //   - `resolvedSource` — fully `realpathSync`'d, used by the overlap
+  //     guard (must catch a source-side symlink whose target is nested
+  //     inside the install root) and as the copy-mode payload (so the
+  //     copy doesn't leave dangling references back into `node_modules`).
+  //     The unconditional `realpathSync` also doubles as the up-front
+  //     "source exists" check.
+  //   - `symlinkAwareSource` — `realpathSync`'d for every ancestor
+  //     symlink EXCEPT a `node_modules/<pkg>` (or
+  //     `node_modules/@scope/<pkg>`) hop, which is preserved. Used as
+  //     the symlink target. Dereferencing the project-root portion keeps
+  //     the relative link target consistent with `resolvedParent` (so
+  //     the install survives a copy/remount even when reached via a
+  //     symlinked checkout), while preserving the package-manager hop
+  //     keeps the install from being broken by a `pnpm update` that
+  //     swaps the `.pnpm/<pkg>@<version>_<hash>/...` hash directory.
   const resolvedSource = realpathSync(skill.sourcePath);
-  const lexicalSource = resolve(skill.sourcePath);
+  const symlinkAwareSource = resolveSourcePreservingPackageHop(skill.sourcePath);
 
   // Refuse to install when the source overlaps any destination:
   //   - copy mode: `mkdirSync(dest)` runs before `readdirSync(copyFrom)`,
@@ -189,12 +199,12 @@ export function installSkill(
   // leave the user with no install. Resolve parents through
   // `resolveExistingPrefix` so the check survives parents that don't exist
   // yet (matching the overlap pre-check's prefix style). Uses
-  // `lexicalSource` to match the link target written below.
+  // `symlinkAwareSource` to match the link target written below.
   if (mode === "symlink") {
     const preflightCanonicalParent = resolveExistingPrefix(canonicalParent);
     assertRelativeLinkTarget(
       join(preflightCanonicalParent, name),
-      relative(preflightCanonicalParent, lexicalSource),
+      relative(preflightCanonicalParent, symlinkAwareSource),
     );
     for (const target of SYMLINK_TARGETS) {
       const preflightAgentParent = resolveExistingPrefix(resolve(cwd, target));
@@ -211,15 +221,16 @@ export function installSkill(
   // Resolve the parent before computing `linkPath` so the link is written
   // at the canonical path even when an ancestor of `.agents/skills/` is
   // itself a symlink. `linkTarget` is computed from `resolvedParent` and
-  // `lexicalSource`: the realpath'd parent matches where the link actually
-  // lives on disk, and the lexical source preserves package-manager
-  // symlinks (pnpm) instead of baking a volatile hashed path in.
+  // `symlinkAwareSource`: the realpath'd parent matches where the link
+  // actually lives on disk, and `symlinkAwareSource` mirrors that
+  // realpath style for project-root symlinks while preserving package
+  // manager hops (pnpm).
   const resolvedParent = realpathSync(canonicalParent);
   const canonicalDir = join(resolvedParent, name);
 
   clearInstallSlot(canonicalDir, expectedStamp);
   symlinkOrCopy({
-    linkTarget: relative(resolvedParent, lexicalSource),
+    linkTarget: relative(resolvedParent, symlinkAwareSource),
     linkPath: canonicalDir,
     copyFrom: resolvedSource,
     mode,
@@ -245,6 +256,75 @@ function assertRelativeLinkTarget(linkPath: string, linkTarget: string): void {
         `filesystem roots (e.g. different Windows drive letters); retry with mode: "copy".`,
     );
   }
+}
+
+/**
+ * Resolve `sourcePath` so every ancestor symlink (a symlinked checkout,
+ * macOS `/tmp` → `/private/tmp`, etc.) gets dereferenced — EXCEPT a
+ * `node_modules/<pkg>` or `node_modules/@scope/<pkg>` symlink, which is
+ * preserved verbatim from that point onward.
+ *
+ * Used by `installSkill` to compute the canonical symlink target (see the
+ * "Symlink target convention" JSDoc on `installSkill`). The project-root
+ * portion of the source must end up in the same realpath style as the
+ * install root so a copy/remount keeps both ends in sync; the package
+ * manager hop must be preserved so a `pnpm update` that swaps the
+ * `.pnpm/<pkg>@<version>_<hash>/...` hashed directory doesn't leave the
+ * install dangling.
+ *
+ * Algorithm: walk root → leaf segment-by-segment. At each segment,
+ * `lstatSync` the prefix. If it is a symlink AND its parent looks like a
+ * package-manager hop (`node_modules` directly, or an `@scope/` directory
+ * inside `node_modules`), return immediately with the remaining segments
+ * joined lexically. Otherwise dereference via `realpathSync` (regular
+ * directories are kept as-is; ancestor symlinks are followed). If the
+ * path doesn't exist past some prefix, return what we have plus the
+ * remaining tail lexically — installs against a missing source still
+ * throw via the up-front `realpathSync(sourcePath)` call in `installSkill`.
+ */
+function resolveSourcePreservingPackageHop(sourcePath: string): string {
+  const abs = resolve(sourcePath);
+  const { root } = parse(abs);
+  const parts = abs
+    .slice(root.length)
+    .split(sep)
+    .filter((s) => s !== "");
+  let current = root;
+  for (const [i, segment] of parts.entries()) {
+    const next = join(current, segment);
+    let stat;
+    try {
+      stat = lstatSync(next);
+    } catch {
+      return join(current, ...parts.slice(i));
+    }
+    if (stat.isSymbolicLink()) {
+      if (isPackageManagerHop(current)) {
+        return join(current, ...parts.slice(i));
+      }
+      current = realpathSync(next);
+    } else {
+      current = next;
+    }
+  }
+  return current;
+}
+
+/**
+ * Does `parentDir` look like the directory immediately above a
+ * package-manager symlink? Two layouts qualify:
+ *
+ * - `<...>/node_modules` — a child symlink at this level is a plain
+ *   package (`node_modules/<pkg>`).
+ * - `<...>/node_modules/@<scope>` — a child symlink at this level is a
+ *   scoped package (`node_modules/@scope/<pkg>`).
+ *
+ * Anything else (a symlinked project checkout, `/tmp`, an arbitrary
+ * shortcut elsewhere in the tree) is dereferenced.
+ */
+function isPackageManagerHop(parentDir: string): boolean {
+  if (basename(parentDir) === "node_modules") return true;
+  return basename(parentDir).startsWith("@") && basename(dirname(parentDir)) === "node_modules";
 }
 
 /**
