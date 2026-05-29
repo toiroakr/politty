@@ -192,6 +192,11 @@ function tryParseSkillDir(
         path: dir,
         reason: "name-mismatch",
         message: `Skill name "${result.data.name}" does not match directory "${parent}"`,
+        // Carry the frontmatter name through so `sync`'s orphan-retention
+        // guard can protect an install at either the directory basename or
+        // the frontmatter name — without it, a name-mismatch reaps the
+        // previously-installed slot when only one side was renamed.
+        skillName: result.data.name,
       };
     }
   }

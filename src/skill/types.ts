@@ -51,6 +51,15 @@ export interface ScanError {
   reason: ScanErrorReason;
   /** Human-readable detail, suitable for logging. */
   message: string;
+  /**
+   * Parsed frontmatter `name`, when the scan got far enough to read it.
+   * Currently populated only for `name-mismatch` — both the directory
+   * basename and this frontmatter name correspond to plausible existing
+   * install slot names (depending on which side the user just renamed),
+   * so `sync`'s orphan-retention guard needs both to avoid reaping an
+   * installed slot belonging to a source skill that failed this scan.
+   */
+  skillName?: string;
 }
 
 /**

@@ -106,6 +106,10 @@ describe("scanSourceDir", () => {
     expect(skills).toHaveLength(0);
     expect(errors).toHaveLength(1);
     expect(errors[0]!.reason).toBe("name-mismatch");
+    // Carry the frontmatter name through so consumers (e.g. `sync`'s
+    // orphan-retention guard) can protect an install at the frontmatter
+    // name even when the directory was renamed to something else.
+    expect(errors[0]!.skillName).toBe("original");
   });
 
   it("should follow symlinked subdirectories", () => {

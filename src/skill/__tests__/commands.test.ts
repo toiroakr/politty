@@ -574,6 +574,44 @@ describe("createSkillSyncCommand", () => {
     expect(installNames).toEqual(["commit"]);
   });
 
+  it("should retain a name-mismatched install slot under either name", () => {
+    // Regression: the orphan-retention guard previously only recorded
+    // `basename(error.path)`. For a `name-mismatch` the install slot lives
+    // under the frontmatter name (which now differs from the directory),
+    // and that install was getting reaped as an orphan. Protect both names
+    // so a transient rename never silently rm-rf's the live install.
+    //
+    // Setup: directory `skills/renamed/` declares `name: original` (a
+    // user-introduced mismatch). A prior successful sync installed at
+    // `.agents/skills/original`. The current sync must keep that slot.
+    const badDir = join(tempDir, "renamed");
+    mkdirSync(badDir, { recursive: true });
+    writeFileSync(
+      join(badDir, "SKILL.md"),
+      `---\nname: original\ndescription: ok\nmetadata:\n  politty-cli: "${OWNERSHIP}"\n---\n`,
+    );
+
+    const projectDir = join(tempDir, ".project");
+    const installedDir = join(projectDir, ".agents/skills");
+    mkdirSync(join(installedDir, "original"), { recursive: true });
+    writeFileSync(
+      join(installedDir, "original", "SKILL.md"),
+      `---\nname: original\ndescription: ok\nmetadata:\n  politty-cli: "${OWNERSHIP}"\n---\n`,
+    );
+
+    mockedReadOwnership.mockReturnValue(OWNERSHIP);
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(projectDir);
+
+    try {
+      const command = createSkillSyncCommand(resolve(opts(tempDir)));
+      command.run!({ exclude: [], verbose: false });
+
+      expect(mockedUninstallSkill).not.toHaveBeenCalled();
+    } finally {
+      cwdSpy.mockRestore();
+    }
+  });
+
   it("should clean up orphans even when the only valid skill is excluded", () => {
     // Regression: `allSkillsInvalid` once checked the post-exclusion `skills`
     // list, so excluding the sole valid skill while any per-file error was

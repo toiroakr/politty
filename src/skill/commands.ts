@@ -187,16 +187,23 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
         // not be reaped as an orphan — the source entry still exists, it
         // just couldn't be scanned this run. Without this guard a transient
         // packaging issue (one broken SKILL.md alongside healthy siblings)
-        // would silently rm-rf the install for the broken one. `basename`
-        // on a subdirectory `ScanError.path` gives the install slot name
-        // (the install was last written using the frontmatter `name`, and
-        // by spec that matches the subdirectory name).
+        // would silently rm-rf the install for the broken one.
+        //
+        // For most reasons the install slot matches the subdirectory name
+        // (spec-mandated equality). For `name-mismatch`, though, the two
+        // diverge — only one side was just renamed — and the prior install
+        // could be at either the directory basename *or* the frontmatter
+        // name, depending on which side moved. Protect both so a transient
+        // rename mistake never reaps the live install.
         const sourceNames = new Set(skills.map((s) => s.frontmatter.name));
-        const erroredDirNames = new Set(
-          errors.filter((e) => e.path !== resolved.sourceDir).map((e) => basename(e.path)),
-        );
+        const erroredSlotNames = new Set<string>();
+        for (const err of errors) {
+          if (err.path === resolved.sourceDir) continue;
+          erroredSlotNames.add(basename(err.path));
+          if (err.skillName !== undefined) erroredSlotNames.add(err.skillName);
+        }
         for (const orphan of findOwnedInstalledSkills(stamp, resolved.cwd, resolved.sourceDir)) {
-          if (sourceNames.has(orphan) || excluded.has(orphan) || erroredDirNames.has(orphan)) {
+          if (sourceNames.has(orphan) || excluded.has(orphan) || erroredSlotNames.has(orphan)) {
             continue;
           }
           removeOwnedSkill(orphan, stamp, resolved.cwd, resolved.sourceDir);
