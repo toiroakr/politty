@@ -2,6 +2,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   readlinkSync,
   realpathSync,
@@ -339,6 +340,43 @@ describe("installSkill", () => {
     symlinkSync(skill.sourcePath, join(skill.sourcePath, "loop"), "dir");
 
     expect(() => installSkill(skill, projectDir, { mode: "copy" })).toThrow(/cyclic/i);
+  });
+
+  it("should leave no partial canonical slot when a copy-mode install fails mid-copy", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    // Cyclic symlink forces `copyDirRecursive` to throw partway through.
+    // Without the staging-and-rename in `atomicCopyDir`, the canonical slot
+    // would be left as a real directory (possibly without SKILL.md depending
+    // on readdir order). `clearInstallSlot` on the retry would then see an
+    // unstamped real directory and refuse to replace it, stranding the
+    // install — breaking the documented "re-running converges" guarantee.
+    symlinkSync(skill.sourcePath, join(skill.sourcePath, "loop"), "dir");
+
+    expect(() => installSkill(skill, projectDir, { mode: "copy" })).toThrow(/cyclic/i);
+
+    expect(existsSync(join(projectDir, ".agents/skills/commit"))).toBe(false);
+    // And no `*.partial-*` staging siblings were left behind either: a future
+    // install must not have to clean up garbage from the failed attempt.
+    const skillsDir = join(projectDir, ".agents/skills");
+    const siblings = existsSync(skillsDir) ? readdirSync(skillsDir) : [];
+    expect(siblings).toEqual([]);
+  });
+
+  it("should converge on retry after a failed copy-mode install", () => {
+    const skill = createSkillFixture(sourceDir, "commit");
+    symlinkSync(skill.sourcePath, join(skill.sourcePath, "loop"), "dir");
+
+    expect(() => installSkill(skill, projectDir, { mode: "copy" })).toThrow(/cyclic/i);
+
+    // Removing the cycle and retrying must succeed: the prior failed install
+    // must not have left a stamp-less partial directory at the canonical
+    // slot that `clearInstallSlot` would later refuse to replace.
+    unlinkSync(join(skill.sourcePath, "loop"));
+    installSkill(skill, projectDir, { mode: "copy" });
+    expect(lstatSync(join(projectDir, ".agents/skills/commit")).isDirectory()).toBe(true);
+    expect(readFileSync(join(projectDir, ".agents/skills/commit/SKILL.md"), "utf-8")).toContain(
+      "name: commit",
+    );
   });
 
   it("should refuse a copy-mode install without an ownership stamp", () => {

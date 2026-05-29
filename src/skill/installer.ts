@@ -3,10 +3,12 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
   readlinkSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -101,7 +103,11 @@ function assertSafeName(name: string): void {
  * crash mid-install can leave the canonical slot updated and one or
  * more agent-specific slots stale; re-running `installSkill` (or the
  * `skills sync` subcommand, which iterates over multiple skills) is
- * idempotent and converges back to the intended state. Multi-skill
+ * idempotent and converges back to the intended state. Within a single
+ * slot's copy-mode write, the staging-and-rename in {@link atomicCopyDir}
+ * guarantees the destination is either absent or fully populated — a
+ * mid-copy failure never leaves a stamp-less partial directory that the
+ * next install's `clearInstallSlot` would refuse to replace. Multi-skill
  * orchestration in {@link createSkillSyncCommand} is fail-fast — the
  * first failed skill aborts the loop without rolling back already-
  * installed siblings, again because re-running converges.
@@ -560,7 +566,7 @@ function symlinkOrCopy(args: {
 }): void {
   const { linkTarget, linkPath, copyFrom, mode } = args;
   if (mode === "copy") {
-    copyDirRecursive(copyFrom, linkPath);
+    atomicCopyDir(copyFrom, linkPath);
     return;
   }
   // `path.relative` returns an absolute path on Windows when the two
@@ -587,6 +593,36 @@ function symlinkOrCopy(args: {
 }
 
 /**
+ * Stage the copy at a sibling `<dest>.partial-XXXXXX` and rename it into
+ * place only after the full copy succeeds. A partial copy that throws
+ * partway (unreadable child, cyclic symlink, EIO, etc.) is removed before
+ * the error propagates, so `dest` is never left as a stamp-less real
+ * directory that `clearInstallSlot` would later refuse to replace.
+ *
+ * The staging directory lives in `dest`'s parent so `renameSync` stays on
+ * the same filesystem (cross-device rename would fail with EXDEV).
+ * Callers run `clearInstallSlot(dest, ...)` first, so `dest` is expected
+ * to be absent when this is called — the `renameSync` simply moves the
+ * fully-populated temp into place. A `*.partial-*` sibling surviving a
+ * crash (e.g. `kill -9` between `copyDirRecursive` and `renameSync`) is
+ * left as harmless on-disk garbage; subsequent installs ignore it.
+ */
+function atomicCopyDir(src: string, dest: string): void {
+  const tmp = mkdtempSync(`${dest}.partial-`);
+  try {
+    copyDirRecursive(src, tmp);
+    renameSync(tmp, dest);
+  } catch (err) {
+    try {
+      rmSync(tmp, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup; the original error is the actionable one.
+    }
+    throw err;
+  }
+}
+
+/**
  * Recursively copy `src` to `dest` following symlinks (`statSync`, not
  * `lstatSync`). Symlinks in the source are materialised as copies of
  * their target content so the install does not leave dangling references
@@ -597,6 +633,9 @@ function symlinkOrCopy(args: {
  * the recursion stack so a directory symlink pointing at an ancestor
  * (e.g. `foo/bar -> ../..`) fails fast instead of recursing until the
  * stack overflows or the disk fills.
+ *
+ * Callers wrap this through {@link atomicCopyDir} so a partial copy is
+ * never left at the final destination.
  */
 function copyDirRecursive(
   src: string,
