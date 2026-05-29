@@ -731,6 +731,11 @@ describe("createSkillAddCommand", () => {
     expect(mockedInstallSkill).toHaveBeenCalledTimes(2);
   });
 
+  it("should expose 'install' as an alias", () => {
+    const command = createSkillAddCommand(resolve(opts(tempDir)));
+    expect(command.aliases).toEqual(["install"]);
+  });
+
   it("should install specific skill by name", () => {
     writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
     writeSkillMd(tempDir, "review", { name: "review", description: "Review skill" });
@@ -1033,6 +1038,11 @@ describe("createSkillRemoveCommand", () => {
     command.run!({ name: undefined });
 
     expect(mockedUninstallSkill).toHaveBeenCalledTimes(2);
+  });
+
+  it("should expose 'uninstall' as an alias", () => {
+    const command = createSkillRemoveCommand(resolve(opts(tempDir)));
+    expect(command.aliases).toEqual(["uninstall"]);
   });
 
   it("should remove specific skill by name", () => {

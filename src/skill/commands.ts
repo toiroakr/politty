@@ -251,6 +251,7 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
 export function createSkillAddCommand(resolved: ResolvedSkillOptions) {
   return defineCommand({
     name: "add",
+    aliases: ["install"],
     description: "Install skills from source",
     args: z.object({
       name: arg(z.array(z.string()).default([]), {
@@ -325,6 +326,7 @@ export function createSkillAddCommand(resolved: ResolvedSkillOptions) {
 export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
   return defineCommand({
     name: "remove",
+    aliases: ["uninstall"],
     description: "Remove installed skills",
     args: z.object({
       name: arg(z.string().optional(), {
