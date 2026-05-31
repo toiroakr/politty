@@ -44,7 +44,7 @@ describe("18-union-types", () => {
 
   it("fails when no auth option is provided", async () => {
     using _console = spyOnConsoleLog();
-    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(main, []);
 
     expect(result.exitCode).toBe(1);

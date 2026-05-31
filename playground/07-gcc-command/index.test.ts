@@ -41,7 +41,7 @@ describe("07-gcc-command", () => {
 
   it("fails when output is not provided", async () => {
     using _console = spyOnConsoleLog();
-    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["main.c"]);
 
     expect(result.exitCode).toBe(1);
@@ -49,7 +49,7 @@ describe("07-gcc-command", () => {
 
   it("fails when sources are not provided", async () => {
     using _console = spyOnConsoleLog();
-    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["-o", "app"]);
 
     expect(result.exitCode).toBe(1);

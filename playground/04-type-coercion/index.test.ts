@@ -48,7 +48,7 @@ describe("04-type-coercion", () => {
 
   it("fails when port is invalid (too high)", async () => {
     using _console = spyOnConsoleLog();
-    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["-p", "99999"]);
 
     expect(result.exitCode).toBe(1);
@@ -56,7 +56,7 @@ describe("04-type-coercion", () => {
 
   it("fails when port is not provided", async () => {
     using _console = spyOnConsoleLog();
-    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
     expect(result.exitCode).toBe(1);

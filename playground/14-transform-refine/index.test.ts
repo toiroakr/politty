@@ -33,7 +33,7 @@ describe("14-transform-refine", () => {
 
     it("fails when name is not provided", async () => {
       using _console = spyOnConsoleLog();
-      vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+      using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
       const result = await runCommand(cli, ["transform", "--tags", "a"]);
 
       expect(result.exitCode).toBe(1);
@@ -41,7 +41,7 @@ describe("14-transform-refine", () => {
 
     it("fails when tags is not provided", async () => {
       using _console = spyOnConsoleLog();
-      vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+      using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
       const result = await runCommand(cli, ["transform", "hello"]);
 
       expect(result.exitCode).toBe(1);
@@ -62,7 +62,7 @@ describe("14-transform-refine", () => {
 
     it("fails when input and output are the same", async () => {
       using _console = spyOnConsoleLog();
-      vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+      using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
       const result = await runCommand(cli, ["refine", "same.txt", "same.txt"]);
 
       expect(result.exitCode).toBe(1);

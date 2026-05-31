@@ -1,22 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { arg, defineCommand, runCommand } from "../src/index.js";
-import { spyOnConsoleLog } from "./utils/console.js";
+import { spyOnConsoleError, spyOnConsoleLog } from "./utils/console.js";
 
 /**
  * E2E tests with concrete sample CLI commands
  */
 const useConsoleSpies = () => {
   const consoleSpy = spyOnConsoleLog();
-  const logs = consoleSpy.getLogs();
-  const errors: string[] = [];
-  const consoleErrorSpy = vi.spyOn(globalThis.console, "error").mockImplementation((msg) => {
-    errors.push(String(msg));
-  });
+  const consoleErrorSpy = spyOnConsoleError();
 
   return {
-    logs,
-    errors,
+    logs: consoleSpy.getLogs(),
     [Symbol.dispose]() {
       consoleErrorSpy.mockRestore();
       consoleSpy.mockRestore();

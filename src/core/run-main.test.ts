@@ -189,7 +189,7 @@ describe("runCommand", () => {
 
   describe("Validation errors", () => {
     it("should show error for invalid arguments", async () => {
-      using _consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using _consoleSpy = spyOnConsoleError();
 
       const cmd = defineCommand({
         name: "test",
@@ -204,7 +204,7 @@ describe("runCommand", () => {
     });
 
     it("should show error for missing required arguments", async () => {
-      using _consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using _consoleSpy = spyOnConsoleError();
 
       const cmd = defineCommand({
         name: "test",
@@ -314,7 +314,7 @@ describe("runCommand", () => {
 
   describe("Unknown flags", () => {
     it("should warn about unknown flags with default z.object (strip mode)", async () => {
-      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = spyOnConsoleError();
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -337,7 +337,7 @@ describe("runCommand", () => {
     });
 
     it("should error on unknown flags with z.strictObject (strict mode)", async () => {
-      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = spyOnConsoleError();
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -363,7 +363,7 @@ describe("runCommand", () => {
     });
 
     it("should error on unknown flags with z.object().strict()", async () => {
-      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = spyOnConsoleError();
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -387,7 +387,7 @@ describe("runCommand", () => {
     });
 
     it("should silently ignore unknown flags with z.looseObject (passthrough mode)", async () => {
-      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = spyOnConsoleError();
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -407,7 +407,7 @@ describe("runCommand", () => {
     });
 
     it("should silently ignore unknown flags with z.object().passthrough()", async () => {
-      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = spyOnConsoleError();
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -430,7 +430,7 @@ describe("runCommand", () => {
 
     // Short option (alias) tests
     it("should warn about unknown short flags with default z.object (strip mode)", async () => {
-      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = spyOnConsoleError();
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -452,7 +452,7 @@ describe("runCommand", () => {
     });
 
     it("should error on unknown short flags with z.strictObject (strict mode)", async () => {
-      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = spyOnConsoleError();
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -474,7 +474,7 @@ describe("runCommand", () => {
     });
 
     it("should silently ignore unknown short flags with z.looseObject (passthrough mode)", async () => {
-      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = spyOnConsoleError();
       const runFn = vi.fn();
 
       const cmd = defineCommand({

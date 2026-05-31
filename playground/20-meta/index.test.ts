@@ -43,7 +43,7 @@ describe("20-meta", () => {
 
   it("fails when name is not provided", async () => {
     using _console = spyOnConsoleLog();
-    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
     expect(result.exitCode).toBe(1);
