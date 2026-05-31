@@ -146,6 +146,7 @@ describe("27-custom-negation", () => {
 
   describe("documentation", () => {
     it("root command", async () => {
+      using _console = spyOnConsoleLog();
       await assertDocMatch({
         ...baseDocConfig,
         targetCommands: [""],

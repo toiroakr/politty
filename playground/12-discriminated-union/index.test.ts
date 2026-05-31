@@ -80,6 +80,7 @@ describe("12-discriminated-union", () => {
   });
 
   it("fails when action is not provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
@@ -87,6 +88,7 @@ describe("12-discriminated-union", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/12-discriminated-union/README.md": [""] },

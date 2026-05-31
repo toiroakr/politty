@@ -69,6 +69,7 @@ describe("13-intersection", () => {
   });
 
   it("fails when input is not provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["-o", "output.txt"]);
 
@@ -76,6 +77,7 @@ describe("13-intersection", () => {
   });
 
   it("fails when output is not provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["input.txt"]);
 
@@ -83,6 +85,7 @@ describe("13-intersection", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/13-intersection/README.md": [""] },

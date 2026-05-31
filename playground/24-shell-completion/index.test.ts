@@ -206,6 +206,7 @@ describe("24-shell-completion", () => {
 
   describe("dynamic completion (via parseCompletionContext + generateCandidates)", () => {
     it("completes subcommands at root level", async () => {
+      using _console = spyOnConsoleLog();
       const ctx = parseCompletionContext([""], cli);
       const result = await generateCandidates(ctx, { shell: "bash" });
       const values = result.candidates.map((c) => c.value);
@@ -216,6 +217,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes options for deploy subcommand", async () => {
+      using _console = spyOnConsoleLog();
       const ctx = parseCompletionContext(["deploy", "--"], cli);
       const result = await generateCandidates(ctx, { shell: "bash" });
       const values = result.candidates.map((c) => c.value);
@@ -226,6 +228,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes enum values for build --format", async () => {
+      using _console = spyOnConsoleLog();
       const ctx = parseCompletionContext(["build", "--format", ""], cli);
       const result = await generateCandidates(ctx, { shell: "bash" });
       const values = result.candidates.map((c) => c.value);
@@ -236,6 +239,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes custom choices for deploy --env", async () => {
+      using _console = spyOnConsoleLog();
       const ctx = parseCompletionContext(["deploy", "--env", ""], cli);
       const result = await generateCandidates(ctx, { shell: "bash" });
       const values = result.candidates.map((c) => c.value);
@@ -246,6 +250,7 @@ describe("24-shell-completion", () => {
     });
 
     it("resolves file completion with extensions in JS for deploy --config", async () => {
+      using _console = spyOnConsoleLog();
       const ctx = parseCompletionContext(["deploy", "--config", ""], cli);
       const result = await generateCandidates(ctx, { shell: "bash" });
 
@@ -256,6 +261,7 @@ describe("24-shell-completion", () => {
     });
 
     it("returns directory directive for build --output", async () => {
+      using _console = spyOnConsoleLog();
       const ctx = parseCompletionContext(["build", "--output", ""], cli);
       const result = await generateCandidates(ctx, { shell: "bash" });
 
@@ -263,6 +269,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes positional enum for test suite", async () => {
+      using _console = spyOnConsoleLog();
       const ctx = parseCompletionContext(["test", ""], cli);
       const result = await generateCandidates(ctx, { shell: "bash" });
       const values = result.candidates.map((c) => c.value);
@@ -273,6 +280,7 @@ describe("24-shell-completion", () => {
     });
 
     it("filters out used options", async () => {
+      using _console = spyOnConsoleLog();
       const ctx = parseCompletionContext(["deploy", "--env", "staging", "--"], cli);
       const result = await generateCandidates(ctx, { shell: "bash" });
       const values = result.candidates.map((c) => c.value);
@@ -283,6 +291,7 @@ describe("24-shell-completion", () => {
     });
 
     it("formats output for shell consumption", async () => {
+      using _console = spyOnConsoleLog();
       const ctx = parseCompletionContext(["deploy", "--env", ""], cli);
       const result = await generateCandidates(ctx, { shell: "fish" });
       const output = formatForShell(result, { shell: "fish", currentWord: "" });
@@ -298,6 +307,7 @@ describe("24-shell-completion", () => {
 
   describe("completion API (programmatic)", () => {
     it("generates completion script via API", () => {
+      using _console = spyOnConsoleLog();
       const result = generateCompletion(cli, {
         shell: "bash",
         programName: "myapp",

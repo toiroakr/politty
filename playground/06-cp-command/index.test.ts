@@ -40,6 +40,7 @@ describe("06-cp-command", () => {
   });
 
   it("fails when source is not provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
@@ -47,6 +48,7 @@ describe("06-cp-command", () => {
   });
 
   it("fails when destination is not provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["source.txt"]);
 
@@ -54,6 +56,7 @@ describe("06-cp-command", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/06-cp-command/README.md": [""] },

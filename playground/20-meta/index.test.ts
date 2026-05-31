@@ -42,6 +42,7 @@ describe("20-meta", () => {
   });
 
   it("fails when name is not provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
@@ -49,6 +50,7 @@ describe("20-meta", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/20-meta/README.md": [""] },

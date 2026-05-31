@@ -40,6 +40,7 @@ describe("07-gcc-command", () => {
   });
 
   it("fails when output is not provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["main.c"]);
 
@@ -47,6 +48,7 @@ describe("07-gcc-command", () => {
   });
 
   it("fails when sources are not provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["-o", "app"]);
 
@@ -54,6 +56,7 @@ describe("07-gcc-command", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/07-gcc-command/README.md": [""] },

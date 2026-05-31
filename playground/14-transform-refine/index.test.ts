@@ -32,6 +32,7 @@ describe("14-transform-refine", () => {
     });
 
     it("fails when name is not provided", async () => {
+      using _console = spyOnConsoleLog();
       vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
       const result = await runCommand(cli, ["transform", "--tags", "a"]);
 
@@ -39,6 +40,7 @@ describe("14-transform-refine", () => {
     });
 
     it("fails when tags is not provided", async () => {
+      using _console = spyOnConsoleLog();
       vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
       const result = await runCommand(cli, ["transform", "hello"]);
 
@@ -59,6 +61,7 @@ describe("14-transform-refine", () => {
     });
 
     it("fails when input and output are the same", async () => {
+      using _console = spyOnConsoleLog();
       vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
       const result = await runCommand(cli, ["refine", "same.txt", "same.txt"]);
 
@@ -89,6 +92,7 @@ describe("14-transform-refine", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: cli,
       files: { "playground/14-transform-refine/README.md": [""] },

@@ -19,6 +19,7 @@ describe("15-complete-cli", () => {
     });
 
     it("returns result from run function", async () => {
+      using _console = spyOnConsoleLog();
       const result = await runCommand(cli, ["file.txt", "-o", "out.txt"]);
 
       expect(result.success).toBe(true);
@@ -103,6 +104,7 @@ describe("15-complete-cli", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: cli,
       files: { "playground/15-complete-cli/README.md": [""] },

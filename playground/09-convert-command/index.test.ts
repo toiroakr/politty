@@ -52,6 +52,7 @@ describe("09-convert-command", () => {
   });
 
   it("fails when input is not provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
@@ -59,6 +60,7 @@ describe("09-convert-command", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/09-convert-command/README.md": [""] },

@@ -26,6 +26,7 @@ describe("01-hello-world", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/01-hello-world/README.md": [""] },

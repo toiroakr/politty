@@ -29,6 +29,7 @@ describe("05-lifecycle-hooks", () => {
   });
 
   it("returns result from run function", async () => {
+    using _console = spyOnConsoleLog();
     using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
 
     const result = await runCommand(command, [
@@ -45,6 +46,7 @@ describe("05-lifecycle-hooks", () => {
   });
 
   it("calls cleanup with error when run fails", async () => {
+    using _console = spyOnConsoleLog();
     using errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
 
     const result = await runCommand(command, [
@@ -62,6 +64,7 @@ describe("05-lifecycle-hooks", () => {
   });
 
   it("fails when database is not provided", async () => {
+    using _console = spyOnConsoleLog();
     using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
 
     const result = await runCommand(command, ["--query", "SELECT 1"]);
@@ -70,6 +73,7 @@ describe("05-lifecycle-hooks", () => {
   });
 
   it("fails when query is not provided", async () => {
+    using _console = spyOnConsoleLog();
     using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
 
     const result = await runCommand(command, ["--database", "postgres://localhost/mydb"]);
@@ -78,6 +82,7 @@ describe("05-lifecycle-hooks", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/05-lifecycle-hooks/README.md": [""] },

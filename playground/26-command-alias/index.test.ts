@@ -190,6 +190,7 @@ describe("26-command-alias", () => {
 
   describe("documentation", () => {
     it("root command", async () => {
+      using _console = spyOnConsoleLog();
       await assertDocMatch({
         ...baseDocConfig,
         targetCommands: [""],
@@ -197,6 +198,7 @@ describe("26-command-alias", () => {
     });
 
     it("install command", async () => {
+      using _console = spyOnConsoleLog();
       await assertDocMatch({
         ...baseDocConfig,
         targetCommands: ["install"],
@@ -204,6 +206,7 @@ describe("26-command-alias", () => {
     });
 
     it("remove command", async () => {
+      using _console = spyOnConsoleLog();
       await assertDocMatch({
         ...baseDocConfig,
         targetCommands: ["remove"],
@@ -211,6 +214,7 @@ describe("26-command-alias", () => {
     });
 
     it("list command", async () => {
+      using _console = spyOnConsoleLog();
       await assertDocMatch({
         ...baseDocConfig,
         targetCommands: ["list"],

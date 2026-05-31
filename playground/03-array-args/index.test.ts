@@ -50,6 +50,7 @@ describe("03-array-args", () => {
   });
 
   it("fails when no files provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
@@ -57,6 +58,7 @@ describe("03-array-args", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/03-array-args/README.md": [""] },

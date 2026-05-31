@@ -18,6 +18,7 @@ describe("02-greet", () => {
   });
 
   it("greets with custom greeting using --greeting", async () => {
+    using _console = spyOnConsoleLog();
     const result = await runCommand(command, ["World", "--greeting", "Hi"]);
 
     expect(result.success).toBe(true);
@@ -27,6 +28,7 @@ describe("02-greet", () => {
   });
 
   it("greets with custom greeting using -g alias", async () => {
+    using _console = spyOnConsoleLog();
     const result = await runCommand(command, ["World", "-g", "Howdy"]);
 
     expect(result.success).toBe(true);
@@ -36,6 +38,7 @@ describe("02-greet", () => {
   });
 
   it("outputs in uppercase with --loud", async () => {
+    using _console = spyOnConsoleLog();
     const result = await runCommand(command, ["World", "--loud"]);
 
     expect(result.success).toBe(true);
@@ -45,6 +48,7 @@ describe("02-greet", () => {
   });
 
   it("outputs in uppercase with -l alias", async () => {
+    using _console = spyOnConsoleLog();
     const result = await runCommand(command, ["World", "-l"]);
 
     expect(result.success).toBe(true);
@@ -54,6 +58,7 @@ describe("02-greet", () => {
   });
 
   it("combines custom greeting and loud mode", async () => {
+    using _console = spyOnConsoleLog();
     const result = await runCommand(command, ["World", "-g", "Hi", "-l"]);
 
     expect(result.success).toBe(true);
@@ -63,6 +68,7 @@ describe("02-greet", () => {
   });
 
   it("fails when name is not provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
@@ -70,6 +76,7 @@ describe("02-greet", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/02-greet/README.md": [""] },

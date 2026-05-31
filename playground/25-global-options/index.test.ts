@@ -208,6 +208,7 @@ describe("25-global-options", () => {
 
   describe("global schema validation", () => {
     it("rejects positional arguments in global schema", async () => {
+      using _console = spyOnConsoleLog();
       const badGlobal = z.object({
         file: arg(z.string(), { positional: true, description: "A file" }),
       });
@@ -218,6 +219,7 @@ describe("25-global-options", () => {
     });
 
     it("rejects reserved alias -h in global schema", async () => {
+      using _console = spyOnConsoleLog();
       const badGlobal = z.object({
         // @ts-expect-error -- intentionally using reserved alias to test runtime validation
         help: arg(z.boolean().default(false), { alias: "h", description: "Help" }),
@@ -229,6 +231,7 @@ describe("25-global-options", () => {
     });
 
     it("rejects reserved alias -H in global schema", async () => {
+      using _console = spyOnConsoleLog();
       const badGlobal = z.object({
         // @ts-expect-error -- intentionally using reserved alias to test runtime validation
         helpAll: arg(z.boolean().default(false), { alias: "H", description: "Help all" }),
@@ -313,6 +316,7 @@ describe("25-global-options", () => {
 
   describe("completion with global options", () => {
     it("includes global options in subcommand completions", () => {
+      using _console = spyOnConsoleLog();
       const result = generateCompletion(cli, {
         shell: "bash",
         programName: "my-app",
@@ -328,6 +332,7 @@ describe("25-global-options", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: cli,
       path: {

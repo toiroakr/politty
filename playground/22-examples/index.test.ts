@@ -75,6 +75,7 @@ describe("22-examples", () => {
   describe("root command", () => {
     describe("documentation", () => {
       it("generates documentation", { timeout: 10000 }, async () => {
+        using _console = spyOnConsoleLog();
         await assertDocMatch({
           ...baseDocConfig,
           targetCommands: [""],
@@ -96,6 +97,7 @@ describe("22-examples", () => {
     });
 
     it("reads and parses JSON file", async () => {
+      using _console = spyOnConsoleLog();
       vi.mocked(fs.readFileSync).mockReturnValue('{"key": "value"}');
 
       const result = await runCommand(readCommand, ["config.json", "-f", "json"]);
@@ -107,6 +109,7 @@ describe("22-examples", () => {
     });
 
     it("documentation", async () => {
+      using _console = spyOnConsoleLog();
       const readFileSyncSpy = vi.mocked(fs.readFileSync);
 
       await assertDocMatch({
@@ -161,6 +164,7 @@ describe("22-examples", () => {
     });
 
     it("documentation", async () => {
+      using _console = spyOnConsoleLog();
       const writeFileSyncSpy = vi.mocked(fs.writeFileSync);
 
       await assertDocMatch({
@@ -210,6 +214,7 @@ describe("22-examples", () => {
     });
 
     it("documentation", async () => {
+      using _console = spyOnConsoleLog();
       const existsSyncSpy = vi.mocked(fs.existsSync);
 
       await assertDocMatch({

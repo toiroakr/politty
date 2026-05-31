@@ -121,6 +121,7 @@ describe("21-lazy-subcommands", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: cli,
       files: { "playground/21-lazy-subcommands/README.md": [""] },

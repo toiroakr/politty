@@ -52,6 +52,7 @@ describe("08-cat-command", () => {
   });
 
   it("fails when no files provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
@@ -59,6 +60,7 @@ describe("08-cat-command", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/08-cat-command/README.md": [""] },

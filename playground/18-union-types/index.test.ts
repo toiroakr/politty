@@ -43,6 +43,7 @@ describe("18-union-types", () => {
   });
 
   it("fails when no auth option is provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(main, []);
 
@@ -50,6 +51,7 @@ describe("18-union-types", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: main,
       files: { "playground/18-union-types/README.md": [""] },

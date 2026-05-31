@@ -25,6 +25,7 @@ describe("11-nested-subcommands", () => {
     });
 
     it("fails when key is not provided", async () => {
+      using _console = spyOnConsoleLog();
       vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
       const result = await runCommand(cli, ["config", "get"]);
 
@@ -102,6 +103,7 @@ describe("11-nested-subcommands", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: cli,
       files: { "playground/11-nested-subcommands/README.md": [""] },

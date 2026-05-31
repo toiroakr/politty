@@ -147,6 +147,7 @@ describe("16-show-subcommand-options", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: cli,
       files: { "playground/16-show-subcommand-options/README.md": [""] },

@@ -47,6 +47,7 @@ describe("04-type-coercion", () => {
   });
 
   it("fails when port is invalid (too high)", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["-p", "99999"]);
 
@@ -54,6 +55,7 @@ describe("04-type-coercion", () => {
   });
 
   it("fails when port is not provided", async () => {
+    using _console = spyOnConsoleLog();
     vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
@@ -61,6 +63,7 @@ describe("04-type-coercion", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/04-type-coercion/README.md": [""] },
