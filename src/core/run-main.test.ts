@@ -5,6 +5,16 @@ import { arg } from "./arg-registry.js";
 import { defineCommand } from "./command.js";
 import { runCommand, runMain } from "./runner.js";
 
+const useArgv = (argv: string[]) => {
+  const originalArgv = process.argv;
+  process.argv = argv;
+  return {
+    [Symbol.dispose]() {
+      process.argv = originalArgv;
+    },
+  };
+};
+
 /**
  * Task 8.1: runCommand function tests
  * - Integrate parse → validation → execution flow
@@ -78,7 +88,7 @@ describe("runCommand", () => {
 
   describe("Help handling", () => {
     it("should show help on --help flag", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "my-cli",
@@ -98,23 +108,20 @@ describe("runCommand", () => {
       expect(output).toContain("my-cli");
       expect(output).toContain("Test CLI");
       expect(result.exitCode).toBe(0);
-
-      console.mockRestore();
     });
 
     it("should show help on -h flag", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
 
       const cmd = defineCommand({ name: "cli" });
 
       await runCommand(cmd, ["-h"]);
 
       expect(console).toHaveBeenCalled();
-      console.mockRestore();
     });
 
     it("should show --help-all option when subcommands exist", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "cli",
@@ -127,11 +134,10 @@ describe("runCommand", () => {
 
       const output = console.getLogs()[0] ?? "";
       expect(output).toContain("--help-all");
-      console.mockRestore();
     });
 
     it("should show subcommand options on --help-all", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "cli",
@@ -154,11 +160,10 @@ describe("runCommand", () => {
       expect(output).toContain("build");
       expect(output).toContain("--output");
       expect(output).toContain("Output directory");
-      console.mockRestore();
     });
 
     it("should show subcommand help on subcmd --help", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "cli",
@@ -179,13 +184,12 @@ describe("runCommand", () => {
       expect(output).toContain("build");
       expect(output).toContain("Build the project");
       expect(output).toContain("--output");
-      console.mockRestore();
     });
   });
 
   describe("Validation errors", () => {
     it("should show error for invalid arguments", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using _consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
         name: "test",
@@ -197,12 +201,10 @@ describe("runCommand", () => {
       const result = await runCommand(cmd, ["--port", "not-a-number"]);
 
       expect(result.exitCode).toBe(1);
-
-      consoleSpy.mockRestore();
     });
 
     it("should show error for missing required arguments", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using _consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
         name: "test",
@@ -214,12 +216,10 @@ describe("runCommand", () => {
       const result = await runCommand(cmd, []);
 
       expect(result.exitCode).toBe(1);
-
-      consoleSpy.mockRestore();
     });
 
     it("should not display validation errors directly via console.error in runCommand", async () => {
-      const consoleSpy = spyOnConsoleError();
+      using consoleSpy = spyOnConsoleError();
 
       const cmd = defineCommand({
         name: "test",
@@ -235,12 +235,10 @@ describe("runCommand", () => {
       // runCommand (programmatic API) should NOT display errors itself;
       // it should only return them in result.error for the caller to handle
       expect(consoleSpy).not.toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
     });
 
     it("should return validation error message in result.error for caller to handle", async () => {
-      const consoleSpy = spyOnConsoleError();
+      using _consoleSpy = spyOnConsoleError();
 
       const cmd = defineCommand({
         name: "test",
@@ -256,12 +254,10 @@ describe("runCommand", () => {
         expect(result.error).toBeInstanceOf(Error);
         expect(result.error.message).toContain("name");
       }
-
-      consoleSpy.mockRestore();
     });
 
     it("should not display errors directly for unknown flags in strict mode", async () => {
-      const consoleSpy = spyOnConsoleError();
+      using consoleSpy = spyOnConsoleError();
 
       const cmd = defineCommand({
         name: "test",
@@ -275,8 +271,6 @@ describe("runCommand", () => {
       expect(result.success).toBe(false);
       // runCommand should NOT display errors itself
       expect(consoleSpy).not.toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
     });
   });
 
@@ -303,7 +297,7 @@ describe("runCommand", () => {
     });
 
     it("should show help when subcommand not specified", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "cli",
@@ -315,13 +309,12 @@ describe("runCommand", () => {
       await runCommand(cmd, []);
 
       expect(console).toHaveBeenCalled();
-      console.mockRestore();
     });
   });
 
   describe("Unknown flags", () => {
     it("should warn about unknown flags with default z.object (strip mode)", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -341,11 +334,10 @@ describe("runCommand", () => {
       expect(output).toContain("unknown-flag");
       expect(runFn).toHaveBeenCalled(); // Command should still run
       expect(result.success).toBe(true);
-      consoleSpy.mockRestore();
     });
 
     it("should error on unknown flags with z.strictObject (strict mode)", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -368,11 +360,10 @@ describe("runCommand", () => {
         expect(result.error.message).toContain("Unknown flags");
         expect(result.error.message).not.toContain("Warning");
       }
-      consoleSpy.mockRestore();
     });
 
     it("should error on unknown flags with z.object().strict()", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -393,11 +384,10 @@ describe("runCommand", () => {
       expect(runFn).not.toHaveBeenCalled();
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
-      consoleSpy.mockRestore();
     });
 
     it("should silently ignore unknown flags with z.looseObject (passthrough mode)", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -414,11 +404,10 @@ describe("runCommand", () => {
       expect(consoleSpy).not.toHaveBeenCalled(); // No warning
       expect(runFn).toHaveBeenCalled(); // Command should run
       expect(result.success).toBe(true);
-      consoleSpy.mockRestore();
     });
 
     it("should silently ignore unknown flags with z.object().passthrough()", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -437,12 +426,11 @@ describe("runCommand", () => {
       expect(consoleSpy).not.toHaveBeenCalled(); // No warning
       expect(runFn).toHaveBeenCalled(); // Command should run
       expect(result.success).toBe(true);
-      consoleSpy.mockRestore();
     });
 
     // Short option (alias) tests
     it("should warn about unknown short flags with default z.object (strip mode)", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -461,11 +449,10 @@ describe("runCommand", () => {
       expect(output).toContain("Warning");
       expect(runFn).toHaveBeenCalled();
       expect(result.success).toBe(true);
-      consoleSpy.mockRestore();
     });
 
     it("should error on unknown short flags with z.strictObject (strict mode)", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -484,11 +471,10 @@ describe("runCommand", () => {
       expect(runFn).not.toHaveBeenCalled();
       expect(result.success).toBe(false);
       expect(result.exitCode).toBe(1);
-      consoleSpy.mockRestore();
     });
 
     it("should silently ignore unknown short flags with z.looseObject (passthrough mode)", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const runFn = vi.fn();
 
       const cmd = defineCommand({
@@ -505,18 +491,15 @@ describe("runCommand", () => {
       expect(consoleSpy).not.toHaveBeenCalled();
       expect(runFn).toHaveBeenCalled();
       expect(result.success).toBe(true);
-      consoleSpy.mockRestore();
     });
   });
 });
 
 describe("runMain displayErrors", () => {
-  const originalArgv = process.argv;
-
   it("should display errors by default", async () => {
-    process.argv = ["node", "test"];
-    const consoleSpy = spyOnConsoleError();
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    using _argv = useArgv(["node", "test"]);
+    using consoleSpy = spyOnConsoleError();
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
     const cmd = defineCommand({
       name: "test",
@@ -530,16 +513,12 @@ describe("runMain displayErrors", () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(consoleSpy).toHaveBeenCalled();
     expect(consoleSpy.getLogs().join("\n")).toContain("name");
-
-    consoleSpy.mockRestore();
-    exitSpy.mockRestore();
-    process.argv = originalArgv;
   });
 
   it("should suppress errors when displayErrors is false", async () => {
-    process.argv = ["node", "test"];
-    const consoleSpy = spyOnConsoleError();
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    using _argv = useArgv(["node", "test"]);
+    using consoleSpy = spyOnConsoleError();
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
     const cmd = defineCommand({
       name: "test",
@@ -552,19 +531,13 @@ describe("runMain displayErrors", () => {
 
     expect(exitSpy).toHaveBeenCalledWith(1);
     expect(consoleSpy).not.toHaveBeenCalled();
-
-    consoleSpy.mockRestore();
-    exitSpy.mockRestore();
-    process.argv = originalArgv;
   });
 });
 
 describe("runMain internal subcommand bypass", () => {
-  const originalArgv = process.argv;
-
   it("skips user setup/cleanup/prompt for `__`-prefixed registered subcommands", async () => {
-    process.argv = ["node", "test", "__internal"];
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    using _argv = useArgv(["node", "test", "__internal"]);
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
     const setup = vi.fn();
     const cleanup = vi.fn();
@@ -591,14 +564,11 @@ describe("runMain internal subcommand bypass", () => {
     expect(cleanup).not.toHaveBeenCalled();
     expect(prompt).not.toHaveBeenCalled();
     expect(exitSpy).toHaveBeenCalledWith(0);
-
-    exitSpy.mockRestore();
-    process.argv = originalArgv;
   });
 
   it("still runs user setup/cleanup for ordinary subcommands", async () => {
-    process.argv = ["node", "test", "regular"];
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    using _argv = useArgv(["node", "test", "regular"]);
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
     const setup = vi.fn();
     const cleanup = vi.fn();
@@ -615,17 +585,14 @@ describe("runMain internal subcommand bypass", () => {
     expect(setup).toHaveBeenCalled();
     expect(cleanup).toHaveBeenCalled();
     expect(exitSpy).toHaveBeenCalledWith(0);
-
-    exitSpy.mockRestore();
-    process.argv = originalArgv;
   });
 
   it("does not bypass when an unregistered `__`-prefixed positional is passed", async () => {
     // Defense in depth: we only bypass for subcommands that are actually
     // registered, so a stray `__foo` argument doesn't accidentally skip
     // user lifecycle.
-    process.argv = ["node", "test", "__not-registered"];
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    using _argv = useArgv(["node", "test", "__not-registered"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
     const setup = vi.fn();
     const cmd = defineCommand({ name: "test", run: () => {} });
@@ -633,9 +600,6 @@ describe("runMain internal subcommand bypass", () => {
     await runMain(cmd, { setup });
 
     expect(setup).toHaveBeenCalled();
-
-    exitSpy.mockRestore();
-    process.argv = originalArgv;
   });
 
   it("does not bypass when `__name` appears as a global option *value*", async () => {
@@ -644,8 +608,8 @@ describe("runMain internal subcommand bypass", () => {
     // "first non-flag token" check would mistakenly bypass lifecycle
     // for ordinary invocations whose option values happen to start
     // with `__`.
-    process.argv = ["node", "test", "--name", "__internal"];
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    using _argv = useArgv(["node", "test", "--name", "__internal"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
     const setup = vi.fn();
     const internal = defineCommand({ name: "__internal", run: () => {} });
@@ -661,18 +625,13 @@ describe("runMain internal subcommand bypass", () => {
     });
 
     expect(setup).toHaveBeenCalled();
-
-    exitSpy.mockRestore();
-    process.argv = originalArgv;
   });
 });
 
 describe("runMain runMainHook", () => {
-  const originalArgv = process.argv;
-
   it("invokes the hook once with the parsed argv before any command execution", async () => {
-    process.argv = ["node", "test", "--flag", "value"];
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    using _argv = useArgv(["node", "test", "--flag", "value"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
     const hook = vi.fn();
 
     const cmd = defineCommand({ name: "test", run: () => {} });
@@ -682,14 +641,11 @@ describe("runMain runMainHook", () => {
 
     expect(hook).toHaveBeenCalledTimes(1);
     expect(hook).toHaveBeenCalledWith(["--flag", "value"]);
-
-    exitSpy.mockRestore();
-    process.argv = originalArgv;
   });
 
   it("swallows hook errors so a misbehaving hook never blocks the CLI", async () => {
-    process.argv = ["node", "test"];
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    using _argv = useArgv(["node", "test"]);
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
     const runFn = vi.fn();
 
     const cmd = defineCommand({ name: "test", run: runFn });
@@ -702,8 +658,5 @@ describe("runMain runMainHook", () => {
     // The user command must still run despite the hook throwing.
     expect(runFn).toHaveBeenCalled();
     expect(exitSpy).toHaveBeenCalledWith(0);
-
-    exitSpy.mockRestore();
-    process.argv = originalArgv;
   });
 });

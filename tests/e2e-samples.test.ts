@@ -1,31 +1,30 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { arg, defineCommand, runCommand } from "../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "./utils/console.js";
+import { spyOnConsoleLog } from "./utils/console.js";
 
 /**
  * E2E tests with concrete sample CLI commands
  */
+const useConsoleSpies = () => {
+  const consoleSpy = spyOnConsoleLog();
+  const logs = consoleSpy.getLogs();
+  const errors: string[] = [];
+  const consoleErrorSpy = vi.spyOn(globalThis.console, "error").mockImplementation((msg) => {
+    errors.push(String(msg));
+  });
+
+  return {
+    logs,
+    errors,
+    [Symbol.dispose]() {
+      consoleErrorSpy.mockRestore();
+      consoleSpy.mockRestore();
+    },
+  };
+};
+
 describe("E2E Sample Commands", () => {
-  let console: ConsoleSpy;
-  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
-  let logs: string[];
-  let errors: string[];
-
-  beforeEach(() => {
-    errors = [];
-    console = spyOnConsoleLog();
-    logs = console.getLogs();
-    consoleErrorSpy = vi.spyOn(globalThis.console, "error").mockImplementation((msg) => {
-      errors.push(String(msg));
-    });
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-    consoleErrorSpy.mockRestore();
-  });
-
   describe("git-like CLI", () => {
     const createGitCli = () => {
       const state = {
@@ -128,6 +127,8 @@ describe("E2E Sample Commands", () => {
     };
 
     it("should initialize repository", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli } = createGitCli();
       const result = await runCommand(cli, ["init"]);
 
@@ -139,6 +140,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should initialize bare repository", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli } = createGitCli();
       const result = await runCommand(cli, ["init", "--bare"]);
 
@@ -150,6 +153,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should add and commit files", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli, state } = createGitCli();
 
       await runCommand(cli, ["add", "file.txt"]);
@@ -163,6 +168,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should add all files with -A flag", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli, state } = createGitCli();
 
       await runCommand(cli, ["add", ".", "-A"]);
@@ -171,6 +178,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should show commit log", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli, state } = createGitCli();
       state.commits = ["First", "Second", "Third"];
 
@@ -270,6 +279,8 @@ describe("E2E Sample Commands", () => {
     };
 
     it("should install a package", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli, installed } = createNpmCli();
 
       await runCommand(cli, ["install", "lodash"]);
@@ -278,6 +289,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should install dev dependency", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli, installed } = createNpmCli();
 
       await runCommand(cli, ["install", "vitest", "-D"]);
@@ -286,6 +299,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should install globally", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli, installed } = createNpmCli();
 
       await runCommand(cli, ["i", "typescript", "-g"]);
@@ -294,6 +309,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should run scripts", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli } = createNpmCli();
 
       const result = await runCommand(cli, ["run", "build"]);
@@ -305,6 +322,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should run tests with options", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli } = createNpmCli();
 
       const result = await runCommand(cli, ["test", "-w", "-c"]);
@@ -373,6 +392,8 @@ describe("E2E Sample Commands", () => {
     };
 
     it("should process file with default options", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli, processed } = createProcessorCli();
 
       const result = await runCommand(cli, ["data.csv", "-o", "data.json"]);
@@ -387,6 +408,7 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should process with custom format and minify", async () => {
+      using _consoleSpies = useConsoleSpies();
       const { cli, processed } = createProcessorCli();
 
       await runCommand(cli, ["data.json", "-o", "data.yaml", "-f", "yaml", "-m"]);
@@ -399,6 +421,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should show verbose output", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli } = createProcessorCli();
 
       await runCommand(cli, ["input.xml", "-o", "output.json", "-v", "-i", "4"]);
@@ -409,6 +433,7 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should reject invalid format", async () => {
+      using _consoleSpies = useConsoleSpies();
       const { cli } = createProcessorCli();
 
       const result = await runCommand(cli, ["data.csv", "-o", "out.txt", "-f", "invalid"]);
@@ -508,6 +533,8 @@ describe("E2E Sample Commands", () => {
     };
 
     it("should start server with required port", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli } = createServerCli();
 
       const result = await runCommand(cli, ["start", "-p", "8080"]);
@@ -520,6 +547,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should start server with custom host and workers", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli } = createServerCli();
 
       await runCommand(cli, ["start", "-p", "3000", "-H", "0.0.0.0", "-w", "4"]);
@@ -529,6 +558,7 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should reject invalid port", async () => {
+      using _consoleSpies = useConsoleSpies();
       const { cli } = createServerCli();
 
       const result = await runCommand(cli, ["start", "-p", "99999"]);
@@ -536,6 +566,7 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should require cert and key for SSL", async () => {
+      using _consoleSpies = useConsoleSpies();
       const { cli } = createServerCli();
 
       const result = await runCommand(cli, ["start", "-p", "443", "--ssl"]);
@@ -544,6 +575,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should start with SSL when cert and key provided", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli } = createServerCli();
 
       const result = await runCommand(cli, [
@@ -562,6 +595,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should stop server gracefully", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli } = createServerCli();
 
       await runCommand(cli, ["stop", "-t", "60"]);
@@ -569,6 +604,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should force stop server", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli } = createServerCli();
 
       await runCommand(cli, ["stop", "-f"]);
@@ -664,6 +701,8 @@ describe("E2E Sample Commands", () => {
     };
 
     it("should run all pending migrations", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli, migrations } = createMigrationCli();
 
       const result = await runCommand(cli, ["up"]);
@@ -675,6 +714,7 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should run specific number of migrations", async () => {
+      using _consoleSpies = useConsoleSpies();
       const { cli, migrations } = createMigrationCli();
 
       await runCommand(cli, ["up", "-n", "2"]);
@@ -684,6 +724,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should dry run migrations", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli, migrations } = createMigrationCli();
 
       const result = await runCommand(cli, ["up", "-d"]);
@@ -700,6 +742,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should rollback migrations", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli, migrations } = createMigrationCli();
       migrations.applied = ["001_create_users", "002_add_email"];
       migrations.pending = ["003_create_posts"];
@@ -712,6 +756,8 @@ describe("E2E Sample Commands", () => {
     });
 
     it("should show migration status", async () => {
+      using consoleSpies = useConsoleSpies();
+      const { logs } = consoleSpies;
       const { cli, migrations } = createMigrationCli();
       migrations.applied = ["001_create_users"];
       migrations.pending = ["002_add_email", "003_create_posts"];

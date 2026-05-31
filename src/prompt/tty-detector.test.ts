@@ -1,19 +1,23 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { isInteractive } from "./tty-detector.js";
 
 describe("isInteractive", () => {
   const originalStdin = process.stdin.isTTY;
   const originalStdout = process.stdout.isTTY;
 
-  beforeEach(() => {
+  const useTTYState = () => {
     vi.unstubAllEnvs();
-  });
-
-  afterEach(() => {
-    Object.defineProperty(process.stdin, "isTTY", { value: originalStdin, configurable: true });
-    Object.defineProperty(process.stdout, "isTTY", { value: originalStdout, configurable: true });
-    vi.unstubAllEnvs();
-  });
+    return {
+      [Symbol.dispose]() {
+        Object.defineProperty(process.stdin, "isTTY", { value: originalStdin, configurable: true });
+        Object.defineProperty(process.stdout, "isTTY", {
+          value: originalStdout,
+          configurable: true,
+        });
+        vi.unstubAllEnvs();
+      },
+    };
+  };
 
   function setTTY(stdin: boolean, stdout: boolean): void {
     Object.defineProperty(process.stdin, "isTTY", { value: stdin, configurable: true });
@@ -21,6 +25,7 @@ describe("isInteractive", () => {
   }
 
   it("returns true when stdin and stdout are TTY and no CI", () => {
+    using _tty = useTTYState();
     setTTY(true, true);
     vi.stubEnv("CI", "");
     delete process.env.CI;
@@ -29,22 +34,26 @@ describe("isInteractive", () => {
   });
 
   it("returns false when stdin is not TTY", () => {
+    using _tty = useTTYState();
     setTTY(false, true);
     expect(isInteractive()).toBe(false);
   });
 
   it("returns false when stdout is not TTY", () => {
+    using _tty = useTTYState();
     setTTY(true, false);
     expect(isInteractive()).toBe(false);
   });
 
   it("returns false when CI env is set", () => {
+    using _tty = useTTYState();
     setTTY(true, true);
     vi.stubEnv("CI", "true");
     expect(isInteractive()).toBe(false);
   });
 
   it("returns false when POLITTY_NO_PROMPT is set", () => {
+    using _tty = useTTYState();
     setTTY(true, true);
     delete process.env.CI;
     vi.stubEnv("POLITTY_NO_PROMPT", "1");

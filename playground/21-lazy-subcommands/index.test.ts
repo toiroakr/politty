@@ -1,23 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { cli, statusCommand } from "./index.js";
 
 describe("21-lazy-subcommands", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   describe("status subcommand (eagerly loaded)", () => {
     it("runs status command", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["status"]);
 
       expect(result.exitCode).toBe(0);
@@ -25,6 +16,7 @@ describe("21-lazy-subcommands", () => {
     });
 
     it("runs status command with verbose flag", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["status", "-v"]);
 
       expect(result.exitCode).toBe(0);
@@ -34,6 +26,7 @@ describe("21-lazy-subcommands", () => {
     });
 
     it("can run statusCommand directly", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(statusCommand, ["-v"]);
 
       expect(result.exitCode).toBe(0);
@@ -43,6 +36,7 @@ describe("21-lazy-subcommands", () => {
 
   describe("heavy subcommand (lazily loaded)", () => {
     it("runs heavy command with default options", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["heavy"]);
 
       expect(result.exitCode).toBe(0);
@@ -53,6 +47,7 @@ describe("21-lazy-subcommands", () => {
     });
 
     it("runs heavy command with custom iterations", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["heavy", "-n", "5000"]);
 
       expect(result.exitCode).toBe(0);
@@ -60,6 +55,7 @@ describe("21-lazy-subcommands", () => {
     });
 
     it("runs heavy command with verbose flag", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["heavy", "-v"]);
 
       expect(result.exitCode).toBe(0);
@@ -69,6 +65,7 @@ describe("21-lazy-subcommands", () => {
 
   describe("analytics subcommand (lazily loaded)", () => {
     it("runs analytics command with default options", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["analytics"]);
 
       expect(result.exitCode).toBe(0);
@@ -79,6 +76,7 @@ describe("21-lazy-subcommands", () => {
     });
 
     it("runs analytics with custom metric", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["analytics", "-m", "complexity"]);
 
       expect(result.exitCode).toBe(0);
@@ -86,6 +84,7 @@ describe("21-lazy-subcommands", () => {
     });
 
     it("runs analytics with json format", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["analytics", "-m", "files", "-f", "json"]);
 
       expect(result.exitCode).toBe(0);
@@ -97,6 +96,7 @@ describe("21-lazy-subcommands", () => {
 
   describe("help", () => {
     it("shows help for main CLI with all subcommands listed", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);
@@ -109,6 +109,7 @@ describe("21-lazy-subcommands", () => {
     });
 
     it("shows help for lazily loaded subcommand", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["heavy", "--help"]);
 
       expect(result.exitCode).toBe(0);

@@ -1,23 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { main } from "./index.js";
 
 describe("18-union-types", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   describe("token auth (first union option)", () => {
     it("authenticates with token", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(main, ["--token", "abc123"]);
 
       expect(result.exitCode).toBe(0);
@@ -28,6 +19,7 @@ describe("18-union-types", () => {
 
   describe("credentials auth (second union option)", () => {
     it("authenticates with username and password", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(main, ["--username", "admin", "--password", "secret"]);
 
       expect(result.exitCode).toBe(0);
@@ -38,6 +30,7 @@ describe("18-union-types", () => {
 
   describe("help", () => {
     it("shows help with union options", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(main, ["--help"]);
 
       expect(result.exitCode).toBe(0);

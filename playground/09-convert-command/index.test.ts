@@ -1,22 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("09-convert-command", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   it("converts with only input (output to stdout)", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["input.json"]);
 
     expect(result.exitCode).toBe(0);
@@ -26,6 +17,7 @@ describe("09-convert-command", () => {
   });
 
   it("converts with input and output", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["input.json", "output.yaml"]);
 
     expect(result.exitCode).toBe(0);
@@ -34,6 +26,7 @@ describe("09-convert-command", () => {
   });
 
   it("uses specified format with -f", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["input.json", "-f", "yaml"]);
 
     expect(result.exitCode).toBe(0);
@@ -41,6 +34,7 @@ describe("09-convert-command", () => {
   });
 
   it("converts to toml format", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["data.json", "-f", "toml"]);
 
     expect(result.exitCode).toBe(0);
@@ -48,6 +42,7 @@ describe("09-convert-command", () => {
   });
 
   it("uses all options together", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["input.json", "output.yaml", "-f", "yaml"]);
 
     expect(result.exitCode).toBe(0);

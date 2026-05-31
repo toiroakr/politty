@@ -1,22 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("01-hello-world", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   it("outputs 'Hello, World!'", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, []);
 
     expect(result.exitCode).toBe(0);
@@ -24,6 +15,7 @@ describe("01-hello-world", () => {
   });
 
   it("shows help with --help", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["--help"]);
 
     expect(result.exitCode).toBe(0);

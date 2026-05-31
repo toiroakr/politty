@@ -1,23 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { cli, initCommand } from "./index.js";
 
 describe("15-complete-cli", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   describe("main command", () => {
     it("processes file with required options", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["file.txt", "-o", "out.txt"]);
 
       expect(result.exitCode).toBe(0);
@@ -37,6 +28,7 @@ describe("15-complete-cli", () => {
     });
 
     it("enables verbose mode with -v", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["file.txt", "-o", "out.txt", "-v"]);
 
       expect(result.exitCode).toBe(0);
@@ -46,6 +38,7 @@ describe("15-complete-cli", () => {
     });
 
     it("uses custom format with -f", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["file.txt", "-o", "out.txt", "-f", "yaml"]);
 
       expect(result.success).toBe(true);
@@ -58,6 +51,7 @@ describe("15-complete-cli", () => {
 
   describe("init subcommand", () => {
     it("initializes with default template", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["init"]);
 
       expect(result.exitCode).toBe(0);
@@ -68,6 +62,7 @@ describe("15-complete-cli", () => {
     });
 
     it("initializes with custom template using -t", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["init", "-t", "react"]);
 
       expect(result.exitCode).toBe(0);
@@ -77,6 +72,7 @@ describe("15-complete-cli", () => {
     });
 
     it("initializes with custom name using -n", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["init", "-n", "my-app"]);
 
       expect(result.exitCode).toBe(0);
@@ -86,6 +82,7 @@ describe("15-complete-cli", () => {
     });
 
     it("can run initCommand directly", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(initCommand, ["-t", "vue", "-n", "vue-app"]);
 
       expect(result.exitCode).toBe(0);
@@ -95,6 +92,7 @@ describe("15-complete-cli", () => {
 
   describe("help", () => {
     it("shows help for main CLI", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);

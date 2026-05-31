@@ -1,23 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { cli, configGetCommand, configListCommand, configSetCommand } from "./index.js";
 
 describe("11-nested-subcommands", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   describe("config get subcommand", () => {
     it("gets config value via nested path", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["config", "get", "user.name"]);
 
       expect(result.exitCode).toBe(0);
@@ -26,6 +17,7 @@ describe("11-nested-subcommands", () => {
     });
 
     it("can run configGetCommand directly", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(configGetCommand, ["user.email"]);
 
       expect(result.exitCode).toBe(0);
@@ -42,6 +34,7 @@ describe("11-nested-subcommands", () => {
 
   describe("config set subcommand", () => {
     it("sets config value via nested path", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["config", "set", "user.name", "John Doe"]);
 
       expect(result.exitCode).toBe(0);
@@ -49,6 +42,7 @@ describe("11-nested-subcommands", () => {
     });
 
     it("can run configSetCommand directly", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(configSetCommand, ["user.email", "john@example.com"]);
 
       expect(result.exitCode).toBe(0);
@@ -58,6 +52,7 @@ describe("11-nested-subcommands", () => {
 
   describe("config list subcommand", () => {
     it("lists all config with default format", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["config", "list"]);
 
       expect(result.exitCode).toBe(0);
@@ -66,6 +61,7 @@ describe("11-nested-subcommands", () => {
     });
 
     it("lists all config in json format", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["config", "list", "--format", "json"]);
 
       expect(result.exitCode).toBe(0);
@@ -73,6 +69,7 @@ describe("11-nested-subcommands", () => {
     });
 
     it("can run configListCommand directly", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(configListCommand, ["-f", "yaml"]);
 
       expect(result.exitCode).toBe(0);
@@ -82,6 +79,7 @@ describe("11-nested-subcommands", () => {
 
   describe("help", () => {
     it("shows help for main CLI", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);
@@ -91,6 +89,7 @@ describe("11-nested-subcommands", () => {
     });
 
     it("shows help for config subcommand", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["config", "--help"]);
 
       expect(result.exitCode).toBe(0);

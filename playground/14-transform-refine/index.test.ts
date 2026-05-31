@@ -1,23 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { cli, refineCommand, transformCommand } from "./index.js";
 
 describe("14-transform-refine", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   describe("transform subcommand", () => {
     it("transforms name to uppercase", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["transform", "hello", "--tags", "a,b,c"]);
 
       expect(result.exitCode).toBe(0);
@@ -25,6 +16,7 @@ describe("14-transform-refine", () => {
     });
 
     it("splits comma-separated tags into array", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["transform", "world", "-t", "tag1,tag2"]);
 
       expect(result.exitCode).toBe(0);
@@ -32,6 +24,7 @@ describe("14-transform-refine", () => {
     });
 
     it("can run transformCommand directly", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(transformCommand, ["TEST", "--tags", "x,y,z"]);
 
       expect(result.exitCode).toBe(0);
@@ -55,6 +48,7 @@ describe("14-transform-refine", () => {
 
   describe("refine subcommand", () => {
     it("passes when input and output are different", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["refine", "input.txt", "output.txt"]);
 
       expect(result.exitCode).toBe(0);
@@ -72,6 +66,7 @@ describe("14-transform-refine", () => {
     });
 
     it("can run refineCommand directly", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(refineCommand, ["a.txt", "b.txt"]);
 
       expect(result.exitCode).toBe(0);
@@ -82,6 +77,7 @@ describe("14-transform-refine", () => {
 
   describe("help", () => {
     it("shows help for main CLI", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);

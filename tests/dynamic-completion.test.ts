@@ -19,14 +19,10 @@ async function runComplete(
   argv: string[],
   shell: "bash" | "zsh" | "fish" = "bash",
 ): Promise<string[]> {
-  const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-  try {
-    await runCommand(cmd, ["__complete", "--shell", shell, "--", ...argv]);
-    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    return output.split("\n");
-  } finally {
-    consoleSpy.mockRestore();
-  }
+  using consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  await runCommand(cmd, ["__complete", "--shell", shell, "--", ...argv]);
+  const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+  return output.split("\n");
 }
 
 describe("Dynamic completion (in-process resolver)", () => {

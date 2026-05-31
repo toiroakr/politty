@@ -1,22 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("07-gcc-command", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   it("compiles single source file", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["-o", "app", "main.c"]);
 
     expect(result.exitCode).toBe(0);
@@ -25,6 +16,7 @@ describe("07-gcc-command", () => {
   });
 
   it("compiles multiple source files", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["-o", "myprogram", "main.c", "util.c", "lib.c"]);
 
     expect(result.exitCode).toBe(0);
@@ -32,6 +24,7 @@ describe("07-gcc-command", () => {
   });
 
   it("enables optimization with -O", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["-o", "app", "-O", "main.c"]);
 
     expect(result.exitCode).toBe(0);
@@ -39,6 +32,7 @@ describe("07-gcc-command", () => {
   });
 
   it("uses --output alias", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["--output", "build/app", "src/a.c", "src/b.c"]);
 
     expect(result.exitCode).toBe(0);

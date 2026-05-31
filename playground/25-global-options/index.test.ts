@@ -1,24 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { arg, defineCommand, generateCompletion, runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { buildCommand, cli, globalArgsSchema } from "./index.js";
 
 describe("25-global-options", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   describe("global flags before subcommand", () => {
     it("passes verbose to build", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["--verbose", "build", "--output", "out"], {
         globalArgs: globalArgsSchema,
       });
@@ -29,6 +20,7 @@ describe("25-global-options", () => {
     });
 
     it("passes verbose with alias -v to deploy", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["-v", "deploy", "--env", "staging"], {
         globalArgs: globalArgsSchema,
       });
@@ -39,6 +31,7 @@ describe("25-global-options", () => {
     });
 
     it("passes config to build", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["--config", "custom.json", "--verbose", "build"], {
         globalArgs: globalArgsSchema,
       });
@@ -51,6 +44,7 @@ describe("25-global-options", () => {
 
   describe("global flags after subcommand", () => {
     it("passes verbose after build", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["build", "--verbose", "--output", "out"], {
         globalArgs: globalArgsSchema,
       });
@@ -61,6 +55,7 @@ describe("25-global-options", () => {
     });
 
     it("passes verbose after deploy", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["deploy", "--verbose", "--env", "staging"], {
         globalArgs: globalArgsSchema,
       });
@@ -73,6 +68,7 @@ describe("25-global-options", () => {
 
   describe("without global args", () => {
     it("build without verbose", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["build"], {
         globalArgs: globalArgsSchema,
       });
@@ -85,6 +81,7 @@ describe("25-global-options", () => {
 
   describe("help output", () => {
     it("shows Global Options section", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["--help"], {
         globalArgs: globalArgsSchema,
       });
@@ -98,6 +95,7 @@ describe("25-global-options", () => {
     });
 
     it("shows Global Options in subcommand help", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["build", "--help"], {
         globalArgs: globalArgsSchema,
       });
@@ -111,6 +109,7 @@ describe("25-global-options", () => {
 
   describe("backward compatibility", () => {
     it("works without globalArgs option", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["build", "--output", "out"]);
 
       expect(result.exitCode).toBe(0);
@@ -118,6 +117,7 @@ describe("25-global-options", () => {
     });
 
     it("subcommand directly without globalArgs", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(buildCommand, ["--output", "custom"]);
 
       expect(result.exitCode).toBe(0);
@@ -127,6 +127,7 @@ describe("25-global-options", () => {
 
   describe("command with no local args schema", () => {
     it("receives global args even without own args schema", async () => {
+      using console = spyOnConsoleLog();
       const noArgsCmd = defineCommand({
         name: "no-args",
         description: "Command without args",
@@ -151,6 +152,7 @@ describe("25-global-options", () => {
 
   describe("help with valued global option", () => {
     it("does not treat option value as unknown subcommand", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["--config", "custom.json", "--help"], {
         globalArgs: globalArgsSchema,
       });
@@ -164,6 +166,7 @@ describe("25-global-options", () => {
 
   describe("global/local flag collision", () => {
     it("local flag takes precedence over global when both define same name", async () => {
+      using console = spyOnConsoleLog();
       // Both global and local define --output
       const globalSchema = z.object({
         output: arg(z.string().default("global-default"), {
@@ -239,6 +242,7 @@ describe("25-global-options", () => {
 
   describe("env fallback for global args", () => {
     it("uses env var when CLI arg not provided", async () => {
+      using console = spyOnConsoleLog();
       vi.stubEnv("MY_APP_CONFIG", "from-env.json");
 
       const globalSchema = z.object({
@@ -272,6 +276,7 @@ describe("25-global-options", () => {
     });
 
     it("CLI arg takes precedence over env var", async () => {
+      using console = spyOnConsoleLog();
       vi.stubEnv("MY_APP_CONFIG", "from-env.json");
 
       const globalSchema = z.object({

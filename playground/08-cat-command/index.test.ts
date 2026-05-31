@@ -1,22 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("08-cat-command", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   it("displays single file", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["file1.txt"]);
 
     expect(result.exitCode).toBe(0);
@@ -25,6 +16,7 @@ describe("08-cat-command", () => {
   });
 
   it("displays multiple files", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["file1.txt", "file2.txt", "file3.txt"]);
 
     expect(result.exitCode).toBe(0);
@@ -35,6 +27,7 @@ describe("08-cat-command", () => {
   });
 
   it("shows line numbers with -n", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["-n", "a.txt"]);
 
     expect(result.exitCode).toBe(0);
@@ -42,6 +35,7 @@ describe("08-cat-command", () => {
   });
 
   it("shows line ends with -E", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["-E", "a.txt"]);
 
     expect(result.exitCode).toBe(0);
@@ -49,6 +43,7 @@ describe("08-cat-command", () => {
   });
 
   it("combines -n and -E options", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["-n", "-E", "a.txt"]);
 
     expect(result.exitCode).toBe(0);

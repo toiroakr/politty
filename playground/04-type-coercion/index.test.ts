@@ -1,22 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("04-type-coercion", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   it("parses port as number", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["-p", "8080"]);
 
     expect(result.exitCode).toBe(0);
@@ -24,6 +15,7 @@ describe("04-type-coercion", () => {
   });
 
   it("uses default count when not specified", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["--port", "3000"]);
 
     expect(result.exitCode).toBe(0);
@@ -31,6 +23,7 @@ describe("04-type-coercion", () => {
   });
 
   it("parses count as number", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["-p", "8080", "-n", "5"]);
 
     expect(result.exitCode).toBe(0);
@@ -38,6 +31,7 @@ describe("04-type-coercion", () => {
   });
 
   it("uses default host when not specified", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["-p", "8080"]);
 
     expect(result.exitCode).toBe(0);
@@ -45,6 +39,7 @@ describe("04-type-coercion", () => {
   });
 
   it("uses custom host with -h", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["-p", "8080", "-h", "0.0.0.0"]);
 
     expect(result.exitCode).toBe(0);

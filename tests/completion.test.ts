@@ -2,7 +2,7 @@ import type * as childProcess from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
 import {
   CompletionDirective,
@@ -44,6 +44,22 @@ vi.mock("node:child_process", async (importOriginal) => ({
 }));
 const childProcessMock = await import("node:child_process");
 const spawnSpy = vi.mocked(childProcessMock.spawn);
+
+const useEnv = (env: Record<string, string | undefined>) => {
+  const originalEnv = new Map(Object.keys(env).map((key) => [key, process.env[key]] as const));
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  return {
+    [Symbol.dispose]() {
+      for (const [key, value] of originalEnv) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    },
+  };
+};
 
 describe("Completion", () => {
   describe("extractCompletionData", () => {
@@ -643,13 +659,12 @@ describe("Completion", () => {
 
       expect(mainCmd.subCommands?.__complete).toBeDefined();
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      using consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
       await runCommand(mainCmd, ["__complete", "--shell", "fish", "--", "--format", ""]);
 
       const output = consoleSpy.mock.calls
         .map((args) => args.map((value) => String(value)).join(" "))
         .join("\n");
-      consoleSpy.mockRestore();
 
       expect(output).toContain("json");
       expect(output).toContain("yaml");
@@ -734,13 +749,12 @@ describe("Completion", () => {
       }
 
       expect(completionSubcommand.run).toBeDefined();
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      using consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
       completionSubcommand.run?.({ shell: "bash", instructions: false });
 
       const output = consoleSpy.mock.calls
         .map((args) => args.map((value) => String(value)).join(" "))
         .join("\n");
-      consoleSpy.mockRestore();
       // Static script embeds completion metadata
       expect(output).toContain("_mycli_completions");
     });
@@ -768,15 +782,13 @@ describe("Completion", () => {
       });
 
       const wrapped = withCompletionCommand(cmd);
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      using consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
       await runCommand(wrapped, ["--help"]);
 
       const output = consoleSpy.mock.calls
         .map((args) => args.map((value) => String(value)).join(" "))
         .join("\n");
-
-      consoleSpy.mockRestore();
 
       expect(output).toContain("build");
       expect(output).toContain("completion");
@@ -1244,13 +1256,12 @@ describe("Completion", () => {
 
         const completeCmd = createDynamicCompleteCommand(mainCmd);
 
-        const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+        using consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
         await completeCmd.run?.({ shell: "fish", args: ["--format", ""] });
 
         const output = consoleSpy.mock.calls
           .map((args) => args.map((value) => String(value)).join(" "))
           .join("\n");
-        consoleSpy.mockRestore();
 
         expect(output).toContain("json");
         expect(output).toContain("yaml");
@@ -1586,14 +1597,8 @@ describe("Completion", () => {
     });
 
     it("installPath routes fish to $XDG_CONFIG_HOME/fish/completions/<prog>.fish", () => {
-      const prev = process.env.XDG_CONFIG_HOME;
-      process.env.XDG_CONFIG_HOME = "/tmp/cfg";
-      try {
-        expect(installPath("mycli", "fish")).toBe("/tmp/cfg/fish/completions/mycli.fish");
-      } finally {
-        if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
-        else process.env.XDG_CONFIG_HOME = prev;
-      }
+      using _env = useEnv({ XDG_CONFIG_HOME: "/tmp/cfg" });
+      expect(installPath("mycli", "fish")).toBe("/tmp/cfg/fish/completions/mycli.fish");
     });
 
     it("install writes the script atomically with the embedded bin-sig", () => {
@@ -1712,29 +1717,13 @@ describe("Completion", () => {
   });
 
   describe("defaultCacheDir", () => {
-    let prevXdg: string | undefined;
-    let prevHome: string | undefined;
-
-    beforeEach(() => {
-      prevXdg = process.env.XDG_CACHE_HOME;
-      prevHome = process.env.HOME;
-    });
-
-    afterEach(() => {
-      if (prevXdg === undefined) delete process.env.XDG_CACHE_HOME;
-      else process.env.XDG_CACHE_HOME = prevXdg;
-      if (prevHome === undefined) delete process.env.HOME;
-      else process.env.HOME = prevHome;
-    });
-
     it("uses XDG_CACHE_HOME when set", () => {
-      process.env.XDG_CACHE_HOME = "/var/cache";
+      using _env = useEnv({ XDG_CACHE_HOME: "/var/cache" });
       expect(defaultCacheDir("mycli")).toBe("/var/cache/mycli");
     });
 
     it("falls back to $HOME/.cache when XDG_CACHE_HOME is unset", () => {
-      delete process.env.XDG_CACHE_HOME;
-      process.env.HOME = "/home/alice";
+      using _env = useEnv({ XDG_CACHE_HOME: undefined, HOME: "/home/alice" });
       expect(defaultCacheDir("mycli")).toBe("/home/alice/.cache/mycli");
     });
   });
@@ -1788,73 +1777,58 @@ describe("Completion", () => {
     it("--install writes the script to the cache and prints the loader snippet to stderr (bash)", () => {
       const subcommand = createCompletionCommand(cmd, "mycli", undefined, { cacheDir });
       const captured: string[] = [];
-      const errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      using _errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
         captured.push(args.map(String).join(" "));
       });
-      try {
-        subcommand.run?.({ shell: "bash", instructions: false, install: true, loader: false });
+      subcommand.run?.({ shell: "bash", instructions: false, install: true, loader: false });
 
-        const target = join(cacheDir, "completion.bash");
-        const written = readFileSync(target, "utf8");
-        expect(written).toContain("# politty-bin-sig:");
-        expect(written).toContain("_mycli_completions");
+      const target = join(cacheDir, "completion.bash");
+      const written = readFileSync(target, "utf8");
+      expect(written).toContain("# politty-bin-sig:");
+      expect(written).toContain("_mycli_completions");
 
-        const stderr = captured.join("\n");
-        expect(stderr).toContain(`installed: ${target}`);
-        expect(stderr).toContain("Add to your ~/.bashrc:");
-        expect(stderr).toContain("__mycli_load_completion()");
-      } finally {
-        errSpy.mockRestore();
-      }
+      const stderr = captured.join("\n");
+      expect(stderr).toContain(`installed: ${target}`);
+      expect(stderr).toContain("Add to your ~/.bashrc:");
+      expect(stderr).toContain("__mycli_load_completion()");
     });
 
     it("--install for fish writes the autoload file and does NOT print a loader snippet", () => {
       const cfgRoot = mkdtempSync(join(tmpdir(), "politty-fishcfg-"));
-      const prevXdg = process.env.XDG_CONFIG_HOME;
-      process.env.XDG_CONFIG_HOME = cfgRoot;
+      using _env = useEnv({ XDG_CONFIG_HOME: cfgRoot });
 
       const subcommand = createCompletionCommand(cmd, "mycli", undefined, { cacheDir });
       const captured: string[] = [];
-      const errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      using _errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
         captured.push(args.map(String).join(" "));
       });
-      try {
-        subcommand.run?.({ shell: "fish", instructions: false, install: true, loader: false });
+      subcommand.run?.({ shell: "fish", instructions: false, install: true, loader: false });
 
-        const target = join(cfgRoot, "fish", "completions", "mycli.fish");
-        expect(readFileSync(target, "utf8")).toContain("# shell: fish");
-        const stderr = captured.join("\n");
-        expect(stderr).toContain(`installed: ${target}`);
-        // Fish has no rc-loader story; we must not tell the user to paste anything.
-        expect(stderr).not.toContain("Add to your ~/");
-      } finally {
-        errSpy.mockRestore();
-        if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
-        else process.env.XDG_CONFIG_HOME = prevXdg;
-      }
+      const target = join(cfgRoot, "fish", "completions", "mycli.fish");
+      expect(readFileSync(target, "utf8")).toContain("# shell: fish");
+      const stderr = captured.join("\n");
+      expect(stderr).toContain(`installed: ${target}`);
+      // Fish has no rc-loader story; we must not tell the user to paste anything.
+      expect(stderr).not.toContain("Add to your ~/");
     });
 
     it("--loader prints just the rc loader to stdout (no script body)", () => {
       const subcommand = createCompletionCommand(cmd, "mycli", undefined, { cacheDir });
       const captured: string[] = [];
-      const writeSpy = vi
+      using _writeSpy = vi
         .spyOn(process.stdout, "write")
         .mockImplementation((chunk: string | Uint8Array): boolean => {
           captured.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
           return true;
         });
-      try {
-        subcommand.run?.({ shell: "zsh", instructions: false, install: false, loader: true });
+      subcommand.run?.({ shell: "zsh", instructions: false, install: false, loader: true });
 
-        const out = captured.join("");
-        expect(out).toContain("__mycli_load_completion()");
-        expect(out).toContain("emulate -L zsh");
-        // Loader must NOT contain the full completion script body.
-        expect(out).not.toContain("_mycli_completions");
-        expect(out).not.toContain("#compdef mycli");
-      } finally {
-        writeSpy.mockRestore();
-      }
+      const out = captured.join("");
+      expect(out).toContain("__mycli_load_completion()");
+      expect(out).toContain("emulate -L zsh");
+      // Loader must NOT contain the full completion script body.
+      expect(out).not.toContain("_mycli_completions");
+      expect(out).not.toContain("#compdef mycli");
     });
 
     it("--loader for fish throws because fish uses an autoload file instead", () => {
@@ -1886,17 +1860,8 @@ describe("Completion", () => {
   });
 
   describe("withCompletionCommand runMainHook (background refresh gates)", () => {
-    let cacheDir: string;
-    let prevShell: string | undefined;
-    let prevOptOut: string | undefined;
-    let wrapped: ReturnType<typeof withCompletionCommand>;
-
-    beforeEach(() => {
-      cacheDir = mkdtempSync(join(tmpdir(), "politty-hook-"));
-      prevShell = process.env.SHELL;
-      prevOptOut = process.env.POLITTY_NO_COMPLETION_REFRESH;
-      process.env.SHELL = "/usr/local/bin/bash";
-      delete process.env.POLITTY_NO_COMPLETION_REFRESH;
+    const setupManagedRefreshHook = () => {
+      const cacheDir = mkdtempSync(join(tmpdir(), "politty-hook-"));
       // Pre-populate a politty-managed cache so `hasManagedCache` returns true,
       // letting us isolate the *other* gates one at a time.
       const fakeBin = join(cacheDir, "mycli");
@@ -1910,21 +1875,21 @@ describe("Completion", () => {
         },
         "bash",
       );
-      wrapped = withCompletionCommand(defineCommand({ name: "mycli", run: () => {} }), {
+      const wrapped = withCompletionCommand(defineCommand({ name: "mycli", run: () => {} }), {
         programName: "mycli",
         cacheDir,
       });
       spawnSpy.mockClear();
-    });
-
-    afterEach(() => {
-      if (prevShell === undefined) delete process.env.SHELL;
-      else process.env.SHELL = prevShell;
-      if (prevOptOut === undefined) delete process.env.POLITTY_NO_COMPLETION_REFRESH;
-      else process.env.POLITTY_NO_COMPLETION_REFRESH = prevOptOut;
-    });
+      return { cacheDir, wrapped };
+    };
 
     it("spawns a detached refresh child for ordinary CLI invocations", () => {
+      using _env = useEnv({
+        SHELL: "/usr/local/bin/bash",
+        POLITTY_NO_COMPLETION_REFRESH: undefined,
+      });
+      const { wrapped } = setupManagedRefreshHook();
+
       wrapped.runMainHook?.(["build", "--watch"]);
       expect(spawnSpy).toHaveBeenCalledTimes(1);
       const [, spawnArgs, opts] = spawnSpy.mock.calls[0]!;
@@ -1934,12 +1899,24 @@ describe("Completion", () => {
     });
 
     it("opt-out via POLITTY_NO_COMPLETION_REFRESH skips the spawn", () => {
+      using _env = useEnv({
+        SHELL: "/usr/local/bin/bash",
+        POLITTY_NO_COMPLETION_REFRESH: undefined,
+      });
+      const { wrapped } = setupManagedRefreshHook();
+
       process.env.POLITTY_NO_COMPLETION_REFRESH = "1";
       wrapped.runMainHook?.(["build"]);
       expect(spawnSpy).not.toHaveBeenCalled();
     });
 
     it("invocations of completion / __complete / __refresh-completion never re-spawn", () => {
+      using _env = useEnv({
+        SHELL: "/usr/local/bin/bash",
+        POLITTY_NO_COMPLETION_REFRESH: undefined,
+      });
+      const { wrapped } = setupManagedRefreshHook();
+
       wrapped.runMainHook?.(["completion", "bash"]);
       wrapped.runMainHook?.(["__complete", "anything"]);
       wrapped.runMainHook?.(["__refresh-completion", "bash"]);
@@ -1947,17 +1924,28 @@ describe("Completion", () => {
     });
 
     it("skips the spawn when no managed cache exists yet (avoids creating files the user never opted into)", () => {
+      using _env = useEnv({
+        SHELL: "/usr/local/bin/bash",
+        POLITTY_NO_COMPLETION_REFRESH: undefined,
+      });
       // Point at an empty cacheDir so `hasManagedCache` returns false.
       const emptyDir = mkdtempSync(join(tmpdir(), "politty-hook-empty-"));
       const w = withCompletionCommand(defineCommand({ name: "mycli", run: () => {} }), {
         programName: "mycli",
         cacheDir: emptyDir,
       });
+      spawnSpy.mockClear();
       w.runMainHook?.(["build"]);
       expect(spawnSpy).not.toHaveBeenCalled();
     });
 
     it("skips the spawn when $SHELL is unrecognized", () => {
+      using _env = useEnv({
+        SHELL: "/usr/local/bin/bash",
+        POLITTY_NO_COMPLETION_REFRESH: undefined,
+      });
+      const { wrapped } = setupManagedRefreshHook();
+
       process.env.SHELL = "/bin/dash";
       wrapped.runMainHook?.(["build"]);
       expect(spawnSpy).not.toHaveBeenCalled();

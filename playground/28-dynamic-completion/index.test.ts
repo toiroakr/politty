@@ -3,10 +3,9 @@ import { runCommand } from "../../src/index.js";
 import { cli } from "./index.js";
 
 async function complete(argv: string[]): Promise<string[]> {
-  const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  using consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
   await runCommand(cli, ["__complete", "--shell", "bash", "--", ...argv]);
   const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
-  consoleSpy.mockRestore();
   // Drop the trailing `:directive` and any `@meta:` sentinel lines.
   return output.split("\n").filter((l) => !l.startsWith(":") && !l.startsWith("@") && l.length > 0);
 }

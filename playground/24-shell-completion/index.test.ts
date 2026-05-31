@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   CompletionDirective,
   formatForShell,
@@ -11,18 +11,9 @@ import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
 import { buildCommand, cli, deployCommand, testCommand } from "./index.js";
 
 describe("24-shell-completion", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   describe("subcommands", () => {
     it("runs build command", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(buildCommand, ["-f", "json"]);
 
       expect(result.exitCode).toBe(0);
@@ -30,6 +21,7 @@ describe("24-shell-completion", () => {
     });
 
     it("runs deploy command", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(deployCommand, ["-e", "staging", "-n"]);
 
       expect(result.exitCode).toBe(0);
@@ -37,6 +29,7 @@ describe("24-shell-completion", () => {
     });
 
     it("runs test command", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(testCommand, ["unit", "-w"]);
 
       expect(result.exitCode).toBe(0);
@@ -46,6 +39,7 @@ describe("24-shell-completion", () => {
 
   describe("completion command", () => {
     it("generates bash completion script", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["completion", "bash"]);
 
       expect(result.exitCode).toBe(0);
@@ -55,6 +49,7 @@ describe("24-shell-completion", () => {
     });
 
     it("generates zsh completion script", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["completion", "zsh"]);
 
       expect(result.exitCode).toBe(0);
@@ -64,6 +59,7 @@ describe("24-shell-completion", () => {
     });
 
     it("generates fish completion script", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["completion", "fish"]);
 
       expect(result.exitCode).toBe(0);
@@ -73,6 +69,7 @@ describe("24-shell-completion", () => {
     });
 
     it("shows install instructions with -i", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["completion", "bash", "-i"]);
 
       expect(result.exitCode).toBe(0);
@@ -96,6 +93,7 @@ describe("24-shell-completion", () => {
     }
 
     it("completes subcommands at root level", async () => {
+      using console = spyOnConsoleLog();
       await runCommand(cli, ["__complete", "--shell", "fish", "--", ""]);
       const values = getCompletionValues(console);
 
@@ -106,6 +104,7 @@ describe("24-shell-completion", () => {
     });
 
     it("does not show options alongside subcommands at root level", async () => {
+      using console = spyOnConsoleLog();
       await runCommand(cli, ["__complete", "--shell", "fish", "--", ""]);
       const values = getCompletionValues(console);
 
@@ -114,6 +113,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes options for subcommand", async () => {
+      using console = spyOnConsoleLog();
       await runCommand(cli, ["__complete", "--shell", "fish", "--", "build", ""]);
       const values = getCompletionValues(console);
 
@@ -125,6 +125,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes options with -- prefix for subcommand", async () => {
+      using console = spyOnConsoleLog();
       await runCommand(cli, ["__complete", "--shell", "fish", "--", "deploy", "--"]);
       const values = getCompletionValues(console);
 
@@ -134,6 +135,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes enum values for option", async () => {
+      using console = spyOnConsoleLog();
       await runCommand(cli, ["__complete", "--shell", "fish", "--", "build", "--format", ""]);
       const values = getCompletionValues(console);
 
@@ -143,6 +145,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes custom choices for option", async () => {
+      using console = spyOnConsoleLog();
       await runCommand(cli, ["__complete", "--shell", "fish", "--", "deploy", "--env", ""]);
       const values = getCompletionValues(console);
 
@@ -152,6 +155,7 @@ describe("24-shell-completion", () => {
     });
 
     it("completes positional enum values", async () => {
+      using console = spyOnConsoleLog();
       await runCommand(cli, ["__complete", "--shell", "fish", "--", "test", ""]);
       const values = getCompletionValues(console);
 
@@ -161,6 +165,7 @@ describe("24-shell-completion", () => {
     });
 
     it("filters out used options", async () => {
+      using console = spyOnConsoleLog();
       await runCommand(cli, [
         "__complete",
         "--shell",
@@ -179,6 +184,7 @@ describe("24-shell-completion", () => {
     });
 
     it("passes file extensions to shell via @ext: metadata (no FileCompletion directive)", async () => {
+      using console = spyOnConsoleLog();
       await runCommand(cli, ["__complete", "--shell", "fish", "--", "deploy", "--config", ""]);
       const output = console.getLogs().join("\n");
 
@@ -190,6 +196,7 @@ describe("24-shell-completion", () => {
     });
 
     it("returns directory directive for directory completion", async () => {
+      using console = spyOnConsoleLog();
       await runCommand(cli, ["__complete", "--shell", "fish", "--", "build", "--output", ""]);
       const output = console.getLogs().join("\n");
 

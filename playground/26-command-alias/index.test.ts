@@ -1,7 +1,7 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { assertDocMatch, initDocFile, type GenerateDocConfig } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { cli, installCommand, listCommand, removeCommand } from "./index.js";
 
@@ -14,22 +14,13 @@ const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
 };
 
 describe("26-command-alias", () => {
-  let consoleSpy: ConsoleSpy;
-
   beforeAll(() => {
     initDocFile(baseDocConfig);
   });
 
-  beforeEach(() => {
-    consoleSpy = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
-  });
-
   describe("install subcommand", () => {
     it("installs all dependencies with no args", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["install"]);
 
       expect(result.exitCode).toBe(0);
@@ -37,6 +28,7 @@ describe("26-command-alias", () => {
     });
 
     it("installs specific packages", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["install", "lodash", "zod"]);
 
       expect(result.exitCode).toBe(0);
@@ -46,6 +38,7 @@ describe("26-command-alias", () => {
     });
 
     it("installs as dev dependency with -D", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["install", "-D", "vitest"]);
 
       expect(result.exitCode).toBe(0);
@@ -54,6 +47,7 @@ describe("26-command-alias", () => {
     });
 
     it("works via alias 'i'", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["i", "lodash"]);
 
       expect(result.exitCode).toBe(0);
@@ -62,6 +56,7 @@ describe("26-command-alias", () => {
     });
 
     it("works via alias 'add'", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["add", "lodash"]);
 
       expect(result.exitCode).toBe(0);
@@ -70,6 +65,7 @@ describe("26-command-alias", () => {
     });
 
     it("can run installCommand directly", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(installCommand, ["express"]);
 
       expect(result.exitCode).toBe(0);
@@ -79,6 +75,7 @@ describe("26-command-alias", () => {
 
   describe("remove subcommand", () => {
     it("removes packages", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["remove", "lodash"]);
 
       expect(result.exitCode).toBe(0);
@@ -87,6 +84,7 @@ describe("26-command-alias", () => {
     });
 
     it("works via alias 'rm'", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["rm", "lodash"]);
 
       expect(result.exitCode).toBe(0);
@@ -95,6 +93,7 @@ describe("26-command-alias", () => {
     });
 
     it("works via alias 'uninstall'", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["uninstall", "lodash"]);
 
       expect(result.exitCode).toBe(0);
@@ -102,6 +101,7 @@ describe("26-command-alias", () => {
     });
 
     it("can run removeCommand directly", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(removeCommand, ["express"]);
 
       expect(result.exitCode).toBe(0);
@@ -111,6 +111,7 @@ describe("26-command-alias", () => {
 
   describe("list subcommand", () => {
     it("lists packages", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["list"]);
 
       expect(result.exitCode).toBe(0);
@@ -118,6 +119,7 @@ describe("26-command-alias", () => {
     });
 
     it("works via alias 'ls'", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["ls"]);
 
       expect(result.exitCode).toBe(0);
@@ -125,6 +127,7 @@ describe("26-command-alias", () => {
     });
 
     it("accepts depth option", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["ls", "-d", "2"]);
 
       expect(result.exitCode).toBe(0);
@@ -132,6 +135,7 @@ describe("26-command-alias", () => {
     });
 
     it("can run listCommand directly", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(listCommand, ["-d", "1"]);
 
       expect(result.exitCode).toBe(0);
@@ -141,6 +145,7 @@ describe("26-command-alias", () => {
 
   describe("help", () => {
     it("shows aliases in main help", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);
@@ -152,6 +157,7 @@ describe("26-command-alias", () => {
     });
 
     it("shows aliases when accessed by canonical name", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["install", "--help"]);
 
       expect(result.exitCode).toBe(0);
@@ -162,6 +168,7 @@ describe("26-command-alias", () => {
     });
 
     it("shows 'Alias for' when accessed via alias", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["i", "--help"]);
 
       expect(result.exitCode).toBe(0);
@@ -171,6 +178,7 @@ describe("26-command-alias", () => {
     });
 
     it("shows 'Alias for' for rm alias", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["rm", "--help"]);
 
       expect(result.exitCode).toBe(0);
