@@ -460,8 +460,9 @@ export function generateFishCompletion(
     `    set -l _sig (stat -L -c '%Y' "$_bin" 2>/dev/null; or stat -L -f '%m' "$_bin" 2>/dev/null)`,
   );
   lines.push(`    test "$_sig" = "${sig}"; and return 1`);
-  lines.push(`    set -l _target "$__fish_config_dir/completions/${programName}.fish"`);
-  lines.push(`    "$_bin" __refresh-completion fish 2>/dev/null`);
+  lines.push(`    set -l _target (status current-filename)`);
+  lines.push(`    test -n "$_target"; and test -f "$_target"; or return 1`);
+  lines.push(`    "$_bin" __refresh-completion fish "$_target" 2>/dev/null`);
   lines.push(`    and source "$_target" 2>/dev/null`);
   lines.push(`    and return 0`);
   lines.push(`    return 1`);

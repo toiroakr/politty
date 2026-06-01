@@ -468,9 +468,9 @@ describe("Completion", () => {
         });
 
         expect(result.installInstructions).toContain("~/.bashrc");
-        expect(result.installInstructions).toContain("mycli completion bash --loader");
-        expect(result.installInstructions).not.toMatch(/^eval "\$\(mycli completion bash\)"/m);
-        expect(result.installInstructions).not.toMatch(/^mycli completion bash >/m);
+        expect(result.installInstructions).toContain('eval "$(mycli completion bash)"');
+        expect(result.installInstructions).toContain("mycli completion bash >");
+        expect(result.installInstructions).not.toContain("mycli completion bash --loader");
       });
 
       it("should not contain __command or __extensions handling", () => {
@@ -501,27 +501,26 @@ describe("Completion", () => {
         expect(result.script).toContain("compdef _mycli mycli");
       });
 
-      it("should include fast fpath installation instructions", () => {
+      it("should include backwards-compatible fpath installation instructions", () => {
         const result = generateCompletion(testCommand, {
           shell: "zsh",
           programName: "mycli",
         });
 
-        expect(result.installInstructions).toContain("mycli completion zsh --install");
+        expect(result.installInstructions).toContain('eval "$(mycli completion zsh)"');
+        expect(result.installInstructions).toContain("mycli completion zsh >");
         expect(result.installInstructions).toContain("fpath=(~/.zsh/completions $fpath)");
         expect(result.installInstructions).toContain("~/.zsh/completions/_mycli");
-        expect(result.installInstructions).not.toMatch(/^eval "\$\(mycli completion zsh\)"/m);
-        expect(result.installInstructions).not.toMatch(/^mycli completion zsh >/m);
+        expect(result.installInstructions).not.toContain("mycli completion zsh --install");
       });
 
-      it("uses the sanitized function name for zsh fpath files", () => {
+      it("uses the command name for zsh fpath files", () => {
         const result = generateCompletion(testCommand, {
           shell: "zsh",
           programName: "tailor-sdk",
         });
 
-        expect(result.installInstructions).toContain("rm -f ~/.zsh/completions/_tailor-sdk");
-        expect(result.installInstructions).toContain("~/.zsh/completions/_tailor_sdk");
+        expect(result.installInstructions).toContain("~/.zsh/completions/_tailor-sdk");
       });
     });
 
@@ -1602,6 +1601,36 @@ describe("Completion", () => {
       });
       expect(result.script).not.toContain("# program-version:");
     });
+
+    it("embeds a bash self-refresh guard in static scripts", () => {
+      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+      const { script } = generateCompletion(cmd, {
+        shell: "bash",
+        programName: "mycli",
+        binPath: fakeBin,
+      });
+
+      expect(script).toContain("__mycli_self_refresh()");
+      expect(script).toContain('"$_bin" __refresh-completion bash "$_self" 2>/dev/null');
+      expect(script).toContain('source "$_self" 2>/dev/null');
+      expect(script).toContain('head -n 8 "$_self"');
+    });
+
+    it("embeds a zsh self-refresh guard in static scripts", () => {
+      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+      const { script } = generateCompletion(cmd, {
+        shell: "zsh",
+        programName: "mycli",
+        binPath: fakeBin,
+      });
+
+      expect(script).toContain("__mycli_self_refresh()");
+      expect(script).toContain('_self="${(%):-%x}"');
+      expect(script).toContain('"$_bin" __refresh-completion zsh "$_self" 2>/dev/null');
+      expect(script).toContain('source "$_self" 2>/dev/null');
+    });
   });
 
   describe("install / refreshIfStale", () => {
@@ -1663,6 +1692,43 @@ describe("Completion", () => {
       const newSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
       expect(newSig).not.toBe(originalSig);
       expect(after).toContain(`# politty-bin-sig: ${newSig}`);
+    });
+
+    it("refreshIfStale rewrites a matching politty-generated target file", () => {
+      const target = join(mkdtempSync(join(tmpdir(), "politty-static-")), "mycli-completion.bash");
+      writeFileSync(
+        target,
+        generateCompletion(cmd, {
+          shell: "bash",
+          programName: "mycli",
+          binPath: fakeBin,
+        }).script,
+      );
+      const originalSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+
+      const bumped = new Date(statSync(fakeBin).mtimeMs + 5000);
+      utimesSync(fakeBin, bumped, bumped);
+
+      refreshIfStale(
+        { rootCommand: cmd, programName: "mycli", binPath: fakeBin, targetPath: target },
+        "bash",
+      );
+      const after = readFileSync(target, "utf8");
+      const newSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+      expect(newSig).not.toBe(originalSig);
+      expect(after).toContain(`# politty-bin-sig: ${newSig}`);
+    });
+
+    it("refreshIfStale does not overwrite arbitrary target files", () => {
+      const target = join(mkdtempSync(join(tmpdir(), "politty-static-")), "not-completion.bash");
+      writeFileSync(target, "important user file\n");
+
+      refreshIfStale(
+        { rootCommand: cmd, programName: "mycli", binPath: fakeBin, targetPath: target },
+        "bash",
+      );
+
+      expect(readFileSync(target, "utf8")).toBe("important user file\n");
     });
 
     it("refreshIfStale leaves the cache untouched when bin-sig matches", () => {
@@ -1787,7 +1853,8 @@ describe("Completion", () => {
         binPath: fakeBin,
       });
       // Refresh body uses the hidden subcommand so user setup/cleanup/prompt is skipped.
-      expect(script).toContain('"$_bin" __refresh-completion fish 2>/dev/null');
+      expect(script).toContain('"$_bin" __refresh-completion fish "$_target" 2>/dev/null');
+      expect(script).toContain("set -l _target (status current-filename)");
       // The stale body must be skipped after a successful refresh.
       expect(script).toContain("set -l _politty_refreshed $status");
       expect(script).toContain("test $_politty_refreshed -eq 0; and return");

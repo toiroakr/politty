@@ -180,6 +180,11 @@ const refreshArgsSchema = z.object({
     description: "Shell to refresh",
     placeholder: "SHELL",
   }),
+  target: arg(z.string().optional(), {
+    positional: true,
+    description: "Existing politty-generated completion file to refresh",
+    placeholder: "TARGET",
+  }),
 });
 
 type RefreshArgs = z.infer<typeof refreshArgsSchema>;
@@ -334,7 +339,15 @@ export function createRefreshCompletionCommand(
     description: "(internal) Refresh the on-disk completion cache if stale.",
     args: refreshArgsSchema,
     run(args) {
-      refreshIfStale({ rootCommand, programName, ...extra }, args.shell);
+      refreshIfStale(
+        {
+          rootCommand,
+          programName,
+          ...extra,
+          ...(args.target !== undefined && { targetPath: args.target }),
+        },
+        args.shell,
+      );
     },
   });
 }
