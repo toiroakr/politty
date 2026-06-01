@@ -499,6 +499,8 @@ describe("Completion", () => {
         expect(result.script).toContain("# shell: zsh");
         expect(result.script).toContain("_mycli()");
         expect(result.script).toContain("compdef _mycli mycli");
+        expect(result.script).toContain("if [[ ${funcstack[1]:-} == _mycli ]]; then");
+        expect(result.script).toContain('_mycli "$@"');
       });
 
       it("should include backwards-compatible fpath installation instructions", () => {
@@ -1632,6 +1634,8 @@ describe("Completion", () => {
       expect(script).toContain('_self="${(%):-%x}"');
       expect(script).toContain('"$_bin" __refresh-completion zsh "$_self" 2>/dev/null');
       expect(script).toContain('source "$_self" 2>/dev/null');
+      expect(script).toContain('_mycli "$@" || return 1');
+      expect(script).toContain('if __mycli_self_refresh "$@"; then');
     });
   });
 

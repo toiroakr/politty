@@ -719,7 +719,11 @@ export function generateZshCompletion(
     `zstyle ':completion:*:*:${programName}:*' file-patterns '%p:globbed-files *(-/):directories'`,
   );
   lines.push(``);
-  lines.push(`compdef _${fn} ${programName}`);
+  lines.push(`if [[ \${funcstack[1]:-} == _${fn} ]]; then`);
+  lines.push(`    _${fn} "$@"`);
+  lines.push(`else`);
+  lines.push(`    compdef _${fn} ${programName}`);
+  lines.push(`fi`);
   lines.push(``);
 
   return {
