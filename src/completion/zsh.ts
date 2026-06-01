@@ -734,6 +734,7 @@ eval "$(${programName} completion zsh)"
 
 # For faster shell startup, save the script in your fpath:
 mkdir -p ~/.zsh/completions
+rm -f ~/.zsh/completions/_${programName}
 ${programName} completion zsh > ~/.zsh/completions/_${fn}
 
 # Make sure your ~/.zshrc includes the fpath line before compinit:

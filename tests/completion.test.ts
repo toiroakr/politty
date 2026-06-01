@@ -514,6 +514,7 @@ describe("Completion", () => {
         expect(result.installInstructions).toContain("mycli completion zsh >");
         expect(result.installInstructions).toContain("fpath line before compinit");
         expect(result.installInstructions).toContain("fpath=(~/.zsh/completions $fpath)");
+        expect(result.installInstructions).toContain("rm -f ~/.zsh/completions/_mycli");
         expect(result.installInstructions).toContain("~/.zsh/completions/_mycli");
         expect(result.installInstructions).not.toContain("mycli completion zsh --install");
       });
@@ -524,6 +525,7 @@ describe("Completion", () => {
           programName: "tailor-sdk",
         });
 
+        expect(result.installInstructions).toContain("rm -f ~/.zsh/completions/_tailor-sdk");
         expect(result.installInstructions).toContain("~/.zsh/completions/_tailor_sdk");
       });
     });
