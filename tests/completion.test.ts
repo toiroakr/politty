@@ -518,15 +518,17 @@ describe("Completion", () => {
         expect(result.installInstructions).not.toContain("mycli completion zsh --install");
       });
 
-      it("supports the command name for zsh fpath files", () => {
+      it("uses the command name as the zsh fpath entrypoint", () => {
         const result = generateCompletion(testCommand, {
           shell: "zsh",
           programName: "tailor-sdk",
         });
 
-        expect(result.script).toContain(
-          'if [[ "${funcstack[1]:-}" == "_tailor_sdk" || "${funcstack[1]:-}" == "_tailor-sdk" ]]; then',
-        );
+        expect(result.script).toContain("_tailor-sdk()");
+        expect(result.script).not.toContain("\n_tailor_sdk() {");
+        expect(result.script).toContain('if [[ "${funcstack[1]:-}" == "_tailor-sdk" ]]; then');
+        expect(result.script).toContain('_tailor-sdk "$@"');
+        expect(result.script).toContain("compdef _tailor-sdk tailor-sdk");
         expect(result.installInstructions).toContain("~/.zsh/completions/_tailor-sdk");
         expect(result.installInstructions).not.toContain("~/.zsh/completions/_tailor_sdk");
       });
@@ -1641,6 +1643,20 @@ describe("Completion", () => {
       expect(script).toContain('_mycli "$@"');
       expect(script).not.toContain('_mycli "$@" || return 1');
       expect(script).toContain('if __mycli_self_refresh "$@"; then');
+    });
+
+    it("zsh self-refresh re-enters the fpath entrypoint for dashed program names", () => {
+      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "tailor-sdk");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+      const { script } = generateCompletion(cmd, {
+        shell: "zsh",
+        programName: "tailor-sdk",
+        binPath: fakeBin,
+      });
+
+      expect(script).toContain("__tailor_sdk_self_refresh()");
+      expect(script).toContain('_tailor-sdk "$@"');
+      expect(script).not.toContain('_tailor_sdk "$@"');
     });
   });
 

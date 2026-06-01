@@ -339,7 +339,7 @@ export function zshCompleteNested(
   args: string[],
   opts?: ExecOptions,
 ): string[] {
-  return zshCompleteWith("nestapp", "nested_test", testEnv, args, {
+  return zshCompleteWith("nestapp", "nested-test", testEnv, args, {
     ...opts,
     filesStub: zshFilesStubSimple,
   });
@@ -366,7 +366,7 @@ export function zshCompleteExpand(
   args: string[],
   opts?: ExecOptions,
 ): string[] {
-  return zshCompleteWith("tailor-expand", "tailor_expand", testEnv, args, {
+  return zshCompleteWith("tailor-expand", "tailor-expand", testEnv, args, {
     ...opts,
     filesStub: zshFilesStubSimple,
   });

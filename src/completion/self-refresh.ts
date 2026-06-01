@@ -56,6 +56,7 @@ export function generateBashSelfRefresh(opts: SelfRefreshOptions): string[] {
 export function generateZshSelfRefresh(opts: SelfRefreshOptions): string[] {
   const { programName, binPath } = opts;
   const fn = sanitize(programName);
+  const completionFn = `_${programName}`;
   const sig = computeBinSig(resolveBinPath(programName, binPath));
   const refreshFn = `__${fn}_self_refresh`;
 
@@ -76,7 +77,7 @@ export function generateZshSelfRefresh(opts: SelfRefreshOptions): string[] {
     `    "$_bin" __refresh-completion zsh "$_self" 2>/dev/null || return 1`,
     `    head -n 8 "$_self" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig" || return 1`,
     `    source "$_self" 2>/dev/null || return 1`,
-    `    _${fn} "$@"`,
+    `    ${completionFn} "$@"`,
     `    return 0`,
     `}`,
     `if ${refreshFn} "$@"; then`,

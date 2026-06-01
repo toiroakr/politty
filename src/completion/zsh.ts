@@ -384,11 +384,8 @@ export function generateZshCompletion(
   const { programName } = options;
   const data = extractCompletionData(command, programName, options.globalArgsSchema);
   const fn = sanitize(programName);
-  const fpathFn = `_${programName}`;
-  const autoloadCheck =
-    fpathFn === `_${fn}`
-      ? `"\${funcstack[1]:-}" == "_${fn}"`
-      : `"\${funcstack[1]:-}" == "_${fn}" || "\${funcstack[1]:-}" == "${escapeZshDQ(fpathFn)}"`;
+  const completionFn = `_${programName}`;
+  const autoloadCheck = `"\${funcstack[1]:-}" == "${escapeZshDQ(completionFn)}"`;
   const root = data.command;
   const visibleSubs = getVisibleSubs(root.subcommands);
   const expandSpecs = collectExpandSpecs(root);
@@ -634,7 +631,7 @@ export function generateZshCompletion(
   // Main completion function -- subcommand dispatch routing
   const subRouting = subDispatchCaseLines(routeEntries, fn).join("\n");
 
-  lines.push(`_${fn}() {`);
+  lines.push(`${completionFn}() {`);
   lines.push(`    (( CURRENT )) || CURRENT=\${#words}`);
   lines.push(``);
   lines.push(`    local _subcmd="" _after_dd=0 _pos_count=0 _skip_next=0`);
@@ -730,9 +727,9 @@ export function generateZshCompletion(
   );
   lines.push(``);
   lines.push(`if [[ ${autoloadCheck} ]]; then`);
-  lines.push(`    _${fn} "$@"`);
+  lines.push(`    ${completionFn} "$@"`);
   lines.push(`else`);
-  lines.push(`    compdef _${fn} ${programName}`);
+  lines.push(`    compdef ${completionFn} ${programName}`);
   lines.push(`fi`);
   lines.push(``);
 
