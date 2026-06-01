@@ -725,16 +725,19 @@ export function generateZshCompletion(
   return {
     script: lines.join("\n"),
     shell: "zsh",
-    installInstructions: `# To enable auto-refreshing zsh completions, add this to your ~/.zshrc before compinit:
+    installInstructions: `# To enable auto-refreshing zsh completions, add this to your ~/.zshrc after compinit:
 eval "$(${programName} completion zsh)"
 
 # For faster shell startup, save the script in your fpath:
 mkdir -p ~/.zsh/completions
 ${programName} completion zsh > ~/.zsh/completions/_${programName}
 
-# Make sure your ~/.zshrc includes this before compinit:
+# Make sure your ~/.zshrc includes the fpath line before compinit:
 fpath=(~/.zsh/completions $fpath)
 autoload -Uz compinit && compinit
+
+# If ~/.zshrc already calls compinit, add only the fpath line before
+# the existing compinit call.
 
 # Then reload your shell or run:
 source ~/.zshrc`,

@@ -508,7 +508,9 @@ describe("Completion", () => {
         });
 
         expect(result.installInstructions).toContain('eval "$(mycli completion zsh)"');
+        expect(result.installInstructions).toContain("after compinit");
         expect(result.installInstructions).toContain("mycli completion zsh >");
+        expect(result.installInstructions).toContain("fpath line before compinit");
         expect(result.installInstructions).toContain("fpath=(~/.zsh/completions $fpath)");
         expect(result.installInstructions).toContain("~/.zsh/completions/_mycli");
         expect(result.installInstructions).not.toContain("mycli completion zsh --install");
