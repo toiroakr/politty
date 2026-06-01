@@ -78,7 +78,8 @@ describe("24-shell-completion", () => {
       expect(result.exitCode).toBe(0);
       const output = console.getLogs().join("\n");
       expect(output).toContain("~/.bashrc");
-      expect(output).toContain('eval "$(myapp completion bash)"');
+      expect(output).toContain("myapp completion bash --loader");
+      expect(output).not.toMatch(/^eval "\$\(myapp completion bash\)"/m);
     });
   });
 

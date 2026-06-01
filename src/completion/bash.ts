@@ -857,14 +857,10 @@ export function generateBashCompletion(
   return {
     script: lines.join("\n"),
     shell: "bash",
-    installInstructions: `# To enable completions, add the following to your ~/.bashrc:
+    installInstructions: `# To enable auto-refreshing bash completions, print the loader:
+${programName} completion bash --loader
 
-# Option 1: Source directly
-eval "$(${programName} completion bash)"
-
-# Option 2: Save to a file
-${programName} completion bash > ~/.local/share/bash-completion/completions/${programName}
-
+# Copy the printed block into ~/.bashrc once, replacing any older ${programName} completion setup.
 # Then reload your shell or run:
 source ~/.bashrc`,
   };

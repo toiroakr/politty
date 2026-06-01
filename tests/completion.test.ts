@@ -468,7 +468,9 @@ describe("Completion", () => {
         });
 
         expect(result.installInstructions).toContain("~/.bashrc");
-        expect(result.installInstructions).toContain("mycli completion bash");
+        expect(result.installInstructions).toContain("mycli completion bash --loader");
+        expect(result.installInstructions).not.toMatch(/^eval "\$\(mycli completion bash\)"/m);
+        expect(result.installInstructions).not.toMatch(/^mycli completion bash >/m);
       });
 
       it("should not contain __command or __extensions handling", () => {
@@ -498,6 +500,29 @@ describe("Completion", () => {
         expect(result.script).toContain("_mycli()");
         expect(result.script).toContain("compdef _mycli mycli");
       });
+
+      it("should include fast fpath installation instructions", () => {
+        const result = generateCompletion(testCommand, {
+          shell: "zsh",
+          programName: "mycli",
+        });
+
+        expect(result.installInstructions).toContain("mycli completion zsh --install");
+        expect(result.installInstructions).toContain("fpath=(~/.zsh/completions $fpath)");
+        expect(result.installInstructions).toContain("~/.zsh/completions/_mycli");
+        expect(result.installInstructions).not.toMatch(/^eval "\$\(mycli completion zsh\)"/m);
+        expect(result.installInstructions).not.toMatch(/^mycli completion zsh >/m);
+      });
+
+      it("uses the sanitized function name for zsh fpath files", () => {
+        const result = generateCompletion(testCommand, {
+          shell: "zsh",
+          programName: "tailor-sdk",
+        });
+
+        expect(result.installInstructions).toContain("rm -f ~/.zsh/completions/_tailor-sdk");
+        expect(result.installInstructions).toContain("~/.zsh/completions/_tailor_sdk");
+      });
     });
 
     describe("fish completion", () => {
@@ -514,6 +539,17 @@ describe("Completion", () => {
         expect(result.script).toContain("complete -c mycli");
         expect(result.script).toContain("__fish_mycli_complete");
         expect(result.script).toContain("complete -c mycli -f");
+      });
+
+      it("should include install instructions", () => {
+        const result = generateCompletion(testCommand, {
+          shell: "fish",
+          programName: "mycli",
+        });
+
+        expect(result.installInstructions).toContain("mycli completion fish --install");
+        expect(result.installInstructions).not.toMatch(/^mycli completion fish \| source/m);
+        expect(result.installInstructions).not.toMatch(/^mycli completion fish >/m);
       });
     });
 
@@ -1803,6 +1839,32 @@ describe("Completion", () => {
         expect(stderr).toContain(`installed: ${target}`);
         expect(stderr).toContain("Add to your ~/.bashrc:");
         expect(stderr).toContain("__mycli_load_completion()");
+      } finally {
+        errSpy.mockRestore();
+      }
+    });
+
+    it("--install for zsh prints fpath setup instead of a loader snippet", () => {
+      const subcommand = createCompletionCommand(cmd, "mycli", undefined, { cacheDir });
+      const captured: string[] = [];
+      const errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+        captured.push(args.map(String).join(" "));
+      });
+      try {
+        subcommand.run?.({ shell: "zsh", instructions: false, install: true, loader: false });
+
+        const target = join(cacheDir, "completion.zsh");
+        const written = readFileSync(target, "utf8");
+        expect(written).toContain("# politty-bin-sig:");
+        expect(written).toContain("_mycli()");
+
+        const stderr = captured.join("\n");
+        expect(stderr).toContain(`installed: ${target}`);
+        expect(stderr).toContain("Configure zsh fpath with:");
+        expect(stderr).toContain(`ln -sf '${target}' ~/.zsh/completions/_mycli`);
+        expect(stderr).toContain("fpath=(~/.zsh/completions $fpath)");
+        expect(stderr).not.toContain("__mycli_load_completion()");
+        expect(stderr).not.toContain("Add to your ~/.zshrc:");
       } finally {
         errSpy.mockRestore();
       }

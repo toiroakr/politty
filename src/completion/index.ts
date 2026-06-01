@@ -30,6 +30,7 @@ import { defineCommand } from "../core/command.js";
 import type { AnyCommand, ArgsSchema, Command } from "../types.js";
 import { generateBashCompletion } from "./bash.js";
 import { createDynamicCompleteCommand } from "./dynamic/index.js";
+import { sanitize } from "./extractor.js";
 import { generateFishCompletion } from "./fish.js";
 import {
   hasManagedCache,
@@ -101,6 +102,25 @@ export function generateCompletion(
  */
 export function getSupportedShells(): ShellType[] {
   return ["bash", "zsh", "fish"];
+}
+
+function shSingleQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+function printZshFpathSetup(programName: string, target: string): void {
+  const fn = sanitize(programName);
+  console.error("");
+  console.error("Configure zsh fpath with:");
+  console.error("");
+  console.error("    mkdir -p ~/.zsh/completions");
+  console.error(`    rm -f ~/.zsh/completions/_${programName}`);
+  console.error(`    ln -sf ${shSingleQuote(target)} ~/.zsh/completions/_${fn}`);
+  console.error("");
+  console.error("Add only this block to your ~/.zshrc before compinit:");
+  console.error("");
+  console.error("    fpath=(~/.zsh/completions $fpath)");
+  console.error("    autoload -Uz compinit && compinit");
 }
 
 /**
@@ -255,7 +275,7 @@ export function createCompletionCommand(
           throw new Error(`install failed: ${e instanceof Error ? e.message : String(e)}`);
         }
         console.error(`installed: ${target}`);
-        if (shellType !== "fish") {
+        if (shellType === "bash") {
           console.error("");
           console.error(`Add to your ~/.${shellType}rc:`);
           console.error("");
@@ -264,6 +284,8 @@ export function createCompletionCommand(
               .trim()
               .replace(/^/gm, "    "),
           );
+        } else if (shellType === "zsh") {
+          printZshFpathSetup(resolvedProgramName, target);
         }
         return;
       }

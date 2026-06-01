@@ -723,17 +723,16 @@ export function generateZshCompletion(
   return {
     script: lines.join("\n"),
     shell: "zsh",
-    installInstructions: `# To enable completions, add the following to your ~/.zshrc:
+    installInstructions: `# To enable auto-refreshing zsh completions with fast startup, run once:
+mkdir -p ~/.zsh/completions
+${programName} completion zsh --install
+rm -f ~/.zsh/completions/_${programName}
+ln -sf "\${XDG_CACHE_HOME:-$HOME/.cache}/${programName}/completion.zsh" \\
+  ~/.zsh/completions/_${fn}
 
-# Option 1: Source directly (add before compinit)
-eval "$(${programName} completion zsh)"
-
-# Option 2: Save to a file in your fpath
-${programName} completion zsh > ~/.zsh/completions/_${programName}
-
-# Make sure your fpath includes the completions directory:
-# fpath=(~/.zsh/completions $fpath)
-# autoload -Uz compinit && compinit
+# Add only this block to ~/.zshrc before compinit:
+fpath=(~/.zsh/completions $fpath)
+autoload -Uz compinit && compinit
 
 # Then reload your shell or run:
 source ~/.zshrc`,

@@ -859,16 +859,7 @@ export function generateFishCompletion(
   return {
     script: lines.join("\n"),
     shell: "fish",
-    installInstructions: `# To enable completions, run one of the following:
-
-# Option 1: Source directly
-${programName} completion fish | source
-
-# Option 2: Save to the fish completions directory
-${programName} completion fish > ~/.config/fish/completions/${programName}.fish
-
-# The completion will be available immediately in new shell sessions.
-# To use in the current session, run:
-source ~/.config/fish/completions/${programName}.fish`,
+    installInstructions: `# To enable auto-refreshing fish completions, run:
+${programName} completion fish --install`,
   };
 }
