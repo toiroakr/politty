@@ -30,7 +30,6 @@ import { defineCommand } from "../core/command.js";
 import type { AnyCommand, ArgsSchema, Command } from "../types.js";
 import { generateBashCompletion } from "./bash.js";
 import { createDynamicCompleteCommand } from "./dynamic/index.js";
-import { sanitize } from "./extractor.js";
 import { generateFishCompletion } from "./fish.js";
 import {
   hasManagedCache,
@@ -109,13 +108,11 @@ function shSingleQuote(s: string): string {
 }
 
 function printZshFpathSetup(programName: string, target: string): void {
-  const fn = sanitize(programName);
   console.error("");
   console.error("Configure zsh fpath with:");
   console.error("");
   console.error("    mkdir -p ~/.zsh/completions");
-  console.error(`    rm -f ~/.zsh/completions/_${programName}`);
-  console.error(`    ln -sf ${shSingleQuote(target)} ~/.zsh/completions/_${fn}`);
+  console.error(`    ln -sf ${shSingleQuote(target)} ~/.zsh/completions/_${programName}`);
   console.error("");
   console.error("Add only this block to your ~/.zshrc before compinit:");
   console.error("");

@@ -64,6 +64,11 @@ function escapeDescribeValue(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/:/g, "\\:");
 }
 
+/** Escape a string for use inside zsh double-quotes. */
+function escapeZshDQ(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$").replace(/`/g, "\\`");
+}
+
 /**
  * Generate zsh value completion lines for a ValueCompletion spec.
  * Uses `_vals` array (must be declared in the calling function scope).
@@ -379,6 +384,11 @@ export function generateZshCompletion(
   const { programName } = options;
   const data = extractCompletionData(command, programName, options.globalArgsSchema);
   const fn = sanitize(programName);
+  const fpathFn = `_${programName}`;
+  const autoloadCheck =
+    fpathFn === `_${fn}`
+      ? `"\${funcstack[1]:-}" == "_${fn}"`
+      : `"\${funcstack[1]:-}" == "_${fn}" || "\${funcstack[1]:-}" == "${escapeZshDQ(fpathFn)}"`;
   const root = data.command;
   const visibleSubs = getVisibleSubs(root.subcommands);
   const expandSpecs = collectExpandSpecs(root);
@@ -719,7 +729,7 @@ export function generateZshCompletion(
     `zstyle ':completion:*:*:${programName}:*' file-patterns '%p:globbed-files *(-/):directories'`,
   );
   lines.push(``);
-  lines.push(`if [[ \${funcstack[1]:-} == _${fn} ]]; then`);
+  lines.push(`if [[ ${autoloadCheck} ]]; then`);
   lines.push(`    _${fn} "$@"`);
   lines.push(`else`);
   lines.push(`    compdef _${fn} ${programName}`);
@@ -734,8 +744,7 @@ eval "$(${programName} completion zsh)"
 
 # For faster shell startup, save the script in your fpath:
 mkdir -p ~/.zsh/completions
-rm -f ~/.zsh/completions/_${programName}
-${programName} completion zsh > ~/.zsh/completions/_${fn}
+${programName} completion zsh > ~/.zsh/completions/_${programName}
 
 # Make sure your ~/.zshrc includes the fpath line before compinit:
 fpath=(~/.zsh/completions $fpath)

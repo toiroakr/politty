@@ -499,7 +499,7 @@ describe("Completion", () => {
         expect(result.script).toContain("# shell: zsh");
         expect(result.script).toContain("_mycli()");
         expect(result.script).toContain("compdef _mycli mycli");
-        expect(result.script).toContain("if [[ ${funcstack[1]:-} == _mycli ]]; then");
+        expect(result.script).toContain('if [[ "${funcstack[1]:-}" == "_mycli" ]]; then');
         expect(result.script).toContain('_mycli "$@"');
       });
 
@@ -514,19 +514,21 @@ describe("Completion", () => {
         expect(result.installInstructions).toContain("mycli completion zsh >");
         expect(result.installInstructions).toContain("fpath line before compinit");
         expect(result.installInstructions).toContain("fpath=(~/.zsh/completions $fpath)");
-        expect(result.installInstructions).toContain("rm -f ~/.zsh/completions/_mycli");
         expect(result.installInstructions).toContain("~/.zsh/completions/_mycli");
         expect(result.installInstructions).not.toContain("mycli completion zsh --install");
       });
 
-      it("uses the sanitized function name for zsh fpath files", () => {
+      it("supports the command name for zsh fpath files", () => {
         const result = generateCompletion(testCommand, {
           shell: "zsh",
           programName: "tailor-sdk",
         });
 
-        expect(result.installInstructions).toContain("rm -f ~/.zsh/completions/_tailor-sdk");
-        expect(result.installInstructions).toContain("~/.zsh/completions/_tailor_sdk");
+        expect(result.script).toContain(
+          'if [[ "${funcstack[1]:-}" == "_tailor_sdk" || "${funcstack[1]:-}" == "_tailor-sdk" ]]; then',
+        );
+        expect(result.installInstructions).toContain("~/.zsh/completions/_tailor-sdk");
+        expect(result.installInstructions).not.toContain("~/.zsh/completions/_tailor_sdk");
       });
     });
 
@@ -1938,6 +1940,7 @@ describe("Completion", () => {
         expect(stderr).toContain(`installed: ${target}`);
         expect(stderr).toContain("Configure zsh fpath with:");
         expect(stderr).toContain(`ln -sf '${target}' ~/.zsh/completions/_mycli`);
+        expect(stderr).not.toContain("rm -f ~/.zsh/completions/_mycli");
         expect(stderr).toContain("fpath=(~/.zsh/completions $fpath)");
         expect(stderr).not.toContain("__mycli_load_completion()");
         expect(stderr).not.toContain("Add to your ~/.zshrc:");
