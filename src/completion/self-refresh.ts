@@ -76,7 +76,7 @@ export function generateZshSelfRefresh(opts: SelfRefreshOptions): string[] {
     `    "$_bin" __refresh-completion zsh "$_self" 2>/dev/null || return 1`,
     `    head -n 8 "$_self" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig" || return 1`,
     `    source "$_self" 2>/dev/null || return 1`,
-    `    _${fn} "$@" || return 1`,
+    `    _${fn} "$@"`,
     `    return 0`,
     `}`,
     `if ${refreshFn} "$@"; then`,

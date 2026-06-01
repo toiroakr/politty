@@ -518,13 +518,13 @@ describe("Completion", () => {
         expect(result.installInstructions).not.toContain("mycli completion zsh --install");
       });
 
-      it("uses the command name for zsh fpath files", () => {
+      it("uses the sanitized function name for zsh fpath files", () => {
         const result = generateCompletion(testCommand, {
           shell: "zsh",
           programName: "tailor-sdk",
         });
 
-        expect(result.installInstructions).toContain("~/.zsh/completions/_tailor-sdk");
+        expect(result.installInstructions).toContain("~/.zsh/completions/_tailor_sdk");
       });
     });
 
@@ -1634,7 +1634,8 @@ describe("Completion", () => {
       expect(script).toContain('_self="${(%):-%x}"');
       expect(script).toContain('"$_bin" __refresh-completion zsh "$_self" 2>/dev/null');
       expect(script).toContain('source "$_self" 2>/dev/null');
-      expect(script).toContain('_mycli "$@" || return 1');
+      expect(script).toContain('_mycli "$@"');
+      expect(script).not.toContain('_mycli "$@" || return 1');
       expect(script).toContain('if __mycli_self_refresh "$@"; then');
     });
   });
