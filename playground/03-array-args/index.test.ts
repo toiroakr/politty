@@ -1,22 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("03-array-args", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   it("processes single file with --files", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["--files", "a.txt"]);
 
     expect(result.exitCode).toBe(0);
@@ -25,6 +16,7 @@ describe("03-array-args", () => {
   });
 
   it("processes multiple files with repeated --files", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, [
       "--files",
       "a.txt",
@@ -42,6 +34,7 @@ describe("03-array-args", () => {
   });
 
   it("processes files with -f alias", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["-f", "one.txt", "-f", "two.txt"]);
 
     expect(result.exitCode).toBe(0);
@@ -49,6 +42,7 @@ describe("03-array-args", () => {
   });
 
   it("shows verbose output with -v", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["-f", "test.txt", "-v"]);
 
     expect(result.exitCode).toBe(0);
@@ -56,13 +50,15 @@ describe("03-array-args", () => {
   });
 
   it("fails when no files provided", async () => {
-    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+    using _console = spyOnConsoleLog();
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
     expect(result.exitCode).toBe(1);
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/03-array-args/README.md": [""] },

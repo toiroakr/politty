@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import {
   cli,
@@ -12,18 +12,9 @@ import {
 } from "./index.js";
 
 describe("16-show-subcommand-options", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   describe("config get subcommand", () => {
     it("gets config value", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["config", "get", "user.name"]);
 
       expect(result.exitCode).toBe(0);
@@ -31,6 +22,7 @@ describe("16-show-subcommand-options", () => {
     });
 
     it("can run configGetCommand directly", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(configGetCommand, ["core.editor"]);
 
       expect(result.exitCode).toBe(0);
@@ -40,6 +32,7 @@ describe("16-show-subcommand-options", () => {
 
   describe("config set subcommand", () => {
     it("sets config value", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["config", "set", "user.name", "John"]);
 
       expect(result.exitCode).toBe(0);
@@ -49,6 +42,7 @@ describe("16-show-subcommand-options", () => {
 
   describe("config list subcommand", () => {
     it("lists config in default format", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["config", "list"]);
 
       expect(result.exitCode).toBe(0);
@@ -56,6 +50,7 @@ describe("16-show-subcommand-options", () => {
     });
 
     it("lists config in json format", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["config", "list", "-f", "json"]);
 
       expect(result.exitCode).toBe(0);
@@ -63,6 +58,7 @@ describe("16-show-subcommand-options", () => {
     });
 
     it("lists global config", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["config", "list", "-g"]);
 
       expect(result.exitCode).toBe(0);
@@ -70,6 +66,7 @@ describe("16-show-subcommand-options", () => {
     });
 
     it("can run configListCommand directly", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(configListCommand, ["-f", "yaml"]);
 
       expect(result.exitCode).toBe(0);
@@ -79,6 +76,7 @@ describe("16-show-subcommand-options", () => {
 
   describe("remote add subcommand", () => {
     it("adds remote", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, [
         "remote",
         "add",
@@ -91,6 +89,7 @@ describe("16-show-subcommand-options", () => {
     });
 
     it("can run remoteAddCommand directly", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(remoteAddCommand, ["upstream", "git@github.com:org/repo"]);
 
       expect(result.exitCode).toBe(0);
@@ -100,6 +99,7 @@ describe("16-show-subcommand-options", () => {
 
   describe("remote remove subcommand", () => {
     it("removes remote", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["remote", "remove", "origin"]);
 
       expect(result.exitCode).toBe(0);
@@ -107,6 +107,7 @@ describe("16-show-subcommand-options", () => {
     });
 
     it("removes remote with force", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["remote", "remove", "origin", "-f"]);
 
       expect(result.exitCode).toBe(0);
@@ -114,6 +115,7 @@ describe("16-show-subcommand-options", () => {
     });
 
     it("can run remoteRemoveCommand directly", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(remoteRemoveCommand, ["upstream", "-f"]);
 
       expect(result.exitCode).toBe(0);
@@ -123,6 +125,7 @@ describe("16-show-subcommand-options", () => {
 
   describe("help", () => {
     it("shows help for main CLI", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);
@@ -133,6 +136,7 @@ describe("16-show-subcommand-options", () => {
     });
 
     it("shows help for config list subcommand", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["config", "list", "--help"]);
 
       expect(result.exitCode).toBe(0);
@@ -143,6 +147,7 @@ describe("16-show-subcommand-options", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: cli,
       files: { "playground/16-show-subcommand-options/README.md": [""] },

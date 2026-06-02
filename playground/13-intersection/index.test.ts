@@ -1,22 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("13-intersection", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   it("processes file with required options", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["input.txt", "-o", "output.txt"]);
 
     expect(result.exitCode).toBe(0);
@@ -27,6 +18,7 @@ describe("13-intersection", () => {
   });
 
   it("enables verbose mode with -v", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["data.json", "-o", "result.json", "-v"]);
 
     expect(result.exitCode).toBe(0);
@@ -37,6 +29,7 @@ describe("13-intersection", () => {
   });
 
   it("uses config file with --config", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, [
       "data.json",
       "-o",
@@ -50,6 +43,7 @@ describe("13-intersection", () => {
   });
 
   it("suppresses output with -q (quiet mode)", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["input.txt", "-o", "output.txt", "-q"]);
 
     expect(result.exitCode).toBe(0);
@@ -59,6 +53,7 @@ describe("13-intersection", () => {
   });
 
   it("combines verbose and config options", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, [
       "data.json",
       "-o",
@@ -74,20 +69,23 @@ describe("13-intersection", () => {
   });
 
   it("fails when input is not provided", async () => {
-    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+    using _console = spyOnConsoleLog();
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["-o", "output.txt"]);
 
     expect(result.exitCode).toBe(1);
   });
 
   it("fails when output is not provided", async () => {
-    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+    using _console = spyOnConsoleLog();
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["input.txt"]);
 
     expect(result.exitCode).toBe(1);
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/13-intersection/README.md": [""] },

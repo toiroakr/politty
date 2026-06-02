@@ -144,7 +144,7 @@ describe("E2E Tests", () => {
 
   describe("Validation", () => {
     it("should validate with zod refinements", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using _consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
         name: "test-cmd",
@@ -158,7 +158,6 @@ describe("E2E Tests", () => {
       const result = await runCommand(cmd, ["--port", "80"]);
 
       expect(result.exitCode).toBe(1);
-      consoleSpy.mockRestore();
     });
 
     it("should validate with zod transforms", async () => {
@@ -182,7 +181,7 @@ describe("E2E Tests", () => {
 
   describe("Help generation", () => {
     it("should generate help with all metadata", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "my-cli",
@@ -237,8 +236,6 @@ describe("E2E Tests", () => {
       expect(output).toContain("Commands:");
       expect(output).toContain("build");
       expect(output).toContain("test");
-
-      console.mockRestore();
     });
   });
 
@@ -352,7 +349,7 @@ describe("E2E Tests", () => {
     });
 
     it("should validate required positionals", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using _consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
         name: "test-cmd",
@@ -366,7 +363,6 @@ describe("E2E Tests", () => {
       const result = await runCommand(cmd, ["input.txt"]);
 
       expect(result.exitCode).toBe(1);
-      consoleSpy.mockRestore();
     });
 
     it("should handle optional positional with default", async () => {
@@ -612,7 +608,7 @@ describe("E2E Tests", () => {
     });
 
     it("should validate array elements with zod", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using _consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       const cmd = defineCommand({
         name: "test-cmd",
@@ -624,7 +620,6 @@ describe("E2E Tests", () => {
       const result = await runCommand(cmd, ["--ports", "8080", "--ports", "99999"]);
 
       expect(result.exitCode).toBe(1);
-      consoleSpy.mockRestore();
     });
 
     it("should transform array elements", async () => {
@@ -667,7 +662,7 @@ describe("E2E Tests", () => {
   describe("Single file completion", () => {
     it("should work as a complete CLI in one definition", async () => {
       // This test verifies Requirement 9.1: single file completion
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
       const output = console.getLogs();
 
       const cli = defineCommand({
@@ -699,8 +694,6 @@ describe("E2E Tests", () => {
         expect(result.result).toEqual({ processed: true });
       }
       expect(output).toContain("Processing file.txt → out.txt");
-
-      console.mockRestore();
     });
   });
 
@@ -850,7 +843,7 @@ describe("E2E Tests", () => {
     });
 
     it("should show custom negation in help output", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "test",
@@ -868,12 +861,10 @@ describe("E2E Tests", () => {
       expect(output).toContain("--cache");
       expect(output).toContain("--disable-cache");
       expect(output).not.toContain("--no-cache");
-
-      console.mockRestore();
     });
 
     it("should show custom negation description on a separate line", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
 
       const cmd = defineCommand({
         name: "test",
@@ -892,8 +883,6 @@ describe("E2E Tests", () => {
       expect(output).toContain("--cache");
       expect(output).toContain("--disable-cache");
       expect(output).toContain("Disable cache");
-
-      console.mockRestore();
     });
 
     it("should throw when negation is used on a non-boolean field", async () => {
@@ -1011,15 +1000,13 @@ describe("E2E Tests", () => {
       const stripGlobal = z.object({
         cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
       });
-      const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      try {
+      {
+        using errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
         const stripResult = await runCommand(cmd, ["--no-cache", "build"], {
           globalArgs: stripGlobal,
         });
         expect(stripResult.success).toBe(true);
         expect(errSpy.mock.calls.some((c) => String(c[0]).includes("no-cache"))).toBe(true);
-      } finally {
-        errSpy.mockRestore();
       }
 
       const passthroughGlobal = z
@@ -1027,20 +1014,18 @@ describe("E2E Tests", () => {
           cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
         })
         .passthrough();
-      const errSpy2 = vi.spyOn(console, "error").mockImplementation(() => {});
-      try {
+      {
+        using errSpy2 = vi.spyOn(console, "error").mockImplementation(() => {});
         const passResult = await runCommand(cmd, ["--no-cache", "build"], {
           globalArgs: passthroughGlobal,
         });
         expect(passResult.success).toBe(true);
         expect(errSpy2.mock.calls.some((c) => String(c[0]).includes("no-cache"))).toBe(false);
-      } finally {
-        errSpy2.mockRestore();
       }
     });
 
     it("advertises default --no-X in help when negation is true", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
       const cmd = defineCommand({
         name: "test",
         args: z.object({
@@ -1056,8 +1041,6 @@ describe("E2E Tests", () => {
       expect(result.success).toBe(true);
       const output = console.getLogs().join("\n");
       expect(output).toMatch(/--pretty\s+\/\s+--no-pretty/);
-
-      console.mockRestore();
     });
 
     it("still accepts default --no-X when negation is true (parser unchanged)", async () => {
@@ -1080,7 +1063,7 @@ describe("E2E Tests", () => {
     });
 
     it("suppresses both default --no-X and custom negation when negation is false", async () => {
-      const console = spyOnConsoleLog();
+      using _console = spyOnConsoleLog();
       const captured: Record<string, unknown> = {};
       const cmd = defineCommand({
         name: "test",
@@ -1115,12 +1098,10 @@ describe("E2E Tests", () => {
       const negated = await runCommand(cmd2, ["--no-verbose"]);
       expect(negated.success).toBe(true);
       expect(captured2.verbose).toBe(false); // default preserved (unknown flag warned)
-
-      console.mockRestore();
     });
 
     it("hides the default --no-X from help when negation is false", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
       const cmd = defineCommand({
         name: "test",
         args: z.object({
@@ -1138,8 +1119,6 @@ describe("E2E Tests", () => {
       expect(output).toContain("--verbose");
       expect(output).not.toContain("--no-verbose");
       expect(output).not.toMatch(/--verbose\s+\//);
-
-      console.mockRestore();
     });
 
     it("throws when negationDescription is combined with negation: false", async () => {
@@ -1225,7 +1204,7 @@ describe("E2E Tests", () => {
     );
 
     it("renders custom negation with description in Global Options help section", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
       const globalArgs = z.object({
         color: arg(z.boolean().default(true), {
           description: "Colorize output",
@@ -1244,12 +1223,10 @@ describe("E2E Tests", () => {
       expect(output).toContain("--color");
       expect(output).toContain("--monochrome");
       expect(output).toContain("Disable colorized output");
-
-      console.mockRestore();
     });
 
     it("renders custom negation with description in --help-all compact subcommand view", async () => {
-      const console = spyOnConsoleLog();
+      using console = spyOnConsoleLog();
       const cmd = defineCommand({
         name: "root",
         subCommands: {
@@ -1273,8 +1250,6 @@ describe("E2E Tests", () => {
       expect(output).toContain("--color");
       expect(output).toContain("--monochrome");
       expect(output).toContain("Disable colorized output");
-
-      console.mockRestore();
     });
   });
 });
