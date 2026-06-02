@@ -484,7 +484,9 @@ describe("Completion", () => {
         });
 
         expect(result.installInstructions).toContain("~/.bashrc");
-        expect(result.installInstructions).toContain("mycli completion bash");
+        expect(result.installInstructions).toContain('eval "$(mycli completion bash)"');
+        expect(result.installInstructions).toContain("mycli completion bash >");
+        expect(result.installInstructions).not.toContain("mycli completion bash --loader");
       });
 
       it("should not contain __command or __extensions handling", () => {
@@ -513,6 +515,38 @@ describe("Completion", () => {
         expect(result.script).toContain("# shell: zsh");
         expect(result.script).toContain("_mycli()");
         expect(result.script).toContain("compdef _mycli mycli");
+        expect(result.script).toContain('if [[ "${funcstack[1]:-}" == "_mycli" ]]; then');
+        expect(result.script).toContain('_mycli "$@"');
+      });
+
+      it("should include backwards-compatible fpath installation instructions", () => {
+        const result = generateCompletion(testCommand, {
+          shell: "zsh",
+          programName: "mycli",
+        });
+
+        expect(result.installInstructions).toContain('eval "$(mycli completion zsh)"');
+        expect(result.installInstructions).toContain("after compinit");
+        expect(result.installInstructions).toContain("mycli completion zsh >");
+        expect(result.installInstructions).toContain("fpath line before compinit");
+        expect(result.installInstructions).toContain("fpath=(~/.zsh/completions $fpath)");
+        expect(result.installInstructions).toContain("~/.zsh/completions/_mycli");
+        expect(result.installInstructions).not.toContain("mycli completion zsh --install");
+      });
+
+      it("uses the command name as the zsh fpath entrypoint", () => {
+        const result = generateCompletion(testCommand, {
+          shell: "zsh",
+          programName: "tailor-sdk",
+        });
+
+        expect(result.script).toContain("_tailor-sdk()");
+        expect(result.script).not.toContain("\n_tailor_sdk() {");
+        expect(result.script).toContain('if [[ "${funcstack[1]:-}" == "_tailor-sdk" ]]; then');
+        expect(result.script).toContain('_tailor-sdk "$@"');
+        expect(result.script).toContain("compdef _tailor-sdk tailor-sdk");
+        expect(result.installInstructions).toContain("~/.zsh/completions/_tailor-sdk");
+        expect(result.installInstructions).not.toContain("~/.zsh/completions/_tailor_sdk");
       });
     });
 
@@ -530,6 +564,17 @@ describe("Completion", () => {
         expect(result.script).toContain("complete -c mycli");
         expect(result.script).toContain("__fish_mycli_complete");
         expect(result.script).toContain("complete -c mycli -f");
+      });
+
+      it("should include install instructions", () => {
+        const result = generateCompletion(testCommand, {
+          shell: "fish",
+          programName: "mycli",
+        });
+
+        expect(result.installInstructions).toContain("mycli completion fish --install");
+        expect(result.installInstructions).not.toMatch(/^mycli completion fish \| source/m);
+        expect(result.installInstructions).not.toMatch(/^mycli completion fish >/m);
       });
     });
 
@@ -1577,6 +1622,53 @@ describe("Completion", () => {
       });
       expect(result.script).not.toContain("# program-version:");
     });
+
+    it("embeds a bash self-refresh guard in static scripts", () => {
+      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+      const { script } = generateCompletion(cmd, {
+        shell: "bash",
+        programName: "mycli",
+        binPath: fakeBin,
+      });
+
+      expect(script).toContain("__mycli_self_refresh()");
+      expect(script).toContain('"$_bin" __refresh-completion bash "$_self" 2>/dev/null');
+      expect(script).toContain('source "$_self" 2>/dev/null');
+      expect(script).toContain('head -n 8 "$_self"');
+    });
+
+    it("embeds a zsh self-refresh guard in static scripts", () => {
+      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+      const { script } = generateCompletion(cmd, {
+        shell: "zsh",
+        programName: "mycli",
+        binPath: fakeBin,
+      });
+
+      expect(script).toContain("__mycli_self_refresh()");
+      expect(script).toContain('_self="${(%):-%x}"');
+      expect(script).toContain('"$_bin" __refresh-completion zsh "$_self" 2>/dev/null');
+      expect(script).toContain('source "$_self" 2>/dev/null');
+      expect(script).toContain('_mycli "$@"');
+      expect(script).not.toContain('_mycli "$@" || return 1');
+      expect(script).toContain('if __mycli_self_refresh "$@"; then');
+    });
+
+    it("zsh self-refresh re-enters the fpath entrypoint for dashed program names", () => {
+      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "tailor-sdk");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+      const { script } = generateCompletion(cmd, {
+        shell: "zsh",
+        programName: "tailor-sdk",
+        binPath: fakeBin,
+      });
+
+      expect(script).toContain("__tailor_sdk_self_refresh()");
+      expect(script).toContain('_tailor-sdk "$@"');
+      expect(script).not.toContain('_tailor_sdk "$@"');
+    });
   });
 
   describe("install / refreshIfStale", () => {
@@ -1632,6 +1724,43 @@ describe("Completion", () => {
       const newSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
       expect(newSig).not.toBe(originalSig);
       expect(after).toContain(`# politty-bin-sig: ${newSig}`);
+    });
+
+    it("refreshIfStale rewrites a matching politty-generated target file", () => {
+      const target = join(mkdtempSync(join(tmpdir(), "politty-static-")), "mycli-completion.bash");
+      writeFileSync(
+        target,
+        generateCompletion(cmd, {
+          shell: "bash",
+          programName: "mycli",
+          binPath: fakeBin,
+        }).script,
+      );
+      const originalSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+
+      const bumped = new Date(statSync(fakeBin).mtimeMs + 5000);
+      utimesSync(fakeBin, bumped, bumped);
+
+      refreshIfStale(
+        { rootCommand: cmd, programName: "mycli", binPath: fakeBin, targetPath: target },
+        "bash",
+      );
+      const after = readFileSync(target, "utf8");
+      const newSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+      expect(newSig).not.toBe(originalSig);
+      expect(after).toContain(`# politty-bin-sig: ${newSig}`);
+    });
+
+    it("refreshIfStale does not overwrite arbitrary target files", () => {
+      const target = join(mkdtempSync(join(tmpdir(), "politty-static-")), "not-completion.bash");
+      writeFileSync(target, "important user file\n");
+
+      refreshIfStale(
+        { rootCommand: cmd, programName: "mycli", binPath: fakeBin, targetPath: target },
+        "bash",
+      );
+
+      expect(readFileSync(target, "utf8")).toBe("important user file\n");
     });
 
     it("refreshIfStale leaves the cache untouched when bin-sig matches", () => {
@@ -1740,7 +1869,8 @@ describe("Completion", () => {
         binPath: fakeBin,
       });
       // Refresh body uses the hidden subcommand so user setup/cleanup/prompt is skipped.
-      expect(script).toContain('"$_bin" __refresh-completion fish 2>/dev/null');
+      expect(script).toContain('"$_bin" __refresh-completion fish "$_target" 2>/dev/null');
+      expect(script).toContain("set -l _target (status current-filename)");
       // The stale body must be skipped after a successful refresh.
       expect(script).toContain("set -l _politty_refreshed $status");
       expect(script).toContain("test $_politty_refreshed -eq 0; and return");
@@ -1791,6 +1921,33 @@ describe("Completion", () => {
       expect(stderr).toContain(`installed: ${target}`);
       expect(stderr).toContain("Add to your ~/.bashrc:");
       expect(stderr).toContain("__mycli_load_completion()");
+    });
+
+    it("--install for zsh prints fpath setup instead of a loader snippet", () => {
+      const subcommand = createCompletionCommand(cmd, "mycli", undefined, { cacheDir });
+      const captured: string[] = [];
+      const errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+        captured.push(args.map(String).join(" "));
+      });
+      try {
+        subcommand.run?.({ shell: "zsh", instructions: false, install: true, loader: false });
+
+        const target = join(cacheDir, "completion.zsh");
+        const written = readFileSync(target, "utf8");
+        expect(written).toContain("# politty-bin-sig:");
+        expect(written).toContain("_mycli()");
+
+        const stderr = captured.join("\n");
+        expect(stderr).toContain(`installed: ${target}`);
+        expect(stderr).toContain("Configure zsh fpath with:");
+        expect(stderr).toContain(`ln -sf '${target}' ~/.zsh/completions/_mycli`);
+        expect(stderr).not.toContain("rm -f ~/.zsh/completions/_mycli");
+        expect(stderr).toContain("fpath=(~/.zsh/completions $fpath)");
+        expect(stderr).not.toContain("__mycli_load_completion()");
+        expect(stderr).not.toContain("Add to your ~/.zshrc:");
+      } finally {
+        errSpy.mockRestore();
+      }
     });
 
     it("--install for fish writes the autoload file and does NOT print a loader snippet", () => {

@@ -103,6 +103,23 @@ export function getSupportedShells(): ShellType[] {
   return ["bash", "zsh", "fish"];
 }
 
+function shSingleQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+function printZshFpathSetup(programName: string, target: string): void {
+  console.error("");
+  console.error("Configure zsh fpath with:");
+  console.error("");
+  console.error("    mkdir -p ~/.zsh/completions");
+  console.error(`    ln -sf ${shSingleQuote(target)} ~/.zsh/completions/_${programName}`);
+  console.error("");
+  console.error("Add only this block to your ~/.zshrc before compinit:");
+  console.error("");
+  console.error("    fpath=(~/.zsh/completions $fpath)");
+  console.error("    autoload -Uz compinit && compinit");
+}
+
 /**
  * Detect the current shell from environment
  */
@@ -159,6 +176,11 @@ const refreshArgsSchema = z.object({
     positional: true,
     description: "Shell to refresh",
     placeholder: "SHELL",
+  }),
+  target: arg(z.string().optional(), {
+    positional: true,
+    description: "Existing politty-generated completion file to refresh",
+    placeholder: "TARGET",
   }),
 });
 
@@ -255,7 +277,7 @@ export function createCompletionCommand(
           throw new Error(`install failed: ${e instanceof Error ? e.message : String(e)}`);
         }
         console.error(`installed: ${target}`);
-        if (shellType !== "fish") {
+        if (shellType === "bash") {
           console.error("");
           console.error(`Add to your ~/.${shellType}rc:`);
           console.error("");
@@ -264,6 +286,8 @@ export function createCompletionCommand(
               .trim()
               .replace(/^/gm, "    "),
           );
+        } else if (shellType === "zsh") {
+          printZshFpathSetup(resolvedProgramName, target);
         }
         return;
       }
@@ -312,7 +336,15 @@ export function createRefreshCompletionCommand(
     description: "(internal) Refresh the on-disk completion cache if stale.",
     args: refreshArgsSchema,
     run(args) {
-      refreshIfStale({ rootCommand, programName, ...extra }, args.shell);
+      refreshIfStale(
+        {
+          rootCommand,
+          programName,
+          ...extra,
+          ...(args.target !== undefined && { targetPath: args.target }),
+        },
+        args.shell,
+      );
     },
   });
 }
