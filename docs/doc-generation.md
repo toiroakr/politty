@@ -1,6 +1,10 @@
 # Documentation Generator
 
-A system that automatically generates Markdown documentation from CLI commands defined with `defineCommand` and validates consistency with golden tests.
+A system that generates Markdown documentation from CLI commands defined with `defineCommand` and validates consistency with golden tests.
+
+The document structure lives **in code** as `md` tagged-template functions. Generated files contain a single marker pair per command (used for per-command partial validation); everything else — file headers, global options, the command index, free-form prose — is produced from your templates and is otherwise markerless.
+
+> **Upgrading from the marker-based API?** Earlier versions embedded nine HTML-comment markers per command in the Markdown and wrote prose between them. That model is gone. Run `npx politty-migrate` to convert an existing project automatically (see [Migration](#migration)).
 
 ## Quick Start
 
@@ -21,7 +25,7 @@ describe("my-command", () => {
 
 ### Updating Documentation
 
-Tests fail when there are differences. Set the environment variable and run tests to update files:
+Tests fail when there are differences. Set the environment variable and run tests to (re)write files:
 
 ```bash
 POLITTY_DOCS_UPDATE=true pnpm test
@@ -31,763 +35,279 @@ POLITTY_DOCS_UPDATE=true pnpm test
 
 ### `assertDocMatch(config)`
 
-Validates that documentation matches the golden file. Throws an error if there are differences and `POLITTY_DOCS_UPDATE` is not set.
+Validates that documentation matches the generated output. Throws when there are differences and `POLITTY_DOCS_UPDATE` is not set.
+
+### `generateDoc(config)`
+
+Generates documentation and returns the result without asserting.
 
 ```typescript
-import { assertDocMatch } from "politty/docs";
+const result = await generateDoc({ command, files: { "docs/cli.md": [""] } });
+console.log(result.success, result.files);
+```
 
+### `initDocFile(config, fileSystem?)`
+
+Deletes documentation files at the start of a test run (only when `POLITTY_DOCS_UPDATE=true`) so stale sections from skipped tests don't linger. Call it in `beforeAll`. Pass `realFs` as the second argument when `node:fs` is mocked.
+
+## The `md` template model
+
+Each documented command is rendered either by the **default renderer** or by a **per-command override** you supply. A file's overall structure is controlled by an optional **layout**. Both overrides and layouts are written with the `md` tagged template, which dedents the literal, trims surrounding blank lines, and collapses blank-line runs (so an empty interpolation never leaves a gap).
+
+### Three layers
+
+| Layer      | What it controls                                               | Shape                                                |
+| ---------- | -------------------------------------------------------------- | ---------------------------------------------------- |
+| `commands` | Which commands appear, and how each renders                    | `string[]` or `Record<path, true \| (md) => string>` |
+| `layout`   | The file's frame (headings, prose) and where command blocks go | `(md) => string` using `md.commands()`               |
+| override   | A single command's block                                       | `(md) => string` using `md.usage`, `md.options`, …   |
+
+- `true` (or the array-sugar form) renders a command with the default renderer.
+- A function value **overrides** that command: you compose its block from the section getters plus your own prose.
+- Free text _between_ two commands belongs to the adjacent command's override (the end of the preceding one, or the start of the next).
+
+### Command override getters
+
+Inside a per-command override, `md` is bound to that command:
+
+| Accessor               | Output                                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `md.h(level, text?)`   | Heading at a **relative** level (`1` = the command's base level in the file, `2` = one deeper). `text` defaults to the command name. |
+| `md.description`       | Description text (and an Aliases line when present)                                                                                  |
+| `md.usage`             | `**Usage**` block                                                                                                                    |
+| `md.arguments`         | `**Arguments**` table/list (`""` when none)                                                                                          |
+| `md.options`           | `**Options**` table/list (`""` when none)                                                                                            |
+| `md.globalOptionsLink` | "See Global Options" link (only when `rootDoc.globalOptions` is set)                                                                 |
+| `md.subcommands`       | `**Commands**` table (`""` when none)                                                                                                |
+| `md.examples`          | `**Examples**` block (`""` when none)                                                                                                |
+| `md.notes`             | `**Notes**` block (`""` when none)                                                                                                   |
+
+```typescript
 await assertDocMatch({
-  command: myCommand,
+  command: cli,
   files: {
-    "docs/cli.md": [""], // Root command only
+    "docs/cli.md": {
+      init: true, // default render
+      build: true, // default render
+      deploy: (md) => md`
+        ${md.h(1)}
+
+        ${md.description}
+
+        > ⚠️ Confirm on staging before deploying to production.
+
+        ${md.usage}
+
+        ${md.options}
+
+        ${md.globalOptionsLink}
+      `,
+    },
   },
 });
 ```
 
-### `generateDoc(config)`
+### Layout getters
 
-Generates documentation and returns the result. Does not perform assertions.
+Inside a `layout`, `md` exposes:
 
-```typescript
-import { generateDoc } from "politty/docs";
+| Accessor           | Output                                                                           |
+| ------------------ | -------------------------------------------------------------------------------- |
+| `md.commands()`    | All of this file's command blocks, in order (each wrapped in its command marker) |
+| `md.globalOptions` | The global options table (root document only; `""` elsewhere)                    |
+| `md.index`         | The command index (root document only; `""` elsewhere)                           |
 
-const result = await generateDoc({
-  command: myCommand,
-  files: { "docs/cli.md": [""] },
-});
-
-console.log(result.success); // true or false
-console.log(result.files); // Status for each file
-```
+If a `layout` is omitted, a default layout is used: a title/description header, then (for the root document) global options and the index, then `md.commands()`.
 
 ## Configuration
 
 ### `GenerateDocConfig`
 
-| Property         | Type                     | Description                                                  |
-| ---------------- | ------------------------ | ------------------------------------------------------------ |
-| `command`        | `AnyCommand`             | Command to generate documentation for                        |
-| `files`          | `FileMapping`            | Mapping of file paths to commands                            |
-| `ignores`        | `string[]`               | Command paths to exclude (with subcommands)                  |
-| `format`         | `DefaultRendererOptions` | Options for default renderer                                 |
-| `formatter`      | `FormatterFunction`      | Formatter for generated content                              |
-| `examples`       | `ExampleConfig`          | Example execution settings per command                       |
-| `targetCommands` | `string[]`               | Specific commands to validate/generate (for partial updates) |
+| Property         | Type                     | Description                                         |
+| ---------------- | ------------------------ | --------------------------------------------------- |
+| `command`        | `AnyCommand`             | Command to document                                 |
+| `files`          | `FileMapping`            | File path → commands/layout mapping                 |
+| `path`           | `PathConfig`             | Simpler alternative to `files` (mutually exclusive) |
+| `rootDoc`        | `RootDocConfig`          | Root document (global options table + index host)   |
+| `globalArgs`     | `ArgsSchema`             | Derives `rootDoc.globalOptions` from a schema       |
+| `ignores`        | `string[]`               | Command paths to exclude (with subcommands)         |
+| `format`         | `DefaultRendererOptions` | Display options for the default renderer            |
+| `formatter`      | `FormatterFunction`      | Formats generated content before comparison         |
+| `examples`       | `ExampleConfig`          | Example execution settings per command              |
+| `targetCommands` | `string[]`               | Validate/generate only these commands' blocks       |
 
 ### `FileMapping`
 
-Specify command path arrays with file paths as keys. **Subcommands of specified commands are automatically included.**
+The value for each file path is one of three forms:
 
 ```typescript
 const files: FileMapping = {
-  // Specifying root command includes all subcommands
-  "docs/cli.md": [""],
+  // 1. Array sugar — every command (and subcommands) uses the default render.
+  "docs/cli.md": ["", "config"],
 
-  // Splitting into multiple files
-  "docs/cli.md": ["", "user"],
-  "docs/cli/config.md": ["config"], // config get, config set are also included
+  // 2. Flat CommandMap — `true` for default, a function to override.
+  "docs/users.md": {
+    user: true,
+    "user create": (md) => md`${md.h(1)}\n\n${md.usage}`,
+  },
 
-  // Using wildcards
-  "docs/config-commands.md": ["config *"], // Only direct children of config
+  // 3. FileConfig — a custom file layout and/or a command map.
+  "docs/admin.md": {
+    layout: (md) => md`# Admin\n\nInternal tools.\n\n${md.commands()}`,
+    commands: { admin: true },
+  },
 };
 ```
 
-- Keys are file paths
-- Values are arrays of command paths (`""` is root command, `"config get"` is space-separated subcommand path)
-- **Subcommands are automatically included** (specifying `"config"` includes `"config get"`, `"config set"`)
-- **Wildcard `*`**: Matches any single command segment (see below)
-- Passing a `FileConfig` object as value allows specifying a custom renderer
-- **Links to other files**: When subcommands are output to different files, relative path links are automatically generated
+Disambiguation: an **array** is sugar; an object with a `commands` or `layout` key is a **`FileConfig`**; any other object is a **`CommandMap`**.
+
+> Edge case: a command literally named `commands` works in any form, but a command literally named `layout` cannot use the bare flat-map form (`{ layout: (md) => … }` reads as a file layout). Use `{ commands: { layout: (md) => … } }` instead.
+
+- **Subcommands are automatically included** (`"config"` pulls in `"config get"`, …).
+- **Wildcards**: `*` matches one command segment — `"config *"`, `"* *"`, `"*"`.
+- **Cross-file links**: when subcommands live in other files, relative links are generated automatically.
+
+### `rootDoc`
+
+The root document hosts the **global options table** and the **command index**, and enables the per-command `md.globalOptionsLink`.
 
 ```typescript
-// Example: Splitting config subcommand to separate file
-const files: FileMapping = {
-  "docs/cli.md": [""], // Link to config becomes config.md#config
-  "docs/config.md": ["config"], // config get, config set are same-file anchors
-};
+await assertDocMatch({
+  command: cli,
+  rootDoc: {
+    path: "docs/REFERENCE.md",
+    globalOptions: commonOptions, // ArgsShape, or { args, options }
+    layout: (md) => md`
+      # project-cli
+
+      Project management CLI.
+
+      ## Global Options
+
+      ${md.globalOptions}
+
+      ## Command Reference
+
+      ${md.index}
+    `,
+  },
+  files: { "docs/README.md": ["init", "build", "deploy"] },
+});
 ```
 
-### `FileConfig`
+- `md.globalOptionsLink` in command blocks is empty unless `rootDoc.globalOptions` is set.
+- Omit `layout` to get the default root layout (header + global options + index).
+- For a single-file setup, point `rootDoc.path` at the same file and call `${md.commands()}` in its layout.
+
+### `path` (shorthand)
+
+A simpler alternative to `files`:
 
 ```typescript
-interface FileConfig {
-  commands: string[]; // Array of command paths to include
-  render?: RenderFunction; // Custom renderer (optional)
+// All commands in one file
+path: "docs/CLI.md"
+
+// Split: root + specific subtrees in their own files
+path: { root: "docs/CLI.md", commands: { build: "docs/build.md" } }
+```
+
+### `globalArgs`
+
+When provided, automatically derives `rootDoc.globalOptions` from a runtime schema and renders the global options table + per-command links.
+
+### `format` (display options)
+
+```typescript
+format: {
+  headingLevel: 2,        // base heading level (default 1)
+  optionStyle: "list",    // "table" | "list"
+  generateAnchors: true,  // anchor links to subcommands
+  includeSubcommandDetails: true,
 }
 ```
 
-### `ignores`
+Heading levels are adjusted per file: the shallowest command uses `headingLevel`, deeper subcommands increase by depth. Inside an override, `md.h(1)` resolves to that command's adjusted base level.
 
-Excludes specific commands and their subcommands from documentation generation:
-
-```typescript
-await assertDocMatch({
-  command: cli,
-  files: { "docs/cli.md": [""] },
-  ignores: ["internal", "debug"], // Exclude internal, debug and their subcommands
-});
-```
-
-- Commands specified in `ignores` and their subcommands are automatically excluded
-- **Wildcard `*`**: Matches any single command segment (see below)
-- Error if commands specified in both `files` and `ignores` overlap
-- Error if specifying non-existent command paths
-
-```typescript
-// Error: "config" specified in both files and ignores
-await assertDocMatch({
-  command: cli,
-  files: { "docs/cli.md": ["config"] },
-  ignores: ["config"], // Error!
-});
-```
-
-### Wildcard Patterns
-
-Wildcard `*` can be used in `files` and `ignores`. `*` matches any single command segment (name).
-
-| Pattern    | Matches                    | Description                           |
-| ---------- | -------------------------- | ------------------------------------- |
-| `*`        | `greet`, `config`          | All top-level commands                |
-| `* *`      | `config get`, `config set` | Depth 2 commands (nested subcommands) |
-| `config *` | `config get`, `config set` | Direct children of config             |
-| `* * *`    | `config get key`           | Depth 3 commands                      |
-
-**Subcommands of wildcard-matched commands are also automatically included** (same as normal command path specification).
-
-```typescript
-// Exclude only nested subcommands
-await assertDocMatch({
-  command: cli,
-  files: { "docs/cli.md": [""] },
-  ignores: ["* *"], // Exclude config get, config set etc. at depth 2+
-});
-
-// Put specific parent's children in separate file
-await assertDocMatch({
-  command: cli,
-  files: {
-    "docs/cli.md": [""],
-    "docs/config.md": ["config *"], // Only config get, config set
-  },
-  ignores: ["config *"], // Exclude config children from main file
-});
-
-// Exclude "two" from all subcommands
-await assertDocMatch({
-  command: cli,
-  files: { "docs/cli.md": ["*"] }, // All top-level commands
-  ignores: ["* two"], // Exclude alpha two, beta two
-});
-```
-
-- Error if wildcard pattern matches no commands
+> Per-section render callbacks (`renderOptions`, `renderFooter`, …) no longer exist. Customize a section by writing a per-command override that composes the section getters with your own markdown.
 
 ### `examples`
 
-Executes `examples` defined in `defineCommand` and includes output in documentation. Mocks can be set per command:
+Executes `examples` defined in `defineCommand` and includes their output. Mocks can be set per command:
 
 ```typescript
-import * as fs from "node:fs";
-import { vi } from "vitest";
-
-vi.mock("node:fs");
-
 await assertDocMatch({
   command: cli,
-  files: { "docs/cli.md": ["", "read", "write"] },
+  files: { "docs/cli.md": ["", "read"] },
   examples: {
-    // read command: Mock file reading
     read: {
       mock: () => {
-        vi.mocked(fs.readFileSync).mockImplementation((path) => {
-          if (path === "config.json") return '{"name": "app"}';
-          throw new Error(`File not found: ${path}`);
-        });
+        /* set up fs mock */
       },
       cleanup: () => {
-        vi.mocked(fs.readFileSync).mockReset();
-      },
-    },
-    // write command: Mock file writing
-    write: {
-      mock: () => {
-        vi.mocked(fs.writeFileSync).mockImplementation(() => {});
-      },
-      cleanup: () => {
-        vi.mocked(fs.writeFileSync).mockReset();
+        /* reset */
       },
     },
   },
 });
 ```
 
-### `ExampleConfig`
+### `targetCommands` (partial validation)
 
-| Property  | Type                          | Description                               |
-| --------- | ----------------------------- | ----------------------------------------- |
-| `mock`    | `() => void \| Promise<void>` | Mock setup function called before example |
-| `cleanup` | `() => void \| Promise<void>` | Cleanup function called after example     |
-
-- Examples for command paths specified in `examples` are executed
-- Each command processes in order: `mock` → execute examples → `cleanup`
-- Mocks don't interfere between commands (reset in `cleanup`)
-
-### `targetCommands`
-
-Validates/generates only specific command sections. Used when isolating tests per command:
+Validates/generates only specific command blocks, preserving the rest of the file. This is the basis for isolating per-command tests (different mocks per `it()`):
 
 ```typescript
-// Validate/generate only read command section
 await assertDocMatch({
-  command: cli,
-  files: { "docs/cli.md": ["", "read", "write"] },
+  ...baseDocConfig,
   targetCommands: ["read"],
-  examples: {
-    read: {
-      mock: () => {
-        /* ... */
-      },
-      cleanup: () => {
-        /* ... */
-      },
-    },
-  },
-});
-
-// Validate/generate multiple commands simultaneously
-await assertDocMatch({
-  command: cli,
-  files: { "docs/cli.md": ["", "read", "write"] },
-  targetCommands: ["read", "write"],
-  examples: {
-    read: {
-      mock: () => {
-        /* ... */
-      },
-      cleanup: () => {
-        /* ... */
-      },
-    },
-    write: {
-      mock: () => {
-        /* ... */
-      },
-      cleanup: () => {
-        /* ... */
-      },
-    },
-  },
+  examples: { read: { mock, cleanup } },
 });
 ```
 
-- When `targetCommands` is specified, only those command sections are generated/validated
-- **Subcommand recursive expansion**: Subcommands of specified commands are also automatically generated
-  - However, commands explicitly specified in `files` are excluded (generated individually with `targetCommands`)
-- Other command sections are preserved as-is if they exist in the file
-- If section doesn't exist, inserted at correct position based on order in `files`
-- Use empty string `""` to specify root command
-- Commands spanning multiple files can be specified together
+Partial validation operates on the single command marker pair (`<!-- politty:command:<path>:start --> … -->`). If a target command has no marker in an existing file and update mode is off, it errors and asks you to regenerate.
 
-```typescript
-// Subcommand recursive expansion example
-// cli: root -> read, write, check, delete (subcommands)
-await assertDocMatch({
-  command: cli,
-  files: { "docs/cli.md": ["", "read", "write", "check"] },
-  targetCommands: [""], // Specify root command
-  examples: {},
-});
-// Result:
-// - "" (root) section is generated
-// - "delete" section is also generated (subcommand not explicitly in files)
-// - "read", "write", "check" are not generated (explicitly in files, generated in individual tests)
-```
+## Markers
 
-### `initDocFile(config, fileSystem?)`
-
-Initializes (deletes) documentation files at test start. Call in `beforeAll` to ensure skipped test sections don't remain:
-
-```typescript
-import { initDocFile } from "politty/docs";
-
-const docConfig = {
-  command,
-  files: { "docs/cli.md": ["", "sub1", "sub2"] },
-};
-
-describe("my-cli", () => {
-  beforeAll(() => {
-    initDocFile(docConfig); // Initialize all files in files
-  });
-
-  // Tests for each command...
-});
-```
-
-- First argument is an object containing `{ files: ... }`, or a single file path string
-- Deletes files only when `POLITTY_DOCS_UPDATE=true`
-- Does nothing during normal test runs (validates existing files)
-- When mocking fs, pass `realFs` as second argument:
-
-```typescript
-const realFs = await vi.importActual<typeof fs>("node:fs");
-
-beforeAll(() => {
-  initDocFile(docConfig, realFs);
-});
-```
-
-### `examples` Field in `defineCommand`
-
-Add usage examples when defining commands:
-
-```typescript
-const readCommand = defineCommand({
-  name: "read",
-  args: z.object({
-    file: arg(z.string(), { positional: true }),
-  }),
-  examples: [
-    { cmd: "config.json", desc: "Read a JSON config file" },
-    { cmd: "data.txt -f text", desc: "Read a text file" },
-  ],
-  run: (args) => {
-    const content = fs.readFileSync(args.file, "utf-8");
-    console.log(content);
-  },
-});
-```
-
-Generated Markdown:
-
-````markdown
-**Examples**
-
-**Read a JSON config file**
-
-```bash
-$ config.json
-{"name": "app"}
-```
-
-**Read a text file**
-
-```bash
-$ data.txt -f text
-Hello from data.txt
-```
-````
-
-## Customization
-
-### Default Renderer Options
-
-Customize default renderer output:
-
-```typescript
-await assertDocMatch({
-  command: cli,
-  files: { "docs/cli.md": [""] },
-  format: {
-    headingLevel: 2, // Heading level (default: 1)
-    optionStyle: "list", // "table" or "list"
-    generateAnchors: true, // Anchor links to subcommands
-    includeSubcommandDetails: true, // Include subcommand details
-  },
-});
-```
-
-#### Automatic Heading Level Adjustment
-
-Subcommand heading levels are **relatively adjusted within the file** based on command depth:
-
-- The shallowest command in the file uses `headingLevel`
-- Deeper subcommands have sequentially lower levels
+Generated files contain exactly **one marker pair per command**:
 
 ```markdown
-<!-- docs/cli.md: When including root command -->
+<!-- politty:command:deploy:start -->
 
-# my-cli ← depth=1, headingLevel
+## deploy
 
-## config ← depth=2, headingLevel+1
+Deploy the project
 
-### config get ← depth=3, headingLevel+2
+...
 
-<!-- docs/config.md: When subcommands only -->
-
-# config ← depth=2 but shallowest in this file, so headingLevel
-
-## config get ← depth=3, headingLevel+1
+<!-- politty:command:deploy:end -->
 ```
 
-Subcommand titles display the full path (e.g., `config get`).
+These delimit blocks for partial validation. Root documents and custom layouts are markerless apart from the command blocks emitted by `md.commands()`. There is no doctor mode.
 
-### Custom Section Renderers
+## Migration
 
-Customize rendering for each section. `render*` functions receive default content and return final content:
+`npx politty-migrate` (a separate package) converts a project from the old marker-based setup to this API:
 
-```typescript
-import { createCommandRenderer } from "politty/docs";
+- 9-marker Markdown → one marker pair per command.
+- Free text that lived between markers is lifted into `layout` / per-command override templates.
+- `rootInfo`, `FileConfig.title` / `description` / `render`, and the per-section render callbacks are folded into `layout` (variable-referenced `files` declarations are resolved and migrated too).
+- Anything it can't rewrite statically (shared-base spreads, unresolvable/computed values, custom renderers) gets a `// TODO(politty-migrate: <category>)` anchor plus a `politty-migrate.todo.md` playbook describing how to finish each category. The tool fails (non-zero exit) rather than emit invalid config silently.
 
-const customRenderer = createCommandRenderer({
-  // Add Examples after options section
-  renderOptions: (defaultContent, info) => `${defaultContent}
-
-**Examples**
-
-\`\`\`bash
-${info.fullCommandPath} --help
-\`\`\``,
-});
-
-await assertDocMatch({
-  command: cli,
-  files: {
-    "docs/cli.md": { commands: [""], render: customRenderer },
-  },
-});
-```
-
-Return empty string to hide a section:
-
-```typescript
-const customRenderer = createCommandRenderer({
-  renderArguments: () => "", // Hide arguments section
-});
-```
-
-Available render functions:
-
-- `renderDescription` - Description section
-- `renderUsage` - Usage section
-- `renderArguments` - Arguments section
-- `renderOptions` - Options section
-- `renderSubcommands` - Subcommands section
-- `renderFooter` - Footer (empty by default)
-
-### Fully Custom Renderer
-
-Generate completely custom Markdown:
-
-```typescript
-import type { RenderFunction, CommandInfo } from "politty/docs";
-
-const myRenderer: RenderFunction = (info: CommandInfo) =>
-  `
-# ${info.name}
-
-${info.description ?? ""}
-
-**Usage**
-
-\`\`\`
-${info.fullCommandPath}
-\`\`\`
-`.trim();
-```
-
-### `CommandInfo`
-
-Command information passed to render functions:
-
-| Property          | Type                                  | Description                                        |
-| ----------------- | ------------------------------------- | -------------------------------------------------- |
-| `name`            | `string`                              | Command name                                       |
-| `description`     | `string \| undefined`                 | Command description                                |
-| `aliases`         | `string[] \| undefined`               | Command aliases                                    |
-| `fullCommandPath` | `string`                              | Full command path (e.g., `"my-cli config get"`)    |
-| `commandPath`     | `string`                              | Command path (e.g., `"config get"`, `""` for root) |
-| `depth`           | `number`                              | Command depth (root=1, subcommand=2, etc.)         |
-| `positionalArgs`  | `ResolvedFieldMeta[]`                 | Array of positional arguments                      |
-| `options`         | `ResolvedFieldMeta[]`                 | Array of options (non-positional arguments)        |
-| `subCommands`     | `SubCommandInfo[]`                    | Array of subcommand info                           |
-| `extracted`       | `ExtractedFields \| null`             | Field info extracted from schema                   |
-| `command`         | `AnyCommand`                          | Original command object                            |
-| `filePath`        | `string \| undefined`                 | File path where this command is output             |
-| `fileMap`         | `Record<string, string> \| undefined` | Map of command path → file path                    |
-
-### `SubCommandInfo`
-
-Subcommand information:
-
-| Property      | Type                    | Description             |
-| ------------- | ----------------------- | ----------------------- |
-| `name`        | `string`                | Subcommand name         |
-| `description` | `string \| undefined`   | Subcommand description  |
-| `aliases`     | `string[] \| undefined` | Subcommand aliases      |
-| `fullPath`    | `string[]`              | Full command path array |
-
-### `ResolvedFieldMeta`
-
-Argument/option metadata:
-
-| Property       | Type                  | Description                          |
-| -------------- | --------------------- | ------------------------------------ |
-| `name`         | `string`              | Field name                           |
-| `description`  | `string \| undefined` | Description                          |
-| `alias`        | `string \| undefined` | Short alias (e.g., `"v"`)            |
-| `type`         | `string`              | Type (`"string"`, `"boolean"`, etc.) |
-| `required`     | `boolean`             | Whether required                     |
-| `defaultValue` | `unknown`             | Default value                        |
-| `positional`   | `boolean`             | Whether positional argument          |
-| `placeholder`  | `string \| undefined` | Placeholder (e.g., `"FILE"`)         |
-
-## Generated Markdown Format
-
-The default renderer generates Markdown in the following format. Subcommand titles display full paths, and heading levels are automatically adjusted by depth:
-
-````markdown
-# command-name
-
-Command description
-
-**Usage**
-
-```
-command-name [options] <arg>
-```
-
-**Arguments**
-
-| Argument | Description          | Required |
-| -------- | -------------------- | -------- |
-| `arg`    | Argument description | Yes      |
-
-**Options**
-
-| Option             | Alias | Description        | Default     |
-| ------------------ | ----- | ------------------ | ----------- |
-| `--option <VALUE>` | `-o`  | Option description | `"default"` |
-| `--help`           | `-h`  | Show help          | -           |
-
-**Commands**
-
-| Command                     | Description            |
-| --------------------------- | ---------------------- |
-| [`subcommand`](#subcommand) | Subcommand description |
-
-## subcommand
-
-Subcommand description
-
-**Usage**
-
-```
-command-name subcommand [options]
-```
-
-**Commands**
-
-| Command                                   | Description       |
-| ----------------------------------------- | ----------------- |
-| [`subcommand action`](#subcommand-action) | Nested subcommand |
-
-### subcommand action
-
-Nested subcommand description
-
-**Usage**
-
-```
-command-name subcommand action
-```
-````
+After migrating, run `POLITTY_DOCS_UPDATE=true pnpm test` to regenerate the Markdown.
 
 ## Environment Variables
 
-| Variable              | Description                                                           |
-| --------------------- | --------------------------------------------------------------------- |
-| `POLITTY_DOCS_UPDATE` | Set to `true` or `1` to enable documentation update mode              |
-| `POLITTY_DOCS_DOCTOR` | Set to `true` or `1` to enable doctor mode (missing marker detection) |
-
-### Doctor Mode (`POLITTY_DOCS_DOCTOR`)
-
-Detects and inserts missing section markers in existing documentation files. Useful when upgrading politty introduces new section types that weren't generated by older versions.
-
-Requires `targetCommands` to be specified — doctor mode only works with marker-based comparison (partial validation).
-
-#### Read-only detection
-
-Reports missing markers as errors without modifying files:
-
-```bash
-POLITTY_DOCS_DOCTOR=true pnpm test
-```
-
-#### Auto-insert missing markers
-
-Combined with `POLITTY_DOCS_UPDATE`, automatically inserts missing markers:
-
-```bash
-POLITTY_DOCS_DOCTOR=true POLITTY_DOCS_UPDATE=true pnpm test
-```
-
-#### Behavior details
-
-- **Section opt-out respected**: Without doctor mode, removing a section's markers is treated as an intentional opt-out — the markers are not re-inserted by `POLITTY_DOCS_UPDATE` alone
-- **Content preservation**: When both adjacent markers exist (preceding and following), doctor mode wraps the existing content between them with the new markers, preserving user customizations
-- **Single boundary fallback**: When only one adjacent marker exists, the generated content is inserted at the correct position (existing content range cannot be safely determined)
-- **Marker ordering**: Inserted markers follow `SECTION_TYPES` order (heading → description → usage → arguments → options → ...)
-
-## Example: Playground Tests
-
-### Simple Example
-
-Example implementing documentation tests for each playground command:
-
-```typescript
-// playground/01-hello-world/index.test.ts
-import { describe, it } from "vitest";
-import { assertDocMatch } from "../../src/docs/index.js";
-import { command } from "./index.js";
-
-describe("01-hello-world", () => {
-  // ... other tests ...
-
-  it("documentation", async () => {
-    await assertDocMatch({
-      command,
-      files: { "playground/01-hello-world/README.md": [""] },
-    });
-  });
-});
-```
-
-### Example: Isolating Tests Per Command
-
-When there are multiple subcommands with different mock requirements, use `targetCommands` and `initDocFile` to isolate tests:
-
-```typescript
-// playground/22-examples/index.test.ts
-import * as fs from "node:fs";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { assertDocMatch, initDocFile, type GenerateDocConfig } from "politty/docs";
-import { command, readCommand, writeCommand, checkCommand } from "./index.js";
-
-vi.mock("node:fs");
-const realFs = await vi.importActual<typeof fs>("node:fs");
-
-const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
-  command,
-  files: { "playground/22-examples/README.md": ["", "read", "write", "check"] },
-};
-
-describe("22-examples", () => {
-  // Initialize documentation file at test start (pass realFs when mocking fs)
-  beforeAll(() => {
-    initDocFile(baseDocConfig, realFs);
-  });
-
-  beforeEach(() => {
-    vi.resetAllMocks();
-    // Delegate to realFs
-    vi.mocked(fs.existsSync).mockImplementation((path) => realFs.existsSync(path));
-    vi.mocked(fs.readFileSync).mockImplementation((path, opts) =>
-      realFs.readFileSync(path, opts as fs.EncodingOption),
-    );
-    vi.mocked(fs.writeFileSync).mockImplementation((path, data, opts) =>
-      realFs.writeFileSync(path, data, opts),
-    );
-  });
-
-  describe("root command", () => {
-    it("documentation", async () => {
-      await assertDocMatch({
-        ...baseDocConfig,
-        targetCommands: [""], // Root command
-        examples: {},
-      });
-    });
-  });
-
-  describe("read command", () => {
-    it("reads file content", async () => {
-      vi.mocked(fs.readFileSync).mockReturnValue("file content");
-      // ... test
-    });
-
-    it("documentation", async () => {
-      await assertDocMatch({
-        ...baseDocConfig,
-        targetCommands: ["read"],
-        examples: {
-          read: {
-            mock: () => {
-              vi.mocked(fs.readFileSync).mockImplementation((path) => {
-                if (path === "config.json") return '{"name": "app"}';
-                return realFs.readFileSync(path, "utf-8");
-              });
-            },
-            cleanup: () => {
-              vi.mocked(fs.readFileSync).mockImplementation((path, opts) =>
-                realFs.readFileSync(path, opts as fs.EncodingOption),
-              );
-            },
-          },
-        },
-      });
-    });
-  });
-
-  describe("write command", () => {
-    // ... same pattern
-  });
-});
-```
-
-Benefits of this pattern:
-
-- Independent mocks per command: Different mock settings possible for `read` and `write` commands
-- Skipped tests reflected: When a test is skipped, that command's section is not generated
-- Order preserved: Sections are placed in the order specified in `files`
-- Idempotent: Same results no matter how many times executed
+| Variable              | Description                                           |
+| --------------------- | ----------------------------------------------------- |
+| `POLITTY_DOCS_UPDATE` | Set to `true`/`1` to write/update documentation files |
 
 ## Exports
 
-### Main API
-
-- `assertDocMatch` - Golden test assertion
-- `generateDoc` - Documentation generation
-- `initDocFile` - Documentation file initialization (deletes files in update mode)
-
-### Utilities
-
-- `buildCommandInfo` - Build command information
-- `collectAllCommands` - Collect all commands
-- `resolveSubcommand` - Resolve lazy subcommands
-
-### Renderers
-
-- `createCommandRenderer` - Create custom renderer
-- `defaultRenderers` - Default renderer presets
-- `renderUsage` - Usage generation
-- `renderArgumentsTable` / `renderArgumentsList` - Argument rendering
-- `renderOptionsTable` / `renderOptionsList` - Option rendering
-- `renderSubcommandsTable` - Subcommand rendering
-
-### Comparator
-
-- `compareWithExisting` - File comparison
-- `formatDiff` - Diff formatting
-- `writeFile` - File writing
-
-### Renderers (Examples)
-
-- `renderExamplesDefault` - Default renderer for Examples section
-
-### Types
-
-- `CommandInfo` - Command information
-- `SubCommandInfo` - Subcommand information
-- `RenderFunction` - Renderer function type
-- `SectionRenderFunction` - Section render function type
-- `DefaultRendererOptions` - Renderer options
-- `FileConfig` - File configuration
-- `FileMapping` - File mapping
-- `GenerateDocConfig` - Configuration
-- `GenerateDocResult` - Result
-- `ExampleConfig` - Example execution settings
-- `ExampleCommandConfig` - Per-command example settings
-- `ExampleExecutionResult` - Example execution result
-- `FormatterFunction` - Formatter function type
+- `assertDocMatch`, `generateDoc`, `initDocFile` — main API
+- `createCommandMd`, `createLayoutMd`, `formatTemplate` — the `md` tag building blocks
+- `createCommandRenderer`, `defaultRenderers` — default rendering
+- `renderUsage`, `renderArgumentsTable`/`renderArgumentsList`, `renderOptionsTable`/`renderOptionsList`, `renderSubcommandsTable`, `renderExamplesDefault` — section renderers
+- `buildCommandInfo`, `collectAllCommands`, `resolveLazyCommand` — command info
+- `renderArgsTable`, `renderCommandIndex` — global options / index
+- `compareWithExisting`, `formatDiff`, `writeFile` — comparator utilities
+- `commandStartMarker`, `commandEndMarker` — command marker helpers
+- Types: `CommandInfo`, `CommandMd`, `LayoutMd`, `CommandOverride`, `CommandMap`, `FileConfig`, `FileMapping`, `RootDocConfig`, `PathConfig`, `GenerateDocConfig`, `GenerateDocResult`, `DefaultRendererOptions`, `ExampleConfig`, `FormatterFunction`, `RenderFunction`

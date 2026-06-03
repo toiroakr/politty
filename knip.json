@@ -1,7 +1,20 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "project": ["src/**/*.ts"],
-  "ignore": ["playground/**", "tests/**"],
-  "ignoreDependencies": ["@quansync/fs", "quansync", "tsx"],
-  "ignoreExportsUsedInFile": true
+  "ignoreExportsUsedInFile": true,
+  "workspaces": {
+    ".": {
+      "ignoreDependencies": ["typescript"]
+    },
+    "packages/politty": {
+      "project": ["src/**/*.ts"],
+      "ignore": ["playground/**", "tests/**"],
+      "ignoreDependencies": ["@quansync/fs", "quansync", "tsx"]
+    },
+    "packages/politty-migrate": {
+      "entry": ["src/cli.ts"],
+      "project": ["src/**/*.ts"],
+      "ignore": ["tests/**"],
+      "ignoreDependencies": ["zod"]
+    }
+  }
 }

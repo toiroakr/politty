@@ -3,16 +3,23 @@ pre-commit:
   commands:
     organize-imports:
       glob: "*.{ts,tsx,cts,mts}"
+      # Migration golden fixtures are byte-exact inputs/expected outputs; never reformat them.
+      exclude:
+        - "packages/politty-migrate/tests/fixtures/**"
       run: npx organize-imports-cli {staged_files}
       stage_fixed: true
       priority: 1
     oxlint:
       glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx}"
+      exclude:
+        - "packages/politty-migrate/tests/fixtures/**"
       run: pnpm fix:oxlint {staged_files}
       stage_fixed: true
       priority: 2
     oxfmt:
       glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc,md}"
+      exclude:
+        - "packages/politty-migrate/tests/fixtures/**"
       run: pnpm fix:oxfmt {staged_files}
       stage_fixed: true
       priority: 3
