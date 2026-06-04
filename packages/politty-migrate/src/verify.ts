@@ -51,12 +51,12 @@ export function verifyMigration(oldMd: string, newMd: string): VerifyResult {
     return { ok: true, drift: [] };
   }
 
-  // Produce a minimal line-level diff of the non-marker content.
+  // Produce a naive line-by-line diff of the non-marker content.
   const drift = lineDiff(oldStripped, newStripped);
   return { ok: false, drift };
 }
 
-/** A compact line diff (old vs new) restricted to differing lines. */
+/** Naive line-by-line diff (old vs new) at matching indices. */
 function lineDiff(a: string, b: string): string[] {
   const aLines = a.split("\n");
   const bLines = b.split("\n");
