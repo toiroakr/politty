@@ -75,4 +75,14 @@ await assertDocMatch({
     expect(errOutput).not.toMatch(/silent miss/i);
     expect(process.exitCode).toBe(0);
   });
+
+  it("does not write a playbook on a no-op run (no doc-generation calls)", () => {
+    const dir = tmpProject();
+    fs.writeFileSync(path.join(dir, "unrelated.test.ts"), "export const x = 1;\n", "utf-8");
+    vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    main([dir]);
+    expect(fs.existsSync(path.join(dir, "politty-migrate.todo.md"))).toBe(false);
+    expect(process.exitCode).toBe(0);
+  });
 });

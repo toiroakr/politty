@@ -16,14 +16,22 @@
 
 const ANY_POLITTY_MARKER = /^\s*<!--\s*politty:[^>]*-->\s*$/;
 
-/** Strip every politty marker line and normalize blank-line runs. */
+/**
+ * Strip every politty marker line and normalize blank-line runs.
+ *
+ * Only marker lines and SURROUNDING BLANK LINES are touched: leading/trailing
+ * blank lines are dropped and 3+ newline runs collapse to one blank line (both
+ * are artifacts of removing marker lines). Meaningful whitespace — e.g. the
+ * indentation of the first content line — is preserved so real content drift
+ * is never masked.
+ */
 export function stripMarkers(content: string): string {
   const kept = content.split("\n").filter((line) => !ANY_POLITTY_MARKER.test(line));
   return kept
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/\s+$/, "")
-    .replace(/^\s+/, "");
+    .replace(/(?:\n[ \t]*)+$/, "")
+    .replace(/^(?:[ \t]*\n)+/, "");
 }
 
 export interface VerifyResult {

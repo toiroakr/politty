@@ -35,3 +35,22 @@ describe("verifyMigration", () => {
     expect(result.drift.length).toBeGreaterThan(0);
   });
 });
+
+describe("stripMarkers whitespace handling", () => {
+  it("preserves meaningful leading indentation on the first content line", () => {
+    // Leading INDENTATION (not a blank line) is content; stripping it would
+    // mask drift between an indented and a non-indented first line.
+    expect(stripMarkers("  indented first line\nbody")).toBe("  indented first line\nbody");
+  });
+
+  it("detects drift when only the first line's indentation differs", () => {
+    const result = verifyMigration("  indented\n", "indented\n");
+    expect(result.ok).toBe(false);
+  });
+
+  it("still tolerates leading/trailing blank lines left by marker removal", () => {
+    const oldMd = "<!-- politty:command:x:start -->\n\nbody\n\n<!-- politty:command:x:end -->\n";
+    const newMd = "body\n";
+    expect(verifyMigration(oldMd, newMd).ok).toBe(true);
+  });
+});

@@ -283,7 +283,9 @@ export function migrate(options: MigrateOptions): MigrateReport {
   }
 
   const playbookPath = path.join(cwd, "politty-migrate.todo.md");
-  if (!dryRun) {
+  // Only write the playbook when something was actually processed — a no-op
+  // run ("No assertDocMatch/generateDoc calls found") must not create files.
+  if (!dryRun && fileReports.length > 0) {
     fs.writeFileSync(playbookPath, renderPlaybook(playbookEntries), "utf-8");
   }
 
