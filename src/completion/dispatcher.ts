@@ -279,6 +279,10 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`            fi`);
   lines.push(`            (( _ok )) && COMPREPLY+=("\${_ip}\${_f}")`);
   lines.push(`        done < <(compgen -f -- "$_cur")`);
+  // bash 3.2 lacks compopt, so when no file matched the extension/matcher the
+  // top-level `complete -o default` would leak unrelated files; seed the empty
+  // sentinel to suppress it (mirrors the dir-only / NoFileCompletion branches).
+  lines.push(`        if (( \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
   lines.push(`    elif (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
   lines.push(`        compopt +o default 2>/dev/null`);
   lines.push(`        compopt -o filenames 2>/dev/null`);

@@ -679,6 +679,11 @@ describe("Completion", () => {
         expect(script).toMatch(
           /elif \(\( _directive & 2 \)\); then[\s\S]*?if \(\( \$\{#COMPREPLY\[@\]\} == 0 \)\); then COMPREPLY=\( "" \); fi/,
         );
+        // Same fallback guard for the extension/matcher branch: when no file
+        // matched the filter, do not leak unrelated files on bash 3.2.
+        expect(script).toMatch(
+          /done < <\(compgen -f -- "\$_cur"\)\s*\n\s*if \(\( \$\{#COMPREPLY\[@\]\} == 0 \)\); then COMPREPLY=\( "" \); fi/,
+        );
       });
 
       it("validates bundled worker headers by whole line, not substring", () => {
