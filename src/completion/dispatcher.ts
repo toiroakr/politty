@@ -365,7 +365,13 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
     `            NODE_COMPILE_CACHE="$_node_compile_cache" ${envName}="$_bin" "$_bin" __refresh-completion bash "$_worker" --static --worker 2>/dev/null`,
   );
   lines.push(`        fi`);
-  lines.push(`        if [[ -f "$_worker" ]] && __${fn}_load_worker "$_worker"; then`);
+  // Only load the worker when its embedded sig matches the current binary. If
+  // the refresh above failed (e.g. unwritable cache), the stale worker stays on
+  // disk; loading it would serve outdated completions, so fall through to
+  // `__complete` against the current binary instead.
+  lines.push(
+    `        if [[ -f "$_worker" ]] && head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig" && __${fn}_load_worker "$_worker"; then`,
+  );
   lines.push(
     `            NODE_COMPILE_CACHE="$_node_compile_cache" ${workerBinEnvName}="$_bin" _${workerFn}_completions`,
   );
@@ -695,7 +701,12 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
     `            NODE_COMPILE_CACHE="$_node_compile_cache" ${envName}="$_bin" "$_bin" __refresh-completion zsh "$_worker" --static --worker 2>/dev/null`,
   );
   lines.push(`        fi`);
-  lines.push(`        if [[ -f "$_worker" ]] && __${fn}_load_worker "$_worker"; then`);
+  // Only load the worker when its embedded sig matches the current binary, so a
+  // failed refresh (stale worker left on disk) falls through to `__complete`
+  // instead of serving outdated completions.
+  lines.push(
+    `        if [[ -f "$_worker" ]] && head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig" && __${fn}_load_worker "$_worker"; then`,
+  );
   lines.push(
     `            NODE_COMPILE_CACHE="$_node_compile_cache" ${workerBinEnvName}="$_bin" _${workerFn}_completions "$@"`,
   );
@@ -1011,7 +1022,12 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
     `            env NODE_COMPILE_CACHE="$_node_compile_cache" ${envName}="$_bin" $_bin __refresh-completion fish "$_worker" --static --worker 2>/dev/null`,
   );
   lines.push(`        end`);
-  lines.push(`        if test -f "$_worker"`);
+  // Only load the worker when its embedded sig matches the current binary, so a
+  // failed refresh (stale worker left on disk) falls through to `__complete`
+  // instead of serving outdated completions.
+  lines.push(
+    `        if test -f "$_worker"; and head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig"`,
+  );
   lines.push(`            if __${fn}_load_worker "$_worker"`);
   lines.push(`                set -lx ${workerBinEnvName} "$_bin"`);
   lines.push(`                set -lx NODE_COMPILE_CACHE "$_node_compile_cache"`);

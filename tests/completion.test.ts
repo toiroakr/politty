@@ -735,6 +735,36 @@ describe("Completion", () => {
         expect(fish).toContain(`set -lx NODE_COMPILE_CACHE "$_node_compile_cache"`);
       });
 
+      it("loads the static worker only when its sig matches (failed refresh falls back)", () => {
+        // A failed refresh leaves a stale worker on disk; the load is gated on
+        // the worker's `# politty-bin-sig` matching the current binary so the
+        // dispatcher falls through to `__complete` rather than serving outdated
+        // completions.
+        const bash = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+        }).script;
+        expect(bash).toContain(
+          'grep -qF "# politty-bin-sig: $_sig" && __mycli_load_worker "$_worker"',
+        );
+
+        const zsh = generateCompletion(dispatcherCommand, {
+          shell: "zsh",
+          programName: "mycli",
+        }).script;
+        expect(zsh).toContain(
+          'grep -qF "# politty-bin-sig: $_sig" && __mycli_load_worker "$_worker"',
+        );
+
+        const fish = generateCompletion(dispatcherCommand, {
+          shell: "fish",
+          programName: "mycli",
+        }).script;
+        expect(fish).toContain(
+          'test -f "$_worker"; and head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig"',
+        );
+      });
+
       it("guards bash command substitutions so a miss does not abort under set -e", () => {
         const { script } = generateCompletion(dispatcherCommand, {
           shell: "bash",
