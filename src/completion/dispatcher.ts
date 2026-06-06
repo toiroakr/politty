@@ -44,7 +44,7 @@ function workerFileSigExpr(fileVar: string): string {
 
 function shellWorkerRelList(options: CompletionOptions, shell: "bash" | "zsh"): string {
   const rels = bundledWorkerRelativePaths(options.programName, shell, options.bundledWorker);
-  return (rels.length > 0 ? rels : ["__politty_no_bundled_worker__"]).map(shSingleQuote).join(" ");
+  return rels.map(shSingleQuote).join(" ");
 }
 
 function fishDQ(s: string): string {
@@ -53,7 +53,7 @@ function fishDQ(s: string): string {
 
 function fishWorkerRelList(options: CompletionOptions): string {
   const rels = bundledWorkerRelativePaths(options.programName, "fish", options.bundledWorker);
-  return (rels.length > 0 ? rels : ["__politty_no_bundled_worker__"]).map(fishDQ).join(" ");
+  return rels.map(fishDQ).join(" ");
 }
 
 function bundledWorkerPathCommandEnabled(options: CompletionOptions): boolean {
@@ -154,13 +154,15 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(``);
   lines.push(`__${fn}_worker_from_dir() {`);
   lines.push(`    local _dir="$1" _rel _candidate`);
-  lines.push(`    for _rel in ${workerRelList}; do`);
-  lines.push(`        [[ "$_rel" == /* ]] && _candidate="$_rel" || _candidate="$_dir/$_rel"`);
-  lines.push(`        if __${fn}_is_worker_file "$_candidate"; then`);
-  lines.push(`            printf '%s\\n' "$_candidate"`);
-  lines.push(`            return 0`);
-  lines.push(`        fi`);
-  lines.push(`    done`);
+  if (workerRelList.length > 0) {
+    lines.push(`    for _rel in ${workerRelList}; do`);
+    lines.push(`        [[ "$_rel" == /* ]] && _candidate="$_rel" || _candidate="$_dir/$_rel"`);
+    lines.push(`        if __${fn}_is_worker_file "$_candidate"; then`);
+    lines.push(`            printf '%s\\n' "$_candidate"`);
+    lines.push(`            return 0`);
+    lines.push(`        fi`);
+    lines.push(`    done`);
+  }
   lines.push(`    return 1`);
   lines.push(`}`);
   lines.push(``);
@@ -450,13 +452,15 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    emulate -L zsh`);
   lines.push(`    setopt local_options no_aliases`);
   lines.push(`    local _dir="$1" _rel _candidate`);
-  lines.push(`    for _rel in ${workerRelList}; do`);
-  lines.push(`        [[ "$_rel" == /* ]] && _candidate="$_rel" || _candidate="$_dir/$_rel"`);
-  lines.push(`        if __${fn}_is_worker_file "$_candidate"; then`);
-  lines.push(`            print -r -- "$_candidate"`);
-  lines.push(`            return 0`);
-  lines.push(`        fi`);
-  lines.push(`    done`);
+  if (workerRelList.length > 0) {
+    lines.push(`    for _rel in ${workerRelList}; do`);
+    lines.push(`        [[ "$_rel" == /* ]] && _candidate="$_rel" || _candidate="$_dir/$_rel"`);
+    lines.push(`        if __${fn}_is_worker_file "$_candidate"; then`);
+    lines.push(`            print -r -- "$_candidate"`);
+    lines.push(`            return 0`);
+    lines.push(`        fi`);
+    lines.push(`    done`);
+  }
   lines.push(`    return 1`);
   lines.push(`}`);
   lines.push(``);
@@ -785,17 +789,19 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(``);
   lines.push(`function __${fn}_worker_from_dir`);
   lines.push(`    set -l _dir $argv[1]`);
-  lines.push(`    for _rel in ${workerRelList}`);
-  lines.push(`        if string match -q '/*' -- "$_rel"`);
-  lines.push(`            set _candidate "$_rel"`);
-  lines.push(`        else`);
-  lines.push(`            set _candidate "$_dir/$_rel"`);
-  lines.push(`        end`);
-  lines.push(`        if __${fn}_is_worker_file "$_candidate"`);
-  lines.push(`            printf '%s\\n' "$_candidate"`);
-  lines.push(`            return 0`);
-  lines.push(`        end`);
-  lines.push(`    end`);
+  if (workerRelList.length > 0) {
+    lines.push(`    for _rel in ${workerRelList}`);
+    lines.push(`        if string match -q '/*' -- "$_rel"`);
+    lines.push(`            set _candidate "$_rel"`);
+    lines.push(`        else`);
+    lines.push(`            set _candidate "$_dir/$_rel"`);
+    lines.push(`        end`);
+    lines.push(`        if __${fn}_is_worker_file "$_candidate"`);
+    lines.push(`            printf '%s\\n' "$_candidate"`);
+    lines.push(`            return 0`);
+    lines.push(`        end`);
+    lines.push(`    end`);
+  }
   lines.push(`    return 1`);
   lines.push(`end`);
   lines.push(``);

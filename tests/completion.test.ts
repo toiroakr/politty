@@ -889,6 +889,18 @@ describe("Completion", () => {
         expect(script).not.toContain("__completion-worker-path");
       });
 
+      it("disables bundled worker lookup without leaving sentinel paths", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+          bundledWorker: { disabled: true },
+        });
+
+        expect(script).not.toContain("__completion-worker-path");
+        expect(script).not.toContain("bash-worker.bash");
+        expect(script).not.toContain("__politty_no_bundled_worker__");
+      });
+
       it("sets a default Node compile cache for bash and preserves user overrides", () => {
         const root = mkdtempSync(join(tmpdir(), "politty-dispatcher-cache-"));
         const binDir = join(root, "bin");
