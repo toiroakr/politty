@@ -658,6 +658,20 @@ describe("Completion", () => {
         }
       });
 
+      it("suppresses bash file fallback for empty NoFileCompletion results (bash 3.2)", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        // bash 3.2 ignores `compopt +o default`, so an empty COMPREPLY in the
+        // NoFileCompletion branch must be seeded with the empty sentinel to stop
+        // `complete -o default` from falling through to filenames.
+        expect(script).toMatch(
+          /elif \(\( _directive & 2 \)\); then[\s\S]*?if \(\( \$\{#COMPREPLY\[@\]\} == 0 \)\); then COMPREPLY=\( "" \); fi/,
+        );
+      });
+
       it("keeps static mode available with baked command metadata", () => {
         const { script } = generateCompletion(dispatcherCommand, {
           shell: "bash",
@@ -1485,6 +1499,8 @@ describe("Completion", () => {
         const subcommandCandidates = result.candidates.filter((c) => c.type === "subcommand");
         expect(subcommandCandidates.some((c) => c.value === "build")).toBe(true);
         expect(subcommandCandidates.some((c) => c.value === "test")).toBe(true);
+        // Name completion opts out of the shells' empty-result file fallback.
+        expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
       });
 
       it("should generate option candidates", async () => {
@@ -1494,6 +1510,7 @@ describe("Completion", () => {
         const optionCandidates = result.candidates.filter((c) => c.type === "option");
         expect(optionCandidates.some((c) => c.value === "--verbose")).toBe(true);
         expect(optionCandidates.some((c) => c.value === "--format")).toBe(true);
+        expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
       });
 
       it("should generate enum value candidates for option-value", async () => {

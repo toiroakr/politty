@@ -424,7 +424,14 @@ function generateSubcommandCandidates(context: CompletionContext): CandidateResu
     candidates.push(...optionResult.candidates);
   }
 
-  return { candidates, directive: CompletionDirective.FilterPrefix };
+  // Name completion must not fall back to file completion when nothing
+  // matches (e.g. `mycli unknownsub<TAB>`). The dispatcher routes name
+  // completion through __complete, and its shells only suppress the file
+  // fallback when NoFileCompletion is set; the static scripts already do.
+  return {
+    candidates,
+    directive: CompletionDirective.FilterPrefix | CompletionDirective.NoFileCompletion,
+  };
 }
 
 /**
@@ -472,7 +479,12 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
     });
   }
 
-  return { candidates, directive: CompletionDirective.FilterPrefix };
+  // Option-name completion never completes filenames; opt out of the shells'
+  // empty-result file fallback (e.g. `mycli --unknown<TAB>`).
+  return {
+    candidates,
+    directive: CompletionDirective.FilterPrefix | CompletionDirective.NoFileCompletion,
+  };
 }
 
 /**

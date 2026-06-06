@@ -285,6 +285,10 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   );
   lines.push(`    elif (( _directive & ${CompletionDirective.NoFileCompletion} )); then`);
   lines.push(`        compopt +o default 2>/dev/null`);
+  // bash 3.2 lacks compopt, so `complete -o default` still falls through to
+  // file completion when COMPREPLY is empty; seed the empty sentinel to
+  // suppress it (mirrors the static script's NoFileCompletion handling).
+  lines.push(`        if (( \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
   lines.push(`    fi`);
   lines.push(`    if (( _directive & ${CompletionDirective.NoSpace} )); then`);
   lines.push(`        compopt -o nospace 2>/dev/null`);
