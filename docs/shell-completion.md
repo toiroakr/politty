@@ -8,14 +8,16 @@ For quick setup, see the [README](../README.md#shell-completion). For type signa
 
 `withCompletionCommand` adds three subcommands to your CLI:
 
-- **`completion <shell>`** — Generates a runtime dispatcher script that users source in their shell config. With `--install`, writes it to its on-disk cache (bash/zsh) or autoload location (fish). With `--loader`, prints the rc-loader snippet (bash/zsh only). Use `--static` to generate the legacy self-contained script.
+- **`completion <shell>`** — Generates a runtime dispatcher script that users source in their shell config. With `--install`, writes it to its on-disk cache (bash/zsh) or autoload location (fish). With `--loader`, prints the rc-loader snippet (bash/zsh only). Use `--static` to generate the legacy self-contained script, or `--static --worker` to print a package-bundled worker artifact.
 - **`__complete`** (hidden) — The dynamic completion engine used by dispatcher scripts and by `completion.custom.resolve`.
 - **`__refresh-completion <shell>`** (hidden) — Re-installs the on-disk cache when the binary's mtime changes. Used by the rc loader and the runMain background hook.
+- **`__completion-worker-path <shell>`** (hidden) — Prints the bundled worker path when the current package ships one. Dispatcher scripts do not call this by default, because that miss path starts the CLI process. Set `bundledWorker.queryCommand` when a package layout cannot be described with relative paths.
 
 By default, generated shell scripts do not embed the command tree. They resolve
-the executable currently visible to the shell and source a per-binary static
-worker cache. On cache miss or binary mtime change, the dispatcher regenerates
-the worker with:
+the executable currently visible to the shell and try to source a package
+bundled static worker from that executable. If no bundled worker exists, they
+source a per-binary static worker cache. On cache miss or binary mtime change,
+the dispatcher regenerates the worker with:
 
 ```
 mycli __refresh-completion bash <worker-cache> --static --worker
@@ -37,6 +39,14 @@ Resolution order:
 1. `<PROGRAM>_BIN`, for example `MYCLI_BIN`, when set.
 2. The executable found on `PATH` (`type -P` for bash, `whence -p` for zsh, and executable `command -v` results for fish).
 3. No completion when no executable is found.
+
+Completion source order:
+
+1. Package-relative bundled worker shipped with the currently visible CLI package.
+2. Optional bundled worker path reported by `__completion-worker-path <shell>` when `bundledWorker.queryCommand` is enabled.
+3. Cached worker under `${XDG_CACHE_HOME:-$HOME/.cache}/<program>/completion-worker.<shell>`.
+4. Runtime refresh via `__refresh-completion <shell> <worker-cache> --static --worker`.
+5. Direct `__complete` fallback if worker refresh or source fails.
 
 Static mode remains available:
 
@@ -61,10 +71,12 @@ static:
 
 Dispatcher worker caches live next to the regular completion cache:
 `${XDG_CACHE_HOME:-$HOME/.cache}/<program>/completion-worker.<shell>` unless
-`cacheDir` is hardcoded. `__complete` runs in JavaScript: it parses the partial
-command line, calls any runtime resolver or `expand` enumerator needed for that
-cursor position, and returns candidates with directives that tell the shell how
-to present them.
+`cacheDir` is hardcoded. Bundled and cached workers are sourced at most once per
+shell session per worker path and file mtime; subsequent TAB presses call the
+already-loaded worker function directly. `__complete` runs in JavaScript: it
+parses the partial command line, calls any runtime resolver or `expand`
+enumerator needed for that cursor position, and returns candidates with
+directives that tell the shell how to present them.
 For Node.js 22+ CLIs, dispatcher scripts set `NODE_COMPILE_CACHE` to
 `${XDG_CACHE_HOME:-$HOME/.cache}/<program>/node-compile-cache` before invoking
 `__complete` unless the user already provided `NODE_COMPILE_CACHE`. This keeps
@@ -118,6 +130,53 @@ const main = withCompletionCommand(rootCommand, {
 
 For fish, the autoload file always lives at `${XDG_CONFIG_HOME:-$HOME/.config}/fish/completions/<program>.fish` since fish dictates that path.
 
+### Bundled worker artifacts
+
+Published CLIs can avoid the first-TAB worker generation cost by shipping a
+worker generated during their build:
+
+```sh
+mycli completion zsh --static --worker > dist/completion/zsh-worker.zsh
+```
+
+The default dispatcher lookup tries common paths relative to the visible
+binary's real directory, including:
+
+```text
+completion/<shell>-worker.<ext>
+../completion/<shell>-worker.<ext>
+dist/completion/<shell>-worker.<ext>
+../dist/completion/<shell>-worker.<ext>
+completion-worker.<shell>
+../completion-worker.<shell>
+```
+
+`<ext>` is `bash`, `zsh`, or `fish`. For custom package layouts, configure the
+lookup at wrap time:
+
+```typescript
+const main = withCompletionCommand(rootCommand, {
+  programName: "mycli",
+  bundledWorker: {
+    relativePaths: {
+      zsh: ["../share/completion/zsh-worker.zsh"],
+    },
+  },
+});
+```
+
+Paths may include `{program}`, `{shell}`, and `{ext}` templates. If a package
+layout cannot be expressed this way, enable `queryCommand: true` to let the
+dispatcher ask the binary for `__completion-worker-path <shell>` and validate
+that reported file before sourcing it. This is off by default because the
+fallback starts the CLI process when package-relative lookup misses. The
+dispatcher falls back to the user cache when no valid bundled worker is
+present.
+
+Add a CI check in the consuming CLI repository that regenerates the worker into
+a temp file and compares it with the published artifact, so command definitions
+and bundled completion do not drift.
+
 ### Header format
 
 Every generated script starts with a small machine-readable header:
@@ -132,6 +191,8 @@ Every generated script starts with a small machine-readable header:
 ```
 
 `politty-bin-sig` is the binary's mtime in seconds. The rc loader and `__refresh-completion` compare this against the live binary to decide whether to rewrite the cache. `program-version` is included only when you pass `programVersion` to `withCompletionCommand`. `politty-completion-mode` records whether the cached script should refresh as `dispatcher` or `static`.
+Internal worker artifacts use `# politty-completion-mode: worker` and include
+`# politty-completion-worker: true`.
 
 ### Disabling auto-refresh
 

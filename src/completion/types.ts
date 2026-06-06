@@ -35,6 +35,25 @@ export type ShellType = "bash" | "zsh" | "fish";
 export type CompletionMode = "dispatcher" | "static";
 
 /**
+ * Optional published worker artifact lookup.
+ *
+ * Paths are resolved relative to the visible executable's real directory.
+ * Templates may include `{shell}`, `{ext}`, and `{program}`.
+ */
+export interface BundledWorkerOptions {
+  /** Disable bundled-worker lookup while keeping cache/dynamic fallbacks. */
+  disabled?: boolean | undefined;
+  /** Shell-specific worker paths relative to the executable directory. */
+  relativePaths?: Partial<Record<ShellType, readonly string[]>> | undefined;
+  /**
+   * Let dispatcher scripts ask the CLI for `__completion-worker-path <shell>`
+   * when package-relative lookup misses. Disabled by default because it starts
+   * the CLI process on that miss path.
+   */
+  queryCommand?: boolean | undefined;
+}
+
+/**
  * Options for completion generation
  */
 export interface CompletionOptions {
@@ -68,6 +87,8 @@ export interface CompletionOptions {
    * Worker scripts define suffixed functions and skip shell registration.
    */
   staticWorker?: { functionSuffix: string };
+  /** Published static-worker artifact lookup used by dispatcher mode. */
+  bundledWorker?: BundledWorkerOptions | undefined;
 }
 
 /**

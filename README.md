@@ -299,10 +299,13 @@ Attach metadata to an argument.
 politty provides automatic shell completion generation for bash, zsh, and fish.
 The default generated script is a small runtime dispatcher: when the user
 presses TAB, it resolves the executable currently visible on `PATH` and uses a
-per-binary static worker cache for normal completions. If the worker cache is
-missing or stale, it is regenerated from that binary's hidden
-`__refresh-completion` command. Completion fields that require runtime
-JavaScript still delegate to the binary's hidden `__complete` command.
+bundled static worker from that executable's package when one is available. If
+no package-relative bundled worker is found, it falls back to a per-binary
+static worker cache and regenerates that cache from the hidden
+`__refresh-completion` command when needed. Sourced workers are memoized for the
+shell session, so warm completions call the worker function directly.
+Completion fields that require runtime JavaScript still delegate to the
+binary's hidden `__complete` command.
 When `NODE_COMPILE_CACHE` is unset, the dispatcher sets it to a
 program-specific cache directory before invoking `__complete`, letting Node.js
 22+ reuse V8 module compile cache across repeated completion requests.
@@ -348,8 +351,23 @@ environment manager, for example:
 PATH_add node_modules/.bin
 ```
 
-Completion then follows the same executable the shell would run. To generate
-the older static script with command metadata baked in, use:
+Completion then follows the same executable the shell would run.
+
+Published CLIs can ship a fast worker artifact:
+
+```bash
+mycli completion zsh --static --worker > dist/completion/zsh-worker.zsh
+```
+
+The dispatcher looks for common package-relative worker paths such as
+`dist/completion/zsh-worker.zsh` from the visible binary. Use
+`withCompletionCommand({ bundledWorker: { relativePaths: { zsh: [...] } } })`
+to customize the package-relative lookup. For package layouts that cannot be
+expressed with relative paths, `bundledWorker.queryCommand: true` lets the
+dispatcher ask the binary's hidden `__completion-worker-path` command on the
+miss path.
+
+To generate the older static script with command metadata baked in, use:
 
 ```bash
 eval "$(mycli completion bash --static)"

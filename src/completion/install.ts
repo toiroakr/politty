@@ -26,7 +26,7 @@ import type { AnyCommand, ArgsSchema } from "../types.js";
 import { resolveBinPath } from "./header.js";
 import { generateCompletion } from "./index.js";
 import { defaultCacheDir } from "./loader.js";
-import type { CompletionMode, ShellType } from "./types.js";
+import type { BundledWorkerOptions, CompletionMode, ShellType } from "./types.js";
 
 export interface InstallContext {
   rootCommand: AnyCommand;
@@ -35,6 +35,7 @@ export interface InstallContext {
   cacheDir?: string | undefined;
   binPath?: string | undefined;
   globalArgsSchema?: ArgsSchema | undefined;
+  bundledWorker?: BundledWorkerOptions | undefined;
   targetPath?: string | undefined;
   completionMode?: CompletionMode | undefined;
   staticWorker?: { functionSuffix: string } | undefined;
@@ -76,6 +77,7 @@ function generateScript(ctx: InstallContext, shell: ShellType): string {
     ...(ctx.binPath !== undefined && { binPath: ctx.binPath }),
     ...(ctx.cacheDir !== undefined && { cacheDir: ctx.cacheDir }),
     ...(ctx.globalArgsSchema !== undefined && { globalArgsSchema: ctx.globalArgsSchema }),
+    ...(ctx.bundledWorker !== undefined && { bundledWorker: ctx.bundledWorker }),
     ...(ctx.staticWorker !== undefined && { staticWorker: ctx.staticWorker }),
   }).script;
 }

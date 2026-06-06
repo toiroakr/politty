@@ -8,6 +8,7 @@
  */
 
 import type { AnyCommand } from "../types.js";
+import { bundledWorkerRelativePaths } from "./bundled-worker.js";
 import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import { binEnvVarName, sanitize } from "./extractor.js";
 import { buildHeaderLines } from "./header.js";
@@ -37,6 +38,28 @@ function statSigExpr(): string {
   return `$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null)`;
 }
 
+function workerFileSigExpr(fileVar: string): string {
+  return `$(stat -L -c '%Y:%s' "${fileVar}" 2>/dev/null || stat -L -f '%m:%z' "${fileVar}" 2>/dev/null)`;
+}
+
+function shellWorkerRelList(options: CompletionOptions, shell: "bash" | "zsh"): string {
+  const rels = bundledWorkerRelativePaths(options.programName, shell, options.bundledWorker);
+  return (rels.length > 0 ? rels : ["__politty_no_bundled_worker__"]).map(shSingleQuote).join(" ");
+}
+
+function fishDQ(s: string): string {
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$")}"`;
+}
+
+function fishWorkerRelList(options: CompletionOptions): string {
+  const rels = bundledWorkerRelativePaths(options.programName, "fish", options.bundledWorker);
+  return (rels.length > 0 ? rels : ["__politty_no_bundled_worker__"]).map(fishDQ).join(" ");
+}
+
+function bundledWorkerPathCommandEnabled(options: CompletionOptions): boolean {
+  return options.bundledWorker?.queryCommand === true && !options.bundledWorker.disabled;
+}
+
 function bashDispatcher(_command: AnyCommand, options: CompletionOptions): CompletionResult {
   const { programName } = options;
   const fn = sanitize(programName);
@@ -52,6 +75,8 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   const workerPathDefault = workerPath
     ? `        printf '%s\\n' ${workerPath}`
     : `        printf '%s\\n' "\${XDG_CACHE_HOME:-$HOME/.cache}"${workerPathSuffix(programName, "bash")}`;
+  const workerRelList = shellWorkerRelList(options, "bash");
+  const canQueryBundledWorkerPath = bundledWorkerPathCommandEnabled(options);
 
   const lines: string[] = [];
   lines.push(
@@ -83,6 +108,91 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(``);
   lines.push(`__${fn}_static_worker_path() {`);
   lines.push(workerPathDefault);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_worker_file_sig() {`);
+  lines.push(`    local _worker="$1" _sig`);
+  lines.push(`    _sig=${workerFileSigExpr("$_worker")} || return 1`);
+  lines.push(`    printf '%s\\n' "$_sig"`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_is_worker_file() {`);
+  lines.push(`    local _worker="$1" _head`);
+  lines.push(`    [[ -f "$_worker" ]] || return 1`);
+  lines.push(`    _head="$(head -n 24 "$_worker" 2>/dev/null)" || return 1`);
+  lines.push(`    [[ "$_head" == *"# politty-completion-version: 1"* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *"# program: ${programName}"* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *"# shell: bash"* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *"# politty-completion-worker: true"* ]] || return 1`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_load_worker() {`);
+  lines.push(`    local _worker="$1" _sig _key`);
+  lines.push(`    __${fn}_is_worker_file "$_worker" || return 1`);
+  lines.push(`    _sig="$(__${fn}_worker_file_sig "$_worker")" || return 1`);
+  lines.push(`    _key="$_worker:$_sig"`);
+  lines.push(`    if [[ "\${__${fn}_loaded_worker_key:-}" != "$_key" ]]; then`);
+  lines.push(`        source "$_worker" 2>/dev/null || return 1`);
+  lines.push(`        __${fn}_loaded_worker_key="$_key"`);
+  lines.push(`    fi`);
+  lines.push(`    declare -F _${workerFn}_completions >/dev/null 2>&1`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_realpath() {`);
+  lines.push(`    local _path="$1" _dir _target _limit=0`);
+  lines.push(`    while [[ -L "$_path" && $_limit -lt 40 ]]; do`);
+  lines.push(`        _dir="$(cd -P "$(dirname "$_path")" 2>/dev/null && pwd)" || return 1`);
+  lines.push(`        _target="$(readlink "$_path")" || return 1`);
+  lines.push(
+    `        if [[ "$_target" == /* ]]; then _path="$_target"; else _path="$_dir/$_target"; fi`,
+  );
+  lines.push(`        (( _limit++ ))`);
+  lines.push(`    done`);
+  lines.push(`    _dir="$(cd -P "$(dirname "$_path")" 2>/dev/null && pwd)" || return 1`);
+  lines.push(`    printf '%s\\n' "$_dir/$(basename "$_path")"`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_worker_from_dir() {`);
+  lines.push(`    local _dir="$1" _rel _candidate`);
+  lines.push(`    for _rel in ${workerRelList}; do`);
+  lines.push(`        [[ "$_rel" == /* ]] && _candidate="$_rel" || _candidate="$_dir/$_rel"`);
+  lines.push(`        if __${fn}_is_worker_file "$_candidate"; then`);
+  lines.push(`            printf '%s\\n' "$_candidate"`);
+  lines.push(`            return 0`);
+  lines.push(`        fi`);
+  lines.push(`    done`);
+  lines.push(`    return 1`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_cmd_shim_target() {`);
+  lines.push(`    sed -n 's/^# cmd-shim-target=//p' "$1" 2>/dev/null | tail -n 1`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_bundled_worker_path() {`);
+  lines.push(`    local _bin="$1" _node_compile_cache="\${2:-}" _real _dir _target _reported`);
+  lines.push(`    _real="$(__${fn}_realpath "$_bin" 2>/dev/null)" || _real=""`);
+  lines.push(`    if [[ -n "$_real" ]]; then`);
+  lines.push(`        _dir="$(dirname "$_real")"`);
+  lines.push(`        __${fn}_worker_from_dir "$_dir" && return 0`);
+  lines.push(`    fi`);
+  lines.push(`    _dir="$(dirname "$_bin")"`);
+  lines.push(`    __${fn}_worker_from_dir "$_dir" && return 0`);
+  lines.push(`    _target="$(__${fn}_cmd_shim_target "$_bin")"`);
+  lines.push(`    if [[ -n "$_target" ]]; then`);
+  lines.push(`        _real="$(__${fn}_realpath "$_target" 2>/dev/null)" || _real="$_target"`);
+  lines.push(`        _dir="$(dirname "$_real")"`);
+  lines.push(`        __${fn}_worker_from_dir "$_dir" && return 0`);
+  lines.push(`    fi`);
+  if (canQueryBundledWorkerPath) {
+    lines.push(
+      `    _reported="$(NODE_COMPILE_CACHE="$_node_compile_cache" "$_bin" __completion-worker-path bash 2>/dev/null)" || _reported=""`,
+    );
+    lines.push(`    if [[ -n "$_reported" ]] && __${fn}_is_worker_file "$_reported"; then`);
+    lines.push(`        printf '%s\\n' "$_reported"`);
+    lines.push(`        return 0`);
+    lines.push(`    fi`);
+  }
+  lines.push(`    return 1`);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_bin_sig() {`);
@@ -178,10 +288,15 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`        _inline_prefix="\${_cur%%=*}="`);
   lines.push(`        _cur="\${_cur#*=}"`);
   lines.push(`    fi`);
-  lines.push(`    local _bin _out _node_compile_cache _worker _sig`);
+  lines.push(`    local _bin _out _node_compile_cache _worker _bundled_worker _sig`);
   lines.push(`    _bin="$(__${fn}_resolve_bin)"`);
   lines.push(`    [[ -n "$_bin" ]] || return 0`);
   lines.push(`    _node_compile_cache="$(__${fn}_node_compile_cache_dir)"`);
+  lines.push(`    _bundled_worker="$(__${fn}_bundled_worker_path "$_bin" "$_node_compile_cache")"`);
+  lines.push(`    if [[ -n "$_bundled_worker" ]] && __${fn}_load_worker "$_bundled_worker"; then`);
+  lines.push(`        ${workerBinEnvName}="$_bin" _${workerFn}_completions`);
+  lines.push(`        return 0`);
+  lines.push(`    fi`);
   lines.push(`    _worker="$(__${fn}_static_worker_path)"`);
   lines.push(`    _sig="$(__${fn}_bin_sig "$_bin")"`);
   lines.push(`    if [[ -n "$_worker" && -n "$_sig" ]]; then`);
@@ -193,7 +308,7 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
     `            NODE_COMPILE_CACHE="$_node_compile_cache" ${envName}="$_bin" "$_bin" __refresh-completion bash "$_worker" --static --worker 2>/dev/null`,
   );
   lines.push(`        fi`);
-  lines.push(`        if [[ -f "$_worker" ]] && source "$_worker" 2>/dev/null; then`);
+  lines.push(`        if [[ -f "$_worker" ]] && __${fn}_load_worker "$_worker"; then`);
   lines.push(`            ${workerBinEnvName}="$_bin" _${workerFn}_completions`);
   lines.push(`            return 0`);
   lines.push(`        fi`);
@@ -239,6 +354,8 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   const workerPathDefault = workerPath
     ? `        print -r -- ${workerPath}`
     : `        print -r -- "\${XDG_CACHE_HOME:-$HOME/.cache}"${workerPathSuffix(programName, "zsh")}`;
+  const workerRelList = shellWorkerRelList(options, "zsh");
+  const canQueryBundledWorkerPath = bundledWorkerPathCommandEnabled(options);
 
   const lines: string[] = [];
   lines.push(`#compdef ${programName}`);
@@ -277,6 +394,105 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    emulate -L zsh`);
   lines.push(`    setopt local_options no_aliases`);
   lines.push(workerPathDefault);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_worker_file_sig() {`);
+  lines.push(`    emulate -L zsh`);
+  lines.push(`    setopt local_options no_aliases`);
+  lines.push(`    local _worker="$1" _sig`);
+  lines.push(`    _sig=${workerFileSigExpr("$_worker")} || return 1`);
+  lines.push(`    print -r -- "$_sig"`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_is_worker_file() {`);
+  lines.push(`    emulate -L zsh`);
+  lines.push(`    setopt local_options no_aliases`);
+  lines.push(`    local _worker="$1" _head`);
+  lines.push(`    [[ -f "$_worker" ]] || return 1`);
+  lines.push(`    _head="$(head -n 24 "$_worker" 2>/dev/null)" || return 1`);
+  lines.push(`    [[ "$_head" == *"# politty-completion-version: 1"* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *"# program: ${programName}"* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *"# shell: zsh"* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *"# politty-completion-worker: true"* ]] || return 1`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_load_worker() {`);
+  lines.push(`    emulate -L zsh`);
+  lines.push(`    setopt local_options no_aliases`);
+  lines.push(`    local _worker="$1" _sig _key`);
+  lines.push(`    __${fn}_is_worker_file "$_worker" || return 1`);
+  lines.push(`    _sig="$(__${fn}_worker_file_sig "$_worker")" || return 1`);
+  lines.push(`    _key="$_worker:$_sig"`);
+  lines.push(`    if [[ "\${__${fn}_loaded_worker_key:-}" != "$_key" ]]; then`);
+  lines.push(`        source "$_worker" 2>/dev/null || return 1`);
+  lines.push(`        typeset -g __${fn}_loaded_worker_key="$_key"`);
+  lines.push(`    fi`);
+  lines.push(`    (( $+functions[_${workerFn}_completions] ))`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_realpath() {`);
+  lines.push(`    emulate -L zsh`);
+  lines.push(`    setopt local_options no_aliases`);
+  lines.push(`    local _path="$1" _dir _target _limit=0`);
+  lines.push(`    while [[ -L "$_path" && $_limit -lt 40 ]]; do`);
+  lines.push(`        _dir="$(cd -P "$(dirname "$_path")" 2>/dev/null && pwd)" || return 1`);
+  lines.push(`        _target="$(readlink "$_path")" || return 1`);
+  lines.push(
+    `        if [[ "$_target" == /* ]]; then _path="$_target"; else _path="$_dir/$_target"; fi`,
+  );
+  lines.push(`        (( _limit++ ))`);
+  lines.push(`    done`);
+  lines.push(`    _dir="$(cd -P "$(dirname "$_path")" 2>/dev/null && pwd)" || return 1`);
+  lines.push(`    print -r -- "$_dir/$(basename "$_path")"`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_worker_from_dir() {`);
+  lines.push(`    emulate -L zsh`);
+  lines.push(`    setopt local_options no_aliases`);
+  lines.push(`    local _dir="$1" _rel _candidate`);
+  lines.push(`    for _rel in ${workerRelList}; do`);
+  lines.push(`        [[ "$_rel" == /* ]] && _candidate="$_rel" || _candidate="$_dir/$_rel"`);
+  lines.push(`        if __${fn}_is_worker_file "$_candidate"; then`);
+  lines.push(`            print -r -- "$_candidate"`);
+  lines.push(`            return 0`);
+  lines.push(`        fi`);
+  lines.push(`    done`);
+  lines.push(`    return 1`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_cmd_shim_target() {`);
+  lines.push(`    emulate -L zsh`);
+  lines.push(`    setopt local_options no_aliases`);
+  lines.push(`    sed -n 's/^# cmd-shim-target=//p' "$1" 2>/dev/null | tail -n 1`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_bundled_worker_path() {`);
+  lines.push(`    emulate -L zsh`);
+  lines.push(`    setopt local_options no_aliases`);
+  lines.push(`    local _bin="$1" _node_compile_cache="\${2:-}" _real _dir _target _reported`);
+  lines.push(`    _real="$(__${fn}_realpath "$_bin" 2>/dev/null)" || _real=""`);
+  lines.push(`    if [[ -n "$_real" ]]; then`);
+  lines.push(`        _dir="$(dirname "$_real")"`);
+  lines.push(`        __${fn}_worker_from_dir "$_dir" && return 0`);
+  lines.push(`    fi`);
+  lines.push(`    _dir="$(dirname "$_bin")"`);
+  lines.push(`    __${fn}_worker_from_dir "$_dir" && return 0`);
+  lines.push(`    _target="$(__${fn}_cmd_shim_target "$_bin")"`);
+  lines.push(`    if [[ -n "$_target" ]]; then`);
+  lines.push(`        _real="$(__${fn}_realpath "$_target" 2>/dev/null)" || _real="$_target"`);
+  lines.push(`        _dir="$(dirname "$_real")"`);
+  lines.push(`        __${fn}_worker_from_dir "$_dir" && return 0`);
+  lines.push(`    fi`);
+  if (canQueryBundledWorkerPath) {
+    lines.push(
+      `    _reported="$(NODE_COMPILE_CACHE="$_node_compile_cache" "$_bin" __completion-worker-path zsh 2>/dev/null)" || _reported=""`,
+    );
+    lines.push(`    if [[ -n "$_reported" ]] && __${fn}_is_worker_file "$_reported"; then`);
+    lines.push(`        print -r -- "$_reported"`);
+    lines.push(`        return 0`);
+    lines.push(`    fi`);
+  }
+  lines.push(`    return 1`);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_bin_sig() {`);
@@ -378,10 +594,15 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`${completionFn}() {`);
   lines.push(`    emulate -L zsh`);
   lines.push(`    setopt local_options no_aliases`);
-  lines.push(`    local _bin _out _node_compile_cache _worker _sig`);
+  lines.push(`    local _bin _out _node_compile_cache _worker _bundled_worker _sig`);
   lines.push(`    _bin="$(__${fn}_resolve_bin)"`);
   lines.push(`    [[ -n "$_bin" ]] || return 1`);
   lines.push(`    _node_compile_cache="$(__${fn}_node_compile_cache_dir)"`);
+  lines.push(`    _bundled_worker="$(__${fn}_bundled_worker_path "$_bin" "$_node_compile_cache")"`);
+  lines.push(`    if [[ -n "$_bundled_worker" ]] && __${fn}_load_worker "$_bundled_worker"; then`);
+  lines.push(`        ${workerBinEnvName}="$_bin" _${workerFn}_completions "$@"`);
+  lines.push(`        return 0`);
+  lines.push(`    fi`);
   lines.push(`    _worker="$(__${fn}_static_worker_path)"`);
   lines.push(`    _sig="$(__${fn}_bin_sig "$_bin")"`);
   lines.push(`    if [[ -n "$_worker" && -n "$_sig" ]]; then`);
@@ -393,7 +614,7 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
     `            NODE_COMPILE_CACHE="$_node_compile_cache" ${envName}="$_bin" "$_bin" __refresh-completion zsh "$_worker" --static --worker 2>/dev/null`,
   );
   lines.push(`        fi`);
-  lines.push(`        if [[ -f "$_worker" ]] && source "$_worker" 2>/dev/null; then`);
+  lines.push(`        if [[ -f "$_worker" ]] && __${fn}_load_worker "$_worker"; then`);
   lines.push(`            ${workerBinEnvName}="$_bin" _${workerFn}_completions "$@"`);
   lines.push(`            return 0`);
   lines.push(`        fi`);
@@ -457,6 +678,8 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
         `    test -n "$_cache_root"; or set _cache_root "$HOME/.cache"`,
         `    printf '%s\\n' "$_cache_root"${workerPathSuffix(programName, "fish")}`,
       ].join("\n");
+  const workerRelList = fishWorkerRelList(options);
+  const canQueryBundledWorkerPath = bundledWorkerPathCommandEnabled(options);
 
   const lines: string[] = [];
   lines.push(
@@ -491,6 +714,122 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(``);
   lines.push(`function __${fn}_static_worker_path`);
   lines.push(workerPathDefault);
+  lines.push(`end`);
+  lines.push(``);
+  lines.push(`function __${fn}_worker_file_sig`);
+  lines.push(`    set -l _worker $argv[1]`);
+  lines.push(
+    `    set -l _sig (stat -L -c '%Y:%s' "$_worker" 2>/dev/null; or stat -L -f '%m:%z' "$_worker" 2>/dev/null)`,
+  );
+  lines.push(`    test -n "$_sig"; and printf '%s\\n' "$_sig"`);
+  lines.push(`end`);
+  lines.push(``);
+  lines.push(`function __${fn}_is_worker_file`);
+  lines.push(`    set -l _worker $argv[1]`);
+  lines.push(`    test -f "$_worker"; or return 1`);
+  lines.push(`    set -l _head (head -n 24 "$_worker" 2>/dev/null)`);
+  lines.push(`    string match -q -- '*# politty-completion-version: 1*' "$_head"; or return 1`);
+  lines.push(`    string match -q -- '*# program: ${programName}*' "$_head"; or return 1`);
+  lines.push(`    string match -q -- '*# shell: fish*' "$_head"; or return 1`);
+  lines.push(`    string match -q -- '*# politty-completion-worker: true*' "$_head"; or return 1`);
+  lines.push(`end`);
+  lines.push(``);
+  lines.push(`function __${fn}_load_worker`);
+  lines.push(`    set -l _worker $argv[1]`);
+  lines.push(`    __${fn}_is_worker_file "$_worker"; or return 1`);
+  lines.push(`    set -l _sig (__${fn}_worker_file_sig "$_worker")`);
+  lines.push(`    test -n "$_sig"; or return 1`);
+  lines.push(`    set -l _key "$_worker:$_sig"`);
+  lines.push(
+    `    if not set -q __${fn}_loaded_worker_key; or test "$__${fn}_loaded_worker_key" != "$_key"`,
+  );
+  lines.push(`        source "$_worker" 2>/dev/null; or return 1`);
+  lines.push(`        set -g __${fn}_loaded_worker_key "$_key"`);
+  lines.push(`    end`);
+  lines.push(`    functions -q __fish_${workerFn}_complete`);
+  lines.push(`end`);
+  lines.push(``);
+  lines.push(`function __${fn}_realpath`);
+  lines.push(`    set -l _path $argv[1]`);
+  lines.push(`    set -l _old_pwd (pwd)`);
+  lines.push(`    set -l _limit 0`);
+  lines.push(`    while test -L "$_path"; and test $_limit -lt 40`);
+  lines.push(`        set -l _dir (dirname "$_path")`);
+  lines.push(`        if not cd "$_dir" 2>/dev/null`);
+  lines.push(`            cd "$_old_pwd" 2>/dev/null`);
+  lines.push(`            return 1`);
+  lines.push(`        end`);
+  lines.push(`        set -l _absdir (pwd -P)`);
+  lines.push(`        cd "$_old_pwd" 2>/dev/null`);
+  lines.push(`        test -n "$_absdir"; or return 1`);
+  lines.push(`        set -l _target (readlink "$_path")`);
+  lines.push(`        test -n "$_target"; or return 1`);
+  lines.push(`        if string match -q '/*' -- "$_target"`);
+  lines.push(`            set _path "$_target"`);
+  lines.push(`        else`);
+  lines.push(`            set _path "$_absdir/$_target"`);
+  lines.push(`        end`);
+  lines.push(`        set _limit (math $_limit + 1)`);
+  lines.push(`    end`);
+  lines.push(`    set -l _dir (dirname "$_path")`);
+  lines.push(`    if not cd "$_dir" 2>/dev/null`);
+  lines.push(`        cd "$_old_pwd" 2>/dev/null`);
+  lines.push(`        return 1`);
+  lines.push(`    end`);
+  lines.push(`    set -l _absdir (pwd -P)`);
+  lines.push(`    cd "$_old_pwd" 2>/dev/null`);
+  lines.push(`    test -n "$_absdir"; or return 1`);
+  lines.push(`    set -l _base (basename "$_path")`);
+  lines.push(`    printf '%s\\n' "$_absdir/$_base"`);
+  lines.push(`end`);
+  lines.push(``);
+  lines.push(`function __${fn}_worker_from_dir`);
+  lines.push(`    set -l _dir $argv[1]`);
+  lines.push(`    for _rel in ${workerRelList}`);
+  lines.push(`        if string match -q '/*' -- "$_rel"`);
+  lines.push(`            set _candidate "$_rel"`);
+  lines.push(`        else`);
+  lines.push(`            set _candidate "$_dir/$_rel"`);
+  lines.push(`        end`);
+  lines.push(`        if __${fn}_is_worker_file "$_candidate"`);
+  lines.push(`            printf '%s\\n' "$_candidate"`);
+  lines.push(`            return 0`);
+  lines.push(`        end`);
+  lines.push(`    end`);
+  lines.push(`    return 1`);
+  lines.push(`end`);
+  lines.push(``);
+  lines.push(`function __${fn}_cmd_shim_target`);
+  lines.push(`    sed -n 's/^# cmd-shim-target=//p' "$argv[1]" 2>/dev/null | tail -n 1`);
+  lines.push(`end`);
+  lines.push(``);
+  lines.push(`function __${fn}_bundled_worker_path`);
+  lines.push(`    set -l _bin $argv[1]`);
+  lines.push(`    set -l _node_compile_cache $argv[2]`);
+  lines.push(`    set -l _real (__${fn}_realpath "$_bin" 2>/dev/null)`);
+  lines.push(`    if test -n "$_real"`);
+  lines.push(`        set -l _dir (dirname "$_real")`);
+  lines.push(`        __${fn}_worker_from_dir "$_dir"; and return 0`);
+  lines.push(`    end`);
+  lines.push(`    set -l _dir (dirname "$_bin")`);
+  lines.push(`    __${fn}_worker_from_dir "$_dir"; and return 0`);
+  lines.push(`    set -l _target (__${fn}_cmd_shim_target "$_bin")`);
+  lines.push(`    if test -n "$_target"`);
+  lines.push(`        set _real (__${fn}_realpath "$_target" 2>/dev/null)`);
+  lines.push(`        test -n "$_real"; or set _real "$_target"`);
+  lines.push(`        set _dir (dirname "$_real")`);
+  lines.push(`        __${fn}_worker_from_dir "$_dir"; and return 0`);
+  lines.push(`    end`);
+  if (canQueryBundledWorkerPath) {
+    lines.push(
+      `    set -l _reported (env NODE_COMPILE_CACHE="$_node_compile_cache" "$_bin" __completion-worker-path fish 2>/dev/null)`,
+    );
+    lines.push(`    if test -n "$_reported"; and __${fn}_is_worker_file "$_reported"`);
+    lines.push(`        printf '%s\\n' "$_reported"`);
+    lines.push(`        return 0`);
+    lines.push(`    end`);
+  }
+  lines.push(`    return 1`);
   lines.push(`end`);
   lines.push(``);
   lines.push(`function __${fn}_bin_sig`);
@@ -578,6 +917,14 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    set -l _bin (__${fn}_resolve_bin)`);
   lines.push(`    test -n "$_bin"; or return 0`);
   lines.push(`    set -l _node_compile_cache (__${fn}_node_compile_cache_dir)`);
+  lines.push(
+    `    set -l _bundled_worker (__${fn}_bundled_worker_path "$_bin" "$_node_compile_cache")`,
+  );
+  lines.push(`    if test -n "$_bundled_worker"; and __${fn}_load_worker "$_bundled_worker"`);
+  lines.push(`        set -lx ${workerBinEnvName} "$_bin"`);
+  lines.push(`        __fish_${workerFn}_complete`);
+  lines.push(`        return 0`);
+  lines.push(`    end`);
   lines.push(`    set -l _worker (__${fn}_static_worker_path)`);
   lines.push(`    set -l _sig (__${fn}_bin_sig "$_bin")`);
   lines.push(`    if test -n "$_worker"; and test -n "$_sig"`);
@@ -590,8 +937,7 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   );
   lines.push(`        end`);
   lines.push(`        if test -f "$_worker"`);
-  lines.push(`            source "$_worker" 2>/dev/null`);
-  lines.push(`            if functions -q __fish_${workerFn}_complete`);
+  lines.push(`            if __${fn}_load_worker "$_worker"`);
   lines.push(`                set -lx ${workerBinEnvName} "$_bin"`);
   lines.push(`                __fish_${workerFn}_complete`);
   lines.push(`                return 0`);
