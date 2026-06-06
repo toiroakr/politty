@@ -25,15 +25,33 @@ function hardcodedCompileCacheDir(cacheDir: string | undefined): string | undefi
   return cacheDir ? shSingleQuote(`${cacheDir}/node-compile-cache`) : undefined;
 }
 
+function hardcodedWorkerPath(cacheDir: string | undefined, shell: string): string | undefined {
+  return cacheDir ? shSingleQuote(`${cacheDir}/completion-worker.${shell}`) : undefined;
+}
+
+function workerPathSuffix(programName: string, shell: string): string {
+  return shSingleQuote(`/${programName}/completion-worker.${shell}`);
+}
+
+function statSigExpr(): string {
+  return `$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null)`;
+}
+
 function bashDispatcher(_command: AnyCommand, options: CompletionOptions): CompletionResult {
   const { programName } = options;
   const fn = sanitize(programName);
+  const workerFn = `${fn}_worker`;
+  const workerBinEnvName = binEnvVarName(workerFn);
   const envName = binEnvVarName(fn);
   const programLookup = shSingleQuote(programName);
   const compileCacheDir = hardcodedCompileCacheDir(options.cacheDir);
   const compileCacheDefault = compileCacheDir
     ? `        printf '%s\\n' ${compileCacheDir}`
     : `        printf '%s\\n' "\${XDG_CACHE_HOME:-$HOME/.cache}"${compileCacheSuffix(programName)}`;
+  const workerPath = hardcodedWorkerPath(options.cacheDir, "bash");
+  const workerPathDefault = workerPath
+    ? `        printf '%s\\n' ${workerPath}`
+    : `        printf '%s\\n' "\${XDG_CACHE_HOME:-$HOME/.cache}"${workerPathSuffix(programName, "bash")}`;
 
   const lines: string[] = [];
   lines.push(
@@ -61,6 +79,16 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`        return 0`);
   lines.push(`    fi`);
   lines.push(compileCacheDefault);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_static_worker_path() {`);
+  lines.push(workerPathDefault);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_bin_sig() {`);
+  lines.push(`    local _bin="$1" _sig`);
+  lines.push(`    _sig=${statSigExpr()} || return 1`);
+  lines.push(`    printf '%s\\n' "$_sig"`);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_apply_dynamic_output() {`);
@@ -150,10 +178,26 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`        _inline_prefix="\${_cur%%=*}="`);
   lines.push(`        _cur="\${_cur#*=}"`);
   lines.push(`    fi`);
-  lines.push(`    local _bin _out _node_compile_cache`);
+  lines.push(`    local _bin _out _node_compile_cache _worker _sig`);
   lines.push(`    _bin="$(__${fn}_resolve_bin)"`);
   lines.push(`    [[ -n "$_bin" ]] || return 0`);
   lines.push(`    _node_compile_cache="$(__${fn}_node_compile_cache_dir)"`);
+  lines.push(`    _worker="$(__${fn}_static_worker_path)"`);
+  lines.push(`    _sig="$(__${fn}_bin_sig "$_bin")"`);
+  lines.push(`    if [[ -n "$_worker" && -n "$_sig" ]]; then`);
+  lines.push(
+    `        if [[ ! -f "$_worker" ]] || ! head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig"; then`,
+  );
+  lines.push(`            mkdir -p "\${_worker%/*}" 2>/dev/null`);
+  lines.push(
+    `            NODE_COMPILE_CACHE="$_node_compile_cache" ${envName}="$_bin" "$_bin" __refresh-completion bash "$_worker" --static --worker 2>/dev/null`,
+  );
+  lines.push(`        fi`);
+  lines.push(`        if [[ -f "$_worker" ]] && source "$_worker" 2>/dev/null; then`);
+  lines.push(`            ${workerBinEnvName}="$_bin" _${workerFn}_completions`);
+  lines.push(`            return 0`);
+  lines.push(`        fi`);
+  lines.push(`    fi`);
   lines.push(
     `    _out=$(NODE_COMPILE_CACHE="$_node_compile_cache" "$_bin" __complete --shell bash -- "\${_words[@]}" 2>/dev/null) || return 0`,
   );
@@ -181,6 +225,8 @@ ${programName} completion bash --static`,
 function zshDispatcher(_command: AnyCommand, options: CompletionOptions): CompletionResult {
   const { programName } = options;
   const fn = sanitize(programName);
+  const workerFn = `${fn}_worker`;
+  const workerBinEnvName = binEnvVarName(workerFn);
   const envName = binEnvVarName(fn);
   const programLookup = shSingleQuote(programName);
   const completionFn = `_${programName}`;
@@ -189,6 +235,10 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   const compileCacheDefault = compileCacheDir
     ? `        print -r -- ${compileCacheDir}`
     : `        print -r -- "\${XDG_CACHE_HOME:-$HOME/.cache}"${compileCacheSuffix(programName)}`;
+  const workerPath = hardcodedWorkerPath(options.cacheDir, "zsh");
+  const workerPathDefault = workerPath
+    ? `        print -r -- ${workerPath}`
+    : `        print -r -- "\${XDG_CACHE_HOME:-$HOME/.cache}"${workerPathSuffix(programName, "zsh")}`;
 
   const lines: string[] = [];
   lines.push(`#compdef ${programName}`);
@@ -221,6 +271,20 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`        return 0`);
   lines.push(`    fi`);
   lines.push(compileCacheDefault);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_static_worker_path() {`);
+  lines.push(`    emulate -L zsh`);
+  lines.push(`    setopt local_options no_aliases`);
+  lines.push(workerPathDefault);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_bin_sig() {`);
+  lines.push(`    emulate -L zsh`);
+  lines.push(`    setopt local_options no_aliases`);
+  lines.push(`    local _bin="$1" _sig`);
+  lines.push(`    _sig=${statSigExpr()} || return 1`);
+  lines.push(`    print -r -- "$_sig"`);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_cdescribe() {`);
@@ -314,10 +378,26 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`${completionFn}() {`);
   lines.push(`    emulate -L zsh`);
   lines.push(`    setopt local_options no_aliases`);
-  lines.push(`    local _bin _out _node_compile_cache`);
+  lines.push(`    local _bin _out _node_compile_cache _worker _sig`);
   lines.push(`    _bin="$(__${fn}_resolve_bin)"`);
   lines.push(`    [[ -n "$_bin" ]] || return 1`);
   lines.push(`    _node_compile_cache="$(__${fn}_node_compile_cache_dir)"`);
+  lines.push(`    _worker="$(__${fn}_static_worker_path)"`);
+  lines.push(`    _sig="$(__${fn}_bin_sig "$_bin")"`);
+  lines.push(`    if [[ -n "$_worker" && -n "$_sig" ]]; then`);
+  lines.push(
+    `        if [[ ! -f "$_worker" ]] || ! head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig"; then`,
+  );
+  lines.push(`            mkdir -p "\${_worker%/*}" 2>/dev/null`);
+  lines.push(
+    `            NODE_COMPILE_CACHE="$_node_compile_cache" ${envName}="$_bin" "$_bin" __refresh-completion zsh "$_worker" --static --worker 2>/dev/null`,
+  );
+  lines.push(`        fi`);
+  lines.push(`        if [[ -f "$_worker" ]] && source "$_worker" 2>/dev/null; then`);
+  lines.push(`            ${workerBinEnvName}="$_bin" _${workerFn}_completions "$@"`);
+  lines.push(`            return 0`);
+  lines.push(`        fi`);
+  lines.push(`    fi`);
   lines.push(
     `    _out=$(NODE_COMPILE_CACHE="$_node_compile_cache" "$_bin" __complete --shell zsh -- "\${(@)words[2,CURRENT]}" 2>/dev/null) || return 1`,
   );
@@ -357,6 +437,8 @@ ${programName} completion zsh --static`,
 function fishDispatcher(_command: AnyCommand, options: CompletionOptions): CompletionResult {
   const { programName } = options;
   const fn = sanitize(programName);
+  const workerFn = `${fn}_worker`;
+  const workerBinEnvName = binEnvVarName(workerFn);
   const envName = binEnvVarName(fn);
   const programLookup = shSingleQuote(programName);
   const compileCacheDir = hardcodedCompileCacheDir(options.cacheDir);
@@ -366,6 +448,14 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
         `    set -l _cache_root "$XDG_CACHE_HOME"`,
         `    test -n "$_cache_root"; or set _cache_root "$HOME/.cache"`,
         `    printf '%s\\n' "$_cache_root"${compileCacheSuffix(programName)}`,
+      ].join("\n");
+  const workerPath = hardcodedWorkerPath(options.cacheDir, "fish");
+  const workerPathDefault = workerPath
+    ? `    printf '%s\\n' ${workerPath}`
+    : [
+        `    set -l _cache_root "$XDG_CACHE_HOME"`,
+        `    test -n "$_cache_root"; or set _cache_root "$HOME/.cache"`,
+        `    printf '%s\\n' "$_cache_root"${workerPathSuffix(programName, "fish")}`,
       ].join("\n");
 
   const lines: string[] = [];
@@ -397,6 +487,18 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`        return 0`);
   lines.push(`    end`);
   lines.push(compileCacheDefault);
+  lines.push(`end`);
+  lines.push(``);
+  lines.push(`function __${fn}_static_worker_path`);
+  lines.push(workerPathDefault);
+  lines.push(`end`);
+  lines.push(``);
+  lines.push(`function __${fn}_bin_sig`);
+  lines.push(`    set -l _bin $argv[1]`);
+  lines.push(
+    `    set -l _sig (stat -L -c '%Y' "$_bin" 2>/dev/null; or stat -L -f '%m' "$_bin" 2>/dev/null)`,
+  );
+  lines.push(`    test -n "$_sig"; and printf '%s\\n' "$_sig"`);
   lines.push(`end`);
   lines.push(``);
   lines.push(`function __${fn}_apply_dynamic_output`);
@@ -476,6 +578,26 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    set -l _bin (__${fn}_resolve_bin)`);
   lines.push(`    test -n "$_bin"; or return 0`);
   lines.push(`    set -l _node_compile_cache (__${fn}_node_compile_cache_dir)`);
+  lines.push(`    set -l _worker (__${fn}_static_worker_path)`);
+  lines.push(`    set -l _sig (__${fn}_bin_sig "$_bin")`);
+  lines.push(`    if test -n "$_worker"; and test -n "$_sig"`);
+  lines.push(
+    `        if not test -f "$_worker"; or not head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig"`,
+  );
+  lines.push(`            mkdir -p (dirname "$_worker") 2>/dev/null`);
+  lines.push(
+    `            env NODE_COMPILE_CACHE="$_node_compile_cache" ${envName}="$_bin" $_bin __refresh-completion fish "$_worker" --static --worker 2>/dev/null`,
+  );
+  lines.push(`        end`);
+  lines.push(`        if test -f "$_worker"`);
+  lines.push(`            source "$_worker" 2>/dev/null`);
+  lines.push(`            if functions -q __fish_${workerFn}_complete`);
+  lines.push(`                set -lx ${workerBinEnvName} "$_bin"`);
+  lines.push(`                __fish_${workerFn}_complete`);
+  lines.push(`                return 0`);
+  lines.push(`            end`);
+  lines.push(`        end`);
+  lines.push(`    end`);
   lines.push(`    set -l _args (commandline -opc)`);
   lines.push(`    set -l _cur (commandline -ct)`);
   lines.push(`    if test (count $_args) -gt 0`);

@@ -13,7 +13,16 @@ For quick setup, see the [README](../README.md#shell-completion). For type signa
 - **`__refresh-completion <shell>`** (hidden) — Re-installs the on-disk cache when the binary's mtime changes. Used by the rc loader and the runMain background hook.
 
 By default, generated shell scripts do not embed the command tree. They resolve
-the executable currently visible to the shell and call:
+the executable currently visible to the shell and source a per-binary static
+worker cache. On cache miss or binary mtime change, the dispatcher regenerates
+the worker with:
+
+```
+mycli __refresh-completion bash <worker-cache> --static --worker
+```
+
+The worker then handles static metadata paths in the shell. Completion fields
+that require runtime JavaScript still call:
 
 ```
 mycli __complete --shell bash -- <partial-tokens>
@@ -42,16 +51,20 @@ TAB, but they are fixed to the command tree from generation time.
 ```
 dispatcher:
   follows the currently visible executable
-  slightly more runtime work on TAB
+  warm cache keeps static completions in-shell
+  runtime resolvers still spawn the CLI
 
 static:
   faster
   fixed to the command tree from generation time
 ```
 
-`__complete` runs in JavaScript: it parses the partial command line, calls any
-runtime resolver or `expand` enumerator needed for that cursor position, and
-returns candidates with directives that tell the shell how to present them.
+Dispatcher worker caches live next to the regular completion cache:
+`${XDG_CACHE_HOME:-$HOME/.cache}/<program>/completion-worker.<shell>` unless
+`cacheDir` is hardcoded. `__complete` runs in JavaScript: it parses the partial
+command line, calls any runtime resolver or `expand` enumerator needed for that
+cursor position, and returns candidates with directives that tell the shell how
+to present them.
 For Node.js 22+ CLIs, dispatcher scripts set `NODE_COMPILE_CACHE` to
 `${XDG_CACHE_HOME:-$HOME/.cache}/<program>/node-compile-cache` before invoking
 `__complete` unless the user already provided `NODE_COMPILE_CACHE`. This keeps

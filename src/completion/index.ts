@@ -197,6 +197,9 @@ const refreshArgsSchema = z.object({
   static: arg(z.boolean().default(false), {
     description: "Refresh using the legacy static completion script mode.",
   }),
+  worker: arg(z.boolean().default(false), {
+    description: "Refresh an internal static worker completion script.",
+  }),
 });
 
 type RefreshArgs = z.infer<typeof refreshArgsSchema>;
@@ -363,7 +366,9 @@ export function createRefreshCompletionCommand(
           rootCommand,
           programName,
           ...extra,
-          completionMode: args.static ? "static" : undefined,
+          completionMode: args.static || args.worker ? "static" : undefined,
+          ...(args.worker && { staticWorker: { functionSuffix: "worker" } }),
+          ...(args.worker && { allowTargetCreate: true }),
           ...(args.target !== undefined && { targetPath: args.target }),
         },
         args.shell,

@@ -27,6 +27,15 @@ export function computeBinSig(binPath: string): string {
   }
 }
 
+function sanitizeProgramName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_]/g, "_");
+}
+
+function binEnvVarName(programName: string): string {
+  const upper = sanitizeProgramName(programName).toUpperCase();
+  return /^[A-Z_]/.test(upper) ? `${upper}_BIN` : `_${upper}_BIN`;
+}
+
 /**
  * Walk `$PATH` looking for an executable named `programName`. Returns
  * the first match's full path, or `null` when not found. We mirror the
@@ -61,6 +70,8 @@ function findOnPath(programName: string): string | null {
  */
 export function resolveBinPath(programName: string, override?: string | undefined): string {
   if (override) return override;
+  const envOverride = process.env[binEnvVarName(programName)];
+  if (envOverride) return envOverride;
   return findOnPath(programName) ?? process.argv[1] ?? "";
 }
 

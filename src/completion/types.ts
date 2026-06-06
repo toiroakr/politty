@@ -63,6 +63,11 @@ export interface CompletionOptions {
    * Setting this hardcodes the location into the generated loader.
    */
   cacheDir?: string;
+  /**
+   * Internal static-worker generation hook used by dispatcher caches.
+   * Worker scripts define suffixed functions and skip shell registration.
+   */
+  staticWorker?: { functionSuffix: string };
 }
 
 /**

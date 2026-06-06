@@ -298,8 +298,11 @@ Attach metadata to an argument.
 
 politty provides automatic shell completion generation for bash, zsh, and fish.
 The default generated script is a small runtime dispatcher: when the user
-presses TAB, it resolves the executable currently visible on `PATH` and asks
-that binary's hidden `__complete` command for candidates.
+presses TAB, it resolves the executable currently visible on `PATH` and uses a
+per-binary static worker cache for normal completions. If the worker cache is
+missing or stale, it is regenerated from that binary's hidden
+`__refresh-completion` command. Completion fields that require runtime
+JavaScript still delegate to the binary's hidden `__complete` command.
 When `NODE_COMPILE_CACHE` is unset, the dispatcher sets it to a
 program-specific cache directory before invoking `__complete`, letting Node.js
 22+ reuse V8 module compile cache across repeated completion requests.

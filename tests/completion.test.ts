@@ -613,6 +613,8 @@ describe("Completion", () => {
           expect(script).toContain(resolver);
           expect(script).toContain("MYCLI_BIN");
           expect(script).toContain("NODE_COMPILE_CACHE");
+          expect(script).toContain("__refresh-completion");
+          expect(script).toContain("--static --worker");
           expect(script).toContain("__complete --shell");
           expect(script).not.toContain("--verbose");
           expect(script).not.toContain("Build the project");
@@ -629,6 +631,22 @@ describe("Completion", () => {
         expect(script).toContain("# politty-completion-mode: static");
         expect(script).toContain("--verbose");
         expect(script).toContain("build");
+      });
+
+      it("can generate an internal static worker without shell registration", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "static",
+          staticWorker: { functionSuffix: "worker" },
+        });
+
+        expect(script).toContain("# politty-completion-worker: true");
+        expect(script).toContain("_mycli_worker_completions()");
+        expect(script).toContain("--verbose");
+        expect(script).toContain("build");
+        expect(script).not.toContain("complete -o default -F");
+        expect(script).not.toContain("__mycli_self_refresh()");
       });
 
       it("uses the PATH-visible executable and lets MYCLI_BIN override it in bash", () => {
@@ -778,13 +796,14 @@ describe("Completion", () => {
         expect(result.script).toContain('[[ "${_f##*/}" == .env.* ]]');
       });
 
-      it("should generate zsh _files -g for matcher", () => {
+      it("should generate zsh manual file filtering for matcher", () => {
         const result = generateCompletion(matcherCmd, {
           shell: "zsh",
           programName: "mycli",
           mode: "static",
         });
-        expect(result.script).toContain('_files -g ".env.*"');
+        expect(result.script).toContain('local -a _matchers=(".env.*")');
+        expect(result.script).toContain('for _f in "$_dir"/${~_pat}(N.); do');
       });
 
       it("should generate fish glob expansion for matcher", () => {

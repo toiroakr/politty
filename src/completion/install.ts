@@ -37,6 +37,8 @@ export interface InstallContext {
   globalArgsSchema?: ArgsSchema | undefined;
   targetPath?: string | undefined;
   completionMode?: CompletionMode | undefined;
+  staticWorker?: { functionSuffix: string } | undefined;
+  allowTargetCreate?: boolean | undefined;
 }
 
 /**
@@ -74,6 +76,7 @@ function generateScript(ctx: InstallContext, shell: ShellType): string {
     ...(ctx.binPath !== undefined && { binPath: ctx.binPath }),
     ...(ctx.cacheDir !== undefined && { cacheDir: ctx.cacheDir }),
     ...(ctx.globalArgsSchema !== undefined && { globalArgsSchema: ctx.globalArgsSchema }),
+    ...(ctx.staticWorker !== undefined && { staticWorker: ctx.staticWorker }),
   }).script;
 }
 
@@ -142,9 +145,14 @@ function isManagedTarget(path: string, programName: string, shell: ShellType): b
 export function refreshIfStale(ctx: InstallContext, shell: ShellType): void {
   try {
     const target = ctx.targetPath
-      ? realpathSync(ctx.targetPath)
+      ? existsSync(ctx.targetPath)
+        ? realpathSync(ctx.targetPath)
+        : ctx.targetPath
       : installPath(ctx.programName, shell, ctx.cacheDir);
-    if (ctx.targetPath && !isManagedTarget(target, ctx.programName, shell)) return;
+    if (ctx.targetPath && existsSync(target) && !isManagedTarget(target, ctx.programName, shell)) {
+      return;
+    }
+    if (ctx.targetPath && !existsSync(target) && !ctx.allowTargetCreate) return;
     const binPath = resolveBinPath(ctx.programName, ctx.binPath);
     if (!binPath) return;
     let currentSig: string;
