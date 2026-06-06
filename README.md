@@ -356,8 +356,12 @@ Completion then follows the same executable the shell would run.
 Published CLIs can ship a fast worker artifact:
 
 ```bash
-mycli completion zsh --static --worker > dist/completion/zsh-worker.zsh
+politty generate-worker --bin dist/cli/index.mjs --program mycli --shell zsh --verify
 ```
+
+or call `generateBundledCompletionWorker()` from `politty/completion` in your
+own build script. The default output path is
+`dist/completion/<shell>-worker.<ext>`.
 
 The dispatcher looks for common package-relative worker paths such as
 `dist/completion/zsh-worker.zsh` from the visible binary. Use

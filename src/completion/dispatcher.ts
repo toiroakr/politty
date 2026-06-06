@@ -153,6 +153,7 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    [[ "$_head" == *"# politty-completion-version: 1"* ]] || return 1`);
   lines.push(`    [[ "$_head" == *"# program: ${programName}"* ]] || return 1`);
   lines.push(`    [[ "$_head" == *"# shell: bash"* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *"# politty-completion-mode: worker"* ]] || return 1`);
   lines.push(`    [[ "$_head" == *"# politty-completion-worker: true"* ]] || return 1`);
   lines.push(`}`);
   lines.push(``);
@@ -447,6 +448,7 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    [[ "$_head" == *"# politty-completion-version: 1"* ]] || return 1`);
   lines.push(`    [[ "$_head" == *"# program: ${programName}"* ]] || return 1`);
   lines.push(`    [[ "$_head" == *"# shell: zsh"* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *"# politty-completion-mode: worker"* ]] || return 1`);
   lines.push(`    [[ "$_head" == *"# politty-completion-worker: true"* ]] || return 1`);
   lines.push(`}`);
   lines.push(``);
@@ -759,6 +761,7 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    string match -q -- '*# politty-completion-version: 1*' "$_head"; or return 1`);
   lines.push(`    string match -q -- '*# program: ${programName}*' "$_head"; or return 1`);
   lines.push(`    string match -q -- '*# shell: fish*' "$_head"; or return 1`);
+  lines.push(`    string match -q -- '*# politty-completion-mode: worker*' "$_head"; or return 1`);
   lines.push(`    string match -q -- '*# politty-completion-worker: true*' "$_head"; or return 1`);
   lines.push(`end`);
   lines.push(``);

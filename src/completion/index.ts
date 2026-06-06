@@ -71,6 +71,15 @@ export {
 } from "./dynamic/index.js";
 // Re-export extractor
 export { extractCompletionData, extractPositionals } from "./extractor.js";
+// Re-export bundled worker helpers
+export {
+  bundledWorkerShellExtension,
+  defaultBundledWorkerOutputPath,
+  generateBundledCompletionWorker,
+  validateBundledWorkerFile,
+  type GenerateBundledCompletionWorkerOptions,
+  type GenerateBundledCompletionWorkerResult,
+} from "./bundled-worker.js";
 // Re-export types
 export type {
   BundledWorkerOptions,

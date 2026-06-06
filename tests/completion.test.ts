@@ -9,12 +9,15 @@ import {
   createCompletionCommand,
   createCompletionWorkerPathCommand,
   createDynamicCompleteCommand,
+  defaultBundledWorkerOutputPath,
   extractCompletionData,
   formatForShell,
+  generateBundledCompletionWorker,
   generateCandidates,
   generateCompletion,
   getSupportedShells,
   parseCompletionContext,
+  validateBundledWorkerFile,
   withCompletionCommand,
 } from "../src/completion/index.js";
 import {
@@ -61,6 +64,39 @@ const useEnv = (env: Record<string, string | undefined>) => {
       }
     },
   };
+};
+
+const writeWorkerGeneratorCli = (root: string): string => {
+  const bin = join(root, "mycli.mjs");
+  writeFileSync(
+    bin,
+    [
+      'import { mkdirSync, writeFileSync } from "node:fs";',
+      'import { dirname } from "node:path";',
+      "const [cmd, shell, out, ...flags] = process.argv.slice(2);",
+      'if (cmd === "__refresh-completion") {',
+      '  if (!out || !flags.includes("--static") || !flags.includes("--worker")) process.exit(2);',
+      "  mkdirSync(dirname(out), { recursive: true });",
+      "  writeFileSync(out, [",
+      '    "# politty-completion-version: 1",',
+      '    "# politty-bin-sig: 0",',
+      '    `# program: ${process.env.PROGRAM_NAME ?? "mycli"}`,',
+      "    `# shell: ${shell}`,",
+      '    "# politty-completion-mode: worker",',
+      '    "# politty-completion-worker: true",',
+      '    "_mycli_worker_completions() { :; }",',
+      '  ].join("\\n") + "\\n");',
+      "  process.exit(0);",
+      "}",
+      'if (cmd === "__completion-worker-path") {',
+      "  if (!process.env.WORKER_PATH) process.exit(1);",
+      "  console.log(process.env.WORKER_PATH);",
+      "  process.exit(0);",
+      "}",
+      "process.exit(1);",
+    ].join("\n"),
+  );
+  return bin;
 };
 
 describe("Completion", () => {
@@ -899,6 +935,86 @@ describe("Completion", () => {
         expect(script).not.toContain("__completion-worker-path");
         expect(script).not.toContain("bash-worker.bash");
         expect(script).not.toContain("__politty_no_bundled_worker__");
+      });
+
+      it("generates and verifies a bundled worker through the helper", async () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-generate-worker-"));
+        const bin = writeWorkerGeneratorCli(root);
+        const outputPath = join(root, "dist", "completion", "zsh-worker.zsh");
+
+        const result = await generateBundledCompletionWorker({
+          bin,
+          programName: "mycli",
+          shell: "zsh",
+          outputPath,
+          verify: true,
+          quiet: true,
+          env: { WORKER_PATH: outputPath },
+        });
+
+        expect(result).toEqual({
+          outputPath,
+          reportedPath: outputPath,
+          size: statSync(outputPath).size,
+        });
+        validateBundledWorkerFile(outputPath, "mycli", "zsh");
+      });
+
+      it("uses the default bundled worker output path", async () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-default-worker-path-"));
+        const bin = writeWorkerGeneratorCli(root);
+        const outputPath = join(root, defaultBundledWorkerOutputPath("fish"));
+
+        const result = await generateBundledCompletionWorker({
+          bin,
+          programName: "mycli",
+          shell: "fish",
+          cwd: root,
+          verify: false,
+          quiet: true,
+        });
+
+        expect(result.outputPath).toBe(outputPath);
+        validateBundledWorkerFile(outputPath, "mycli", "fish");
+      });
+
+      it("fails verification when the reported bundled worker path differs", async () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-worker-path-mismatch-"));
+        const bin = writeWorkerGeneratorCli(root);
+        const outputPath = join(root, "dist", "completion", "zsh-worker.zsh");
+        const otherPath = join(root, "dist", "completion", "other.zsh");
+        mkdirSync(dirname(otherPath), { recursive: true });
+        writeFileSync(otherPath, "other\n");
+
+        await expect(
+          generateBundledCompletionWorker({
+            bin,
+            programName: "mycli",
+            shell: "zsh",
+            outputPath,
+            verify: true,
+            quiet: true,
+            env: { WORKER_PATH: otherPath },
+          }),
+        ).rejects.toThrow(/path mismatch/);
+      });
+
+      it("rejects bundled worker files missing required worker metadata", () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-invalid-worker-"));
+        const workerPath = join(root, "zsh-worker.zsh");
+        writeFileSync(
+          workerPath,
+          [
+            "# politty-completion-version: 1",
+            "# program: mycli",
+            "# shell: zsh",
+            "# politty-completion-worker: true",
+          ].join("\n"),
+        );
+
+        expect(() => validateBundledWorkerFile(workerPath, "mycli", "zsh")).toThrow(
+          /politty-completion-mode/,
+        );
       });
 
       it("sets a default Node compile cache for bash and preserves user overrides", () => {

@@ -133,7 +133,35 @@ For fish, the autoload file always lives at `${XDG_CONFIG_HOME:-$HOME/.config}/f
 ### Bundled worker artifacts
 
 Published CLIs can avoid the first-TAB worker generation cost by shipping a
-worker generated during their build:
+worker generated during their build. The JS helper creates the output
+directory, generates the worker, validates metadata headers, and can verify
+that the built CLI reports the same worker through `__completion-worker-path`:
+
+```typescript
+import { generateBundledCompletionWorker } from "politty/completion";
+
+await generateBundledCompletionWorker({
+  bin: "dist/cli/index.mjs",
+  programName: "mycli",
+  shell: "zsh",
+  verify: true,
+});
+```
+
+The equivalent package-script CLI is:
+
+```sh
+politty generate-worker --bin dist/cli/index.mjs --program mycli --shell zsh --verify
+```
+
+Both forms default to:
+
+```text
+dist/completion/<shell>-worker.<ext>
+```
+
+The low-level command remains available when you need to wire generation
+manually:
 
 ```sh
 mycli completion zsh --static --worker > dist/completion/zsh-worker.zsh
@@ -174,8 +202,9 @@ dispatcher falls back to the user cache when no valid bundled worker is
 present.
 
 Add a CI check in the consuming CLI repository that regenerates the worker into
-a temp file and compares it with the published artifact, so command definitions
-and bundled completion do not drift.
+a temp file and compares it with the published artifact, or run the package
+build in CI when the worker lives under `dist/`. This keeps command definitions
+and bundled completion from drifting.
 
 ### Header format
 

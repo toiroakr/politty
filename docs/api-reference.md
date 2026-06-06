@@ -266,12 +266,13 @@ function withCompletionCommand<T extends AnyCommand>(
 
 **WithCompletionOptions:**
 
-| Property           | Type          | Description                                                                                                           |
-| ------------------ | ------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `programName`      | `string?`     | Override program name (defaults to command.name)                                                                      |
-| `globalArgsSchema` | `ArgsSchema?` | Global args schema for deriving global options in completion                                                          |
-| `cacheDir`         | `string?`     | Hardcode the on-disk cache directory used by the rc loader and the runMain background refresh (overrides XDG default) |
-| `programVersion`   | `string?`     | Program version embedded in the script header                                                                         |
+| Property           | Type                    | Description                                                                                                           |
+| ------------------ | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `programName`      | `string?`               | Override program name (defaults to command.name)                                                                      |
+| `globalArgsSchema` | `ArgsSchema?`           | Global args schema for deriving global options in completion                                                          |
+| `cacheDir`         | `string?`               | Hardcode the on-disk cache directory used by the rc loader and the runMain background refresh (overrides XDG default) |
+| `programVersion`   | `string?`               | Program version embedded in the script header                                                                         |
+| `bundledWorker`    | `BundledWorkerOptions?` | Package-relative bundled worker lookup configuration for dispatcher mode                                              |
 
 #### Example
 
@@ -291,6 +292,7 @@ const mainCommand = withCompletionCommand(
 // - mycli completion bash|zsh|fish [--install] [--loader] [--instructions]
 // - mycli __complete --shell <shell> -- <args>
 // - mycli __refresh-completion <shell>  (hidden; spawned by the rc loader / runMain hook)
+// - mycli __completion-worker-path <shell>  (hidden; prints a bundled worker path)
 
 runMain(mainCommand);
 ```
@@ -314,16 +316,18 @@ function generateCompletion(command: AnyCommand, options: CompletionOptions): Co
 
 **CompletionOptions:**
 
-| Property              | Type          | Description                                                                                            |
-| --------------------- | ------------- | ------------------------------------------------------------------------------------------------------ |
-| `shell`               | `ShellType`   | Target shell: "bash", "zsh", or "fish"                                                                 |
-| `programName`         | `string`      | Program name as invoked                                                                                |
-| `includeSubcommands`  | `boolean?`    | Include subcommand completions (default: true)                                                         |
-| `includeDescriptions` | `boolean?`    | Include descriptions (default: true)                                                                   |
-| `globalArgsSchema`    | `ArgsSchema?` | Global args schema for deriving global options in completion                                           |
-| `binPath`             | `string?`     | Path to the binary whose mtime is the freshness signature (defaults to `process.argv[1]`)              |
-| `programVersion`      | `string?`     | Program version embedded in the script header                                                          |
-| `cacheDir`            | `string?`     | Cache directory hardcoded into the generated rc loader (defaults to XDG cache dir resolved at runtime) |
+| Property              | Type                    | Description                                                                                            |
+| --------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------ |
+| `shell`               | `ShellType`             | Target shell: "bash", "zsh", or "fish"                                                                 |
+| `programName`         | `string`                | Program name as invoked                                                                                |
+| `includeSubcommands`  | `boolean?`              | Include subcommand completions (default: true)                                                         |
+| `includeDescriptions` | `boolean?`              | Include descriptions (default: true)                                                                   |
+| `mode`                | `CompletionMode?`       | `dispatcher` by default, or `static` for legacy self-contained scripts                                 |
+| `globalArgsSchema`    | `ArgsSchema?`           | Global args schema for deriving global options in completion                                           |
+| `binPath`             | `string?`               | Path to the binary whose mtime is the freshness signature (defaults to `process.argv[1]`)              |
+| `programVersion`      | `string?`               | Program version embedded in the script header                                                          |
+| `cacheDir`            | `string?`               | Cache directory hardcoded into the generated rc loader (defaults to XDG cache dir resolved at runtime) |
+| `bundledWorker`       | `BundledWorkerOptions?` | Package-relative bundled worker lookup configuration for dispatcher mode                               |
 
 #### Return Value
 
@@ -346,6 +350,51 @@ const result = generateCompletion(command, {
 });
 
 console.log(result.script);
+```
+
+---
+
+### `generateBundledCompletionWorker`
+
+Generates a bundled worker artifact for dispatcher completion and validates
+that it is usable by the built CLI package.
+
+```typescript
+function generateBundledCompletionWorker(
+  options: GenerateBundledCompletionWorkerOptions,
+): Promise<GenerateBundledCompletionWorkerResult>;
+```
+
+#### Parameters
+
+| Property      | Type         | Description                                                                 |
+| ------------- | ------------ | --------------------------------------------------------------------------- |
+| `bin`         | `string`     | CLI binary or built JS entry file to invoke                                 |
+| `programName` | `string`     | Program name expected in worker metadata                                    |
+| `shell`       | `ShellType`  | Worker shell to generate                                                    |
+| `outputPath`  | `string?`    | Output path, defaulting to `dist/completion/<shell>-worker.<ext>`           |
+| `verify`      | `boolean?`   | Also verify that `__completion-worker-path <shell>` resolves to `outputPath` |
+| `cwd`         | `string?`    | Working directory for relative paths                                        |
+| `env`         | `Record<string, string \| undefined>?` | Extra environment passed to the target binary                               |
+| `quiet`       | `boolean?`   | Suppress the success message                                                |
+
+#### Example
+
+```typescript
+import { generateBundledCompletionWorker } from "politty/completion";
+
+await generateBundledCompletionWorker({
+  bin: "dist/cli/index.mjs",
+  programName: "mycli",
+  shell: "zsh",
+  verify: true,
+});
+```
+
+The package-script equivalent is:
+
+```sh
+politty generate-worker --bin dist/cli/index.mjs --program mycli --shell zsh --verify
 ```
 
 ---
