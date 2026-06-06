@@ -40,13 +40,21 @@ export function formatForShell(result: CandidateResult, options: ShellFormatOpti
  * Append extension metadata and directive to output lines
  */
 function appendMetadata(lines: string[], result: CandidateResult): void {
+  // The directive sentinel is always the final line. Fold the file
+  // `@ext:`/`@matcher:` metadata onto it (tab-separated) instead of emitting
+  // standalone lines, so candidate lines stay unambiguous: a dynamic resolver
+  // may legitimately return a value starting with `@ext:`/`@matcher:`, and the
+  // dispatcher must not mistake such a candidate for metadata. Static consumers
+  // never receive ext/matcher (file fields bake their own completion), so their
+  // plain `:<directive>` line is unchanged.
+  let directiveLine = `:${result.directive}`;
   if (result.fileExtensions && result.fileExtensions.length > 0) {
-    lines.push(`@ext:${result.fileExtensions.join(",")}`);
+    directiveLine += `\t@ext:${result.fileExtensions.join(",")}`;
   }
   if (result.fileMatchers && result.fileMatchers.length > 0) {
-    lines.push(`@matcher:${result.fileMatchers.join(",")}`);
+    directiveLine += `\t@matcher:${result.fileMatchers.join(",")}`;
   }
-  lines.push(`:${result.directive}`);
+  lines.push(directiveLine);
 }
 
 /**

@@ -170,8 +170,13 @@ export function resolveBundledWorkerPath(opts: {
   if (rels.length === 0) return null;
 
   const bases = new Set<string>();
-  addBaseDirs(bases, resolveBinPath(opts.programName, opts.binPath));
+  // Worker discovery must prefer the bin the caller pointed at and the current
+  // executable over a PATH lookup: a different same-named install earlier on
+  // PATH would otherwise win, and its bundled worker could be verified/sourced
+  // instead of this one's. `resolveBinPath` falls back to PATH only last here.
+  if (opts.binPath !== undefined) addBaseDirs(bases, opts.binPath);
   if (process.argv[1]) addBaseDirs(bases, process.argv[1]);
+  addBaseDirs(bases, resolveBinPath(opts.programName, opts.binPath));
 
   for (const rel of rels) {
     if (isAbsolute(rel) && isBundledWorkerFile(rel, opts.programName, opts.shell)) {

@@ -233,20 +233,27 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    local -a _lines=() _exts=() _matchers=()`);
   lines.push(`    local _line`);
   lines.push(`    while IFS= read -r _line; do _lines+=("$_line"); done <<< "$_raw"`);
+  // The final line is the directive sentinel, optionally carrying tab-separated
+  // @ext:/@matcher: file metadata. Parsing it here (instead of scanning every
+  // line) keeps candidate values that begin with `@ext:`/`@matcher:` intact.
   lines.push(`    local _last=$((\${#_lines[@]} - 1))`);
-  lines.push(`    if (( _last >= 0 )) && [[ "\${_lines[$_last]}" =~ ^:[0-9]+$ ]]; then`);
-  lines.push(`        _directive="\${_lines[$_last]#:}"`);
+  lines.push(`    if (( _last >= 0 )) && [[ "\${_lines[$_last]}" == :[0-9]* ]]; then`);
+  lines.push(`        local -a _meta=()`);
+  lines.push(`        IFS=$'\\t' read -r -a _meta <<< "\${_lines[$_last]}"`);
   lines.push(`        unset '_lines[_last]'`);
+  lines.push(`        _directive="\${_meta[0]#:}"`);
+  lines.push(`        local _m`);
+  lines.push(`        for _m in "\${_meta[@]:1}"; do`);
+  lines.push(`            if [[ "$_m" == @ext:* ]]; then`);
+  lines.push(`                IFS=',' read -r -a _exts <<< "\${_m#@ext:}"`);
+  lines.push(`            elif [[ "$_m" == @matcher:* ]]; then`);
+  lines.push(`                IFS=',' read -r -a _matchers <<< "\${_m#@matcher:}"`);
+  lines.push(`            fi`);
+  lines.push(`        done`);
   lines.push(`    fi`);
   lines.push(`    for _line in "\${_lines[@]}"; do`);
   lines.push(`        [[ -z "$_line" ]] && continue`);
-  lines.push(`        if [[ "$_line" == @ext:* ]]; then`);
-  lines.push(`            IFS=',' read -r -a _exts <<< "\${_line#@ext:}"`);
-  lines.push(`        elif [[ "$_line" == @matcher:* ]]; then`);
-  lines.push(`            IFS=',' read -r -a _matchers <<< "\${_line#@matcher:}"`);
-  lines.push(`        else`);
-  lines.push(`            COMPREPLY+=("$_line")`);
-  lines.push(`        fi`);
+  lines.push(`        COMPREPLY+=("$_line")`);
   lines.push(`    done`);
   lines.push(`    local _ip="\${_inline_prefix:-}"`);
   lines.push(`    if (( \${#_exts[@]} > 0 || \${#_matchers[@]} > 0 )); then`);
@@ -565,23 +572,31 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    local -a _vals _lines _exts _matchers`);
   lines.push(`    local _meta`);
   lines.push(`    _lines=("\${(@f)_raw}")`);
+  // The final line is the directive sentinel, optionally carrying tab-separated
+  // @ext:/@matcher: file metadata. Parsing it here (instead of scanning every
+  // line) keeps candidate values that begin with `@ext:`/`@matcher:` intact.
   lines.push(`    local _last=$#_lines`);
-  lines.push(`    if (( _last >= 1 )) && [[ "\${_lines[$_last]}" == :<-> ]]; then`);
-  lines.push(`        _directive="\${_lines[$_last]#:}"`);
+  lines.push(`    if (( _last >= 1 )) && [[ "\${_lines[$_last]}" == :<->* ]]; then`);
+  lines.push(`        local _dline="\${_lines[$_last]}"`);
   lines.push(`        _lines[$_last]=()`);
+  lines.push(`        local -a _dfields`);
+  lines.push(`        _dfields=("\${(@ps:\\t:)_dline}")`);
+  lines.push(`        _directive="\${_dfields[1]#:}"`);
+  lines.push(`        local _m`);
+  lines.push(`        for _m in "\${(@)_dfields[2,-1]}"; do`);
+  lines.push(`            if [[ "$_m" == @ext:* ]]; then`);
+  lines.push(`                _meta="\${_m#@ext:}"`);
+  lines.push(`                _exts=("\${(@s:,:)_meta}")`);
+  lines.push(`            elif [[ "$_m" == @matcher:* ]]; then`);
+  lines.push(`                _meta="\${_m#@matcher:}"`);
+  lines.push(`                _matchers=("\${(@s:,:)_meta}")`);
+  lines.push(`            fi`);
+  lines.push(`        done`);
   lines.push(`    fi`);
   lines.push(`    local _l`);
   lines.push(`    for _l in "\${_lines[@]}"; do`);
   lines.push(`        [[ -z "$_l" ]] && continue`);
-  lines.push(`        if [[ "$_l" == @ext:* ]]; then`);
-  lines.push(`            _meta="\${_l#@ext:}"`);
-  lines.push(`            _exts=("\${(@s:,:)_meta}")`);
-  lines.push(`        elif [[ "$_l" == @matcher:* ]]; then`);
-  lines.push(`            _meta="\${_l#@matcher:}"`);
-  lines.push(`            _matchers=("\${(@s:,:)_meta}")`);
-  lines.push(`        else`);
-  lines.push(`            _vals+=("$_l")`);
-  lines.push(`        fi`);
+  lines.push(`        _vals+=("$_l")`);
   lines.push(`    done`);
   lines.push(`    if (( \${#_vals[@]} > 0 )); then`);
   lines.push(`        if (( _directive & ${CompletionDirective.NoSpace} )); then`);
@@ -884,38 +899,30 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    set -l _emitted 0`);
   lines.push(`    set -l _exts`);
   lines.push(`    set -l _matchers`);
-  lines.push(`    set -l _prev ""`);
-  lines.push(`    set -l _has_prev 0`);
+  lines.push(`    set -l _lines`);
   lines.push(`    while read -l _l`);
-  lines.push(`        if test $_has_prev -eq 1`);
-  lines.push(`            if test -n "$_prev"`);
-  lines.push(`                if string match -q '@ext:*' -- "$_prev"`);
-  lines.push(`                    set _exts (string split , -- (string sub -s 6 -- "$_prev"))`);
-  lines.push(`                else if string match -q '@matcher:*' -- "$_prev"`);
-  lines.push(
-    `                    set _matchers (string split , -- (string sub -s 10 -- "$_prev"))`,
-  );
-  lines.push(`                else`);
-  lines.push(`                    printf '%s\\n' "$_prev"`);
-  lines.push(`                    set _emitted 1`);
-  lines.push(`                end`);
+  lines.push(`        set -a _lines $_l`);
+  lines.push(`    end`);
+  // The final line is the directive sentinel, optionally carrying tab-separated
+  // @ext:/@matcher: file metadata. Everything before it is a candidate, so a
+  // value beginning with `@ext:`/`@matcher:` is preserved rather than eaten.
+  lines.push(`    set -l _n (count $_lines)`);
+  lines.push(`    if test $_n -ge 1; and string match -qr '^:[0-9]+' -- $_lines[$_n]`);
+  lines.push(`        set -l _fields (string split \\t -- $_lines[$_n])`);
+  lines.push(`        set -e _lines[$_n]`);
+  lines.push(`        set _directive (string sub -s 2 -- $_fields[1])`);
+  lines.push(`        for _f in $_fields[2..-1]`);
+  lines.push(`            if string match -q '@ext:*' -- $_f`);
+  lines.push(`                set _exts (string split , -- (string sub -s 6 -- $_f))`);
+  lines.push(`            else if string match -q '@matcher:*' -- $_f`);
+  lines.push(`                set _matchers (string split , -- (string sub -s 10 -- $_f))`);
   lines.push(`            end`);
   lines.push(`        end`);
-  lines.push(`        set _prev $_l`);
-  lines.push(`        set _has_prev 1`);
   lines.push(`    end`);
-  lines.push(`    if test $_has_prev -eq 1`);
-  lines.push(`        if string match -qr '^:[0-9]+$' -- $_prev`);
-  lines.push(`            set _directive (string sub -s 2 -- $_prev)`);
-  lines.push(`        else if test -n "$_prev"`);
-  lines.push(`            if string match -q '@ext:*' -- "$_prev"`);
-  lines.push(`                set _exts (string split , -- (string sub -s 6 -- "$_prev"))`);
-  lines.push(`            else if string match -q '@matcher:*' -- "$_prev"`);
-  lines.push(`                set _matchers (string split , -- (string sub -s 10 -- "$_prev"))`);
-  lines.push(`            else`);
-  lines.push(`                printf '%s\\n' "$_prev"`);
-  lines.push(`                set _emitted 1`);
-  lines.push(`            end`);
+  lines.push(`    for _l in $_lines`);
+  lines.push(`        if test -n "$_l"`);
+  lines.push(`            printf '%s\\n' $_l`);
+  lines.push(`            set _emitted 1`);
   lines.push(`        end`);
   lines.push(`    end`);
   lines.push(`    if test (count $_exts) -gt 0; or test (count $_matchers) -gt 0`);

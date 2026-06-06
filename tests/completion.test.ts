@@ -1,7 +1,15 @@
 import type * as childProcess from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
 import {
@@ -26,6 +34,7 @@ import {
   installPath,
   refreshIfStale,
 } from "../src/completion/install.js";
+import { resolveBundledWorkerPath } from "../src/completion/bundled-worker.js";
 import { defaultCacheDir, generateLoader } from "../src/completion/loader.js";
 import {
   arg,
@@ -1119,6 +1128,49 @@ describe("Completion", () => {
         expect(regenerated).not.toContain("# STALE");
       });
 
+      it("prefers the current executable over a same-named binary earlier on PATH", () => {
+        const rel = defaultBundledWorkerOutputPath("zsh");
+        const workerContent = `${[
+          "# politty-completion-version: 1",
+          "# politty-completion-mode: worker",
+          "# politty-completion-worker: true",
+          "# program: mycli",
+          "# shell: zsh",
+        ].join("\n")}\n`;
+        const root = mkdtempSync(join(tmpdir(), "politty-worker-precedence-"));
+
+        // Decoy install earlier on PATH, with its own valid worker.
+        const decoyDir = join(root, "decoy");
+        const decoyWorker = join(decoyDir, rel);
+        mkdirSync(dirname(decoyWorker), { recursive: true });
+        writeFileSync(join(decoyDir, "mycli"), "#!/bin/sh\n", { mode: 0o755 });
+        writeFileSync(decoyWorker, workerContent);
+
+        // The install actually being executed (process.argv[1]).
+        const realDir = join(root, "real");
+        const realWorker = join(realDir, rel);
+        mkdirSync(dirname(realWorker), { recursive: true });
+        const realBin = join(realDir, "mycli");
+        writeFileSync(realBin, "#!/bin/sh\n", { mode: 0o755 });
+        writeFileSync(realWorker, workerContent);
+
+        const prevArgv1 = process.argv[1] ?? "";
+        const prevPath = process.env.PATH;
+        process.argv[1] = realBin;
+        process.env.PATH = `${decoyDir}${delimiter}${prevPath ?? ""}`;
+        try {
+          // No explicit binPath: worker discovery must prefer the current
+          // executable (argv[1]) over the PATH-resolved decoy install's worker.
+          const resolved = resolveBundledWorkerPath({ programName: "mycli", shell: "zsh" });
+          expect(resolved).not.toBeNull();
+          expect(realpathSync(resolved!)).toBe(realpathSync(realWorker));
+          expect(realpathSync(resolved!)).not.toBe(realpathSync(decoyWorker));
+        } finally {
+          process.argv[1] = prevArgv1;
+          process.env.PATH = prevPath;
+        }
+      });
+
       it("rejects bundled worker files missing required worker metadata", () => {
         const root = mkdtempSync(join(tmpdir(), "politty-invalid-worker-"));
         const workerPath = join(root, "zsh-worker.zsh");
@@ -1906,7 +1958,7 @@ describe("Completion", () => {
         expect(lines[1]).toBe("--format=yaml");
       });
 
-      it("should include @matcher: metadata for file matchers", () => {
+      it("should include @matcher: metadata on the trailing directive line", () => {
         const result: Parameters<typeof formatForShell>[0] = {
           candidates: [],
           directive: CompletionDirective.FilterPrefix,
@@ -1914,9 +1966,27 @@ describe("Completion", () => {
         };
 
         const output = formatForShell(result, { shell: "bash", currentWord: "" });
+
+        // Metadata rides on the directive sentinel (tab-separated), not a
+        // standalone line, so candidate lines stay unambiguous.
+        expect(output).toBe(`:${CompletionDirective.FilterPrefix}\t@matcher:.env.*`);
+      });
+
+      it("keeps candidate values that look like @ext:/@matcher: metadata distinct", () => {
+        const directive = CompletionDirective.FilterPrefix | CompletionDirective.NoFileCompletion;
+        const result: Parameters<typeof formatForShell>[0] = {
+          candidates: [{ value: "@ext:tsx" }, { value: "normal" }],
+          directive,
+        };
+
+        const output = formatForShell(result, { shell: "bash", currentWord: "" });
         const lines = output.split("\n");
 
-        expect(lines).toContain("@matcher:.env.*");
+        // A resolver candidate that begins with `@ext:` must remain a candidate
+        // line; metadata/directive live only on the final line.
+        expect(lines[0]).toBe("@ext:tsx");
+        expect(lines[1]).toBe("normal");
+        expect(lines[lines.length - 1]).toBe(`:${directive}`);
       });
 
       it("should not include @matcher: when fileMatchers is empty", () => {
