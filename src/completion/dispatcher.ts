@@ -10,7 +10,7 @@
 import type { AnyCommand } from "../types.js";
 import { bundledWorkerRelativePaths } from "./bundled-worker.js";
 import { CompletionDirective } from "./dynamic/candidate-generator.js";
-import { binEnvVarName, sanitize } from "./extractor.js";
+import { binEnvVarName, extractCompletionData, sanitize } from "./extractor.js";
 import { buildHeaderLines } from "./header.js";
 import { shSingleQuote, statSigExpr } from "./shell-shared.js";
 import type { CompletionOptions, CompletionResult } from "./types.js";
@@ -1065,6 +1065,13 @@ export function generateDispatcherCompletion(
   command: AnyCommand,
   options: CompletionOptions,
 ): CompletionResult {
+  // Validate completion metadata (expand `dependsOn` references, custom variant
+  // consistency, ...) at generation time, matching the static generators which
+  // do this via extractCompletionData. The dispatcher script does not embed the
+  // command tree, so without this an invalid `completion.custom` config would
+  // install a broken dispatcher and only fail — silently — at TAB time.
+  extractCompletionData(command, options.programName, options.globalArgsSchema);
+
   switch (options.shell) {
     case "bash":
       return bashDispatcher(command, options);
