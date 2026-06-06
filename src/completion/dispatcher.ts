@@ -209,10 +209,21 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`        __${fn}_worker_from_dir "$_dir" && return 0`);
   lines.push(`    fi`);
   if (canQueryBundledWorkerPath) {
+    // Memoize the queried worker path per bin so repeat completions don't start
+    // the CLI on every TAB — without this, queryCommand packages never reach a
+    // warm fast path.
+    lines.push(
+      `    if [[ "\${__${fn}_queried_bin:-}" == "$_bin" && -n "\${__${fn}_queried_worker:-}" ]] && __${fn}_is_worker_file "\${__${fn}_queried_worker}"; then`,
+    );
+    lines.push(`        printf '%s\\n' "\${__${fn}_queried_worker}"`);
+    lines.push(`        return 0`);
+    lines.push(`    fi`);
     lines.push(
       `    _reported="$(NODE_COMPILE_CACHE="$_node_compile_cache" "$_bin" __completion-worker-path bash 2>/dev/null)" || _reported=""`,
     );
     lines.push(`    if [[ -n "$_reported" ]] && __${fn}_is_worker_file "$_reported"; then`);
+    lines.push(`        __${fn}_queried_bin="$_bin"`);
+    lines.push(`        __${fn}_queried_worker="$_reported"`);
     lines.push(`        printf '%s\\n' "$_reported"`);
     lines.push(`        return 0`);
     lines.push(`    fi`);
@@ -557,10 +568,21 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`        __${fn}_worker_from_dir "$_dir" && return 0`);
   lines.push(`    fi`);
   if (canQueryBundledWorkerPath) {
+    // Memoize the queried worker path per bin so repeat completions don't start
+    // the CLI on every TAB — without this, queryCommand packages never reach a
+    // warm fast path.
+    lines.push(
+      `    if [[ "\${__${fn}_queried_bin:-}" == "$_bin" && -n "\${__${fn}_queried_worker:-}" ]] && __${fn}_is_worker_file "\${__${fn}_queried_worker}"; then`,
+    );
+    lines.push(`        print -r -- "\${__${fn}_queried_worker}"`);
+    lines.push(`        return 0`);
+    lines.push(`    fi`);
     lines.push(
       `    _reported="$(NODE_COMPILE_CACHE="$_node_compile_cache" "$_bin" __completion-worker-path zsh 2>/dev/null)" || _reported=""`,
     );
     lines.push(`    if [[ -n "$_reported" ]] && __${fn}_is_worker_file "$_reported"; then`);
+    lines.push(`        typeset -g __${fn}_queried_bin="$_bin"`);
+    lines.push(`        typeset -g __${fn}_queried_worker="$_reported"`);
     lines.push(`        print -r -- "$_reported"`);
     lines.push(`        return 0`);
     lines.push(`    fi`);
@@ -910,10 +932,21 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`        __${fn}_worker_from_dir "$_dir"; and return 0`);
   lines.push(`    end`);
   if (canQueryBundledWorkerPath) {
+    // Memoize the queried worker path per bin so repeat completions don't start
+    // the CLI on every TAB — without this, queryCommand packages never reach a
+    // warm fast path.
+    lines.push(
+      `    if set -q __${fn}_queried_bin; and test "$__${fn}_queried_bin" = "$_bin"; and test -n "$__${fn}_queried_worker"; and __${fn}_is_worker_file "$__${fn}_queried_worker"`,
+    );
+    lines.push(`        printf '%s\\n' "$__${fn}_queried_worker"`);
+    lines.push(`        return 0`);
+    lines.push(`    end`);
     lines.push(
       `    set -l _reported (env NODE_COMPILE_CACHE="$_node_compile_cache" "$_bin" __completion-worker-path fish 2>/dev/null)`,
     );
     lines.push(`    if test -n "$_reported"; and __${fn}_is_worker_file "$_reported"`);
+    lines.push(`        set -g __${fn}_queried_bin "$_bin"`);
+    lines.push(`        set -g __${fn}_queried_worker "$_reported"`);
     lines.push(`        printf '%s\\n' "$_reported"`);
     lines.push(`        return 0`);
     lines.push(`    end`);

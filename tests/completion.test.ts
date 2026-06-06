@@ -531,8 +531,10 @@ describe("Completion", () => {
         });
 
         expect(result.installInstructions).toContain("~/.bashrc");
-        expect(result.installInstructions).toContain('eval "$(mycli completion bash)"');
-        expect(result.installInstructions).toContain("mycli completion bash >");
+        // Static-mode instructions must include `--static`; without it the
+        // documented command would install the now-default dispatcher.
+        expect(result.installInstructions).toContain('eval "$(mycli completion bash --static)"');
+        expect(result.installInstructions).toContain("mycli completion bash --static >");
         expect(result.installInstructions).not.toContain("mycli completion bash --loader");
       });
 
@@ -572,9 +574,9 @@ describe("Completion", () => {
           programName: "mycli",
         });
 
-        expect(result.installInstructions).toContain('eval "$(mycli completion zsh)"');
+        expect(result.installInstructions).toContain('eval "$(mycli completion zsh --static)"');
         expect(result.installInstructions).toContain("after compinit");
-        expect(result.installInstructions).toContain("mycli completion zsh >");
+        expect(result.installInstructions).toContain("mycli completion zsh --static >");
         expect(result.installInstructions).toContain("fpath line before compinit");
         expect(result.installInstructions).toContain("fpath=(~/.zsh/completions $fpath)");
         expect(result.installInstructions).toContain("~/.zsh/completions/_mycli");
@@ -619,7 +621,7 @@ describe("Completion", () => {
           programName: "mycli",
         });
 
-        expect(result.installInstructions).toContain("mycli completion fish --install");
+        expect(result.installInstructions).toContain("mycli completion fish --install --static");
         expect(result.installInstructions).not.toMatch(/^mycli completion fish \| source/m);
         expect(result.installInstructions).not.toMatch(/^mycli completion fish >/m);
       });
@@ -753,6 +755,21 @@ describe("Completion", () => {
           mode: "dispatcher",
         }).script;
         expect(fish).toContain(`set -lx NODE_COMPILE_CACHE "$_node_compile_cache"`);
+      });
+
+      it("memoizes the queried worker path so queryCommand does not spawn the CLI every TAB", () => {
+        for (const shell of ["bash", "zsh", "fish"] as const) {
+          const { script } = generateCompletion(dispatcherCommand, {
+            shell,
+            programName: "mycli",
+            mode: "dispatcher",
+            bundledWorker: { queryCommand: true },
+          });
+          // The `__completion-worker-path` query is cached per bin so warm
+          // completions reuse the resolved path instead of re-spawning the CLI.
+          expect(script).toContain("__mycli_queried_worker");
+          expect(script).toContain("__mycli_queried_bin");
+        }
       });
 
       it("loads the static worker only when its sig matches (failed refresh falls back)", () => {

@@ -910,11 +910,11 @@ export function generateBashCompletion(
     script: lines.join("\n"),
     shell: "bash",
     installInstructions: `# To enable auto-refreshing bash completions, add this to your ~/.bashrc:
-eval "$(${programName} completion bash)"
+eval "$(${programName} completion bash --static)"
 
 # For faster shell startup, save the script instead:
 mkdir -p ~/.local/share/bash-completion/completions
-${programName} completion bash > ~/.local/share/bash-completion/completions/${programName}
+${programName} completion bash --static > ~/.local/share/bash-completion/completions/${programName}
 
 # Then reload your shell or run:
 source ~/.bashrc`,

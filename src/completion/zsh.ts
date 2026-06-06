@@ -843,11 +843,11 @@ export function generateZshCompletion(
     script: lines.join("\n"),
     shell: "zsh",
     installInstructions: `# To enable auto-refreshing zsh completions, add this to your ~/.zshrc after compinit:
-eval "$(${programName} completion zsh)"
+eval "$(${programName} completion zsh --static)"
 
 # For faster shell startup, save the script in your fpath:
 mkdir -p ~/.zsh/completions
-${programName} completion zsh > ~/.zsh/completions/_${programName}
+${programName} completion zsh --static > ~/.zsh/completions/_${programName}
 
 # Make sure your ~/.zshrc includes the fpath line before compinit:
 fpath=(~/.zsh/completions $fpath)

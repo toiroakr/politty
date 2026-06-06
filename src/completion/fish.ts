@@ -910,6 +910,6 @@ export function generateFishCompletion(
     script: lines.join("\n"),
     shell: "fish",
     installInstructions: `# To enable auto-refreshing fish completions, run:
-${programName} completion fish --install`,
+${programName} completion fish --install --static`,
   };
 }
