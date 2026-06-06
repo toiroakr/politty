@@ -8,7 +8,7 @@
  * stale body.
  */
 
-import { sanitize } from "./extractor.js";
+import { binEnvVarName, sanitize } from "./extractor.js";
 import { computeBinSig, resolveBinPath } from "./header.js";
 import { statSigExpr } from "./shell-shared.js";
 
@@ -20,6 +20,7 @@ interface SelfRefreshOptions {
 export function generateBashSelfRefresh(opts: SelfRefreshOptions): string[] {
   const { programName, binPath } = opts;
   const fn = sanitize(programName);
+  const envName = binEnvVarName(fn);
   const sig = computeBinSig(resolveBinPath(programName, binPath));
   const refreshFn = `__${fn}_self_refresh`;
 
@@ -31,7 +32,7 @@ export function generateBashSelfRefresh(opts: SelfRefreshOptions): string[] {
     `    head -n 8 "$_self" 2>/dev/null | grep -qF "# politty-completion-version:" || return 1`,
     `    head -n 8 "$_self" 2>/dev/null | grep -qF "# program: ${programName}" || return 1`,
     `    head -n 8 "$_self" 2>/dev/null | grep -qF "# shell: bash" || return 1`,
-    `    _bin=$(type -P ${programName} 2>/dev/null)`,
+    `    _bin="\${${envName}:-$(type -P ${programName} 2>/dev/null)}"`,
     `    [[ -n "$_bin" ]] || return 1`,
     `    _sig=${statSigExpr("$_bin", { shell: "posix" })} || return 1`,
     `    [[ "$_sig" != "${sig}" ]] || return 1`,
@@ -53,6 +54,7 @@ export function generateBashSelfRefresh(opts: SelfRefreshOptions): string[] {
 export function generateZshSelfRefresh(opts: SelfRefreshOptions): string[] {
   const { programName, binPath } = opts;
   const fn = sanitize(programName);
+  const envName = binEnvVarName(fn);
   const completionFn = `_${programName}`;
   const sig = computeBinSig(resolveBinPath(programName, binPath));
   const refreshFn = `__${fn}_self_refresh`;
@@ -67,7 +69,7 @@ export function generateZshSelfRefresh(opts: SelfRefreshOptions): string[] {
     `    head -n 8 "$_self" 2>/dev/null | grep -qF "# politty-completion-version:" || return 1`,
     `    head -n 8 "$_self" 2>/dev/null | grep -qF "# program: ${programName}" || return 1`,
     `    head -n 8 "$_self" 2>/dev/null | grep -qF "# shell: zsh" || return 1`,
-    `    _bin=$(whence -p ${programName} 2>/dev/null)`,
+    `    _bin="\${${envName}:-$(whence -p ${programName} 2>/dev/null)}"`,
     `    [[ -n "$_bin" ]] || return 1`,
     `    _sig=${statSigExpr("$_bin", { shell: "posix" })} || return 1`,
     `    [[ "$_sig" != "${sig}" ]] || return 1`,

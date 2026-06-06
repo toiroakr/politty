@@ -2418,6 +2418,9 @@ describe("Completion", () => {
       expect(script).toContain('"$_bin" __refresh-completion bash "$_self" --static 2>/dev/null');
       expect(script).toContain('source "$_self" 2>/dev/null');
       expect(script).toContain('head -n 8 "$_self"');
+      // Resolve the bin like resolveBinPath (env override → PATH) so the
+      // self-refresh sig check matches the embedded `# politty-bin-sig`.
+      expect(script).toContain('_bin="${MYCLI_BIN:-$(type -P mycli 2>/dev/null)}"');
     });
 
     it("embeds a zsh self-refresh guard in static scripts", () => {
@@ -2437,6 +2440,7 @@ describe("Completion", () => {
       expect(script).toContain('_mycli "$@"');
       expect(script).not.toContain('_mycli "$@" || return 1');
       expect(script).toContain('if __mycli_self_refresh "$@"; then');
+      expect(script).toContain('_bin="${MYCLI_BIN:-$(whence -p mycli 2>/dev/null)}"');
     });
 
     it("zsh self-refresh re-enters the fpath entrypoint for dashed program names", () => {
@@ -2598,6 +2602,18 @@ describe("Completion", () => {
       expect(snippet).toContain("emulate -L zsh");
       expect(snippet).toContain("setopt local_options no_aliases");
       expect(snippet).toContain("completion.zsh");
+    });
+
+    it("resolves the bin via the env override before PATH to match the header sig", () => {
+      // `# politty-bin-sig` is computed from resolveBinPath (env override →
+      // PATH). The loader's freshness check must stat the same binary, or a set
+      // `<PROG>_BIN` that differs from PATH would mismatch and regenerate forever.
+      expect(generateLoader({ programName: "mycli", shell: "bash" })).toContain(
+        '_bin="${MYCLI_BIN:-$(type -P mycli 2>/dev/null)}"',
+      );
+      expect(generateLoader({ programName: "mycli", shell: "zsh" })).toContain(
+        '_bin="${MYCLI_BIN:-$(whence -p mycli 2>/dev/null)}"',
+      );
     });
 
     it("hardcodes the cache directory when cacheDir is provided", () => {

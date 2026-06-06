@@ -15,7 +15,7 @@
  * blocks shell startup.
  */
 
-import { sanitize } from "./extractor.js";
+import { binEnvVarName, sanitize } from "./extractor.js";
 import { shSingleQuote } from "./shell-shared.js";
 import type { ShellType } from "./types.js";
 
@@ -43,6 +43,7 @@ function bashCachePathExpr(
 
 function generateBashLoader(opts: LoaderOptions): string {
   const fn = sanitize(opts.programName);
+  const envName = binEnvVarName(fn);
   const cache = bashCachePathExpr(opts.programName, opts.cacheDir, "bash");
   // `type -P` is path-only — it skips aliases, functions, and builtins.
   // `command -v` would surface the alias text or function name when the
@@ -61,7 +62,7 @@ function generateBashLoader(opts: LoaderOptions): string {
   // append a second line and break the header comparison.
   return `__${fn}_load_completion() {
     local _bin _cache _sig _hdr
-    _bin=$(type -P ${opts.programName} 2>/dev/null)
+    _bin="\${${envName}:-$(type -P ${opts.programName} 2>/dev/null)}"
     [[ -n "$_bin" ]] || return 0
     _cache=${cache}
     _sig=$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null) || return 0
@@ -89,6 +90,7 @@ unset -f __${fn}_load_completion
 
 function generateZshLoader(opts: LoaderOptions): string {
   const fn = sanitize(opts.programName);
+  const envName = binEnvVarName(fn);
   const cache = bashCachePathExpr(opts.programName, opts.cacheDir, "zsh");
   // `whence -p` is the zsh equivalent of bash's `type -P` — path-only,
   // ignoring aliases / functions / builtins. See bash loader for the
@@ -97,7 +99,7 @@ function generateZshLoader(opts: LoaderOptions): string {
     emulate -L zsh
     setopt local_options no_aliases
     local _bin _cache _sig _hdr
-    _bin=$(whence -p ${opts.programName} 2>/dev/null)
+    _bin="\${${envName}:-$(whence -p ${opts.programName} 2>/dev/null)}"
     [[ -n "$_bin" ]] || return 0
     _cache=${cache}
     _sig=$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null) || return 0
