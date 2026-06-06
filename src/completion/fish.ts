@@ -382,9 +382,29 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
 
   // 4. Subcommand or positional completion (includes aliases)
   if (visibleSubs.length > 0) {
-    for (const s of getSubNamesWithAliases(sub.subcommands)) {
-      const desc = escapeDesc(s.description ?? "");
-      lines.push(`    echo "${s.name}\t${desc}"`);
+    const subItems = getSubNamesWithAliases(sub.subcommands);
+    if (sub.positionals.length > 0) {
+      lines.push(`    set -l _sub_match 0`);
+      lines.push(
+        `    for _sub_name in ${subItems.map((s) => `"${escapeDesc(s.name)}"`).join(" ")}`,
+      );
+      lines.push(
+        `        test (string sub -l (string length -- "$_cur") -- "$_sub_name") = "$_cur"; and set _sub_match 1; and break`,
+      );
+      lines.push(`    end`);
+      lines.push(`    if test $_sub_match -eq 1`);
+      for (const s of subItems) {
+        const desc = escapeDesc(s.description ?? "");
+        lines.push(`        echo "${s.name}\t${desc}"`);
+      }
+      lines.push(`    else`);
+      lines.push(...positionalBlock(sub.positionals, fn, sub.options).map((l) => `    ${l}`));
+      lines.push(`    end`);
+    } else {
+      for (const s of subItems) {
+        const desc = escapeDesc(s.description ?? "");
+        lines.push(`    echo "${s.name}\t${desc}"`);
+      }
     }
   } else if (sub.positionals.length > 0) {
     lines.push(...positionalBlock(sub.positionals, fn, sub.options));
@@ -698,9 +718,29 @@ export function generateFishCompletion(
   lines.push(...availableOptionLines(root.options, fn));
   if (visibleSubs.length > 0) {
     lines.push(`    else`);
-    for (const s of getSubNamesWithAliases(root.subcommands)) {
-      const desc = escapeDesc(s.description ?? "");
-      lines.push(`        echo "${s.name}\t${desc}"`);
+    const subItems = getSubNamesWithAliases(root.subcommands);
+    if (root.positionals.length > 0) {
+      lines.push(`        set -l _sub_match 0`);
+      lines.push(
+        `        for _sub_name in ${subItems.map((s) => `"${escapeDesc(s.name)}"`).join(" ")}`,
+      );
+      lines.push(
+        `            test (string sub -l (string length -- "$_cur") -- "$_sub_name") = "$_cur"; and set _sub_match 1; and break`,
+      );
+      lines.push(`        end`);
+      lines.push(`        if test $_sub_match -eq 1`);
+      for (const s of subItems) {
+        const desc = escapeDesc(s.description ?? "");
+        lines.push(`            echo "${s.name}\t${desc}"`);
+      }
+      lines.push(`        else`);
+      lines.push(...positionalBlock(root.positionals, fn, root.options).map((l) => `        ${l}`));
+      lines.push(`        end`);
+    } else {
+      for (const s of subItems) {
+        const desc = escapeDesc(s.description ?? "");
+        lines.push(`        echo "${s.name}\t${desc}"`);
+      }
     }
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);

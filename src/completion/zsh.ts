@@ -413,14 +413,32 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
 
   // 4. Subcommand or positional completion (includes aliases)
   if (visibleSubs.length > 0) {
-    const subItems = getSubNamesWithAliases(sub.subcommands)
+    const subItems = getSubNamesWithAliases(sub.subcommands);
+    const subDescribed = subItems
       .map((s) => {
         const desc = s.description ? `:${escapeDesc(s.description)}` : "";
         return `"${s.name}${desc}"`;
       })
       .join(" ");
-    lines.push(`    local -a _subs=(${subItems})`);
-    lines.push(`    __${fn}_cdescribe 'subcommands' _subs`);
+    if (sub.positionals.length > 0) {
+      const subNames = subItems.map((s) => `"${escapeZshDQ(s.name)}"`).join(" ");
+      lines.push(`    local -a _sub_names=(${subNames})`);
+      lines.push(`    local _cur_word="\${words[CURRENT]:-}" _sub_name _sub_match=0`);
+      lines.push(`    for _sub_name in "\${_sub_names[@]}"; do`);
+      lines.push(`        [[ "$_sub_name" == "$_cur_word"* ]] && _sub_match=1 && break`);
+      lines.push(`    done`);
+      lines.push(`    if (( _sub_match )); then`);
+      lines.push(`        local -a _subs=(${subDescribed})`);
+      lines.push(`        __${fn}_cdescribe 'subcommands' _subs`);
+      lines.push(`    else`);
+      lines.push(
+        ...positionalBlock(sub.positionals, fn, funcSuffix, sub.options).map((l) => `    ${l}`),
+      );
+      lines.push(`    fi`);
+    } else {
+      lines.push(`    local -a _subs=(${subDescribed})`);
+      lines.push(`    __${fn}_cdescribe 'subcommands' _subs`);
+    }
   } else if (sub.positionals.length > 0) {
     lines.push(...positionalBlock(sub.positionals, fn, funcSuffix, sub.options));
   }
@@ -678,14 +696,32 @@ export function generateZshCompletion(
   lines.push(`        __${fn}_cdescribe 'options' _opts`);
   if (visibleSubs.length > 0) {
     lines.push(`    else`);
-    const subItems = getSubNamesWithAliases(root.subcommands)
+    const subItems = getSubNamesWithAliases(root.subcommands);
+    const subDescribed = subItems
       .map((s) => {
         const desc = s.description ? `:${escapeDesc(s.description)}` : "";
         return `"${s.name}${desc}"`;
       })
       .join(" ");
-    lines.push(`        local -a _subs=(${subItems})`);
-    lines.push(`        __${fn}_cdescribe 'subcommands' _subs`);
+    if (root.positionals.length > 0) {
+      const subNames = subItems.map((s) => `"${escapeZshDQ(s.name)}"`).join(" ");
+      lines.push(`        local -a _sub_names=(${subNames})`);
+      lines.push(`        local _cur_word="\${words[CURRENT]:-}" _sub_name _sub_match=0`);
+      lines.push(`        for _sub_name in "\${_sub_names[@]}"; do`);
+      lines.push(`            [[ "$_sub_name" == "$_cur_word"* ]] && _sub_match=1 && break`);
+      lines.push(`        done`);
+      lines.push(`        if (( _sub_match )); then`);
+      lines.push(`            local -a _subs=(${subDescribed})`);
+      lines.push(`            __${fn}_cdescribe 'subcommands' _subs`);
+      lines.push(`        else`);
+      lines.push(
+        ...positionalBlock(root.positionals, fn, "root", root.options).map((l) => `        ${l}`),
+      );
+      lines.push(`        fi`);
+    } else {
+      lines.push(`        local -a _subs=(${subDescribed})`);
+      lines.push(`        __${fn}_cdescribe 'subcommands' _subs`);
+    }
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
     lines.push(

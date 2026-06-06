@@ -435,8 +435,24 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
     const subNames = getSubNamesWithAliases(sub.subcommands)
       .map((s) => s.name)
       .join(" ");
-    lines.push(`    COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
-    lines.push(`    compopt +o default 2>/dev/null`);
+    if (sub.positionals.length > 0) {
+      lines.push(`    local -a _sub_names=(${subNames})`);
+      lines.push(`    local _sub_name _sub_match=0`);
+      lines.push(`    for _sub_name in "\${_sub_names[@]}"; do`);
+      lines.push(`        [[ "$_sub_name" == "$_cur"* ]] && _sub_match=1 && break`);
+      lines.push(`    done`);
+      lines.push(`    if (( _sub_match )); then`);
+      lines.push(`        COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
+      lines.push(`        compopt +o default 2>/dev/null`);
+      lines.push(`    else`);
+      lines.push(
+        ...positionalBlock(sub.positionals, fn, funcSuffix, sub.options).map((l) => `    ${l}`),
+      );
+      lines.push(`    fi`);
+    } else {
+      lines.push(`    COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
+      lines.push(`    compopt +o default 2>/dev/null`);
+    }
   } else if (sub.positionals.length > 0) {
     lines.push(...positionalBlock(sub.positionals, fn, funcSuffix, sub.options));
   }
@@ -707,8 +723,24 @@ export function generateBashCompletion(
     const subNames = getSubNamesWithAliases(root.subcommands)
       .map((s) => s.name)
       .join(" ");
-    lines.push(`        COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
-    lines.push(`        compopt +o default 2>/dev/null`);
+    if (root.positionals.length > 0) {
+      lines.push(`        local -a _sub_names=(${subNames})`);
+      lines.push(`        local _sub_name _sub_match=0`);
+      lines.push(`        for _sub_name in "\${_sub_names[@]}"; do`);
+      lines.push(`            [[ "$_sub_name" == "$_cur"* ]] && _sub_match=1 && break`);
+      lines.push(`        done`);
+      lines.push(`        if (( _sub_match )); then`);
+      lines.push(`            COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
+      lines.push(`            compopt +o default 2>/dev/null`);
+      lines.push(`        else`);
+      lines.push(
+        ...positionalBlock(root.positionals, fn, "root", root.options).map((l) => `        ${l}`),
+      );
+      lines.push(`        fi`);
+    } else {
+      lines.push(`        COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
+      lines.push(`        compopt +o default 2>/dev/null`);
+    }
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
     lines.push(
