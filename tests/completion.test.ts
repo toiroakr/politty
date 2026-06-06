@@ -730,6 +730,31 @@ describe("Completion", () => {
         expect(fish).toContain(`set -lx NODE_COMPILE_CACHE "$_node_compile_cache"`);
       });
 
+      it("guards bash command substitutions so a miss does not abort under set -e", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        // Expected helper misses (e.g. no bundled worker) must not abort the
+        // completion function when the user has `set -e` enabled.
+        expect(script).toContain(`|| _bundled_worker=""`);
+        expect(script).toContain(`|| _worker=""`);
+        expect(script).toContain(`|| _sig=""`);
+      });
+
+      it("does not split inline option prefixes after a -- separator in bash", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        // A word like `-D=foo` after `--` is a positional, not an inline option
+        // value, so the inline split must be gated on not being after `--`.
+        expect(script).toContain(`local _after_dd=0`);
+        expect(script).toContain(`if (( ! _after_dd )) && [[ "$_cur" == -*=* ]]; then`);
+      });
+
       it("keeps static mode available with baked command metadata", () => {
         const { script } = generateCompletion(dispatcherCommand, {
           shell: "bash",

@@ -320,23 +320,38 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    done`);
   lines.push(`    local _cur="" _inline_prefix=""`);
   lines.push(`    (( \${#_words[@]} > 0 )) && _cur="\${_words[\${#_words[@]}-1]}"`);
-  lines.push(`    if [[ "$_cur" == -*=* ]]; then`);
+  // After a `--` separator the current word is a positional, not an option, so
+  // do not split `-x=y` into an inline option prefix (which would mis-prefix
+  // file/dir fallback candidates). Mirrors the static script's `_after_dd`.
+  lines.push(`    local _after_dd=0 _di=0`);
+  lines.push(`    while (( _di < \${#_words[@]} - 1 )); do`);
+  lines.push(`        [[ "\${_words[_di]}" == "--" ]] && { _after_dd=1; break; }`);
+  lines.push(`        (( _di++ ))`);
+  lines.push(`    done`);
+  lines.push(`    if (( ! _after_dd )) && [[ "$_cur" == -*=* ]]; then`);
   lines.push(`        _inline_prefix="\${_cur%%=*}="`);
   lines.push(`        _cur="\${_cur#*=}"`);
   lines.push(`    fi`);
   lines.push(`    local _bin _out _node_compile_cache _worker _bundled_worker _sig`);
-  lines.push(`    _bin="$(__${fn}_resolve_bin)"`);
+  // `|| _x=""` keeps an expected helper miss (e.g. no bundled worker) from
+  // aborting the completion under a user's `set -e`; the guards below handle
+  // the empty values. (zsh resets options via `emulate -L zsh`; fish has none.)
+  lines.push(`    _bin="$(__${fn}_resolve_bin)" || _bin=""`);
   lines.push(`    [[ -n "$_bin" ]] || return 0`);
-  lines.push(`    _node_compile_cache="$(__${fn}_node_compile_cache_dir)"`);
-  lines.push(`    _bundled_worker="$(__${fn}_bundled_worker_path "$_bin" "$_node_compile_cache")"`);
+  lines.push(
+    `    _node_compile_cache="$(__${fn}_node_compile_cache_dir)" || _node_compile_cache=""`,
+  );
+  lines.push(
+    `    _bundled_worker="$(__${fn}_bundled_worker_path "$_bin" "$_node_compile_cache")" || _bundled_worker=""`,
+  );
   lines.push(`    if [[ -n "$_bundled_worker" ]] && __${fn}_load_worker "$_bundled_worker"; then`);
   lines.push(
     `        NODE_COMPILE_CACHE="$_node_compile_cache" ${workerBinEnvName}="$_bin" _${workerFn}_completions`,
   );
   lines.push(`        return 0`);
   lines.push(`    fi`);
-  lines.push(`    _worker="$(__${fn}_static_worker_path)"`);
-  lines.push(`    _sig="$(__${fn}_bin_sig "$_bin")"`);
+  lines.push(`    _worker="$(__${fn}_static_worker_path)" || _worker=""`);
+  lines.push(`    _sig="$(__${fn}_bin_sig "$_bin")" || _sig=""`);
   lines.push(`    if [[ -n "$_worker" && -n "$_sig" ]]; then`);
   lines.push(
     `        if [[ ! -f "$_worker" ]] || ! head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig"; then`,
