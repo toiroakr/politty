@@ -25,6 +25,16 @@ export interface ExpandTableEntry {
 export type ShellType = "bash" | "zsh" | "fish";
 
 /**
+ * Completion script generation mode.
+ *
+ * - `dispatcher`: small runtime script that resolves the executable visible on
+ *   PATH at TAB time and delegates to its `__complete` command.
+ * - `static`: self-contained script with command metadata baked in at
+ *   generation time.
+ */
+export type CompletionMode = "dispatcher" | "static";
+
+/**
  * Options for completion generation
  */
 export interface CompletionOptions {
@@ -36,6 +46,8 @@ export interface CompletionOptions {
   includeSubcommands?: boolean;
   /** Include description in completions where supported (default: true) */
   includeDescriptions?: boolean;
+  /** Completion script mode (default: dispatcher). */
+  mode?: CompletionMode;
   /** Global args schema for deriving global options in completion */
   globalArgsSchema?: ArgsSchema;
   /**
@@ -107,6 +119,25 @@ export type ValueCompletion =
       resolve?: never;
       extensions?: never;
       matcher?: never;
+    }
+  | {
+      /**
+       * Runtime form of `completion.custom.expand` used by `__complete`.
+       * The dispatcher invokes `__complete` at TAB time, so it can call the
+       * user's `enumerate` function against the already typed dependency
+       * values instead of baking a table into the shell script.
+       */
+      type: "runtime-expand";
+      dependsOn: readonly string[];
+      enumerate: (
+        deps: Readonly<Record<string, string>>,
+      ) => ReadonlyArray<string | { value: string; description?: string }>;
+      choices?: never;
+      shellCommand?: never;
+      resolve?: never;
+      extensions?: never;
+      matcher?: never;
+      table?: never;
     };
 
 /**

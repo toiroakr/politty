@@ -108,16 +108,27 @@ export async function generateCandidates(
       const effectiveContext = inlinePrefix
         ? { ...context, currentWord: context.currentWord.slice(inlinePrefix.length) }
         : context;
-      return generateValueCandidates(effectiveContext, options, opt?.name, opt?.valueCompletion);
+      return generateValueCandidates(
+        effectiveContext,
+        options,
+        opt?.name,
+        opt?.valueCompletion,
+        undefined,
+        opt?.valueType === "array",
+      );
     }
     case "positional": {
       const positional = resolvePositionalTarget(context);
+      if (!positional) {
+        return { candidates: [], directive: CompletionDirective.NoFileCompletion };
+      }
       return generateValueCandidates(
         context,
         options,
-        positional?.name,
-        positional?.valueCompletion,
-        positional?.description,
+        positional.name,
+        positional.valueCompletion,
+        positional.description,
+        false,
       );
     }
   }
@@ -219,6 +230,7 @@ async function resolveValueCandidates(
   vc: ValueCompletion,
   ctx: DynamicCompletionContext,
   description?: string,
+  dedupeKeyValues?: boolean,
 ): Promise<CandidateResult> {
   const candidates: CompletionCandidate[] = [];
   let directive: number = CompletionDirective.FilterPrefix;
@@ -303,14 +315,39 @@ async function resolveValueCandidates(
     }
 
     case "expand":
-      // `expand` candidates are inlined into the static shell script at
-      // generation time, so the dynamic path never delegates to us for an
-      // expand field. This case is reachable only if a caller invokes
-      // `__complete` for an expand field directly (e.g. from tests). Return
-      // no candidates with `NoFileCompletion` to mirror the choices/none
-      // shapes.
+      // Static scripts consume pre-resolved expand tables directly. Runtime
+      // dispatcher scripts use the `runtime-expand` branch below.
       directive |= CompletionDirective.NoFileCompletion;
       break;
+
+    case "runtime-expand": {
+      const deps: Record<string, string> = {};
+      let missingDep = false;
+      for (const dep of vc.dependsOn) {
+        const value = ctx.parsedArgs[dep];
+        if (typeof value !== "string") {
+          missingDep = true;
+          break;
+        }
+        deps[dep] = value;
+      }
+      if (!missingDep) {
+        try {
+          const seen = new Set<string>();
+          for (const item of vc.enumerate(deps)) {
+            const normalized = typeof item === "string" ? { value: item } : item;
+            if (seen.has(normalized.value)) continue;
+            seen.add(normalized.value);
+            candidates.push({ ...normalized, type: "value" });
+          }
+        } catch {
+          directive = CompletionDirective.NoFileCompletion | CompletionDirective.Error;
+          break;
+        }
+      }
+      directive |= CompletionDirective.NoFileCompletion;
+      break;
+    }
   }
 
   // Two-stage key=value: collapse to keys before `=` is typed, and flip
@@ -319,8 +356,12 @@ async function resolveValueCandidates(
   // `expand` sources — `choices`/`shellCommand` values containing `=`
   // are concrete (e.g. `foo=bar` literal choice) and must reach the
   // shell unchanged, matching what the static script paths emit.
-  if (vc.type === "dynamic" || vc.type === "expand") {
-    const processed = applyKeyValuePostProcessing(candidates, ctx.currentWord);
+  if (vc.type === "dynamic" || vc.type === "expand" || vc.type === "runtime-expand") {
+    const sourceCandidates =
+      vc.type === "runtime-expand" && dedupeKeyValues === true
+        ? dropAlreadyUsedKeyCandidates(candidates, ctx.previousValues)
+        : candidates;
+    const processed = applyKeyValuePostProcessing(sourceCandidates, ctx.currentWord);
     if (processed.hasEqSuffix) {
       directive |= CompletionDirective.NoSpace;
     }
@@ -333,6 +374,23 @@ async function resolveValueCandidates(
   }
 
   return { candidates, directive, fileExtensions, fileMatchers };
+}
+
+function dropAlreadyUsedKeyCandidates(
+  candidates: readonly CompletionCandidate[],
+  previousValues: readonly string[],
+): CompletionCandidate[] {
+  const used = new Set<string>();
+  for (const value of previousValues) {
+    const eqIdx = value.indexOf("=");
+    if (eqIdx > 0) used.add(value.slice(0, eqIdx));
+  }
+  if (used.size === 0) return [...candidates];
+  return candidates.filter((candidate) => {
+    const eqIdx = candidate.value.indexOf("=");
+    if (eqIdx <= 0) return true;
+    return !used.has(candidate.value.slice(0, eqIdx));
+  });
 }
 
 /**
@@ -464,6 +522,7 @@ async function generateValueCandidates(
   targetFieldName: string | undefined,
   vc: ValueCompletion | undefined,
   description?: string,
+  dedupeKeyValues?: boolean,
 ): Promise<CandidateResult> {
   if (!vc) {
     return { candidates: [], directive: CompletionDirective.FilterPrefix };
@@ -472,5 +531,6 @@ async function generateValueCandidates(
     vc,
     resolverContext(context, options, targetFieldName),
     description,
+    dedupeKeyValues,
   );
 }

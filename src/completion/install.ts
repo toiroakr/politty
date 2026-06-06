@@ -26,7 +26,7 @@ import type { AnyCommand, ArgsSchema } from "../types.js";
 import { resolveBinPath } from "./header.js";
 import { generateCompletion } from "./index.js";
 import { defaultCacheDir } from "./loader.js";
-import type { ShellType } from "./types.js";
+import type { CompletionMode, ShellType } from "./types.js";
 
 export interface InstallContext {
   rootCommand: AnyCommand;
@@ -36,6 +36,7 @@ export interface InstallContext {
   binPath?: string | undefined;
   globalArgsSchema?: ArgsSchema | undefined;
   targetPath?: string | undefined;
+  completionMode?: CompletionMode | undefined;
 }
 
 /**
@@ -67,6 +68,7 @@ function generateScript(ctx: InstallContext, shell: ShellType): string {
   return generateCompletion(ctx.rootCommand, {
     shell,
     programName: ctx.programName,
+    mode: ctx.completionMode ?? "dispatcher",
     includeDescriptions: true,
     ...(ctx.programVersion !== undefined && { programVersion: ctx.programVersion }),
     ...(ctx.binPath !== undefined && { binPath: ctx.binPath }),
@@ -95,6 +97,18 @@ function readCachedSig(path: string): string | null {
     return m ? m[1]! : null;
   } catch {
     return null;
+  }
+}
+
+function readCachedMode(path: string): CompletionMode | undefined {
+  try {
+    if (!existsSync(path)) return undefined;
+    const head = readFileSync(path, "utf8").split("\n", 10).join("\n");
+    const m = head.match(/^# politty-completion-mode: (dispatcher|static)$/m);
+    if (m) return m[1] as CompletionMode;
+    return undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -140,7 +154,8 @@ export function refreshIfStale(ctx: InstallContext, shell: ShellType): void {
       return;
     }
     if (readCachedSig(target) === currentSig) return;
-    writeAtomic(target, generateScript(ctx, shell));
+    const completionMode = ctx.completionMode ?? readCachedMode(target) ?? "dispatcher";
+    writeAtomic(target, generateScript({ ...ctx, completionMode }, shell));
   } catch {
     // Best-effort.
   }

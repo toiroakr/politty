@@ -504,13 +504,13 @@ interface DynamicCompletionResult {
 }
 ```
 
-Specifying more than one of `choices`, `shellCommand`, `resolve`, or `expand` on the same field throws at command-definition time. Static shell scripts automatically delegate to `<program> __complete --shell <shell>` when a field uses `resolve`. With `expand`, the candidate table is computed at script-generation time and inlined into the script — TAB completion stays in-shell.
+Specifying more than one of `choices`, `shellCommand`, `resolve`, or `expand` on the same field throws at command-definition time. Dispatcher scripts delegate every completion request to `<program> __complete --shell <shell>`, resolving the executable currently visible on `PATH` at TAB time. Static shell scripts automatically delegate to `<program> __complete --shell <shell>` when a field uses `resolve`. With `expand`, dispatcher mode calls `enumerate` for the already typed dependency values inside `__complete`; static mode computes the candidate table at script-generation time and inlines it into the script.
 
 ---
 
 ### `ExpandCompletion`
 
-Pre-enumerated value completion. Use when candidates can be computed up front from a finite set of sibling arg values (each must have a static `choices` or enum schema). politty walks the cartesian product of the `dependsOn` values at script-generation time, calls `enumerate` for each combination, and bakes the resulting table into the static shell script.
+Pre-enumerated value completion. Use when candidates can be computed from a finite set of sibling arg values (each must have a static `choices` or enum schema). Dispatcher mode calls `enumerate` from `__complete` for the dependency values already typed on the command line. Static mode walks the cartesian product of the `dependsOn` values at script-generation time, calls `enumerate` for each combination, and bakes the resulting table into the static shell script.
 
 ```typescript
 interface ExpandCompletion {
@@ -535,7 +535,7 @@ interface ExpandCompletion {
 Properties and constraints:
 
 - `dependsOn` must be non-empty and may not reference the field itself or any sibling without a static value set. Validation errors throw at command-definition time with the offending field name.
-- `enumerate` runs synchronously at the time the user invokes `<program> completion <shell>`. politty does not retain it for runtime use; if it throws, the error is wrapped with the field name and the offending `deps` snapshot.
+- In dispatcher mode, `enumerate` runs synchronously inside `__complete` for the currently typed dependency values. In static mode, it runs when the user invokes `<program> completion <shell> --static`; if it throws, the error is wrapped with the field name and the offending `deps` snapshot.
 - bash emits one prefix-scalar variable per table entry (`<base>__<encKey>=<candidates>`) so the generated script runs on Bash 3.2 (macOS default `/bin/bash`) without associative arrays; zsh emits one global associative array per spec (`typeset -gA`); fish emits an inline `switch` (no associative arrays). bash drops descriptions; zsh uses `value:description` for `_describe`; fish uses tab-separated `value\tdescription`.
 
 #### Example

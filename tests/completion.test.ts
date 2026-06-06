@@ -43,6 +43,7 @@ vi.mock("node:child_process", async (importOriginal) => ({
   spawn: vi.fn(() => ({ unref: () => {} })),
 }));
 const childProcessMock = await import("node:child_process");
+const childProcessActual = await vi.importActual<typeof childProcess>("node:child_process");
 const spawnSpy = vi.mocked(childProcessMock.spawn);
 
 const useEnv = (env: Record<string, string | undefined>) => {
@@ -578,6 +579,115 @@ describe("Completion", () => {
       });
     });
 
+    describe("dispatcher mode", () => {
+      const dispatcherCommand = defineCommand({
+        name: "mycli",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            description: "Verbose output",
+          }),
+        }),
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            description: "Build the project",
+            run: () => {},
+          }),
+        },
+      });
+
+      it("is the default and resolves the runtime executable for every shell", () => {
+        const cases = [
+          ["bash", "type -P 'mycli'"],
+          ["zsh", "whence -p 'mycli'"],
+          ["fish", "command -v 'mycli'"],
+        ] as const;
+
+        for (const [shell, resolver] of cases) {
+          const { script } = generateCompletion(dispatcherCommand, {
+            shell,
+            programName: "mycli",
+          });
+
+          expect(script).toContain("# politty-completion-mode: dispatcher");
+          expect(script).toContain(resolver);
+          expect(script).toContain("MYCLI_BIN");
+          expect(script).toContain("__complete --shell");
+          expect(script).not.toContain("--verbose");
+          expect(script).not.toContain("Build the project");
+        }
+      });
+
+      it("keeps static mode available with baked command metadata", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "static",
+        });
+
+        expect(script).toContain("# politty-completion-mode: static");
+        expect(script).toContain("--verbose");
+        expect(script).toContain("build");
+      });
+
+      it("uses the PATH-visible executable and lets MYCLI_BIN override it in bash", () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-dispatcher-"));
+        const localDir = join(root, "local");
+        const globalDir = join(root, "global");
+        mkdirSync(localDir);
+        mkdirSync(globalDir);
+        const localBin = join(localDir, "mycli");
+        const globalBin = join(globalDir, "mycli");
+        const writeFake = (file: string, label: string) => {
+          writeFileSync(
+            file,
+            `#!/bin/sh\nif [ "$1" = "__complete" ]; then printf '%s\\n:6\\n' '${label}'; fi\n`,
+            { mode: 0o755 },
+          );
+        };
+        writeFake(localBin, "local-candidate");
+        writeFake(globalBin, "global-candidate");
+
+        const completionPath = join(root, "completion.bash");
+        writeFileSync(
+          completionPath,
+          generateCompletion(dispatcherCommand, { shell: "bash", programName: "mycli" }).script,
+        );
+        const runner = join(root, "run.sh");
+        writeFileSync(
+          runner,
+          [
+            `source '${completionPath}'`,
+            `COMP_WORDS=('mycli' '')`,
+            `COMP_CWORD=1`,
+            `COMP_LINE='mycli '`,
+            `COMP_POINT=\${#COMP_LINE}`,
+            `_mycli_completions`,
+            `printf '%s\\n' "\${COMPREPLY[@]}"`,
+          ].join("\n"),
+        );
+
+        const baseEnv = {
+          ...process.env,
+          BASH_ENV: "/dev/null",
+          PATH: `${localDir}:${globalDir}:${process.env.PATH}`,
+        };
+        const fromPath = childProcessActual.execFileSync(
+          "/bin/bash",
+          ["--noprofile", "--norc", runner],
+          { env: baseEnv, encoding: "utf8", timeout: 1000 },
+        );
+        expect(fromPath.trim()).toBe("local-candidate");
+
+        const fromOverride = childProcessActual.execFileSync(
+          "/bin/bash",
+          ["--noprofile", "--norc", runner],
+          { env: { ...baseEnv, MYCLI_BIN: globalBin }, encoding: "utf8", timeout: 1000 },
+        );
+        expect(fromOverride.trim()).toBe("global-candidate");
+      });
+    });
+
     describe("matcher in static scripts", () => {
       const matcherCmd = defineCommand({
         name: "mycli",
@@ -594,6 +704,7 @@ describe("Completion", () => {
         const result = generateCompletion(matcherCmd, {
           shell: "bash",
           programName: "mycli",
+          mode: "static",
         });
         expect(result.script).toContain('[[ "${_f##*/}" == .env.* ]]');
       });
@@ -602,6 +713,7 @@ describe("Completion", () => {
         const result = generateCompletion(matcherCmd, {
           shell: "zsh",
           programName: "mycli",
+          mode: "static",
         });
         expect(result.script).toContain('_files -g ".env.*"');
       });
@@ -610,6 +722,7 @@ describe("Completion", () => {
         const result = generateCompletion(matcherCmd, {
           shell: "fish",
           programName: "mycli",
+          mode: "static",
         });
         expect(result.script).toContain('"$_dir".env.*');
       });
@@ -1326,6 +1439,7 @@ describe("Completion", () => {
         const result = generateCompletion(cmd, {
           shell: "bash",
           programName: "mycli",
+          mode: "static",
         });
 
         expect(result.script).toContain("# program: mycli");
@@ -1346,6 +1460,7 @@ describe("Completion", () => {
         const result = generateCompletion(cmd, {
           shell: "zsh",
           programName: "mycli",
+          mode: "static",
         });
 
         expect(result.script).toContain("# program: mycli");
@@ -1366,6 +1481,7 @@ describe("Completion", () => {
         const result = generateCompletion(cmd, {
           shell: "fish",
           programName: "mycli",
+          mode: "static",
         });
 
         expect(result.script).toContain("# program: mycli");
@@ -1385,7 +1501,7 @@ describe("Completion", () => {
         });
 
         for (const shell of ["bash", "zsh", "fish"] as const) {
-          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+          const result = generateCompletion(cmd, { shell, programName: "mycli", mode: "static" });
 
           // Should not contain empty else branch (bash/zsh syntax error)
           expect(result.script).not.toMatch(/else\s*\n\s*(fi|end)/);
@@ -1408,7 +1524,7 @@ describe("Completion", () => {
         });
 
         for (const shell of ["bash", "zsh", "fish"] as const) {
-          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+          const result = generateCompletion(cmd, { shell, programName: "mycli", mode: "static" });
 
           // Should contain opt_takes_value fallback check
           expect(result.script).toContain("opt_takes_value");
@@ -1428,7 +1544,7 @@ describe("Completion", () => {
         });
 
         for (const shell of ["bash", "zsh", "fish"] as const) {
-          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+          const result = generateCompletion(cmd, { shell, programName: "mycli", mode: "static" });
 
           // Should contain positional value candidates in the root handler
           expect(result.script).toContain("a.txt");
@@ -1449,7 +1565,7 @@ describe("Completion", () => {
         });
 
         for (const shell of ["zsh", "fish"] as const) {
-          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+          const result = generateCompletion(cmd, { shell, programName: "mycli", mode: "static" });
 
           // Should not contain unescaped double quotes inside description strings
           // The raw description 'Build "the" project ($var)' should be escaped
@@ -1475,7 +1591,7 @@ describe("Completion", () => {
         });
 
         for (const shell of ["bash", "zsh", "fish"] as const) {
-          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+          const result = generateCompletion(cmd, { shell, programName: "mycli", mode: "static" });
 
           // Array option --tags should NOT go through not_used filter
           expect(result.script).not.toMatch(/not_used.*"--tags"/);
@@ -1502,16 +1618,28 @@ describe("Completion", () => {
           },
         });
 
-        const bashResult = generateCompletion(cmd, { shell: "bash", programName: "mycli" });
+        const bashResult = generateCompletion(cmd, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "static",
+        });
         // _used_opts should be reset when entering a subcommand via is_subcmd
         expect(bashResult.script).toContain("_used_opts=(); _pos_count=0");
         expect(bashResult.script).toContain("__mycli_is_subcmd");
 
-        const zshResult = generateCompletion(cmd, { shell: "zsh", programName: "mycli" });
+        const zshResult = generateCompletion(cmd, {
+          shell: "zsh",
+          programName: "mycli",
+          mode: "static",
+        });
         expect(zshResult.script).toContain("_used_opts=(); _pos_count=0");
         expect(zshResult.script).toContain("__mycli_is_subcmd");
 
-        const fishResult = generateCompletion(cmd, { shell: "fish", programName: "mycli" });
+        const fishResult = generateCompletion(cmd, {
+          shell: "fish",
+          programName: "mycli",
+          mode: "static",
+        });
         expect(fishResult.script).toContain("set _used_opts; set _pos_count 0");
         expect(fishResult.script).toContain("__mycli_is_subcmd");
       });
@@ -1528,17 +1656,29 @@ describe("Completion", () => {
         });
 
         // Bash: choice values should be escaped in array literals
-        const bashResult = generateCompletion(cmd, { shell: "bash", programName: "mycli" });
+        const bashResult = generateCompletion(cmd, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "static",
+        });
         expect(bashResult.script).toContain('say \\"hi\\"');
         expect(bashResult.script).toContain("cost\\$5");
 
         // Zsh: choice values should be escaped via escapeDesc
-        const zshResult = generateCompletion(cmd, { shell: "zsh", programName: "mycli" });
+        const zshResult = generateCompletion(cmd, {
+          shell: "zsh",
+          programName: "mycli",
+          mode: "static",
+        });
         expect(zshResult.script).toContain('\\"hi\\"');
         expect(zshResult.script).toContain("\\$5");
 
         // Fish: choice values should be escaped via escapeDesc
-        const fishResult = generateCompletion(cmd, { shell: "fish", programName: "mycli" });
+        const fishResult = generateCompletion(cmd, {
+          shell: "fish",
+          programName: "mycli",
+          mode: "static",
+        });
         expect(fishResult.script).toContain('\\"hi\\"');
         expect(fishResult.script).toContain("\\$5");
       });
@@ -1599,6 +1739,7 @@ describe("Completion", () => {
         programName: "mycli",
         binPath: fakeBin,
         programVersion: "1.2.3",
+        mode: "static",
       });
       const expectedSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
       expect(result.script).toContain(`# politty-bin-sig: ${expectedSig}`);
@@ -1611,6 +1752,7 @@ describe("Completion", () => {
         shell: "zsh",
         programName: "mycli",
         binPath: "/nonexistent/path/to/binary",
+        mode: "static",
       });
       expect(result.script).toContain("# politty-bin-sig: 0");
     });
@@ -1619,6 +1761,7 @@ describe("Completion", () => {
       const result = generateCompletion(cmd, {
         shell: "fish",
         programName: "mycli",
+        mode: "static",
       });
       expect(result.script).not.toContain("# program-version:");
     });
@@ -1630,10 +1773,11 @@ describe("Completion", () => {
         shell: "bash",
         programName: "mycli",
         binPath: fakeBin,
+        mode: "static",
       });
 
       expect(script).toContain("__mycli_self_refresh()");
-      expect(script).toContain('"$_bin" __refresh-completion bash "$_self" 2>/dev/null');
+      expect(script).toContain('"$_bin" __refresh-completion bash "$_self" --static 2>/dev/null');
       expect(script).toContain('source "$_self" 2>/dev/null');
       expect(script).toContain('head -n 8 "$_self"');
     });
@@ -1645,11 +1789,12 @@ describe("Completion", () => {
         shell: "zsh",
         programName: "mycli",
         binPath: fakeBin,
+        mode: "static",
       });
 
       expect(script).toContain("__mycli_self_refresh()");
       expect(script).toContain('_self="${(%):-%x}"');
-      expect(script).toContain('"$_bin" __refresh-completion zsh "$_self" 2>/dev/null');
+      expect(script).toContain('"$_bin" __refresh-completion zsh "$_self" --static 2>/dev/null');
       expect(script).toContain('source "$_self" 2>/dev/null');
       expect(script).toContain('_mycli "$@"');
       expect(script).not.toContain('_mycli "$@" || return 1');
@@ -1663,6 +1808,7 @@ describe("Completion", () => {
         shell: "zsh",
         programName: "tailor-sdk",
         binPath: fakeBin,
+        mode: "static",
       });
 
       expect(script).toContain("__tailor_sdk_self_refresh()");
@@ -1867,9 +2013,10 @@ describe("Completion", () => {
         shell: "fish",
         programName: "mycli",
         binPath: fakeBin,
+        mode: "static",
       });
       // Refresh body uses the hidden subcommand so user setup/cleanup/prompt is skipped.
-      expect(script).toContain('"$_bin" __refresh-completion fish "$_target" 2>/dev/null');
+      expect(script).toContain('"$_bin" __refresh-completion fish "$_target" --static 2>/dev/null');
       expect(script).toContain("set -l _target (status current-filename)");
       // The stale body must be skipped after a successful refresh.
       expect(script).toContain("set -l _politty_refreshed $status");
@@ -1887,6 +2034,7 @@ describe("Completion", () => {
         shell: "fish",
         programName: "mycli",
         binPath: fakeBin,
+        mode: "static",
       });
       expect(script).toContain(`test "$_sig" = "${sig}"; and return 1`);
     });
@@ -1910,7 +2058,14 @@ describe("Completion", () => {
       using _errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
         captured.push(args.map(String).join(" "));
       });
-      subcommand.run?.({ shell: "bash", instructions: false, install: true, loader: false });
+      subcommand.run?.({
+        shell: "bash",
+        instructions: false,
+        install: true,
+        loader: false,
+        static: false,
+        dispatcher: false,
+      });
 
       const target = join(cacheDir, "completion.bash");
       const written = readFileSync(target, "utf8");
@@ -1930,7 +2085,14 @@ describe("Completion", () => {
         captured.push(args.map(String).join(" "));
       });
       try {
-        subcommand.run?.({ shell: "zsh", instructions: false, install: true, loader: false });
+        subcommand.run?.({
+          shell: "zsh",
+          instructions: false,
+          install: true,
+          loader: false,
+          static: false,
+          dispatcher: false,
+        });
 
         const target = join(cacheDir, "completion.zsh");
         const written = readFileSync(target, "utf8");
@@ -1959,7 +2121,14 @@ describe("Completion", () => {
       using _errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
         captured.push(args.map(String).join(" "));
       });
-      subcommand.run?.({ shell: "fish", instructions: false, install: true, loader: false });
+      subcommand.run?.({
+        shell: "fish",
+        instructions: false,
+        install: true,
+        loader: false,
+        static: false,
+        dispatcher: false,
+      });
 
       const target = join(cfgRoot, "fish", "completions", "mycli.fish");
       expect(readFileSync(target, "utf8")).toContain("# shell: fish");
@@ -1978,7 +2147,14 @@ describe("Completion", () => {
           captured.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
           return true;
         });
-      subcommand.run?.({ shell: "zsh", instructions: false, install: false, loader: true });
+      subcommand.run?.({
+        shell: "zsh",
+        instructions: false,
+        install: false,
+        loader: true,
+        static: false,
+        dispatcher: false,
+      });
 
       const out = captured.join("");
       expect(out).toContain("__mycli_load_completion()");
@@ -1991,7 +2167,14 @@ describe("Completion", () => {
     it("--loader for fish throws because fish uses an autoload file instead", () => {
       const subcommand = createCompletionCommand(cmd, "mycli");
       expect(() =>
-        subcommand.run?.({ shell: "fish", instructions: false, install: false, loader: true }),
+        subcommand.run?.({
+          shell: "fish",
+          instructions: false,
+          install: false,
+          loader: true,
+          static: false,
+          dispatcher: false,
+        }),
       ).toThrow(/fish does not use an rc loader/);
     });
   });

@@ -297,6 +297,9 @@ Attach metadata to an argument.
 ## Shell Completion
 
 politty provides automatic shell completion generation for bash, zsh, and fish.
+The default generated script is a small runtime dispatcher: when the user
+presses TAB, it resolves the executable currently visible on `PATH` and asks
+that binary's hidden `__complete` command for candidates.
 
 ### Quick Setup
 
@@ -329,6 +332,22 @@ eval "$(mycli completion zsh)"
 
 # Fish
 mycli completion fish | source
+```
+
+For project-local CLIs, put the local binary directory in `PATH` with your
+environment manager, for example:
+
+```sh
+# .envrc
+PATH_add node_modules/.bin
+```
+
+Completion then follows the same executable the shell would run. To generate
+the older static script with command metadata baked in, use:
+
+```bash
+eval "$(mycli completion bash --static)"
+eval "$(mycli completion zsh --static)"
 ```
 
 ### Value Completion

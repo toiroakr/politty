@@ -8,24 +8,50 @@ For quick setup, see the [README](../README.md#shell-completion). For type signa
 
 `withCompletionCommand` adds three subcommands to your CLI:
 
-- **`completion <shell>`** — Generates a shell script that users source in their shell config. With `--install`, writes it to its on-disk cache (bash/zsh) or autoload location (fish). With `--loader`, prints the rc-loader snippet (bash/zsh only).
-- **`__complete`** (hidden) — The dynamic completion engine used by `completion.custom.resolve`
+- **`completion <shell>`** — Generates a runtime dispatcher script that users source in their shell config. With `--install`, writes it to its on-disk cache (bash/zsh) or autoload location (fish). With `--loader`, prints the rc-loader snippet (bash/zsh only). Use `--static` to generate the legacy self-contained script.
+- **`__complete`** (hidden) — The dynamic completion engine used by dispatcher scripts and by `completion.custom.resolve`.
 - **`__refresh-completion <shell>`** (hidden) — Re-installs the on-disk cache when the binary's mtime changes. Used by the rc loader and the runMain background hook.
 
-The generated shell scripts embed static metadata for subcommands, options,
-`choices`, file/directory completion, and `expand` tables. These paths stay
-inside the shell at TAB time.
-
-When a field uses `completion.custom.resolve`, the generated script delegates
-that value completion to the hidden command:
+By default, generated shell scripts do not embed the command tree. They resolve
+the executable currently visible to the shell and call:
 
 ```
 mycli __complete --shell bash -- <partial-tokens>
 ```
 
-That command runs in JavaScript: it parses the partial command line, calls the
-resolver, and returns candidates with directives that tell the shell how to
-present them.
+This means completion follows the same `PATH` rule as command execution. If a
+project uses `direnv`, `mise`, or another environment manager to put a local
+binary directory first, completion uses that local binary too.
+
+Resolution order:
+
+1. `<PROGRAM>_BIN`, for example `MYCLI_BIN`, when set.
+2. The executable found on `PATH` (`type -P` for bash, `whence -p` for zsh, and executable `command -v` results for fish).
+3. No completion when no executable is found.
+
+Static mode remains available:
+
+```
+mycli completion bash --static
+```
+
+Static scripts embed metadata for subcommands, options, `choices`,
+file/directory completion, and `expand` tables. They avoid a process spawn on
+TAB, but they are fixed to the command tree from generation time.
+
+```
+dispatcher:
+  follows the currently visible executable
+  slightly more runtime work on TAB
+
+static:
+  faster
+  fixed to the command tree from generation time
+```
+
+`__complete` runs in JavaScript: it parses the partial command line, calls any
+runtime resolver or `expand` enumerator needed for that cursor position, and
+returns candidates with directives that tell the shell how to present them.
 
 Command aliases defined via `aliases` in `defineCommand()` are automatically included in both static completion scripts and dynamic completion candidates.
 
@@ -51,6 +77,16 @@ mycli completion bash --loader >> ~/.bashrc   # or ~/.zshrc with `zsh`
 mycli completion fish --install
 ```
 
+For project-local Node.js CLIs, prefer managing `PATH` outside politty:
+
+```sh
+# .envrc
+PATH_add node_modules/.bin
+```
+
+politty does not search upward for `node_modules/.bin`; it only follows the
+executable the shell can already see.
+
 ### Cache location
 
 By default the cache lives at `${XDG_CACHE_HOME:-$HOME/.cache}/<program>/completion.<shell>`. You can hardcode an alternate location at wrap-time:
@@ -74,9 +110,10 @@ Every generated script starts with a small machine-readable header:
 # program: mycli
 # program-version: 1.2.3
 # shell: bash
+# politty-completion-mode: dispatcher
 ```
 
-`politty-bin-sig` is the binary's mtime in seconds. The rc loader and `__refresh-completion` compare this against the live binary to decide whether to rewrite the cache. `program-version` is included only when you pass `programVersion` to `withCompletionCommand`.
+`politty-bin-sig` is the binary's mtime in seconds. The rc loader and `__refresh-completion` compare this against the live binary to decide whether to rewrite the cache. `program-version` is included only when you pass `programVersion` to `withCompletionCommand`. `politty-completion-mode` records whether the cached script should refresh as `dispatcher` or `static`.
 
 ### Disabling auto-refresh
 
@@ -158,6 +195,7 @@ Return `{ candidates, directive? }` where `candidates` is an array of strings or
 
 The resolver runs **inside the `__complete` command**, so:
 
+- Dispatcher scripts delegate all completion requests to `<program> __complete --shell <shell>`.
 - Static shell scripts delegate to `<program> __complete --shell <shell>` whenever a field uses `resolve`. This is automatic — call `withCompletionCommand` and politty wires it up.
 - The resolver may be async (returning `Promise<DynamicCompletionResult>`).
 - If the resolver throws, completion silently returns no candidates (with `CompletionDirective.Error` set).
@@ -168,13 +206,13 @@ For local dev, set `MYCLI_BIN` (uppercase program name) to override the binary t
 
 ### Expand (pre-enumerated)
 
-When all of the candidates can be computed up front from a small, known set
-of sibling arg values, use `expand` instead of `resolve`. politty walks the
-cartesian product of the `dependsOn` values at script-generation time, calls
-`enumerate(deps)` once per combination, and bakes the resulting table into
-the shell script. At TAB time the shell dispatches via a case lookup keyed
-on the runtime values of those args — **no Node process is spawned**, so
-the latency matches static `choices` (typically <10ms).
+When all of the candidates can be computed from a small, known set of sibling
+arg values, use `expand` instead of `resolve`. In dispatcher mode, politty calls
+`enumerate(deps)` from `__complete` for the already typed dependency values. In
+static mode, politty walks the cartesian product of the `dependsOn` values at
+script-generation time, calls `enumerate(deps)` once per combination, and bakes
+the resulting table into the shell script. Static TAB latency matches static
+`choices`; dispatcher mode pays the normal `__complete` process cost.
 
 ```typescript
 field: arg(z.array(z.string()).default([]), {

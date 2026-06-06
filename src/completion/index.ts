@@ -29,6 +29,7 @@ import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
 import type { AnyCommand, ArgsSchema, Command } from "../types.js";
 import { generateBashCompletion } from "./bash.js";
+import { generateDispatcherCompletion } from "./dispatcher.js";
 import { createDynamicCompleteCommand } from "./dynamic/index.js";
 import { generateFishCompletion } from "./fish.js";
 import {
@@ -70,6 +71,7 @@ export type {
   CompletableSubcommand,
   CompletionData,
   CompletionGenerator,
+  CompletionMode,
   CompletionOptions,
   CompletionResult,
   ShellType,
@@ -84,6 +86,10 @@ export function generateCompletion(
   command: AnyCommand,
   options: CompletionOptions,
 ): CompletionResult {
+  if (options.mode !== "static") {
+    return generateDispatcherCompletion(command, options);
+  }
+
   switch (options.shell) {
     case "bash":
       return generateBashCompletion(command, options);
@@ -167,6 +173,12 @@ const completionArgsSchema = z.object({
     description:
       "Write the completion script to its on-disk cache (bash/zsh) or autoload location (fish) instead of printing it.",
   }),
+  static: arg(z.boolean().default(false), {
+    description: "Generate the legacy static completion script with command metadata baked in.",
+  }),
+  dispatcher: arg(z.boolean().default(false), {
+    description: "Generate the runtime dispatcher completion script. This is the default.",
+  }),
 });
 
 type CompletionArgs = z.infer<typeof completionArgsSchema>;
@@ -181,6 +193,9 @@ const refreshArgsSchema = z.object({
     positional: true,
     description: "Existing politty-generated completion file to refresh",
     placeholder: "TARGET",
+  }),
+  static: arg(z.boolean().default(false), {
+    description: "Refresh using the legacy static completion script mode.",
   }),
 });
 
@@ -269,10 +284,16 @@ export function createCompletionCommand(
         return;
       }
 
+      if (args.static && args.dispatcher) {
+        throw new Error("Choose only one completion mode: --dispatcher or --static.");
+      }
+
+      const completionMode = args.static ? "static" : "dispatcher";
+
       if (args.install) {
         let target: string;
         try {
-          target = installCompletion({ rootCommand, ...installCtxBase }, shellType);
+          target = installCompletion({ rootCommand, ...installCtxBase, completionMode }, shellType);
         } catch (e) {
           throw new Error(`install failed: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -305,6 +326,7 @@ export function createCompletionCommand(
       const result = generateCompletion(rootCommand, {
         shell: shellType,
         programName: resolvedProgramName,
+        mode: completionMode,
         includeDescriptions: true,
         ...(globalArgsSchema !== undefined && { globalArgsSchema }),
         ...(programVersion !== undefined && { programVersion }),
@@ -341,6 +363,7 @@ export function createRefreshCompletionCommand(
           rootCommand,
           programName,
           ...extra,
+          completionMode: args.static ? "static" : undefined,
           ...(args.target !== undefined && { targetPath: args.target }),
         },
         args.shell,
