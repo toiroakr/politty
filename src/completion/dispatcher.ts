@@ -17,11 +17,23 @@ function shSingleQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
+function compileCacheSuffix(programName: string): string {
+  return shSingleQuote(`/${programName}/node-compile-cache`);
+}
+
+function hardcodedCompileCacheDir(cacheDir: string | undefined): string | undefined {
+  return cacheDir ? shSingleQuote(`${cacheDir}/node-compile-cache`) : undefined;
+}
+
 function bashDispatcher(_command: AnyCommand, options: CompletionOptions): CompletionResult {
   const { programName } = options;
   const fn = sanitize(programName);
   const envName = binEnvVarName(fn);
   const programLookup = shSingleQuote(programName);
+  const compileCacheDir = hardcodedCompileCacheDir(options.cacheDir);
+  const compileCacheDefault = compileCacheDir
+    ? `        printf '%s\\n' ${compileCacheDir}`
+    : `        printf '%s\\n' "\${XDG_CACHE_HOME:-$HOME/.cache}"${compileCacheSuffix(programName)}`;
 
   const lines: string[] = [];
   lines.push(
@@ -41,6 +53,14 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`        return 0`);
   lines.push(`    fi`);
   lines.push(`    type -P ${programLookup} 2>/dev/null`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_node_compile_cache_dir() {`);
+  lines.push(`    if [[ -n "\${NODE_COMPILE_CACHE:-}" ]]; then`);
+  lines.push(`        printf '%s\\n' "$NODE_COMPILE_CACHE"`);
+  lines.push(`        return 0`);
+  lines.push(`    fi`);
+  lines.push(compileCacheDefault);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_apply_dynamic_output() {`);
@@ -130,11 +150,12 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`        _inline_prefix="\${_cur%%=*}="`);
   lines.push(`        _cur="\${_cur#*=}"`);
   lines.push(`    fi`);
-  lines.push(`    local _bin _out`);
+  lines.push(`    local _bin _out _node_compile_cache`);
   lines.push(`    _bin="$(__${fn}_resolve_bin)"`);
   lines.push(`    [[ -n "$_bin" ]] || return 0`);
+  lines.push(`    _node_compile_cache="$(__${fn}_node_compile_cache_dir)"`);
   lines.push(
-    `    _out=$("$_bin" __complete --shell bash -- "\${_words[@]}" 2>/dev/null) || return 0`,
+    `    _out=$(NODE_COMPILE_CACHE="$_node_compile_cache" "$_bin" __complete --shell bash -- "\${_words[@]}" 2>/dev/null) || return 0`,
   );
   lines.push(`    __${fn}_apply_dynamic_output "$_out" "$_cur" "$_inline_prefix"`);
   lines.push(`}`);
@@ -164,6 +185,10 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   const programLookup = shSingleQuote(programName);
   const completionFn = `_${programName}`;
   const autoloadCheck = `"${"${funcstack[1]:-}"}" == "${completionFn}"`;
+  const compileCacheDir = hardcodedCompileCacheDir(options.cacheDir);
+  const compileCacheDefault = compileCacheDir
+    ? `        print -r -- ${compileCacheDir}`
+    : `        print -r -- "\${XDG_CACHE_HOME:-$HOME/.cache}"${compileCacheSuffix(programName)}`;
 
   const lines: string[] = [];
   lines.push(`#compdef ${programName}`);
@@ -186,6 +211,16 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`        return 0`);
   lines.push(`    fi`);
   lines.push(`    whence -p ${programLookup} 2>/dev/null`);
+  lines.push(`}`);
+  lines.push(``);
+  lines.push(`__${fn}_node_compile_cache_dir() {`);
+  lines.push(`    emulate -L zsh`);
+  lines.push(`    setopt local_options no_aliases`);
+  lines.push(`    if [[ -n "\${NODE_COMPILE_CACHE:-}" ]]; then`);
+  lines.push(`        print -r -- "$NODE_COMPILE_CACHE"`);
+  lines.push(`        return 0`);
+  lines.push(`    fi`);
+  lines.push(compileCacheDefault);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_cdescribe() {`);
@@ -279,11 +314,12 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`${completionFn}() {`);
   lines.push(`    emulate -L zsh`);
   lines.push(`    setopt local_options no_aliases`);
-  lines.push(`    local _bin _out`);
+  lines.push(`    local _bin _out _node_compile_cache`);
   lines.push(`    _bin="$(__${fn}_resolve_bin)"`);
   lines.push(`    [[ -n "$_bin" ]] || return 1`);
+  lines.push(`    _node_compile_cache="$(__${fn}_node_compile_cache_dir)"`);
   lines.push(
-    `    _out=$("$_bin" __complete --shell zsh -- "\${(@)words[2,CURRENT]}" 2>/dev/null) || return 1`,
+    `    _out=$(NODE_COMPILE_CACHE="$_node_compile_cache" "$_bin" __complete --shell zsh -- "\${(@)words[2,CURRENT]}" 2>/dev/null) || return 1`,
   );
   lines.push(`    __${fn}_apply_dynamic_output "$_out"`);
   lines.push(`}`);
@@ -323,6 +359,14 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   const fn = sanitize(programName);
   const envName = binEnvVarName(fn);
   const programLookup = shSingleQuote(programName);
+  const compileCacheDir = hardcodedCompileCacheDir(options.cacheDir);
+  const compileCacheDefault = compileCacheDir
+    ? `    printf '%s\\n' ${compileCacheDir}`
+    : [
+        `    set -l _cache_root "$XDG_CACHE_HOME"`,
+        `    test -n "$_cache_root"; or set _cache_root "$HOME/.cache"`,
+        `    printf '%s\\n' "$_cache_root"${compileCacheSuffix(programName)}`,
+      ].join("\n");
 
   const lines: string[] = [];
   lines.push(
@@ -345,6 +389,14 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(
     `    test -n "$_bin"; and test -x "$_bin"; and not test -d "$_bin"; and printf '%s\\n' "$_bin"`,
   );
+  lines.push(`end`);
+  lines.push(``);
+  lines.push(`function __${fn}_node_compile_cache_dir`);
+  lines.push(`    if set -q NODE_COMPILE_CACHE; and test -n "$NODE_COMPILE_CACHE"`);
+  lines.push(`        printf '%s\\n' "$NODE_COMPILE_CACHE"`);
+  lines.push(`        return 0`);
+  lines.push(`    end`);
+  lines.push(compileCacheDefault);
   lines.push(`end`);
   lines.push(``);
   lines.push(`function __${fn}_apply_dynamic_output`);
@@ -423,13 +475,14 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`function __fish_${fn}_complete`);
   lines.push(`    set -l _bin (__${fn}_resolve_bin)`);
   lines.push(`    test -n "$_bin"; or return 0`);
+  lines.push(`    set -l _node_compile_cache (__${fn}_node_compile_cache_dir)`);
   lines.push(`    set -l _args (commandline -opc)`);
   lines.push(`    set -l _cur (commandline -ct)`);
   lines.push(`    if test (count $_args) -gt 0`);
   lines.push(`        set _args $_args[2..]`);
   lines.push(`    end`);
   lines.push(
-    `    $_bin __complete --shell fish -- $_args "$_cur" 2>/dev/null | __${fn}_apply_dynamic_output "$_cur"`,
+    `    env NODE_COMPILE_CACHE="$_node_compile_cache" $_bin __complete --shell fish -- $_args "$_cur" 2>/dev/null | __${fn}_apply_dynamic_output "$_cur"`,
   );
   lines.push(`end`);
   lines.push(``);

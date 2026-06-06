@@ -612,6 +612,7 @@ describe("Completion", () => {
           expect(script).toContain("# politty-completion-mode: dispatcher");
           expect(script).toContain(resolver);
           expect(script).toContain("MYCLI_BIN");
+          expect(script).toContain("NODE_COMPILE_CACHE");
           expect(script).toContain("__complete --shell");
           expect(script).not.toContain("--verbose");
           expect(script).not.toContain("Build the project");
@@ -685,6 +686,74 @@ describe("Completion", () => {
           { env: { ...baseEnv, MYCLI_BIN: globalBin }, encoding: "utf8", timeout: 1000 },
         );
         expect(fromOverride.trim()).toBe("global-candidate");
+      });
+
+      it("sets a default Node compile cache for bash and preserves user overrides", () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-dispatcher-cache-"));
+        const binDir = join(root, "bin");
+        const xdgCache = join(root, "xdg-cache");
+        const home = join(root, "home");
+        mkdirSync(binDir);
+        mkdirSync(xdgCache);
+        mkdirSync(home);
+
+        const bin = join(binDir, "mycli");
+        writeFileSync(
+          bin,
+          [
+            "#!/bin/sh",
+            `if [ "$1" = "__complete" ]; then`,
+            `  printf '%s\\n:6\\n' "$NODE_COMPILE_CACHE"`,
+            "fi",
+          ].join("\n"),
+          { mode: 0o755 },
+        );
+
+        const completionPath = join(root, "completion.bash");
+        writeFileSync(
+          completionPath,
+          generateCompletion(dispatcherCommand, { shell: "bash", programName: "mycli" }).script,
+        );
+        const runner = join(root, "run.sh");
+        writeFileSync(
+          runner,
+          [
+            `source '${completionPath}'`,
+            `COMP_WORDS=('mycli' '')`,
+            `COMP_CWORD=1`,
+            `COMP_LINE='mycli '`,
+            `COMP_POINT=\${#COMP_LINE}`,
+            `_mycli_completions`,
+            `printf '%s\\n' "\${COMPREPLY[@]}"`,
+          ].join("\n"),
+        );
+
+        const baseEnv = {
+          ...process.env,
+          BASH_ENV: "/dev/null",
+          HOME: home,
+          PATH: `${binDir}:${process.env.PATH}`,
+          XDG_CACHE_HOME: xdgCache,
+          NODE_COMPILE_CACHE: undefined,
+        };
+        const fromDefault = childProcessActual.execFileSync(
+          "/bin/bash",
+          ["--noprofile", "--norc", runner],
+          { env: baseEnv, encoding: "utf8", timeout: 1000 },
+        );
+        expect(fromDefault.trim()).toBe(join(xdgCache, "mycli", "node-compile-cache"));
+
+        const customCache = join(root, "custom-node-cache");
+        const fromOverride = childProcessActual.execFileSync(
+          "/bin/bash",
+          ["--noprofile", "--norc", runner],
+          {
+            env: { ...baseEnv, NODE_COMPILE_CACHE: customCache },
+            encoding: "utf8",
+            timeout: 1000,
+          },
+        );
+        expect(fromOverride.trim()).toBe(customCache);
       });
     });
 

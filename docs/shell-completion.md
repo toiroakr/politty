@@ -52,6 +52,11 @@ static:
 `__complete` runs in JavaScript: it parses the partial command line, calls any
 runtime resolver or `expand` enumerator needed for that cursor position, and
 returns candidates with directives that tell the shell how to present them.
+For Node.js 22+ CLIs, dispatcher scripts set `NODE_COMPILE_CACHE` to
+`${XDG_CACHE_HOME:-$HOME/.cache}/<program>/node-compile-cache` before invoking
+`__complete` unless the user already provided `NODE_COMPILE_CACHE`. This keeps
+the process model unchanged while letting repeated completion requests reuse
+Node's on-disk V8 module compile cache.
 
 Command aliases defined via `aliases` in `defineCommand()` are automatically included in both static completion scripts and dynamic completion candidates.
 
