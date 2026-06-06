@@ -444,8 +444,10 @@ export function createCompletionWorkerPathCommand(
         ...(extra.bundledWorker !== undefined && { bundledWorker: extra.bundledWorker }),
       });
       if (!path) {
-        process.exitCode = 1;
-        return;
+        // Throw so runMain reports a non-zero exit code: a bare
+        // `process.exitCode = 1` is overwritten by runMain's final
+        // `process.exit(0)`, leaving build scripts unable to detect the miss.
+        throw new Error(`No bundled completion worker found for ${programName} (${args.shell}).`);
       }
       console.log(path);
     },

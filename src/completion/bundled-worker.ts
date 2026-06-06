@@ -128,8 +128,9 @@ function missingBundledWorkerHeaders(
   programName: string,
   shell: ShellType,
 ): string[] {
+  const lines = head.split("\n").map((line) => line.trimEnd());
   return requiredBundledWorkerHeaders(programName, shell).filter(
-    (header) => !head.includes(header),
+    (header) => !lines.includes(header),
   );
 }
 

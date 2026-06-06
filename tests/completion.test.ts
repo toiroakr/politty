@@ -1017,6 +1017,27 @@ describe("Completion", () => {
         );
       });
 
+      it("rejects a bundled worker whose program header only matches as a substring", () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-worker-substring-"));
+        const workerPath = join(root, "zsh-worker.zsh");
+        writeFileSync(
+          workerPath,
+          [
+            "# politty-completion-version: 1",
+            "# politty-completion-mode: worker",
+            "# politty-completion-worker: true",
+            "# program: mycli-extra",
+            "# shell: zsh",
+          ].join("\n"),
+        );
+
+        // `mycli` must not accept a worker built for `mycli-extra`, even though
+        // "# program: mycli" is a substring of the "# program: mycli-extra" line.
+        expect(() => validateBundledWorkerFile(workerPath, "mycli", "zsh")).toThrow(
+          /# program: mycli/,
+        );
+      });
+
       it("sets a default Node compile cache for bash and preserves user overrides", () => {
         const root = mkdtempSync(join(tmpdir(), "politty-dispatcher-cache-"));
         const binDir = join(root, "bin");
@@ -2612,7 +2633,7 @@ describe("Completion", () => {
       expect(workerPath.name).toBe("__completion-worker-path");
     });
 
-    it("__completion-worker-path prints an existing bundled worker and otherwise exits non-zero", () => {
+    it("__completion-worker-path prints an existing bundled worker and otherwise throws", () => {
       const root = mkdtempSync(join(tmpdir(), "politty-worker-path-"));
       const distDir = join(root, "dist");
       const completionDir = join(distDir, "completion");
@@ -2641,10 +2662,9 @@ describe("Completion", () => {
       expect(captured).toEqual([worker]);
 
       const missing = createCompletionWorkerPathCommand("missing", { binPath: bin });
-      process.exitCode = undefined;
-      missing.run?.({ shell: "zsh" });
-      expect(process.exitCode).toBe(1);
-      process.exitCode = undefined;
+      // A miss must throw so runMain surfaces a non-zero exit code; a bare
+      // `process.exitCode = 1` would be overwritten by runMain's process.exit.
+      expect(() => missing.run?.({ shell: "zsh" })).toThrow(/No bundled completion worker/);
     });
 
     it("completion --static --worker prints a worker artifact", () => {
