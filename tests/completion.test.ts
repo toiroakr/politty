@@ -694,6 +694,33 @@ describe("Completion", () => {
         expect(fish).not.toContain(`'*# program: mycli*'`);
       });
 
+      it("passes NODE_COMPILE_CACHE to the warm worker path", () => {
+        // The worker's dynamic resolver may spawn `__complete`; it must inherit
+        // the compile cache the direct fallback already sets, or repeated TABs
+        // lose the latency win on the warm path.
+        const bash = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+        }).script;
+        expect(bash).toContain(
+          `NODE_COMPILE_CACHE="$_node_compile_cache" MYCLI_WORKER_BIN="$_bin" _mycli_worker_completions`,
+        );
+
+        const zsh = generateCompletion(dispatcherCommand, {
+          shell: "zsh",
+          programName: "mycli",
+        }).script;
+        expect(zsh).toContain(
+          `NODE_COMPILE_CACHE="$_node_compile_cache" MYCLI_WORKER_BIN="$_bin" _mycli_worker_completions "$@"`,
+        );
+
+        const fish = generateCompletion(dispatcherCommand, {
+          shell: "fish",
+          programName: "mycli",
+        }).script;
+        expect(fish).toContain(`set -lx NODE_COMPILE_CACHE "$_node_compile_cache"`);
+      });
+
       it("keeps static mode available with baked command metadata", () => {
         const { script } = generateCompletion(dispatcherCommand, {
           shell: "bash",
@@ -1033,6 +1060,63 @@ describe("Completion", () => {
             env: { WORKER_PATH: otherPath },
           }),
         ).rejects.toThrow(/path mismatch/);
+      });
+
+      it("forces a fresh bundled worker even when an existing artifact would be skipped", async () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-worker-force-"));
+        // Fake CLI whose __refresh-completion mimics the real sig-match no-op:
+        // it only writes when the target is absent. With a stale file present,
+        // a non-forcing generator would return the stale artifact unchanged.
+        const bin = join(root, "mycli.mjs");
+        writeFileSync(
+          bin,
+          [
+            'import { existsSync, mkdirSync, writeFileSync } from "node:fs";',
+            'import { dirname } from "node:path";',
+            "const [cmd, shell, out] = process.argv.slice(2);",
+            'if (cmd === "__refresh-completion") {',
+            "  if (existsSync(out)) process.exit(0);",
+            "  mkdirSync(dirname(out), { recursive: true });",
+            "  writeFileSync(out, [",
+            '    "# politty-completion-version: 1",',
+            '    "# politty-completion-mode: worker",',
+            '    "# politty-completion-worker: true",',
+            '    "# program: mycli",',
+            "    `# shell: ${shell}`,",
+            '    "# FRESH",',
+            '  ].join("\\n") + "\\n");',
+            "  process.exit(0);",
+            "}",
+            "process.exit(1);",
+          ].join("\n"),
+        );
+
+        const outputPath = join(root, "dist", "completion", "zsh-worker.zsh");
+        mkdirSync(dirname(outputPath), { recursive: true });
+        writeFileSync(
+          outputPath,
+          `${[
+            "# politty-completion-version: 1",
+            "# politty-completion-mode: worker",
+            "# politty-completion-worker: true",
+            "# program: mycli",
+            "# shell: zsh",
+            "# STALE",
+          ].join("\n")}\n`,
+        );
+
+        await generateBundledCompletionWorker({
+          bin,
+          programName: "mycli",
+          shell: "zsh",
+          outputPath,
+          verify: false,
+          quiet: true,
+        });
+
+        const regenerated = readFileSync(outputPath, "utf8");
+        expect(regenerated).toContain("# FRESH");
+        expect(regenerated).not.toContain("# STALE");
       });
 
       it("rejects bundled worker files missing required worker metadata", () => {

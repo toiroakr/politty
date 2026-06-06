@@ -323,7 +323,9 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    _node_compile_cache="$(__${fn}_node_compile_cache_dir)"`);
   lines.push(`    _bundled_worker="$(__${fn}_bundled_worker_path "$_bin" "$_node_compile_cache")"`);
   lines.push(`    if [[ -n "$_bundled_worker" ]] && __${fn}_load_worker "$_bundled_worker"; then`);
-  lines.push(`        ${workerBinEnvName}="$_bin" _${workerFn}_completions`);
+  lines.push(
+    `        NODE_COMPILE_CACHE="$_node_compile_cache" ${workerBinEnvName}="$_bin" _${workerFn}_completions`,
+  );
   lines.push(`        return 0`);
   lines.push(`    fi`);
   lines.push(`    _worker="$(__${fn}_static_worker_path)"`);
@@ -338,7 +340,9 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   );
   lines.push(`        fi`);
   lines.push(`        if [[ -f "$_worker" ]] && __${fn}_load_worker "$_worker"; then`);
-  lines.push(`            ${workerBinEnvName}="$_bin" _${workerFn}_completions`);
+  lines.push(
+    `            NODE_COMPILE_CACHE="$_node_compile_cache" ${workerBinEnvName}="$_bin" _${workerFn}_completions`,
+  );
   lines.push(`            return 0`);
   lines.push(`        fi`);
   lines.push(`    fi`);
@@ -637,7 +641,9 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    _node_compile_cache="$(__${fn}_node_compile_cache_dir)"`);
   lines.push(`    _bundled_worker="$(__${fn}_bundled_worker_path "$_bin" "$_node_compile_cache")"`);
   lines.push(`    if [[ -n "$_bundled_worker" ]] && __${fn}_load_worker "$_bundled_worker"; then`);
-  lines.push(`        ${workerBinEnvName}="$_bin" _${workerFn}_completions "$@"`);
+  lines.push(
+    `        NODE_COMPILE_CACHE="$_node_compile_cache" ${workerBinEnvName}="$_bin" _${workerFn}_completions "$@"`,
+  );
   lines.push(`        return 0`);
   lines.push(`    fi`);
   lines.push(`    _worker="$(__${fn}_static_worker_path)"`);
@@ -652,7 +658,9 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   );
   lines.push(`        fi`);
   lines.push(`        if [[ -f "$_worker" ]] && __${fn}_load_worker "$_worker"; then`);
-  lines.push(`            ${workerBinEnvName}="$_bin" _${workerFn}_completions "$@"`);
+  lines.push(
+    `            NODE_COMPILE_CACHE="$_node_compile_cache" ${workerBinEnvName}="$_bin" _${workerFn}_completions "$@"`,
+  );
   lines.push(`            return 0`);
   lines.push(`        fi`);
   lines.push(`    fi`);
@@ -952,6 +960,7 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   );
   lines.push(`    if test -n "$_bundled_worker"; and __${fn}_load_worker "$_bundled_worker"`);
   lines.push(`        set -lx ${workerBinEnvName} "$_bin"`);
+  lines.push(`        set -lx NODE_COMPILE_CACHE "$_node_compile_cache"`);
   lines.push(`        __fish_${workerFn}_complete`);
   lines.push(`        return 0`);
   lines.push(`    end`);
@@ -969,6 +978,7 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`        if test -f "$_worker"`);
   lines.push(`            if __${fn}_load_worker "$_worker"`);
   lines.push(`                set -lx ${workerBinEnvName} "$_bin"`);
+  lines.push(`                set -lx NODE_COMPILE_CACHE "$_node_compile_cache"`);
   lines.push(`                __fish_${workerFn}_complete`);
   lines.push(`                return 0`);
   lines.push(`            end`);

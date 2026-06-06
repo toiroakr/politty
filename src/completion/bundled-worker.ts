@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { resolveBinPath } from "./header.js";
@@ -269,6 +269,11 @@ export async function generateBundledCompletionWorker(
   );
 
   mkdirSync(dirname(outputPath), { recursive: true });
+  // Force a fresh build: `__refresh-completion` no-ops when the existing
+  // worker's `politty-bin-sig` matches the bin's (second-granularity) mtime,
+  // which can return a stale artifact during fast successive builds. Removing
+  // any existing output guarantees regeneration for the publishable worker.
+  rmSync(outputPath, { force: true });
   await runTargetBin(
     options.bin,
     ["__refresh-completion", options.shell, outputPath, "--static", "--worker"],
