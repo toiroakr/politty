@@ -12,11 +12,8 @@ import { bundledWorkerRelativePaths } from "./bundled-worker.js";
 import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import { binEnvVarName, sanitize } from "./extractor.js";
 import { buildHeaderLines } from "./header.js";
+import { shSingleQuote, statSigExpr } from "./shell-shared.js";
 import type { CompletionOptions, CompletionResult } from "./types.js";
-
-function shSingleQuote(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
-}
 
 function compileCacheSuffix(programName: string): string {
   return shSingleQuote(`/${programName}/node-compile-cache`);
@@ -60,14 +57,6 @@ function fishCacheDefault(hardcoded: string | undefined, suffix: string): string
     `    test -n "$_cache_root"; or set _cache_root "$HOME/.cache"`,
     `    printf '%s\\n' "$_cache_root"${suffix}`,
   ].join("\n");
-}
-
-function statSigExpr(): string {
-  return `$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null)`;
-}
-
-function workerFileSigExpr(fileVar: string): string {
-  return `$(stat -L -c '%Y:%s' "${fileVar}" 2>/dev/null || stat -L -f '%m:%z' "${fileVar}" 2>/dev/null)`;
 }
 
 function shellWorkerRelList(options: CompletionOptions, shell: "bash" | "zsh"): string {
@@ -142,7 +131,7 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(``);
   lines.push(`__${fn}_worker_file_sig() {`);
   lines.push(`    local _worker="$1" _sig`);
-  lines.push(`    _sig=${workerFileSigExpr("$_worker")} || return 1`);
+  lines.push(`    _sig=${statSigExpr("$_worker", { shell: "posix", withSize: true })} || return 1`);
   lines.push(`    printf '%s\\n' "$_sig"`);
   lines.push(`}`);
   lines.push(``);
@@ -230,7 +219,7 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(``);
   lines.push(`__${fn}_bin_sig() {`);
   lines.push(`    local _bin="$1" _sig`);
-  lines.push(`    _sig=${statSigExpr()} || return 1`);
+  lines.push(`    _sig=${statSigExpr("$_bin", { shell: "posix" })} || return 1`);
   lines.push(`    printf '%s\\n' "$_sig"`);
   lines.push(`}`);
   lines.push(``);
@@ -435,7 +424,7 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    emulate -L zsh`);
   lines.push(`    setopt local_options no_aliases`);
   lines.push(`    local _worker="$1" _sig`);
-  lines.push(`    _sig=${workerFileSigExpr("$_worker")} || return 1`);
+  lines.push(`    _sig=${statSigExpr("$_worker", { shell: "posix", withSize: true })} || return 1`);
   lines.push(`    print -r -- "$_sig"`);
   lines.push(`}`);
   lines.push(``);
@@ -537,7 +526,7 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    emulate -L zsh`);
   lines.push(`    setopt local_options no_aliases`);
   lines.push(`    local _bin="$1" _sig`);
-  lines.push(`    _sig=${statSigExpr()} || return 1`);
+  lines.push(`    _sig=${statSigExpr("$_bin", { shell: "posix" })} || return 1`);
   lines.push(`    print -r -- "$_sig"`);
   lines.push(`}`);
   lines.push(``);
@@ -749,7 +738,7 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`function __${fn}_worker_file_sig`);
   lines.push(`    set -l _worker $argv[1]`);
   lines.push(
-    `    set -l _sig (stat -L -c '%Y:%s' "$_worker" 2>/dev/null; or stat -L -f '%m:%z' "$_worker" 2>/dev/null)`,
+    `    set -l _sig ${statSigExpr("$_worker", { shell: "fish", withSize: true })}`,
   );
   lines.push(`    test -n "$_sig"; and printf '%s\\n' "$_sig"`);
   lines.push(`end`);
@@ -868,7 +857,7 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`function __${fn}_bin_sig`);
   lines.push(`    set -l _bin $argv[1]`);
   lines.push(
-    `    set -l _sig (stat -L -c '%Y' "$_bin" 2>/dev/null; or stat -L -f '%m' "$_bin" 2>/dev/null)`,
+    `    set -l _sig ${statSigExpr("$_bin", { shell: "fish" })}`,
   );
   lines.push(`    test -n "$_sig"; and printf '%s\\n' "$_sig"`);
   lines.push(`end`);

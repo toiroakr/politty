@@ -25,6 +25,7 @@ import {
   optionExpandLocation,
   positionalExpandLocation,
   quotedAvailabilityTokens,
+  statSigExpr,
   type BaseExpandLocation,
   type ResolvedExpandDep,
 } from "./shell-shared.js";
@@ -488,13 +489,7 @@ export function generateFishCompletion(
     lines.push(`function ${refreshFn} --no-scope-shadowing`);
     lines.push(`    set -l _bin (command -v ${programName})`);
     lines.push(`    test -z "$_bin"; and return 1`);
-    // `-L` follows symlinks so the shell-side mtime matches Node's
-    // `fs.statSync`, mirroring the bash/zsh loader. Probe order matches
-    // the bash/zsh loader: GNU (`-c`) first because `-f` is filesystem
-    // mode there and would otherwise dump filesystem info into `_sig`.
-    lines.push(
-      `    set -l _sig (stat -L -c '%Y' "$_bin" 2>/dev/null; or stat -L -f '%m' "$_bin" 2>/dev/null)`,
-    );
+    lines.push(`    set -l _sig ${statSigExpr("$_bin", { shell: "fish" })}`);
     lines.push(`    test "$_sig" = "${sig}"; and return 1`);
     lines.push(`    set -l _target (status current-filename)`);
     lines.push(`    test -n "$_target"; and test -f "$_target"; or return 1`);

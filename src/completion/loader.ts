@@ -16,6 +16,7 @@
  */
 
 import { sanitize } from "./extractor.js";
+import { shSingleQuote } from "./shell-shared.js";
 import type { ShellType } from "./types.js";
 
 export interface LoaderOptions {
@@ -27,17 +28,6 @@ export interface LoaderOptions {
    * which is what most users want.
    */
   cacheDir?: string;
-}
-
-/**
- * Single-quote escape: `'` -> `'\''`. Inside single quotes the shell
- * performs no expansion at all, so `$`, backticks, and `$(...)` are
- * inert. Used for hardcoded paths because callers may sources them
- * from env / config — we must not let metachars in the path execute as
- * commands when the rc snippet is sourced.
- */
-function shSingleQuote(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 function bashCachePathExpr(
