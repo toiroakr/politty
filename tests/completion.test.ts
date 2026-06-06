@@ -642,7 +642,7 @@ describe("Completion", () => {
         },
       });
 
-      it("is the default and resolves the runtime executable for every shell", () => {
+      it("emits dispatcher completion for every shell in dispatcher mode", () => {
         const cases = [
           ["bash", "type -P 'mycli'"],
           ["zsh", "whence -p 'mycli'"],
@@ -653,6 +653,7 @@ describe("Completion", () => {
           const { script } = generateCompletion(dispatcherCommand, {
             shell,
             programName: "mycli",
+            mode: "dispatcher",
           });
 
           expect(script).toContain("# politty-completion-mode: dispatcher");
@@ -667,10 +668,24 @@ describe("Completion", () => {
         }
       });
 
+      it("defaults to a self-contained static script for the direct generateCompletion API", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        expect(script).toContain("# politty-completion-mode: static");
+        expect(script).not.toContain("# politty-completion-mode: dispatcher");
+        // Static scripts bake the command metadata directly into the body.
+        expect(script).toContain("--verbose");
+        expect(script).toContain("build");
+      });
+
       it("suppresses bash file fallback for empty NoFileCompletion results (bash 3.2)", () => {
         const { script } = generateCompletion(dispatcherCommand, {
           shell: "bash",
           programName: "mycli",
+          mode: "dispatcher",
         });
 
         // bash 3.2 ignores `compopt +o default`, so an empty COMPREPLY in the
@@ -694,6 +709,7 @@ describe("Completion", () => {
           const { script } = generateCompletion(dispatcherCommand, {
             shell,
             programName: "mycli",
+            mode: "dispatcher",
           });
           expect(script).toContain(`*$'\\n'"# program: mycli"$'\\n'*`);
           expect(script).toContain(`*$'\\n'"# politty-completion-version: 1"$'\\n'*`);
@@ -703,6 +719,7 @@ describe("Completion", () => {
         const { script: fish } = generateCompletion(dispatcherCommand, {
           shell: "fish",
           programName: "mycli",
+          mode: "dispatcher",
         });
         expect(fish).toContain(`string match -q -- "# program: mycli" $_head`);
         expect(fish).not.toContain(`'*# program: mycli*'`);
@@ -715,6 +732,7 @@ describe("Completion", () => {
         const bash = generateCompletion(dispatcherCommand, {
           shell: "bash",
           programName: "mycli",
+          mode: "dispatcher",
         }).script;
         expect(bash).toContain(
           `NODE_COMPILE_CACHE="$_node_compile_cache" MYCLI_WORKER_BIN="$_bin" _mycli_worker_completions`,
@@ -723,6 +741,7 @@ describe("Completion", () => {
         const zsh = generateCompletion(dispatcherCommand, {
           shell: "zsh",
           programName: "mycli",
+          mode: "dispatcher",
         }).script;
         expect(zsh).toContain(
           `NODE_COMPILE_CACHE="$_node_compile_cache" MYCLI_WORKER_BIN="$_bin" _mycli_worker_completions "$@"`,
@@ -731,6 +750,7 @@ describe("Completion", () => {
         const fish = generateCompletion(dispatcherCommand, {
           shell: "fish",
           programName: "mycli",
+          mode: "dispatcher",
         }).script;
         expect(fish).toContain(`set -lx NODE_COMPILE_CACHE "$_node_compile_cache"`);
       });
@@ -743,6 +763,7 @@ describe("Completion", () => {
         const bash = generateCompletion(dispatcherCommand, {
           shell: "bash",
           programName: "mycli",
+          mode: "dispatcher",
         }).script;
         expect(bash).toContain(
           'grep -qF "# politty-bin-sig: $_sig" && __mycli_load_worker "$_worker"',
@@ -751,6 +772,7 @@ describe("Completion", () => {
         const zsh = generateCompletion(dispatcherCommand, {
           shell: "zsh",
           programName: "mycli",
+          mode: "dispatcher",
         }).script;
         expect(zsh).toContain(
           'grep -qF "# politty-bin-sig: $_sig" && __mycli_load_worker "$_worker"',
@@ -759,6 +781,7 @@ describe("Completion", () => {
         const fish = generateCompletion(dispatcherCommand, {
           shell: "fish",
           programName: "mycli",
+          mode: "dispatcher",
         }).script;
         expect(fish).toContain(
           'test -f "$_worker"; and head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig"',
@@ -769,6 +792,7 @@ describe("Completion", () => {
         const { script } = generateCompletion(dispatcherCommand, {
           shell: "bash",
           programName: "mycli",
+          mode: "dispatcher",
         });
 
         // Expected helper misses (e.g. no bundled worker) must not abort the
@@ -782,6 +806,7 @@ describe("Completion", () => {
         const { script } = generateCompletion(dispatcherCommand, {
           shell: "bash",
           programName: "mycli",
+          mode: "dispatcher",
         });
 
         // A word like `-D=foo` after `--` is a positional, not an inline option
@@ -840,7 +865,11 @@ describe("Completion", () => {
         const completionPath = join(root, "completion.bash");
         writeFileSync(
           completionPath,
-          generateCompletion(dispatcherCommand, { shell: "bash", programName: "mycli" }).script,
+          generateCompletion(dispatcherCommand, {
+            shell: "bash",
+            programName: "mycli",
+            mode: "dispatcher",
+          }).script,
         );
         const runner = join(root, "run.sh");
         writeFileSync(
@@ -921,7 +950,11 @@ describe("Completion", () => {
         const completionPath = join(root, "completion.bash");
         writeFileSync(
           completionPath,
-          generateCompletion(dispatcherCommand, { shell: "bash", programName: "mycli" }).script,
+          generateCompletion(dispatcherCommand, {
+            shell: "bash",
+            programName: "mycli",
+            mode: "dispatcher",
+          }).script,
         );
         const runner = join(root, "run.sh");
         writeFileSync(
@@ -1009,6 +1042,7 @@ describe("Completion", () => {
           generateCompletion(dispatcherCommand, {
             shell: "bash",
             programName: "mycli",
+            mode: "dispatcher",
             bundledWorker: { queryCommand: true, relativePaths: { bash: ["missing-worker.bash"] } },
           }).script,
         );
@@ -1294,7 +1328,11 @@ describe("Completion", () => {
         const completionPath = join(root, "completion.bash");
         writeFileSync(
           completionPath,
-          generateCompletion(dispatcherCommand, { shell: "bash", programName: "mycli" }).script,
+          generateCompletion(dispatcherCommand, {
+            shell: "bash",
+            programName: "mycli",
+            mode: "dispatcher",
+          }).script,
         );
         const runner = join(root, "run.sh");
         writeFileSync(

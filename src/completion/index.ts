@@ -103,7 +103,13 @@ export function generateCompletion(
   command: AnyCommand,
   options: CompletionOptions,
 ): CompletionResult {
-  if (options.mode !== "static") {
+  // The direct API defaults to the self-contained static script: dispatcher
+  // mode needs the runtime `__complete`/`__refresh-completion` commands, which
+  // only `withCompletionCommand`/`createCompletionCommand` register, so a raw
+  // `generateCompletion(command, { shell })` must not silently emit an unwired
+  // dispatcher. The `completion <shell>` subcommand opts into dispatcher
+  // explicitly (`mode: "dispatcher"`).
+  if (options.mode === "dispatcher") {
     return generateDispatcherCompletion(command, options);
   }
 

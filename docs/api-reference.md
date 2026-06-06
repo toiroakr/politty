@@ -322,7 +322,7 @@ function generateCompletion(command: AnyCommand, options: CompletionOptions): Co
 | `programName`         | `string`                | Program name as invoked                                                                                |
 | `includeSubcommands`  | `boolean?`              | Include subcommand completions (default: true)                                                         |
 | `includeDescriptions` | `boolean?`              | Include descriptions (default: true)                                                                   |
-| `mode`                | `CompletionMode?`       | `dispatcher` by default, or `static` for legacy self-contained scripts                                 |
+| `mode`                | `CompletionMode?`       | Defaults to `static` (self-contained) for this direct API. Pass `dispatcher` for runtime resolution — it requires the CLI to register the hidden `__complete` / `__refresh-completion` commands via `withCompletionCommand` / `createCompletionCommand`. The `completion <shell>` subcommand defaults to `dispatcher`. |
 | `globalArgsSchema`    | `ArgsSchema?`           | Global args schema for deriving global options in completion                                           |
 | `binPath`             | `string?`               | Path to the binary whose mtime is the freshness signature (defaults to `process.argv[1]`)              |
 | `programVersion`      | `string?`               | Program version embedded in the script header                                                          |
@@ -351,6 +351,11 @@ const result = generateCompletion(command, {
 
 console.log(result.script);
 ```
+
+> This direct API emits a self-contained **static** script by default. For runtime
+> dispatcher completion, pass `mode: "dispatcher"` and make sure the command tree
+> has the hidden runtime commands registered (use `withCompletionCommand` /
+> `createCompletionCommand`, which the `completion <shell>` subcommand relies on).
 
 ---
 
