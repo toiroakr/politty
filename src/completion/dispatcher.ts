@@ -1099,11 +1099,12 @@ export function generateDispatcherCompletion(
   options: CompletionOptions,
 ): CompletionResult {
   // Validate completion metadata (expand `dependsOn` references, custom variant
-  // consistency, ...) at generation time, matching the static generators which
-  // do this via extractCompletionData. The dispatcher script does not embed the
-  // command tree, so without this an invalid `completion.custom` config would
-  // install a broken dispatcher and only fail — silently — at TAB time.
-  extractCompletionData(command, options.programName, options.globalArgsSchema);
+  // consistency, ...) at generation time, matching the static generators. Pass
+  // `validateOnly` so the dispatcher does NOT run the static table's eager
+  // cartesian `enumerate` — it resolves typed deps lazily via `__complete` at
+  // TAB time. Without this an invalid `completion.custom` config would install
+  // a broken dispatcher that only fails, silently, at runtime.
+  extractCompletionData(command, options.programName, options.globalArgsSchema, true);
 
   switch (options.shell) {
     case "bash":

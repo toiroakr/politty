@@ -1794,6 +1794,41 @@ describe("Completion", () => {
         expect(result.candidates.some((c) => c.value === "yaml")).toBe(true);
       });
 
+      it("uses the last value of an array dep for runtime expand completion", async () => {
+        let seenDeps: Record<string, string> | undefined;
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            env: arg(z.array(z.string()).default([]), {
+              completion: { custom: { choices: ["dev", "prod"] } },
+            }),
+            target: arg(z.string().optional(), {
+              completion: {
+                custom: {
+                  expand: {
+                    dependsOn: ["env"],
+                    enumerate: (deps) => {
+                      seenDeps = deps;
+                      return [`${deps.env}-a`];
+                    },
+                  },
+                },
+              },
+            }),
+          }),
+          run: () => {},
+        });
+
+        // `env` is repeatable, so parseCompletionContext stages it as string[];
+        // runtime expand must use the most recent value rather than treating
+        // the array dep as missing (which would yield no candidates).
+        const ctx = parseCompletionContext(["--env", "prod", "--target", ""], cmd);
+        const result = await generateCandidates(ctx, { shell: "bash" });
+
+        expect(seenDeps).toEqual({ env: "prod" });
+        expect(result.candidates.map((c) => c.value)).toContain("prod-a");
+      });
+
       it("should set file directive for file completion without extensions", async () => {
         const ctx = parseCompletionContext(["--config", ""], testCmd);
         const result = await gen(ctx);

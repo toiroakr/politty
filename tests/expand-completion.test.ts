@@ -124,6 +124,43 @@ describe("expand completion", () => {
       ).toThrow(/dependsOn references "dynamicField"/);
     });
 
+    it("does not run expand enumerate at dispatcher generation time", () => {
+      let calls = 0;
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: {
+          api: defineCommand({
+            name: "api",
+            args: z.object({
+              env: arg(z.string(), { completion: { custom: { choices: ["dev", "prod"] } } }),
+              field: arg(z.string().optional(), {
+                completion: {
+                  custom: {
+                    expand: {
+                      dependsOn: ["env"],
+                      enumerate: () => {
+                        calls++;
+                        return [];
+                      },
+                    },
+                  },
+                },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      // Dispatcher validates dependsOn but must not eagerly enumerate — it
+      // resolves typed deps lazily at TAB time via __complete.
+      generateCompletion(cmd, { shell: "bash", programName: "mycli", mode: "dispatcher" });
+      expect(calls).toBe(0);
+      // Static generation bakes the table, so it does enumerate the combos.
+      generateCompletion(cmd, { shell: "bash", programName: "mycli", mode: "static" });
+      expect(calls).toBeGreaterThan(0);
+    });
+
     it("rejects dependsOn that includes the field itself", () => {
       const cmd = defineCommand({
         name: "mycli",

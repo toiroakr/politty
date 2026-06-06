@@ -199,6 +199,7 @@ function extractSubcommand(
   name: string,
   command: AnyCommand,
   globalOptions: readonly CompletableOption[] = [],
+  validateOnly = false,
 ): CompletableSubcommand {
   const subcommands: CompletableSubcommand[] = [];
 
@@ -207,7 +208,7 @@ function extractSubcommand(
     for (const [subName, subCommand] of Object.entries(command.subCommands)) {
       const resolved = resolveSubCommandMeta(subCommand);
       if (resolved) {
-        subcommands.push(extractSubcommand(subName, resolved, globalOptions));
+        subcommands.push(extractSubcommand(subName, resolved, globalOptions, validateOnly));
       } else {
         // Legacy async subcommands: placeholder only
         subcommands.push({
@@ -238,7 +239,7 @@ function extractSubcommand(
   // subcommand's siblings (and the global schema, which runtime
   // propagates to every frame). Throws if `dependsOn` references a
   // non-static sibling or `enumerate` raises.
-  resolveExpandTargets(node, pending, globalOptions);
+  resolveExpandTargets(node, pending, globalOptions, validateOnly);
   return node;
 }
 
@@ -935,6 +936,7 @@ export function extractCompletionData(
   command: AnyCommand,
   programName: string,
   globalArgsSchema?: ArgsSchema,
+  validateOnly = false,
 ): CompletionData {
   // Derive globals FIRST so they're available when subcommand expand
   // specs resolve. A local expand that declares `dependsOn: ["env"]`
@@ -960,10 +962,12 @@ export function extractCompletionData(
         positionals: [],
       },
       globalPending,
+      [],
+      validateOnly,
     );
   }
 
-  const rootSubcommand = extractSubcommand(programName, command, globalOptions);
+  const rootSubcommand = extractSubcommand(programName, command, globalOptions, validateOnly);
 
   if (globalArgsSchema) {
     // Merge global options into all subcommands recursively so shell

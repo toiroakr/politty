@@ -324,7 +324,12 @@ async function resolveValueCandidates(
       const deps: Record<string, string> = {};
       let missingDep = false;
       for (const dep of vc.dependsOn) {
-        const value = ctx.parsedArgs[dep];
+        const raw = ctx.parsedArgs[dep];
+        // A repeatable option / variadic positional dep is staged as string[]
+        // by parseCompletionContext; use the most recently typed value so
+        // `--env prod --target <TAB>` still enumerates instead of treating the
+        // dep as missing.
+        const value = Array.isArray(raw) ? raw[raw.length - 1] : raw;
         if (typeof value !== "string") {
           missingDep = true;
           break;
