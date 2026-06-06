@@ -672,6 +672,28 @@ describe("Completion", () => {
         );
       });
 
+      it("validates bundled worker headers by whole line, not substring", () => {
+        // A worker built for another program (e.g. `mycli-extra`) or a future
+        // version must not be accepted by `mycli`; the runtime check anchors each
+        // header to a complete line, mirroring validateBundledWorkerFile.
+        for (const shell of ["bash", "zsh"] as const) {
+          const { script } = generateCompletion(dispatcherCommand, {
+            shell,
+            programName: "mycli",
+          });
+          expect(script).toContain(`*$'\\n'"# program: mycli"$'\\n'*`);
+          expect(script).toContain(`*$'\\n'"# politty-completion-version: 1"$'\\n'*`);
+          expect(script).not.toContain(`*"# program: mycli"*`);
+        }
+
+        const { script: fish } = generateCompletion(dispatcherCommand, {
+          shell: "fish",
+          programName: "mycli",
+        });
+        expect(fish).toContain(`string match -q -- "# program: mycli" $_head`);
+        expect(fish).not.toContain(`'*# program: mycli*'`);
+      });
+
       it("keeps static mode available with baked command metadata", () => {
         const { script } = generateCompletion(dispatcherCommand, {
           shell: "bash",

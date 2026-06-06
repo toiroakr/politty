@@ -139,11 +139,14 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    local _worker="$1" _head`);
   lines.push(`    [[ -f "$_worker" ]] || return 1`);
   lines.push(`    _head="$(head -n 24 "$_worker" 2>/dev/null)" || return 1`);
-  lines.push(`    [[ "$_head" == *"# politty-completion-version: 1"* ]] || return 1`);
-  lines.push(`    [[ "$_head" == *"# program: ${programName}"* ]] || return 1`);
-  lines.push(`    [[ "$_head" == *"# shell: bash"* ]] || return 1`);
-  lines.push(`    [[ "$_head" == *"# politty-completion-mode: worker"* ]] || return 1`);
-  lines.push(`    [[ "$_head" == *"# politty-completion-worker: true"* ]] || return 1`);
+  // Match whole header lines (not substrings) so a worker for another program
+  // or version (e.g. `# program: ${programName}-extra`, version `10`) is rejected.
+  lines.push(`    _head=$'\\n'"$_head"$'\\n'`);
+  lines.push(`    [[ "$_head" == *$'\\n'"# politty-completion-version: 1"$'\\n'* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *$'\\n'"# program: ${programName}"$'\\n'* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *$'\\n'"# shell: bash"$'\\n'* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *$'\\n'"# politty-completion-mode: worker"$'\\n'* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *$'\\n'"# politty-completion-worker: true"$'\\n'* ]] || return 1`);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_load_worker() {`);
@@ -438,11 +441,14 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    local _worker="$1" _head`);
   lines.push(`    [[ -f "$_worker" ]] || return 1`);
   lines.push(`    _head="$(head -n 24 "$_worker" 2>/dev/null)" || return 1`);
-  lines.push(`    [[ "$_head" == *"# politty-completion-version: 1"* ]] || return 1`);
-  lines.push(`    [[ "$_head" == *"# program: ${programName}"* ]] || return 1`);
-  lines.push(`    [[ "$_head" == *"# shell: zsh"* ]] || return 1`);
-  lines.push(`    [[ "$_head" == *"# politty-completion-mode: worker"* ]] || return 1`);
-  lines.push(`    [[ "$_head" == *"# politty-completion-worker: true"* ]] || return 1`);
+  // Match whole header lines (not substrings) so a worker for another program
+  // or version (e.g. `# program: ${programName}-extra`, version `10`) is rejected.
+  lines.push(`    _head=$'\\n'"$_head"$'\\n'`);
+  lines.push(`    [[ "$_head" == *$'\\n'"# politty-completion-version: 1"$'\\n'* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *$'\\n'"# program: ${programName}"$'\\n'* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *$'\\n'"# shell: zsh"$'\\n'* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *$'\\n'"# politty-completion-mode: worker"$'\\n'* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *$'\\n'"# politty-completion-worker: true"$'\\n'* ]] || return 1`);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_load_worker() {`);
@@ -749,11 +755,13 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    set -l _worker $argv[1]`);
   lines.push(`    test -f "$_worker"; or return 1`);
   lines.push(`    set -l _head (head -n 24 "$_worker" 2>/dev/null)`);
-  lines.push(`    string match -q -- '*# politty-completion-version: 1*' "$_head"; or return 1`);
-  lines.push(`    string match -q -- '*# program: ${programName}*' "$_head"; or return 1`);
-  lines.push(`    string match -q -- '*# shell: fish*' "$_head"; or return 1`);
-  lines.push(`    string match -q -- '*# politty-completion-mode: worker*' "$_head"; or return 1`);
-  lines.push(`    string match -q -- '*# politty-completion-worker: true*' "$_head"; or return 1`);
+  // Match whole header lines (not substrings) so a worker for another program
+  // or version (e.g. `# program: ${programName}-extra`, version `10`) is rejected.
+  lines.push(`    string match -q -- "# politty-completion-version: 1" $_head; or return 1`);
+  lines.push(`    string match -q -- "# program: ${programName}" $_head; or return 1`);
+  lines.push(`    string match -q -- "# shell: fish" $_head; or return 1`);
+  lines.push(`    string match -q -- "# politty-completion-mode: worker" $_head; or return 1`);
+  lines.push(`    string match -q -- "# politty-completion-worker: true" $_head; or return 1`);
   lines.push(`end`);
   lines.push(``);
   lines.push(`function __${fn}_load_worker`);
