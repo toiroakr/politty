@@ -352,10 +352,11 @@ async function resolveValueCandidates(
 
   // Two-stage key=value: collapse to keys before `=` is typed, and flip
   // NoSpace whenever a candidate ends with `=` so the user can keep
-  // typing the value after the first TAB. Apply only to `dynamic` and
-  // `expand` sources — `choices`/`shellCommand` values containing `=`
-  // are concrete (e.g. `foo=bar` literal choice) and must reach the
-  // shell unchanged, matching what the static script paths emit.
+  // typing the value after the first TAB. Apply only to `dynamic`,
+  // `expand`, and `runtime-expand` sources — `choices`/`shellCommand`
+  // values containing `=` are concrete (e.g. `foo=bar` literal choice)
+  // and must reach the shell unchanged, matching what the static script
+  // paths emit.
   if (vc.type === "dynamic" || vc.type === "expand" || vc.type === "runtime-expand") {
     const sourceCandidates =
       vc.type === "runtime-expand" && dedupeKeyValues === true

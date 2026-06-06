@@ -602,7 +602,7 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`        done`);
   lines.push(`        for _pat in "\${_matchers[@]}"; do`);
   lines.push(`            [[ -n "$_pat" ]] || continue`);
-  lines.push(`            for _f in "$_dir"/$_pat(N.); do`);
+  lines.push(`            for _f in "$_dir"/\${~_pat}(N.); do`);
   lines.push(`                _out="\${_f#./}"`);
   lines.push(`                [[ "$_out" == "$_cur"* ]] && __${fn}_add_path_candidate "$_out"`);
   lines.push(`            done`);
