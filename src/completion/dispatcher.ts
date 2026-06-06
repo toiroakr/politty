@@ -34,6 +34,34 @@ function workerPathSuffix(programName: string, shell: string): string {
   return shSingleQuote(`/${programName}/completion-worker.${shell}`);
 }
 
+/**
+ * `<printCmd> <dir>` line resolving a cache path: the hardcoded `cacheDir` when
+ * configured, else `${XDG_CACHE_HOME:-$HOME/.cache}` joined with `suffix`. Used
+ * by bash and zsh, which both expand the XDG default inline.
+ */
+function posixCacheDefault(
+  printCmd: string,
+  hardcoded: string | undefined,
+  suffix: string,
+): string {
+  return hardcoded
+    ? `        ${printCmd} ${hardcoded}`
+    : `        ${printCmd} "\${XDG_CACHE_HOME:-$HOME/.cache}"${suffix}`;
+}
+
+/**
+ * fish equivalent of {@link posixCacheDefault}. fish has no `${VAR:-default}`
+ * form, so the XDG fallback is materialized over three lines.
+ */
+function fishCacheDefault(hardcoded: string | undefined, suffix: string): string {
+  if (hardcoded) return `    printf '%s\\n' ${hardcoded}`;
+  return [
+    `    set -l _cache_root "$XDG_CACHE_HOME"`,
+    `    test -n "$_cache_root"; or set _cache_root "$HOME/.cache"`,
+    `    printf '%s\\n' "$_cache_root"${suffix}`,
+  ].join("\n");
+}
+
 function statSigExpr(): string {
   return `$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null)`;
 }
@@ -67,14 +95,16 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   const workerBinEnvName = binEnvVarName(workerFn);
   const envName = binEnvVarName(fn);
   const programLookup = shSingleQuote(programName);
-  const compileCacheDir = hardcodedCompileCacheDir(options.cacheDir);
-  const compileCacheDefault = compileCacheDir
-    ? `        printf '%s\\n' ${compileCacheDir}`
-    : `        printf '%s\\n' "\${XDG_CACHE_HOME:-$HOME/.cache}"${compileCacheSuffix(programName)}`;
-  const workerPath = hardcodedWorkerPath(options.cacheDir, "bash");
-  const workerPathDefault = workerPath
-    ? `        printf '%s\\n' ${workerPath}`
-    : `        printf '%s\\n' "\${XDG_CACHE_HOME:-$HOME/.cache}"${workerPathSuffix(programName, "bash")}`;
+  const compileCacheDefault = posixCacheDefault(
+    "printf '%s\\n'",
+    hardcodedCompileCacheDir(options.cacheDir),
+    compileCacheSuffix(programName),
+  );
+  const workerPathDefault = posixCacheDefault(
+    "printf '%s\\n'",
+    hardcodedWorkerPath(options.cacheDir, "bash"),
+    workerPathSuffix(programName, "bash"),
+  );
   const workerRelList = shellWorkerRelList(options, "bash");
   const canQueryBundledWorkerPath = bundledWorkerPathCommandEnabled(options);
 
@@ -348,14 +378,16 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   const programLookup = shSingleQuote(programName);
   const completionFn = `_${programName}`;
   const autoloadCheck = `"${"${funcstack[1]:-}"}" == "${completionFn}"`;
-  const compileCacheDir = hardcodedCompileCacheDir(options.cacheDir);
-  const compileCacheDefault = compileCacheDir
-    ? `        print -r -- ${compileCacheDir}`
-    : `        print -r -- "\${XDG_CACHE_HOME:-$HOME/.cache}"${compileCacheSuffix(programName)}`;
-  const workerPath = hardcodedWorkerPath(options.cacheDir, "zsh");
-  const workerPathDefault = workerPath
-    ? `        print -r -- ${workerPath}`
-    : `        print -r -- "\${XDG_CACHE_HOME:-$HOME/.cache}"${workerPathSuffix(programName, "zsh")}`;
+  const compileCacheDefault = posixCacheDefault(
+    "print -r --",
+    hardcodedCompileCacheDir(options.cacheDir),
+    compileCacheSuffix(programName),
+  );
+  const workerPathDefault = posixCacheDefault(
+    "print -r --",
+    hardcodedWorkerPath(options.cacheDir, "zsh"),
+    workerPathSuffix(programName, "zsh"),
+  );
   const workerRelList = shellWorkerRelList(options, "zsh");
   const canQueryBundledWorkerPath = bundledWorkerPathCommandEnabled(options);
 
@@ -666,22 +698,14 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   const workerBinEnvName = binEnvVarName(workerFn);
   const envName = binEnvVarName(fn);
   const programLookup = shSingleQuote(programName);
-  const compileCacheDir = hardcodedCompileCacheDir(options.cacheDir);
-  const compileCacheDefault = compileCacheDir
-    ? `    printf '%s\\n' ${compileCacheDir}`
-    : [
-        `    set -l _cache_root "$XDG_CACHE_HOME"`,
-        `    test -n "$_cache_root"; or set _cache_root "$HOME/.cache"`,
-        `    printf '%s\\n' "$_cache_root"${compileCacheSuffix(programName)}`,
-      ].join("\n");
-  const workerPath = hardcodedWorkerPath(options.cacheDir, "fish");
-  const workerPathDefault = workerPath
-    ? `    printf '%s\\n' ${workerPath}`
-    : [
-        `    set -l _cache_root "$XDG_CACHE_HOME"`,
-        `    test -n "$_cache_root"; or set _cache_root "$HOME/.cache"`,
-        `    printf '%s\\n' "$_cache_root"${workerPathSuffix(programName, "fish")}`,
-      ].join("\n");
+  const compileCacheDefault = fishCacheDefault(
+    hardcodedCompileCacheDir(options.cacheDir),
+    compileCacheSuffix(programName),
+  );
+  const workerPathDefault = fishCacheDefault(
+    hardcodedWorkerPath(options.cacheDir, "fish"),
+    workerPathSuffix(programName, "fish"),
+  );
   const workerRelList = fishWorkerRelList(options);
   const canQueryBundledWorkerPath = bundledWorkerPathCommandEnabled(options);
 

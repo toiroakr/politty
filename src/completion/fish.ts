@@ -311,6 +311,33 @@ function positionalBlock(
   return lines;
 }
 
+/**
+ * Subcommand-name echoes. When the same node also has positionals, complete
+ * subcommand names only while the cursor still prefixes one and fall through to
+ * positional completion otherwise. Returns lines at base indentation; callers
+ * re-indent for their handler depth.
+ */
+function subOrPositionalLines(
+  subItems: Array<{ name: string; description?: string | undefined }>,
+  positionals: CompletablePositional[],
+  fn: string,
+  options: readonly CompletableOption[],
+): string[] {
+  const echoSubs = subItems.map((s) => `echo "${s.name}\t${escapeDesc(s.description ?? "")}"`);
+  if (positionals.length === 0) return echoSubs;
+  return [
+    `set -l _sub_match 0`,
+    `for _sub_name in ${subItems.map((s) => `"${escapeDesc(s.name)}"`).join(" ")}`,
+    `    test (string sub -l (string length -- "$_cur") -- "$_sub_name") = "$_cur"; and set _sub_match 1; and break`,
+    `end`,
+    `if test $_sub_match -eq 1`,
+    ...echoSubs.map((l) => `    ${l}`),
+    `else`,
+    ...positionalBlock(positionals, fn, options),
+    `end`,
+  ];
+}
+
 /** Generate available-option echo lines for fish */
 function availableOptionLines(options: CompletableOption[], fn: string): string[] {
   const lines: string[] = [];
@@ -383,29 +410,9 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
   // 4. Subcommand or positional completion (includes aliases)
   if (visibleSubs.length > 0) {
     const subItems = getSubNamesWithAliases(sub.subcommands);
-    if (sub.positionals.length > 0) {
-      lines.push(`    set -l _sub_match 0`);
-      lines.push(
-        `    for _sub_name in ${subItems.map((s) => `"${escapeDesc(s.name)}"`).join(" ")}`,
-      );
-      lines.push(
-        `        test (string sub -l (string length -- "$_cur") -- "$_sub_name") = "$_cur"; and set _sub_match 1; and break`,
-      );
-      lines.push(`    end`);
-      lines.push(`    if test $_sub_match -eq 1`);
-      for (const s of subItems) {
-        const desc = escapeDesc(s.description ?? "");
-        lines.push(`        echo "${s.name}\t${desc}"`);
-      }
-      lines.push(`    else`);
-      lines.push(...positionalBlock(sub.positionals, fn, sub.options).map((l) => `    ${l}`));
-      lines.push(`    end`);
-    } else {
-      for (const s of subItems) {
-        const desc = escapeDesc(s.description ?? "");
-        lines.push(`    echo "${s.name}\t${desc}"`);
-      }
-    }
+    lines.push(
+      ...subOrPositionalLines(subItems, sub.positionals, fn, sub.options).map((l) => `    ${l}`),
+    );
   } else if (sub.positionals.length > 0) {
     lines.push(...positionalBlock(sub.positionals, fn, sub.options));
   }
@@ -719,29 +726,11 @@ export function generateFishCompletion(
   if (visibleSubs.length > 0) {
     lines.push(`    else`);
     const subItems = getSubNamesWithAliases(root.subcommands);
-    if (root.positionals.length > 0) {
-      lines.push(`        set -l _sub_match 0`);
-      lines.push(
-        `        for _sub_name in ${subItems.map((s) => `"${escapeDesc(s.name)}"`).join(" ")}`,
-      );
-      lines.push(
-        `            test (string sub -l (string length -- "$_cur") -- "$_sub_name") = "$_cur"; and set _sub_match 1; and break`,
-      );
-      lines.push(`        end`);
-      lines.push(`        if test $_sub_match -eq 1`);
-      for (const s of subItems) {
-        const desc = escapeDesc(s.description ?? "");
-        lines.push(`            echo "${s.name}\t${desc}"`);
-      }
-      lines.push(`        else`);
-      lines.push(...positionalBlock(root.positionals, fn, root.options).map((l) => `        ${l}`));
-      lines.push(`        end`);
-    } else {
-      for (const s of subItems) {
-        const desc = escapeDesc(s.description ?? "");
-        lines.push(`        echo "${s.name}\t${desc}"`);
-      }
-    }
+    lines.push(
+      ...subOrPositionalLines(subItems, root.positionals, fn, root.options).map(
+        (l) => `        ${l}`,
+      ),
+    );
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
     lines.push(...positionalBlock(root.positionals, fn, root.options));

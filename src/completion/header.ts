@@ -9,6 +9,7 @@
 
 import { statSync } from "node:fs";
 import { join } from "node:path";
+import { binEnvVarName, sanitize } from "./extractor.js";
 import type { ShellType } from "./types.js";
 
 /** Schema version of the header itself. Bump when the header layout changes. */
@@ -25,15 +26,6 @@ export function computeBinSig(binPath: string): string {
   } catch {
     return "0";
   }
-}
-
-function sanitizeProgramName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_]/g, "_");
-}
-
-function binEnvVarName(programName: string): string {
-  const upper = sanitizeProgramName(programName).toUpperCase();
-  return /^[A-Z_]/.test(upper) ? `${upper}_BIN` : `_${upper}_BIN`;
 }
 
 /**
@@ -70,7 +62,7 @@ function findOnPath(programName: string): string | null {
  */
 export function resolveBinPath(programName: string, override?: string | undefined): string {
   if (override) return override;
-  const envOverride = process.env[binEnvVarName(programName)];
+  const envOverride = process.env[binEnvVarName(sanitize(programName))];
   if (envOverride) return envOverride;
   return findOnPath(programName) ?? process.argv[1] ?? "";
 }

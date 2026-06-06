@@ -320,6 +320,38 @@ function positionalBlock(
   return lines;
 }
 
+/**
+ * Subcommand-name completion. When the same node also has positionals, emit a
+ * runtime check that completes subcommand names while the cursor still prefixes
+ * one and falls through to positional completion otherwise. Returns lines at
+ * base indentation; callers re-indent for their handler depth.
+ */
+function subOrPositionalLines(
+  subNames: string,
+  positionals: CompletablePositional[],
+  fn: string,
+  funcSuffix: string,
+  options: readonly CompletableOption[],
+): string[] {
+  const subReply = [
+    `COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`,
+    `compopt +o default 2>/dev/null`,
+  ];
+  if (positionals.length === 0) return subReply;
+  return [
+    `local -a _sub_names=(${subNames})`,
+    `local _sub_name _sub_match=0`,
+    `for _sub_name in "\${_sub_names[@]}"; do`,
+    `    [[ "$_sub_name" == "$_cur"* ]] && _sub_match=1 && break`,
+    `done`,
+    `if (( _sub_match )); then`,
+    ...subReply.map((l) => `    ${l}`),
+    `else`,
+    ...positionalBlock(positionals, fn, funcSuffix, options),
+    `fi`,
+  ];
+}
+
 /** Generate prev/inline value completion blocks for options */
 function valueCompletionBlocks(
   options: CompletableOption[],
@@ -435,24 +467,11 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
     const subNames = getSubNamesWithAliases(sub.subcommands)
       .map((s) => s.name)
       .join(" ");
-    if (sub.positionals.length > 0) {
-      lines.push(`    local -a _sub_names=(${subNames})`);
-      lines.push(`    local _sub_name _sub_match=0`);
-      lines.push(`    for _sub_name in "\${_sub_names[@]}"; do`);
-      lines.push(`        [[ "$_sub_name" == "$_cur"* ]] && _sub_match=1 && break`);
-      lines.push(`    done`);
-      lines.push(`    if (( _sub_match )); then`);
-      lines.push(`        COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
-      lines.push(`        compopt +o default 2>/dev/null`);
-      lines.push(`    else`);
-      lines.push(
-        ...positionalBlock(sub.positionals, fn, funcSuffix, sub.options).map((l) => `    ${l}`),
-      );
-      lines.push(`    fi`);
-    } else {
-      lines.push(`    COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
-      lines.push(`    compopt +o default 2>/dev/null`);
-    }
+    lines.push(
+      ...subOrPositionalLines(subNames, sub.positionals, fn, funcSuffix, sub.options).map(
+        (l) => `    ${l}`,
+      ),
+    );
   } else if (sub.positionals.length > 0) {
     lines.push(...positionalBlock(sub.positionals, fn, funcSuffix, sub.options));
   }
@@ -723,24 +742,11 @@ export function generateBashCompletion(
     const subNames = getSubNamesWithAliases(root.subcommands)
       .map((s) => s.name)
       .join(" ");
-    if (root.positionals.length > 0) {
-      lines.push(`        local -a _sub_names=(${subNames})`);
-      lines.push(`        local _sub_name _sub_match=0`);
-      lines.push(`        for _sub_name in "\${_sub_names[@]}"; do`);
-      lines.push(`            [[ "$_sub_name" == "$_cur"* ]] && _sub_match=1 && break`);
-      lines.push(`        done`);
-      lines.push(`        if (( _sub_match )); then`);
-      lines.push(`            COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
-      lines.push(`            compopt +o default 2>/dev/null`);
-      lines.push(`        else`);
-      lines.push(
-        ...positionalBlock(root.positionals, fn, "root", root.options).map((l) => `        ${l}`),
-      );
-      lines.push(`        fi`);
-    } else {
-      lines.push(`        COMPREPLY=($(compgen -W "${subNames}" -- "$_cur"))`);
-      lines.push(`        compopt +o default 2>/dev/null`);
-    }
+    lines.push(
+      ...subOrPositionalLines(subNames, root.positionals, fn, "root", root.options).map(
+        (l) => `        ${l}`,
+      ),
+    );
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
     lines.push(
