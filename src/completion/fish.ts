@@ -238,9 +238,17 @@ function fishMatcherLines(patterns: string[]): string[] {
 function fishExtensionLines(extensions: string[]): string[] {
   const lines: string[] = [];
   lines.push(`__fish_complete_directories "$_cur"`);
-  for (const ext of extensions) {
-    lines.push(`for _f in "$_cur"*.${ext}`);
-    lines.push(`    test -f "$_f"; and echo "$_f"`);
+  if (extensions.length > 0) {
+    // Enumerate prefix matches and filter by extension instead of globbing
+    // `<prefix>*.<ext>`, which never matches once part of the extension is
+    // typed. OR the per-extension checks into one `if` so each file echoes once
+    // (a `break` here would wrongly exit the file loop after the first match).
+    const extMatch = extensions.map((ext) => `string match -q -- "*.${ext}" "$_f"`).join("; or ");
+    lines.push(`for _f in "$_cur"*`);
+    lines.push(`    test -f "$_f"; or continue`);
+    lines.push(`    if ${extMatch}`);
+    lines.push(`        echo "$_f"`);
+    lines.push(`    end`);
     lines.push(`end`);
   }
   return lines;

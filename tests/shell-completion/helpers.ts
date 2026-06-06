@@ -521,6 +521,14 @@ export function defineCommonTests(
     expect(values).not.toContain("deploy.yml");
   });
 
+  it("matches extension-filtered files when part of the extension is typed", () => {
+    // Regression: globbing `<prefix>*.<ext>` (e.g. `app.j*.json`) never matched
+    // `app.json` once part of the extension was typed; enumerate + ext-filter.
+    const values = complete(["deploy", "--config", "app.j"], { cwd: getTestFilesDir() });
+    expect(values).toContain("app.json");
+    expect(values).not.toContain("app.yaml");
+  });
+
   it("returns empty for non-existent directory path", () => {
     const values = complete(["deploy", "--config", "nonexistent/"], { cwd: getTestFilesDir() });
     expect(values.filter((v) => v.startsWith("nonexistent/"))).toHaveLength(0);

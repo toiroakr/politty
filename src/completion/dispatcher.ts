@@ -637,11 +637,15 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`            _out="\${_f#./}"`);
   lines.push(`            __${fn}_add_path_candidate "$_out"`);
   lines.push(`        done`);
-  lines.push(`        for _ext in "\${_exts[@]}"; do`);
-  lines.push(`            [[ -n "$_ext" ]] || continue`);
-  lines.push(`            for _f in "$_dir"/"$_prefix"*."$_ext"(N.); do`);
-  lines.push(`                _out="\${_f#./}"`);
-  lines.push(`                __${fn}_add_path_candidate "$_out"`);
+  // Enumerate prefix matches and filter by extension instead of globbing
+  // `<prefix>*.<ext>`, which never matches once the user has typed part of the
+  // extension (e.g. `app.j<TAB>` would miss `app.json`).
+  lines.push(`        for _f in "$_dir"/"$_prefix"*(N.); do`);
+  lines.push(`            _out="\${_f#./}"`);
+  lines.push(`            for _ext in "\${_exts[@]}"; do`);
+  lines.push(
+    `                [[ -n "$_ext" && "$_out" == *."$_ext" ]] && { __${fn}_add_path_candidate "$_out"; break; }`,
+  );
   lines.push(`            done`);
   lines.push(`        done`);
   lines.push(`        for _pat in "\${_matchers[@]}"; do`);
@@ -946,9 +950,15 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`        if string match -q '*/*' "$_cur"`);
   lines.push(`            set _dir (string replace -r '[^/]*$' '' "$_cur")`);
   lines.push(`        end`);
-  lines.push(`        for _ext in $_exts`);
-  lines.push(`            for _f in "$_cur"*.$_ext`);
-  lines.push(`                test -f "$_f"; and printf '%s\\n' "$_f"`);
+  // Enumerate prefix matches and filter by extension instead of globbing
+  // `<prefix>*.<ext>`, which never matches once part of the extension is typed.
+  lines.push(`        for _f in "$_cur"*`);
+  lines.push(`            test -f "$_f"; or continue`);
+  lines.push(`            for _ext in $_exts`);
+  lines.push(`                if string match -q -- "*.$_ext" "$_f"`);
+  lines.push(`                    printf '%s\\n' "$_f"`);
+  lines.push(`                    break`);
+  lines.push(`                end`);
   lines.push(`            end`);
   lines.push(`        end`);
   lines.push(`        for _pat in $_matchers`);

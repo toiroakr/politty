@@ -99,12 +99,16 @@ function zshFilteredFileLines(
     `done`,
   ];
   if (kind === "extensions") {
+    // Enumerate prefix matches and filter by extension instead of globbing
+    // `<prefix>*.<ext>`, which never matches once the user has typed part of
+    // the extension (e.g. `app.j<TAB>` would miss `app.json`).
     lines.push(`local _ext`);
-    lines.push(`for _ext in "\${_exts[@]}"; do`);
-    lines.push(`    [[ -n "$_ext" ]] || continue`);
-    lines.push(`    for _f in "$_dir"/"$_prefix"*."$_ext"(N.); do`);
-    lines.push(`        _out="\${_f#./}"`);
-    lines.push(`        __${fn}_add_path_candidate "$_out"`);
+    lines.push(`for _f in "$_dir"/"$_prefix"*(N.); do`);
+    lines.push(`    _out="\${_f#./}"`);
+    lines.push(`    for _ext in "\${_exts[@]}"; do`);
+    lines.push(
+      `        [[ -n "$_ext" && "$_out" == *."$_ext" ]] && { __${fn}_add_path_candidate "$_out"; break; }`,
+    );
     lines.push(`    done`);
     lines.push(`done`);
   } else {
