@@ -737,9 +737,7 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(``);
   lines.push(`function __${fn}_worker_file_sig`);
   lines.push(`    set -l _worker $argv[1]`);
-  lines.push(
-    `    set -l _sig ${statSigExpr("$_worker", { shell: "fish", withSize: true })}`,
-  );
+  lines.push(`    set -l _sig ${statSigExpr("$_worker", { shell: "fish", withSize: true })}`);
   lines.push(`    test -n "$_sig"; and printf '%s\\n' "$_sig"`);
   lines.push(`end`);
   lines.push(``);
@@ -856,9 +854,7 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(``);
   lines.push(`function __${fn}_bin_sig`);
   lines.push(`    set -l _bin $argv[1]`);
-  lines.push(
-    `    set -l _sig ${statSigExpr("$_bin", { shell: "fish" })}`,
-  );
+  lines.push(`    set -l _sig ${statSigExpr("$_bin", { shell: "fish" })}`);
   lines.push(`    test -n "$_sig"; and printf '%s\\n' "$_sig"`);
   lines.push(`end`);
   lines.push(``);

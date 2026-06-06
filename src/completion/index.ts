@@ -55,7 +55,7 @@ export type {
   DynamicCompletionCandidate,
   DynamicCompletionContext,
   DynamicCompletionResolver,
-  DynamicCompletionResult
+  DynamicCompletionResult,
 } from "../core/dynamic-completion-types.js";
 export {
   CompletionDirective,
@@ -68,7 +68,7 @@ export {
   type CompletionCandidate,
   type CompletionContext,
   type CompletionType,
-  type ShellFormatOptions
+  type ShellFormatOptions,
 } from "./dynamic/index.js";
 // Re-export extractor
 export { extractCompletionData, extractPositionals } from "./extractor.js";
@@ -79,7 +79,7 @@ export {
   generateBundledCompletionWorker,
   validateBundledWorkerFile,
   type GenerateBundledCompletionWorkerOptions,
-  type GenerateBundledCompletionWorkerResult
+  type GenerateBundledCompletionWorkerResult,
 } from "./bundled-worker.js";
 // Re-export types
 export type {
@@ -91,7 +91,7 @@ export type {
   CompletionMode,
   CompletionOptions,
   CompletionResult,
-  ShellType
+  ShellType,
 } from "./types.js";
 // Re-export value completion resolver
 export { resolveValueCompletion, type ValueCompletionField } from "./value-completion-resolver.js";
