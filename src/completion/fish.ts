@@ -493,9 +493,14 @@ export function generateFishCompletion(
     // user setup/cleanup/prompt and validates required globalArgs, which
     // can fail or block when triggered from autoload.
     const sig = computeBinSig(resolveBinPath(programName, options.binPath));
+    const refreshEnvName = binEnvVarName(baseFn);
     const refreshFn = `__${fn}_refresh_completion`;
     lines.push(`function ${refreshFn} --no-scope-shadowing`);
-    lines.push(`    set -l _bin (command -v ${programName})`);
+    // Resolve the bin like resolveBinPath (env override → PATH) so the sig
+    // check stats the same binary the embedded sig was computed from; a set
+    // `<PROG>_BIN` that differs from PATH would otherwise refresh every time.
+    lines.push(`    set -l _bin $${refreshEnvName}`);
+    lines.push(`    test -z "$_bin"; and set _bin (command -v ${programName})`);
     lines.push(`    test -z "$_bin"; and return 1`);
     lines.push(`    set -l _sig ${statSigExpr("$_bin", { shell: "fish" })}`);
     lines.push(`    test "$_sig" = "${sig}"; and return 1`);

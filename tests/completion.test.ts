@@ -2457,6 +2457,22 @@ describe("Completion", () => {
       expect(script).toContain('_tailor-sdk "$@"');
       expect(script).not.toContain('_tailor_sdk "$@"');
     });
+
+    it("fish self-refresh honors the bin override before PATH", () => {
+      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+      const { script } = generateCompletion(cmd, {
+        shell: "fish",
+        programName: "mycli",
+        binPath: fakeBin,
+        mode: "static",
+      });
+
+      // Resolve the bin like resolveBinPath (env override → PATH) so the sig
+      // check stats the same binary the embedded sig was computed from.
+      expect(script).toContain("set -l _bin $MYCLI_BIN");
+      expect(script).toContain('test -z "$_bin"; and set _bin (command -v mycli)');
+    });
   });
 
   describe("install / refreshIfStale", () => {
@@ -2512,6 +2528,33 @@ describe("Completion", () => {
       const newSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
       expect(newSig).not.toBe(originalSig);
       expect(after).toContain(`# politty-bin-sig: ${newSig}`);
+    });
+
+    it("refreshIfStale keeps a legacy (mode-less) cache static rather than dispatcher", () => {
+      const target = join(cacheDir, "completion.bash");
+      mkdirSync(cacheDir, { recursive: true });
+      // A completion file from a release predating dispatcher mode: managed
+      // headers, no `# politty-completion-mode`, and a stale sig to force a
+      // rewrite. The refresh must not silently upgrade it to dispatcher.
+      writeFileSync(
+        target,
+        `${[
+          "# politty-completion-version: 1",
+          "# politty-bin-sig: 0",
+          "# program: mycli",
+          "# shell: bash",
+          "_mycli_completions() { :; }",
+        ].join("\n")}\n`,
+      );
+
+      refreshIfStale(
+        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
+        "bash",
+      );
+
+      const after = readFileSync(target, "utf8");
+      expect(after).toContain("# politty-completion-mode: static");
+      expect(after).not.toContain("# politty-completion-mode: dispatcher");
     });
 
     it("refreshIfStale rewrites a matching politty-generated target file", () => {

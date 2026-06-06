@@ -164,7 +164,14 @@ export function refreshIfStale(ctx: InstallContext, shell: ShellType): void {
       return;
     }
     if (readCachedSig(target) === currentSig) return;
-    const completionMode = ctx.completionMode ?? readCachedMode(target) ?? "dispatcher";
+    // A managed target that already exists but carries no mode header predates
+    // dispatcher mode — keep it static so an upgrade + self-refresh does not
+    // silently rewrite a user's static completion into a dispatcher one. Only a
+    // fresh install (no existing target) defaults to dispatcher.
+    const completionMode =
+      ctx.completionMode ??
+      readCachedMode(target) ??
+      (existsSync(target) ? "static" : "dispatcher");
     writeAtomic(target, generateScript({ ...ctx, completionMode }, shell));
   } catch {
     // Best-effort.
