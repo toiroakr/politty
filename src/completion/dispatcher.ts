@@ -237,6 +237,14 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    printf '%s\\n' "$_sig"`);
   lines.push(`}`);
   lines.push(``);
+  lines.push(`__${fn}_worker_matches_bin() {`);
+  lines.push(`    local _worker="$1" _sig="$2" _bin="$3" _head`);
+  lines.push(`    [[ -f "$_worker" ]] || return 1`);
+  lines.push(`    _head="$(head -n 12 "$_worker" 2>/dev/null)" || return 1`);
+  lines.push(`    grep -qF "# politty-bin-sig: $_sig" <<< "$_head" || return 1`);
+  lines.push(`    grep -qF "# politty-bin-path: $_bin" <<< "$_head" || return 1`);
+  lines.push(`}`);
+  lines.push(``);
   lines.push(`__${fn}_apply_dynamic_output() {`);
   lines.push(`    local _raw="$1" _cur="$2" _inline_prefix="$3"`);
   lines.push(`    COMPREPLY=()`);
@@ -368,9 +376,7 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    _worker="$(__${fn}_static_worker_path)" || _worker=""`);
   lines.push(`    _sig="$(__${fn}_bin_sig "$_bin")" || _sig=""`);
   lines.push(`    if [[ -n "$_worker" && -n "$_sig" ]]; then`);
-  lines.push(
-    `        if [[ ! -f "$_worker" ]] || ! head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig"; then`,
-  );
+  lines.push(`        if ! __${fn}_worker_matches_bin "$_worker" "$_sig" "$_bin"; then`);
   lines.push(`            mkdir -p "\${_worker%/*}" 2>/dev/null`);
   lines.push(
     `            NODE_COMPILE_CACHE="$_node_compile_cache" ${envName}="$_bin" "$_bin" __refresh-completion bash "$_worker" --static --worker 2>/dev/null`,
@@ -381,7 +387,7 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   // disk; loading it would serve outdated completions, so fall through to
   // `__complete` against the current binary instead.
   lines.push(
-    `        if [[ -f "$_worker" ]] && head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig" && __${fn}_load_worker "$_worker"; then`,
+    `        if __${fn}_worker_matches_bin "$_worker" "$_sig" "$_bin" && __${fn}_load_worker "$_worker"; then`,
   );
   lines.push(
     `            NODE_COMPILE_CACHE="$_node_compile_cache" ${workerBinEnvName}="$_bin" _${workerFn}_completions`,
@@ -598,6 +604,16 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    print -r -- "$_sig"`);
   lines.push(`}`);
   lines.push(``);
+  lines.push(`__${fn}_worker_matches_bin() {`);
+  lines.push(`    emulate -L zsh`);
+  lines.push(`    setopt local_options no_aliases`);
+  lines.push(`    local _worker="$1" _sig="$2" _bin="$3" _head`);
+  lines.push(`    [[ -f "$_worker" ]] || return 1`);
+  lines.push(`    _head="$(head -n 12 "$_worker" 2>/dev/null)" || return 1`);
+  lines.push(`    grep -qF "# politty-bin-sig: $_sig" <<< "$_head" || return 1`);
+  lines.push(`    grep -qF "# politty-bin-path: $_bin" <<< "$_head" || return 1`);
+  lines.push(`}`);
+  lines.push(``);
   lines.push(`__${fn}_cdescribe() {`);
   lines.push(`    _describe "$@" 2>/dev/null && return 0`);
   lines.push(`    shift`);
@@ -715,9 +731,7 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    _worker="$(__${fn}_static_worker_path)"`);
   lines.push(`    _sig="$(__${fn}_bin_sig "$_bin")"`);
   lines.push(`    if [[ -n "$_worker" && -n "$_sig" ]]; then`);
-  lines.push(
-    `        if [[ ! -f "$_worker" ]] || ! head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig"; then`,
-  );
+  lines.push(`        if ! __${fn}_worker_matches_bin "$_worker" "$_sig" "$_bin"; then`);
   lines.push(`            mkdir -p "\${_worker%/*}" 2>/dev/null`);
   lines.push(
     `            NODE_COMPILE_CACHE="$_node_compile_cache" ${envName}="$_bin" "$_bin" __refresh-completion zsh "$_worker" --static --worker 2>/dev/null`,
@@ -727,7 +741,7 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   // failed refresh (stale worker left on disk) falls through to `__complete`
   // instead of serving outdated completions.
   lines.push(
-    `        if [[ -f "$_worker" ]] && head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig" && __${fn}_load_worker "$_worker"; then`,
+    `        if __${fn}_worker_matches_bin "$_worker" "$_sig" "$_bin" && __${fn}_load_worker "$_worker"; then`,
   );
   lines.push(
     `            NODE_COMPILE_CACHE="$_node_compile_cache" ${workerBinEnvName}="$_bin" _${workerFn}_completions "$@"`,
@@ -960,6 +974,16 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    test -n "$_sig"; and printf '%s\\n' "$_sig"`);
   lines.push(`end`);
   lines.push(``);
+  lines.push(`function __${fn}_worker_matches_bin`);
+  lines.push(`    set -l _worker $argv[1]`);
+  lines.push(`    set -l _sig $argv[2]`);
+  lines.push(`    set -l _bin $argv[3]`);
+  lines.push(`    test -f "$_worker"; or return 1`);
+  lines.push(`    set -l _head (head -n 12 "$_worker" 2>/dev/null)`);
+  lines.push(`    contains -- "# politty-bin-sig: $_sig" $_head; or return 1`);
+  lines.push(`    contains -- "# politty-bin-path: $_bin" $_head; or return 1`);
+  lines.push(`end`);
+  lines.push(``);
   lines.push(`function __${fn}_apply_dynamic_output`);
   lines.push(`    set -l _cur $argv[1]`);
   lines.push(`    set -l _directive 0`);
@@ -1047,9 +1071,7 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    set -l _worker (__${fn}_static_worker_path)`);
   lines.push(`    set -l _sig (__${fn}_bin_sig "$_bin")`);
   lines.push(`    if test -n "$_worker"; and test -n "$_sig"`);
-  lines.push(
-    `        if not test -f "$_worker"; or not head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig"`,
-  );
+  lines.push(`        if not __${fn}_worker_matches_bin "$_worker" "$_sig" "$_bin"`);
   lines.push(`            mkdir -p (dirname "$_worker") 2>/dev/null`);
   lines.push(
     `            env NODE_COMPILE_CACHE="$_node_compile_cache" ${envName}="$_bin" $_bin __refresh-completion fish "$_worker" --static --worker 2>/dev/null`,
@@ -1058,9 +1080,7 @@ function fishDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   // Only load the worker when its embedded sig matches the current binary, so a
   // failed refresh (stale worker left on disk) falls through to `__complete`
   // instead of serving outdated completions.
-  lines.push(
-    `        if test -f "$_worker"; and head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig"`,
-  );
+  lines.push(`        if __${fn}_worker_matches_bin "$_worker" "$_sig" "$_bin"`);
   lines.push(`            if __${fn}_load_worker "$_worker"`);
   lines.push(`                set -lx ${workerBinEnvName} "$_bin"`);
   lines.push(`                set -lx NODE_COMPILE_CACHE "$_node_compile_cache"`);

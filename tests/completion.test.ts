@@ -772,18 +772,19 @@ describe("Completion", () => {
         }
       });
 
-      it("loads the static worker only when its sig matches (failed refresh falls back)", () => {
+      it("loads the static worker only when its sig and bin path match", () => {
         // A failed refresh leaves a stale worker on disk; the load is gated on
-        // the worker's `# politty-bin-sig` matching the current binary so the
-        // dispatcher falls through to `__complete` rather than serving outdated
-        // completions.
+        // both the worker's `# politty-bin-sig` and `# politty-bin-path`
+        // matching the current binary so the dispatcher falls through to
+        // `__complete` rather than serving outdated completions.
         const bash = generateCompletion(dispatcherCommand, {
           shell: "bash",
           programName: "mycli",
           mode: "dispatcher",
         }).script;
+        expect(bash).toContain(`grep -qF "# politty-bin-path: $_bin" <<< "$_head"`);
         expect(bash).toContain(
-          'grep -qF "# politty-bin-sig: $_sig" && __mycli_load_worker "$_worker"',
+          '__mycli_worker_matches_bin "$_worker" "$_sig" "$_bin" && __mycli_load_worker "$_worker"',
         );
 
         const zsh = generateCompletion(dispatcherCommand, {
@@ -791,8 +792,9 @@ describe("Completion", () => {
           programName: "mycli",
           mode: "dispatcher",
         }).script;
+        expect(zsh).toContain(`grep -qF "# politty-bin-path: $_bin" <<< "$_head"`);
         expect(zsh).toContain(
-          'grep -qF "# politty-bin-sig: $_sig" && __mycli_load_worker "$_worker"',
+          '__mycli_worker_matches_bin "$_worker" "$_sig" "$_bin" && __mycli_load_worker "$_worker"',
         );
 
         const fish = generateCompletion(dispatcherCommand, {
@@ -800,9 +802,8 @@ describe("Completion", () => {
           programName: "mycli",
           mode: "dispatcher",
         }).script;
-        expect(fish).toContain(
-          'test -f "$_worker"; and head -n 10 "$_worker" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig"',
-        );
+        expect(fish).toContain(`contains -- "# politty-bin-path: $_bin" $_head`);
+        expect(fish).toContain('__mycli_worker_matches_bin "$_worker" "$_sig" "$_bin"');
       });
 
       it("guards bash command substitutions so a miss does not abort under set -e", () => {
@@ -854,6 +855,7 @@ describe("Completion", () => {
 
         expect(script).toContain("# politty-completion-worker: true");
         expect(script).toContain("# politty-completion-mode: worker");
+        expect(script).toContain("# politty-bin-path:");
         expect(script).toContain("_mycli_worker_completions()");
         expect(script).toContain("--verbose");
         expect(script).toContain("build");
@@ -2546,6 +2548,8 @@ describe("Completion", () => {
       // Resolve the bin like resolveBinPath (env override → PATH) so the
       // self-refresh sig check matches the embedded `# politty-bin-sig`.
       expect(script).toContain('_bin="${MYCLI_BIN:-$(type -P mycli 2>/dev/null)}"');
+      expect(script).toContain(`"$_bin" != '${fakeBin}'`);
+      expect(script).toContain('grep -qF "# politty-bin-path: $_bin"');
     });
 
     it("embeds a zsh self-refresh guard in static scripts", () => {
@@ -2566,6 +2570,8 @@ describe("Completion", () => {
       expect(script).not.toContain('_mycli "$@" || return 1');
       expect(script).toContain('if __mycli_self_refresh "$@"; then');
       expect(script).toContain('_bin="${MYCLI_BIN:-$(whence -p mycli 2>/dev/null)}"');
+      expect(script).toContain(`"$_bin" != '${fakeBin}'`);
+      expect(script).toContain('grep -qF "# politty-bin-path: $_bin"');
     });
 
     it("zsh self-refresh re-enters the fpath entrypoint for dashed program names", () => {
@@ -2597,6 +2603,7 @@ describe("Completion", () => {
       // check stats the same binary the embedded sig was computed from.
       expect(script).toContain("set -l _bin $MYCLI_BIN");
       expect(script).toContain('test -z "$_bin"; and set _bin (command -v mycli)');
+      expect(script).toContain(`and test "$_bin" = "${fakeBin}"; and return 1`);
     });
   });
 
@@ -2680,6 +2687,47 @@ describe("Completion", () => {
       const after = readFileSync(target, "utf8");
       expect(after).toContain("# politty-completion-mode: static");
       expect(after).not.toContain("# politty-completion-mode: dispatcher");
+    });
+
+    it("refreshIfStale rewrites a same-sig worker cache when the bin path differs", () => {
+      const target = join(cacheDir, "completion-worker.bash");
+      const otherBin = join(dirname(fakeBin), "other-mycli");
+      writeFileSync(otherBin, "#!/bin/sh\nexit 0\n");
+      mkdirSync(cacheDir, { recursive: true });
+      const sig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+      writeFileSync(
+        target,
+        `${[
+          "# politty-completion-version: 1",
+          `# politty-bin-sig: ${sig}`,
+          `# politty-bin-path: ${otherBin}`,
+          "# program: mycli",
+          "# shell: bash",
+          "# politty-completion-mode: worker",
+          "# politty-completion-worker: true",
+          "_mycli_worker_completions() { COMPREPLY=(old); }",
+        ].join("\n")}\n`,
+      );
+
+      refreshIfStale(
+        {
+          rootCommand: cmd,
+          programName: "mycli",
+          binPath: fakeBin,
+          targetPath: target,
+          completionMode: "static",
+          staticWorker: { functionSuffix: "worker" },
+          allowTargetCreate: true,
+        },
+        "bash",
+      );
+
+      const after = readFileSync(target, "utf8");
+      expect(after).toContain(`# politty-bin-sig: ${sig}`);
+      expect(after).toContain(`# politty-bin-path: ${fakeBin}`);
+      expect(after).toContain("# politty-completion-mode: worker");
+      expect(after).toContain("_mycli_worker_completions()");
+      expect(after).not.toContain("COMPREPLY=(old)");
     });
 
     it("refreshIfStale rewrites a matching politty-generated target file", () => {
@@ -2780,6 +2828,7 @@ describe("Completion", () => {
       const snippet = generateLoader({ programName: "mycli", shell: "bash" });
       expect(snippet).toContain("__mycli_load_completion()");
       expect(snippet).toContain("politty-bin-sig:");
+      expect(snippet).toContain("politty-bin-path:");
       expect(snippet).toContain("completion.bash");
       expect(snippet).toContain('source "$_cache"');
     });
@@ -2867,7 +2916,7 @@ describe("Completion", () => {
       expect(script).toContain("stat -L -f '%m'");
     });
 
-    it("embeds the resolved bin-sig so the refresh function can early-exit when fresh", () => {
+    it("embeds the resolved bin freshness key so the refresh function can early-exit when fresh", () => {
       const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
       writeFileSync(fakeBin, "#!/bin/sh\n");
       const sig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
@@ -2877,7 +2926,9 @@ describe("Completion", () => {
         binPath: fakeBin,
         mode: "static",
       });
-      expect(script).toContain(`test "$_sig" = "${sig}"; and return 1`);
+      expect(script).toContain(
+        `test "$_sig" = "${sig}"; and test "$_bin" = "${fakeBin}"; and return 1`,
+      );
     });
   });
 

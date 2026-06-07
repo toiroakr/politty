@@ -7,8 +7,8 @@
  *   1. Looks up the binary on $PATH.
  *   2. Reads its mtime.
  *   3. If the on-disk completion cache is missing or its
- *      `# politty-bin-sig:` header differs, regenerates the cache by
- *      spawning the binary once.
+ *      `# politty-bin-sig:` / `# politty-bin-path:` headers differ,
+ *      regenerates the cache by spawning the binary once.
  *   4. Sources the cache.
  *
  * All failure modes are silent no-ops so a broken / missing CLI never
@@ -61,13 +61,14 @@ function generateBashLoader(opts: LoaderOptions): string {
   // info on stdout *and* exit non-zero, causing the `||` fallback to
   // append a second line and break the header comparison.
   return `__${fn}_load_completion() {
-    local _bin _cache _sig _hdr
+    local _bin _cache _sig _sig_hdr _path_hdr
     _bin="\${${envName}:-$(type -P ${opts.programName} 2>/dev/null)}"
     [[ -n "$_bin" ]] || return 0
     _cache=${cache}
     _sig=$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null) || return 0
-    _hdr="# politty-bin-sig: $_sig"
-    if [[ ! -f "$_cache" ]] || ! head -5 "$_cache" 2>/dev/null | grep -qF "$_hdr"; then
+    _sig_hdr="# politty-bin-sig: $_sig"
+    _path_hdr="# politty-bin-path: $_bin"
+    if [[ ! -f "$_cache" ]] || ! head -8 "$_cache" 2>/dev/null | grep -qF "$_sig_hdr" || ! head -8 "$_cache" 2>/dev/null | grep -qF "$_path_hdr"; then
         # Use the hidden __refresh-completion subcommand instead of
         # \`$_bin completion bash\`: the foreground completion command
         # is subject to user setup/cleanup/prompt and required
@@ -98,13 +99,14 @@ function generateZshLoader(opts: LoaderOptions): string {
   return `__${fn}_load_completion() {
     emulate -L zsh
     setopt local_options no_aliases
-    local _bin _cache _sig _hdr
+    local _bin _cache _sig _sig_hdr _path_hdr
     _bin="\${${envName}:-$(whence -p ${opts.programName} 2>/dev/null)}"
     [[ -n "$_bin" ]] || return 0
     _cache=${cache}
     _sig=$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null) || return 0
-    _hdr="# politty-bin-sig: $_sig"
-    if [[ ! -f "$_cache" ]] || ! head -5 "$_cache" 2>/dev/null | grep -qF "$_hdr"; then
+    _sig_hdr="# politty-bin-sig: $_sig"
+    _path_hdr="# politty-bin-path: $_bin"
+    if [[ ! -f "$_cache" ]] || ! head -8 "$_cache" 2>/dev/null | grep -qF "$_sig_hdr" || ! head -8 "$_cache" 2>/dev/null | grep -qF "$_path_hdr"; then
         # See bash loader for why we use __refresh-completion instead
         # of \`$_bin completion zsh\`.
         "$_bin" __refresh-completion zsh 2>/dev/null

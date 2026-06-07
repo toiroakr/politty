@@ -213,13 +213,20 @@ Every generated script starts with a small machine-readable header:
 ```
 # politty-completion-version: 1
 # politty-bin-sig: 1730000000
+# politty-bin-path: /usr/local/bin/mycli
 # program: mycli
 # program-version: 1.2.3
 # shell: bash
 # politty-completion-mode: dispatcher
 ```
 
-`politty-bin-sig` is the binary's mtime in seconds. The rc loader and `__refresh-completion` compare this against the live binary to decide whether to rewrite the cache. `program-version` is included only when you pass `programVersion` to `withCompletionCommand`. `politty-completion-mode` records whether the cached script should refresh as `dispatcher` or `static`.
+`politty-bin-sig` is the binary's mtime in seconds, and
+`politty-bin-path` is the resolved executable path used for that signature.
+The rc loader, dispatcher worker cache, and `__refresh-completion` compare
+these against the live binary to decide whether to rewrite or reuse a cache.
+`program-version` is included only when you pass `programVersion` to
+`withCompletionCommand`. `politty-completion-mode` records whether the cached
+script should refresh as `dispatcher` or `static`.
 Internal worker artifacts use `# politty-completion-mode: worker` and include
 `# politty-completion-worker: true`.
 

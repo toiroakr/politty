@@ -492,7 +492,8 @@ export function generateFishCompletion(
     // `<bin> completion fish`: the foreground completion command runs
     // user setup/cleanup/prompt and validates required globalArgs, which
     // can fail or block when triggered from autoload.
-    const sig = computeBinSig(resolveBinPath(programName, options.binPath));
+    const resolvedBinPath = resolveBinPath(programName, options.binPath);
+    const sig = computeBinSig(resolvedBinPath);
     const refreshEnvName = binEnvVarName(baseFn);
     const refreshFn = `__${fn}_refresh_completion`;
     lines.push(`function ${refreshFn} --no-scope-shadowing`);
@@ -503,7 +504,9 @@ export function generateFishCompletion(
     lines.push(`    test -z "$_bin"; and set _bin (command -v ${programName})`);
     lines.push(`    test -z "$_bin"; and return 1`);
     lines.push(`    set -l _sig ${statSigExpr("$_bin", { shell: "fish" })}`);
-    lines.push(`    test "$_sig" = "${sig}"; and return 1`);
+    lines.push(
+      `    test "$_sig" = "${sig}"; and test "$_bin" = "${escapeDesc(resolvedBinPath)}"; and return 1`,
+    );
     lines.push(`    set -l _target (status current-filename)`);
     lines.push(`    test -n "$_target"; and test -f "$_target"; or return 1`);
     lines.push(`    "$_bin" __refresh-completion fish "$_target" --static 2>/dev/null`);

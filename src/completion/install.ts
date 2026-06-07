@@ -117,6 +117,17 @@ function readCachedMode(path: string): CompletionMode | undefined {
   }
 }
 
+function readCachedBinPath(path: string): string | null {
+  try {
+    if (!existsSync(path)) return null;
+    const head = readFileSync(path, "utf8").split("\n", 10).join("\n");
+    const m = head.match(/^# politty-bin-path: (.*)$/m);
+    return m ? m[1]! : null;
+  } catch {
+    return null;
+  }
+}
+
 function isManagedTarget(path: string, programName: string, shell: ShellType): boolean {
   try {
     if (!existsSync(path)) return false;
@@ -165,7 +176,7 @@ export function refreshIfStale(ctx: InstallContext, shell: ShellType): void {
     } catch {
       return;
     }
-    if (readCachedSig(target) === currentSig) return;
+    if (readCachedSig(target) === currentSig && readCachedBinPath(target) === binPath) return;
     // A managed target that already exists but carries no mode header predates
     // dispatcher mode — keep it static so an upgrade + self-refresh does not
     // silently rewrite a user's static completion into a dispatcher one. Only a
