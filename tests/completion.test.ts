@@ -1832,6 +1832,39 @@ describe("Completion", () => {
         expect(result.candidates.map((c) => c.value)).toContain("prod-a");
       });
 
+      it("skips runtime expand when a dep value is outside its static choices", async () => {
+        let calls = 0;
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            env: arg(z.string(), {
+              completion: { custom: { choices: ["dev", "prod"] } },
+            }),
+            target: arg(z.string().optional(), {
+              completion: {
+                custom: {
+                  expand: {
+                    dependsOn: ["env"],
+                    enumerate: (deps) => {
+                      calls++;
+                      return [`${deps.env}-a`];
+                    },
+                  },
+                },
+              },
+            }),
+          }),
+          run: () => {},
+        });
+
+        const ctx = parseCompletionContext(["--env", "qa", "--target", ""], cmd);
+        const result = await generateCandidates(ctx, { shell: "bash" });
+
+        expect(calls).toBe(0);
+        expect(result.candidates).toEqual([]);
+        expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
+      });
+
       it("should set file directive for file completion without extensions", async () => {
         const ctx = parseCompletionContext(["--config", ""], testCmd);
         const result = await gen(ctx);

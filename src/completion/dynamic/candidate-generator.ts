@@ -166,6 +166,24 @@ function executeShellCommand(command: string): CompletionCandidate[] {
   }
 }
 
+function staticChoices(vc: ValueCompletion | undefined): readonly string[] | undefined {
+  return vc?.type === "choices" ? vc.choices : undefined;
+}
+
+function runtimeExpandDepChoices(
+  context: CompletionContext,
+  dep: string,
+): readonly string[] | undefined {
+  const localOption = context.options.find((opt) => opt.name === dep && opt.isGlobal !== true);
+  if (localOption) return staticChoices(localOption.valueCompletion);
+
+  const positional = context.positionals.find((pos) => pos.name === dep);
+  if (positional) return staticChoices(positional.valueCompletion);
+
+  const globalOption = context.options.find((opt) => opt.name === dep && opt.isGlobal === true);
+  return staticChoices(globalOption?.valueCompletion);
+}
+
 /**
  * Two-stage `key=value` post-processing. Returns the transformed candidate
  * list plus whether it contains a bare `key=` entry so the caller can flip
@@ -229,6 +247,7 @@ function dropBareKeyEcho(
 async function resolveValueCandidates(
   vc: ValueCompletion,
   ctx: DynamicCompletionContext,
+  completionContext: CompletionContext,
   description?: string,
   dedupeKeyValues?: boolean,
 ): Promise<CandidateResult> {
@@ -330,7 +349,12 @@ async function resolveValueCandidates(
         // `--env prod --target <TAB>` still enumerates instead of treating the
         // dep as missing.
         const value = Array.isArray(raw) ? raw[raw.length - 1] : raw;
-        if (typeof value !== "string") {
+        const allowedValues = runtimeExpandDepChoices(completionContext, dep);
+        if (
+          typeof value !== "string" ||
+          allowedValues === undefined ||
+          !allowedValues.includes(value)
+        ) {
           missingDep = true;
           break;
         }
@@ -548,6 +572,7 @@ async function generateValueCandidates(
   return resolveValueCandidates(
     vc,
     resolverContext(context, options, targetFieldName),
+    context,
     description,
     dedupeKeyValues,
   );
