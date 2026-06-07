@@ -691,15 +691,16 @@ describe("Completion", () => {
         });
 
         // bash 3.2 ignores `compopt +o default`, so an empty COMPREPLY in the
-        // NoFileCompletion branch must be seeded with the empty sentinel to stop
-        // `complete -o default` from falling through to filenames.
+        // NoFileCompletion branch must be seeded with the empty sentinel only
+        // when compopt failed; Bash 4+ treats COMPREPLY=("") as a real empty
+        // candidate.
         expect(script).toMatch(
-          /elif \(\( _directive & 2 \)\); then[\s\S]*?if \(\( \$\{#COMPREPLY\[@\]\} == 0 \)\); then COMPREPLY=\( "" \); fi/,
+          /elif \(\( _directive & 2 \)\); then[\s\S]*?compopt \+o default 2>\/dev\/null \|\| _need_empty=1[\s\S]*?if \(\( _need_empty && \$\{#COMPREPLY\[@\]\} == 0 \)\); then COMPREPLY=\( "" \); fi/,
         );
         // Same fallback guard for the extension/matcher branch: when no file
         // matched the filter, do not leak unrelated files on bash 3.2.
         expect(script).toMatch(
-          /done < <\(compgen -f -- "\$_cur"\)\s*\n\s*if \(\( \$\{#COMPREPLY\[@\]\} == 0 \)\); then COMPREPLY=\( "" \); fi/,
+          /done < <\(compgen -f -- "\$_cur"\)\s*\n\s*if \(\( _need_empty && \$\{#COMPREPLY\[@\]\} == 0 \)\); then COMPREPLY=\( "" \); fi/,
         );
       });
 

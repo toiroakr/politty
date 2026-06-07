@@ -276,7 +276,8 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    done`);
   lines.push(`    local _ip="\${_inline_prefix:-}"`);
   lines.push(`    if (( \${#_exts[@]} > 0 || \${#_matchers[@]} > 0 )); then`);
-  lines.push(`        compopt +o default 2>/dev/null`);
+  lines.push(`        local _need_empty=0`);
+  lines.push(`        compopt +o default 2>/dev/null || _need_empty=1`);
   lines.push(`        compopt -o filenames 2>/dev/null`);
   lines.push(`        local _f _ext _pat _base _ok`);
   lines.push(`        while IFS= read -r _f; do`);
@@ -299,17 +300,19 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`            (( _ok )) && COMPREPLY+=("\${_ip}\${_f}")`);
   lines.push(`        done < <(compgen -f -- "$_cur")`);
   // bash 3.2 lacks compopt, so when no file matched the extension/matcher the
-  // top-level `complete -o default` would leak unrelated files; seed the empty
-  // sentinel to suppress it (mirrors the dir-only / NoFileCompletion branches).
-  lines.push(`        if (( \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
+  // top-level `complete -o default` would leak unrelated files. Only seed the
+  // empty sentinel when compopt failed; Bash 4+ treats COMPREPLY=("") as a real
+  // empty candidate instead of "no candidates".
+  lines.push(`        if (( _need_empty && \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
   lines.push(`    elif (( _directive & ${CompletionDirective.DirectoryCompletion} )); then`);
-  lines.push(`        compopt +o default 2>/dev/null`);
+  lines.push(`        local _need_empty=0`);
+  lines.push(`        compopt +o default 2>/dev/null || _need_empty=1`);
   lines.push(`        compopt -o filenames 2>/dev/null`);
   lines.push(`        local _d`);
   lines.push(
     `        while IFS= read -r _d; do COMPREPLY+=("\${_ip}\${_d}"); done < <(compgen -d -- "$_cur")`,
   );
-  lines.push(`        if (( \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
+  lines.push(`        if (( _need_empty && \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
   lines.push(`    elif (( _directive & ${CompletionDirective.FileCompletion} )); then`);
   lines.push(`        compopt -o filenames 2>/dev/null`);
   lines.push(`        local _p`);
@@ -317,11 +320,13 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
     `        while IFS= read -r _p; do COMPREPLY+=("\${_ip}\${_p}"); done < <(compgen -f -- "$_cur")`,
   );
   lines.push(`    elif (( _directive & ${CompletionDirective.NoFileCompletion} )); then`);
-  lines.push(`        compopt +o default 2>/dev/null`);
+  lines.push(`        local _need_empty=0`);
+  lines.push(`        compopt +o default 2>/dev/null || _need_empty=1`);
   // bash 3.2 lacks compopt, so `complete -o default` still falls through to
   // file completion when COMPREPLY is empty; seed the empty sentinel to
-  // suppress it (mirrors the static script's NoFileCompletion handling).
-  lines.push(`        if (( \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
+  // suppress it only when compopt failed (mirrors the static script's
+  // NoFileCompletion handling on bash 3.2).
+  lines.push(`        if (( _need_empty && \${#COMPREPLY[@]} == 0 )); then COMPREPLY=( "" ); fi`);
   lines.push(`    fi`);
   lines.push(`    if (( _directive & ${CompletionDirective.NoSpace} )); then`);
   lines.push(`        compopt -o nospace 2>/dev/null`);
