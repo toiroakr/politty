@@ -241,8 +241,8 @@ function bashDispatcher(_command: AnyCommand, options: CompletionOptions): Compl
   lines.push(`    local _worker="$1" _sig="$2" _bin="$3" _head`);
   lines.push(`    [[ -f "$_worker" ]] || return 1`);
   lines.push(`    _head="$(head -n 12 "$_worker" 2>/dev/null)" || return 1`);
-  lines.push(`    grep -qF "# politty-bin-sig: $_sig" <<< "$_head" || return 1`);
-  lines.push(`    grep -qF "# politty-bin-path: $_bin" <<< "$_head" || return 1`);
+  lines.push(`    grep -qxF "# politty-bin-sig: $_sig" <<< "$_head" || return 1`);
+  lines.push(`    grep -qxF "# politty-bin-path: $_bin" <<< "$_head" || return 1`);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_apply_dynamic_output() {`);
@@ -610,8 +610,8 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    local _worker="$1" _sig="$2" _bin="$3" _head`);
   lines.push(`    [[ -f "$_worker" ]] || return 1`);
   lines.push(`    _head="$(head -n 12 "$_worker" 2>/dev/null)" || return 1`);
-  lines.push(`    grep -qF "# politty-bin-sig: $_sig" <<< "$_head" || return 1`);
-  lines.push(`    grep -qF "# politty-bin-path: $_bin" <<< "$_head" || return 1`);
+  lines.push(`    grep -qxF "# politty-bin-sig: $_sig" <<< "$_head" || return 1`);
+  lines.push(`    grep -qxF "# politty-bin-path: $_bin" <<< "$_head" || return 1`);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_cdescribe() {`);

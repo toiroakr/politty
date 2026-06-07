@@ -782,7 +782,7 @@ describe("Completion", () => {
           programName: "mycli",
           mode: "dispatcher",
         }).script;
-        expect(bash).toContain(`grep -qF "# politty-bin-path: $_bin" <<< "$_head"`);
+        expect(bash).toContain(`grep -qxF "# politty-bin-path: $_bin" <<< "$_head"`);
         expect(bash).toContain(
           '__mycli_worker_matches_bin "$_worker" "$_sig" "$_bin" && __mycli_load_worker "$_worker"',
         );
@@ -792,7 +792,7 @@ describe("Completion", () => {
           programName: "mycli",
           mode: "dispatcher",
         }).script;
-        expect(zsh).toContain(`grep -qF "# politty-bin-path: $_bin" <<< "$_head"`);
+        expect(zsh).toContain(`grep -qxF "# politty-bin-path: $_bin" <<< "$_head"`);
         expect(zsh).toContain(
           '__mycli_worker_matches_bin "$_worker" "$_sig" "$_bin" && __mycli_load_worker "$_worker"',
         );
@@ -2549,7 +2549,7 @@ describe("Completion", () => {
       // self-refresh sig check matches the embedded `# politty-bin-sig`.
       expect(script).toContain('_bin="${MYCLI_BIN:-$(type -P mycli 2>/dev/null)}"');
       expect(script).toContain(`"$_bin" != '${fakeBin}'`);
-      expect(script).toContain('grep -qF "# politty-bin-path: $_bin"');
+      expect(script).toContain('grep -qxF "# politty-bin-path: $_bin"');
     });
 
     it("embeds a zsh self-refresh guard in static scripts", () => {
@@ -2571,7 +2571,7 @@ describe("Completion", () => {
       expect(script).toContain('if __mycli_self_refresh "$@"; then');
       expect(script).toContain('_bin="${MYCLI_BIN:-$(whence -p mycli 2>/dev/null)}"');
       expect(script).toContain(`"$_bin" != '${fakeBin}'`);
-      expect(script).toContain('grep -qF "# politty-bin-path: $_bin"');
+      expect(script).toContain('grep -qxF "# politty-bin-path: $_bin"');
     });
 
     it("zsh self-refresh re-enters the fpath entrypoint for dashed program names", () => {
@@ -2829,6 +2829,7 @@ describe("Completion", () => {
       expect(snippet).toContain("__mycli_load_completion()");
       expect(snippet).toContain("politty-bin-sig:");
       expect(snippet).toContain("politty-bin-path:");
+      expect(snippet).toContain("grep -qxF");
       expect(snippet).toContain("completion.bash");
       expect(snippet).toContain('source "$_cache"');
     });

@@ -68,7 +68,7 @@ function generateBashLoader(opts: LoaderOptions): string {
     _sig=$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null) || return 0
     _sig_hdr="# politty-bin-sig: $_sig"
     _path_hdr="# politty-bin-path: $_bin"
-    if [[ ! -f "$_cache" ]] || ! head -8 "$_cache" 2>/dev/null | grep -qF "$_sig_hdr" || ! head -8 "$_cache" 2>/dev/null | grep -qF "$_path_hdr"; then
+    if [[ ! -f "$_cache" ]] || ! head -8 "$_cache" 2>/dev/null | grep -qxF "$_sig_hdr" || ! head -8 "$_cache" 2>/dev/null | grep -qxF "$_path_hdr"; then
         # Use the hidden __refresh-completion subcommand instead of
         # \`$_bin completion bash\`: the foreground completion command
         # is subject to user setup/cleanup/prompt and required
@@ -106,7 +106,7 @@ function generateZshLoader(opts: LoaderOptions): string {
     _sig=$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null) || return 0
     _sig_hdr="# politty-bin-sig: $_sig"
     _path_hdr="# politty-bin-path: $_bin"
-    if [[ ! -f "$_cache" ]] || ! head -8 "$_cache" 2>/dev/null | grep -qF "$_sig_hdr" || ! head -8 "$_cache" 2>/dev/null | grep -qF "$_path_hdr"; then
+    if [[ ! -f "$_cache" ]] || ! head -8 "$_cache" 2>/dev/null | grep -qxF "$_sig_hdr" || ! head -8 "$_cache" 2>/dev/null | grep -qxF "$_path_hdr"; then
         # See bash loader for why we use __refresh-completion instead
         # of \`$_bin completion zsh\`.
         "$_bin" __refresh-completion zsh 2>/dev/null
