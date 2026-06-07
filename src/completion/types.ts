@@ -65,7 +65,12 @@ export interface CompletionOptions {
   includeSubcommands?: boolean;
   /** Include description in completions where supported (default: true) */
   includeDescriptions?: boolean;
-  /** Completion script mode (default: dispatcher). */
+  /**
+   * Completion script mode.
+   *
+   * `generateCompletion` defaults to `static` when this is omitted. The
+   * `completion <shell>` subcommand passes `dispatcher` explicitly by default.
+   */
   mode?: CompletionMode;
   /** Global args schema for deriving global options in completion */
   globalArgsSchema?: ArgsSchema;
