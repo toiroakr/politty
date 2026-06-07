@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
+import { resolveBundledWorkerPath } from "../src/completion/bundled-worker.js";
 import {
   CompletionDirective,
   createCompletionCommand,
@@ -34,7 +35,6 @@ import {
   installPath,
   refreshIfStale,
 } from "../src/completion/install.js";
-import { resolveBundledWorkerPath } from "../src/completion/bundled-worker.js";
 import { defaultCacheDir, generateLoader } from "../src/completion/loader.js";
 import {
   arg,
@@ -2717,6 +2717,25 @@ describe("Completion", () => {
       );
 
       expect(readFileSync(target, "utf8")).toBe("important user file\n");
+    });
+
+    it("refreshIfStale does not overwrite a similarly named program target", () => {
+      const target = join(mkdtempSync(join(tmpdir(), "politty-static-")), "other-completion.bash");
+      const otherCompletion = `${[
+        "# politty-completion-version: 1",
+        "# politty-bin-sig: 0",
+        "# program: mycli-extra",
+        "# shell: bash",
+        "_mycli_extra_completions() { :; }",
+      ].join("\n")}\n`;
+      writeFileSync(target, otherCompletion);
+
+      refreshIfStale(
+        { rootCommand: cmd, programName: "mycli", binPath: fakeBin, targetPath: target },
+        "bash",
+      );
+
+      expect(readFileSync(target, "utf8")).toBe(otherCompletion);
     });
 
     it("refreshIfStale leaves the cache untouched when bin-sig matches", () => {

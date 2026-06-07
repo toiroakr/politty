@@ -120,11 +120,13 @@ function readCachedMode(path: string): CompletionMode | undefined {
 function isManagedTarget(path: string, programName: string, shell: ShellType): boolean {
   try {
     if (!existsSync(path)) return false;
-    const head = readFileSync(path, "utf8").split("\n", 8).join("\n");
+    const lines = readFileSync(path, "utf8")
+      .split("\n", 8)
+      .map((line) => line.trimEnd());
     return (
-      /^# politty-completion-version: \S+/m.test(head) &&
-      head.includes(`# program: ${programName}`) &&
-      head.includes(`# shell: ${shell}`)
+      lines.some((line) => /^# politty-completion-version: \S+$/.test(line)) &&
+      lines.includes(`# program: ${programName}`) &&
+      lines.includes(`# shell: ${shell}`)
     );
   } catch {
     return false;
