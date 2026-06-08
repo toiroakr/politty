@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # Run on every PR regardless of base branch, so checks (including the macOS
+  # shell-completion job) cover stacked / feature-branch PRs too, not only
+  # main-targeting ones.
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
