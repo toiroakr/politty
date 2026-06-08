@@ -54,3 +54,20 @@ describe("stripMarkers whitespace handling", () => {
     expect(verifyMigration(oldMd, newMd).ok).toBe(true);
   });
 });
+
+describe("stripMarkers CRLF handling", () => {
+  it("strips markers and normalizes CRLF docs identically to LF", () => {
+    const crlf =
+      "<!-- politty:command:x:start -->\r\n# Title\r\n\r\nbody\r\n<!-- politty:command:x:end -->\r\n";
+    const lf =
+      "<!-- politty:command:x:start -->\n# Title\n\nbody\n<!-- politty:command:x:end -->\n";
+    expect(stripMarkers(crlf)).toBe(stripMarkers(lf));
+    expect(stripMarkers(crlf)).toBe("# Title\n\nbody");
+  });
+
+  it("treats a pure CRLF<->LF difference as non-drift", () => {
+    const oldMd = "<!-- politty:command:x:start -->\r\nbody\r\n<!-- politty:command:x:end -->\r\n";
+    const newMd = "body\n";
+    expect(verifyMigration(oldMd, newMd).ok).toBe(true);
+  });
+});

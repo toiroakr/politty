@@ -24,9 +24,14 @@ const ANY_POLITTY_MARKER = /^\s*<!--\s*politty:[^>]*-->\s*$/;
  * are artifacts of removing marker lines). Meaningful whitespace — e.g. the
  * indentation of the first content line — is preserved so real content drift
  * is never masked.
+ *
+ * Line endings are normalized to LF up-front so CRLF (Windows) docs are handled
+ * identically: blank-line normalization stays reliable and a pure EOL-only
+ * difference between the old and new doc is not reported as content drift.
  */
 export function stripMarkers(content: string): string {
-  const kept = content.split("\n").filter((line) => !ANY_POLITTY_MARKER.test(line));
+  const normalized = content.replace(/\r\n?/g, "\n");
+  const kept = normalized.split("\n").filter((line) => !ANY_POLITTY_MARKER.test(line));
   return kept
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
