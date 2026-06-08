@@ -793,7 +793,9 @@ describe("Completion", () => {
           programName: "mycli",
           mode: "dispatcher",
         }).script;
-        expect(zsh).toContain(`grep -qxF "# politty-bin-path: $_bin" <<< "$_head"`);
+        // zsh matches the bin-path header in-process (no `grep` fork): whole-line
+        // anchored pattern match, mirroring the bundled-worker header check.
+        expect(zsh).toContain(`*$'\\n'"# politty-bin-path: $_bin"$'\\n'*`);
         expect(zsh).toContain(
           '__mycli_worker_matches_bin "$_worker" "$_sig" "$_bin" && __mycli_load_worker "$_worker"',
         );
