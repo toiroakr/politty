@@ -221,7 +221,29 @@ export interface MainOptions {
   displayErrors?: boolean;
   /** Prompt resolver for interactive missing-arg prompts (e.g. from `politty/prompt/clack`). */
   prompt?: PromptResolver | undefined;
+  /**
+   * Fallback hook invoked when the first positional is not a known subcommand
+   * (and the root command exposes subcommands). Enables CLI plugin dispatch:
+   * the handler receives the unknown name and the args that follow it, and may
+   * exec an external `<cli>-<name>` binary.
+   *
+   * Return a number to treat the command as handled and exit with that code.
+   * Return `undefined` (or omit the option) to fall back to the default
+   * "unknown subcommand" / help behavior. Not invoked for completion
+   * (`__complete`) invocations.
+   */
+  onUnknownSubcommand?: UnknownSubcommandHandler | undefined;
 }
+
+/**
+ * Handler for an unrecognized leading subcommand. See {@link MainOptions.onUnknownSubcommand}.
+ */
+export type UnknownSubcommandHandler = (context: {
+  /** The unrecognized subcommand name (first positional). */
+  name: string;
+  /** Args following the name, forwarded verbatim to the plugin. */
+  args: readonly string[];
+}) => number | undefined | Promise<number | undefined>;
 
 /**
  * Options for runCommand (programmatic/test usage)

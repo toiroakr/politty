@@ -628,6 +628,102 @@ describe("runMain internal subcommand bypass", () => {
   });
 });
 
+describe("runMain onUnknownSubcommand", () => {
+  it("invokes the handler with the unknown name and forwarded args, exiting with its code", async () => {
+    using _argv = useArgv(["node", "test", "plugin-name", "foo", "--bar"]);
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn().mockResolvedValue(3);
+    const known = defineCommand({ name: "known", run: () => {} });
+    const cmd = defineCommand({ name: "test", subCommands: { known } });
+
+    await runMain(cmd, { onUnknownSubcommand });
+
+    expect(onUnknownSubcommand).toHaveBeenCalledWith({
+      name: "plugin-name",
+      args: ["foo", "--bar"],
+    });
+    expect(exitSpy).toHaveBeenCalledWith(3);
+  });
+
+  it("forwards --help when it follows the unknown name", async () => {
+    using _argv = useArgv(["node", "test", "plugin-name", "--help"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn().mockReturnValue(0);
+    const known = defineCommand({ name: "known", run: () => {} });
+    const cmd = defineCommand({ name: "test", subCommands: { known } });
+
+    await runMain(cmd, { onUnknownSubcommand });
+
+    expect(onUnknownSubcommand).toHaveBeenCalledWith({
+      name: "plugin-name",
+      args: ["--help"],
+    });
+  });
+
+  it("does not invoke the handler for known subcommands", async () => {
+    using _argv = useArgv(["node", "test", "known"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn();
+    const knownRun = vi.fn();
+    const known = defineCommand({ name: "known", run: knownRun });
+    const cmd = defineCommand({ name: "test", subCommands: { known } });
+
+    await runMain(cmd, { onUnknownSubcommand });
+
+    expect(onUnknownSubcommand).not.toHaveBeenCalled();
+    expect(knownRun).toHaveBeenCalled();
+  });
+
+  it("falls back to default behavior when the handler returns undefined", async () => {
+    using _argv = useArgv(["node", "test", "plugin-name"]);
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn().mockReturnValue(undefined);
+    const setup = vi.fn();
+    const known = defineCommand({ name: "known", run: () => {} });
+    const cmd = defineCommand({ name: "test", subCommands: { known } });
+
+    await runMain(cmd, { onUnknownSubcommand, setup });
+
+    expect(onUnknownSubcommand).toHaveBeenCalled();
+    // Not handled → host CLI lifecycle proceeds (setup runs, help is shown).
+    expect(setup).toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalled();
+  });
+
+  it("does not invoke the handler when no positional is present", async () => {
+    using _argv = useArgv(["node", "test", "--help"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn();
+    const known = defineCommand({ name: "known", run: () => {} });
+    const cmd = defineCommand({ name: "test", subCommands: { known } });
+
+    await runMain(cmd, { onUnknownSubcommand });
+
+    expect(onUnknownSubcommand).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a global option value as an unknown subcommand", async () => {
+    using _argv = useArgv(["node", "test", "--name", "value"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn();
+    const known = defineCommand({ name: "known", run: () => {} });
+    const cmd = defineCommand({ name: "test", subCommands: { known } });
+
+    await runMain(cmd, {
+      onUnknownSubcommand,
+      globalArgs: z.object({ name: arg(z.string().optional(), {}) }),
+    });
+
+    expect(onUnknownSubcommand).not.toHaveBeenCalled();
+  });
+});
+
 describe("runMain runMainHook", () => {
   it("invokes the hook once with the parsed argv before any command execution", async () => {
     using _argv = useArgv(["node", "test", "--flag", "value"]);

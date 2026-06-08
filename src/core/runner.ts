@@ -7,7 +7,7 @@ import {
 } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
-import { findFirstPositional } from "../parser/subcommand-scanner.js";
+import { findFirstPositional, findFirstPositionalIndex } from "../parser/subcommand-scanner.js";
 import type {
   AnyCommand,
   ArgsSchema,
@@ -250,6 +250,29 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
 
   const globalExtracted = extractAndValidateGlobal(effectiveOptions);
 
+  // Plugin dispatch: when the first positional is not a known subcommand and a
+  // handler is registered, delegate to it (e.g. exec an external `<cli>-<name>`
+  // binary). Runs before global setup/cleanup so plugins are independent of the
+  // host CLI's lifecycle, and is skipped for internal (`__*`) invocations.
+  if (
+    effectiveOptions.onUnknownSubcommand &&
+    !isInternalSubcommandInvocation(command, argv, globalExtractedForBypass)
+  ) {
+    const knownSubCommands = listSubCommandNamesWithAliases(command);
+    if (knownSubCommands.size > 0) {
+      const positionalIndex = findFirstPositionalIndex(argv, globalExtracted);
+      const name = positionalIndex >= 0 ? argv[positionalIndex] : undefined;
+      if (name && !knownSubCommands.has(name)) {
+        const forwardArgs = argv.slice(positionalIndex + 1);
+        const exitCode = await effectiveOptions.onUnknownSubcommand({ name, args: forwardArgs });
+        if (typeof exitCode === "number") {
+          await flushStandardStreams();
+          process.exit(exitCode);
+        }
+      }
+    }
+  }
+
   // Global setup
   if (effectiveOptions.setup) {
     try {
@@ -303,17 +326,23 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     }
   }
 
-  // Flush stdout/stderr before exit to prevent truncated output when piped.
-  // When stdout/stderr is a pipe, writes are buffered asynchronously.
-  // Calling process.exit() before the buffer is drained causes data loss.
+  await flushStandardStreams();
+
+  process.exit(result.exitCode);
+}
+
+/**
+ * Flush stdout/stderr before exit to prevent truncated output when piped.
+ * When stdout/stderr is a pipe, writes are buffered asynchronously, so calling
+ * process.exit() before the buffer is drained causes data loss.
+ */
+async function flushStandardStreams(): Promise<void> {
   if (process.stdout.writableLength > 0) {
     await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
   }
   if (process.stderr.writableLength > 0) {
     await new Promise<void>((resolve) => process.stderr.once("drain", resolve));
   }
-
-  process.exit(result.exitCode);
 }
 
 /**

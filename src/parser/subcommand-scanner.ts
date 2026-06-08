@@ -319,23 +319,25 @@ export function scanForSubcommand(
 const BUILTIN_FLAGS = new Set(["--help", "-h", "--help-all", "-H", "--version"]);
 
 /**
- * Find the first positional argument in argv, properly skipping global flag values.
+ * Find the index of the first positional argument in argv, properly skipping
+ * global flag values. Returns -1 when no positional is present (or when a `--`
+ * terminator is encountered before any positional).
  * Without globalExtracted, falls back to the first non-flag token.
  */
-export function findFirstPositional(
+export function findFirstPositionalIndex(
   argv: string[],
   globalExtracted?: ExtractedFields,
-): string | undefined {
+): number {
   if (!globalExtracted) {
-    return argv.find((arg) => !arg.startsWith("-"));
+    return argv.findIndex((arg) => !arg.startsWith("-"));
   }
 
   const lookup = buildGlobalFlagLookup(globalExtracted);
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
-    if (!arg.startsWith("-")) return arg;
-    if (arg === "--") return undefined;
+    if (!arg.startsWith("-")) return i;
+    if (arg === "--") return -1;
 
     // Long option
     if (arg.startsWith("--")) {
@@ -360,5 +362,17 @@ export function findFirstPositional(
       }
     }
   }
-  return undefined;
+  return -1;
+}
+
+/**
+ * Find the first positional argument in argv, properly skipping global flag values.
+ * Without globalExtracted, falls back to the first non-flag token.
+ */
+export function findFirstPositional(
+  argv: string[],
+  globalExtracted?: ExtractedFields,
+): string | undefined {
+  const index = findFirstPositionalIndex(argv, globalExtracted);
+  return index >= 0 ? argv[index] : undefined;
 }
