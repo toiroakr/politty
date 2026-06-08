@@ -395,6 +395,48 @@ async function runCommandInternal<TResult = unknown>(
       ...parseResult.rawGlobalArgs,
     };
 
+    // Nested plugin dispatch: an unknown positional under a known parent
+    // command (e.g. `cli foo bar` -> `cli-foo-bar`). Runs before --help/--version
+    // handling so those flags are forwarded to the plugin, mirroring the
+    // root-level dispatch in runMain. Root level (empty command path) is handled
+    // in runMain before global setup; here we only cover nested levels.
+    const nestedCommandPath = context.commandPath ?? [];
+    if (options.onUnknownSubcommand && nestedCommandPath.length > 0) {
+      const knownSubCommands = listSubCommandNamesWithAliases(command);
+      if (knownSubCommands.size > 0) {
+        const positionalIndex = findFirstPositionalIndex(argv, options._globalExtracted);
+        const name = positionalIndex >= 0 ? argv[positionalIndex] : undefined;
+        if (name && !knownSubCommands.has(name)) {
+          const forwardArgs = argv.slice(positionalIndex + 1);
+          const exitCode = await options.onUnknownSubcommand({
+            commandPath: nestedCommandPath,
+            name,
+            args: forwardArgs,
+          });
+          if (typeof exitCode === "number") {
+            collector?.stop();
+            // In a real CLI run (runMain sets handleSignals), exit directly with
+            // the plugin's code, mirroring root-level dispatch. Programmatic
+            // runCommand callers get a typed result instead.
+            if (options.handleSignals) {
+              await flushStandardStreams();
+              process.exit(exitCode);
+            }
+            return exitCode === 0
+              ? { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() }
+              : {
+                  success: false,
+                  error: new Error(
+                    `Plugin "${[...nestedCommandPath, name].join(" ")}" exited with code ${exitCode}`,
+                  ),
+                  exitCode,
+                  logs: getCurrentLogs(),
+                };
+          }
+        }
+      }
+    }
+
     // Handle --help or --help-all
     if (parseResult.helpRequested || parseResult.helpAllRequested) {
       // Check if there's an unknown subcommand specified
@@ -490,46 +532,9 @@ async function runCommandInternal<TResult = unknown>(
       }
     }
 
-    // If command has subcommands but none specified, attempt nested plugin
-    // dispatch, then fall back to help. Root-level dispatch is handled in
-    // `runMain` before global setup; here we cover nested levels (the command
-    // path is non-empty), e.g. `cli foo bar` -> `cli-foo-bar`.
+    // If command has subcommands but none specified, show help
     const subCmds = listSubCommands(command);
     if (subCmds.length > 0 && !parseResult.subCommand && !command.run) {
-      const commandPath = context.commandPath ?? [];
-      if (options.onUnknownSubcommand && commandPath.length > 0) {
-        const positionalIndex = findFirstPositionalIndex(argv, options._globalExtracted);
-        const name = positionalIndex >= 0 ? argv[positionalIndex] : undefined;
-        if (name) {
-          const forwardArgs = argv.slice(positionalIndex + 1);
-          const exitCode = await options.onUnknownSubcommand({
-            commandPath,
-            name,
-            args: forwardArgs,
-          });
-          if (typeof exitCode === "number") {
-            collector?.stop();
-            // In a real CLI run (runMain sets handleSignals), exit directly with
-            // the plugin's code, mirroring the root-level dispatch in runMain.
-            // Programmatic runCommand callers get a typed result instead.
-            if (options.handleSignals) {
-              await flushStandardStreams();
-              process.exit(exitCode);
-            }
-            return exitCode === 0
-              ? { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() }
-              : {
-                  success: false,
-                  error: new Error(
-                    `Plugin "${[...commandPath, name].join(" ")}" exited with code ${exitCode}`,
-                  ),
-                  exitCode,
-                  logs: getCurrentLogs(),
-                };
-          }
-        }
-      }
-
       const help = generateHelp(command, {
         showSubcommands: options.showSubcommands ?? true,
         context,

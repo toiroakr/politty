@@ -744,6 +744,24 @@ describe("runMain onUnknownSubcommand", () => {
     expect(exitSpy).toHaveBeenCalledWith(5);
   });
 
+  it("forwards --help to a nested plugin instead of showing parent help", async () => {
+    using _argv = useArgv(["node", "test", "parent", "plugin-name", "--help"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn().mockReturnValue(0);
+    const child = defineCommand({ name: "child", run: () => {} });
+    const parent = defineCommand({ name: "parent", subCommands: { child } });
+    const cmd = defineCommand({ name: "test", subCommands: { parent } });
+
+    await runMain(cmd, { onUnknownSubcommand });
+
+    expect(onUnknownSubcommand).toHaveBeenCalledWith({
+      commandPath: ["parent"],
+      name: "plugin-name",
+      args: ["--help"],
+    });
+  });
+
   it("does not dispatch for a known nested subcommand", async () => {
     using _argv = useArgv(["node", "test", "parent", "child"]);
     using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
