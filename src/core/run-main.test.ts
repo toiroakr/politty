@@ -640,6 +640,7 @@ describe("runMain onUnknownSubcommand", () => {
     await runMain(cmd, { onUnknownSubcommand });
 
     expect(onUnknownSubcommand).toHaveBeenCalledWith({
+      commandPath: [],
       name: "plugin-name",
       args: ["foo", "--bar"],
     });
@@ -657,6 +658,7 @@ describe("runMain onUnknownSubcommand", () => {
     await runMain(cmd, { onUnknownSubcommand });
 
     expect(onUnknownSubcommand).toHaveBeenCalledWith({
+      commandPath: [],
       name: "plugin-name",
       args: ["--help"],
     });
@@ -721,6 +723,41 @@ describe("runMain onUnknownSubcommand", () => {
     });
 
     expect(onUnknownSubcommand).not.toHaveBeenCalled();
+  });
+
+  it("dispatches for an unknown subcommand nested under a known parent", async () => {
+    using _argv = useArgv(["node", "test", "parent", "plugin-name", "rest", "--flag"]);
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn().mockResolvedValue(5);
+    const child = defineCommand({ name: "child", run: () => {} });
+    const parent = defineCommand({ name: "parent", subCommands: { child } });
+    const cmd = defineCommand({ name: "test", subCommands: { parent } });
+
+    await runMain(cmd, { onUnknownSubcommand });
+
+    expect(onUnknownSubcommand).toHaveBeenCalledWith({
+      commandPath: ["parent"],
+      name: "plugin-name",
+      args: ["rest", "--flag"],
+    });
+    expect(exitSpy).toHaveBeenCalledWith(5);
+  });
+
+  it("does not dispatch for a known nested subcommand", async () => {
+    using _argv = useArgv(["node", "test", "parent", "child"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn();
+    const childRun = vi.fn();
+    const child = defineCommand({ name: "child", run: childRun });
+    const parent = defineCommand({ name: "parent", subCommands: { child } });
+    const cmd = defineCommand({ name: "test", subCommands: { parent } });
+
+    await runMain(cmd, { onUnknownSubcommand });
+
+    expect(onUnknownSubcommand).not.toHaveBeenCalled();
+    expect(childRun).toHaveBeenCalled();
   });
 });
 
