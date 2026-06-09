@@ -140,8 +140,8 @@ build: (md) => md`
 | `remove`       | `SectionName[]`                                    | Drop these sections                            |
 | `insertBefore` | `Partial<Record<SectionName, string \| string[]>>` | Insert before the named section                |
 | `insertAfter`  | `Partial<Record<SectionName, string \| string[]>>` | Insert after the named section                 |
-| `prepend`      | `string \| string[]`                               | Place before everything                        |
-| `append`       | `string \| string[]`                               | Place after everything                         |
+
+To add prose before/after the whole block, wrap the result in `md\`…\``and write it around the interpolated`${md.sections(...)}`(shown above) — there is no`prepend`/`append`.
 
 - `SectionName` is one of `heading` / `description` / `usage` / `arguments` / `options` / `globalOptionsLink` / `subcommands` / `examples` / `notes`. An unknown name is a type error (and throws at runtime).
 - Edits are anchored by section name and applied in render order; all nine anchors always exist, so `insertAfter: { arguments: … }` works even when the command has no arguments. Empty sections are dropped from the output.

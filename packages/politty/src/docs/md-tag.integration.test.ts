@@ -138,10 +138,16 @@ describe("createCommandMd.sections", () => {
     expect(out.indexOf("ONE")).toBeGreaterThan(out.indexOf("**Usage**"));
   });
 
-  it("remove drops sections; prepend/append wrap the block", async () => {
+  it("remove drops sections; surrounding prose is added by wrapping in md``", async () => {
     const info = await buildCommandInfo(initCommand, "project-cli", ["init"]);
     const md = createCommandMd(info, { baseHeadingLevel: 2 });
-    const out = md.sections({ remove: ["heading"], prepend: "TOP", append: "BOTTOM" });
+    const out = md`
+      TOP
+
+      ${md.sections({ remove: ["heading"] })}
+
+      BOTTOM
+    `;
     expect(out).not.toContain("## init");
     expect(out.startsWith("TOP")).toBe(true);
     expect(out.endsWith("BOTTOM")).toBe(true);

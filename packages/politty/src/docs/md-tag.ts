@@ -100,6 +100,9 @@ export type SectionEdit = SectionContent | readonly SectionContent[];
 /**
  * Declarative edits applied to a command's default section list. Operations
  * are anchored by section name; anything not mentioned keeps its default.
+ *
+ * Prose around the whole block is not an operation here — wrap the result in
+ * `md\`…\`` and write it before/after the interpolated `md.sections(...)`.
  */
 export interface SectionsSpec {
   /** Swap a section's content, keeping its position. */
@@ -110,10 +113,6 @@ export interface SectionsSpec {
   insertBefore?: Partial<Record<SectionName, SectionEdit>>;
   /** Insert content immediately after the named section. */
   insertAfter?: Partial<Record<SectionName, SectionEdit>>;
-  /** Content placed before everything. */
-  prepend?: SectionEdit;
-  /** Content placed after everything. */
-  append?: SectionEdit;
 }
 
 /**
@@ -219,7 +218,7 @@ export function createCommandMd(info: CommandInfo, options: CommandMdOptions = {
       edit === undefined ? [] : Array.isArray(edit) ? [...edit] : [edit as SectionContent];
 
     const removed = new Set<SectionName>(spec.remove ?? []);
-    const out: string[] = [...toItems(spec.prepend)];
+    const out: string[] = [];
     for (const name of SECTION_NAMES) {
       out.push(...toItems(spec.insertBefore?.[name]));
       if (!removed.has(name)) {
@@ -228,7 +227,6 @@ export function createCommandMd(info: CommandInfo, options: CommandMdOptions = {
       }
       out.push(...toItems(spec.insertAfter?.[name]));
     }
-    out.push(...toItems(spec.append));
     return out.filter((s) => s.length > 0).join("\n\n");
   };
 
