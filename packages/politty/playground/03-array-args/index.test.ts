@@ -61,7 +61,7 @@ describe("03-array-args", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
-      files: { "playground/03-array-args/README.md": [""] },
+      files: { "playground/03-array-args/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

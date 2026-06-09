@@ -95,7 +95,7 @@ describe("14-transform-refine", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: cli,
-      files: { "playground/14-transform-refine/README.md": [""] },
+      files: { "playground/14-transform-refine/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

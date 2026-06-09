@@ -27,7 +27,9 @@ const docConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
     `,
   },
   files: {
-    "playground/23-global-options-index-markers/README.md": ["init", "build", "deploy"],
+    "playground/23-global-options-index-markers/README.md": {
+      commands: ["init", "build", "deploy"],
+    },
   },
   formatter: mdFormatter,
 };
@@ -154,11 +156,9 @@ describe("23-global-options-index-markers", () => {
         `,
       },
       files: {
-        "playground/23-global-options-index-markers/README-CUSTOM-HEADING.md": [
-          "init",
-          "build",
-          "deploy",
-        ],
+        "playground/23-global-options-index-markers/README-CUSTOM-HEADING.md": {
+          commands: ["init", "build", "deploy"],
+        },
       },
       formatter: mdFormatter,
     };

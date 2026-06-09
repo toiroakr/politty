@@ -24,7 +24,7 @@ describe("migrate integration", () => {
     try {
       await generateDoc({
         command: initCommand,
-        files: { [rel]: [""] },
+        files: { [rel]: { commands: [""] } },
       });
     } finally {
       if (prev === undefined) delete process.env.POLITTY_DOCS_UPDATE;

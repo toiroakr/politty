@@ -48,7 +48,7 @@ const realFs = await vi.importActual<typeof fs>("node:fs");
 // Shared config for all documentation tests - fileMap is built from this
 const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
   command,
-  files: { "playground/22-examples/README.md": ["", "read", "write", "check"] },
+  files: { "playground/22-examples/README.md": { commands: ["", "read", "write", "check"] } },
   formatter: mdFormatter,
 };
 

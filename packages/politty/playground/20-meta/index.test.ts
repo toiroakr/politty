@@ -53,7 +53,7 @@ describe("20-meta", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
-      files: { "playground/20-meta/README.md": [""] },
+      files: { "playground/20-meta/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

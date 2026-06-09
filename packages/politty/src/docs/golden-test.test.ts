@@ -97,7 +97,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
       });
 
@@ -130,14 +130,14 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: [""] },
+        files: { [filePath]: { commands: [""] } },
       });
 
       vi.stubEnv(UPDATE_GOLDEN_ENV, "");
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: [""] },
+        files: { [filePath]: { commands: [""] } },
       });
 
       expect(result.success).toBe(true);
@@ -152,7 +152,7 @@ describe("golden-test", () => {
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: [""] },
+        files: { [filePath]: { commands: [""] } },
       });
 
       expect(result.success).toBe(false);
@@ -169,7 +169,7 @@ describe("golden-test", () => {
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: [""] },
+        files: { [filePath]: { commands: [""] } },
       });
 
       expect(result.success).toBe(true);
@@ -187,7 +187,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: ["config"],
+          [filePath]: { commands: ["config"] },
         },
       });
 
@@ -208,8 +208,8 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [mainPath]: ["greet"],
-          [configPath]: ["config"],
+          [mainPath]: { commands: ["greet"] },
+          [configPath]: { commands: ["config"] },
         },
       });
 
@@ -234,7 +234,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         ignores: ["config"],
       });
@@ -257,7 +257,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: ["config"],
+          [filePath]: { commands: ["config"] },
         },
         ignores: ["config set"],
       });
@@ -277,7 +277,7 @@ describe("golden-test", () => {
         generateDoc({
           command: testCommand,
           files: {
-            [filePath]: ["config"],
+            [filePath]: { commands: ["config"] },
           },
           ignores: ["config"],
         }),
@@ -291,7 +291,7 @@ describe("golden-test", () => {
         generateDoc({
           command: testCommand,
           files: {
-            [filePath]: ["config get"],
+            [filePath]: { commands: ["config get"] },
           },
           ignores: ["config"],
         }),
@@ -307,10 +307,12 @@ describe("golden-test", () => {
         command: testCommand,
         files: {
           [filePath]: {
-            "": (md) =>
-              md`
+            commands: {
+              "": (md) =>
+                md`
 # Custom heading\n\nCustom content for the root command.
-              `,
+                `,
+            },
           },
         },
       });
@@ -363,8 +365,8 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [mainPath]: [""],
-          [configPath]: ["config"],
+          [mainPath]: { commands: [""] },
+          [configPath]: { commands: ["config"] },
         },
         ignores: ["greet"],
       });
@@ -394,8 +396,8 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [mainPath]: [""],
-          [configPath]: ["config"],
+          [mainPath]: { commands: [""] },
+          [configPath]: { commands: ["config"] },
         },
         ignores: ["greet"],
       });
@@ -413,7 +415,7 @@ describe("golden-test", () => {
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: [""] },
+        files: { [filePath]: { commands: [""] } },
         formatter: (content) => content + "\n<!-- formatted -->\n",
       });
 
@@ -431,7 +433,7 @@ describe("golden-test", () => {
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: [""] },
+        files: { [filePath]: { commands: [""] } },
         formatter: async (content) => {
           await new Promise((resolve) => setTimeout(resolve, 10));
           return content.toUpperCase();
@@ -451,7 +453,7 @@ describe("golden-test", () => {
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: [""] },
+        files: { [filePath]: { commands: [""] } },
       });
 
       expect(result.success).toBe(true);
@@ -468,7 +470,7 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: [""] },
+        files: { [filePath]: { commands: [""] } },
         formatter,
       });
 
@@ -476,7 +478,7 @@ describe("golden-test", () => {
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: [""] },
+        files: { [filePath]: { commands: [""] } },
         formatter,
       });
 
@@ -490,7 +492,7 @@ describe("golden-test", () => {
       await expect(
         generateDoc({
           command: testCommand,
-          files: { [filePath]: [""] },
+          files: { [filePath]: { commands: [""] } },
           formatter: () => {
             throw new Error("Formatter error");
           },
@@ -510,7 +512,7 @@ describe("golden-test", () => {
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: [""] },
+        files: { [filePath]: { commands: [""] } },
         formatter: oxfmtFormatter,
       });
 
@@ -523,7 +525,7 @@ describe("golden-test", () => {
 
       const matchResult = await generateDoc({
         command: testCommand,
-        files: { [filePath]: [""] },
+        files: { [filePath]: { commands: [""] } },
         formatter: oxfmtFormatter,
       });
 
@@ -539,7 +541,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: [],
+          [filePath]: { commands: [] },
         },
       });
 
@@ -556,7 +558,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: ["nonexistent"],
+          [filePath]: { commands: ["nonexistent"] },
         },
       });
 
@@ -574,7 +576,7 @@ describe("golden-test", () => {
         generateDoc({
           command: testCommand,
           files: {
-            [filePath]: [""],
+            [filePath]: { commands: [""] },
           },
           ignores: [""],
         }),
@@ -589,7 +591,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         ignores: ["greet", "config"],
       });
@@ -613,7 +615,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         ignores: [],
       });
@@ -636,7 +638,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: ["greet"],
+          [filePath]: { commands: ["greet"] },
         },
         format: {
           headingLevel: 2,
@@ -658,7 +660,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: ["config"],
+          [filePath]: { commands: ["config"] },
         },
       });
 
@@ -678,7 +680,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: ["", "greet", "config"],
+          [filePath]: { commands: ["", "greet", "config"] },
         },
       });
 
@@ -701,8 +703,8 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [mainPath]: ["greet"],
-          [duplicatePath]: ["greet"],
+          [mainPath]: { commands: ["greet"] },
+          [duplicatePath]: { commands: ["greet"] },
         },
       });
 
@@ -724,7 +726,7 @@ describe("golden-test", () => {
         generateDoc({
           command: testCommand,
           files: {
-            [filePath]: [""],
+            [filePath]: { commands: [""] },
           },
           ignores: ["nonexistent"],
         }),
@@ -740,7 +742,7 @@ describe("golden-test", () => {
         generateDoc({
           command: testCommand,
           files: {
-            [filePath]: [""],
+            [filePath]: { commands: [""] },
           },
           ignores: ["foo", "bar", "greet"],
         }),
@@ -755,7 +757,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         ignores: ["*"],
       });
@@ -778,7 +780,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         ignores: ["* *"],
       });
@@ -801,7 +803,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         ignores: ["config *"],
       });
@@ -825,7 +827,7 @@ describe("golden-test", () => {
         generateDoc({
           command: testCommand,
           files: {
-            [filePath]: [""],
+            [filePath]: { commands: [""] },
           },
           ignores: ["* * *"],
         }),
@@ -840,7 +842,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: ["config *"],
+          [filePath]: { commands: ["config *"] },
         },
       });
 
@@ -863,7 +865,7 @@ describe("golden-test", () => {
         generateDoc({
           command: testCommand,
           files: {
-            [filePath]: ["config *"],
+            [filePath]: { commands: ["config *"] },
           },
           ignores: ["config get"],
         }),
@@ -921,7 +923,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: deepCommand,
         files: {
-          [filePath]: ["*"],
+          [filePath]: { commands: ["*"] },
         },
         ignores: ["* two"],
       });
@@ -946,7 +948,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         ignores: ["config"],
       });
@@ -969,7 +971,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         ignores: ["greet", "config set"],
       });
@@ -1004,7 +1006,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: rootOnlyCommand,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
       });
 
@@ -1041,7 +1043,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: commandWithExamples,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         examples: {
           "": true,
@@ -1076,7 +1078,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: commandWithMock,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         examples: {
           "": {
@@ -1112,7 +1114,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: commandWithoutExamples,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         examples: {
           "": true,
@@ -1159,7 +1161,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: commandWithIgnoredExamples,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         ignores: ["hide"],
         examples: {
@@ -1210,7 +1212,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: commandForPartialExamples,
         files: {
-          [mainPath]: ["included"],
+          [mainPath]: { commands: ["included"] },
         },
         examples: {
           included: true,
@@ -1245,7 +1247,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: commandWithFormattedExamples,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
         examples: {
           "": true,
@@ -1280,7 +1282,7 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: commandWithExamplesNoConfig,
         files: {
-          [filePath]: [""],
+          [filePath]: { commands: [""] },
         },
       });
 
@@ -1302,14 +1304,14 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: { commands: ["", "greet", "config"] } },
       });
 
       vi.stubEnv(UPDATE_GOLDEN_ENV, "");
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: { commands: ["", "greet", "config"] } },
         targetCommands: ["greet"],
       });
 
@@ -1324,7 +1326,7 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: { commands: ["", "greet", "config"] } },
       });
 
       const originalContent = fs.readFileSync(filePath, "utf-8");
@@ -1335,7 +1337,7 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: { commands: ["", "greet", "config"] } },
         targetCommands: ["greet"],
       });
 
@@ -1350,7 +1352,7 @@ describe("golden-test", () => {
       await expect(
         generateDoc({
           command: testCommand,
-          files: { [filePath]: [""] },
+          files: { [filePath]: { commands: [""] } },
           targetCommands: ["nonexistent"],
         }),
       ).rejects.toThrow('Target command "nonexistent" not found');
@@ -1363,14 +1365,14 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: { commands: ["", "greet", "config"] } },
       });
 
       vi.stubEnv(UPDATE_GOLDEN_ENV, "");
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: { commands: ["", "greet", "config"] } },
         targetCommands: ["greet", "config"],
       });
 
@@ -1385,7 +1387,7 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: { commands: ["", "greet", "config"] } },
       });
 
       const originalContent = fs.readFileSync(filePath, "utf-8");
@@ -1395,7 +1397,7 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: { commands: ["", "greet", "config"] } },
         targetCommands: ["greet", "config"],
       });
 
@@ -1415,8 +1417,8 @@ describe("golden-test", () => {
       await generateDoc({
         command: testCommand,
         files: {
-          [mainPath]: ["", "greet"],
-          [configPath]: ["config"],
+          [mainPath]: { commands: ["", "greet"] },
+          [configPath]: { commands: ["config"] },
         },
       });
 
@@ -1425,8 +1427,8 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [mainPath]: ["", "greet"],
-          [configPath]: ["config"],
+          [mainPath]: { commands: ["", "greet"] },
+          [configPath]: { commands: ["config"] },
         },
         targetCommands: ["greet", "config"],
       });
@@ -1445,8 +1447,8 @@ describe("golden-test", () => {
       await generateDoc({
         command: testCommand,
         files: {
-          [targetPath]: ["greet"],
-          [otherPath]: ["config"],
+          [targetPath]: { commands: ["greet"] },
+          [otherPath]: { commands: ["config"] },
         },
       });
 
@@ -1458,8 +1460,8 @@ describe("golden-test", () => {
       const result = await generateDoc({
         command: testCommand,
         files: {
-          [targetPath]: ["greet"],
-          [otherPath]: ["config"],
+          [targetPath]: { commands: ["greet"] },
+          [otherPath]: { commands: ["config"] },
         },
         targetCommands: ["greet"],
       });
@@ -1477,7 +1479,7 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: { commands: ["", "greet", "config"] } },
       });
 
       // Remove greet's command marker block entirely (simulating an old-format doc).
@@ -1489,7 +1491,7 @@ describe("golden-test", () => {
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: { commands: ["", "greet", "config"] } },
         targetCommands: ["greet"],
       });
 
@@ -1506,7 +1508,7 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: { commands: ["", "greet", "config"] } },
       });
 
       const originalContent = fs.readFileSync(filePath, "utf-8");
@@ -1516,7 +1518,7 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["", "greet", "config"] },
+        files: { [filePath]: { commands: ["", "greet", "config"] } },
         targetCommands: ["greet"],
       });
 
@@ -1532,7 +1534,7 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["config"] },
+        files: { [filePath]: { commands: ["config"] } },
       });
 
       const initialContent = fs.readFileSync(filePath, "utf-8");
@@ -1599,7 +1601,7 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: extendedCommand,
-        files: { [filePath]: ["config"] },
+        files: { [filePath]: { commands: ["config"] } },
         targetCommands: ["config"],
       });
 
@@ -1634,7 +1636,7 @@ ${commandEndMarker("removed")}
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["greet"] },
+        files: { [filePath]: { commands: ["greet"] } },
         targetCommands: ["greet"],
       });
 
@@ -1653,7 +1655,7 @@ ${commandEndMarker("removed")}
       // First generate the real greet block, then append an orphan marker.
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["greet"] },
+        files: { [filePath]: { commands: ["greet"] } },
       });
       const generated = fs.readFileSync(filePath, "utf-8");
       fs.writeFileSync(
@@ -1666,7 +1668,7 @@ ${commandEndMarker("removed")}
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [filePath]: ["greet"] },
+        files: { [filePath]: { commands: ["greet"] } },
         targetCommands: ["greet"],
       });
 
@@ -1684,7 +1686,7 @@ ${commandEndMarker("removed")}
 
       await generateDoc({
         command: testCommand,
-        files: { [filePath]: [""] },
+        files: { [filePath]: { commands: [""] } },
       });
 
       vi.stubEnv(UPDATE_GOLDEN_ENV, "");
@@ -1692,7 +1694,7 @@ ${commandEndMarker("removed")}
       await expect(
         assertDocMatch({
           command: testCommand,
-          files: { [filePath]: [""] },
+          files: { [filePath]: { commands: [""] } },
         }),
       ).resolves.toBeUndefined();
     });
@@ -1706,7 +1708,7 @@ ${commandEndMarker("removed")}
       await expect(
         assertDocMatch({
           command: testCommand,
-          files: { [filePath]: [""] },
+          files: { [filePath]: { commands: [""] } },
         }),
       ).rejects.toThrow("Documentation does not match golden files");
     });
@@ -1720,7 +1722,7 @@ ${commandEndMarker("removed")}
       await expect(
         assertDocMatch({
           command: testCommand,
-          files: { [filePath]: [""] },
+          files: { [filePath]: { commands: [""] } },
         }),
       ).resolves.toBeUndefined();
 
@@ -1748,7 +1750,7 @@ ${commandEndMarker("removed")}
           },
         },
         files: {
-          [greetPath]: ["greet"],
+          [greetPath]: { commands: ["greet"] },
         },
       };
 
@@ -1780,7 +1782,7 @@ ${commandEndMarker("removed")}
       const result = await generateDoc({
         command: testCommand,
         rootDoc: { path: rootDocPath },
-        files: { [greetPath]: ["greet"] },
+        files: { [greetPath]: { commands: ["greet"] } },
       });
 
       expect(result.success).toBe(false);
@@ -1818,7 +1820,7 @@ ${commandEndMarker("removed")}
           `,
         },
         files: {
-          [greetPath]: ["greet"],
+          [greetPath]: { commands: ["greet"] },
         },
       };
 
@@ -1852,7 +1854,7 @@ ${commandEndMarker("removed")}
           index: { headingLevel: 4 as const },
         },
         files: {
-          [filePath]: ["greet", "config"],
+          [filePath]: { commands: ["greet", "config"] },
         },
       };
 
@@ -1874,7 +1876,7 @@ ${commandEndMarker("removed")}
           command: testCommand,
           rootDoc: { path: filePath },
           files: {
-            [filePath]: ["greet"],
+            [filePath]: { commands: ["greet"] },
           },
         }),
       ).rejects.toThrow("must not also appear as a key in files");
@@ -1889,7 +1891,7 @@ ${commandEndMarker("removed")}
           command: testCommand,
           rootDoc: { path: filePath },
           files: {
-            [equivalentPath]: ["greet"],
+            [equivalentPath]: { commands: ["greet"] },
           },
         }),
       ).rejects.toThrow("must not also appear as a key in files");
@@ -1964,7 +1966,7 @@ ${commandEndMarker("removed")}
           },
         },
         files: {
-          [readmePath]: ["build", "deploy"],
+          [readmePath]: { commands: ["build", "deploy"] },
         },
       });
 
@@ -1995,7 +1997,7 @@ ${commandEndMarker("removed")}
           },
         },
         files: {
-          [readmePath]: ["build"],
+          [readmePath]: { commands: ["build"] },
         },
       });
 
@@ -2025,7 +2027,9 @@ ${commandEndMarker("removed")}
         },
         files: {
           [readmePath]: {
-            build: (md) => md`# build\n\n${md.options}`,
+            commands: {
+              build: (md) => md`# build\n\n${md.options}`,
+            },
           },
         },
       });
@@ -2046,7 +2050,7 @@ ${commandEndMarker("removed")}
       const result = await generateDoc({
         command: commandWithSharedOptions,
         files: {
-          [filePath]: ["build"],
+          [filePath]: { commands: ["build"] },
         },
       });
 
@@ -2078,7 +2082,7 @@ ${commandEndMarker("removed")}
           },
         },
         files: {
-          [readmePath]: ["build"],
+          [readmePath]: { commands: ["build"] },
         },
       });
 
@@ -2133,7 +2137,7 @@ ${commandEndMarker("removed")}
           },
         },
         files: {
-          [readmePath]: ["create"],
+          [readmePath]: { commands: ["create"] },
         },
       });
 
@@ -2192,7 +2196,7 @@ ${commandEndMarker("removed")}
             },
           },
           files: {
-            [readmePath]: ["build", "deploy"],
+            [readmePath]: { commands: ["build", "deploy"] },
           },
         }),
       ).rejects.toThrow('does not match globalOptions definition for "output"');
@@ -2245,8 +2249,8 @@ ${commandEndMarker("removed")}
           },
         },
         files: {
-          [targetPath]: ["build"],
-          [nonTargetPath]: ["deploy"],
+          [targetPath]: { commands: ["build"] },
+          [nonTargetPath]: { commands: ["deploy"] },
         },
         targetCommands: ["build"],
       });
@@ -2263,8 +2267,8 @@ ${commandEndMarker("removed")}
           },
         },
         files: {
-          [targetPath]: ["build"],
-          [nonTargetPath]: ["deploy"],
+          [targetPath]: { commands: ["build"] },
+          [nonTargetPath]: { commands: ["deploy"] },
         },
         targetCommands: ["build"],
       });
@@ -2320,7 +2324,7 @@ ${commandEndMarker("removed")}
           },
         },
         files: {
-          [readmePath]: ["build"],
+          [readmePath]: { commands: ["build"] },
         },
       });
 
@@ -2373,7 +2377,7 @@ ${commandEndMarker("removed")}
             },
           },
           files: {
-            [readmePath]: ["build", "deploy"],
+            [readmePath]: { commands: ["build", "deploy"] },
           },
         }),
       ).rejects.toThrow('does not match globalOptions definition for "output"');
@@ -2397,7 +2401,7 @@ ${commandEndMarker("removed")}
           },
         },
         files: {
-          [readmePath]: ["build", "deploy"],
+          [readmePath]: { commands: ["build", "deploy"] },
         },
       };
 

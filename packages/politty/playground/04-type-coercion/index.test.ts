@@ -66,7 +66,7 @@ describe("04-type-coercion", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
-      files: { "playground/04-type-coercion/README.md": [""] },
+      files: { "playground/04-type-coercion/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

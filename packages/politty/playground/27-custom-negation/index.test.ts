@@ -8,7 +8,7 @@ import { cli } from "./index.js";
 const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
   command: cli,
   files: {
-    "playground/27-custom-negation/README.md": [""],
+    "playground/27-custom-negation/README.md": { commands: [""] },
   },
   formatter: mdFormatter,
 };

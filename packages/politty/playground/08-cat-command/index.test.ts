@@ -63,7 +63,7 @@ describe("08-cat-command", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
-      files: { "playground/08-cat-command/README.md": [""] },
+      files: { "playground/08-cat-command/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

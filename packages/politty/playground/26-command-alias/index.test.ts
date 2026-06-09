@@ -8,7 +8,7 @@ import { cli, installCommand, listCommand, removeCommand } from "./index.js";
 const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
   command: cli,
   files: {
-    "playground/26-command-alias/README.md": ["", "install", "remove", "list"],
+    "playground/26-command-alias/README.md": { commands: ["", "install", "remove", "list"] },
   },
   formatter: mdFormatter,
 };

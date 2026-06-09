@@ -324,9 +324,11 @@ function wrapSingleFileMap(call: ParsedConfigCall, commandMap: string): string {
   // Grab the first string-literal key from the original files value.
   const keyMatch = filesProp.valueText.match(/["'`]([^"'`]+\.md)["'`]/);
   const key = keyMatch ? keyMatch[1]! : "docs/cli.md";
+  // Wrap the per-command map under `commands:` so the value is a FileConfig
+  // (the only accepted FileMapping value shape).
   const indented = commandMap
     .split("\n")
-    .map((l, i) => (i === 0 ? l : `  ${l}`))
+    .map((l, i) => (i === 0 ? l : `    ${l}`))
     .join("\n");
-  return `{\n  ${JSON.stringify(key)}: ${indented},\n}`;
+  return `{\n  ${JSON.stringify(key)}: { commands: ${indented} },\n}`;
 }

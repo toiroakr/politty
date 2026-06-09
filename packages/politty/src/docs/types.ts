@@ -199,12 +199,14 @@ export type CommandOverride = true | ((md: CommandMd) => string);
 export type CommandMap = Record<string, CommandOverride>;
 
 /**
- * Per-file configuration.
+ * Per-file configuration. Every value in a {@link FileMapping} is a
+ * `FileConfig`, so there is no value-level ambiguity to disambiguate.
  */
 export interface FileConfig {
   /**
-   * Commands to include in this file. The array form is sugar where each path
-   * uses the default render; the map form allows per-command overrides.
+   * Commands to include in this file. The array form lists command paths that
+   * each use the default render; the map form ({@link CommandMap}) allows
+   * per-command overrides. Array vs. object is the only (reliable) distinction.
    */
   commands?: string[] | CommandMap;
   /**
@@ -219,24 +221,21 @@ export interface FileConfig {
 /**
  * File mapping configuration.
  * Key: output file path (e.g., "docs/cli.md").
- * Value: a command-path array (sugar), a flat CommandMap, or a FileConfig.
- *
- * Disambiguation of the value:
- * - Array -> array sugar (each path uses the default render).
- * - Object with a `commands` or `layout` key -> FileConfig.
- * - Any other object -> a bare CommandMap.
+ * Value: a {@link FileConfig}. Put command paths under `commands` (an array for
+ * default renders, or a {@link CommandMap} for per-command overrides) and an
+ * optional `layout`.
  *
  * @example
- * // Simple: single file with multiple commands
- * { "docs/cli.md": ["", "user", "config"] }
+ * // Default renders for several commands
+ * { "docs/cli.md": { commands: ["", "user", "config"] } }
  *
- * // Flat command map with an override
- * { "docs/cli.md": { "": true, "build": (md) => md`${md.usage}` } }
+ * // Per-command overrides
+ * { "docs/cli.md": { commands: { "": true, "build": (md) => md`${md.usage}` } } }
  *
- * // FileConfig with a custom layout
+ * // A custom file layout
  * { "docs/cli.md": { commands: [""], layout: (md) => md`...` } }
  */
-export type FileMapping = Record<string, string[] | CommandMap | FileConfig>;
+export type FileMapping = Record<string, FileConfig>;
 
 /**
  * generateDoc configuration

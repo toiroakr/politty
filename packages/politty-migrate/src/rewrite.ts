@@ -151,26 +151,53 @@ export function rewriteSource(
     for (const prop of filesObj.properties) {
       if (!ts.isPropertyAssignment(prop)) continue;
       const value = prop.initializer;
+
+      // Array sugar (`"x.md": ["", "build"]`) -> `{ commands: [...] }`.
+      if (ts.isArrayLiteralExpression(value)) {
+        edits.push({
+          start: value.getStart(sf),
+          end: value.getEnd(),
+          replacement: `{ commands: ${value.getText(sf)} }`,
+        });
+        migratedAny = true;
+        continue;
+      }
+
       if (!ts.isObjectLiteralExpression(value)) continue;
       const { properties } = extractProperties(value, sf);
       const hasRemoved = properties.some((p) =>
         (REMOVED_FILECONFIG_KEYS as readonly string[]).includes(p.name),
       );
-      if (!hasRemoved) continue;
-      const entryIndent = indentOf(original, value.getStart(sf)).length;
-      const migrated = migrateFileConfig(value, sf, entryIndent);
-      edits.push({
-        start: value.getStart(sf),
-        end: value.getEnd(),
-        replacement: migrated.text,
-      });
-      migratedAny = true;
-      if (migrated.layoutReview) {
-        addTodo("layout-review", migrated.layoutReview, value.getStart(sf));
+      const isFileConfigShape = properties.some(
+        (p) => p.name === "commands" || p.name === "layout" || p.name === "noExpand",
+      );
+
+      if (hasRemoved) {
+        const entryIndent = indentOf(original, value.getStart(sf)).length;
+        const migrated = migrateFileConfig(value, sf, entryIndent);
+        edits.push({
+          start: value.getStart(sf),
+          end: value.getEnd(),
+          replacement: migrated.text,
+        });
+        migratedAny = true;
+        if (migrated.layoutReview) {
+          addTodo("layout-review", migrated.layoutReview, value.getStart(sf));
+        }
+        if (migrated.variableRef) {
+          addTodo("variable-ref", migrated.variableRef, value.getStart(sf));
+        }
+      } else if (!isFileConfigShape) {
+        // Bare CommandMap (`"x.md": { "": true, build: (md) => ... }`) ->
+        // `{ commands: { ... } }`.
+        edits.push({
+          start: value.getStart(sf),
+          end: value.getEnd(),
+          replacement: `{ commands: ${value.getText(sf)} }`,
+        });
+        migratedAny = true;
       }
-      if (migrated.variableRef) {
-        addTodo("variable-ref", migrated.variableRef, value.getStart(sf));
-      }
+      // else: already a FileConfig with no removed keys -> leave as-is.
     }
     return migratedAny;
   };

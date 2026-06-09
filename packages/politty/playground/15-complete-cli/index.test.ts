@@ -107,7 +107,7 @@ describe("15-complete-cli", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: cli,
-      files: { "playground/15-complete-cli/README.md": [""] },
+      files: { "playground/15-complete-cli/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

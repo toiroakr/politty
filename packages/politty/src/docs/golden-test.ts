@@ -71,27 +71,6 @@ interface NormalizedFileConfig {
 }
 
 /**
- * Determine whether a non-array object value is a FileConfig versus a bare
- * CommandMap.
- *
- * A FileConfig is identified by a `commands` that is an array or a CommandMap
- * object, or a `layout` that is a function. A bare CommandMap whose command
- * path happens to be `"commands"` (with a `true`/function value) is therefore
- * NOT misread as a FileConfig.
- *
- * Residual ambiguity: a command literally named `"layout"` cannot use the bare
- * flat-map override form (`{ layout: (md) => ... }` reads as a FileConfig
- * layout); use the explicit form `{ commands: { layout: (md) => ... } }`.
- */
-function isFileConfig(value: CommandMap | FileConfig): value is FileConfig {
-  const commands = (value as FileConfig).commands;
-  if (Array.isArray(commands) || (commands != null && typeof commands === "object")) {
-    return true;
-  }
-  return typeof (value as FileConfig).layout === "function";
-}
-
-/**
  * Build the `{ commands, commandOverrides }` pair from a CommandMap.
  * `commands` preserves the map's key insertion order; function values become
  * overrides while `true` values use the default render.
@@ -108,37 +87,32 @@ function splitCommandMap(map: CommandMap): { commands: string[]; commandOverride
 }
 
 /**
- * Normalize a FileMapping value to a NormalizedFileConfig.
- *
- * - Array => array sugar (each path uses the default render).
- * - Object with `commands`/`layout` => FileConfig.
- * - Any other object => a bare CommandMap.
+ * Normalize a FileConfig to a NormalizedFileConfig. `commands` is either an
+ * array of paths (default render) or a CommandMap (with per-command overrides);
+ * the two are distinguished reliably by `Array.isArray`.
  */
-function normalizeFileConfig(config: string[] | CommandMap | FileConfig): NormalizedFileConfig {
-  if (Array.isArray(config)) {
-    return { commands: config, commandOverrides: {} };
+function normalizeFileConfig(config: FileConfig): NormalizedFileConfig {
+  if (config.commands === undefined && config.layout === undefined) {
+    throw new Error(
+      "A file config must have `commands` and/or `layout`. " +
+        "Wrap per-command overrides in `{ commands: { … } }`.",
+    );
   }
 
-  if (isFileConfig(config)) {
-    const rawCommands = config.commands;
-    let commands: string[] = [];
-    let commandOverrides: CommandMap = {};
-    if (Array.isArray(rawCommands)) {
-      commands = rawCommands;
-    } else if (rawCommands) {
-      ({ commands, commandOverrides } = splitCommandMap(rawCommands));
-    }
-    return {
-      commands,
-      commandOverrides,
-      layout: config.layout,
-      noExpand: config.noExpand,
-    };
+  const rawCommands = config.commands;
+  let commands: string[] = [];
+  let commandOverrides: CommandMap = {};
+  if (Array.isArray(rawCommands)) {
+    commands = rawCommands;
+  } else if (rawCommands) {
+    ({ commands, commandOverrides } = splitCommandMap(rawCommands));
   }
-
-  // Bare CommandMap
-  const { commands, commandOverrides } = splitCommandMap(config);
-  return { commands, commandOverrides };
+  return {
+    commands,
+    commandOverrides,
+    layout: config.layout,
+    noExpand: config.noExpand,
+  };
 }
 
 /**
@@ -289,7 +263,7 @@ function resolveTopLevelCommands(
  * This applies wildcard/subcommand expansion and ignore filtering.
  */
 function resolveConfiguredCommandPaths(
-  fileConfigRaw: string[] | CommandMap | FileConfig,
+  fileConfigRaw: FileConfig,
   allCommands: Map<string, CommandInfo>,
   ignores: string[],
 ): {
@@ -1000,7 +974,7 @@ function pathToFiles(
   if (typeof pathConfig === "string") {
     // All commands in one file
     return {
-      files: { [pathConfig]: Array.from(allCommands.keys()) },
+      files: { [pathConfig]: { commands: Array.from(allCommands.keys()) } },
       rootDocPath: pathConfig,
     };
   }
@@ -1165,9 +1139,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // Build the set of files to process. The rootDoc file participates in the
   // loop; if it is not already a files key (explicit-files mode), add it with
   // an empty command set so its layout (header + globalOptions + index) renders.
-  const fileEntries: Array<[string, string[] | CommandMap | FileConfig]> = Object.entries(files);
+  const fileEntries: Array<[string, FileConfig]> = Object.entries(files);
   if (rootDocPath !== undefined && !rootDocIsFileKey) {
-    fileEntries.push([rootDocPath, []]);
+    fileEntries.push([rootDocPath, { commands: [] }]);
   }
 
   // Process each file

@@ -49,6 +49,7 @@ export type {
   SectionContent,
   SectionEdit,
   SectionName,
+  SectionReplacement,
   SectionsSpec,
 } from "./md-tag.js";
 // Types

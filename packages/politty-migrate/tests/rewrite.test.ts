@@ -92,15 +92,28 @@ describe("rewriteSource", () => {
     expect(review!.detail).toMatch(/title|description|render/);
   });
 
-  it("rewrites the files value to a CommandMap when provided", () => {
+  it("rewrites the files value to a single-file FileConfig when provided", () => {
     const text = read("fixtures/inline-array/config.old.ts");
     const parsed = parseConfigSource("config.ts", text);
     const { text: out } = rewriteSource(parsed, [
       {
         call: parsed.calls[0]!,
-        filesValue: '{ "tests/.../README.md": { "greet": true } }',
+        filesValue: '{ "tests/.../README.md": { commands: { "greet": true } } }',
       },
     ]);
-    expect(out).toContain('"greet": true');
+    expect(out).toContain('commands: { "greet": true }');
+  });
+
+  it("wraps array-sugar files entries in a FileConfig (commands)", () => {
+    const text = read("fixtures/inline-array/config.old.ts");
+    const parsed = parseConfigSource("config.ts", text);
+    // No filesValue planned (pure-default doc): migrateFilesObject runs and must
+    // wrap the bare `["greet"]` array under `commands:`.
+    const { text: out } = rewriteSource(
+      parsed,
+      parsed.calls.map((call) => ({ call })),
+    );
+    expect(out).toContain('{ commands: ["greet"] }');
+    expect(out).not.toMatch(/README\.old\.md":\s*\[/);
   });
 });

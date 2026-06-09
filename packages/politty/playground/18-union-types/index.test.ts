@@ -54,7 +54,7 @@ describe("18-union-types", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: main,
-      files: { "playground/18-union-types/README.md": [""] },
+      files: { "playground/18-union-types/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

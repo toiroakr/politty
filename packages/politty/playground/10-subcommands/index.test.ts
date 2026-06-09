@@ -105,7 +105,7 @@ describe("10-subcommands", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: cli,
-      files: { "playground/10-subcommands/README.md": [""] },
+      files: { "playground/10-subcommands/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

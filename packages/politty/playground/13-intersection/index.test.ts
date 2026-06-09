@@ -88,7 +88,7 @@ describe("13-intersection", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
-      files: { "playground/13-intersection/README.md": [""] },
+      files: { "playground/13-intersection/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

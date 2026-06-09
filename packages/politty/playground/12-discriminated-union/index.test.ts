@@ -91,7 +91,7 @@ describe("12-discriminated-union", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
-      files: { "playground/12-discriminated-union/README.md": [""] },
+      files: { "playground/12-discriminated-union/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

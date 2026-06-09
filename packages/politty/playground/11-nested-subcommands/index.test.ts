@@ -106,7 +106,7 @@ describe("11-nested-subcommands", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: cli,
-      files: { "playground/11-nested-subcommands/README.md": [""] },
+      files: { "playground/11-nested-subcommands/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

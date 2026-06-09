@@ -85,7 +85,7 @@ describe("05-lifecycle-hooks", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
-      files: { "playground/05-lifecycle-hooks/README.md": [""] },
+      files: { "playground/05-lifecycle-hooks/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

@@ -63,7 +63,7 @@ describe("09-convert-command", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
-      files: { "playground/09-convert-command/README.md": [""] },
+      files: { "playground/09-convert-command/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

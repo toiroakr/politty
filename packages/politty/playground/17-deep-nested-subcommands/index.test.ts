@@ -159,7 +159,7 @@ describe("17-deep-nested-subcommands", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: cli,
-      files: { "playground/17-deep-nested-subcommands/README.md": [""] },
+      files: { "playground/17-deep-nested-subcommands/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

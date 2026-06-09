@@ -79,7 +79,7 @@ describe("02-greet", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
-      files: { "playground/02-greet/README.md": [""] },
+      files: { "playground/02-greet/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

@@ -17,7 +17,7 @@ describe("my-command", () => {
   it("documentation", async () => {
     await assertDocMatch({
       command,
-      files: { "path/to/README.md": [""] },
+      files: { "path/to/README.md": { commands: [""] } },
     });
   });
 });
@@ -42,13 +42,29 @@ Validates that documentation matches the generated output. Throws when there are
 Generates documentation and returns the result without asserting.
 
 ```typescript
-const result = await generateDoc({ command, files: { "docs/cli.md": [""] } });
+const result = await generateDoc({ command, files: { "docs/cli.md": { commands: [""] } } });
 console.log(result.success, result.files);
 ```
 
 ### `initDocFile(config, fileSystem?)`
 
 Deletes documentation files at the start of a test run (only when `POLITTY_DOCS_UPDATE=true`) so stale sections from skipped tests don't linger. Call it in `beforeAll`. Pass `realFs` as the second argument when `node:fs` is mocked.
+
+### `createDocSuite(base, options?)` (from `politty/docs/vitest`)
+
+A thin Vitest helper that wires the `initDocFile` lifecycle for you. Call it at the top of a `describe`; it registers a `beforeAll(() => initDocFile(base, fileSystem))` and returns `{ match }`, where `match(overrides)` runs `assertDocMatch({ ...base, ...overrides })`. This removes the three easy-to-forget steps of the manual pattern: calling `initDocFile` in `beforeAll`, passing the real fs under a mock, and gating on update mode.
+
+```typescript
+import { createDocSuite } from "politty/docs/vitest";
+
+describe("cli docs", () => {
+  const doc = createDocSuite(baseConfig, { fileSystem: realFs });
+  it("read", () => doc.match({ targetCommands: ["read"], examples: { read: { mock, cleanup } } }));
+  it("write", () => doc.match({ targetCommands: ["write"] }));
+});
+```
+
+It lives in the `politty/docs/vitest` subpath (not `politty/docs`) so the core API stays test-runner-agnostic; `vitest` is an optional peer dependency.
 
 ## The `md` template model
 
@@ -134,12 +150,22 @@ build: (md) => md`
 
 `SectionsSpec`:
 
-| Key            | Type                                               | Effect                                         |
-| -------------- | -------------------------------------------------- | ---------------------------------------------- |
-| `replace`      | `Partial<Record<SectionName, string>>`             | Swap a section's content, keeping its position |
-| `remove`       | `SectionName[]`                                    | Drop these sections                            |
-| `insertBefore` | `Partial<Record<SectionName, string \| string[]>>` | Insert before the named section                |
-| `insertAfter`  | `Partial<Record<SectionName, string \| string[]>>` | Insert after the named section                 |
+| Key            | Type                                                          | Effect                                         |
+| -------------- | ------------------------------------------------------------- | ---------------------------------------------- |
+| `replace`      | `Partial<Record<SectionName, string \| (current) => string>>` | Swap a section's content, keeping its position |
+| `remove`       | `SectionName[]`                                               | Drop these sections                            |
+| `insertBefore` | `Partial<Record<SectionName, string \| string[]>>`            | Insert before the named section                |
+| `insertAfter`  | `Partial<Record<SectionName, string \| string[]>>`            | Insert after the named section                 |
+
+A `replace` value can be a function `(current) => string`, where `current` is the
+section's default render. Use it to tweak the default instead of rebuilding it:
+
+```typescript
+md.sections({
+  // add a column to the default options table without re-deriving it
+  replace: { options: (current) => current.replace("| Name |", "| Name | Since |") },
+});
+```
 
 To add prose before/after the whole block, wrap the result in `md\`…\``and write it around the interpolated`${md.sections(...)}`(shown above) — there is no`prepend`/`append`.
 
@@ -178,30 +204,30 @@ If a `layout` is omitted, a default layout is used: a title/description header, 
 
 ### `FileMapping`
 
-The value for each file path is one of three forms:
+Each file path maps to a `FileConfig`: a `commands` list (and/or a custom `layout`). `commands` is either an **array** of command paths (default render) or a **`CommandMap`** (`true` for default, a function to override). Array vs. object is the only distinction, and it is unambiguous.
 
 ```typescript
 const files: FileMapping = {
-  // 1. Array sugar — every command (and subcommands) uses the default render.
-  "docs/cli.md": ["", "config"],
+  // commands array — every listed command (and subcommands) uses the default render.
+  "docs/cli.md": { commands: ["", "config"] },
 
-  // 2. Flat CommandMap — `true` for default, a function to override.
+  // commands map — `true` for default, a function to override.
   "docs/users.md": {
-    user: true,
-    "user create": (md) => md`${md.h(1)}\n\n${md.usage}`,
+    commands: {
+      user: true,
+      "user create": (md) => md`${md.h(1)}\n\n${md.usage}`,
+    },
   },
 
-  // 3. FileConfig — a custom file layout and/or a command map.
+  // a custom file layout alongside the command map.
   "docs/admin.md": {
-    layout: (md) => md`# Admin\n\nInternal tools.\n\n${md.commands()}`,
     commands: { admin: true },
+    layout: (md) => md`# Admin\n\nInternal tools.\n\n${md.commands()}`,
   },
 };
 ```
 
-Disambiguation: an **array** is sugar; an object with a `commands` or `layout` key is a **`FileConfig`**; any other object is a **`CommandMap`**.
-
-> Edge case: a command literally named `commands` works in any form, but a command literally named `layout` cannot use the bare flat-map form (`{ layout: (md) => … }` reads as a file layout). Use `{ commands: { layout: (md) => … } }` instead.
+A `FileConfig` must have `commands` and/or `layout` (an object with neither throws). There are no value-level forms to disambiguate and no reserved-command-name edge case — a command named `commands` or `layout` is just a key inside `commands: { … }`.
 
 - **Subcommands are automatically included** (`"config"` pulls in `"config get"`, …).
 - **Wildcards**: `*` matches one command segment — `"config *"`, `"* *"`, `"*"`.
@@ -231,7 +257,7 @@ await assertDocMatch({
       ${md.index}
     `,
   },
-  files: { "docs/README.md": ["init", "build", "deploy"] },
+  files: { "docs/README.md": { commands: ["init", "build", "deploy"] } },
 });
 ```
 
@@ -277,7 +303,7 @@ Executes `examples` defined in `defineCommand` and includes their output. Mocks 
 ```typescript
 await assertDocMatch({
   command: cli,
-  files: { "docs/cli.md": ["", "read"] },
+  files: { "docs/cli.md": { commands: ["", "read"] } },
   examples: {
     read: {
       mock: () => {

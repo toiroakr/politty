@@ -94,6 +94,13 @@ export type SectionName =
 /** Markdown for a section (an `md\`…\`` result, a plain string, or `md.usage`). */
 export type SectionContent = string;
 
+/**
+ * A replacement for a section: either new content, or a function that derives
+ * it from the section's default render. The updater form lets you tweak the
+ * default (e.g. add a column to the options table) without re-deriving it.
+ */
+export type SectionReplacement = SectionContent | ((current: string) => SectionContent);
+
 /** One or more pieces of section content. */
 export type SectionEdit = SectionContent | readonly SectionContent[];
 
@@ -105,8 +112,12 @@ export type SectionEdit = SectionContent | readonly SectionContent[];
  * `md\`…\`` and write it before/after the interpolated `md.sections(...)`.
  */
 export interface SectionsSpec {
-  /** Swap a section's content, keeping its position. */
-  replace?: Partial<Record<SectionName, SectionContent>>;
+  /**
+   * Swap a section's content, keeping its position. The value is either new
+   * content or a function `(defaultContent) => newContent` that derives it from
+   * the section's default render.
+   */
+  replace?: Partial<Record<SectionName, SectionReplacement>>;
   /** Drop these sections entirely. */
   remove?: readonly SectionName[];
   /** Insert content immediately before the named section. */
@@ -222,8 +233,14 @@ export function createCommandMd(info: CommandInfo, options: CommandMdOptions = {
     for (const name of SECTION_NAMES) {
       out.push(...toItems(spec.insertBefore?.[name]));
       if (!removed.has(name)) {
-        const replaced = spec.replace?.[name];
-        out.push(replaced !== undefined ? replaced : defaultContent(name));
+        const replacement = spec.replace?.[name];
+        if (replacement === undefined) {
+          out.push(defaultContent(name));
+        } else if (typeof replacement === "function") {
+          out.push(replacement(defaultContent(name)));
+        } else {
+          out.push(replacement);
+        }
       }
       out.push(...toItems(spec.insertAfter?.[name]));
     }

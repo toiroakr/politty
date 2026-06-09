@@ -54,6 +54,16 @@
         "default": "./dist/docs/index.cjs"
       }
     },
+    "./docs/vitest": {
+      "import": {
+        "types": "./dist/docs/vitest.d.ts",
+        "default": "./dist/docs/vitest.js"
+      },
+      "require": {
+        "types": "./dist/docs/vitest.d.cts",
+        "default": "./dist/docs/vitest.cjs"
+      }
+    },
     "./completion": {
       "import": {
         "types": "./dist/completion/index.d.ts",
@@ -123,6 +133,7 @@
   "peerDependencies": {
     "@clack/prompts": "^0.10.0 || ^0.11.0 || ^1.0.0",
     "@inquirer/prompts": "^8.3.2",
+    "vitest": "^2 || ^3 || ^4",
     "zod": "^4.2.1"
   },
   "peerDependenciesMeta": {
@@ -130,6 +141,9 @@
       "optional": true
     },
     "@inquirer/prompts": {
+      "optional": true
+    },
+    "vitest": {
       "optional": true
     }
   },

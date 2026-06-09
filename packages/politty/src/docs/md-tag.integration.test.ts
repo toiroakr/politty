@@ -118,6 +118,20 @@ describe("createCommandMd.sections", () => {
     expect(out.indexOf("CUSTOM_OPTIONS")).toBeGreaterThan(out.indexOf("**Usage**"));
   });
 
+  it("replace accepts an updater that derives content from the default", async () => {
+    const info = await buildCommandInfo(initCommand, "project-cli", ["init"]);
+    const md = createCommandMd(info, { baseHeadingLevel: 2 });
+    const defaultOptions = md.options;
+    const out = md.sections({
+      replace: { options: (current) => `${current}\n\n> see also: --help` },
+    });
+    // the default options table is preserved (not hand-rebuilt)...
+    expect(out).toContain(defaultOptions);
+    // ...and the derived suffix is appended in place
+    expect(out).toContain("> see also: --help");
+    expect(out.indexOf("> see also: --help")).toBeGreaterThan(out.indexOf("--template"));
+  });
+
   it("insertAfter / insertBefore place content relative to an anchor", async () => {
     const info = await buildCommandInfo(initCommand, "project-cli", ["init"]);
     const md = createCommandMd(info, { baseHeadingLevel: 2 });

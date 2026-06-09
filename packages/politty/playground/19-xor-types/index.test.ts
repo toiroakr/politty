@@ -54,7 +54,7 @@ describe("19-xor-types", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: main,
-      files: { "playground/19-xor-types/README.md": [""] },
+      files: { "playground/19-xor-types/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

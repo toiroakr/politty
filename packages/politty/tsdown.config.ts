@@ -5,6 +5,7 @@ export default defineConfig({
     "src/index.ts",
     "src/augment.ts",
     "src/docs/index.ts",
+    "src/docs/vitest.ts",
     "src/completion/index.ts",
     "src/prompt/index.ts",
     "src/prompt/clack/index.ts",
@@ -18,6 +19,6 @@ export default defineConfig({
   minify: false,
   target: "node18",
   outDir: "dist",
-  external: ["zod", "string-width", "@clack/prompts", "@inquirer/prompts"],
+  external: ["zod", "string-width", "@clack/prompts", "@inquirer/prompts", "vitest"],
   fixedExtension: false,
 });

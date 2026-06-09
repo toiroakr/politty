@@ -59,7 +59,7 @@ describe("07-gcc-command", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
-      files: { "playground/07-gcc-command/README.md": [""] },
+      files: { "playground/07-gcc-command/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });

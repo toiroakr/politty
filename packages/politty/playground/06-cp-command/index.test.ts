@@ -59,7 +59,7 @@ describe("06-cp-command", () => {
     using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
-      files: { "playground/06-cp-command/README.md": [""] },
+      files: { "playground/06-cp-command/README.md": { commands: [""] } },
       formatter: mdFormatter,
     });
   });
