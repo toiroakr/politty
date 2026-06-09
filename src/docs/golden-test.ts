@@ -1466,7 +1466,10 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     }
   }
   const updateMode = isTruthyEnv(UPDATE_GOLDEN_ENV);
-  const doctorMode = isTruthyEnv(DOCTOR_ENV);
+  // Missing-marker detection is on by default; an explicitly set env var
+  // (e.g. POLITTY_DOCS_DOCTOR=false) overrides the config option per run.
+  const doctorEnv = process.env[DOCTOR_ENV];
+  const doctorMode = doctorEnv ? isTruthyEnv(DOCTOR_ENV) : (config.doctor ?? true);
   let hasDoctorIssues = false;
 
   // Validate rootDoc.path does not overlap with files keys (only for explicit files mode)
@@ -1766,7 +1769,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
               hasDoctorIssues = true;
               fileStatus = "diff";
               diffs.push(
-                `[doctor] Missing section marker "${sectionType}" for command "${formatCommandPath(targetCommand)}". Run with ${DOCTOR_ENV}=true ${UPDATE_GOLDEN_ENV}=true to insert.\n${generatedSectionPart}`,
+                `[doctor] Missing section marker "${sectionType}" for command "${formatCommandPath(targetCommand)}". Run with ${UPDATE_GOLDEN_ENV}=true to insert. To intentionally omit this section, use a custom renderer that returns "" for it, or set doctor: false.\n${generatedSectionPart}`,
               );
             }
           }
@@ -2017,8 +2020,14 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     });
   }
 
+  // When detection was forced on via env against doctor: false, the fix
+  // command needs the env var as well.
+  const fixMissingMarkersCommand =
+    config.doctor === false
+      ? `${DOCTOR_ENV}=true ${UPDATE_GOLDEN_ENV}=true`
+      : `${UPDATE_GOLDEN_ENV}=true`;
   const errorHint = hasDoctorIssues
-    ? `Run with ${DOCTOR_ENV}=true ${UPDATE_GOLDEN_ENV}=true to fix missing markers.`
+    ? `Run with ${fixMissingMarkersCommand} to fix missing markers.`
     : `Run with ${UPDATE_GOLDEN_ENV}=true to update.`;
 
   return {

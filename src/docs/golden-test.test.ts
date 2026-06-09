@@ -1649,7 +1649,38 @@ describe("golden-test", () => {
       expect(result.files[0]?.status).toBe("match");
     });
 
-    it("should respect section opt-out by not re-inserting removed markers", async () => {
+    it("should re-insert removed markers in update mode by default", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "reinsert-default.md");
+
+      // Create initial file with all sections
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      // Read the generated content and remove the description marker for greet
+      const originalContent = fs.readFileSync(filePath, "utf-8");
+      expect(originalContent).toContain("<!-- politty:command:greet:description:start -->");
+
+      const strippedContent = removeSectionBlock(originalContent, "description", "greet");
+      fs.writeFileSync(filePath, strippedContent, "utf-8");
+
+      // Run update targeting greet
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet"],
+      });
+
+      // Verify: the description marker was re-inserted (doctor on by default)
+      const updatedContent = fs.readFileSync(filePath, "utf-8");
+      expect(updatedContent).toContain("<!-- politty:command:greet:description:start -->");
+      expect(updatedContent).toContain("<!-- politty:command:greet:description:end -->");
+    });
+
+    it("should respect section opt-out with doctor: false by not re-inserting removed markers", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
 
       const filePath = path.join(testDir, "opt-out.md");
@@ -1673,6 +1704,7 @@ describe("golden-test", () => {
         command: testCommand,
         files: { [filePath]: ["", "greet", "config"] },
         targetCommands: ["greet"],
+        doctor: false,
       });
 
       // Verify: the description marker was NOT re-inserted (opt-out respected)
@@ -1783,7 +1815,7 @@ describe("golden-test", () => {
       expect(getPos).toBeLessThan(setPos);
     });
 
-    it("should report success in read-only mode when sections are opted out", async () => {
+    it("should report success in read-only mode with doctor: false when sections are opted out", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
 
       const filePath = path.join(testDir, "opt-out-readonly.md");
@@ -1807,6 +1839,7 @@ describe("golden-test", () => {
         command: testCommand,
         files: { [filePath]: ["", "greet", "config"] },
         targetCommands: ["greet"],
+        doctor: false,
       });
 
       expect(result.success).toBe(true);
@@ -1842,36 +1875,83 @@ describe("golden-test", () => {
       return filePath;
     }
 
-    it("should detect missing section markers in read-only mode", async () => {
+    it("should detect missing section markers in read-only mode by default", async () => {
       const filePath = await setupWithMissingMarker("doctor-detect.md", "description", "greet");
 
-      // Without doctor mode: should succeed (opt-out respected)
-      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
-      const resultNormal = await generateDoc({
+      const result = await generateDoc({
         command: testCommand,
         files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
-      expect(resultNormal.success).toBe(true);
-
-      // With doctor mode: should report missing marker
-      vi.stubEnv(DOCTOR_ENV, "true");
-      const resultDoctor = await generateDoc({
-        command: testCommand,
-        files: { [filePath]: filesConfig },
-        targetCommands: ["greet"],
-      });
-      expect(resultDoctor.success).toBe(false);
-      expect(resultDoctor.files[0]?.diff).toContain("[doctor] Missing section marker");
-      expect(resultDoctor.files[0]?.diff).toContain("description");
-      expect(resultDoctor.files[0]?.diff).toContain("greet");
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.diff).toContain("[doctor] Missing section marker");
+      expect(result.files[0]?.diff).toContain("description");
+      expect(result.files[0]?.diff).toContain("greet");
     });
 
-    it("should insert missing section markers in update+doctor mode", async () => {
+    it("should skip missing-marker detection with doctor: false", async () => {
+      const filePath = await setupWithMissingMarker("doctor-config-off.md", "description", "greet");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: filesConfig },
+        targetCommands: ["greet"],
+        doctor: false,
+      });
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("match");
+    });
+
+    it("should let the env var override the doctor config option", async () => {
+      const filePath = await setupWithMissingMarker(
+        "doctor-env-override.md",
+        "description",
+        "greet",
+      );
+
+      // Env true forces detection on even when the config disables it
+      vi.stubEnv(DOCTOR_ENV, "true");
+      const forcedOn = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: filesConfig },
+        targetCommands: ["greet"],
+        doctor: false,
+      });
+      expect(forcedOn.success).toBe(false);
+      expect(forcedOn.files[0]?.diff).toContain("[doctor] Missing section marker");
+      // With doctor: false, the fix command must include the env var
+      expect(forcedOn.error).toContain("POLITTY_DOCS_DOCTOR=true POLITTY_DOCS_UPDATE=true");
+
+      // Env false skips detection even though the default is on
+      vi.stubEnv(DOCTOR_ENV, "false");
+      const forcedOff = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: filesConfig },
+        targetCommands: ["greet"],
+      });
+      expect(forcedOff.success).toBe(true);
+    });
+
+    it("should not flag sections omitted via custom renderer", async () => {
+      const filePath = await setupWithMissingMarker(
+        "doctor-renderer-opt-out.md",
+        "description",
+        "greet",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: filesConfig },
+        targetCommands: ["greet"],
+        format: { renderDescription: () => "" },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("should insert missing section markers in update mode", async () => {
       const filePath = await setupWithMissingMarker("doctor-insert.md", "description", "greet");
 
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
-      vi.stubEnv(DOCTOR_ENV, "true");
       await generateDoc({
         command: testCommand,
         files: { [filePath]: filesConfig },
@@ -1891,13 +1971,15 @@ describe("golden-test", () => {
       expect(descPos).toBeLessThan(usagePos);
     });
 
-    it("should not insert markers without doctor mode (opt-out respected)", async () => {
+    it("should not insert markers in update mode with doctor: false (opt-out respected)", async () => {
       const filePath = await setupWithMissingMarker("doctor-no-insert.md", "description", "greet");
 
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       await generateDoc({
         command: testCommand,
         files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
+        doctor: false,
       });
 
       const updatedContent = fs.readFileSync(filePath, "utf-8");
@@ -1908,7 +1990,6 @@ describe("golden-test", () => {
       const filePath = await setupWithMissingMarker("doctor-heading.md", "heading", "greet");
 
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
-      vi.stubEnv(DOCTOR_ENV, "true");
       await generateDoc({
         command: testCommand,
         files: { [filePath]: filesConfig },
@@ -1933,7 +2014,6 @@ describe("golden-test", () => {
       const filePath = await setupWithMissingMarker("doctor-mid-insert.md", "usage", "greet");
 
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
-      vi.stubEnv(DOCTOR_ENV, "true");
       await generateDoc({
         command: testCommand,
         files: { [filePath]: filesConfig },
@@ -1972,9 +2052,8 @@ describe("golden-test", () => {
       content = removeSectionBlock(content, "usage", "greet");
       fs.writeFileSync(filePath, content, "utf-8");
 
-      // Read-only doctor mode should report both missing markers
+      // Read-only mode should report both missing markers
       vi.stubEnv(UPDATE_GOLDEN_ENV, "");
-      vi.stubEnv(DOCTOR_ENV, "true");
       const result = await generateDoc({
         command: testCommand,
         files: { [filePath]: filesConfig },
@@ -1985,9 +2064,9 @@ describe("golden-test", () => {
       const diff = result.files[0]?.diff ?? "";
       expect(diff).toContain('[doctor] Missing section marker "description"');
       expect(diff).toContain('[doctor] Missing section marker "usage"');
-      // Verify hint message mentions both env vars for correct remediation
-      expect(diff).toContain("POLITTY_DOCS_DOCTOR=true");
+      // Verify hint message points at update mode for remediation
       expect(diff).toContain("POLITTY_DOCS_UPDATE=true");
+      expect(result.error).toContain("POLITTY_DOCS_UPDATE=true to fix missing markers");
     });
   });
 

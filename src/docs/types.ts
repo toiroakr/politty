@@ -385,6 +385,20 @@ export interface GenerateDocConfig {
    * When provided, automatically derives `rootDoc.globalOptions` from this schema.
    */
   globalArgs?: ArgsSchema;
+  /**
+   * Missing section marker detection (doctor).
+   * When enabled, sections present in the generated output but missing their
+   * markers in the existing document are reported as errors (and inserted in
+   * update mode). Applies to marker-based comparison (targetCommands or
+   * PathConfig root document).
+   * Set to false to restore the legacy behavior where missing markers are
+   * silently skipped. To intentionally omit a section, prefer a custom
+   * renderer (e.g. `format: { renderNotes: () => "" }`) — sections absent
+   * from the generated output are never flagged.
+   * The POLITTY_DOCS_DOCTOR env var, when set, overrides this option.
+   * @default true
+   */
+  doctor?: boolean;
 }
 
 /**
@@ -418,9 +432,10 @@ export type FormatterFunction = (content: string) => string | Promise<string>;
 export const UPDATE_GOLDEN_ENV = "POLITTY_DOCS_UPDATE";
 
 /**
- * Environment variable name for doctor mode.
- * When enabled alone, detects and reports missing section markers (read-only).
- * When combined with POLITTY_DOCS_UPDATE=true, auto-inserts missing markers.
+ * Environment variable name for doctor mode (missing marker detection).
+ * Detection is enabled by default; this variable overrides the `doctor`
+ * config option for a single run: set to "false"/"0" to temporarily skip
+ * missing-marker detection, or "true"/"1" to force it on.
  */
 export const DOCTOR_ENV = "POLITTY_DOCS_DOCTOR";
 
