@@ -498,7 +498,10 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    setopt local_options no_aliases`);
   lines.push(`    local _worker="$1" _head`);
   lines.push(`    [[ -f "$_worker" ]] || return 1`);
-  lines.push(`    _head="$(head -n 24 "$_worker" 2>/dev/null)" || return 1`);
+  // zsh reads `$(<file)` in-process (no `head` fork). This helper runs many
+  // times per completion (once per candidate worker path), so the saved forks
+  // dominate; see __realpath for why fork volume matters on macOS.
+  lines.push(`    _head="$(<$_worker)" || return 1`);
   // Match whole header lines (not substrings) so a worker for another program
   // or version (e.g. `# program: ${programName}-extra`, version `10`) is rejected.
   lines.push(`    _head=$'\\n'"$_head"$'\\n'`);
@@ -526,17 +529,13 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`__${fn}_realpath() {`);
   lines.push(`    emulate -L zsh`);
   lines.push(`    setopt local_options no_aliases`);
-  lines.push(`    local _path="$1" _dir _target _limit=0`);
-  lines.push(`    while [[ -L "$_path" && $_limit -lt 40 ]]; do`);
-  lines.push(`        _dir="$(cd -P "$(dirname "$_path")" 2>/dev/null && pwd)" || return 1`);
-  lines.push(`        _target="$(readlink "$_path")" || return 1`);
-  lines.push(
-    `        if [[ "$_target" == /* ]]; then _path="$_target"; else _path="$_dir/$_target"; fi`,
-  );
-  lines.push(`        (( _limit++ ))`);
-  lines.push(`    done`);
-  lines.push(`    _dir="$(cd -P "$(dirname "$_path")" 2>/dev/null && pwd)" || return 1`);
-  lines.push(`    print -r -- "$_dir/$(basename "$_path")"`);
+  lines.push(`    local _path="$1"`);
+  lines.push(`    [[ -n "$_path" ]] || return 1`);
+  // zsh's `:A` modifier resolves symlinks and absolutizes the path entirely
+  // in-process — no `cd`/`dirname`/`readlink`/`basename` forks. Keeping the
+  // completion widget fork-free matters: on macOS the per-TAB subprocess
+  // volume otherwise aborts the dispatcher completion under real compsys.
+  lines.push(`    print -r -- "\${_path:A}"`);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_worker_from_dir() {`);
@@ -558,7 +557,14 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`__${fn}_cmd_shim_target() {`);
   lines.push(`    emulate -L zsh`);
   lines.push(`    setopt local_options no_aliases`);
-  lines.push(`    sed -n 's/^# cmd-shim-target=//p' "$1" 2>/dev/null | tail -n 1`);
+  lines.push(`    [[ -f "$1" ]] || return 0`);
+  // Read in-process and keep the last `# cmd-shim-target=` line (no sed/tail
+  // forks), matching the previous `sed -n | tail -n 1` behavior.
+  lines.push(`    local _l _t=""`);
+  lines.push(`    for _l in "\${(@f)$(<$1)}"; do`);
+  lines.push(`        [[ "$_l" == "# cmd-shim-target="* ]] && _t="\${_l#\\# cmd-shim-target=}"`);
+  lines.push(`    done`);
+  lines.push(`    [[ -n "$_t" ]] && print -r -- "$_t"`);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_bundled_worker_path() {`);
@@ -567,15 +573,15 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    local _bin="$1" _node_compile_cache="\${2:-}" _real _dir _target _reported`);
   lines.push(`    _real="$(__${fn}_realpath "$_bin" 2>/dev/null)" || _real=""`);
   lines.push(`    if [[ -n "$_real" ]]; then`);
-  lines.push(`        _dir="$(dirname "$_real")"`);
+  lines.push(`        _dir="\${_real:h}"`);
   lines.push(`        __${fn}_worker_from_dir "$_dir" && return 0`);
   lines.push(`    fi`);
-  lines.push(`    _dir="$(dirname "$_bin")"`);
+  lines.push(`    _dir="\${_bin:h}"`);
   lines.push(`    __${fn}_worker_from_dir "$_dir" && return 0`);
   lines.push(`    _target="$(__${fn}_cmd_shim_target "$_bin")"`);
   lines.push(`    if [[ -n "$_target" ]]; then`);
   lines.push(`        _real="$(__${fn}_realpath "$_target" 2>/dev/null)" || _real="$_target"`);
-  lines.push(`        _dir="$(dirname "$_real")"`);
+  lines.push(`        _dir="\${_real:h}"`);
   lines.push(`        __${fn}_worker_from_dir "$_dir" && return 0`);
   lines.push(`    fi`);
   if (canQueryBundledWorkerPath) {
@@ -614,9 +620,12 @@ function zshDispatcher(_command: AnyCommand, options: CompletionOptions): Comple
   lines.push(`    setopt local_options no_aliases`);
   lines.push(`    local _worker="$1" _sig="$2" _bin="$3" _head`);
   lines.push(`    [[ -f "$_worker" ]] || return 1`);
-  lines.push(`    _head="$(head -n 12 "$_worker" 2>/dev/null)" || return 1`);
-  lines.push(`    grep -qxF "# politty-bin-sig: $_sig" <<< "$_head" || return 1`);
-  lines.push(`    grep -qxF "# politty-bin-path: $_bin" <<< "$_head" || return 1`);
+  // In-process read + whole-line pattern match (no `head`/`grep` forks),
+  // mirroring __is_worker_file. Wrap in newlines so the match is anchored to
+  // complete header lines.
+  lines.push(`    _head=$'\\n'"$(<$_worker)"$'\\n'`);
+  lines.push(`    [[ "$_head" == *$'\\n'"# politty-bin-sig: $_sig"$'\\n'* ]] || return 1`);
+  lines.push(`    [[ "$_head" == *$'\\n'"# politty-bin-path: $_bin"$'\\n'* ]] || return 1`);
   lines.push(`}`);
   lines.push(``);
   lines.push(`__${fn}_cdescribe() {`);
