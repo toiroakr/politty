@@ -79,6 +79,43 @@ function stringifyValue(value: unknown): string {
  */
 export type MdTagFn = (strings: TemplateStringsArray, ...values: unknown[]) => string;
 
+/** Canonical names of the generated command sections, in render order. */
+export type SectionName =
+  | "heading"
+  | "description"
+  | "usage"
+  | "arguments"
+  | "options"
+  | "globalOptionsLink"
+  | "subcommands"
+  | "examples"
+  | "notes";
+
+/** Markdown for a section (an `md\`…\`` result, a plain string, or `md.usage`). */
+export type SectionContent = string;
+
+/** One or more pieces of section content. */
+export type SectionEdit = SectionContent | readonly SectionContent[];
+
+/**
+ * Declarative edits applied to a command's default section list. Operations
+ * are anchored by section name; anything not mentioned keeps its default.
+ */
+export interface SectionsSpec {
+  /** Swap a section's content, keeping its position. */
+  replace?: Partial<Record<SectionName, SectionContent>>;
+  /** Drop these sections entirely. */
+  remove?: readonly SectionName[];
+  /** Insert content immediately before the named section. */
+  insertBefore?: Partial<Record<SectionName, SectionEdit>>;
+  /** Insert content immediately after the named section. */
+  insertAfter?: Partial<Record<SectionName, SectionEdit>>;
+  /** Content placed before everything. */
+  prepend?: SectionEdit;
+  /** Content placed after everything. */
+  append?: SectionEdit;
+}
+
 /**
  * `md` tag bound to a single command. Exposes that command's generated
  * sections as getters and a heading helper.
@@ -106,6 +143,12 @@ export type CommandMd = MdTagFn & {
    * to emit an arbitrary heading instead of the command name.
    */
   h(level: number, text?: string): string;
+  /**
+   * Render the command block from its default sections, applying `spec` edits.
+   * Returns the joined markdown (no command marker — that is added by the
+   * generator). With no argument it equals the default render (same as `true`).
+   */
+  sections(spec?: SectionsSpec): string;
 };
 
 /**
@@ -168,7 +211,58 @@ export function createCommandMd(info: CommandInfo, options: CommandMdOptions = {
     return `${"#".repeat(effective)} ${label}`;
   };
 
+  const defaultContent = (name: SectionName): string => (name === "heading" ? tag.h(1) : tag[name]);
+
+  tag.sections = (spec: SectionsSpec = {}): string => {
+    validateSectionNames(spec);
+    const toItems = (edit: SectionEdit | undefined): SectionContent[] =>
+      edit === undefined ? [] : Array.isArray(edit) ? [...edit] : [edit as SectionContent];
+
+    const removed = new Set<SectionName>(spec.remove ?? []);
+    const out: string[] = [...toItems(spec.prepend)];
+    for (const name of SECTION_NAMES) {
+      out.push(...toItems(spec.insertBefore?.[name]));
+      if (!removed.has(name)) {
+        const replaced = spec.replace?.[name];
+        out.push(replaced !== undefined ? replaced : defaultContent(name));
+      }
+      out.push(...toItems(spec.insertAfter?.[name]));
+    }
+    out.push(...toItems(spec.append));
+    return out.filter((s) => s.length > 0).join("\n\n");
+  };
+
   return tag;
+}
+
+/** Canonical section render order. */
+const SECTION_NAMES: readonly SectionName[] = [
+  "heading",
+  "description",
+  "usage",
+  "arguments",
+  "options",
+  "globalOptionsLink",
+  "subcommands",
+  "examples",
+  "notes",
+];
+
+const SECTION_NAME_SET = new Set<string>(SECTION_NAMES);
+
+/** Throw on an unknown section name in a spec (a typo not caught by types). */
+function validateSectionNames(spec: SectionsSpec): void {
+  const names = [
+    ...Object.keys(spec.replace ?? {}),
+    ...Object.keys(spec.insertBefore ?? {}),
+    ...Object.keys(spec.insertAfter ?? {}),
+    ...(spec.remove ?? []),
+  ];
+  for (const name of names) {
+    if (!SECTION_NAME_SET.has(name)) {
+      throw new Error(`Unknown section "${name}". Valid sections: ${SECTION_NAMES.join(", ")}.`);
+    }
+  }
 }
 
 /** Inputs for building a layout `md` tag. */

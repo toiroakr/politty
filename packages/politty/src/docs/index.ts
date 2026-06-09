@@ -40,7 +40,17 @@ export {
 } from "./types.js";
 // `md` tag composers
 export { createCommandMd, createLayoutMd, formatTemplate } from "./md-tag.js";
-export type { CommandMd, CommandMdOptions, LayoutMd, LayoutMdInputs, MdTagFn } from "./md-tag.js";
+export type {
+  CommandMd,
+  CommandMdOptions,
+  LayoutMd,
+  LayoutMdInputs,
+  MdTagFn,
+  SectionContent,
+  SectionEdit,
+  SectionName,
+  SectionsSpec,
+} from "./md-tag.js";
 // Types
 export type {
   CommandIndexOptions,

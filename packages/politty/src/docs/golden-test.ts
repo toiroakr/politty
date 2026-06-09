@@ -905,9 +905,16 @@ function renderCommandBlock(cmdPath: string, ctx: CommandRenderContext): string 
   if (!enriched) return null;
 
   const override: CommandOverride | undefined = ctx.commandOverrides[cmdPath];
+  // `ctx.mdOptions.baseHeadingLevel` is the file's minimum-depth level; the
+  // default renderer adds `depth - 1` per command, so mirror that here so an
+  // override's `md.h(1)` / `md.sections()` heading matches the default render.
+  const mdOptions: CommandMdOptions = {
+    ...ctx.mdOptions,
+    baseHeadingLevel: (ctx.mdOptions.baseHeadingLevel ?? 1) + (enriched.depth - 1),
+  };
   const body =
     typeof override === "function"
-      ? override(createCommandMd(enriched, ctx.mdOptions))
+      ? override(createCommandMd(enriched, mdOptions))
       : ctx.render(enriched);
 
   return `${commandStartMarker(cmdPath)}\n${body.trimEnd()}\n${commandEndMarker(cmdPath)}`;

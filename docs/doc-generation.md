@@ -107,6 +107,46 @@ await assertDocMatch({
 });
 ```
 
+### Editing sections (`md.sections`)
+
+Re-listing every section just to tweak one is tedious. `md.sections(spec)` renders
+the command's default sections, applying only the edits you declare — everything
+else keeps its default. The result is a string, so use it as the override's
+return value (or interpolate it inside `md\`…\``).
+
+```typescript
+deploy: (md) =>
+  md.sections({
+    replace: { options: md`${md.h(2, "Options")}\n\n(custom table)` },
+    insertAfter: { usage: "> ⚠️ Confirm on staging before deploying." },
+    remove: ["examples"],
+  });
+
+// Wrap in md`` only when you need extra surrounding prose:
+build: (md) => md`
+  ${md.h(1)}
+
+  Intro paragraph.
+
+  ${md.sections({ remove: ["heading"] })}
+`;
+```
+
+`SectionsSpec`:
+
+| Key            | Type                                               | Effect                                         |
+| -------------- | -------------------------------------------------- | ---------------------------------------------- |
+| `replace`      | `Partial<Record<SectionName, string>>`             | Swap a section's content, keeping its position |
+| `remove`       | `SectionName[]`                                    | Drop these sections                            |
+| `insertBefore` | `Partial<Record<SectionName, string \| string[]>>` | Insert before the named section                |
+| `insertAfter`  | `Partial<Record<SectionName, string \| string[]>>` | Insert after the named section                 |
+| `prepend`      | `string \| string[]`                               | Place before everything                        |
+| `append`       | `string \| string[]`                               | Place after everything                         |
+
+- `SectionName` is one of `heading` / `description` / `usage` / `arguments` / `options` / `globalOptionsLink` / `subcommands` / `examples` / `notes`. An unknown name is a type error (and throws at runtime).
+- Edits are anchored by section name and applied in render order; all nine anchors always exist, so `insertAfter: { arguments: … }` works even when the command has no arguments. Empty sections are dropped from the output.
+- `md.sections()` with no spec equals the default render (the same as `true`).
+
 ### Layout getters
 
 Inside a `layout`, `md` exposes:
