@@ -214,6 +214,13 @@ export interface FileConfig {
    * the file's command blocks (`md.commands()`).
    */
   layout?: (md: LayoutMd) => string;
+  /**
+   * Curated label for this file's entry in the root document command index
+   * (`md.index`). When omitted, the index derives the title/description from the
+   * file's first command. Use this to keep a hand-written category title (e.g.
+   * "Application Commands") instead of the raw command name.
+   */
+  index?: { title?: string; description?: string };
   /** Skip subcommand expansion (commands are used as-is). @internal */
   noExpand?: boolean;
 }

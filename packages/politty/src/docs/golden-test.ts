@@ -667,9 +667,12 @@ function deriveIndexFromFiles(
     const docPath = "./" + path.relative(path.dirname(rootDocPath), filePath).replace(/\\/g, "/");
     const firstCmdPath = commandPaths[0];
     const cmdInfo = firstCmdPath !== undefined ? allCommands.get(firstCmdPath) : undefined;
+    // A curated `FileConfig.index` label wins over the auto-derived title /
+    // description (the first command's name / description).
+    const label = fileConfigRaw.index;
     categories.push({
-      title: cmdInfo?.name ?? path.basename(filePath, path.extname(filePath)),
-      description: cmdInfo?.description ?? "",
+      title: label?.title ?? cmdInfo?.name ?? path.basename(filePath, path.extname(filePath)),
+      description: label?.description ?? cmdInfo?.description ?? "",
       commands: topLevelCommands,
       docPath,
     });

@@ -1840,6 +1840,37 @@ ${commandEndMarker("removed")}
       expect(matched.files.find((f) => f.path === rootDocPath)?.status).toBe("match");
     });
 
+    it("should use FileConfig.index to label the command index entry", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "labeled-reference.md");
+      const greetPath = path.join(testDir, "cli", "greet.md");
+
+      const config = {
+        command: testCommand,
+        rootDoc: { path: rootDocPath },
+        files: {
+          [greetPath]: {
+            commands: ["greet"],
+            index: { title: "Greeting Commands", description: "Say hello, your way." },
+          },
+        },
+      };
+
+      const created = await generateDoc(config);
+      expect(created.success).toBe(true);
+
+      const content = fs.readFileSync(rootDocPath, "utf-8");
+      // The curated label wins over the first command's name/description.
+      expect(content).toContain("[Greeting Commands]");
+      expect(content).toContain("Say hello, your way.");
+      expect(content).not.toMatch(/\[greet\]\(\.\/cli\/greet\.md\)/);
+
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+      const matched = await generateDoc(config);
+      expect(matched.success).toBe(true);
+    });
+
     it("should support custom heading levels via rootDoc.headingLevel and index", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
 

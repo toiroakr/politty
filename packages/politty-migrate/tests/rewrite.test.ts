@@ -92,6 +92,19 @@ describe("rewriteSource", () => {
     expect(review!.detail).toMatch(/title|description|render/);
   });
 
+  it("maps removed title/description to a FileConfig.index label", () => {
+    const text = read("fixtures/custom-render/config.old.ts");
+    const parsed = parseConfigSource("config.ts", text);
+    const { text: out } = rewriteSource(
+      parsed,
+      parsed.calls.map((call) => ({ call })),
+    );
+    // The OLD title/description drove the root index, so they survive as `index`.
+    expect(out).toContain('index: { title: "Build Docs", description: "How to build." }');
+    // ...and the OLD keys themselves are gone.
+    expect(out).not.toMatch(/title:\s*"Build Docs",\n\s*description:/);
+  });
+
   it("rewrites the files value to a single-file FileConfig when provided", () => {
     const text = read("fixtures/inline-array/config.old.ts");
     const parsed = parseConfigSource("config.ts", text);

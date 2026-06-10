@@ -229,6 +229,8 @@ const files: FileMapping = {
 
 A `FileConfig` must have `commands` and/or `layout` (an object with neither throws). There are no value-level forms to disambiguate and no reserved-command-name edge case — a command named `commands` or `layout` is just a key inside `commands: { … }`.
 
+`FileConfig.index` (`{ title?, description? }`) sets this file's entry in the root command index (`md.index`). When omitted, the index derives the title/description from the file's first command; set it to keep a curated category label (e.g. `index: { title: "Application Commands", description: "…" }`).
+
 - **Subcommands are automatically included** (`"config"` pulls in `"config get"`, …).
 - **Wildcards**: `*` matches one command segment — `"config *"`, `"* *"`, `"*"`.
 - **Cross-file links**: when subcommands live in other files, relative links are generated automatically.

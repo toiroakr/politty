@@ -23,9 +23,11 @@ Root documents and file layouts are MARKERLESS — no \`global-options\`,
 
 Config shape:
 
-- \`files\`: \`string[]\` (each path uses the default render) | a flat
-  \`CommandMap\` (\`Record<path, true | (md) => string>\`) | a \`FileConfig\`
-  (\`{ commands?, layout?, noExpand? }\`).
+- \`files\`: \`Record<string, FileConfig>\`. A \`FileConfig\` is
+  \`{ commands?, layout?, index?, noExpand? }\`. \`commands\` is a \`string[]\` (each
+  path uses the default render) OR a \`CommandMap\`
+  (\`Record<path, true | (md) => string>\`). There is no array-sugar or bare
+  \`CommandMap\` value form — always wrap them in \`{ commands: ... }\`.
 - A command value of \`true\` => default render. A function \`(md) => md\\\`...\\\`\`
   composes the block from section getters: \`md.description\`, \`md.usage\`,
   \`md.arguments\`, \`md.options\`, \`md.globalOptionsLink\`, \`md.subcommands\`,
@@ -33,8 +35,13 @@ Config shape:
 - \`rootDoc.layout(md) => string\` and \`FileConfig.layout(md) => string\` build a
   markerless file body. On the root document, \`md.globalOptions\` and
   \`md.index\` are available; \`md.commands()\` emits the file's command blocks.
+- \`FileConfig.index\` (\`{ title?, description? }\`) sets this file's curated entry
+  in the root command index, replacing the OLD \`title\`/\`description\` (which the
+  index used). Without it the index falls back to the first command's name.
 - REMOVED: \`rootInfo\`, \`FileConfig.title\`, \`FileConfig.description\`,
-  \`FileConfig.render\`, per-section \`format\` renderers, and doctor mode.
+  \`FileConfig.render\`, per-section \`format\` renderers, and doctor mode. The OLD
+  \`title\`/\`description\` now map to \`FileConfig.index\` (root index) plus a
+  \`layout\` heading (file body).
 
 The \`md\` tag dedents, trims, and collapses blank-line runs, so absent sections
 collapse cleanly.
@@ -51,10 +58,12 @@ must be updated by hand.`;
  * \`files\` case. The migrator does this automatically when it can; this section
  * documents the exact transform so an AI agent can finish the cases it flagged.
  */
-export const FILECONFIG_GUIDE = `## FileConfig: \`title\`/\`description\`/\`render\` -> \`layout\`
+export const FILECONFIG_GUIDE = `## FileConfig: \`title\`/\`description\`/\`render\` -> \`index\` + \`layout\`
 
-The NEW \`FileConfig\` is \`{ commands?, layout?, noExpand? }\`. The OLD keys
-\`title\`, \`description\`, and \`render\` were REMOVED. Convert each entry as:
+The NEW \`FileConfig\` is \`{ commands?, layout?, index?, noExpand? }\`. The OLD keys
+\`title\`, \`description\`, and \`render\` were REMOVED. The OLD \`title\`/\`description\`
+served TWO roles — the file's entry in the root command index AND the file-body
+heading — so they map to BOTH \`index\` and \`layout\`. Convert each entry as:
 
 BEFORE (OLD, now invalid):
 
@@ -72,6 +81,10 @@ AFTER (NEW):
     const files: Record<string, FileConfig> = {
       "docs/cli/application.md": {
         commands: ["init", "deploy"],
+        index: {
+          title: "Application Commands",
+          description: "Commands for managing applications.",
+        },
         layout: (md) =>
           md\`
             # Application Commands
@@ -84,8 +97,11 @@ AFTER (NEW):
     };
 
 Rules:
-- \`title\` -> a leading \`# <title>\` line in the \`layout\`.
-- \`description\` -> a paragraph after the heading.
+- \`title\`/\`description\` -> \`index: { title, description }\` (the root command
+  index entry). If the file body had a DIFFERENT hand-written heading/prose,
+  prefer that text in the \`layout\` and keep the curated \`index\` text separate.
+- \`title\` -> also a leading \`# <title>\` line in the \`layout\`; \`description\` -> a
+  paragraph after the heading.
 - Always end the \`layout\` with \`\\\${md.commands()}\` so the file's command blocks
   still render. Omit the heading / description lines that were absent.
 - \`render\`: if it is \`createCommandRenderer({})\` / \`createCommandRenderer({ headingLevel: 1 })\`

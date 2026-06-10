@@ -157,7 +157,7 @@ describe("migrate integration", () => {
 
     // The playbook documents the FileConfig conversion.
     const playbook = fs.readFileSync(report.playbookPath, "utf-8");
-    expect(playbook).toContain("`title`/`description`/`render` -> `layout`");
+    expect(playbook).toContain("`title`/`description`/`render` -> `index` + `layout`");
     expect(playbook).toContain("Variable-referenced `files`");
 
     fs.rmSync(tmp, { recursive: true, force: true });

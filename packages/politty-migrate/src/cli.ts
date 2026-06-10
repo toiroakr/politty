@@ -7,6 +7,7 @@
  * API. Run via `npx politty-migrate`.
  */
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { migrate } from "./index.js";
@@ -166,14 +167,24 @@ export function main(argv: string[] = process.argv.slice(2)): void {
 
 /**
  * Only auto-run when invoked as the CLI entry point (`node cli.js`), not when
- * imported (e.g. by tests). Comparing the resolved module path to argv[1]
- * keeps the guard tooling-agnostic.
+ * imported (e.g. by tests). Comparing the realpath of the module to argv[1]
+ * keeps the guard tooling-agnostic AND robust to symlinked bins: `npx`, `pnpm
+ * dlx`, and global installs expose the CLI through a symlink, so `argv[1]` is
+ * the link path while `import.meta.url` is the link target — comparing without
+ * resolving symlinks would never match and `main()` would silently never run.
  */
 function isEntryPoint(): boolean {
   const entry = process.argv[1];
   if (!entry) return false;
+  const real = (p: string): string => {
+    try {
+      return fs.realpathSync(p);
+    } catch {
+      return path.resolve(p);
+    }
+  };
   try {
-    return path.resolve(entry) === path.resolve(fileURLToPath(import.meta.url));
+    return real(entry) === real(fileURLToPath(import.meta.url));
   } catch {
     return false;
   }

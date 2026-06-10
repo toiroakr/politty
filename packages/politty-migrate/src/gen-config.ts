@@ -366,6 +366,16 @@ export function migrateFileConfig(
     // Re-indent multi-line kept values to sit at innerPad.
     parts.push(`${innerPad}${k},`);
   }
+  // The OLD `title`/`description` drove the ROOT command index entry, so carry
+  // them to the NEW `FileConfig.index` label (the file-body heading is handled
+  // by `layout` below). Without this the index would regress to the first
+  // command's raw name/description.
+  if (title !== undefined || description !== undefined) {
+    const idx: string[] = [];
+    if (title !== undefined) idx.push(`title: ${JSON.stringify(title)}`);
+    if (description !== undefined) idx.push(`description: ${JSON.stringify(description)}`);
+    parts.push(`${innerPad}index: { ${idx.join(", ")} },`);
+  }
   if (hasLayout) {
     const layoutBody = layoutLines.map((l) => (l.length ? bodyPad + l : l)).join("\n\n");
     const layout = `(md) =>\n${innerPad}  md\`\n${layoutBody}\n${innerPad}  \``;
