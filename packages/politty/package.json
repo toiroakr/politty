@@ -122,7 +122,7 @@
     "@inquirer/prompts": "8.5.2",
     "@quansync/fs": "1.0.0",
     "@types/node": "25.9.1",
-    "@typescript/native-preview": "7.0.0-dev.20260527.2",
+    "@typescript/native-preview": "7.0.0-dev.20260603.1",
     "@vitest/coverage-v8": "4.1.8",
     "quansync": "1.0.0",
     "tsdown": "0.22.1",
