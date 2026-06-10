@@ -7,7 +7,6 @@ import { createCommandRenderer } from "./default-renderers.js";
 import {
   compareWithExisting,
   deleteFile,
-  formatDiff,
   readFile,
   writeFile,
   type DeleteFileFs,
@@ -431,15 +430,6 @@ function formatCommandPath(commandPath: string): string {
 // Single command-marker helpers (over the generic extract/replace below).
 // ---------------------------------------------------------------------------
 
-/** Extract a command's wrapped block (including markers), or null. */
-function extractCommandMarker(content: string, commandPath: string): string | null {
-  return extractMarkerSection(
-    content,
-    commandStartMarker(commandPath),
-    commandEndMarker(commandPath),
-  );
-}
-
 /** Replace a command's wrapped block. Returns null if the marker is absent. */
 function replaceCommandMarker(content: string, commandPath: string, block: string): string | null {
   return replaceMarkerSection(
@@ -534,28 +524,6 @@ function removeCommandSections(content: string, commandPath: string): string {
   // Clean up excess blank lines (3+ consecutive newlines -> 2)
   content = content.replace(/\n{3,}/g, "\n\n");
   return content;
-}
-
-/**
- * Extract a marker section from content
- * Returns the content between start and end markers (including markers)
- */
-function extractMarkerSection(
-  content: string,
-  startMarker: string,
-  endMarker: string,
-): string | null {
-  const startIndex = content.indexOf(startMarker);
-  if (startIndex === -1) {
-    return null;
-  }
-
-  const endIndex = content.indexOf(endMarker, startIndex);
-  if (endIndex === -1) {
-    return null;
-  }
-
-  return content.slice(startIndex, endIndex + endMarker.length);
 }
 
 /**
@@ -1298,43 +1266,26 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           );
         }
       } else {
+        // Replace/insert each target command's block RAW; the whole file is
+        // formatted once at the end so command markers stay consistent with a
+        // full-file formatter (e.g. a repo's pre-commit hook). Per-block
+        // formatting could indent a marker that trails a list, which a
+        // full-file formatter would then re-flow — producing a perpetual diff.
+        let working = existingContent;
         for (const targetCommand of fileTargetCommands) {
           const block = renderCommandBlock(targetCommand, renderCtx);
           if (block === null) {
             throw new Error(`Target command "${targetCommand}" not found in commands`);
           }
-          const generatedBlock = await applyFormatter(block, formatter);
 
-          if (hasCommandMarker(existingContent, targetCommand)) {
-            const existingBlock = extractCommandMarker(existingContent, targetCommand);
-            if (existingBlock !== generatedBlock) {
-              if (updateMode) {
-                const updated = replaceCommandMarker(
-                  existingContent,
-                  targetCommand,
-                  generatedBlock,
-                );
-                if (!updated) {
-                  throw new Error(`Failed to replace command block for "${targetCommand}"`);
-                }
-                existingContent = updated;
-                writeFile(filePath, existingContent);
-                fileStatus = "updated";
-              } else {
-                hasError = true;
-                fileStatus = "diff";
-                diffs.push(formatDiff(existingBlock ?? "", generatedBlock));
-              }
+          if (hasCommandMarker(working, targetCommand)) {
+            const updated = replaceCommandMarker(working, targetCommand, block);
+            if (!updated) {
+              throw new Error(`Failed to replace command block for "${targetCommand}"`);
             }
+            working = updated;
           } else if (updateMode) {
-            existingContent = insertCommandSections(
-              existingContent,
-              targetCommand,
-              generatedBlock,
-              sortedCommandPaths,
-            );
-            writeFile(filePath, existingContent);
-            fileStatus = "updated";
+            working = insertCommandSections(working, targetCommand, block, sortedCommandPaths);
           } else {
             // Hard error: old-style or missing markers require a full regeneration.
             hasError = true;
@@ -1348,28 +1299,33 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         }
 
         // Remove orphaned command markers for commands no longer in this file.
-        const existingMarkerPaths = collectSectionMarkerPaths(existingContent);
+        const existingMarkerPaths = collectSectionMarkerPaths(working);
         const commandPathSet = new Set(commandPaths);
-        if (updateMode) {
-          let removedAny = false;
-          for (const markerPath of existingMarkerPaths) {
-            if (!commandPathSet.has(markerPath)) {
-              existingContent = removeCommandSections(existingContent, markerPath);
-              removedAny = true;
-            }
+        for (const markerPath of existingMarkerPaths) {
+          if (commandPathSet.has(markerPath)) continue;
+          if (updateMode) {
+            working = removeCommandSections(working, markerPath);
+          } else {
+            hasError = true;
+            fileStatus = "diff";
+            diffs.push(
+              `Found orphaned command marker for deleted command "${formatCommandPath(markerPath)}"`,
+            );
           }
-          if (removedAny) {
-            writeFile(filePath, existingContent);
+        }
+
+        // Format the whole file once, then compare/write at the file level.
+        const formattedWhole = await applyFormatter(working, formatter);
+        const comparison = compareWithExisting(formattedWhole, filePath);
+        if (!comparison.match) {
+          if (updateMode) {
+            writeFile(filePath, formattedWhole);
             fileStatus = "updated";
-          }
-        } else {
-          for (const markerPath of existingMarkerPaths) {
-            if (!commandPathSet.has(markerPath)) {
-              hasError = true;
-              fileStatus = "diff";
-              diffs.push(
-                `Found orphaned command marker for deleted command "${formatCommandPath(markerPath)}"`,
-              );
+          } else if (diffs.length === 0) {
+            hasError = true;
+            fileStatus = "diff";
+            if (comparison.diff) {
+              diffs.push(comparison.diff);
             }
           }
         }
