@@ -107,8 +107,11 @@ Rules:
 - \`render\`: if it is \`createCommandRenderer({})\` / \`createCommandRenderer({ headingLevel: 1 })\`
   (or a \`const\` bound to one), DROP it — the default renderer already matches.
   If it is a CUSTOM renderer, drop it from the \`FileConfig\` and reproduce its
-  behavior with per-command \`(md) => md\\\`...\\\`\` overrides on \`commands\` (a
-  \`layout-review\` TODO marks each such entry).
+  behavior with \`FileConfig.sections\` (a \`SectionsSpec\` applied to every command
+  in the file — e.g. \`sections: { order: [...] }\` to change the section order,
+  or \`{ remove: [...] }\` to drop sections). For per-command differences, use a
+  \`(md) => md\\\`...\\\`\` override on that command instead. A \`layout-review\` TODO
+  marks each custom-render entry.
 
 ### Variable-referenced \`files\`
 

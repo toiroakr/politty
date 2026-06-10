@@ -1,6 +1,6 @@
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
 import type { AnyCommand, ArgsSchema, Example } from "../types.js";
-import type { CommandMd, LayoutMd } from "./md-tag.js";
+import type { CommandMd, LayoutMd, SectionsSpec } from "./md-tag.js";
 import type { ArgsShape, ArgsTableOptions } from "./render-args.js";
 
 /** Heading level for markdown headings (1-6) */
@@ -209,6 +209,15 @@ export interface FileConfig {
    * per-command overrides. Array vs. object is the only (reliable) distinction.
    */
   commands?: string[] | CommandMap;
+  /**
+   * Default section spec applied to every command in this file that does NOT
+   * have an explicit function override in `commands`. This is the declarative
+   * "default renderer" for the file — e.g. `{ order: [...] }` to render the
+   * sections in a custom order, or `{ remove: ["examples"] }` to drop a section
+   * everywhere. Equivalent to giving each such command a
+   * `(md) => md.sections(spec)` override.
+   */
+  sections?: SectionsSpec;
   /**
    * Custom layout for this file. When absent, the default layout simply emits
    * the file's command blocks (`md.commands()`).

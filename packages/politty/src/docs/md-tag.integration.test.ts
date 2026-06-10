@@ -152,6 +152,18 @@ describe("createCommandMd.sections", () => {
     expect(out.indexOf("ONE")).toBeGreaterThan(out.indexOf("**Usage**"));
   });
 
+  it("order renders sections in the given sequence (and drops omitted ones)", async () => {
+    const info = await buildCommandInfo(initCommand, "project-cli", ["init"]);
+    const md = createCommandMd(info, { baseHeadingLevel: 2 });
+    const out = md.sections({
+      order: ["heading", "usage", "description", "options"],
+    });
+    // sequence honored: usage before description (the inverse of the default)
+    expect(out.indexOf("**Usage**")).toBeLessThan(out.indexOf("Initialize a new project"));
+    // arguments was omitted from `order`, so it is dropped
+    expect(out).not.toContain("**Arguments**");
+  });
+
   it("remove drops sections; surrounding prose is added by wrapping in md``", async () => {
     const info = await buildCommandInfo(initCommand, "project-cli", ["init"]);
     const md = createCommandMd(info, { baseHeadingLevel: 2 });

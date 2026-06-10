@@ -150,12 +150,31 @@ build: (md) => md`
 
 `SectionsSpec`:
 
-| Key            | Type                                                          | Effect                                         |
-| -------------- | ------------------------------------------------------------- | ---------------------------------------------- |
-| `replace`      | `Partial<Record<SectionName, string \| (current) => string>>` | Swap a section's content, keeping its position |
-| `remove`       | `SectionName[]`                                               | Drop these sections                            |
-| `insertBefore` | `Partial<Record<SectionName, string \| string[]>>`            | Insert before the named section                |
-| `insertAfter`  | `Partial<Record<SectionName, string \| string[]>>`            | Insert after the named section                 |
+| Key            | Type                                                          | Effect                                                     |
+| -------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
+| `order`        | `SectionName[]`                                               | Render sections in this exact sequence (omitted ones drop) |
+| `replace`      | `Partial<Record<SectionName, string \| (current) => string>>` | Swap a section's content, keeping its position             |
+| `remove`       | `SectionName[]`                                               | Drop these sections                                        |
+| `insertBefore` | `Partial<Record<SectionName, string \| string[]>>`            | Insert before the named section                            |
+| `insertAfter`  | `Partial<Record<SectionName, string \| string[]>>`            | Insert after the named section                             |
+
+`order` is authoritative when given: only the listed sections are emitted, in that sequence (so it both reorders and selects). `replace` / `insertBefore` / `insertAfter` still apply, anchored by name. Example — render the global-options link last:
+
+```typescript
+md.sections({
+  order: [
+    "heading",
+    "description",
+    "usage",
+    "arguments",
+    "options",
+    "subcommands",
+    "examples",
+    "notes",
+    "globalOptionsLink",
+  ],
+});
+```
 
 A `replace` value can be a function `(current) => string`, where `current` is the
 section's default render. Use it to tweak the default instead of rebuilding it:
@@ -230,6 +249,18 @@ const files: FileMapping = {
 A `FileConfig` must have `commands` and/or `layout` (an object with neither throws). There are no value-level forms to disambiguate and no reserved-command-name edge case — a command named `commands` or `layout` is just a key inside `commands: { … }`.
 
 `FileConfig.index` (`{ title?, description? }`) sets this file's entry in the root command index (`md.index`). When omitted, the index derives the title/description from the file's first command; set it to keep a curated category label (e.g. `index: { title: "Application Commands", description: "…" }`).
+
+`FileConfig.sections` (a `SectionsSpec`) is the file-level **default renderer**: it is applied to every command in the file that does not have an explicit function override, equivalent to giving each a `(md) => md.sections(spec)` override. Use it to apply a custom section order (or drop a section) across a whole file without repeating it per command:
+
+```typescript
+"docs/cli/application.md": {
+  commands: ["init", "generate", "deploy"],
+  // render globalOptionsLink last for every command in this file
+  sections: { order: ["heading", "description", "usage", "arguments", "options", "subcommands", "examples", "notes", "globalOptionsLink"] },
+}
+```
+
+Precedence per command: an explicit `(md) => …` override in `commands` wins; otherwise `FileConfig.sections` (if set); otherwise the default render.
 
 - **Subcommands are automatically included** (`"config"` pulls in `"config get"`, …).
 - **Wildcards**: `*` matches one command segment — `"config *"`, `"* *"`, `"*"`.

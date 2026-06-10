@@ -14,7 +14,13 @@ import {
 } from "./doc-comparator.js";
 import { collectAllCommands } from "./doc-generator.js";
 import { executeExamples } from "./example-executor.js";
-import { createCommandMd, createLayoutMd, type CommandMdOptions, type LayoutMd } from "./md-tag.js";
+import {
+  createCommandMd,
+  createLayoutMd,
+  type CommandMdOptions,
+  type LayoutMd,
+  type SectionsSpec,
+} from "./md-tag.js";
 import { renderArgsTable, type ArgsShape, type ArgsTableOptions } from "./render-args.js";
 import { renderCommandIndex, type CommandCategory } from "./render-index.js";
 import type {
@@ -64,6 +70,8 @@ interface NormalizedFileConfig {
   commands: string[];
   /** Per-command overrides (path -> override). */
   commandOverrides: CommandMap;
+  /** Default section spec applied to non-overridden commands. */
+  sections?: SectionsSpec | undefined;
   /** Optional custom layout. */
   layout?: ((md: LayoutMd) => string) | undefined;
   /** Skip subcommand expansion. */
@@ -110,6 +118,7 @@ function normalizeFileConfig(config: FileConfig): NormalizedFileConfig {
   return {
     commands,
     commandOverrides,
+    sections: config.sections,
     layout: config.layout,
     noExpand: config.noExpand,
   };
@@ -847,6 +856,8 @@ interface CommandRenderContext {
   allCommands: Map<string, CommandInfo>;
   render: RenderFunction;
   commandOverrides: CommandMap;
+  /** File-level default section spec for non-overridden commands. */
+  defaultSections?: SectionsSpec | undefined;
   mdOptions: CommandMdOptions;
   filePath?: string | undefined;
   fileMap?: Record<string, string> | undefined;
@@ -892,7 +903,9 @@ function renderCommandBlock(cmdPath: string, ctx: CommandRenderContext): string 
   const body =
     typeof override === "function"
       ? override(createCommandMd(enriched, mdOptions))
-      : ctx.render(enriched);
+      : ctx.defaultSections !== undefined
+        ? createCommandMd(enriched, mdOptions).sections(ctx.defaultSections)
+        : ctx.render(enriched);
 
   return `${commandStartMarker(cmdPath)}\n${body.trimEnd()}\n${commandEndMarker(cmdPath)}`;
 }
@@ -1206,6 +1219,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       allCommands,
       render,
       commandOverrides: fileConfig.commandOverrides,
+      defaultSections: fileConfig.sections,
       mdOptions,
       filePath,
       fileMap,

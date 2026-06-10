@@ -1898,6 +1898,40 @@ ${commandEndMarker("removed")}
     });
   });
 
+  describe("FileConfig.sections (file-level default render)", () => {
+    it("applies the section spec to every non-overridden command in the file", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "ordered.md");
+      const config = {
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: ["greet", "config"],
+            // usage before description, and drop arguments everywhere
+            sections: {
+              order: ["heading", "usage", "description", "options", "subcommands"] as const,
+            },
+          },
+        },
+      };
+
+      const created = await generateDoc(config);
+      expect(created.success).toBe(true);
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      // greet has a positional arg; `arguments` was omitted from `order`, so it
+      // is dropped for every command in the file.
+      expect(content).not.toContain("**Arguments**");
+      // the custom order is applied: usage precedes the description text.
+      expect(content.indexOf("**Usage**")).toBeLessThan(content.indexOf("Greet someone"));
+
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+      const matched = await generateDoc(config);
+      expect(matched.success).toBe(true);
+    });
+  });
+
   describe("rootDoc.path overlap with files", () => {
     it("should throw when rootDoc.path is also in files", async () => {
       const filePath = path.join(testDir, "overlap.md");

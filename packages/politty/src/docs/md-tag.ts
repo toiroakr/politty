@@ -113,6 +113,13 @@ export type SectionEdit = SectionContent | readonly SectionContent[];
  */
 export interface SectionsSpec {
   /**
+   * Render the sections in this exact order. When given it is authoritative:
+   * only the listed sections are emitted, in this sequence (sections omitted
+   * here are dropped, like `remove`). When absent, the canonical order is used.
+   * `replace` / `insertBefore` / `insertAfter` still apply, anchored by name.
+   */
+  order?: readonly SectionName[];
+  /**
    * Swap a section's content, keeping its position. The value is either new
    * content or a function `(defaultContent) => newContent` that derives it from
    * the section's default render.
@@ -229,8 +236,9 @@ export function createCommandMd(info: CommandInfo, options: CommandMdOptions = {
       edit === undefined ? [] : Array.isArray(edit) ? [...edit] : [edit as SectionContent];
 
     const removed = new Set<SectionName>(spec.remove ?? []);
+    const sequence = spec.order ?? SECTION_NAMES;
     const out: string[] = [];
-    for (const name of SECTION_NAMES) {
+    for (const name of sequence) {
       out.push(...toItems(spec.insertBefore?.[name]));
       if (!removed.has(name)) {
         const replacement = spec.replace?.[name];
@@ -268,6 +276,7 @@ const SECTION_NAME_SET = new Set<string>(SECTION_NAMES);
 /** Throw on an unknown section name in a spec (a typo not caught by types). */
 function validateSectionNames(spec: SectionsSpec): void {
   const names = [
+    ...(spec.order ?? []),
     ...Object.keys(spec.replace ?? {}),
     ...Object.keys(spec.insertBefore ?? {}),
     ...Object.keys(spec.insertAfter ?? {}),
