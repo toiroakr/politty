@@ -1,0 +1,866 @@
+import path from "node:path";
+import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
+import type { Example } from "../types.js";
+import type {
+  CommandInfo,
+  DefaultRendererOptions,
+  ExampleExecutionResult,
+  ExamplesRenderOptions,
+  RenderFunction,
+  SubCommandInfo,
+} from "./types.js";
+
+/**
+ * Escape markdown special characters in table cells
+ */
+function escapeTableCell(str: string): string {
+  return str.replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
+
+/**
+ * Marker appended to a custom negation row/line so readers can see which
+ * positive flag it negates (e.g. `--monochrome` → `(↔ \`--color\`)`).
+ */
+export function negationRelationMarker(opt: ResolvedFieldMeta): string {
+  return `(↔ \`--${opt.cliName}\`)`;
+}
+
+/**
+ * Format default value for display
+ */
+function formatDefaultValue(value: unknown): string {
+  if (value === undefined) {
+    return "-";
+  }
+  return `\`${JSON.stringify(value)}\``;
+}
+
+/**
+ * Render usage line
+ */
+export function renderUsage(info: CommandInfo): string {
+  const parts: string[] = [info.fullCommandPath];
+
+  if (info.options.length > 0) {
+    parts.push("[options]");
+  }
+
+  if (info.subCommands.length > 0) {
+    parts.push("[command]");
+  }
+
+  for (const arg of info.positionalArgs) {
+    if (arg.required) {
+      parts.push(`<${arg.name}>`);
+    } else {
+      parts.push(`[${arg.name}]`);
+    }
+  }
+
+  return parts.join(" ");
+}
+
+/**
+ * Render arguments as table
+ */
+export function renderArgumentsTable(info: CommandInfo): string {
+  if (info.positionalArgs.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  lines.push("| Argument | Description | Required |");
+  lines.push("|----------|-------------|----------|");
+
+  for (const arg of info.positionalArgs) {
+    const desc = escapeTableCell(arg.description ?? "");
+    const required = arg.required ? "Yes" : "No";
+    lines.push(`| \`${arg.name}\` | ${desc} | ${required} |`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render arguments as list
+ */
+export function renderArgumentsList(info: CommandInfo): string {
+  if (info.positionalArgs.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  for (const arg of info.positionalArgs) {
+    const required = arg.required ? "(required)" : "(optional)";
+    const desc = arg.description ? ` - ${arg.description}` : "";
+    lines.push(`- \`${arg.name}\`${desc} ${required}`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Format environment variable info for display
+ */
+function formatEnvInfo(env: string | string[] | undefined): string {
+  if (!env) return "";
+  const envNames = Array.isArray(env) ? env : [env];
+  return ` [env: ${envNames.join(", ")}]`;
+}
+
+/**
+ * Resolve placeholder for an option (uses kebab-case cliName)
+ */
+function resolvePlaceholder(opt: ResolvedFieldMeta): string {
+  return opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
+}
+
+/**
+ * Format option name for table display (e.g., `--dry-run` or `--port <PORT>`)
+ *
+ * Boolean fields with a custom inline `negation` (no separate description) are
+ * shown as `\`--cache\` / \`--disable-cache\``.
+ */
+function formatOptionName(opt: ResolvedFieldMeta): string {
+  const placeholder = resolvePlaceholder(opt);
+  if (opt.type === "boolean") {
+    const positive = `\`--${opt.cliName}\``;
+    if (opt.negationDisplay && !opt.negationDescription) {
+      return `${positive} / \`--${opt.negationDisplay}\``;
+    }
+    return positive;
+  }
+  return `\`--${opt.cliName} <${placeholder}>\``;
+}
+
+/**
+ * Format option flags for list display (uses kebab-case cliName).
+ * Aliases are joined with `, `; the inline negation (when no separate
+ * `negationDescription` is set) is appended with ` / ` so it stays
+ * visually distinct from aliases, matching help and table output.
+ */
+function formatOptionFlags(opt: ResolvedFieldMeta): string {
+  const placeholder = resolvePlaceholder(opt);
+  const longFlag =
+    opt.type === "boolean" ? `--${opt.cliName}` : `--${opt.cliName} <${placeholder}>`;
+
+  const parts: string[] = [];
+  if (opt.alias) {
+    for (const a of opt.alias) {
+      if (a.length === 1) parts.push(`\`-${a}\``);
+    }
+  }
+  parts.push(`\`${longFlag}\``);
+  if (opt.alias) {
+    for (const a of opt.alias) {
+      if (a.length > 1) parts.push(`\`--${a}\``);
+    }
+  }
+  const aliasJoined = parts.join(", ");
+  if (opt.type === "boolean" && opt.negationDisplay && !opt.negationDescription) {
+    return `${aliasJoined} / \`--${opt.negationDisplay}\``;
+  }
+  return aliasJoined;
+}
+
+/**
+ * Format aliases for a markdown table cell
+ */
+function formatAliasCell(alias: string[] | undefined): string {
+  if (!alias || alias.length === 0) return "-";
+  return alias.map((a) => `\`${a.length === 1 ? `-${a}` : `--${a}`}\``).join(", ");
+}
+
+/**
+ * Format env variable names for table display
+ */
+function formatEnvNames(env: string | string[] | undefined): string {
+  if (!env) return "-";
+  if (Array.isArray(env)) {
+    return env.map((e) => `\`${e}\``).join(", ");
+  }
+  return `\`${env}\``;
+}
+
+/**
+ * Render options as markdown table
+ *
+ * Features:
+ * - Uses kebab-case (cliName) for option names (e.g., `--dry-run` instead of `--dryRun`)
+ * - Automatically adds Env column when any option has env configured
+ * - Displays multiple env vars as comma-separated list
+ *
+ * @example
+ * | Option | Alias | Description | Required | Default | Env |
+ * |--------|-------|-------------|----------|---------|-----|
+ * | `--dry-run` | `-d` | Dry run mode | No | `false` | - |
+ * | `--port <PORT>` | - | Server port | Yes | - | `PORT`, `SERVER_PORT` |
+ */
+export function renderOptionsTable(info: CommandInfo): string {
+  if (info.options.length === 0) {
+    return "";
+  }
+
+  // Check if any option has env configured
+  const hasEnv = info.options.some((opt) => opt.env);
+
+  const lines: string[] = [];
+  if (hasEnv) {
+    lines.push("| Option | Alias | Description | Required | Default | Env |");
+    lines.push("|--------|-------|-------------|----------|---------|-----|");
+  } else {
+    lines.push("| Option | Alias | Description | Required | Default |");
+    lines.push("|--------|-------|-------------|----------|---------|");
+  }
+
+  for (const opt of info.options) {
+    const optionName = formatOptionName(opt);
+    const alias = formatAliasCell(opt.alias);
+    const desc = escapeTableCell(opt.description ?? "");
+    const required = opt.required ? "Yes" : "No";
+    const defaultVal = formatDefaultValue(opt.defaultValue);
+
+    if (hasEnv) {
+      const envNames = formatEnvNames(opt.env);
+      lines.push(
+        `| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} | ${envNames} |`,
+      );
+    } else {
+      lines.push(`| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} |`);
+    }
+
+    // Add a separate row for the negation when a description is provided
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      const negName = `\`--${opt.negationDisplay}\``;
+      const negDesc = `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`;
+      if (hasEnv) {
+        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - | - |`);
+      } else {
+        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - |`);
+      }
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render options as markdown list
+ *
+ * Features:
+ * - Uses kebab-case (cliName) for option names (e.g., `--dry-run` instead of `--dryRun`)
+ * - Appends env info at the end of each option (e.g., `[env: PORT, SERVER_PORT]`)
+ *
+ * @example
+ * - `-d`, `--dry-run` - Dry run mode (default: false)
+ * - `--port <PORT>` - Server port (required) [env: PORT, SERVER_PORT]
+ */
+export function renderOptionsList(info: CommandInfo): string {
+  if (info.options.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  for (const opt of info.options) {
+    const flags = formatOptionFlags(opt);
+    const desc = opt.description ? ` - ${opt.description}` : "";
+    const required = opt.required ? " (required)" : "";
+    const defaultVal =
+      opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
+    const envInfo = formatEnvInfo(opt.env);
+    lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      lines.push(
+        `- \`--${opt.negationDisplay}\` - ${opt.negationDescription} ${negationRelationMarker(opt)}`,
+      );
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Generate anchor from command path
+ */
+function generateAnchor(commandPath: string[]): string {
+  return commandPath.join("-").toLowerCase();
+}
+
+/**
+ * Generate relative path from one file to another.
+ * Always emits forward slashes so Markdown links remain portable across OSes.
+ */
+function getRelativePath(from: string, to: string): string {
+  const fromPosix = from.replace(/\\/g, "/");
+  const toPosix = to.replace(/\\/g, "/");
+  return path.posix.relative(path.posix.dirname(fromPosix), toPosix);
+}
+
+/**
+ * Render subcommands as table
+ */
+export function renderSubcommandsTable(info: CommandInfo, generateAnchors = true): string {
+  return renderSubcommandsTableFromArray(info.subCommands, info, generateAnchors);
+}
+
+/**
+ * Render options from array as table
+ */
+export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): string {
+  if (options.length === 0) {
+    return "";
+  }
+
+  // Check if any option has env configured
+  const hasEnv = options.some((opt) => opt.env);
+
+  const lines: string[] = [];
+  if (hasEnv) {
+    lines.push("| Option | Alias | Description | Required | Default | Env |");
+    lines.push("|--------|-------|-------------|----------|---------|-----|");
+  } else {
+    lines.push("| Option | Alias | Description | Required | Default |");
+    lines.push("|--------|-------|-------------|----------|---------|");
+  }
+
+  for (const opt of options) {
+    const optionName = formatOptionName(opt);
+    const alias = formatAliasCell(opt.alias);
+    const desc = escapeTableCell(opt.description ?? "");
+    const required = opt.required ? "Yes" : "No";
+    const defaultVal = formatDefaultValue(opt.defaultValue);
+
+    if (hasEnv) {
+      const envNames = formatEnvNames(opt.env);
+      lines.push(
+        `| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} | ${envNames} |`,
+      );
+    } else {
+      lines.push(`| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} |`);
+    }
+
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      const negName = `\`--${opt.negationDisplay}\``;
+      const negDesc = `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`;
+      if (hasEnv) {
+        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - | - |`);
+      } else {
+        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - |`);
+      }
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render union/xor options as markdown with variant grouping
+ */
+export function renderUnionOptionsMarkdown(
+  extracted: ExtractedFields,
+  style: "table" | "list" = "table",
+): string {
+  const unionOptions = extracted.unionOptions ?? [];
+  if (unionOptions.length === 0) return "";
+
+  const sections: string[] = [];
+
+  // Compute common fields (present in all variants)
+  const allFieldNames = new Set<string>();
+  for (const option of unionOptions) {
+    for (const field of option.fields) {
+      allFieldNames.add(field.name);
+    }
+  }
+  const commonFieldNames = new Set<string>();
+  for (const fieldName of allFieldNames) {
+    if (unionOptions.every((o) => o.fields.some((f) => f.name === fieldName))) {
+      commonFieldNames.add(fieldName);
+    }
+  }
+
+  // Render common fields first
+  const commonFields = extracted.fields.filter(
+    (f) => commonFieldNames.has(f.name) && !f.positional,
+  );
+  if (commonFields.length > 0) {
+    sections.push(
+      style === "table"
+        ? renderOptionsTableFromArray(commonFields)
+        : renderOptionsListFromArray(commonFields),
+    );
+  }
+
+  // Intro note
+  sections.push("> One of the following option groups is required:");
+
+  // Render each variant
+  for (let i = 0; i < unionOptions.length; i++) {
+    const option = unionOptions[i];
+    if (!option) continue;
+
+    const uniqueFields = option.fields.filter(
+      (f) => !commonFieldNames.has(f.name) && !f.positional,
+    );
+
+    const label = option.description ?? `Variant ${i + 1}`;
+    if (uniqueFields.length === 0) {
+      sections.push(`**${label}:**\n\n_no options_`);
+      continue;
+    }
+
+    const rendered =
+      style === "table"
+        ? renderOptionsTableFromArray(uniqueFields)
+        : renderOptionsListFromArray(uniqueFields);
+    sections.push(`**${label}:**\n\n${rendered}`);
+  }
+
+  return sections.join("\n\n");
+}
+
+/**
+ * Render discriminatedUnion options as markdown with variant grouping
+ */
+export function renderDiscriminatedUnionOptionsMarkdown(
+  extracted: ExtractedFields,
+  style: "table" | "list" = "table",
+): string {
+  const discriminator = extracted.discriminator;
+  const variants = extracted.variants ?? [];
+  if (!discriminator || variants.length === 0) return "";
+
+  const sections: string[] = [];
+
+  // Compute common fields (in all variants, excluding discriminator)
+  const allFieldNames = new Set<string>();
+  for (const variant of variants) {
+    for (const field of variant.fields) {
+      allFieldNames.add(field.name);
+    }
+  }
+  const commonFieldNames = new Set<string>();
+  for (const fieldName of allFieldNames) {
+    if (fieldName === discriminator) continue;
+    if (variants.every((v) => v.fields.some((f) => f.name === fieldName))) {
+      commonFieldNames.add(fieldName);
+    }
+  }
+
+  // Build discriminator field with aggregated values
+  const discriminatorField = extracted.fields.find((f) => f.name === discriminator);
+  const variantValues = variants.map((v) => v.discriminatorValue).join("\\|");
+
+  // Top-level table: discriminator + common fields
+  const topFields: ResolvedFieldMeta[] = [];
+  if (discriminatorField) {
+    topFields.push({
+      ...discriminatorField,
+      placeholder: variantValues,
+    });
+  }
+  for (const fieldName of commonFieldNames) {
+    const field = extracted.fields.find((f) => f.name === fieldName);
+    if (field && !field.positional) {
+      topFields.push(field);
+    }
+  }
+
+  if (topFields.length > 0) {
+    sections.push(
+      style === "table"
+        ? renderOptionsTableFromArray(topFields)
+        : renderOptionsListFromArray(topFields),
+    );
+  }
+
+  // Render each variant's unique fields
+  for (const variant of variants) {
+    const uniqueFields = variant.fields.filter(
+      (f) => f.name !== discriminator && !commonFieldNames.has(f.name) && !f.positional,
+    );
+    if (uniqueFields.length === 0) continue;
+
+    const descSuffix = variant.description ? ` ${variant.description}` : "";
+    const label = `**When \`${discriminator}\` = \`${variant.discriminatorValue}\`:**${descSuffix}`;
+    const rendered =
+      style === "table"
+        ? renderOptionsTableFromArray(uniqueFields)
+        : renderOptionsListFromArray(uniqueFields);
+    sections.push(`${label}\n\n${rendered}`);
+  }
+
+  return sections.join("\n\n");
+}
+
+/**
+ * Render options from array as list
+ */
+export function renderOptionsListFromArray(options: ResolvedFieldMeta[]): string {
+  if (options.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  for (const opt of options) {
+    const flags = formatOptionFlags(opt);
+    const desc = opt.description ? ` - ${opt.description}` : "";
+    const required = opt.required ? " (required)" : "";
+    const defaultVal =
+      opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
+    const envInfo = formatEnvInfo(opt.env);
+    lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
+    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
+      lines.push(
+        `- \`--${opt.negationDisplay}\` - ${opt.negationDescription} ${negationRelationMarker(opt)}`,
+      );
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render arguments from array as table
+ */
+export function renderArgumentsTableFromArray(args: ResolvedFieldMeta[]): string {
+  if (args.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  lines.push("| Argument | Description | Required |");
+  lines.push("|----------|-------------|----------|");
+
+  for (const arg of args) {
+    const desc = escapeTableCell(arg.description ?? "");
+    const required = arg.required ? "Yes" : "No";
+    lines.push(`| \`${arg.name}\` | ${desc} | ${required} |`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render arguments from array as list
+ */
+export function renderArgumentsListFromArray(args: ResolvedFieldMeta[]): string {
+  if (args.length === 0) {
+    return "";
+  }
+
+  const lines: string[] = [];
+  for (const arg of args) {
+    const required = arg.required ? "(required)" : "(optional)";
+    const desc = arg.description ? ` - ${arg.description}` : "";
+    lines.push(`- \`${arg.name}\`${desc} ${required}`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render subcommands from array as table
+ */
+export function renderSubcommandsTableFromArray(
+  subcommands: SubCommandInfo[],
+  info: CommandInfo,
+  generateAnchors = true,
+): string {
+  if (subcommands.length === 0) {
+    return "";
+  }
+
+  // Check if any subcommand has aliases
+  const hasAliases = subcommands.some((s) => s.aliases && s.aliases.length > 0);
+
+  const lines: string[] = [];
+  if (hasAliases) {
+    lines.push("| Command | Aliases | Description |");
+    lines.push("|---------|---------|-------------|");
+  } else {
+    lines.push("| Command | Description |");
+    lines.push("|---------|-------------|");
+  }
+
+  const currentFile = info.filePath;
+  const fileMap = info.fileMap;
+
+  for (const sub of subcommands) {
+    const fullName = sub.fullPath.join(" ");
+    const desc = escapeTableCell(sub.description ?? "");
+    const subCommandPath = sub.fullPath.join(" ");
+    const aliasCell = hasAliases
+      ? sub.aliases && sub.aliases.length > 0
+        ? sub.aliases.map((a) => `\`${escapeTableCell(a)}\``).join(", ")
+        : "-"
+      : "";
+
+    // Build command cell (with optional anchor link)
+    let cmdCell: string;
+    if (generateAnchors) {
+      const anchor = generateAnchor(sub.fullPath);
+      const subFile = fileMap?.[subCommandPath];
+
+      if (currentFile && subFile && currentFile !== subFile) {
+        const relativePath = getRelativePath(currentFile, subFile);
+        cmdCell = `[\`${fullName}\`](${relativePath}#${anchor})`;
+      } else {
+        cmdCell = `[\`${fullName}\`](#${anchor})`;
+      }
+    } else {
+      cmdCell = `\`${fullName}\``;
+    }
+
+    if (hasAliases) {
+      lines.push(`| ${cmdCell} | ${aliasCell} | ${desc} |`);
+    } else {
+      lines.push(`| ${cmdCell} | ${desc} |`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Render examples as markdown
+ *
+ * @example
+ * **Basic usage**
+ *
+ * ```bash
+ * $ greet World
+ * ```
+ *
+ * Output:
+ * ```
+ * Hello, World!
+ * ```
+ */
+export function renderExamplesDefault(
+  examples: Example[],
+  results?: ExampleExecutionResult[],
+  opts?: ExamplesRenderOptions,
+): string {
+  if (examples.length === 0) {
+    return "";
+  }
+
+  const showOutput = opts?.showOutput ?? true;
+  const prefix = opts?.commandPrefix ? `${opts.commandPrefix} ` : "";
+  const lines: string[] = [];
+
+  for (let i = 0; i < examples.length; i++) {
+    const example = examples[i];
+    if (!example) continue;
+
+    const result = results?.[i];
+
+    // Description as bold text
+    lines.push(`**${example.desc}**`);
+    lines.push("");
+
+    // Command and output in a single code block
+    lines.push("```bash");
+    lines.push(`$ ${prefix}${example.cmd}`);
+
+    // Output
+    if (showOutput) {
+      if (result) {
+        // Use captured output from execution
+        if (result.stdout) {
+          lines.push(result.stdout);
+        }
+        if (result.stderr) {
+          lines.push(`[stderr] ${result.stderr}`);
+        }
+      } else if (example.output) {
+        // Use expected output from definition
+        lines.push(example.output);
+      }
+    }
+
+    lines.push("```");
+    lines.push("");
+  }
+
+  // Remove trailing empty lines
+  while (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+
+  return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Markerless section composers
+//
+// Each returns the full markdown for a single section (bold label + body),
+// or "" when the section does not apply. Shared by the default command
+// renderer and the `md` tag getters so output stays identical.
+// ---------------------------------------------------------------------------
+
+/** Description section (description text plus an Aliases line when present). */
+export function renderDescriptionSection(info: CommandInfo): string {
+  const parts: string[] = [];
+  if (info.description) {
+    parts.push(info.description);
+  }
+  if (info.aliases && info.aliases.length > 0) {
+    parts.push(`**Aliases:** ${info.aliases.map((a) => `\`${a}\``).join(", ")}`);
+  }
+  return parts.join("\n\n");
+}
+
+/** Usage section (always present). */
+export function renderUsageSection(info: CommandInfo): string {
+  return `**Usage**\n\n\`\`\`\n${renderUsage(info)}\n\`\`\``;
+}
+
+/** Arguments section, or "" when there are no positional arguments. */
+export function renderArgumentsSection(
+  info: CommandInfo,
+  style: "table" | "list" = "table",
+): string {
+  if (info.positionalArgs.length === 0) {
+    return "";
+  }
+  const content =
+    style === "table"
+      ? renderArgumentsTableFromArray(info.positionalArgs)
+      : renderArgumentsListFromArray(info.positionalArgs);
+  return `**Arguments**\n\n${content}`;
+}
+
+/** Render just the options body (handles union/discriminated-union grouping). */
+function renderOptionsContent(info: CommandInfo, style: "table" | "list"): string {
+  const extracted = info.extracted;
+  if (
+    extracted &&
+    (extracted.schemaType === "union" || extracted.schemaType === "xor") &&
+    extracted.unionOptions
+  ) {
+    return renderUnionOptionsMarkdown(extracted, style);
+  }
+  if (extracted && extracted.schemaType === "discriminatedUnion" && extracted.discriminator) {
+    return renderDiscriminatedUnionOptionsMarkdown(extracted, style);
+  }
+  return style === "table"
+    ? renderOptionsTableFromArray(info.options)
+    : renderOptionsListFromArray(info.options);
+}
+
+/** Options section, or "" when there are no options. */
+export function renderOptionsSection(info: CommandInfo, style: "table" | "list" = "table"): string {
+  if (info.options.length === 0) {
+    return "";
+  }
+  return `**Options**\n\n${renderOptionsContent(info, style)}`;
+}
+
+/** Global-options link section, or "" when it does not apply. */
+export function renderGlobalOptionsLinkSection(info: CommandInfo): string {
+  return getGlobalOptionsLink(info) ?? "";
+}
+
+/** Subcommands section, or "" when there are no subcommands. */
+export function renderSubcommandsSection(
+  info: CommandInfo,
+  options: { generateAnchors?: boolean; includeSubcommandDetails?: boolean } = {},
+): string {
+  if (info.subCommands.length === 0) {
+    return "";
+  }
+  const generateAnchors = options.generateAnchors ?? true;
+  const includeSubcommandDetails = options.includeSubcommandDetails ?? true;
+  const content = renderSubcommandsTableFromArray(
+    info.subCommands,
+    info,
+    generateAnchors && includeSubcommandDetails,
+  );
+  return `**Commands**\n\n${content}`;
+}
+
+/** Examples section, or "" when there are no examples. */
+export function renderExamplesSection(info: CommandInfo): string {
+  if (!info.examples || info.examples.length === 0) {
+    return "";
+  }
+  const content = renderExamplesDefault(info.examples, info.exampleResults, {
+    commandPrefix: info.fullCommandPath,
+  });
+  return `**Examples**\n\n${content}`;
+}
+
+/** Notes section, or "" when there are no notes. */
+export function renderNotesSection(info: CommandInfo): string {
+  if (!info.notes) {
+    return "";
+  }
+  return `**Notes**\n\n${info.notes}`;
+}
+
+/**
+ * Generate a "See Global Options" link for subcommand documentation.
+ * Returns null for root command or when no global options exist.
+ */
+function getGlobalOptionsLink(info: CommandInfo): string | null {
+  if (!info.hasGlobalOptions || info.commandPath === "") {
+    return null;
+  }
+
+  const isCrossFile = info.rootDocPath && info.filePath && info.filePath !== info.rootDocPath;
+  const href = isCrossFile
+    ? `${getRelativePath(info.filePath!, info.rootDocPath!)}#global-options`
+    : "#global-options";
+  return `See [Global Options](${href}) for options available to all commands.`;
+}
+
+/**
+ * Build the default, markerless command renderer.
+ *
+ * The output is the command's sections composed in a fixed order and joined
+ * with blank lines. No markers are emitted here — wrapping each command block
+ * in a single command marker pair is the caller's responsibility.
+ */
+export function createCommandRenderer(options: DefaultRendererOptions = {}): RenderFunction {
+  const {
+    headingLevel = 1,
+    optionStyle = "table",
+    generateAnchors = true,
+    includeSubcommandDetails = true,
+  } = options;
+
+  return (info: CommandInfo): string => {
+    // Calculate effective heading level based on command depth
+    // depth=1 → headingLevel, depth=2 → headingLevel+1, etc.
+    const effectiveLevel = Math.min(headingLevel + (info.depth - 1), 6);
+    const heading = `${"#".repeat(effectiveLevel)} ${info.commandPath || info.name}`;
+
+    const sections: string[] = [
+      heading,
+      renderDescriptionSection(info),
+      renderUsageSection(info),
+      renderArgumentsSection(info, optionStyle),
+      renderOptionsSection(info, optionStyle),
+      renderGlobalOptionsLinkSection(info),
+      renderSubcommandsSection(info, { generateAnchors, includeSubcommandDetails }),
+      renderExamplesSection(info),
+      renderNotesSection(info),
+    ];
+
+    return sections.filter(Boolean).join("\n\n");
+  };
+}
+
+/**
+ * Default renderers presets
+ */
+export const defaultRenderers = {
+  /** Standard command documentation */
+  command: (options?: DefaultRendererOptions) => createCommandRenderer(options),
+  /** Table style options (default) */
+  tableStyle: createCommandRenderer({ optionStyle: "table" }),
+  /** List style options */
+  listStyle: createCommandRenderer({ optionStyle: "list" }),
+};

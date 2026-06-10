@@ -1,158 +1,43 @@
 {
-  "name": "politty",
-  "version": "0.5.1",
-  "description": "A lightweight CLI framework inspired by citty with zod v4 registry integration for type-safe metadata management",
-  "keywords": [
-    "argument-parser",
-    "cli",
-    "command-line",
-    "type-safe",
-    "typescript",
-    "zod"
-  ],
+  "name": "@politty/monorepo",
+  "version": "0.0.0",
+  "private": true,
   "license": "MIT",
-  "author": "",
   "repository": {
     "type": "git",
-    "url": "https://github.com/toiroakr/politty.git"
+    "url": "git+https://github.com/toiroakr/politty.git"
   },
-  "files": [
-    "dist"
-  ],
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
-      }
-    },
-    "./augment": {
-      "import": {
-        "types": "./dist/augment.d.ts",
-        "default": "./dist/augment.js"
-      },
-      "require": {
-        "types": "./dist/augment.d.cts",
-        "default": "./dist/augment.cjs"
-      }
-    },
-    "./docs": {
-      "import": {
-        "types": "./dist/docs/index.d.ts",
-        "default": "./dist/docs/index.js"
-      },
-      "require": {
-        "types": "./dist/docs/index.d.cts",
-        "default": "./dist/docs/index.cjs"
-      }
-    },
-    "./completion": {
-      "import": {
-        "types": "./dist/completion/index.d.ts",
-        "default": "./dist/completion/index.js"
-      },
-      "require": {
-        "types": "./dist/completion/index.d.cts",
-        "default": "./dist/completion/index.cjs"
-      }
-    },
-    "./prompt": {
-      "import": {
-        "types": "./dist/prompt/index.d.ts",
-        "default": "./dist/prompt/index.js"
-      },
-      "require": {
-        "types": "./dist/prompt/index.d.cts",
-        "default": "./dist/prompt/index.cjs"
-      }
-    },
-    "./prompt/clack": {
-      "import": {
-        "types": "./dist/prompt/clack/index.d.ts",
-        "default": "./dist/prompt/clack/index.js"
-      },
-      "require": {
-        "types": "./dist/prompt/clack/index.d.cts",
-        "default": "./dist/prompt/clack/index.cjs"
-      }
-    },
-    "./prompt/inquirer": {
-      "import": {
-        "types": "./dist/prompt/inquirer/index.d.ts",
-        "default": "./dist/prompt/inquirer/index.js"
-      },
-      "require": {
-        "types": "./dist/prompt/inquirer/index.d.cts",
-        "default": "./dist/prompt/inquirer/index.cjs"
-      }
-    }
-  },
   "scripts": {
-    "build": "tsdown",
-    "dev": "tsdown --watch",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "typecheck": "tsgo --incremental",
-    "lint": "oxlint -c oxlint.json src tests",
-    "lint:fix": "oxlint -c oxlint.json --fix src tests",
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter politty dev",
+    "test": "pnpm -r test",
+    "test:watch": "pnpm --filter politty test:watch",
+    "test:coverage": "pnpm --filter politty test:coverage",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "oxlint -c oxlint.json packages/politty/src packages/politty/tests packages/politty-migrate/src",
+    "lint:fix": "oxlint -c oxlint.json --fix packages/politty/src packages/politty/tests packages/politty-migrate/src",
     "knip": "knip",
-    "format": "oxfmt src tests",
-    "format:check": "oxfmt --check src tests",
-    "organize-imports": "organize-imports-cli tsconfig.json",
+    "format": "oxfmt packages/politty/src packages/politty/tests packages/politty-migrate/src",
+    "format:check": "oxfmt --check packages/politty/src packages/politty/tests packages/politty-migrate/src",
+    "organize-imports": "organize-imports-cli packages/politty/tsconfig.json",
     "fix:oxlint": "oxlint -c oxlint.json --fix",
     "fix:oxfmt": "oxfmt",
     "prepare": "lefthook install",
-    "prepublishOnly": "pnpm run build",
     "changeset": "changeset",
     "release": "pnpm build && changeset publish"
   },
-  "dependencies": {
-    "string-width": "^8.2.0"
-  },
   "devDependencies": {
     "@changesets/cli": "2.31.0",
-    "@clack/prompts": "1.2.0",
-    "@inquirer/prompts": "8.5.2",
-    "@quansync/fs": "1.0.0",
-    "@types/node": "25.9.1",
-    "@typescript/native-preview": "7.0.0-dev.20260603.1",
-    "@vitest/coverage-v8": "4.1.8",
     "knip": "6.15.0",
     "lefthook": "2.1.9",
     "organize-imports-cli": "1.0.2",
     "oxfmt": "0.52.0",
     "oxlint": "1.67.0",
-    "quansync": "1.0.0",
-    "tsdown": "0.22.1",
-    "tsx": "4.22.4",
-    "typescript": "6.0.3",
-    "vitest": "4.1.8",
-    "zod": "4.4.3"
-  },
-  "peerDependencies": {
-    "@clack/prompts": "^0.10.0 || ^0.11.0 || ^1.0.0",
-    "@inquirer/prompts": "^8.3.2",
-    "zod": "^4.2.1"
-  },
-  "peerDependenciesMeta": {
-    "@clack/prompts": {
-      "optional": true
-    },
-    "@inquirer/prompts": {
-      "optional": true
-    }
+    "typescript": "^6.0.0"
   },
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@11.5.0"
+  "packageManager": "pnpm@11.4.0"
 }

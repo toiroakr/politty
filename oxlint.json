@@ -16,19 +16,19 @@
       }
     },
     {
-      "files": ["src/index.ts"],
+      "files": ["**/src/index.ts"],
       "rules": {
         "no-restricted-imports": ["error", { "patterns": ["**/tests/utils/**"] }]
       }
     },
     {
-      "files": ["src/docs/**/*.ts"],
+      "files": ["**/src/docs/**/*.ts"],
       "rules": {
         "no-restricted-imports": ["error", { "patterns": ["**/tests/utils/**"] }]
       }
     },
     {
-      "files": ["src/completion/**/*.ts"],
+      "files": ["**/src/completion/**/*.ts"],
       "rules": {
         "no-restricted-imports": ["error", { "patterns": ["**/tests/utils/**"] }]
       }

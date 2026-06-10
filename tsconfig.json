@@ -12,7 +12,6 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "outDir": "./dist",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noUnusedLocals": true,
@@ -23,7 +22,5 @@
     "exactOptionalPropertyTypes": true,
     "verbatimModuleSyntax": true,
     "noEmit": true
-  },
-  "include": ["src/**/*", "tests/**/*", "playground/**/*"],
-  "exclude": ["node_modules", "dist"]
+  }
 }

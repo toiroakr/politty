@@ -3,7 +3,7 @@
 
 coverage:
   paths:
-    - coverage/lcov.info
+    - packages/politty/coverage/lcov.info
 
 body:
   enable: true

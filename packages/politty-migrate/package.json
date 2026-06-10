@@ -1,0 +1,42 @@
+{
+  "name": "politty-migrate",
+  "version": "0.1.0",
+  "description": "One-shot migration CLI: convert a politty project from the old marker-based docs to the new markerless md-template API.",
+  "keywords": [
+    "cli",
+    "codemod",
+    "migration",
+    "politty"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/toiroakr/politty.git",
+    "directory": "packages/politty-migrate"
+  },
+  "bin": {
+    "politty-migrate": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsgo --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "typescript": ">=5.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "25.9.1",
+    "@typescript/native-preview": "7.0.0-dev.20260603.1",
+    "tsdown": "0.22.1",
+    "vitest": "4.1.8",
+    "zod": "4.4.3"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

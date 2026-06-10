@@ -31,4 +31,4 @@ jobs:
       - name: Build
         run: pnpm build
       - name: Publish preview
-        run: pnpm dlx pkg-pr-new publish --commentWithSha --compact
+        run: pnpm dlx pkg-pr-new publish --commentWithSha --compact ./packages/politty ./packages/politty-migrate
