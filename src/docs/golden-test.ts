@@ -711,6 +711,26 @@ function removeCommandSections(content: string, commandPath: string): string {
 }
 
 /**
+ * Strip politty marker lines from content, then collapse runs of 3+ newlines
+ * to 2 and trim leading/trailing blank lines.
+ */
+function stripPolittyMarkers(content: string): string {
+  const lines = content.split("\n");
+  const stripped = lines.filter((line) => !/^<!-- politty:.*-->$/.test(line.trim()));
+  let result = stripped.join("\n");
+  result = result.replace(/\n{3,}/g, "\n\n");
+  result = result.replace(/^\n+/, "").replace(/\n+$/, "");
+  return result;
+}
+
+/**
+ * Type guard for SectionType values parsed from template placeholders.
+ */
+function isSectionType(value: string): value is SectionType {
+  return SECTION_TYPES.some((type) => type === value);
+}
+
+/**
  * Extract a marker section from content
  * Returns the content between start and end markers (including markers)
  */
@@ -949,19 +969,30 @@ function validateGlobalOptionCompatibility(
 }
 
 /**
+ * Build global options content (anchor + args table) without markers
+ */
+function buildGlobalOptionsContent(config: {
+  args: ArgsShape;
+  options?: ArgsTableOptions;
+}): string {
+  const anchor = '<a id="global-options"></a>';
+  const table = renderArgsTable(config.args, config.options);
+
+  return [anchor, table].join("\n");
+}
+
+/**
  * Generate global options section content with markers
  */
 function generateGlobalOptionsSection(config: {
   args: ArgsShape;
   options?: ArgsTableOptions;
 }): string {
-  const startMarker = globalOptionsStartMarker();
-  const endMarker = globalOptionsEndMarker();
-
-  const anchor = '<a id="global-options"></a>';
-  const table = renderArgsTable(config.args, config.options);
-
-  return [startMarker, anchor, table, endMarker].join("\n");
+  return [
+    globalOptionsStartMarker(),
+    buildGlobalOptionsContent(config),
+    globalOptionsEndMarker(),
+  ].join("\n");
 }
 
 /**
@@ -1445,8 +1476,10 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     usingPathConfig = true;
   } else if (config.files !== undefined) {
     files = config.files;
+  } else if (config.templates !== undefined) {
+    files = {};
   } else {
-    throw new Error('Either "path" or "files" must be specified.');
+    throw new Error('Either "path", "files", or "templates" must be specified.');
   }
 
   // Auto-derive rootDoc from PathConfig or globalArgs
@@ -1849,6 +1882,293 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     });
   }
 
+  // === Template processing ===
+  // Pre-parse all templates to collect referencedScopes for validateGlobalOptionCompatibility
+  // and for index generation
+  const templateReferencedScopes = new Map<string, string[]>(); // outputPath -> scopes
+
+  if (config.templates) {
+    // Upfront validation: path collisions
+    const normalizedRootDocPath = rootDoc ? normalizeDocPathForComparison(rootDoc.path) : null;
+    const normalizedFileKeys = new Set(Object.keys(files).map(normalizeDocPathForComparison));
+    const normalizedTemplateOutputs = new Set<string>();
+
+    for (const [outputPath, templatePath] of Object.entries(config.templates)) {
+      const normalizedOutput = normalizeDocPathForComparison(outputPath);
+
+      if (normalizedFileKeys.has(normalizedOutput)) {
+        throw new Error(
+          `Template output path "${outputPath}" conflicts with an existing files key.`,
+        );
+      }
+      if (normalizedRootDocPath && normalizedOutput === normalizedRootDocPath) {
+        throw new Error(
+          `Template output path "${outputPath}" conflicts with rootDoc.path "${rootDoc!.path}".`,
+        );
+      }
+      if (normalizedTemplateOutputs.has(normalizedOutput)) {
+        throw new Error(`Duplicate template output path: "${outputPath}".`);
+      }
+      normalizedTemplateOutputs.add(normalizedOutput);
+
+      if (normalizeDocPathForComparison(templatePath) === normalizedOutput) {
+        throw new Error(
+          `Template output path "${outputPath}" must not be the same as its source template path.`,
+        );
+      }
+    }
+
+    // Parse templates to collect referencedScopes
+    const placeholderRegex = /\{\{politty:[^{}]*\}\}/g;
+    const availableCommandPaths = Array.from(allCommands.keys()).join(", ");
+
+    for (const [outputPath, templatePath] of Object.entries(config.templates)) {
+      const templateContent = readFile(templatePath);
+      if (templateContent === null) {
+        // Will be handled in generation loop
+        templateReferencedScopes.set(outputPath, []);
+        continue;
+      }
+
+      const placeholders = Array.from(new Set(templateContent.match(placeholderRegex) ?? []));
+      const scopes = new Set<string>();
+
+      for (const placeholder of placeholders) {
+        const inner = placeholder.slice(2, -2); // remove {{ and }}
+        const tokens = inner.split(":");
+        // tokens[0] = "politty", tokens[1] = directive
+        const directive = tokens[1];
+
+        if (directive === "command") {
+          if (tokens.length > 4) {
+            throw new Error(
+              `Malformed placeholder "${placeholder}" in template "${templatePath}". Expected {{politty:command}}, {{politty:command:<scope>}}, or {{politty:command:<scope>:<type>}}.`,
+            );
+          }
+          const scope = tokens[2] ?? "";
+          const type = tokens[3];
+
+          // Validate scope
+          if (!allCommands.has(scope)) {
+            throw new Error(
+              `Unknown command scope "${scope}" in template "${templatePath}". Available: ${availableCommandPaths}`,
+            );
+          }
+          // Validate scope not in ignores
+          if (ignores.some((pattern) => matchesIgnorePattern(scope, pattern))) {
+            throw new Error(
+              `Command scope "${scope}" in template "${templatePath}" conflicts with ignores configuration.`,
+            );
+          }
+          // Validate type if present
+          if (type !== undefined && !isSectionType(type)) {
+            throw new Error(
+              `Unknown section type "${type}" in template "${templatePath}". Valid types: ${SECTION_TYPES.join(", ")}`,
+            );
+          }
+          scopes.add(scope);
+        } else if (directive === "global-options" || directive === "index") {
+          if (tokens.length !== 2) {
+            throw new Error(
+              `Malformed placeholder "${placeholder}" in template "${templatePath}". Expected {{politty:${directive}}}.`,
+            );
+          }
+        } else {
+          throw new Error(
+            `Unknown politty directive "${directive ?? ""}" in template "${templatePath}". Valid directives: command, global-options, index`,
+          );
+        }
+      }
+
+      // Check if global-options is used but not configured
+      const hasGlobalOptionsPlaceholder = placeholders.some(
+        (p) => p === "{{politty:global-options}}",
+      );
+      if (hasGlobalOptionsPlaceholder) {
+        const hasGlobalOptionsConfig =
+          !!rootDoc?.globalOptions ||
+          !!(
+            globalArgs &&
+            (() => {
+              const optFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
+              return optFields.length > 0;
+            })()
+          );
+        if (!hasGlobalOptionsConfig) {
+          throw new Error(
+            `Template "${templatePath}" uses {{politty:global-options}} but no global options are configured (neither rootDoc.globalOptions nor globalArgs with non-positional options).`,
+          );
+        }
+      }
+
+      templateReferencedScopes.set(outputPath, Array.from(scopes));
+    }
+
+    // Extend documentedCommandPaths with template scopes for validateGlobalOptionCompatibility
+    for (const scopes of templateReferencedScopes.values()) {
+      for (const scope of scopes) {
+        documentedCommandPaths.add(scope);
+      }
+    }
+    // Re-validate global option compatibility with template commands included
+    validateGlobalOptionCompatibility(documentedCommandPaths, allCommands, globalOptionDefinitions);
+  }
+
+  // Global options shape used by {{politty:global-options}} placeholders
+  let normalizedTemplateGlobalOptions: { args: ArgsShape; options?: ArgsTableOptions } | undefined;
+  if (rootDoc?.globalOptions) {
+    normalizedTemplateGlobalOptions = normalizeGlobalOptions(rootDoc.globalOptions);
+  } else if (globalArgs) {
+    const optionFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
+    if (optionFields.length > 0) {
+      const globalShape: ArgsShape = Object.fromEntries(
+        optionFields.map((f) => [f.name, f.schema]),
+      );
+      normalizedTemplateGlobalOptions = { args: globalShape };
+    }
+  }
+
+  // Template scopes participate in cross-file links between template outputs
+  const templateFileMap: Record<string, string> = { ...fileMap };
+  for (const [templateOutputPath, scopes] of templateReferencedScopes.entries()) {
+    for (const scope of scopes) {
+      templateFileMap[scope] = templateOutputPath;
+    }
+  }
+
+  // Now process each template
+  for (const [outputPath, templatePath] of Object.entries(config.templates ?? {})) {
+    const templateContent = readFile(templatePath);
+    if (templateContent === null) {
+      hasError = true;
+      results.push({
+        path: outputPath,
+        status: "diff",
+        diff: `Template file not found: ${templatePath}`,
+      });
+      continue;
+    }
+
+    const referencedScopes = templateReferencedScopes.get(outputPath) ?? [];
+
+    // Compute heading level adjustment
+    const scopeDepths = referencedScopes.map((s) => allCommands.get(s)?.depth ?? 1);
+    const minDepth = scopeDepths.length > 0 ? Math.min(...scopeDepths) : 1;
+    const adjustedHeadingLevel = Math.max(
+      1,
+      (format?.headingLevel ?? 1) - (minDepth - 1),
+    ) as HeadingLevel;
+    const templateRenderer = createCommandRenderer({
+      ...format,
+      headingLevel: adjustedHeadingLevel,
+    });
+
+    // Determine rootDocPath for global-options-link in commands
+    const hasGlobalOptionsPlaceholderInThis = templateContent.includes(
+      "{{politty:global-options}}",
+    );
+    const effectiveRootDocPath =
+      rootDoc?.path ?? (hasGlobalOptionsPlaceholderInThis ? outputPath : undefined);
+
+    // Parse placeholders and compute replacements
+    const placeholderRegex = /\{\{politty:[^{}]*\}\}/g;
+    const placeholders = Array.from(new Set(templateContent.match(placeholderRegex) ?? []));
+    const replacements = new Map<string, string>();
+
+    for (const placeholder of placeholders) {
+      const inner = placeholder.slice(2, -2);
+      const tokens = inner.split(":");
+      const directive = tokens[1];
+
+      if (directive === "command") {
+        const scope = tokens[2] ?? "";
+        const type = tokens[3];
+
+        const rawSection = generateCommandSection(
+          scope,
+          allCommands,
+          templateRenderer,
+          outputPath,
+          templateFileMap,
+          effectiveRootDocPath,
+          globalOptionDefinitions.size > 0,
+        );
+
+        if (rawSection === null) {
+          replacements.set(placeholder, "");
+          continue;
+        }
+
+        if (type === undefined) {
+          // Full section, strip markers
+          replacements.set(placeholder, stripPolittyMarkers(rawSection));
+        } else if (isSectionType(type)) {
+          // Single section type
+          const extracted = extractSectionMarker(rawSection, type, scope);
+          if (extracted === null) {
+            replacements.set(placeholder, "");
+          } else {
+            replacements.set(placeholder, stripPolittyMarkers(extracted));
+          }
+        }
+      } else if (directive === "global-options") {
+        if (normalizedTemplateGlobalOptions) {
+          replacements.set(placeholder, buildGlobalOptionsContent(normalizedTemplateGlobalOptions));
+        } else {
+          replacements.set(placeholder, "");
+        }
+      } else if (directive === "index") {
+        // Build filesForIndex: files + other templates (not current), excluding current outputPath
+        const normalizedCurrentOutput = normalizeDocPathForComparison(outputPath);
+        const filesForIndex: FileMapping = { ...files };
+        for (const [otherOutputPath, otherScopes] of templateReferencedScopes.entries()) {
+          if (normalizeDocPathForComparison(otherOutputPath) !== normalizedCurrentOutput) {
+            filesForIndex[otherOutputPath] = { commands: otherScopes, noExpand: true };
+          }
+        }
+        const categories = deriveIndexFromFiles(filesForIndex, outputPath, allCommands, ignores);
+        const indexContent = await renderCommandIndex(command, categories, rootDoc?.index);
+        replacements.set(placeholder, indexContent);
+      }
+    }
+
+    // Replace all placeholders
+    let generated = templateContent.replace(placeholderRegex, (match) => {
+      return replacements.get(match) ?? match;
+    });
+
+    // Normalize: collapse 3+ newlines to 2 and ensure exactly one trailing newline
+    generated = generated.replace(/\n{3,}/g, "\n\n");
+    generated = `${generated.trimEnd()}\n`;
+
+    // Apply formatter
+    generated = await applyFormatter(generated, formatter);
+
+    // Compare and update
+    const comparison = compareWithExisting(generated, outputPath);
+    let templateStatus: "match" | "created" | "updated" | "diff" = "match";
+    let templateDiff: string | undefined;
+
+    if (comparison.match) {
+      // stays "match"
+    } else if (updateMode) {
+      writeFile(outputPath, generated);
+      templateStatus = comparison.fileExists ? "updated" : "created";
+    } else {
+      hasError = true;
+      templateStatus = "diff";
+      if (comparison.diff) {
+        templateDiff = comparison.diff;
+      }
+    }
+
+    results.push({
+      path: outputPath,
+      status: templateStatus,
+      diff: templateDiff,
+    });
+  }
+
   // === Root document processing ===
   if (rootDoc) {
     const rootDocFilePath = rootDoc.path;
@@ -2062,7 +2382,7 @@ export async function assertDocMatch(config: GenerateDocConfig): Promise<void> {
  * @param fileSystem - Optional fs implementation (useful when fs is mocked)
  */
 export function initDocFile(
-  config: Pick<GenerateDocConfig, "files"> | string,
+  config: Pick<GenerateDocConfig, "files" | "templates"> | string,
   fileSystem?: DeleteFileFs,
 ): void {
   if (!isTruthyEnv(UPDATE_GOLDEN_ENV)) {
@@ -2071,11 +2391,19 @@ export function initDocFile(
 
   if (typeof config === "string") {
     deleteFile(config, fileSystem);
-  } else if (config.files) {
+  } else {
     // rootDoc is NOT deleted because generateDoc expects it to exist with markers.
     // Only generated files (which are fully regenerated) are deleted.
-    for (const filePath of Object.keys(config.files)) {
-      deleteFile(filePath, fileSystem);
+    if (config.files) {
+      for (const filePath of Object.keys(config.files)) {
+        deleteFile(filePath, fileSystem);
+      }
+    }
+    if (config.templates) {
+      // Delete OUTPUT paths only, not template source files
+      for (const outputPath of Object.keys(config.templates)) {
+        deleteFile(outputPath, fileSystem);
+      }
     }
   }
 }

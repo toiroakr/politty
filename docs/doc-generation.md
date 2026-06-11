@@ -73,6 +73,7 @@ console.log(result.files); // Status for each file
 | `formatter`      | `FormatterFunction`      | Formatter for generated content                              |
 | `examples`       | `ExampleConfig`          | Example execution settings per command                       |
 | `targetCommands` | `string[]`               | Specific commands to validate/generate (for partial updates) |
+| `templates`      | `Record<string, string>` | Output path → template path for marker-free generation       |
 
 ### `FileMapping`
 
@@ -115,6 +116,71 @@ interface FileConfig {
   render?: RenderFunction; // Custom renderer (optional)
 }
 ```
+
+### `templates` (Template-Based Generation)
+
+Generates marker-free output files from template files. The template is the
+source of truth: it mixes handwritten markdown with `{{politty:...}}`
+placeholders, and the output file is fully generated from it. Unlike the
+marker-based modes, the output contains no politty markers, and accidental
+edits to the output can never corrupt marker boundaries — they are simply
+overwritten on the next update.
+
+```typescript
+await assertDocMatch({
+  command,
+  // output path -> template path
+  templates: { "docs/README.md": "docs/README.template.md" },
+});
+```
+
+Available placeholders:
+
+| Placeholder                          | Expands to                                          |
+| ------------------------------------ | --------------------------------------------------- |
+| `{{politty:command}}`                | Full section of the root command                    |
+| `{{politty:command:<scope>}}`        | Full section of the command at `<scope>`            |
+| `{{politty:command:<scope>:<type>}}` | A single section (`usage`, `options`, etc.)         |
+| `{{politty:global-options}}`         | Global options table (from `globalArgs` / rootDoc)  |
+| `{{politty:index}}`                  | Command index derived from other configured outputs |
+
+`<scope>` is a space-separated command path (e.g. `config get`); the root
+command uses an empty scope (`{{politty:command::usage}}`). `<type>` is one of
+the section types: `heading`, `description`, `usage`, `arguments`, `options`,
+`global-options-link`, `subcommands`, `examples`, `notes`. A typed placeholder
+for a section the command does not have expands to nothing.
+
+Template example:
+
+```markdown
+# My CLI
+
+Handwritten introduction.
+
+{{politty:command}}
+
+Handwritten notes between generated sections.
+
+{{politty:command:config get}}
+```
+
+Behavior notes:
+
+- Placeholders reference commands explicitly; subcommands are NOT expanded
+  automatically. Add a placeholder per command you want documented.
+- Validation happens before generation: unknown scopes, section types, or
+  directives throw with the list of valid values.
+- `templates` can be combined with `files`/`path` in the same config, but an
+  output path must not collide with a `files` key or `rootDoc.path`.
+- In update mode (`POLITTY_DOCS_UPDATE=true`) the output file is (re)written;
+  otherwise the generated content is compared against the existing output and
+  differences fail the test.
+- `initDocFile` deletes template OUTPUT files (never the template sources).
+- Literal `{{politty:...}}` text cannot appear in a template as prose — it is
+  always treated as a placeholder. Write it without the curly braces when
+  documenting the syntax itself.
+
+See `playground/30-template-docs` for a complete example.
 
 ### `ignores`
 

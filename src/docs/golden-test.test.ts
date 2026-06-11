@@ -4,7 +4,7 @@ import { format } from "oxfmt";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { arg, defineCommand } from "../index.js";
-import { assertDocMatch, generateDoc } from "./golden-test.js";
+import { assertDocMatch, generateDoc, initDocFile } from "./golden-test.js";
 import { renderArgsTable } from "./render-args.js";
 import { renderCommandIndex } from "./render-index.js";
 import {
@@ -4191,6 +4191,327 @@ ${argsContent}
       const content = fs.readFileSync(rootPath, "utf-8");
       expect(content).toContain("# Custom Title");
       expect(content).toContain("Custom description for the CLI");
+    });
+  });
+
+  describe("template mode", () => {
+    it("creates output from template with handwritten text and command section", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(
+        templatePath,
+        "# My CLI Docs\n\nSome handwritten intro.\n\n{{politty:command}}\n\nSome handwritten footer.\n",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("created");
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("# My CLI Docs");
+      expect(content).toContain("Some handwritten intro.");
+      expect(content).toContain("Some handwritten footer.");
+      expect(content).toContain("test-cli");
+      // No politty markers in output
+      expect(content).not.toContain("<!-- politty:");
+    });
+
+    it("typed placeholder renders only that section without markers", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      // {{politty:command::usage}} - root command usage section
+      fs.writeFileSync(templatePath, "# Usage\n\n{{politty:command::usage}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("Usage");
+      expect(content).not.toContain("<!-- politty:");
+      expect(content).toContain("test-cli");
+    });
+
+    it("typed placeholder for missing section expands to empty without stray blank lines", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      // greet command has no examples
+      fs.writeFileSync(templatePath, "Before\n\n{{politty:command:greet:examples}}\n\nAfter\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).not.toMatch(/\n{3,}/); // No 3+ consecutive newlines
+      expect(content).not.toContain("<!-- politty:");
+    });
+
+    it("non-update mode with matching output succeeds", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "# Docs\n\n{{politty:command}}\n");
+
+      await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("match");
+    });
+
+    it("non-update mode with stale output fails and includes diff and path", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "# Docs\n\n{{politty:command}}\n");
+      fs.writeFileSync(outputPath, "stale content\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.status).toBe("diff");
+
+      await expect(
+        assertDocMatch({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow(outputPath);
+    });
+
+    it("subcommand scope placeholder renders that subcommand section", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "# Config Docs\n\n{{politty:command:config}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("config");
+      expect(content).not.toContain("<!-- politty:");
+    });
+
+    it("unknown scope throws with available paths", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command:nonexistent}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow("nonexistent");
+    });
+
+    it("unknown type throws listing SECTION_TYPES", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command::badtype}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow("badtype");
+    });
+
+    it("unknown directive throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:unknown}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow("unknown");
+    });
+
+    it("missing template file gives error result in both modes", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "nonexistent-template.md");
+      const outputPath = path.join(testDir, "output.md");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.status).toBe("diff");
+      expect(result.files[0]?.diff).toContain("Template file not found");
+
+      // Also fails in check mode
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+      const result2 = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result2.success).toBe(false);
+    });
+
+    it("output path collision with files key throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          files: { [outputPath]: [""] },
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("output path equal to template source path throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(outputPath, "{{politty:command}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: outputPath },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("global-options placeholder renders table and excludes from command options", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:global-options}}\n\n{{politty:command:greet}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), {
+            alias: "v",
+            description: "Enable verbose output",
+          }),
+        }),
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("global-options");
+      expect(content).not.toContain("<!-- politty:");
+    });
+
+    it("global-options placeholder without any global options config throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:global-options}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow("global-options");
+    });
+
+    it("index placeholder with templates and files includes both in categories", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "greet.md");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:index}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["greet"] },
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      // Should contain a link to the greet file
+      expect(content).toContain("greet");
+      expect(content).not.toContain("<!-- politty:");
+    });
+
+    it("formatter is applied to the final output", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command::heading}}\n");
+
+      const uppercaseFormatter = (content: string) => content.toUpperCase();
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+        formatter: uppercaseFormatter,
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toBe(content.toUpperCase());
+    });
+
+    it("initDocFile deletes output path but not template source", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+      fs.writeFileSync(outputPath, "old content\n");
+
+      initDocFile({ templates: { [outputPath]: templatePath } });
+
+      expect(fs.existsSync(outputPath)).toBe(false);
+      expect(fs.existsSync(templatePath)).toBe(true);
+    });
+
+    it("templates combined with files both processed", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "greet.md");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command:config}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["greet"] },
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const paths = result.files.map((f) => f.path);
+      expect(paths).toContain(filePath);
+      expect(paths).toContain(outputPath);
+      // files results come before templates results
+      expect(paths.indexOf(filePath)).toBeLessThan(paths.indexOf(outputPath));
     });
   });
 });
