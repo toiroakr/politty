@@ -28,6 +28,12 @@ export type CommandCategory = {
   commands: string[];
   /** Path to documentation file for links (e.g., "./cli/application.md") */
   docPath: string;
+  /**
+   * When true, `commands` are used verbatim as index rows without expanding
+   * parent commands to their leaf subcommands. Used for template-derived
+   * categories where only explicitly rendered scopes have headings.
+   */
+  noExpand?: boolean;
 };
 
 export type { CommandIndexOptions };
@@ -101,8 +107,12 @@ function renderCategory(
   lines.push(category.description);
   lines.push("");
 
-  // Determine which commands to include (always expand, leafOnly controls filtering)
-  const commandPaths = expandCommands(category.commands, allCommands, leafOnly);
+  // Determine which commands to include. noExpand categories (template-derived) use
+  // their command list verbatim so the index lists exactly the rendered scopes;
+  // otherwise parent commands expand to leaf subcommands (leafOnly controls filtering).
+  const commandPaths = category.noExpand
+    ? category.commands
+    : expandCommands(category.commands, allCommands, leafOnly);
 
   // Build command table
   lines.push("| Command | Description |");
@@ -112,8 +122,9 @@ function renderCategory(
     const info = allCommands.get(cmdPath);
     if (!info) continue;
 
-    // Skip non-leaf commands if leafOnly is true
-    if (leafOnly && !isLeafCommand(info)) continue;
+    // Skip non-leaf commands if leafOnly is true (not applied to noExpand categories,
+    // whose scopes are explicit and must all be listed).
+    if (!category.noExpand && leafOnly && !isLeafCommand(info)) continue;
 
     const displayName = cmdPath || info.name;
     const anchor = generateAnchor(displayName);

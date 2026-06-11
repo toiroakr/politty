@@ -4680,8 +4680,38 @@ ${argsContent}
       expect(verboseOptionRows).toHaveLength(1);
     });
 
-    // FIX C: duplicate index rows from parent+child template scopes
-    it("index placeholder lists each subcommand exactly once when parent and child both referenced", async () => {
+    // globalArgs-derived stripping/linking must NOT leak into files outputs, which have no
+    // reachable #global-options anchor. Only templates-only mode derives from globalArgs.
+    it("globalArgs does not strip options or add dead global-options link in files outputs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filesOutputPath = path.join(testDir, "cmd.md");
+      const templatePath = path.join(testDir, "readme-template.md");
+      const templateOutputPath = path.join(testDir, "readme.md");
+      // Template does not need a global-options placeholder for this test.
+      fs.writeFileSync(templatePath, "{{politty:command:greet}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filesOutputPath]: [""] },
+        templates: { [templateOutputPath]: templatePath },
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), {
+            alias: "v",
+            description: "Enable verbose output",
+          }),
+        }),
+      });
+      expect(result.success).toBe(true);
+      const filesContent = fs.readFileSync(filesOutputPath, "utf-8");
+      // The root command's own --verbose option must remain (not stripped).
+      expect(filesContent).toContain("--verbose");
+      // No dead link to a #global-options anchor that the files output never emits.
+      expect(filesContent).not.toContain("#global-options");
+    });
+
+    // Template-derived index lists only the scopes actually rendered as headings,
+    // each exactly once, never expanding a parent to unrendered sibling subcommands.
+    it("index placeholder lists only explicitly rendered scopes, once each", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const indexTemplatePath = path.join(testDir, "index-template.md");
       const indexOutputPath = path.join(testDir, "index.md");
@@ -4690,7 +4720,8 @@ ${argsContent}
 
       // Template A: renders the index
       fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
-      // Template B: references both the root ("") and the "config get" subcommand explicitly
+      // Template B: references both the root ("") and the "config get" subcommand explicitly.
+      // The root has other subcommands (greet, config set) that are NOT referenced.
       fs.writeFileSync(
         commandTemplatePath,
         "{{politty:command}}\n\n{{politty:command:config get}}\n",
@@ -4705,10 +4736,55 @@ ${argsContent}
       });
       expect(result.success).toBe(true);
       const indexContent = fs.readFileSync(indexOutputPath, "utf-8");
-      // "config get" should appear at most once in the index (no duplicate row)
-      const matches = indexContent.match(/config get/g);
-      const count = matches ? matches.length : 0;
-      expect(count).toBeLessThanOrEqual(1);
+
+      // "config get" (explicitly rendered) appears exactly once.
+      expect(indexContent.match(/config get/g)?.length ?? 0).toBe(1);
+      // Unrendered sibling subcommands must not appear in the index.
+      expect(indexContent).not.toContain("config set");
+      expect(indexContent).not.toContain("greet");
+    });
+
+    // A parent-only template must not emit local anchor links to children that have
+    // no heading in the output (template mode does not auto-expand subcommands).
+    it("parent-only template renders unrendered children without broken anchor links", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "root-only-template.md");
+      const outputPath = path.join(testDir, "root-only.md");
+
+      // Only the root is rendered; its children (greet, config) get no heading here.
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+
+      // The subcommands table lists the children as plain text, not as dead local links.
+      expect(content).toContain("greet");
+      expect(content).not.toContain("(#greet)");
+      expect(content).not.toContain("(#config)");
+    });
+
+    // An explicitly rendered child still links correctly within the same output.
+    it("explicitly rendered child keeps its local anchor link", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "root-and-greet-template.md");
+      const outputPath = path.join(testDir, "root-and-greet.md");
+
+      // Both root and the greet subcommand are rendered in the same output.
+      fs.writeFileSync(templatePath, "{{politty:command}}\n\n{{politty:command:greet}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+
+      // greet is rendered, so its row in the subcommands table links to the local anchor.
+      expect(content).toContain("(#greet)");
     });
   });
 });

@@ -614,6 +614,12 @@ export function renderSubcommandsTableFromArray(
       if (currentFile && subFile && currentFile !== subFile) {
         const relativePath = getRelativePath(currentFile, subFile);
         cmdCell = `[\`${fullName}\`](${relativePath}#${anchor})`;
+      } else if (fileMap && subFile === undefined) {
+        // A fileMap is present but this subcommand has no entry: in template mode this
+        // means the child is not rendered as a heading anywhere, so a local #anchor link
+        // would be dead. Render plain text instead. (Files mode populates an entry for
+        // every documented command, so this branch is not reached there.)
+        cmdCell = `\`${fullName}\``;
       } else {
         cmdCell = `[\`${fullName}\`](#${anchor})`;
       }

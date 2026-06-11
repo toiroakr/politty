@@ -96,18 +96,6 @@ function isSubcommandOf(childPath: string, parentPath: string): boolean {
 }
 
 /**
- * Remove scopes that are already covered by an ancestor scope in the same list.
- * A scope S is removed when another scope P in the list satisfies isSubcommandOf(S, P)
- * (which returns true for P="" root, covering all non-empty scopes).
- * Used to prevent duplicate rows in the index when both a parent and child scope are listed.
- */
-function dropDescendantScopes(scopes: string[]): string[] {
-  return scopes.filter((s) => {
-    return !scopes.some((p) => p !== s && isSubcommandOf(s, p));
-  });
-}
-
-/**
  * Check if a pattern contains wildcards
  */
 function containsWildcard(pattern: string): boolean {
@@ -994,12 +982,19 @@ function deriveIndexFromFiles(
     const firstCmdPath = commandPaths[0];
     const cmdInfo = firstCmdPath !== undefined ? allCommands.get(firstCmdPath) : undefined;
     const fileConfig = Array.isArray(fileConfigRaw) ? undefined : fileConfigRaw;
-    categories.push({
+    const noExpand = fileConfig?.noExpand === true;
+    const category: CommandCategory = {
       title: fileConfig?.title ?? cmdInfo?.name ?? path.basename(filePath, path.extname(filePath)),
       description: fileConfig?.description ?? cmdInfo?.description ?? "",
-      commands: topLevelCommands,
+      // For noExpand (template-derived) categories, list the explicit scopes verbatim,
+      // excluding the root scope which is the page itself rather than an index entry.
+      commands: noExpand ? topLevelCommands.filter((p) => p !== "") : topLevelCommands,
       docPath,
-    });
+    };
+    if (noExpand) {
+      category.noExpand = true;
+    }
+    categories.push(category);
   }
   return categories;
 }
@@ -1661,7 +1656,16 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // In templates-only mode (no rootDoc, no files), globalOptionDefinitions is empty even when
   // globalArgs provides non-positional options. Populate from globalArgs so the strip loop,
   // validateGlobalOptionCompatibility, and hasGlobalOptions plumbing all see them.
-  if (config.templates && globalOptionDefinitions.size === 0 && globalArgs) {
+  // Restricted to templates-only mode (no files): a files output has no reachable
+  // #global-options anchor, so stripping/linking there would produce a dead link.
+  // Template outputs are required to contain {{politty:global-options}} when global options
+  // are configured, so the anchor is always present for them.
+  if (
+    config.templates &&
+    Object.keys(files).length === 0 &&
+    globalOptionDefinitions.size === 0 &&
+    globalArgs
+  ) {
     const shape = deriveGlobalArgsShape(globalArgs);
     if (shape) {
       for (const field of collectRenderableGlobalOptionFields(shape)) {
@@ -2280,10 +2284,11 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         const filesForIndex: FileMapping = { ...files };
         for (const [otherOutputPath, otherScopes] of templateReferencedScopes.entries()) {
           if (normalizeDocPathForComparison(otherOutputPath) !== normalizedCurrentOutput) {
-            // Normalize the scope list: drop any scope already covered by an ancestor scope
-            // in the same list to prevent duplicate rows when both parent and child are referenced.
-            const dedupedScopes = dropDescendantScopes(otherScopes);
-            filesForIndex[otherOutputPath] = { commands: dedupedScopes, noExpand: true };
+            // Pass the explicit placeholder scopes verbatim. noExpand keeps the index rows
+            // limited to the scopes actually rendered as headings in that template output
+            // (template mode does not auto-expand subcommands), so the index never links to
+            // unrendered sibling commands.
+            filesForIndex[otherOutputPath] = { commands: otherScopes, noExpand: true };
           }
         }
         const categories = deriveIndexFromFiles(filesForIndex, outputPath, allCommands, ignores);
