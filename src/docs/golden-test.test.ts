@@ -4901,5 +4901,139 @@ ${argsContent}
       // The three consecutive newlines inside the code block survive untouched.
       expect(content).toContain("line1\n\n\nline2");
     });
+
+    // An empty own-line placeholder between two single newlines must not concatenate the
+    // adjacent handwritten lines.
+    it("empty own-line placeholder keeps adjacent lines separated", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "tight-template.md");
+      const outputPath = path.join(testDir, "tight.md");
+      // greet has no examples, so the typed placeholder resolves to empty.
+      fs.writeFileSync(templatePath, "Before\n{{politty:command:greet:examples}}\nAfter\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).not.toContain("BeforeAfter");
+      expect(content).toContain("Before");
+      expect(content).toContain("After");
+    });
+
+    // A typed-only ancestor placeholder must not skew the heading depth of the full-section
+    // command. Here "config" is referenced only via a typed (options) placeholder, so the
+    // heading depth is computed from "config get" alone — identical to rendering it on its own.
+    it("typed-only ancestor does not skew heading depth of a full-section command", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const withAncestor = path.join(testDir, "with-ancestor-template.md");
+      const withAncestorOut = path.join(testDir, "with-ancestor.md");
+      const aloneTemplate = path.join(testDir, "alone-template.md");
+      const aloneOut = path.join(testDir, "alone.md");
+
+      // One template references config (typed-only) plus config get (full section).
+      fs.writeFileSync(
+        withAncestor,
+        "{{politty:command:config:options}}\n\n{{politty:command:config get}}\n",
+      );
+      // The other renders config get alone.
+      fs.writeFileSync(aloneTemplate, "{{politty:command:config get}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [withAncestorOut]: withAncestor,
+          [aloneOut]: aloneTemplate,
+        },
+      });
+      expect(result.success).toBe(true);
+
+      // The "config get" heading must render at the same level in both outputs (its depth is not
+      // pulled shallower by the typed-only "config" reference).
+      const withAncestorContent = fs.readFileSync(withAncestorOut, "utf-8");
+      const aloneContent = fs.readFileSync(aloneOut, "utf-8");
+      const headingOf = (c: string): string =>
+        c.split("\n").find((l) => /^#+\s+(config get|get)\b/.test(l)) ?? "";
+      expect(headingOf(withAncestorContent)).toBe(headingOf(aloneContent));
+      expect(headingOf(aloneContent)).not.toBe("");
+    });
+
+    // A template that does NOT emit the global-options anchor must not be subjected to
+    // globalArgs compatibility validation (its options are left intact).
+    it("globalArgs compatibility is not enforced on non-emitting templates", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const conflictCommand = defineCommand({
+        name: "conflict-cli",
+        description: "CLI whose subcommand has a local option clashing with a global name",
+        subCommands: {
+          run: defineCommand({
+            name: "run",
+            description: "Run",
+            // Local "verbose" is a string, differing from the global boolean definition.
+            args: z.object({
+              verbose: arg(z.string().optional(), { description: "Verbosity label" }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const templatePath = path.join(testDir, "conflict-template.md");
+      const outputPath = path.join(testDir, "conflict.md");
+      // No {{politty:global-options}} here, so the local verbose must not be validated.
+      fs.writeFileSync(templatePath, "{{politty:command:run}}\n");
+
+      const result = await generateDoc({
+        command: conflictCommand,
+        templates: { [outputPath]: templatePath },
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+        }),
+      });
+      // Must NOT throw a compatibility error; the command renders with its own verbose option.
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("--verbose");
+    });
+
+    // For a union/discriminated-union command, an excluded global option must not reappear in the
+    // grouped option table rendered from `extracted`.
+    it("excluded global option is removed from grouped (union) option tables", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const unionCommand = defineCommand({
+        name: "union-cli",
+        description: "CLI with a discriminated-union schema and a shared global option",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: z.literal("create"),
+            name: arg(z.string(), { description: "Resource name" }),
+            verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+          }),
+          z.object({
+            action: z.literal("delete"),
+            id: arg(z.string(), { description: "Resource id" }),
+            verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+          }),
+        ]),
+        run: () => {},
+      });
+      const templatePath = path.join(testDir, "union-template.md");
+      const outputPath = path.join(testDir, "union.md");
+      fs.writeFileSync(templatePath, "{{politty:global-options}}\n\n{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: unionCommand,
+        templates: { [outputPath]: templatePath },
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+        }),
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      // verbose appears once — in the global-options table — not again in the union option groups.
+      expect(content.split("\n").filter((l) => l.includes("--verbose"))).toHaveLength(1);
+    });
   });
 });

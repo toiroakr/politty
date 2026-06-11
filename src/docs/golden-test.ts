@@ -1,7 +1,11 @@
 import * as path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
-import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
+import {
+  extractFields,
+  type ExtractedFields,
+  type ResolvedFieldMeta,
+} from "../core/schema-extractor.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import { createCommandRenderer } from "./default-renderers.js";
 import {
@@ -724,6 +728,39 @@ function stripPolittyMarkers(content: string): string {
 }
 
 /**
+ * Collapse runs of 3+ newlines to 2, but only outside fenced code blocks so that intentional
+ * blank lines inside handwritten code samples are preserved. Fences are lines whose trimmed
+ * content starts with ``` or ~~~.
+ */
+function collapseBlankLinesOutsideCodeFences(content: string): string {
+  const lines = content.split("\n");
+  const out: string[] = [];
+  let inFence = false;
+  let blankRun = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const isFence = trimmed.startsWith("```") || trimmed.startsWith("~~~");
+    if (isFence) {
+      inFence = !inFence;
+      blankRun = 0;
+      out.push(line);
+      continue;
+    }
+    if (!inFence && line.trim() === "") {
+      blankRun++;
+      // Keep at most one blank line between content outside fences.
+      if (blankRun >= 2) {
+        continue;
+      }
+    } else if (!inFence) {
+      blankRun = 0;
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+/**
  * Type guard for SectionType values parsed from template placeholders.
  */
 function isSectionType(value: string): value is SectionType {
@@ -1435,11 +1472,43 @@ function generateCommandSection(
     enriched.hasGlobalOptions = hasGlobalOptions;
   }
   // Non-destructively exclude options (e.g. per-template global options) without mutating
-  // the shared CommandInfo in allCommands.
+  // the shared CommandInfo in allCommands. The default renderer also reads grouped option
+  // tables from `extracted` (union/discriminated-union schemas), so filter those too, otherwise
+  // an excluded global option would still appear there and duplicate {{politty:global-options}}.
   if (excludeOptionNames && excludeOptionNames.size > 0) {
     enriched.options = info.options.filter((opt) => !excludeOptionNames.has(opt.name));
+    if (info.extracted) {
+      enriched.extracted = filterExtractedFields(info.extracted, excludeOptionNames);
+    }
   }
   return render(enriched);
+}
+
+/**
+ * Return a copy of ExtractedFields with the named options removed from every field collection
+ * (top-level fields, union options, and discriminated-union variants). Used to exclude global
+ * options from grouped option tables rendered directly from `extracted`.
+ */
+function filterExtractedFields(
+  extracted: ExtractedFields,
+  excludeOptionNames: ReadonlySet<string>,
+): ExtractedFields {
+  const result: ExtractedFields = {
+    ...extracted,
+    fields: extracted.fields.filter((f) => !excludeOptionNames.has(f.name)),
+  };
+  if (extracted.unionOptions) {
+    result.unionOptions = extracted.unionOptions.map((opt) =>
+      filterExtractedFields(opt, excludeOptionNames),
+    );
+  }
+  if (extracted.variants) {
+    result.variants = extracted.variants.map((variant) => ({
+      ...variant,
+      fields: variant.fields.filter((f) => !excludeOptionNames.has(f.name)),
+    }));
+  }
+  return result;
 }
 
 /**
@@ -1872,15 +1941,24 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // loop and the template generation loop so that generated sections use the stripped options.
   validateGlobalOptionCompatibility(documentedCommandPaths, allCommands, globalOptionDefinitions);
   // When global options come only from globalArgs (no rootDoc), the destructive strip below does
-  // not run, so validate template scopes against the globalArgs-derived definitions separately.
+  // not run, so validate them separately — but ONLY for scopes in templates that actually emit a
+  // global-options anchor (where options will be excluded). Templates without the anchor keep
+  // their option tables intact, so a same-named local option there is not a conflict.
   if (globalOptionDefinitions.size === 0 && templateGlobalOptionFields.size > 0) {
-    const templateScopes = new Set<string>();
+    const emittingTemplateScopes = new Set<string>();
     for (const meta of templateMeta.values()) {
+      if (!meta.emitsGlobalOptions) {
+        continue;
+      }
       for (const scope of meta.referencedScopes) {
-        templateScopes.add(scope);
+        emittingTemplateScopes.add(scope);
       }
     }
-    validateGlobalOptionCompatibility(templateScopes, allCommands, templateGlobalOptionFields);
+    validateGlobalOptionCompatibility(
+      emittingTemplateScopes,
+      allCommands,
+      templateGlobalOptionFields,
+    );
   }
   if (globalOptionDefinitions.size > 0) {
     for (const info of allCommands.values()) {
@@ -2246,11 +2324,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     }
 
     const meta = templateMeta.get(outputPath);
-    const referencedScopes = meta?.referencedScopes ?? [];
 
-    // Compute heading level adjustment
-    const scopeDepths = referencedScopes.map((s) => allCommands.get(s)?.depth ?? 1);
-    const minDepth = scopeDepths.length > 0 ? Math.min(...scopeDepths) : 1;
+    // Compute heading level adjustment from the scopes that actually render a heading. Typed-only
+    // placeholders (which emit no heading) must not skew the depth, matching files-mode behaviour
+    // where the shallowest rendered command maps to the configured heading level.
+    const headingDepths = (meta?.headingScopes ?? []).map((s) => allCommands.get(s)?.depth ?? 1);
+    const minDepth = headingDepths.length > 0 ? Math.min(...headingDepths) : 1;
     const adjustedHeadingLevel = clampHeadingLevel((format?.headingLevel ?? 1) - (minDepth - 1));
     const templateRenderer = createCommandRenderer({
       ...format,
@@ -2357,36 +2436,23 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     // including handwritten blank lines, e.g. inside fenced code blocks — is preserved verbatim;
     // newlines are NOT collapsed globally. The leading `\n\n?` is only consumed for empty
     // own-line placeholders; for any other case it is restored.
-    let generated = templateContent.replace(
-      /(\n?)([ \t]*)(\{\{politty:[^{}]*\}\})([ \t]*)(\n?)/g,
-      (
-        _match,
-        leadNl: string,
-        leadWs: string,
-        placeholder: string,
-        trailWs: string,
-        trailNl: string,
-      ) => {
-        const replacement = replacements.get(placeholder);
-        if (replacement === undefined) {
-          throw new Error(
-            `Internal error: unresolved placeholder "${placeholder}" in template "${templatePath}".`,
-          );
-        }
-        const isOwnLine = leadWs === "" && trailWs === "" && trailNl === "\n";
-        // Own-line empty placeholder: drop the placeholder together with its own leading and
-        // trailing newline. The blank line that surrounded it (if any) collapses to a single
-        // paragraph break instead of a 3+ newline gap, while handwritten spacing elsewhere is
-        // untouched.
-        if (replacement === "" && isOwnLine) {
-          return "";
-        }
-        // Otherwise restore everything around the placeholder and substitute its content.
-        return `${leadNl}${leadWs}${replacement}${trailWs}${trailNl}`;
-      },
-    );
+    // Substitute placeholders in place, leaving all surrounding whitespace untouched.
+    let generated = templateContent.replace(TEMPLATE_PLACEHOLDER_REGEX, (match) => {
+      const replacement = replacements.get(match);
+      if (replacement === undefined) {
+        throw new Error(
+          `Internal error: unresolved placeholder "${match}" in template "${templatePath}".`,
+        );
+      }
+      return replacement;
+    });
 
-    // Ensure exactly one trailing newline; do not otherwise alter handwritten spacing.
+    // Collapse the blank-line gaps left by empty placeholders, but ONLY outside fenced code
+    // blocks so intentional blank lines in handwritten code samples are preserved. Template
+    // content is the source of truth; we never reflow handwritten prose spacing beyond this.
+    generated = collapseBlankLinesOutsideCodeFences(generated);
+
+    // Ensure exactly one trailing newline.
     generated = `${generated.trimEnd()}\n`;
 
     // Apply formatter
