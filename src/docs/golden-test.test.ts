@@ -4528,6 +4528,57 @@ ${argsContent}
       expect(paths.indexOf(filePath)).toBeLessThan(paths.indexOf(outputPath));
     });
 
+    it("targetCommands skips templates that do not reference target scopes", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "greet.md");
+      const templatePath = path.join(testDir, "config-template.md");
+      const outputPath = path.join(testDir, "config.md");
+      fs.writeFileSync(templatePath, "{{politty:command:config}}\n");
+
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["greet"] },
+        templates: { [outputPath]: templatePath },
+      });
+
+      fs.writeFileSync(outputPath, "stale config docs\n");
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["greet"] },
+        templates: { [outputPath]: templatePath },
+        targetCommands: ["greet"],
+      });
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([filePath]);
+    });
+
+    it("targetCommands processes templates that reference target scopes", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "config-template.md");
+      const outputPath = path.join(testDir, "config.md");
+      fs.writeFileSync(templatePath, "{{politty:command:config}}\n");
+
+      await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      fs.writeFileSync(outputPath, "stale config docs\n");
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+        targetCommands: ["config"],
+      });
+      expect(result.success).toBe(false);
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0]?.path).toBe(outputPath);
+      expect(result.files[0]?.status).toBe("diff");
+    });
+
     // A trailing colon is ambiguous with the root command placeholder and must be rejected.
     it("{{politty:command:}} (trailing colon) throws with clear message", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");

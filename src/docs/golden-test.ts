@@ -1179,6 +1179,14 @@ function collectTargetDocumentedCommandPaths(
   return documentedTargetCommandPaths;
 }
 
+function commandPathMatchesTarget(commandPath: string, targetCommands: string[]): boolean {
+  return targetCommands.some((targetCommand) => isSubcommandOf(commandPath, targetCommand));
+}
+
+function templateMetaReferencesTarget(meta: TemplateMeta, targetCommands: string[]): boolean {
+  return meta.referencedScopes.some((scope) => commandPathMatchesTarget(scope, targetCommands));
+}
+
 /**
  * Validate that excluded command options match globalOptions definitions.
  */
@@ -1808,16 +1816,6 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
   const hasTargetCommands = targetCommands !== undefined && targetCommands.length > 0;
 
-  // Validate all targetCommands exist in files
-  if (hasTargetCommands) {
-    for (const targetCommand of targetCommands) {
-      const targetFilePath = findFileForCommand(targetCommand, files, allCommands, ignores);
-      if (!targetFilePath) {
-        throw new Error(`Target command "${targetCommand}" not found in any file configuration`);
-      }
-    }
-  }
-
   // Collect global option definitions and the initial set of documented command paths (files only).
   // Template scopes will be added after template validation below, before the single
   // validateGlobalOptionCompatibility call and before the mutation that strips global options.
@@ -2007,11 +2005,40 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     // Extend documentedCommandPaths with template scopes so the single
     // validateGlobalOptionCompatibility call below covers template-only commands too.
     for (const meta of templateMeta.values()) {
+      if (hasTargetCommands && !templateMetaReferencesTarget(meta, targetCommands)) {
+        continue;
+      }
       for (const scope of meta.referencedScopes) {
+        if (hasTargetCommands && !commandPathMatchesTarget(scope, targetCommands)) {
+          continue;
+        }
         documentedCommandPaths.add(scope);
       }
     }
   }
+
+  if (hasTargetCommands) {
+    for (const targetCommand of targetCommands) {
+      const targetFilePath = findFileForCommand(targetCommand, files, allCommands, ignores);
+      const targetTemplatePath = Array.from(templateMeta.values()).some((meta) =>
+        templateMetaReferencesTarget(meta, [targetCommand]),
+      );
+      if (!targetFilePath && !targetTemplatePath) {
+        throw new Error(
+          `Target command "${targetCommand}" not found in any file or template configuration`,
+        );
+      }
+    }
+  }
+
+  const activeTemplateMeta =
+    hasTargetCommands && config.templates
+      ? new Map(
+          Array.from(templateMeta.entries()).filter(([, meta]) =>
+            templateMetaReferencesTarget(meta, targetCommands),
+          ),
+        )
+      : templateMeta;
 
   // Validate global option compatibility across ALL documented commands (files + template scopes),
   // then strip global options from command option tables. Both steps must happen before the files
@@ -2023,11 +2050,14 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // their option tables intact, so a same-named local option there is not a conflict.
   if (globalOptionDefinitions.size === 0 && templateGlobalOptionFields.size > 0) {
     const emittingTemplateScopes = new Set<string>();
-    for (const meta of templateMeta.values()) {
+    for (const meta of activeTemplateMeta.values()) {
       if (!meta.emitsGlobalOptions) {
         continue;
       }
       for (const scope of meta.referencedScopes) {
+        if (hasTargetCommands && !commandPathMatchesTarget(scope, targetCommands)) {
+          continue;
+        }
         emittingTemplateScopes.add(scope);
       }
     }
@@ -2056,8 +2086,11 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // command rendered in multiple places gets a stable, order-independent link target rather than
   // being overwritten by whichever output happens to be processed last.
   const templateFileMap: Record<string, string> = { ...fileMap };
-  for (const [templateOutputPath, meta] of templateMeta.entries()) {
+  for (const [templateOutputPath, meta] of activeTemplateMeta.entries()) {
     for (const scope of meta.headingScopes) {
+      if (hasTargetCommands && !commandPathMatchesTarget(scope, targetCommands)) {
+        continue;
+      }
       if (!(scope in templateFileMap)) {
         templateFileMap[scope] = templateOutputPath;
       }
@@ -2402,6 +2435,10 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
   // Now process each template
   for (const [outputPath, templatePath] of Object.entries(config.templates ?? {})) {
+    if (!activeTemplateMeta.has(outputPath)) {
+      continue;
+    }
+
     const templateContent = readFile(templatePath);
     if (templateContent === null) {
       hasError = true;
@@ -2497,7 +2534,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         // links to commands template mode did not render.
         const categories = [
           ...deriveIndexFromFiles(files, outputPath, allCommands, ignores),
-          ...deriveIndexFromTemplateOutputs(templateMeta, outputPath, outputPath, allCommands),
+          ...deriveIndexFromTemplateOutputs(
+            activeTemplateMeta,
+            outputPath,
+            outputPath,
+            allCommands,
+          ),
         ];
         const indexContent = await renderCommandIndex(command, categories, rootDoc?.index);
         replacements.set(placeholder, indexContent);
