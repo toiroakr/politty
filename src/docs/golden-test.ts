@@ -2518,12 +2518,14 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     let generated = templateContent.replace(
       /(\n*)([ \t]*)(\{\{politty:[^{}]*\}\})([ \t]*)(\n*)/g,
       (
-        _m,
+        match,
         leadNl: string,
         leadWs: string,
         placeholder: string,
         trailWs: string,
         trailNl: string,
+        offset: number,
+        fullString: string,
       ) => {
         const replacement = replacements.get(placeholder);
         if (replacement === undefined) {
@@ -2531,7 +2533,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
             `Internal error: unresolved placeholder "${placeholder}" in template "${templatePath}".`,
           );
         }
-        const isOwnLine = leadWs === "" && trailWs === "" && (leadNl !== "" || trailNl !== "");
+        const startsLine = leadNl !== "" || offset === 0;
+        const endsLine = trailNl !== "" || offset + match.length === fullString.length;
+        const isOwnLine = startsLine && endsLine;
         if (replacement === "" && isOwnLine) {
           // Re-emit one break: the wider of the two surrounding newline runs, capped at a blank
           // line. Empty when the placeholder sat at the very start/end so output does not gain a

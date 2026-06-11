@@ -4934,6 +4934,22 @@ ${argsContent}
       expect(content).toContain("After");
     });
 
+    it("empty inline placeholder at line end keeps the following newline", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "inline-empty-template.md");
+      const outputPath = path.join(testDir, "inline-empty.md");
+      fs.writeFileSync(templatePath, "Before{{politty:command:greet:examples}}\nAfter\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toBe("Before\nAfter\n");
+    });
+
     it("empty own-line placeholder at file start does not leave a leading blank line", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "leading-empty-template.md");
