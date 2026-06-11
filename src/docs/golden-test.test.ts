@@ -4691,6 +4691,40 @@ ${argsContent}
       expect(content).toContain("config.md#config");
     });
 
+    it("targetCommands validates index-only templates", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplatePath = path.join(testDir, "index-only-template.md");
+      const indexOutputPath = path.join(testDir, "index-only.md");
+      const greetTemplatePath = path.join(testDir, "greet-template.md");
+      const greetOutputPath = path.join(testDir, "greet.md");
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+      fs.writeFileSync(greetTemplatePath, "{{politty:command:greet}}\n");
+
+      await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [greetOutputPath]: greetTemplatePath,
+        },
+      });
+
+      fs.writeFileSync(indexOutputPath, "stale index\n");
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [greetOutputPath]: greetTemplatePath,
+        },
+        targetCommands: ["greet"],
+      });
+      expect(result.success).toBe(false);
+      expect(result.files.some((f) => f.path === indexOutputPath && f.status === "diff")).toBe(
+        true,
+      );
+    });
+
     // A trailing colon is ambiguous with the root command placeholder and must be rejected.
     it("{{politty:command:}} (trailing colon) throws with clear message", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
@@ -5118,6 +5152,25 @@ ${argsContent}
       const templatePath = path.join(testDir, "leading-empty-template.md");
       const outputPath = path.join(testDir, "leading-empty.md");
       fs.writeFileSync(templatePath, "{{politty:command:greet:examples}}\nAfter\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toBe("After\n");
+    });
+
+    it("stacked empty own-line placeholders do not leave leading blank lines", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "stacked-empty-template.md");
+      const outputPath = path.join(testDir, "stacked-empty.md");
+      fs.writeFileSync(
+        templatePath,
+        "{{politty:command:greet:examples}}\n{{politty:command:greet:notes}}\nAfter\n",
+      );
 
       const result = await generateDoc({
         command: testCommand,

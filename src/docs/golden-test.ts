@@ -814,6 +814,8 @@ interface TemplateMeta {
   headingScopes: string[];
   /** Whether this output emits a `#global-options` anchor via `{{politty:global-options}}`. */
   emitsGlobalOptions: boolean;
+  /** Whether this output renders an index from configured outputs via `{{politty:index}}`. */
+  emitsIndex: boolean;
 }
 
 /**
@@ -1183,8 +1185,15 @@ function commandPathMatchesTarget(commandPath: string, targetCommands: string[])
   return targetCommands.some((targetCommand) => isSubcommandOf(commandPath, targetCommand));
 }
 
-function templateMetaReferencesTarget(meta: TemplateMeta, targetCommands: string[]): boolean {
+function templateMetaReferencesCommandTarget(
+  meta: TemplateMeta,
+  targetCommands: string[],
+): boolean {
   return meta.referencedScopes.some((scope) => commandPathMatchesTarget(scope, targetCommands));
+}
+
+function templateMetaShouldProcessForTarget(meta: TemplateMeta, targetCommands: string[]): boolean {
+  return meta.emitsIndex || templateMetaReferencesCommandTarget(meta, targetCommands);
 }
 
 /**
@@ -1934,6 +1943,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           referencedScopes: [],
           headingScopes: [],
           emitsGlobalOptions: false,
+          emitsIndex: false,
         });
         continue;
       }
@@ -1945,6 +1955,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       const scopes = new Set<string>();
       const headingScopes = new Set<string>();
       let emitsGlobalOptions = false;
+      let emitsIndex = false;
 
       for (const placeholder of placeholders) {
         const parsed = parsePlaceholder(placeholder, allCommands);
@@ -1981,6 +1992,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           }
         } else if (parsed.kind === "global-options") {
           emitsGlobalOptions = true;
+        } else if (parsed.kind === "index") {
+          emitsIndex = true;
         }
       }
 
@@ -1999,13 +2012,14 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         referencedScopes: Array.from(scopes),
         headingScopes: Array.from(headingScopes),
         emitsGlobalOptions,
+        emitsIndex,
       });
     }
 
     // Extend documentedCommandPaths with template scopes so the single
     // validateGlobalOptionCompatibility call below covers template-only commands too.
     for (const meta of templateMeta.values()) {
-      if (hasTargetCommands && !templateMetaReferencesTarget(meta, targetCommands)) {
+      if (hasTargetCommands && !templateMetaShouldProcessForTarget(meta, targetCommands)) {
         continue;
       }
       for (const scope of meta.referencedScopes) {
@@ -2018,7 +2032,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     for (const targetCommand of targetCommands) {
       const targetFilePath = findFileForCommand(targetCommand, files, allCommands, ignores);
       const targetTemplatePath = Array.from(templateMeta.values()).some((meta) =>
-        templateMetaReferencesTarget(meta, [targetCommand]),
+        templateMetaReferencesCommandTarget(meta, [targetCommand]),
       );
       if (!targetFilePath && !targetTemplatePath) {
         throw new Error(
@@ -2032,7 +2046,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     hasTargetCommands && config.templates
       ? new Map(
           Array.from(templateMeta.entries()).filter(([, meta]) =>
-            templateMetaReferencesTarget(meta, targetCommands),
+            templateMetaShouldProcessForTarget(meta, targetCommands),
           ),
         )
       : templateMeta;
@@ -2561,7 +2575,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
             `Internal error: unresolved placeholder "${placeholder}" in template "${templatePath}".`,
           );
         }
-        const startsLine = leadNl !== "" || offset === 0;
+        const startsLine = leadNl !== "" || offset === 0 || fullString[offset - 1] === "\n";
         const endsLine = trailNl !== "" || offset + match.length === fullString.length;
         const isOwnLine = startsLine && endsLine;
         if (replacement === "" && isOwnLine) {
