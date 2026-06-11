@@ -4579,6 +4579,67 @@ ${argsContent}
       expect(result.files[0]?.status).toBe("diff");
     });
 
+    it("targetCommands validates all scopes in active templates", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const conflictCommand = defineCommand({
+        name: "conflict-cli",
+        description: "CLI with a non-target global option conflict",
+        subCommands: {
+          run: defineCommand({
+            name: "run",
+            description: "Target command",
+            run: () => {},
+          }),
+          other: defineCommand({
+            name: "other",
+            description: "Non-target command with a conflicting option",
+            args: z.object({
+              verbose: arg(z.string(), { description: "Verbosity label" }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const templatePath = path.join(testDir, "mixed-template.md");
+      const outputPath = path.join(testDir, "mixed.md");
+      fs.writeFileSync(
+        templatePath,
+        "{{politty:global-options}}\n\n{{politty:command:run}}\n\n{{politty:command:other}}\n",
+      );
+
+      await expect(
+        generateDoc({
+          command: conflictCommand,
+          templates: { [outputPath]: templatePath },
+          targetCommands: ["run"],
+          globalArgs: z.object({
+            verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+          }),
+        }),
+      ).rejects.toThrow('does not match globalOptions definition for "verbose"');
+    });
+
+    it("targetCommands keeps link targets for all headings in active templates", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "mixed-link-template.md");
+      const outputPath = path.join(testDir, "mixed-link.md");
+      fs.writeFileSync(
+        templatePath,
+        "{{politty:command}}\n\n{{politty:command:greet}}\n\n{{politty:command:config}}\n",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+        targetCommands: ["greet"],
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("(#greet)");
+      expect(content).toContain("(#config)");
+    });
+
     // A trailing colon is ambiguous with the root command placeholder and must be rejected.
     it("{{politty:command:}} (trailing colon) throws with clear message", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");

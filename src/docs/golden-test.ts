@@ -2009,9 +2009,6 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         continue;
       }
       for (const scope of meta.referencedScopes) {
-        if (hasTargetCommands && !commandPathMatchesTarget(scope, targetCommands)) {
-          continue;
-        }
         documentedCommandPaths.add(scope);
       }
     }
@@ -2055,9 +2052,6 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         continue;
       }
       for (const scope of meta.referencedScopes) {
-        if (hasTargetCommands && !commandPathMatchesTarget(scope, targetCommands)) {
-          continue;
-        }
         emittingTemplateScopes.add(scope);
       }
     }
@@ -2088,9 +2082,6 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   const templateFileMap: Record<string, string> = { ...fileMap };
   for (const [templateOutputPath, meta] of activeTemplateMeta.entries()) {
     for (const scope of meta.headingScopes) {
-      if (hasTargetCommands && !commandPathMatchesTarget(scope, targetCommands)) {
-        continue;
-      }
       if (!(scope in templateFileMap)) {
         templateFileMap[scope] = templateOutputPath;
       }

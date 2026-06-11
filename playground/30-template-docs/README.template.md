@@ -1,7 +1,7 @@
 # 30-template-docs
 
-> This file is the documentation source. `README.md` is generated from it and
-> must not be edited by hand.
+> `README.template.md` is the documentation source. `README.md` is generated
+> from it and must not be edited by hand.
 
 This example demonstrates **template-based documentation generation**: the
 generated `README.md` contains no politty markers because all generated
