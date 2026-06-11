@@ -5035,5 +5035,89 @@ ${argsContent}
       // verbose appears once — in the global-options table — not again in the union option groups.
       expect(content.split("\n").filter((l) => l.includes("--verbose"))).toHaveLength(1);
     });
+
+    // initDocFile must never delete a path that is also used as a template source, so a
+    // misconfigured { [p]: p } entry surfaces as a generateDoc validation error, not data loss.
+    it("initDocFile does not delete a path also used as a template source", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const shared = path.join(testDir, "shared.md");
+      fs.writeFileSync(shared, "{{politty:command}}\n");
+
+      initDocFile({ templates: { [shared]: shared } });
+
+      // The source file must still exist (not deleted as if it were a disposable output).
+      expect(fs.existsSync(shared)).toBe(true);
+    });
+
+    // Combined files + templates: a files output links to a heading rendered only in a template.
+    it("files output links to a subcommand heading rendered in a template output", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const rootFile = path.join(testDir, "root.md");
+      const greetTemplate = path.join(testDir, "greet-template.md");
+      const greetOutput = path.join(testDir, "greet.md");
+
+      // greet's heading is rendered ONLY by the template output.
+      fs.writeFileSync(greetTemplate, "{{politty:command:greet}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [rootFile]: [""] },
+        templates: { [greetOutput]: greetTemplate },
+      });
+      expect(result.success).toBe(true);
+
+      // The root file's subcommands table links greet to the template output, not a dead anchor.
+      const rootContent = fs.readFileSync(rootFile, "utf-8");
+      expect(rootContent).toContain("greet.md#greet");
+    });
+
+    // A command whose name contains a colon must be referenceable from a template, matching
+    // files mode (the section type is only consumed when the last token is a known type).
+    it("supports colon-containing command names in template placeholders", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const colonCommand = defineCommand({
+        name: "db-cli",
+        description: "DB CLI",
+        subCommands: {
+          "db:migrate": defineCommand({
+            name: "db:migrate",
+            description: "Run migrations",
+            run: () => {},
+          }),
+        },
+      });
+      const templatePath = path.join(testDir, "colon-template.md");
+      const outputPath = path.join(testDir, "colon.md");
+      // Full section and a typed section of the colon-named command.
+      fs.writeFileSync(
+        templatePath,
+        "{{politty:command:db:migrate}}\n\n{{politty:command:db:migrate:usage}}\n",
+      );
+
+      const result = await generateDoc({
+        command: colonCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("db:migrate");
+    });
+
+    // Handwritten blank-line runs unrelated to placeholders must survive (no global reflow).
+    it("does not collapse handwritten blank-line runs outside placeholders", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "prose-template.md");
+      const outputPath = path.join(testDir, "prose.md");
+      // Three blank lines between two prose paragraphs, far from any placeholder.
+      fs.writeFileSync(templatePath, "Para one.\n\n\n\nPara two.\n\n{{politty:command:greet}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("Para one.\n\n\n\nPara two.");
+    });
   });
 });

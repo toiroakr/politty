@@ -715,14 +715,14 @@ function removeCommandSections(content: string, commandPath: string): string {
 }
 
 /**
- * Strip politty marker lines from content, then collapse runs of 3+ newlines
- * to 2 and trim leading/trailing blank lines.
+ * Strip politty marker lines from content, then collapse the blank-line gaps the removed markers
+ * leave behind (outside fenced code blocks only, so intentional blank lines inside generated
+ * example/code blocks are preserved) and trim leading/trailing blank lines.
  */
 function stripPolittyMarkers(content: string): string {
   const lines = content.split("\n");
   const stripped = lines.filter((line) => !/^<!-- politty:.*-->$/.test(line.trim()));
-  let result = stripped.join("\n");
-  result = result.replace(/\n{3,}/g, "\n\n");
+  let result = collapseBlankLinesOutsideCodeFences(stripped.join("\n"));
   result = result.replace(/^\n+/, "").replace(/\n+$/, "");
   return result;
 }
@@ -794,7 +794,7 @@ function clampHeadingLevel(level: number): HeadingLevel {
  * Discriminated union; `type` variants are required for unions per project style.
  */
 type ParsedPlaceholder =
-  | { kind: "command"; scope: string; type: string | undefined }
+  | { kind: "command"; scope: string; type: SectionType | undefined }
   | { kind: "global-options" }
   | { kind: "index" }
   | { kind: "invalid"; reason: string };
@@ -830,18 +830,23 @@ function parsePlaceholder(placeholder: string): ParsedPlaceholder {
   const directive = tokens[1];
 
   if (directive === "command") {
-    if (tokens.length > 4) {
-      return {
-        kind: "invalid",
-        reason: `Malformed placeholder "${placeholder}". Expected {{politty:command}}, {{politty:command:<scope>}}, or {{politty:command:<scope>:<type>}}.`,
-      };
+    // tokens after "politty"/"command" form the scope, with an OPTIONAL trailing section type.
+    // The type is only consumed when the last token is a known SectionType; this keeps command
+    // names that themselves contain ":" (e.g. "db:migrate") referenceable, mirroring files mode.
+    const rest = tokens.slice(2);
+    let type: SectionType | undefined;
+    if (rest.length >= 2) {
+      const last = rest[rest.length - 1];
+      if (last !== undefined && isSectionType(last)) {
+        type = last;
+        rest.pop();
+      }
     }
-    const scope = tokens[2] ?? "";
-    const type = tokens[3];
-    // {{politty:command:}} — trailing colon with empty scope and no type is ambiguous with
-    // the intentional root form {{politty:command}}; treat it as invalid.
-    // {{politty:command::usage}} (scope="", type="usage") is the typed-root form and stays valid.
-    if (tokens.length === 3 && scope === "" && type === undefined) {
+    const scope = rest.join(":");
+    // {{politty:command:}} — trailing colon with empty scope and no type is ambiguous with the
+    // intentional root form {{politty:command}}; treat it as invalid. The typed-root form
+    // {{politty:command::usage}} (scope="", type="usage") stays valid.
+    if (rest.length === 1 && scope === "" && type === undefined) {
       return {
         kind: "invalid",
         reason: `Trailing colon in "${placeholder}"; use {{politty:command}} for the root command.`,
@@ -1036,19 +1041,46 @@ function deriveIndexFromFiles(
     const firstCmdPath = commandPaths[0];
     const cmdInfo = firstCmdPath !== undefined ? allCommands.get(firstCmdPath) : undefined;
     const fileConfig = Array.isArray(fileConfigRaw) ? undefined : fileConfigRaw;
-    const noExpand = fileConfig?.noExpand === true;
-    const category: CommandCategory = {
+    categories.push({
       title: fileConfig?.title ?? cmdInfo?.name ?? path.basename(filePath, path.extname(filePath)),
       description: fileConfig?.description ?? cmdInfo?.description ?? "",
-      // For noExpand (template-derived) categories, list the explicit scopes verbatim,
-      // excluding the root scope which is the page itself rather than an index entry.
-      commands: noExpand ? topLevelCommands.filter((p) => p !== "") : topLevelCommands,
+      commands: topLevelCommands,
       docPath,
-    };
-    if (noExpand) {
-      category.noExpand = true;
-    }
-    categories.push(category);
+    });
+  }
+  return categories;
+}
+
+/**
+ * Build index categories for the {{politty:index}} placeholder from other template outputs.
+ * Each category lists exactly the heading-producing scopes of that output (noExpand), so the
+ * index never links to commands that template mode did not render. The root scope is excluded
+ * because it represents the page itself, not an index entry.
+ */
+function deriveIndexFromTemplateOutputs(
+  templateMeta: ReadonlyMap<string, TemplateMeta>,
+  currentOutputPath: string,
+  indexFilePath: string,
+  allCommands: Map<string, CommandInfo>,
+): CommandCategory[] {
+  const normalizedCurrent = normalizeDocPathForComparison(currentOutputPath);
+  const categories: CommandCategory[] = [];
+  for (const [outputPath, meta] of templateMeta.entries()) {
+    if (normalizeDocPathForComparison(outputPath) === normalizedCurrent) continue;
+    const scopes = meta.headingScopes.filter((p) => p !== "");
+    if (scopes.length === 0) continue;
+
+    const docPath =
+      "./" + path.relative(path.dirname(indexFilePath), outputPath).replace(/\\/g, "/");
+    const firstScope = scopes[0];
+    const cmdInfo = firstScope !== undefined ? allCommands.get(firstScope) : undefined;
+    categories.push({
+      title: cmdInfo?.name ?? path.basename(outputPath, path.extname(outputPath)),
+      description: cmdInfo?.description ?? "",
+      commands: scopes,
+      docPath,
+      noExpand: true,
+    });
   }
   return categories;
 }
@@ -1891,12 +1923,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
               `Command scope "${scope}" in template "${templatePath}" conflicts with ignores configuration.`,
             );
           }
-          // Validate type if present
-          if (type !== undefined && !isSectionType(type)) {
-            throw new Error(
-              `Unknown section type "${type}" in template "${templatePath}". Valid types: ${SECTION_TYPES.join(", ")}`,
-            );
-          }
+          // Section type is already constrained to a valid SectionType by parsePlaceholder.
           scopes.add(scope);
           // A scope produces a #anchor heading when rendered as a full section (no type) or
           // via the explicit "heading" section. Other typed placeholders (usage, options, …)
@@ -1963,6 +1990,16 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   if (globalOptionDefinitions.size > 0) {
     for (const info of allCommands.values()) {
       info.options = info.options.filter((opt) => !globalOptionDefinitions.has(opt.name));
+    }
+  }
+
+  // Link map covering both files outputs and template-output headings, so a command rendered in
+  // one place can link to its heading rendered in another (in either direction). Only scopes that
+  // actually produce a heading in a template output are added.
+  const templateFileMap: Record<string, string> = { ...fileMap };
+  for (const [templateOutputPath, meta] of templateMeta.entries()) {
+    for (const scope of meta.headingScopes) {
+      templateFileMap[scope] = templateOutputPath;
     }
   }
 
@@ -2039,7 +2076,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           allCommands,
           render,
           filePath,
-          fileMap,
+          templateFileMap,
           rootDoc?.path,
           globalOptionDefinitions.size > 0,
         );
@@ -2244,13 +2281,15 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         }
       }
     } else {
-      // Generate markdown with file context (pass specifiedCommands as order hint)
+      // Generate markdown with file context (pass specifiedCommands as order hint).
+      // Use templateFileMap so a files output can link to a heading rendered in a template
+      // output; with no templates it is identical to fileMap.
       const rawMarkdown = generateFileMarkdown(
         commandPaths,
         allCommands,
         render,
         filePath,
-        fileMap,
+        templateFileMap,
         specifiedCommands,
         fileConfig,
         rootDoc?.path,
@@ -2297,16 +2336,6 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     const shape = deriveGlobalArgsShape(globalArgs);
     if (shape) {
       normalizedTemplateGlobalOptions = { args: shape };
-    }
-  }
-
-  // Cross-output links may only target scopes that actually render a heading (full-section
-  // placeholders). Typed placeholders like {{politty:command:greet:usage}} emit no #greet anchor,
-  // so they must not contribute to the file map.
-  const templateFileMap: Record<string, string> = { ...fileMap };
-  for (const [templateOutputPath, meta] of templateMeta.entries()) {
-    for (const scope of meta.headingScopes) {
-      templateFileMap[scope] = templateOutputPath;
     }
   }
 
@@ -2389,18 +2418,10 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         if (type === undefined) {
           // Full section, strip markers
           replacements.set(placeholder, stripPolittyMarkers(rawSection));
-        } else if (isSectionType(type)) {
+        } else {
           // Single section type
           const extracted = extractSectionMarker(rawSection, type, scope);
-          if (extracted === null) {
-            replacements.set(placeholder, "");
-          } else {
-            replacements.set(placeholder, stripPolittyMarkers(extracted));
-          }
-        } else {
-          throw new Error(
-            `Internal error: unknown section type "${type}" in template "${templatePath}". This should have been caught during validation.`,
-          );
+          replacements.set(placeholder, extracted === null ? "" : stripPolittyMarkers(extracted));
         }
       } else if (parsed.kind === "global-options") {
         if (normalizedTemplateGlobalOptions) {
@@ -2409,22 +2430,13 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           replacements.set(placeholder, "");
         }
       } else if (parsed.kind === "index") {
-        // Build filesForIndex: files + other templates (not current), excluding current outputPath
-        const normalizedCurrentOutput = normalizeDocPathForComparison(outputPath);
-        const filesForIndex: FileMapping = { ...files };
-        for (const [otherOutputPath, otherMeta] of templateMeta.entries()) {
-          if (normalizeDocPathForComparison(otherOutputPath) === normalizedCurrentOutput) {
-            continue;
-          }
-          // Index only the scopes that actually render a heading in that output (full-section
-          // placeholders). noExpand keeps the rows limited to those exact scopes — template mode
-          // does not auto-expand subcommands — so the index never links to unrendered commands.
-          if (otherMeta.headingScopes.length === 0) {
-            continue;
-          }
-          filesForIndex[otherOutputPath] = { commands: otherMeta.headingScopes, noExpand: true };
-        }
-        const categories = deriveIndexFromFiles(filesForIndex, outputPath, allCommands, ignores);
+        // files-based categories keep their normal leaf-only expansion; template-output
+        // categories list exactly their rendered heading scopes (noExpand) so the index never
+        // links to commands template mode did not render.
+        const categories = [
+          ...deriveIndexFromFiles(files, outputPath, allCommands, ignores),
+          ...deriveIndexFromTemplateOutputs(templateMeta, outputPath, outputPath, allCommands),
+        ];
         const indexContent = await renderCommandIndex(command, categories, rootDoc?.index);
         replacements.set(placeholder, indexContent);
       }
@@ -2436,21 +2448,38 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     // including handwritten blank lines, e.g. inside fenced code blocks — is preserved verbatim;
     // newlines are NOT collapsed globally. The leading `\n\n?` is only consumed for empty
     // own-line placeholders; for any other case it is restored.
-    // Substitute placeholders in place, leaving all surrounding whitespace untouched.
-    let generated = templateContent.replace(TEMPLATE_PLACEHOLDER_REGEX, (match) => {
-      const replacement = replacements.get(match);
-      if (replacement === undefined) {
-        throw new Error(
-          `Internal error: unresolved placeholder "${match}" in template "${templatePath}".`,
-        );
-      }
-      return replacement;
-    });
-
-    // Collapse the blank-line gaps left by empty placeholders, but ONLY outside fenced code
-    // blocks so intentional blank lines in handwritten code samples are preserved. Template
-    // content is the source of truth; we never reflow handwritten prose spacing beyond this.
-    generated = collapseBlankLinesOutsideCodeFences(generated);
+    // Substitute placeholders. Handwritten spacing is preserved verbatim; the ONLY whitespace we
+    // touch is the gap an EMPTY own-line placeholder would otherwise leave. For such a placeholder
+    // we consume the newlines immediately around it and re-emit a single break that matches the
+    // larger of the two surrounding runs (so a blank-line paragraph gap stays a blank line, and a
+    // tight single-newline gap stays a single newline — adjacent lines never concatenate).
+    let generated = templateContent.replace(
+      /(\n*)([ \t]*)(\{\{politty:[^{}]*\}\})([ \t]*)(\n*)/g,
+      (
+        _m,
+        leadNl: string,
+        leadWs: string,
+        placeholder: string,
+        trailWs: string,
+        trailNl: string,
+      ) => {
+        const replacement = replacements.get(placeholder);
+        if (replacement === undefined) {
+          throw new Error(
+            `Internal error: unresolved placeholder "${placeholder}" in template "${templatePath}".`,
+          );
+        }
+        const isOwnLine = leadWs === "" && trailWs === "" && (leadNl !== "" || trailNl !== "");
+        if (replacement === "" && isOwnLine) {
+          // Re-emit one break: the wider of the two surrounding newline runs, capped at a blank
+          // line. Empty when the placeholder sat at the very start/end with no surrounding break.
+          const widest = Math.max(leadNl.length, trailNl.length);
+          return widest >= 2 ? "\n\n" : widest === 1 ? "\n" : "";
+        }
+        // Otherwise restore the exact surrounding whitespace and substitute the content.
+        return `${leadNl}${leadWs}${replacement}${trailWs}${trailNl}`;
+      },
+    );
 
     // Ensure exactly one trailing newline.
     generated = `${generated.trimEnd()}\n`;
@@ -2714,8 +2743,16 @@ export function initDocFile(
       }
     }
     if (config.templates) {
-      // Delete OUTPUT paths only, not template source files
+      // Delete OUTPUT paths only, never template source files. A misconfigured entry whose
+      // output equals some template source (e.g. { [p]: p }) must be left intact so generateDoc
+      // can reject it instead of this initializer destroying the source first.
+      const templateSources = new Set(
+        Object.values(config.templates).map(normalizeDocPathForComparison),
+      );
       for (const outputPath of Object.keys(config.templates)) {
+        if (templateSources.has(normalizeDocPathForComparison(outputPath))) {
+          continue;
+        }
         deleteFile(outputPath, fileSystem);
       }
     }
