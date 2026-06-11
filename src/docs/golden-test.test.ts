@@ -4513,5 +4513,86 @@ ${argsContent}
       // files results come before templates results
       expect(paths.indexOf(filePath)).toBeLessThan(paths.indexOf(outputPath));
     });
+
+    // FIX 5 regression: trailing colon in command placeholder
+    it("{{politty:command:}} (trailing colon) throws with clear message", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command:}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow(/trailing colon|use \{\{politty:command\}\}/);
+    });
+
+    // FIX 5 regression: typed-root form must still work
+    it("{{politty:command::usage}} (typed root) renders root usage section without error", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "# Usage\n\n{{politty:command::usage}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("test-cli");
+      expect(content).not.toContain("<!-- politty:");
+      expect(content).not.toContain("{{politty:");
+    });
+
+    // FIX 1 regression: template-only command with incompatible global option must throw
+    it("template-only command with incompatible global option throws compatibility error", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      const rootDocPath = path.join(testDir, "root.md");
+
+      // greet command has a "name" option (positional), so use a fresh command that has
+      // a "verbose" option on a subcommand with a DIFFERENT type than the global definition.
+      const conflictCommand = defineCommand({
+        name: "conflict-cli",
+        description: "CLI for testing template-only global option conflict",
+        subCommands: {
+          run: defineCommand({
+            name: "run",
+            description: "Run something",
+            args: z.object({
+              // verbose here is z.string() but globalOptions defines it as z.boolean() — incompatible
+              verbose: arg(z.string(), {
+                description: "Verbosity level (string, conflicts with global boolean)",
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      // "run" is referenced ONLY via the template (not in files), so the old code would skip it
+      fs.writeFileSync(templatePath, "{{politty:command:run}}\n");
+
+      await expect(
+        generateDoc({
+          command: conflictCommand,
+          // No files entry for "run" — it is a template-only reference
+          templates: { [outputPath]: templatePath },
+          rootDoc: {
+            path: rootDocPath,
+            globalOptions: {
+              verbose: arg(z.boolean().default(false), {
+                alias: "v",
+                description: "Enable verbose output",
+              }),
+            },
+          },
+        }),
+      ).rejects.toThrow('does not match globalOptions definition for "verbose"');
+    });
   });
 });
