@@ -4554,6 +4554,23 @@ ${argsContent}
       expect(result.files.map((f) => f.path)).toEqual([filePath]);
     });
 
+    it("targetCommands ignores validation errors in skipped templates", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "greet.md");
+      const templatePath = path.join(testDir, "broken-template.md");
+      const outputPath = path.join(testDir, "broken.md");
+      fs.writeFileSync(templatePath, "{{politty:command:nope}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["greet"] },
+        templates: { [outputPath]: templatePath },
+        targetCommands: ["greet"],
+      });
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([filePath]);
+    });
+
     it("targetCommands processes templates that reference target scopes", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "config-template.md");

@@ -1876,6 +1876,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // This ensures a command referenced ONLY via a template is validated against its original
   // (pre-strip) options, closing the vacuous-validation window.
   const templateMeta = new Map<string, TemplateMeta>(); // outputPath -> metadata
+  const templateValidationErrors = new Map<string, string[]>();
 
   if (config.templates) {
     // Upfront validation: path collisions
@@ -1937,6 +1938,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
     for (const [outputPath, templatePath] of Object.entries(config.templates)) {
       const templateContent = readFile(templatePath);
+      const validationErrors: string[] = [];
       if (templateContent === null) {
         // Will be handled in generation loop
         templateMeta.set(outputPath, {
@@ -1945,9 +1947,14 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           emitsGlobalOptions: false,
           emitsIndex: false,
         });
+        templateValidationErrors.set(outputPath, validationErrors);
         continue;
       }
-      validateTemplatePlaceholderSyntax(templateContent, templatePath);
+      try {
+        validateTemplatePlaceholderSyntax(templateContent, templatePath);
+      } catch (error) {
+        validationErrors.push(error instanceof Error ? error.message : String(error));
+      }
 
       const placeholders = Array.from(
         new Set(templateContent.match(TEMPLATE_PLACEHOLDER_REGEX) ?? []),
@@ -1961,7 +1968,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         const parsed = parsePlaceholder(placeholder, allCommands);
 
         if (parsed.kind === "invalid") {
-          throw new Error(`${parsed.reason} (in template "${templatePath}")`);
+          validationErrors.push(`${parsed.reason} (in template "${templatePath}")`);
+          continue;
         }
 
         if (parsed.kind === "command") {
@@ -1970,17 +1978,20 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           if (!allCommands.has(scope)) {
             const sectionTypeError = getUnknownSectionTypeError(scope, allCommands);
             if (sectionTypeError) {
-              throw new Error(`${sectionTypeError} (in template "${templatePath}")`);
+              validationErrors.push(`${sectionTypeError} (in template "${templatePath}")`);
+              continue;
             }
-            throw new Error(
+            validationErrors.push(
               `Unknown command scope "${scope}" in template "${templatePath}". Available: ${availableCommandPaths}`,
             );
+            continue;
           }
           // Validate scope not in ignores
           if (ignores.some((pattern) => matchesIgnorePattern(scope, pattern))) {
-            throw new Error(
+            validationErrors.push(
               `Command scope "${scope}" in template "${templatePath}" conflicts with ignores configuration.`,
             );
+            continue;
           }
           // Section type is already constrained to a valid SectionType by parsePlaceholder.
           scopes.add(scope);
@@ -2002,7 +2013,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         const hasGlobalOptionsConfig =
           !!rootDoc?.globalOptions || deriveGlobalArgsShape(globalArgs) !== undefined;
         if (!hasGlobalOptionsConfig) {
-          throw new Error(
+          validationErrors.push(
             `Template "${templatePath}" uses {{politty:global-options}} but no global options are configured (neither rootDoc.globalOptions nor globalArgs with non-positional options).`,
           );
         }
@@ -2014,6 +2025,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         emitsGlobalOptions,
         emitsIndex,
       });
+      templateValidationErrors.set(outputPath, validationErrors);
     }
 
     // Extend documentedCommandPaths with template scopes so the single
@@ -2050,6 +2062,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           ),
         )
       : templateMeta;
+
+  for (const [outputPath, validationErrors] of templateValidationErrors.entries()) {
+    if (validationErrors.length > 0 && activeTemplateMeta.has(outputPath)) {
+      throw new Error(validationErrors.join("\n"));
+    }
+  }
 
   // Validate global option compatibility across ALL documented commands (files + template scopes),
   // then strip global options from command option tables. Both steps must happen before the files
