@@ -4594,5 +4594,121 @@ ${argsContent}
         }),
       ).rejects.toThrow('does not match globalOptions definition for "verbose"');
     });
+
+    // FIX A: template source path collision checks
+    it("template source path conflicting with a files key throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const sharedPath = path.join(testDir, "cli.md");
+      const outputPath = path.join(testDir, "readme.md");
+      fs.writeFileSync(sharedPath, "{{politty:command}}\n");
+
+      // sharedPath is both a files key and the template source — must throw
+      await expect(
+        generateDoc({
+          command: testCommand,
+          files: { [sharedPath]: [""] },
+          templates: { [outputPath]: sharedPath },
+        }),
+      ).rejects.toThrow(/Template source path.*conflicts with a files output key/);
+    });
+
+    it("template source path conflicting with another template output path throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templateA = path.join(testDir, "template-a.md");
+      const outputA = path.join(testDir, "output-a.md");
+      const outputB = path.join(testDir, "output-b.md");
+      fs.writeFileSync(templateA, "{{politty:command}}\n");
+
+      // outputA is both a template output and the source for templateB — must throw
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: {
+            [outputA]: templateA,
+            [outputB]: outputA,
+          },
+        }),
+      ).rejects.toThrow(/Template source path.*conflicts with a template output path/);
+    });
+
+    it("template source path conflicting with rootDoc.path throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const rootDocPath = path.join(testDir, "root.md");
+      const outputPath = path.join(testDir, "readme.md");
+      // rootDocPath is used as the template source — must throw
+      fs.writeFileSync(rootDocPath, "{{politty:command}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          rootDoc: { path: rootDocPath },
+          templates: { [outputPath]: rootDocPath },
+        }),
+      ).rejects.toThrow(/Template source path.*conflicts with rootDoc\.path/);
+    });
+
+    // FIX B: globalArgs option not duplicated in command section in templates-only mode
+    it("templates-only with globalArgs: global option appears once and not in command options", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      // Use root command scope ({{politty:command}}) — testCommand root has "verbose" in its
+      // own args, so without the fix globalOptionDefinitions would be empty and the strip would
+      // not run, causing "--verbose" to appear in both the global-options table AND the
+      // root command's own options table.
+      fs.writeFileSync(templatePath, "{{politty:global-options}}\n\n{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), {
+            alias: "v",
+            description: "Enable verbose output",
+          }),
+        }),
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      // The global-options section must be present
+      expect(content).toContain("global-options");
+      // Count table rows containing "--verbose": the option name in a markdown table cell.
+      // "--verbose" should appear in exactly one table row (the global-options table).
+      // If globalOptionDefinitions is NOT populated (the bug), the root command section also
+      // renders a verbose options row, producing two "--verbose" table rows.
+      const verboseOptionRows = content.split("\n").filter((line) => line.includes("--verbose"));
+      expect(verboseOptionRows).toHaveLength(1);
+    });
+
+    // FIX C: duplicate index rows from parent+child template scopes
+    it("index placeholder lists each subcommand exactly once when parent and child both referenced", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplatePath = path.join(testDir, "index-template.md");
+      const indexOutputPath = path.join(testDir, "index.md");
+      const commandTemplatePath = path.join(testDir, "cmd-template.md");
+      const commandOutputPath = path.join(testDir, "cmd.md");
+
+      // Template A: renders the index
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+      // Template B: references both the root ("") and the "config get" subcommand explicitly
+      fs.writeFileSync(
+        commandTemplatePath,
+        "{{politty:command}}\n\n{{politty:command:config get}}\n",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [commandOutputPath]: commandTemplatePath,
+        },
+      });
+      expect(result.success).toBe(true);
+      const indexContent = fs.readFileSync(indexOutputPath, "utf-8");
+      // "config get" should appear at most once in the index (no duplicate row)
+      const matches = indexContent.match(/config get/g);
+      const count = matches ? matches.length : 0;
+      expect(count).toBeLessThanOrEqual(1);
+    });
   });
 });

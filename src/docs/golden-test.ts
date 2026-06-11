@@ -2,7 +2,7 @@ import * as path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
-import type { AnyCommand } from "../types.js";
+import type { AnyCommand, ArgsSchema } from "../types.js";
 import { createCommandRenderer } from "./default-renderers.js";
 import {
   compareWithExisting,
@@ -93,6 +93,18 @@ function isSubcommandOf(childPath: string, parentPath: string): boolean {
   if (parentPath === "") return true; // Root is parent of everything
   if (childPath === parentPath) return true;
   return childPath.startsWith(parentPath + " ");
+}
+
+/**
+ * Remove scopes that are already covered by an ancestor scope in the same list.
+ * A scope S is removed when another scope P in the list satisfies isSubcommandOf(S, P)
+ * (which returns true for P="" root, covering all non-empty scopes).
+ * Used to prevent duplicate rows in the index when both a parent and child scope are listed.
+ */
+function dropDescendantScopes(scopes: string[]): string[] {
+  return scopes.filter((s) => {
+    return !scopes.some((p) => p !== s && isSubcommandOf(s, p));
+  });
 }
 
 /**
@@ -928,6 +940,18 @@ function normalizeGlobalOptions(
 }
 
 /**
+ * Derive an ArgsShape from a globalArgs Zod schema, retaining only non-positional option fields.
+ * Returns undefined when globalArgs is undefined or contains no option fields.
+ * Used to build globalOptionDefinitions from globalArgs when rootDoc is not available.
+ */
+function deriveGlobalArgsShape(globalArgs: ArgsSchema | undefined): ArgsShape | undefined {
+  if (!globalArgs) return undefined;
+  const optionFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
+  if (optionFields.length === 0) return undefined;
+  return Object.fromEntries(optionFields.map((f) => [f.name, f.schema]));
+}
+
+/**
  * Collect global option definitions from rootDoc.
  * Global options are intentionally applied to all generated command sections.
  */
@@ -1633,6 +1657,19 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // Template scopes will be added after template validation below, before the single
   // validateGlobalOptionCompatibility call and before the mutation that strips global options.
   const globalOptionDefinitions = collectGlobalOptionDefinitions(rootDoc);
+
+  // In templates-only mode (no rootDoc, no files), globalOptionDefinitions is empty even when
+  // globalArgs provides non-positional options. Populate from globalArgs so the strip loop,
+  // validateGlobalOptionCompatibility, and hasGlobalOptions plumbing all see them.
+  if (config.templates && globalOptionDefinitions.size === 0 && globalArgs) {
+    const shape = deriveGlobalArgsShape(globalArgs);
+    if (shape) {
+      for (const field of collectRenderableGlobalOptionFields(shape)) {
+        globalOptionDefinitions.set(field.name, field);
+      }
+    }
+  }
+
   const documentedCommandPaths = hasTargetCommands
     ? collectTargetDocumentedCommandPaths(targetCommands, files, allCommands, ignores)
     : collectDocumentedCommandPaths(files, allCommands, ignores);
@@ -1666,8 +1703,15 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     const normalizedFileKeys = new Set(Object.keys(files).map(normalizeDocPathForComparison));
     const normalizedTemplateOutputs = new Set<string>();
 
+    // Pre-collect all template output paths so source-vs-output checks can see
+    // outputs declared later in the same loop iteration.
+    const allNormalizedTemplateOutputs = new Set(
+      Object.keys(config.templates).map(normalizeDocPathForComparison),
+    );
+
     for (const [outputPath, templatePath] of Object.entries(config.templates)) {
       const normalizedOutput = normalizeDocPathForComparison(outputPath);
+      const normalizedSource = normalizeDocPathForComparison(templatePath);
 
       if (normalizedFileKeys.has(normalizedOutput)) {
         throw new Error(
@@ -1684,9 +1728,26 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       }
       normalizedTemplateOutputs.add(normalizedOutput);
 
-      if (normalizeDocPathForComparison(templatePath) === normalizedOutput) {
+      if (normalizedSource === normalizedOutput) {
         throw new Error(
           `Template output path "${outputPath}" must not be the same as its source template path.`,
+        );
+      }
+
+      // Check template SOURCE path against output sets to prevent read-after-write corruption.
+      if (normalizedFileKeys.has(normalizedSource)) {
+        throw new Error(
+          `Template source path "${templatePath}" conflicts with a files output key.`,
+        );
+      }
+      if (normalizedRootDocPath && normalizedSource === normalizedRootDocPath) {
+        throw new Error(
+          `Template source path "${templatePath}" conflicts with rootDoc.path "${rootDoc!.path}".`,
+        );
+      }
+      if (allNormalizedTemplateOutputs.has(normalizedSource)) {
+        throw new Error(
+          `Template source path "${templatePath}" conflicts with a template output path.`,
         );
       }
     }
@@ -2111,13 +2172,10 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   let normalizedTemplateGlobalOptions: { args: ArgsShape; options?: ArgsTableOptions } | undefined;
   if (rootDoc?.globalOptions) {
     normalizedTemplateGlobalOptions = normalizeGlobalOptions(rootDoc.globalOptions);
-  } else if (globalArgs) {
-    const optionFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
-    if (optionFields.length > 0) {
-      const globalShape: ArgsShape = Object.fromEntries(
-        optionFields.map((f) => [f.name, f.schema]),
-      );
-      normalizedTemplateGlobalOptions = { args: globalShape };
+  } else {
+    const shape = deriveGlobalArgsShape(globalArgs);
+    if (shape) {
+      normalizedTemplateGlobalOptions = { args: shape };
     }
   }
 
@@ -2222,7 +2280,10 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         const filesForIndex: FileMapping = { ...files };
         for (const [otherOutputPath, otherScopes] of templateReferencedScopes.entries()) {
           if (normalizeDocPathForComparison(otherOutputPath) !== normalizedCurrentOutput) {
-            filesForIndex[otherOutputPath] = { commands: otherScopes, noExpand: true };
+            // Normalize the scope list: drop any scope already covered by an ancestor scope
+            // in the same list to prevent duplicate rows when both parent and child are referenced.
+            const dedupedScopes = dropDescendantScopes(otherScopes);
+            filesForIndex[otherOutputPath] = { commands: dedupedScopes, noExpand: true };
           }
         }
         const categories = deriveIndexFromFiles(filesForIndex, outputPath, allCommands, ignores);
