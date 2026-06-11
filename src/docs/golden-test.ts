@@ -823,7 +823,10 @@ interface TemplateMeta {
  * Uses String.match / String.replace internally (not .exec) to avoid lastIndex
  * state issues from the shared TEMPLATE_PLACEHOLDER_REGEX constant.
  */
-function parsePlaceholder(placeholder: string): ParsedPlaceholder {
+function parsePlaceholder(
+  placeholder: string,
+  allCommands?: ReadonlyMap<string, CommandInfo>,
+): ParsedPlaceholder {
   const inner = placeholder.slice(2, -2); // strip {{ and }}
   const tokens = inner.split(":");
   // tokens[0] === "politty"
@@ -834,6 +837,20 @@ function parsePlaceholder(placeholder: string): ParsedPlaceholder {
     // The type is only consumed when the last token is a known SectionType; this keeps command
     // names that themselves contain ":" (e.g. "db:migrate") referenceable, mirroring files mode.
     const rest = tokens.slice(2);
+    const fullScope = rest.join(":");
+    // {{politty:command:}} — trailing colon with empty scope and no type is ambiguous with the
+    // intentional root form {{politty:command}}; treat it as invalid. The typed-root form
+    // {{politty:command::usage}} (scope="", type="usage") stays valid.
+    if (rest.length === 1 && fullScope === "") {
+      return {
+        kind: "invalid",
+        reason: `Trailing colon in "${placeholder}"; use {{politty:command}} for the root command.`,
+      };
+    }
+    if (allCommands?.has(fullScope)) {
+      return { kind: "command", scope: fullScope, type: undefined };
+    }
+
     let type: SectionType | undefined;
     if (rest.length >= 2) {
       const last = rest[rest.length - 1];
@@ -843,15 +860,6 @@ function parsePlaceholder(placeholder: string): ParsedPlaceholder {
       }
     }
     const scope = rest.join(":");
-    // {{politty:command:}} — trailing colon with empty scope and no type is ambiguous with the
-    // intentional root form {{politty:command}}; treat it as invalid. The typed-root form
-    // {{politty:command::usage}} (scope="", type="usage") stays valid.
-    if (rest.length === 1 && scope === "" && type === undefined) {
-      return {
-        kind: "invalid",
-        reason: `Trailing colon in "${placeholder}"; use {{politty:command}} for the root command.`,
-      };
-    }
     return { kind: "command", scope, type };
   }
 
@@ -887,6 +895,26 @@ function parsePlaceholder(placeholder: string): ParsedPlaceholder {
  * because the /g flag makes the regex stateful via lastIndex.
  */
 const TEMPLATE_PLACEHOLDER_REGEX = /\{\{politty:[^{}]*\}\}/g;
+
+function validateTemplatePlaceholderSyntax(templateContent: string, templatePath: string): void {
+  const validPlaceholderStarts = new Set(
+    Array.from(templateContent.matchAll(TEMPLATE_PLACEHOLDER_REGEX), (match) => match.index),
+  );
+  let searchIndex = 0;
+  while (true) {
+    const placeholderStart = templateContent.indexOf("{{politty:", searchIndex);
+    if (placeholderStart === -1) {
+      return;
+    }
+    if (!validPlaceholderStarts.has(placeholderStart)) {
+      const snippet = templateContent.slice(placeholderStart, placeholderStart + 80).split("\n")[0];
+      throw new Error(
+        `Malformed politty placeholder in template "${templatePath}": "${snippet}". Expected {{politty:...}}.`,
+      );
+    }
+    searchIndex = placeholderStart + "{{politty:".length;
+  }
+}
 
 function getUnknownSectionTypeError(
   scope: string,
@@ -1911,6 +1939,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         });
         continue;
       }
+      validateTemplatePlaceholderSyntax(templateContent, templatePath);
 
       const placeholders = Array.from(
         new Set(templateContent.match(TEMPLATE_PLACEHOLDER_REGEX) ?? []),
@@ -1920,7 +1949,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       let emitsGlobalOptions = false;
 
       for (const placeholder of placeholders) {
-        const parsed = parsePlaceholder(placeholder);
+        const parsed = parsePlaceholder(placeholder, allCommands);
 
         if (parsed.kind === "invalid") {
           throw new Error(`${parsed.reason} (in template "${templatePath}")`);
@@ -2420,7 +2449,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     const replacements = new Map<string, string>();
 
     for (const placeholder of placeholders) {
-      const parsed = parsePlaceholder(placeholder);
+      const parsed = parsePlaceholder(placeholder, allCommands);
 
       if (parsed.kind === "invalid") {
         // Should have been caught in the validation pass; guard defensively.

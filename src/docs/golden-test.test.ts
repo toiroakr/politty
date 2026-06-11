@@ -4358,6 +4358,20 @@ ${argsContent}
       ).rejects.toThrow("unknown");
     });
 
+    it("malformed placeholder syntax throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow(/Malformed politty placeholder/);
+    });
+
     it("missing template file gives error result in both modes", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "nonexistent-template.md");
@@ -5173,6 +5187,33 @@ ${argsContent}
       expect(result.success).toBe(true);
       const content = fs.readFileSync(outputPath, "utf-8");
       expect(content).toContain("db:migrate");
+    });
+
+    it("prefers full colon-containing command scope over trailing section type", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const colonCommand = defineCommand({
+        name: "db-cli",
+        description: "DB CLI",
+        subCommands: {
+          "db:usage": defineCommand({
+            name: "db:usage",
+            description: "Command whose name ends with a section type",
+            run: () => {},
+          }),
+        },
+      });
+      const templatePath = path.join(testDir, "colon-usage-template.md");
+      const outputPath = path.join(testDir, "colon-usage.md");
+      fs.writeFileSync(templatePath, "{{politty:command:db:usage}}\n");
+
+      const result = await generateDoc({
+        command: colonCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("# db:usage");
+      expect(content).toContain("Command whose name ends with a section type");
     });
 
     // Handwritten blank-line runs unrelated to placeholders must survive (no global reflow).
