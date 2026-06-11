@@ -5049,26 +5049,31 @@ ${argsContent}
       expect(fs.existsSync(shared)).toBe(true);
     });
 
-    // Combined files + templates: a files output links to a heading rendered only in a template.
-    it("files output links to a subcommand heading rendered in a template output", async () => {
+    // Cross-output links between templates: a parent rendered in one template links its
+    // subcommand to the other template output where that subcommand's heading is rendered.
+    it("subcommands table links to a heading rendered in another template output", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
-      const rootFile = path.join(testDir, "root.md");
-      const greetTemplate = path.join(testDir, "greet-template.md");
-      const greetOutput = path.join(testDir, "greet.md");
+      const parentTemplate = path.join(testDir, "parent-template.md");
+      const parentOutput = path.join(testDir, "parent.md");
+      const childTemplate = path.join(testDir, "child-template.md");
+      const childOutput = path.join(testDir, "child.md");
 
-      // greet's heading is rendered ONLY by the template output.
-      fs.writeFileSync(greetTemplate, "{{politty:command:greet}}\n");
+      // The parent (config) is rendered in one output; its child (config get) only in the other.
+      fs.writeFileSync(parentTemplate, "{{politty:command:config}}\n");
+      fs.writeFileSync(childTemplate, "{{politty:command:config get}}\n");
 
       const result = await generateDoc({
         command: testCommand,
-        files: { [rootFile]: [""] },
-        templates: { [greetOutput]: greetTemplate },
+        templates: {
+          [parentOutput]: parentTemplate,
+          [childOutput]: childTemplate,
+        },
       });
       expect(result.success).toBe(true);
 
-      // The root file's subcommands table links greet to the template output, not a dead anchor.
-      const rootContent = fs.readFileSync(rootFile, "utf-8");
-      expect(rootContent).toContain("greet.md#greet");
+      // config's subcommands table links "config get" to the child output, not a dead local anchor.
+      const parentContent = fs.readFileSync(parentOutput, "utf-8");
+      expect(parentContent).toContain("child.md#config-get");
     });
 
     // A command whose name contains a colon must be referenceable from a template, matching
@@ -5118,6 +5123,53 @@ ${argsContent}
       expect(result.success).toBe(true);
       const content = fs.readFileSync(outputPath, "utf-8");
       expect(content).toContain("Para one.\n\n\n\nPara two.");
+    });
+
+    // A self-contained template that emits {{politty:global-options}} must link its subcommand
+    // sections to its OWN #global-options anchor, even when rootDoc.globalOptions also exists.
+    it("self-contained template links global options locally, not to rootDoc", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const rootDocPath = path.join(testDir, "root.md");
+      // rootDoc must exist with its markers for generateDoc to validate it.
+      fs.writeFileSync(
+        rootDocPath,
+        [
+          "# test-cli",
+          "",
+          "A test CLI for documentation generation",
+          "",
+          "<!-- politty:global-options:start -->",
+          '<a id="global-options"></a>',
+          "",
+          "| Option | Alias | Description | Required | Default |",
+          "| --- | --- | --- | --- | --- |",
+          "| `--verbose` | `-v` | Enable verbose output | No | `false` |",
+          "<!-- politty:global-options:end -->",
+          "",
+        ].join("\n"),
+      );
+      const templatePath = path.join(testDir, "tmpl-template.md");
+      const outputPath = path.join(testDir, "tmpl.md");
+      // Render a subcommand (which gets a global-options link) plus the local global-options table.
+      fs.writeFileSync(
+        templatePath,
+        "{{politty:global-options}}\n\n{{politty:command:config get}}\n",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: { verbose: arg(z.boolean().default(false), { alias: "v" }) },
+        },
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      // The global-options link in command sections must point at the local anchor, not root.md.
+      expect(content).toContain("#global-options");
+      expect(content).not.toContain("root.md#global-options");
     });
   });
 });

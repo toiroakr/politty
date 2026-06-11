@@ -1995,11 +1995,16 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
   // Link map covering both files outputs and template-output headings, so a command rendered in
   // one place can link to its heading rendered in another (in either direction). Only scopes that
-  // actually produce a heading in a template output are added.
+  // actually produce a heading in a template output are added. A files output (already in fileMap)
+  // takes precedence over template outputs, and the first template wins over later ones, so a
+  // command rendered in multiple places gets a stable, order-independent link target rather than
+  // being overwritten by whichever output happens to be processed last.
   const templateFileMap: Record<string, string> = { ...fileMap };
   for (const [templateOutputPath, meta] of templateMeta.entries()) {
     for (const scope of meta.headingScopes) {
-      templateFileMap[scope] = templateOutputPath;
+      if (!(scope in templateFileMap)) {
+        templateFileMap[scope] = templateOutputPath;
+      }
     }
   }
 
@@ -2377,8 +2382,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         ? new Set(templateGlobalOptionFields.keys())
         : undefined;
     const sectionHasGlobalOptions = excludeOptionNames !== undefined;
-    const effectiveRootDocPath =
-      rootDoc?.path ?? (outputEmitsGlobalOptions ? outputPath : undefined);
+    // Prefer this output's own #global-options anchor when it emits one, so a self-contained
+    // template links to its local table rather than to rootDoc; fall back to rootDoc otherwise.
+    const effectiveRootDocPath = outputEmitsGlobalOptions ? outputPath : rootDoc?.path;
 
     // Parse placeholders and compute replacements (reuse TEMPLATE_PLACEHOLDER_REGEX via .match)
     const placeholders = Array.from(
@@ -2735,22 +2741,29 @@ export function initDocFile(
   if (typeof config === "string") {
     deleteFile(config, fileSystem);
   } else {
+    // Never delete a path that is used as a template source. A misconfigured entry whose files
+    // output or template output equals some template source (e.g. { [p]: p }) must be left intact
+    // so generateDoc can reject it instead of this initializer destroying the source first.
+    // Computed up front so it guards BOTH the files loop and the templates loop.
+    const templateSources = new Set(
+      Object.values(config.templates ?? {}).map(normalizeDocPathForComparison),
+    );
+    const isTemplateSource = (p: string): boolean =>
+      templateSources.has(normalizeDocPathForComparison(p));
+
     // rootDoc is NOT deleted because generateDoc expects it to exist with markers.
     // Only generated files (which are fully regenerated) are deleted.
     if (config.files) {
       for (const filePath of Object.keys(config.files)) {
+        if (isTemplateSource(filePath)) {
+          continue;
+        }
         deleteFile(filePath, fileSystem);
       }
     }
     if (config.templates) {
-      // Delete OUTPUT paths only, never template source files. A misconfigured entry whose
-      // output equals some template source (e.g. { [p]: p }) must be left intact so generateDoc
-      // can reject it instead of this initializer destroying the source first.
-      const templateSources = new Set(
-        Object.values(config.templates).map(normalizeDocPathForComparison),
-      );
       for (const outputPath of Object.keys(config.templates)) {
-        if (templateSources.has(normalizeDocPathForComparison(outputPath))) {
+        if (isTemplateSource(outputPath)) {
           continue;
         }
         deleteFile(outputPath, fileSystem);
