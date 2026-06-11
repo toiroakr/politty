@@ -4640,6 +4640,57 @@ ${argsContent}
       expect(content).toContain("(#config)");
     });
 
+    it("targetCommands keeps cross-output links to skipped template headings", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const rootTemplatePath = path.join(testDir, "root-template.md");
+      const rootOutputPath = path.join(testDir, "root.md");
+      const configTemplatePath = path.join(testDir, "config-template.md");
+      const configOutputPath = path.join(testDir, "config.md");
+      fs.writeFileSync(rootTemplatePath, "{{politty:command}}\n\n{{politty:command:greet}}\n");
+      fs.writeFileSync(configTemplatePath, "{{politty:command:config}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [rootOutputPath]: rootTemplatePath,
+          [configOutputPath]: configTemplatePath,
+        },
+        targetCommands: ["greet"],
+      });
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([rootOutputPath]);
+
+      const content = fs.readFileSync(rootOutputPath, "utf-8");
+      expect(content).toContain("config.md#config");
+    });
+
+    it("targetCommands keeps index entries for skipped template headings", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplatePath = path.join(testDir, "index-template.md");
+      const indexOutputPath = path.join(testDir, "index.md");
+      const configTemplatePath = path.join(testDir, "config-template.md");
+      const configOutputPath = path.join(testDir, "config.md");
+      fs.writeFileSync(
+        indexTemplatePath,
+        "{{politty:command:greet:heading}}\n\n{{politty:index}}\n",
+      );
+      fs.writeFileSync(configTemplatePath, "{{politty:command:config}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [configOutputPath]: configTemplatePath,
+        },
+        targetCommands: ["greet"],
+      });
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([indexOutputPath]);
+
+      const content = fs.readFileSync(indexOutputPath, "utf-8");
+      expect(content).toContain("config.md#config");
+    });
+
     // A trailing colon is ambiguous with the root command placeholder and must be rejected.
     it("{{politty:command:}} (trailing colon) throws with clear message", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");

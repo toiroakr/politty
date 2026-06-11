@@ -2080,7 +2080,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // command rendered in multiple places gets a stable, order-independent link target rather than
   // being overwritten by whichever output happens to be processed last.
   const templateFileMap: Record<string, string> = { ...fileMap };
-  for (const [templateOutputPath, meta] of activeTemplateMeta.entries()) {
+  for (const [templateOutputPath, meta] of templateMeta.entries()) {
     for (const scope of meta.headingScopes) {
       if (!(scope in templateFileMap)) {
         templateFileMap[scope] = templateOutputPath;
@@ -2525,12 +2525,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         // links to commands template mode did not render.
         const categories = [
           ...deriveIndexFromFiles(files, outputPath, allCommands, ignores),
-          ...deriveIndexFromTemplateOutputs(
-            activeTemplateMeta,
-            outputPath,
-            outputPath,
-            allCommands,
-          ),
+          ...deriveIndexFromTemplateOutputs(templateMeta, outputPath, outputPath, allCommands),
         ];
         const indexContent = await renderCommandIndex(command, categories, rootDoc?.index);
         replacements.set(placeholder, indexContent);
