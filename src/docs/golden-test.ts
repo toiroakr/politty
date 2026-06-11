@@ -763,6 +763,23 @@ type ParsedPlaceholder =
   | { kind: "invalid"; reason: string };
 
 /**
+ * Per-output metadata collected while validating a template.
+ */
+interface TemplateMeta {
+  /** All command scopes referenced by any command placeholder (used for compatibility validation). */
+  referencedScopes: string[];
+  /**
+   * Scopes that produce a command heading in this output, i.e. full-section placeholders
+   * (`{{politty:command}}` / `{{politty:command:<scope>}}` without a type). Typed placeholders
+   * like `{{politty:command:greet:usage}}` do not emit a `#greet` heading, so they are excluded.
+   * Used to build cross-output links and index rows that only point at real anchors.
+   */
+  headingScopes: string[];
+  /** Whether this output emits a `#global-options` anchor via `{{politty:global-options}}`. */
+  emitsGlobalOptions: boolean;
+}
+
+/**
  * Parse a single {{politty:...}} placeholder string into a discriminated structure.
  * The `placeholder` argument should be the full `{{politty:...}}` text.
  *
@@ -1407,6 +1424,7 @@ function generateCommandSection(
   fileMap?: Record<string, string>,
   rootDocPath?: string,
   hasGlobalOptions?: boolean,
+  excludeOptionNames?: ReadonlySet<string>,
 ): string | null {
   const info = allCommands.get(cmdPath);
   if (!info) return null;
@@ -1415,6 +1433,11 @@ function generateCommandSection(
   const enriched: CommandInfo = { ...info, filePath, fileMap, rootDocPath };
   if (hasGlobalOptions !== undefined) {
     enriched.hasGlobalOptions = hasGlobalOptions;
+  }
+  // Non-destructively exclude options (e.g. per-template global options) without mutating
+  // the shared CommandInfo in allCommands.
+  if (excludeOptionNames && excludeOptionNames.size > 0) {
+    enriched.options = info.options.filter((opt) => !excludeOptionNames.has(opt.name));
   }
   return render(enriched);
 }
@@ -1653,23 +1676,22 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // validateGlobalOptionCompatibility call and before the mutation that strips global options.
   const globalOptionDefinitions = collectGlobalOptionDefinitions(rootDoc);
 
-  // In templates-only mode (no rootDoc, no files), globalOptionDefinitions is empty even when
-  // globalArgs provides non-positional options. Populate from globalArgs so the strip loop,
-  // validateGlobalOptionCompatibility, and hasGlobalOptions plumbing all see them.
-  // Restricted to templates-only mode (no files): a files output has no reachable
-  // #global-options anchor, so stripping/linking there would produce a dead link.
-  // Template outputs are required to contain {{politty:global-options}} when global options
-  // are configured, so the anchor is always present for them.
-  if (
-    config.templates &&
-    Object.keys(files).length === 0 &&
-    globalOptionDefinitions.size === 0 &&
-    globalArgs
-  ) {
-    const shape = deriveGlobalArgsShape(globalArgs);
-    if (shape) {
-      for (const field of collectRenderableGlobalOptionFields(shape)) {
-        globalOptionDefinitions.set(field.name, field);
+  // Global option definitions used to exclude options from command tables WITHIN template
+  // outputs that emit a #global-options anchor. Sourced from rootDoc.globalOptions or globalArgs.
+  // Unlike globalOptionDefinitions (which drives the destructive global strip for files/rootDoc),
+  // these are applied per-output during template generation so plain files outputs are unaffected.
+  const templateGlobalOptionFields = new Map<string, ResolvedFieldMeta>();
+  if (config.templates) {
+    if (globalOptionDefinitions.size > 0) {
+      for (const [name, field] of globalOptionDefinitions) {
+        templateGlobalOptionFields.set(name, field);
+      }
+    } else {
+      const shape = deriveGlobalArgsShape(globalArgs);
+      if (shape) {
+        for (const field of collectRenderableGlobalOptionFields(shape)) {
+          templateGlobalOptionFields.set(field.name, field);
+        }
       }
     }
   }
@@ -1699,7 +1721,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // can be included in validateGlobalOptionCompatibility and the global-option strip that follow.
   // This ensures a command referenced ONLY via a template is validated against its original
   // (pre-strip) options, closing the vacuous-validation window.
-  const templateReferencedScopes = new Map<string, string[]>(); // outputPath -> scopes
+  const templateMeta = new Map<string, TemplateMeta>(); // outputPath -> metadata
 
   if (config.templates) {
     // Upfront validation: path collisions
@@ -1763,7 +1785,11 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       const templateContent = readFile(templatePath);
       if (templateContent === null) {
         // Will be handled in generation loop
-        templateReferencedScopes.set(outputPath, []);
+        templateMeta.set(outputPath, {
+          referencedScopes: [],
+          headingScopes: [],
+          emitsGlobalOptions: false,
+        });
         continue;
       }
 
@@ -1771,6 +1797,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         new Set(templateContent.match(TEMPLATE_PLACEHOLDER_REGEX) ?? []),
       );
       const scopes = new Set<string>();
+      const headingScopes = new Set<string>();
+      let emitsGlobalOptions = false;
 
       for (const placeholder of placeholders) {
         const parsed = parsePlaceholder(placeholder);
@@ -1801,25 +1829,21 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
             );
           }
           scopes.add(scope);
-        } else if (parsed.kind === "global-options" || parsed.kind === "index") {
-          // no extra validation needed beyond parsePlaceholder
+          // A scope produces a #anchor heading when rendered as a full section (no type) or
+          // via the explicit "heading" section. Other typed placeholders (usage, options, …)
+          // emit no heading, so they must not feed cross-output links or index rows.
+          if (type === undefined || type === "heading") {
+            headingScopes.add(scope);
+          }
+        } else if (parsed.kind === "global-options") {
+          emitsGlobalOptions = true;
         }
       }
 
       // Check if global-options is used but not configured
-      const hasGlobalOptionsPlaceholder = placeholders.some(
-        (p) => p === "{{politty:global-options}}",
-      );
-      if (hasGlobalOptionsPlaceholder) {
+      if (emitsGlobalOptions) {
         const hasGlobalOptionsConfig =
-          !!rootDoc?.globalOptions ||
-          !!(
-            globalArgs &&
-            (() => {
-              const optFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
-              return optFields.length > 0;
-            })()
-          );
+          !!rootDoc?.globalOptions || deriveGlobalArgsShape(globalArgs) !== undefined;
         if (!hasGlobalOptionsConfig) {
           throw new Error(
             `Template "${templatePath}" uses {{politty:global-options}} but no global options are configured (neither rootDoc.globalOptions nor globalArgs with non-positional options).`,
@@ -1827,13 +1851,17 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         }
       }
 
-      templateReferencedScopes.set(outputPath, Array.from(scopes));
+      templateMeta.set(outputPath, {
+        referencedScopes: Array.from(scopes),
+        headingScopes: Array.from(headingScopes),
+        emitsGlobalOptions,
+      });
     }
 
     // Extend documentedCommandPaths with template scopes so the single
     // validateGlobalOptionCompatibility call below covers template-only commands too.
-    for (const scopes of templateReferencedScopes.values()) {
-      for (const scope of scopes) {
+    for (const meta of templateMeta.values()) {
+      for (const scope of meta.referencedScopes) {
         documentedCommandPaths.add(scope);
       }
     }
@@ -1843,6 +1871,17 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // then strip global options from command option tables. Both steps must happen before the files
   // loop and the template generation loop so that generated sections use the stripped options.
   validateGlobalOptionCompatibility(documentedCommandPaths, allCommands, globalOptionDefinitions);
+  // When global options come only from globalArgs (no rootDoc), the destructive strip below does
+  // not run, so validate template scopes against the globalArgs-derived definitions separately.
+  if (globalOptionDefinitions.size === 0 && templateGlobalOptionFields.size > 0) {
+    const templateScopes = new Set<string>();
+    for (const meta of templateMeta.values()) {
+      for (const scope of meta.referencedScopes) {
+        templateScopes.add(scope);
+      }
+    }
+    validateGlobalOptionCompatibility(templateScopes, allCommands, templateGlobalOptionFields);
+  }
   if (globalOptionDefinitions.size > 0) {
     for (const info of allCommands.values()) {
       info.options = info.options.filter((opt) => !globalOptionDefinitions.has(opt.name));
@@ -2183,10 +2222,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     }
   }
 
-  // Template scopes participate in cross-file links between template outputs
+  // Cross-output links may only target scopes that actually render a heading (full-section
+  // placeholders). Typed placeholders like {{politty:command:greet:usage}} emit no #greet anchor,
+  // so they must not contribute to the file map.
   const templateFileMap: Record<string, string> = { ...fileMap };
-  for (const [templateOutputPath, scopes] of templateReferencedScopes.entries()) {
-    for (const scope of scopes) {
+  for (const [templateOutputPath, meta] of templateMeta.entries()) {
+    for (const scope of meta.headingScopes) {
       templateFileMap[scope] = templateOutputPath;
     }
   }
@@ -2204,7 +2245,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       continue;
     }
 
-    const referencedScopes = templateReferencedScopes.get(outputPath) ?? [];
+    const meta = templateMeta.get(outputPath);
+    const referencedScopes = meta?.referencedScopes ?? [];
 
     // Compute heading level adjustment
     const scopeDepths = referencedScopes.map((s) => allCommands.get(s)?.depth ?? 1);
@@ -2215,12 +2257,20 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       headingLevel: adjustedHeadingLevel,
     });
 
-    // Determine rootDocPath for global-options-link in commands
-    const hasGlobalOptionsPlaceholderInThis = templateContent.includes(
-      "{{politty:global-options}}",
-    );
+    // Global options affect command sections in this output ONLY when this output emits a
+    // reachable #global-options anchor (via {{politty:global-options}}) or a rootDoc provides one.
+    // Otherwise, leave command option tables intact and emit no global-options link, avoiding
+    // dead links / silently dropped options.
+    const outputEmitsGlobalOptions = meta?.emitsGlobalOptions ?? false;
+    const globalOptionsReachable =
+      (rootDoc !== undefined && globalOptionDefinitions.size > 0) || outputEmitsGlobalOptions;
+    const excludeOptionNames =
+      globalOptionsReachable && templateGlobalOptionFields.size > 0
+        ? new Set(templateGlobalOptionFields.keys())
+        : undefined;
+    const sectionHasGlobalOptions = excludeOptionNames !== undefined;
     const effectiveRootDocPath =
-      rootDoc?.path ?? (hasGlobalOptionsPlaceholderInThis ? outputPath : undefined);
+      rootDoc?.path ?? (outputEmitsGlobalOptions ? outputPath : undefined);
 
     // Parse placeholders and compute replacements (reuse TEMPLATE_PLACEHOLDER_REGEX via .match)
     const placeholders = Array.from(
@@ -2248,7 +2298,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           outputPath,
           templateFileMap,
           effectiveRootDocPath,
-          globalOptionDefinitions.size > 0,
+          sectionHasGlobalOptions,
+          excludeOptionNames,
         );
 
         if (rawSection === null) {
@@ -2282,14 +2333,17 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         // Build filesForIndex: files + other templates (not current), excluding current outputPath
         const normalizedCurrentOutput = normalizeDocPathForComparison(outputPath);
         const filesForIndex: FileMapping = { ...files };
-        for (const [otherOutputPath, otherScopes] of templateReferencedScopes.entries()) {
-          if (normalizeDocPathForComparison(otherOutputPath) !== normalizedCurrentOutput) {
-            // Pass the explicit placeholder scopes verbatim. noExpand keeps the index rows
-            // limited to the scopes actually rendered as headings in that template output
-            // (template mode does not auto-expand subcommands), so the index never links to
-            // unrendered sibling commands.
-            filesForIndex[otherOutputPath] = { commands: otherScopes, noExpand: true };
+        for (const [otherOutputPath, otherMeta] of templateMeta.entries()) {
+          if (normalizeDocPathForComparison(otherOutputPath) === normalizedCurrentOutput) {
+            continue;
           }
+          // Index only the scopes that actually render a heading in that output (full-section
+          // placeholders). noExpand keeps the rows limited to those exact scopes — template mode
+          // does not auto-expand subcommands — so the index never links to unrendered commands.
+          if (otherMeta.headingScopes.length === 0) {
+            continue;
+          }
+          filesForIndex[otherOutputPath] = { commands: otherMeta.headingScopes, noExpand: true };
         }
         const categories = deriveIndexFromFiles(filesForIndex, outputPath, allCommands, ignores);
         const indexContent = await renderCommandIndex(command, categories, rootDoc?.index);
@@ -2297,19 +2351,42 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       }
     }
 
-    // Replace all placeholders; throw if any placeholder has no computed replacement (FIX 3).
-    let generated = templateContent.replace(TEMPLATE_PLACEHOLDER_REGEX, (match) => {
-      const replacement = replacements.get(match);
-      if (replacement === undefined) {
-        throw new Error(
-          `Internal error: unresolved placeholder "${match}" in template "${templatePath}".`,
-        );
-      }
-      return replacement;
-    });
+    // Replace placeholders. A placeholder that resolves to empty AND occupies its own line is
+    // removed together with that line and the surrounding blank-line pair it would otherwise
+    // leave behind (one blank line is kept as the paragraph separator). All other content —
+    // including handwritten blank lines, e.g. inside fenced code blocks — is preserved verbatim;
+    // newlines are NOT collapsed globally. The leading `\n\n?` is only consumed for empty
+    // own-line placeholders; for any other case it is restored.
+    let generated = templateContent.replace(
+      /(\n?)([ \t]*)(\{\{politty:[^{}]*\}\})([ \t]*)(\n?)/g,
+      (
+        _match,
+        leadNl: string,
+        leadWs: string,
+        placeholder: string,
+        trailWs: string,
+        trailNl: string,
+      ) => {
+        const replacement = replacements.get(placeholder);
+        if (replacement === undefined) {
+          throw new Error(
+            `Internal error: unresolved placeholder "${placeholder}" in template "${templatePath}".`,
+          );
+        }
+        const isOwnLine = leadWs === "" && trailWs === "" && trailNl === "\n";
+        // Own-line empty placeholder: drop the placeholder together with its own leading and
+        // trailing newline. The blank line that surrounded it (if any) collapses to a single
+        // paragraph break instead of a 3+ newline gap, while handwritten spacing elsewhere is
+        // untouched.
+        if (replacement === "" && isOwnLine) {
+          return "";
+        }
+        // Otherwise restore everything around the placeholder and substitute its content.
+        return `${leadNl}${leadWs}${replacement}${trailWs}${trailNl}`;
+      },
+    );
 
-    // Normalize: collapse 3+ newlines to 2 and ensure exactly one trailing newline
-    generated = generated.replace(/\n{3,}/g, "\n\n");
+    // Ensure exactly one trailing newline; do not otherwise alter handwritten spacing.
     generated = `${generated.trimEnd()}\n`;
 
     // Apply formatter

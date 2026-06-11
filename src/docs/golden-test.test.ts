@@ -4786,5 +4786,120 @@ ${argsContent}
       // greet is rendered, so its row in the subcommands table links to the local anchor.
       expect(content).toContain("(#greet)");
     });
+
+    // Per-output global options: a template WITHOUT {{politty:global-options}} must not strip
+    // options or add a dead #global-options link, even when another template (or globalArgs)
+    // provides global options.
+    it("global options apply only to outputs that emit the global-options anchor", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const withGoTemplate = path.join(testDir, "with-go-template.md");
+      const withGoOutput = path.join(testDir, "with-go.md");
+      const noGoTemplate = path.join(testDir, "no-go-template.md");
+      const noGoOutput = path.join(testDir, "no-go.md");
+
+      // Template A emits the global-options anchor and a command section.
+      fs.writeFileSync(withGoTemplate, "{{politty:global-options}}\n\n{{politty:command}}\n");
+      // Template B renders the same root command but does NOT emit a global-options anchor.
+      fs.writeFileSync(noGoTemplate, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [withGoOutput]: withGoTemplate,
+          [noGoOutput]: noGoTemplate,
+        },
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), {
+            alias: "v",
+            description: "Enable verbose output",
+          }),
+        }),
+      });
+      expect(result.success).toBe(true);
+
+      // Output WITH the anchor: verbose appears once (in the global-options table only).
+      const withGo = fs.readFileSync(withGoOutput, "utf-8");
+      expect(withGo.split("\n").filter((l) => l.includes("--verbose"))).toHaveLength(1);
+
+      // Output WITHOUT the anchor: verbose stays in the command's own options table and there is
+      // no dead #global-options link.
+      const noGo = fs.readFileSync(noGoOutput, "utf-8");
+      expect(noGo).toContain("--verbose");
+      expect(noGo).not.toContain("#global-options");
+    });
+
+    // Typed-only placeholders do not produce a heading, so they must not appear in another
+    // template's index (which would link to a nonexistent anchor).
+    it("index does not list scopes referenced only by typed placeholders", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplate = path.join(testDir, "idx-template.md");
+      const indexOutput = path.join(testDir, "idx.md");
+      const typedTemplate = path.join(testDir, "typed-template.md");
+      const typedOutput = path.join(testDir, "typed.md");
+
+      fs.writeFileSync(indexTemplate, "{{politty:index}}\n");
+      // Only a typed section of greet — no greet heading is rendered here.
+      fs.writeFileSync(typedTemplate, "{{politty:command:greet:usage}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutput]: indexTemplate,
+          [typedOutput]: typedTemplate,
+        },
+      });
+      expect(result.success).toBe(true);
+
+      // greet has no heading anywhere, so it must not be listed in the index.
+      const idx = fs.readFileSync(indexOutput, "utf-8");
+      expect(idx).not.toContain("greet");
+    });
+
+    // The explicit "heading" section DOES produce an anchor, so such scopes are indexable.
+    it("index lists scopes rendered via an explicit heading placeholder", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplate = path.join(testDir, "idx2-template.md");
+      const indexOutput = path.join(testDir, "idx2.md");
+      const headingTemplate = path.join(testDir, "heading-template.md");
+      const headingOutput = path.join(testDir, "heading.md");
+
+      fs.writeFileSync(indexTemplate, "{{politty:index}}\n");
+      // Render greet via its heading section — this emits a #greet anchor.
+      fs.writeFileSync(headingTemplate, "{{politty:command:greet:heading}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutput]: indexTemplate,
+          [headingOutput]: headingTemplate,
+        },
+      });
+      expect(result.success).toBe(true);
+
+      const idx = fs.readFileSync(indexOutput, "utf-8");
+      expect(idx).toContain("greet");
+    });
+
+    // Handwritten blank lines (e.g. inside a fenced code block) must be preserved verbatim;
+    // template content is the source of truth and is not reflowed.
+    it("preserves handwritten blank lines around generated content", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "blanks-template.md");
+      const outputPath = path.join(testDir, "blanks.md");
+
+      // A fenced code block with an intentional internal blank line, then a placeholder.
+      const template = "```\nline1\n\n\nline2\n```\n\n{{politty:command:greet:heading}}\n";
+      fs.writeFileSync(templatePath, template);
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      // The three consecutive newlines inside the code block survive untouched.
+      expect(content).toContain("line1\n\n\nline2");
+    });
   });
 });
