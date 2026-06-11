@@ -1115,7 +1115,7 @@ function deriveIndexFromTemplateOutputs(
   const categories: CommandCategory[] = [];
   for (const [outputPath, meta] of templateMeta.entries()) {
     if (normalizeDocPathForComparison(outputPath) === normalizedCurrent) continue;
-    const scopes = meta.headingScopes.filter((p) => p !== "");
+    const scopes = meta.headingScopes;
     if (scopes.length === 0) continue;
 
     const docPath =
@@ -2855,7 +2855,7 @@ export async function assertDocMatch(config: GenerateDocConfig): Promise<void> {
  * @param fileSystem - Optional fs implementation (useful when fs is mocked)
  */
 export function initDocFile(
-  config: Pick<GenerateDocConfig, "files" | "templates"> | string,
+  config: Pick<GenerateDocConfig, "files" | "templates" | "rootDoc"> | string,
   fileSystem?: DeleteFileFs,
 ): void {
   if (!isTruthyEnv(UPDATE_GOLDEN_ENV)) {
@@ -2869,17 +2869,20 @@ export function initDocFile(
     // output or template output equals some template source (e.g. { [p]: p }) must be left intact
     // so generateDoc can reject it instead of this initializer destroying the source first.
     // Computed up front so it guards BOTH the files loop and the templates loop.
-    const templateSources = new Set(
+    const protectedPaths = new Set(
       Object.values(config.templates ?? {}).map(normalizeDocPathForComparison),
     );
-    const isTemplateSource = (p: string): boolean =>
-      templateSources.has(normalizeDocPathForComparison(p));
+    if (config.rootDoc) {
+      protectedPaths.add(normalizeDocPathForComparison(config.rootDoc.path));
+    }
+    const isProtectedPath = (p: string): boolean =>
+      protectedPaths.has(normalizeDocPathForComparison(p));
 
     // rootDoc is NOT deleted because generateDoc expects it to exist with markers.
     // Only generated files (which are fully regenerated) are deleted.
     if (config.files) {
       for (const filePath of Object.keys(config.files)) {
-        if (isTemplateSource(filePath)) {
+        if (isProtectedPath(filePath)) {
           continue;
         }
         deleteFile(filePath, fileSystem);
@@ -2887,7 +2890,7 @@ export function initDocFile(
     }
     if (config.templates) {
       for (const outputPath of Object.keys(config.templates)) {
-        if (isTemplateSource(outputPath)) {
+        if (isProtectedPath(outputPath)) {
           continue;
         }
         deleteFile(outputPath, fileSystem);

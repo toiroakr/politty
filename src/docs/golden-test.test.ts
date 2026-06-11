@@ -4708,6 +4708,28 @@ ${argsContent}
       expect(content).toContain("config.md#config");
     });
 
+    it("index includes root-only template outputs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplatePath = path.join(testDir, "root-index-template.md");
+      const indexOutputPath = path.join(testDir, "root-index.md");
+      const rootTemplatePath = path.join(testDir, "root-page-template.md");
+      const rootOutputPath = path.join(testDir, "root-page.md");
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+      fs.writeFileSync(rootTemplatePath, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [rootOutputPath]: rootTemplatePath,
+        },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(indexOutputPath, "utf-8");
+      expect(content).toContain("root-page.md#test-cli");
+    });
+
     it("targetCommands validates index-only templates", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const indexTemplatePath = path.join(testDir, "index-only-template.md");
@@ -5405,6 +5427,24 @@ ${argsContent}
 
       // The source file must still exist (not deleted as if it were a disposable output).
       expect(fs.existsSync(shared)).toBe(true);
+    });
+
+    it("initDocFile does not delete rootDoc when a template output collides with it", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const rootDocPath = path.join(testDir, "root.md");
+      const templatePath = path.join(testDir, "root-template.md");
+      fs.writeFileSync(
+        rootDocPath,
+        "<!-- politty:global-options:start -->\n<!-- politty:global-options:end -->\n",
+      );
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      initDocFile({
+        rootDoc: { path: rootDocPath },
+        templates: { [rootDocPath]: templatePath },
+      });
+
+      expect(fs.existsSync(rootDocPath)).toBe(true);
     });
 
     // Cross-output links between templates: a parent rendered in one template links its
