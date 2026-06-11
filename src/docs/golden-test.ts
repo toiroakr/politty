@@ -1658,7 +1658,7 @@ function buildFileMap(
   allCommands: Map<string, CommandInfo>,
   ignores: string[],
 ): Record<string, string> {
-  const fileMap: Record<string, string> = {};
+  const fileMap: Record<string, string> = Object.create(null);
 
   for (const [filePath, fileConfigRaw] of Object.entries(files)) {
     const { commandPaths } = resolveConfiguredCommandPaths(fileConfigRaw, allCommands, ignores);
@@ -2093,10 +2093,10 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // takes precedence over template outputs, and the first template wins over later ones, so a
   // command rendered in multiple places gets a stable, order-independent link target rather than
   // being overwritten by whichever output happens to be processed last.
-  const templateFileMap: Record<string, string> = { ...fileMap };
+  const templateFileMap: Record<string, string> = Object.assign(Object.create(null), fileMap);
   for (const [templateOutputPath, meta] of templateMeta.entries()) {
     for (const scope of meta.headingScopes) {
-      if (!(scope in templateFileMap)) {
+      if (!Object.prototype.hasOwnProperty.call(templateFileMap, scope)) {
         templateFileMap[scope] = templateOutputPath;
       }
     }

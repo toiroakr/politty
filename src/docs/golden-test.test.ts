@@ -4975,6 +4975,34 @@ ${argsContent}
       expect(content).not.toContain("(#config)");
     });
 
+    it("template link map handles command names from Object prototype", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const protoCommand = defineCommand({
+        name: "proto-cli",
+        description: "CLI with prototype-named command",
+        subCommands: {
+          toString: defineCommand({
+            name: "toString",
+            description: "Prototype named command",
+            run: () => {},
+          }),
+        },
+      });
+      const templatePath = path.join(testDir, "proto-template.md");
+      const outputPath = path.join(testDir, "proto.md");
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: protoCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("toString");
+      expect(content).not.toContain("(#toString)");
+    });
+
     // An explicitly rendered child still links correctly within the same output.
     it("explicitly rendered child keeps its local anchor link", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
