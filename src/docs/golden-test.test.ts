@@ -4341,7 +4341,7 @@ ${argsContent}
           command: testCommand,
           templates: { [outputPath]: templatePath },
         }),
-      ).rejects.toThrow("badtype");
+      ).rejects.toThrow(/Unknown section type "badtype".*Valid section types/);
     });
 
     it("unknown directive throws", async () => {
@@ -4514,7 +4514,7 @@ ${argsContent}
       expect(paths.indexOf(filePath)).toBeLessThan(paths.indexOf(outputPath));
     });
 
-    // FIX 5 regression: trailing colon in command placeholder
+    // A trailing colon is ambiguous with the root command placeholder and must be rejected.
     it("{{politty:command:}} (trailing colon) throws with clear message", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "template.md");
@@ -4529,7 +4529,7 @@ ${argsContent}
       ).rejects.toThrow(/trailing colon|use \{\{politty:command\}\}/);
     });
 
-    // FIX 5 regression: typed-root form must still work
+    // The explicit typed-root form uses an empty scope plus a section type.
     it("{{politty:command::usage}} (typed root) renders root usage section without error", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "template.md");
@@ -4547,7 +4547,7 @@ ${argsContent}
       expect(content).not.toContain("{{politty:");
     });
 
-    // FIX 1 regression: template-only command with incompatible global option must throw
+    // Template-only commands must still participate in global option compatibility checks.
     it("template-only command with incompatible global option throws compatibility error", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "template.md");
@@ -4574,7 +4574,7 @@ ${argsContent}
         },
       });
 
-      // "run" is referenced ONLY via the template (not in files), so the old code would skip it
+      // "run" is referenced only via the template, not through files.
       fs.writeFileSync(templatePath, "{{politty:command:run}}\n");
 
       await expect(
@@ -4595,7 +4595,7 @@ ${argsContent}
       ).rejects.toThrow('does not match globalOptions definition for "verbose"');
     });
 
-    // FIX A: template source path collision checks
+    // Template sources must never overlap with generated outputs.
     it("template source path conflicting with a files key throws", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const sharedPath = path.join(testDir, "cli.md");
@@ -4647,14 +4647,13 @@ ${argsContent}
       ).rejects.toThrow(/Template source path.*conflicts with rootDoc\.path/);
     });
 
-    // FIX B: globalArgs option not duplicated in command section in templates-only mode
+    // globalArgs-derived options should not duplicate command options in templates-only mode.
     it("templates-only with globalArgs: global option appears once and not in command options", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "template.md");
       const outputPath = path.join(testDir, "output.md");
       // Use root command scope ({{politty:command}}) — testCommand root has "verbose" in its
-      // own args, so without the fix globalOptionDefinitions would be empty and the strip would
-      // not run, causing "--verbose" to appear in both the global-options table AND the
+      // own args; "--verbose" must not appear in both the global-options table and the
       // root command's own options table.
       fs.writeFileSync(templatePath, "{{politty:global-options}}\n\n{{politty:command}}\n");
 
@@ -4674,8 +4673,6 @@ ${argsContent}
       expect(content).toContain("global-options");
       // Count table rows containing "--verbose": the option name in a markdown table cell.
       // "--verbose" should appear in exactly one table row (the global-options table).
-      // If globalOptionDefinitions is NOT populated (the bug), the root command section also
-      // renders a verbose options row, producing two "--verbose" table rows.
       const verboseOptionRows = content.split("\n").filter((line) => line.includes("--verbose"));
       expect(verboseOptionRows).toHaveLength(1);
     });
@@ -4923,6 +4920,22 @@ ${argsContent}
       expect(content).toContain("After");
     });
 
+    it("empty own-line placeholder at file start does not leave a leading blank line", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "leading-empty-template.md");
+      const outputPath = path.join(testDir, "leading-empty.md");
+      fs.writeFileSync(templatePath, "{{politty:command:greet:examples}}\nAfter\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toBe("After\n");
+    });
+
     // A typed-only ancestor placeholder must not skew the heading depth of the full-section
     // command. Here "config" is referenced only via a typed (options) placeholder, so the
     // heading depth is computed from "config get" alone — identical to rendering it on its own.
@@ -5034,6 +5047,60 @@ ${argsContent}
       const content = fs.readFileSync(outputPath, "utf-8");
       // verbose appears once — in the global-options table — not again in the union option groups.
       expect(content.split("\n").filter((l) => l.includes("--verbose"))).toHaveLength(1);
+    });
+
+    it("rootDoc global option is removed from grouped option tables in templates", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const unionCommand = defineCommand({
+        name: "union-cli",
+        description: "CLI with rootDoc global options and a grouped local schema",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: z.literal("create"),
+            name: arg(z.string(), { description: "Resource name" }),
+            verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+          }),
+          z.object({
+            action: z.literal("delete"),
+            id: arg(z.string(), { description: "Resource id" }),
+            verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+          }),
+        ]),
+        run: () => {},
+      });
+      const rootDocPath = path.join(testDir, "union-root.md");
+      const templatePath = path.join(testDir, "union-root-template.md");
+      const outputPath = path.join(testDir, "union-output.md");
+      const globalOptions = {
+        verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+      };
+      fs.writeFileSync(
+        rootDocPath,
+        [
+          "# union-cli",
+          "",
+          "CLI with rootDoc global options and a grouped local schema",
+          "",
+          "<!-- politty:global-options:start -->",
+          renderArgsTable(globalOptions),
+          "<!-- politty:global-options:end -->",
+          "",
+        ].join("\n"),
+      );
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: unionCommand,
+        templates: { [outputPath]: templatePath },
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions,
+        },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).not.toContain("--verbose");
     });
 
     // initDocFile must never delete a path that is also used as a template source, so a

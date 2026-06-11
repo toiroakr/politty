@@ -888,6 +888,24 @@ function parsePlaceholder(placeholder: string): ParsedPlaceholder {
  */
 const TEMPLATE_PLACEHOLDER_REGEX = /\{\{politty:[^{}]*\}\}/g;
 
+function getUnknownSectionTypeError(
+  scope: string,
+  allCommands: Map<string, CommandInfo>,
+): string | null {
+  const separatorIndex = scope.lastIndexOf(":");
+  if (separatorIndex === -1) {
+    return null;
+  }
+
+  const commandScope = scope.slice(0, separatorIndex);
+  const sectionType = scope.slice(separatorIndex + 1);
+  if (sectionType === "" || !allCommands.has(commandScope)) {
+    return null;
+  }
+
+  return `Unknown section type "${sectionType}" for command scope "${formatCommandPath(commandScope)}". Valid section types: ${SECTION_TYPES.join(", ")}`;
+}
+
 /**
  * Extract a marker section from content
  * Returns the content between start and end markers (including markers)
@@ -1911,8 +1929,11 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         if (parsed.kind === "command") {
           const { scope, type } = parsed;
 
-          // Validate scope
           if (!allCommands.has(scope)) {
+            const sectionTypeError = getUnknownSectionTypeError(scope, allCommands);
+            if (sectionTypeError) {
+              throw new Error(`${sectionTypeError} (in template "${templatePath}")`);
+            }
             throw new Error(
               `Unknown command scope "${scope}" in template "${templatePath}". Available: ${availableCommandPaths}`,
             );
@@ -1990,6 +2011,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   if (globalOptionDefinitions.size > 0) {
     for (const info of allCommands.values()) {
       info.options = info.options.filter((opt) => !globalOptionDefinitions.has(opt.name));
+      if (info.extracted) {
+        info.extracted = filterExtractedFields(
+          info.extracted,
+          new Set(globalOptionDefinitions.keys()),
+        );
+      }
     }
   }
 
@@ -2478,7 +2505,11 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         const isOwnLine = leadWs === "" && trailWs === "" && (leadNl !== "" || trailNl !== "");
         if (replacement === "" && isOwnLine) {
           // Re-emit one break: the wider of the two surrounding newline runs, capped at a blank
-          // line. Empty when the placeholder sat at the very start/end with no surrounding break.
+          // line. Empty when the placeholder sat at the very start/end so output does not gain a
+          // leading or trailing blank line.
+          if (leadNl === "" || trailNl === "") {
+            return "";
+          }
           const widest = Math.max(leadNl.length, trailNl.length);
           return widest >= 2 ? "\n\n" : widest === 1 ? "\n" : "";
         }
