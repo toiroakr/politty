@@ -4528,6 +4528,172 @@ ${argsContent}
       expect(paths.indexOf(filePath)).toBeLessThan(paths.indexOf(outputPath));
     });
 
+    it("front matter can exclude a specific command placeholder", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          "    - command:config",
+          "---",
+          "",
+          "{{politty:command:greet}}",
+          "",
+          "{{politty:command:config}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([outputPath]);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("Greet someone");
+      expect(content).not.toContain("Manage configuration");
+      expect(content).not.toContain("{{politty:command:config}}");
+    });
+
+    it("front matter command exclusions apply inside full parent command placeholders", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "parent-exclude-template.md");
+      const outputPath = path.join(testDir, "parent-exclude.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          "    - command:greet",
+          "---",
+          "",
+          "{{politty:command}}",
+          "",
+          "{{politty:command:greet}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("test-cli");
+      expect(content).toContain("config");
+      expect(content).not.toContain("[`greet`]");
+      expect(content).not.toContain("Greet someone");
+      expect(content).not.toContain("{{politty:command:greet}}");
+    });
+
+    it("front matter can exclude a typed command placeholder", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "typed-exclude-template.md");
+      const outputPath = path.join(testDir, "typed-exclude.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          "    - command:config get:usage",
+          "---",
+          "",
+          "{{politty:command:config get}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("config get");
+      expect(content).toContain("**Arguments**");
+      expect(content).not.toContain("**Usage**");
+    });
+
+    it("excluded placeholders are ignored during validation", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "unknown-exclude-template.md");
+      const outputPath = path.join(testDir, "unknown-exclude.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          '    - "{{politty:command:nope}}"',
+          "---",
+          "",
+          "{{politty:command:greet}}",
+          "",
+          "{{politty:command:nope}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("Greet someone");
+      expect(content).not.toContain("{{politty:command:nope}}");
+    });
+
+    it("excluded command placeholders do not contribute index entries", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplatePath = path.join(testDir, "index-template.md");
+      const indexOutputPath = path.join(testDir, "index.md");
+      const commandTemplatePath = path.join(testDir, "command-template.md");
+      const commandOutputPath = path.join(testDir, "command.md");
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+      fs.writeFileSync(
+        commandTemplatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          "    - command:config",
+          "---",
+          "",
+          "{{politty:command:greet}}",
+          "",
+          "{{politty:command:config}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [commandOutputPath]: commandTemplatePath,
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([indexOutputPath, commandOutputPath]);
+      const indexContent = fs.readFileSync(indexOutputPath, "utf-8");
+      expect(indexContent).toContain("greet");
+      expect(indexContent).not.toContain("config");
+    });
+
     it("targetCommands skips templates that do not reference target scopes", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const filePath = path.join(testDir, "greet.md");

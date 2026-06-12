@@ -75,6 +75,158 @@ function isTruthyEnv(envKey: string): boolean {
   return value === "true" || value === "1";
 }
 
+function extractYamlFrontMatter(content: string): string | null {
+  const lines = content.split(/\r?\n/);
+  if (lines[0] !== "---") {
+    return null;
+  }
+
+  const frontMatterLines: string[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === "---" || line === "...") {
+      return frontMatterLines.join("\n");
+    }
+    frontMatterLines.push(line ?? "");
+  }
+
+  return null;
+}
+
+function stripYamlScalarQuotes(value: string): string {
+  const trimmed = value.trim();
+  if (
+    trimmed.length >= 2 &&
+    ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'")))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function normalizeTemplatePlaceholderKey(value: string): string | null {
+  let normalized = stripYamlScalarQuotes(value);
+  if (normalized === "") {
+    return null;
+  }
+
+  const fullPlaceholder = normalized.match(/^\{\{politty:([^{}]*)\}\}$/);
+  if (fullPlaceholder) {
+    normalized = fullPlaceholder[1] ?? "";
+  } else if (normalized.startsWith("politty:")) {
+    normalized = normalized.slice("politty:".length);
+  }
+
+  return normalized === "" ? null : normalized;
+}
+
+function templatePlaceholderKey(placeholder: string): string {
+  return placeholder.slice(2, -2).slice("politty:".length);
+}
+
+function splitFrontMatterListValue(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+    return [trimmed];
+  }
+  return trimmed
+    .slice(1, -1)
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function addTemplatePlaceholderExclusion(exclusions: Set<string>, value: string): void {
+  const normalized = normalizeTemplatePlaceholderKey(value);
+  if (normalized !== null) {
+    exclusions.add(normalized);
+  }
+}
+
+function collectExcludedTemplatePlaceholders(templateContent: string): Set<string> {
+  const exclusions = new Set<string>();
+  const frontMatter = extractYamlFrontMatter(templateContent);
+  if (frontMatter === null) {
+    return exclusions;
+  }
+
+  let inPolittyBlock = false;
+  let inExcludeList = false;
+  let excludeIndent = 0;
+  for (const line of frontMatter.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const topLevelPolitty = line.match(/^politty\s*:\s*(.*)$/);
+    if (topLevelPolitty) {
+      const value = topLevelPolitty[1]?.trim() ?? "";
+      inPolittyBlock = value === "";
+      inExcludeList = false;
+      continue;
+    }
+
+    if (!line.startsWith(" ") && !line.startsWith("\t")) {
+      inPolittyBlock = false;
+      inExcludeList = false;
+      continue;
+    }
+
+    if (!inPolittyBlock) {
+      continue;
+    }
+
+    const excludeEntry = line.match(/^(\s+)(?:exclude|excludes)\s*:\s*(.*)$/);
+    if (excludeEntry) {
+      const value = excludeEntry[2]?.trim() ?? "";
+      if (value === "") {
+        inExcludeList = true;
+        excludeIndent = excludeEntry[1]?.length ?? 0;
+      } else {
+        inExcludeList = false;
+        for (const item of splitFrontMatterListValue(value)) {
+          addTemplatePlaceholderExclusion(exclusions, item);
+        }
+      }
+      continue;
+    }
+
+    if (!inExcludeList) {
+      continue;
+    }
+
+    const listItem = line.match(/^(\s*)-\s*(.+)$/);
+    if (!listItem || (listItem[1]?.length ?? 0) <= excludeIndent) {
+      inExcludeList = false;
+      continue;
+    }
+
+    addTemplatePlaceholderExclusion(exclusions, listItem[2] ?? "");
+  }
+
+  return exclusions;
+}
+
+interface TemplateExclusions {
+  rawKeys: Set<string>;
+  commandScopes: Set<string>;
+  commandSections: Map<string, Set<SectionType>>;
+  globalOptions: boolean;
+  index: boolean;
+}
+
+function createTemplateExclusions(rawKeys: Set<string>): TemplateExclusions {
+  return {
+    rawKeys,
+    commandScopes: new Set(),
+    commandSections: new Map(),
+    globalOptions: false,
+    index: false,
+  };
+}
+
 /**
  * Normalize file mapping entry to FileConfig
  */
@@ -891,6 +1043,86 @@ function parsePlaceholder(
   };
 }
 
+function buildTemplateExclusions(
+  rawKeys: Set<string>,
+  allCommands: ReadonlyMap<string, CommandInfo>,
+): TemplateExclusions {
+  const exclusions = createTemplateExclusions(rawKeys);
+  for (const key of rawKeys) {
+    const parsed = parsePlaceholder(`{{politty:${key}}}`, allCommands);
+    if (parsed.kind === "command") {
+      if (parsed.type === undefined) {
+        exclusions.commandScopes.add(parsed.scope);
+      } else {
+        let sections = exclusions.commandSections.get(parsed.scope);
+        if (!sections) {
+          sections = new Set();
+          exclusions.commandSections.set(parsed.scope, sections);
+        }
+        sections.add(parsed.type);
+      }
+    } else if (parsed.kind === "global-options") {
+      exclusions.globalOptions = true;
+    } else if (parsed.kind === "index") {
+      exclusions.index = true;
+    }
+  }
+  return exclusions;
+}
+
+function isCommandScopeExcluded(
+  commandPath: string,
+  excludedCommandScopes: ReadonlySet<string>,
+): boolean {
+  for (const excludedScope of excludedCommandScopes) {
+    if (isSubcommandOf(commandPath, excludedScope)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isCommandSectionExcluded(
+  commandPath: string,
+  sectionType: SectionType,
+  exclusions: TemplateExclusions,
+): boolean {
+  if (isCommandScopeExcluded(commandPath, exclusions.commandScopes)) {
+    return true;
+  }
+  return exclusions.commandSections.get(commandPath)?.has(sectionType) ?? false;
+}
+
+function shouldSkipTemplatePlaceholder(
+  placeholder: string,
+  parsed: ParsedPlaceholder,
+  exclusions: TemplateExclusions,
+): boolean {
+  if (exclusions.rawKeys.has(templatePlaceholderKey(placeholder))) {
+    return true;
+  }
+
+  if (parsed.kind === "command") {
+    if (isCommandScopeExcluded(parsed.scope, exclusions.commandScopes)) {
+      return true;
+    }
+    return (
+      parsed.type !== undefined &&
+      (exclusions.commandSections.get(parsed.scope)?.has(parsed.type) ?? false)
+    );
+  }
+
+  if (parsed.kind === "global-options") {
+    return exclusions.globalOptions;
+  }
+
+  if (parsed.kind === "index") {
+    return exclusions.index;
+  }
+
+  return false;
+}
+
 /**
  * Regex matching {{politty:...}} placeholders.
  * NOTE: only use with String.match / String.replace, never with .exec in a loop,
@@ -1557,12 +1789,24 @@ function generateCommandSection(
   rootDocPath?: string,
   hasGlobalOptions?: boolean,
   excludeOptionNames?: ReadonlySet<string>,
+  templateExclusions?: TemplateExclusions,
 ): string | null {
   const info = allCommands.get(cmdPath);
   if (!info) return null;
+  if (
+    templateExclusions &&
+    isCommandScopeExcluded(info.commandPath, templateExclusions.commandScopes)
+  ) {
+    return null;
+  }
 
   // Add file context to CommandInfo for cross-file link generation
   const enriched: CommandInfo = { ...info, filePath, fileMap, rootDocPath };
+  if (templateExclusions && templateExclusions.commandScopes.size > 0) {
+    enriched.subCommands = info.subCommands.filter(
+      (sub) => !isCommandScopeExcluded(sub.fullPath.join(" "), templateExclusions.commandScopes),
+    );
+  }
   if (hasGlobalOptions !== undefined) {
     enriched.hasGlobalOptions = hasGlobalOptions;
   }
@@ -1576,7 +1820,22 @@ function generateCommandSection(
       enriched.extracted = filterExtractedFields(info.extracted, excludeOptionNames);
     }
   }
-  return render(enriched);
+  let rendered = render(enriched);
+  if (templateExclusions) {
+    for (const [scope, sectionTypes] of templateExclusions.commandSections) {
+      if (scope !== info.commandPath) {
+        continue;
+      }
+      for (const sectionType of sectionTypes) {
+        const section = extractSectionMarker(rendered, sectionType, scope);
+        if (section !== null) {
+          rendered = rendered.replace(section, "");
+        }
+      }
+      rendered = rendered.replace(/\n{3,}/g, "\n\n");
+    }
+  }
+  return rendered;
 }
 
 /**
@@ -1869,6 +2128,24 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
   // Build file map for cross-file links
   const fileMap = buildFileMap(files, allCommands, ignores);
+  const templateContents = new Map<string, string | null>();
+  const templateExclusions = new Map<string, TemplateExclusions>();
+  if (config.templates) {
+    for (const [outputPath, templatePath] of Object.entries(config.templates)) {
+      const templateContent = readFile(templatePath);
+      templateContents.set(outputPath, templateContent);
+      if (templateContent !== null) {
+        templateExclusions.set(
+          outputPath,
+          buildTemplateExclusions(
+            collectExcludedTemplatePlaceholders(templateContent),
+            allCommands,
+          ),
+        );
+      }
+    }
+  }
+  const templateEntries = Object.entries(config.templates ?? {});
 
   // === Template scope collection (validation pass) ===
   // Parse all templates early — before the files loop — so that template-referenced command scopes
@@ -1878,7 +2155,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   const templateMeta = new Map<string, TemplateMeta>(); // outputPath -> metadata
   const templateValidationErrors = new Map<string, string[]>();
 
-  if (config.templates) {
+  if (templateEntries.length > 0) {
     // Upfront validation: path collisions
     const normalizedRootDocPath = rootDoc ? normalizeDocPathForComparison(rootDoc.path) : null;
     const normalizedFileKeys = new Set(Object.keys(files).map(normalizeDocPathForComparison));
@@ -1887,10 +2164,10 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     // Pre-collect all template output paths so source-vs-output checks can see
     // outputs declared later in the same loop iteration.
     const allNormalizedTemplateOutputs = new Set(
-      Object.keys(config.templates).map(normalizeDocPathForComparison),
+      templateEntries.map(([outputPath]) => normalizeDocPathForComparison(outputPath)),
     );
 
-    for (const [outputPath, templatePath] of Object.entries(config.templates)) {
+    for (const [outputPath, templatePath] of templateEntries) {
       const normalizedOutput = normalizeDocPathForComparison(outputPath);
       const normalizedSource = normalizeDocPathForComparison(templatePath);
 
@@ -1936,8 +2213,8 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     // Parse templates to collect referencedScopes
     const availableCommandPaths = Array.from(allCommands.keys()).join(", ");
 
-    for (const [outputPath, templatePath] of Object.entries(config.templates)) {
-      const templateContent = readFile(templatePath);
+    for (const [outputPath, templatePath] of templateEntries) {
+      const templateContent = templateContents.get(outputPath) ?? null;
       const validationErrors: string[] = [];
       if (templateContent === null) {
         // Will be handled in generation loop
@@ -1963,9 +2240,17 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       const headingScopes = new Set<string>();
       let emitsGlobalOptions = false;
       let emitsIndex = false;
+      const exclusions = templateExclusions.get(outputPath) ?? createTemplateExclusions(new Set());
 
       for (const placeholder of placeholders) {
+        if (exclusions.rawKeys.has(templatePlaceholderKey(placeholder))) {
+          continue;
+        }
+
         const parsed = parsePlaceholder(placeholder, allCommands);
+        if (shouldSkipTemplatePlaceholder(placeholder, parsed, exclusions)) {
+          continue;
+        }
 
         if (parsed.kind === "invalid") {
           validationErrors.push(`${parsed.reason} (in template "${templatePath}")`);
@@ -1998,7 +2283,10 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           // A scope produces a #anchor heading when rendered as a full section (no type) or
           // via the explicit "heading" section. Other typed placeholders (usage, options, …)
           // emit no heading, so they must not feed cross-output links or index rows.
-          if (type === undefined || type === "heading") {
+          if (
+            (type === undefined || type === "heading") &&
+            !isCommandSectionExcluded(scope, "heading", exclusions)
+          ) {
             headingScopes.add(scope);
           }
         } else if (parsed.kind === "global-options") {
@@ -2457,12 +2745,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   }
 
   // Now process each template
-  for (const [outputPath, templatePath] of Object.entries(config.templates ?? {})) {
+  for (const [outputPath, templatePath] of templateEntries) {
     if (!activeTemplateMeta.has(outputPath)) {
       continue;
     }
 
-    const templateContent = readFile(templatePath);
+    const templateContent = templateContents.get(outputPath) ?? null;
     if (templateContent === null) {
       hasError = true;
       results.push({
@@ -2507,9 +2795,19 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       new Set(templateContent.match(TEMPLATE_PLACEHOLDER_REGEX) ?? []),
     );
     const replacements = new Map<string, string>();
+    const exclusions = templateExclusions.get(outputPath) ?? createTemplateExclusions(new Set());
 
     for (const placeholder of placeholders) {
+      if (exclusions.rawKeys.has(templatePlaceholderKey(placeholder))) {
+        replacements.set(placeholder, "");
+        continue;
+      }
+
       const parsed = parsePlaceholder(placeholder, allCommands);
+      if (shouldSkipTemplatePlaceholder(placeholder, parsed, exclusions)) {
+        replacements.set(placeholder, "");
+        continue;
+      }
 
       if (parsed.kind === "invalid") {
         // Should have been caught in the validation pass; guard defensively.
@@ -2530,6 +2828,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           effectiveRootDocPath,
           sectionHasGlobalOptions,
           excludeOptionNames,
+          exclusions,
         );
 
         if (rawSection === null) {

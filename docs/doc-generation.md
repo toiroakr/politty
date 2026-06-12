@@ -164,10 +164,41 @@ Handwritten notes between generated sections.
 {{politty:command:config get}}
 ```
 
+Exclude specific placeholders from generation with front matter. Excluded
+placeholders expand to nothing and do not participate in validation, indexes,
+or cross-output link maps:
+
+```markdown
+---
+politty:
+  exclude:
+    - command:config
+    - command:config get:usage
+---
+
+# My CLI
+
+{{politty:command}}
+
+<!-- The placeholders below are ignored by the docs generator. -->
+{{politty:command:config}}
+{{politty:command:config get:usage}}
+```
+
 Behavior notes:
 
 - Placeholders reference commands explicitly; subcommands are NOT expanded
   automatically. Add a placeholder per command you want documented.
+- `politty.exclude` entries are exact placeholder directives without the
+  `{{politty:...}}` wrapper. Quoted full placeholders such as
+  `"{{politty:command:config}}"` are also accepted.
+- Excluded command scopes are removed before validation and rendering, so an
+  excluded command scope is not required to exist, is not listed by
+  `{{politty:index}}`, and is omitted from parent command output such as
+  `{{politty:command}}` subcommand tables.
+- Excluded section entries such as `command:config get:usage` remove only that
+  section, including when the full command is rendered with
+  `{{politty:command:config get}}`.
 - Validation happens before generation: unknown scopes, section types, or
   directives throw with the list of valid values.
 - `templates` can be combined with `files`/`path` in the same config, but an
