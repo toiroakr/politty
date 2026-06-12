@@ -4586,7 +4586,7 @@ ${argsContent}
 
       expect(result.success).toBe(true);
       const content = fs.readFileSync(indexOutputPath, "utf-8");
-      expect(content).toContain("config");
+      expect(content).toContain("| [config](");
       expect(content).not.toContain("config get");
       expect(content).not.toContain("config set");
     });

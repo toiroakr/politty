@@ -122,6 +122,7 @@ function renderCategory(
     ? category.commands
     : expandCommands(category.commands, allCommands, leafOnly);
   let visibleCommandPaths = commandPaths;
+  const fallbackCommandPaths = new Set<string>();
   if (category.allowedCommands) {
     const allowed = new Set(category.allowedCommands);
     visibleCommandPaths = commandPaths.filter((cmdPath) => allowed.has(cmdPath));
@@ -131,6 +132,7 @@ function renderCategory(
         !visibleCommandPaths.some((cmdPath) => isSubcommandOf(cmdPath, configuredPath))
       ) {
         visibleCommandPaths.push(configuredPath);
+        fallbackCommandPaths.add(configuredPath);
       }
     }
   }
@@ -145,7 +147,14 @@ function renderCategory(
 
     // Skip non-leaf commands if leafOnly is true (not applied to noExpand categories,
     // whose scopes are explicit and must all be listed).
-    if (!category.noExpand && leafOnly && !isLeafCommand(info)) continue;
+    if (
+      !category.noExpand &&
+      leafOnly &&
+      !fallbackCommandPaths.has(cmdPath) &&
+      !isLeafCommand(info)
+    ) {
+      continue;
+    }
 
     const displayName = cmdPath || info.name;
     const anchor = generateAnchor(displayName);
