@@ -16,13 +16,13 @@
     "type": "git",
     "url": "https://github.com/toiroakr/politty.git"
   },
+  "bin": {
+    "politty": "./dist/cli.js"
+  },
   "files": [
     "dist"
   ],
   "type": "module",
-  "bin": {
-    "politty": "./dist/cli.js"
-  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -132,10 +132,10 @@
     "knip": "6.15.0",
     "lefthook": "2.1.9",
     "organize-imports-cli": "1.0.2",
-    "oxfmt": "0.52.0",
-    "oxlint": "1.67.0",
+    "oxfmt": "0.53.0",
+    "oxlint": "1.68.0",
     "quansync": "1.0.0",
-    "tsdown": "0.22.1",
+    "tsdown": "0.22.2",
     "tsx": "4.22.4",
     "typescript": "6.0.3",
     "vitest": "4.1.8",
@@ -157,5 +157,5 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@11.5.0"
+  "packageManager": "pnpm@11.5.1"
 }
