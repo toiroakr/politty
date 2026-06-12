@@ -396,8 +396,14 @@ export function findFirstPositionalIndex(
 }
 
 /**
- * Find the first positional argument in argv, properly skipping global flag values.
- * Without globalExtracted, falls back to the first non-flag token.
+ * Find the first positional argument in argv, properly skipping global flag
+ * values. Thin wrapper over {@link findFirstPositionalIndex} — see that
+ * function for the exact scan and stop conditions. Returns `undefined` when no
+ * positional is present.
+ *
+ * Note: without globalExtracted, the scan stops at the first leading flag
+ * (builtin/unknown), so a positional is only returned when it precedes every
+ * flag; it does not fall back to the first non-flag token anywhere in argv.
  */
 export function findFirstPositional(
   argv: string[],
