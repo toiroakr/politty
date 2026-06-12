@@ -23,17 +23,17 @@ export interface CustomCompletion {
   /**
    * In-process JS callback for dynamic completion. Receives parsed context
    * (other arg values typed so far, previously supplied values for this same
-   * option) and returns candidates. Static shell scripts delegate to
-   * `<program> __complete` whenever this is set.
+   * option) and returns candidates. Dispatcher scripts call
+   * `<program> __complete` for every completion request; static scripts
+   * delegate to it whenever this is set.
    */
   resolve?: DynamicCompletionResolver;
   /**
-   * Pre-enumerated completion baked into the generated shell script. The
-   * candidate list is computed at script-generation time by calling
-   * `enumerate` for every combination of the sibling arg values listed in
-   * `dependsOn` (each must have a static `choices` or enum schema). The
-   * shell then dispatches via a case lookup keyed by the runtime values of
-   * those args — no Node process is spawned on TAB.
+   * Completion whose candidates depend on sibling arg values. Dispatcher
+   * scripts call `enumerate` inside `__complete` for the dependency values
+   * already typed on the command line. Static scripts pre-enumerate every
+   * combination of `dependsOn` values at script-generation time and dispatch
+   * via a shell lookup table.
    */
   expand?: ExpandCompletion;
 }

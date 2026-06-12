@@ -8,7 +8,7 @@ import {
 } from "../src/completion/extractor.js";
 import { generateFishCompletion } from "../src/completion/fish.js";
 import { generateZshCompletion } from "../src/completion/zsh.js";
-import { arg, defineCommand } from "../src/index.js";
+import { arg, defineCommand, generateCompletion } from "../src/index.js";
 
 const ENDPOINT_FIELDS: Record<string, string[]> = {
   GetApplication: ["workspaceId", "applicationName"],
@@ -91,6 +91,74 @@ describe("expand completion", () => {
       expect(() => extractCompletionData(cmd, "mycli")).toThrow(
         /dependsOn references "dynamicField"/,
       );
+    });
+
+    it("validates expand dependsOn when generating a dispatcher script", () => {
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: {
+          api: defineCommand({
+            name: "api",
+            args: z.object({
+              dynamicField: arg(z.string(), {}),
+              field: arg(z.string(), {
+                completion: {
+                  custom: {
+                    expand: {
+                      dependsOn: ["dynamicField"],
+                      enumerate: () => [],
+                    },
+                  },
+                },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      // Dispatcher generation must run the same metadata validation as the
+      // static path, so an invalid completion.custom config fails at generation
+      // time rather than installing a broken dispatcher that breaks at TAB.
+      expect(() =>
+        generateCompletion(cmd, { shell: "bash", programName: "mycli", mode: "dispatcher" }),
+      ).toThrow(/dependsOn references "dynamicField"/);
+    });
+
+    it("does not run expand enumerate at dispatcher generation time", () => {
+      let calls = 0;
+      const cmd = defineCommand({
+        name: "mycli",
+        subCommands: {
+          api: defineCommand({
+            name: "api",
+            args: z.object({
+              env: arg(z.string(), { completion: { custom: { choices: ["dev", "prod"] } } }),
+              field: arg(z.string().optional(), {
+                completion: {
+                  custom: {
+                    expand: {
+                      dependsOn: ["env"],
+                      enumerate: () => {
+                        calls++;
+                        return [];
+                      },
+                    },
+                  },
+                },
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      // Dispatcher validates dependsOn but must not eagerly enumerate — it
+      // resolves typed deps lazily at TAB time via __complete.
+      generateCompletion(cmd, { shell: "bash", programName: "mycli", mode: "dispatcher" });
+      expect(calls).toBe(0);
+      // Static generation bakes the table, so it does enumerate the combos.
+      generateCompletion(cmd, { shell: "bash", programName: "mycli", mode: "static" });
+      expect(calls).toBeGreaterThan(0);
     });
 
     it("rejects dependsOn that includes the field itself", () => {

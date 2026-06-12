@@ -25,6 +25,35 @@ export interface ExpandTableEntry {
 export type ShellType = "bash" | "zsh" | "fish";
 
 /**
+ * Completion script generation mode.
+ *
+ * - `dispatcher`: small runtime script that resolves the executable visible on
+ *   PATH at TAB time and delegates to its `__complete` command.
+ * - `static`: self-contained script with command metadata baked in at
+ *   generation time.
+ */
+export type CompletionMode = "dispatcher" | "static";
+
+/**
+ * Optional published worker artifact lookup.
+ *
+ * Paths are resolved relative to the visible executable's real directory.
+ * Templates may include `{shell}`, `{ext}`, and `{program}`.
+ */
+export interface BundledWorkerOptions {
+  /** Disable bundled-worker lookup while keeping cache/dynamic fallbacks. */
+  disabled?: boolean | undefined;
+  /** Shell-specific worker paths relative to the executable directory. */
+  relativePaths?: Partial<Record<ShellType, readonly string[]>> | undefined;
+  /**
+   * Let dispatcher scripts ask the CLI for `__completion-worker-path <shell>`
+   * when package-relative lookup misses. Disabled by default because it starts
+   * the CLI process on that miss path.
+   */
+  queryCommand?: boolean | undefined;
+}
+
+/**
  * Options for completion generation
  */
 export interface CompletionOptions {
@@ -36,6 +65,13 @@ export interface CompletionOptions {
   includeSubcommands?: boolean;
   /** Include description in completions where supported (default: true) */
   includeDescriptions?: boolean;
+  /**
+   * Completion script mode.
+   *
+   * `generateCompletion` defaults to `static` when this is omitted. The
+   * `completion <shell>` subcommand passes `dispatcher` explicitly by default.
+   */
+  mode?: CompletionMode;
   /** Global args schema for deriving global options in completion */
   globalArgsSchema?: ArgsSchema;
   /**
@@ -51,6 +87,13 @@ export interface CompletionOptions {
    * Setting this hardcodes the location into the generated loader.
    */
   cacheDir?: string;
+  /**
+   * Internal static-worker generation hook used by dispatcher caches.
+   * Worker scripts define suffixed functions and skip shell registration.
+   */
+  staticWorker?: { functionSuffix: string };
+  /** Published static-worker artifact lookup used by dispatcher mode. */
+  bundledWorker?: BundledWorkerOptions | undefined;
 }
 
 /**
@@ -107,6 +150,25 @@ export type ValueCompletion =
       resolve?: never;
       extensions?: never;
       matcher?: never;
+    }
+  | {
+      /**
+       * Runtime form of `completion.custom.expand` used by `__complete`.
+       * The dispatcher invokes `__complete` at TAB time, so it can call the
+       * user's `enumerate` function against the already typed dependency
+       * values instead of baking a table into the shell script.
+       */
+      type: "runtime-expand";
+      dependsOn: readonly string[];
+      enumerate: (
+        deps: Readonly<Record<string, string>>,
+      ) => ReadonlyArray<string | { value: string; description?: string }>;
+      choices?: never;
+      shellCommand?: never;
+      resolve?: never;
+      extensions?: never;
+      matcher?: never;
+      table?: never;
     };
 
 /**

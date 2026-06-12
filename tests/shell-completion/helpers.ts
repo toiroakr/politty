@@ -104,6 +104,13 @@ export function setupTestContext(): TestContext {
 
 export function setupNestedTestContext(): TestContext {
   const { tmpDir, testEnv } = createWrapperContext("politty-nested-", "nestapp", nestedCommandPath);
+  const projectRoot = path.resolve(import.meta.dirname, "../..");
+  const tsxBin = path.join(projectRoot, "node_modules", ".bin", "tsx");
+  fs.writeFileSync(
+    path.join(tmpDir, "nested-test"),
+    `#!/bin/sh\nexec ${tsxBin} ${nestedCommandPath} "$@"\n`,
+    { mode: 0o755 },
+  );
   const completionScripts = generateCompletionScripts(tmpDir, "nestapp", testEnv);
   return { tmpDir, testEnv, testFilesDir: tmpDir, completionScripts };
 }
@@ -172,7 +179,7 @@ printf '%s\\n' "\${COMPREPLY[@]}"
   const result = execSync(`${bashBin} -c '${script.replace(/'/g, "'\\''")}'`, {
     env: testEnv,
     encoding: "utf-8",
-    timeout: 15000,
+    timeout: 30000,
     cwd: opts?.cwd,
   });
   return result
@@ -253,13 +260,14 @@ _describe() {
 ${filesStub}
 ${sourceCmd}
 words=(${wordsArray.map((w) => `'${w}'`).join(" ")})
+CURRENT=${wordsArray.length}
 _${fnName} 2>/dev/null
 `;
 
   const result = execSync(`zsh -f -c '${script.replace(/'/g, "'\\''")}'`, {
     env: testEnv,
     encoding: "utf-8",
-    timeout: 15000,
+    timeout: 30000,
     cwd: opts?.cwd,
   });
   return result
@@ -308,7 +316,7 @@ __fish_${fnName}_complete
   const result = execSync(`fish -c '${script.replace(/'/g, "'\\''")}'`, {
     env: testEnv,
     encoding: "utf-8",
-    timeout: 15000,
+    timeout: 30000,
     cwd: opts?.cwd,
   });
   return result
@@ -511,6 +519,14 @@ export function defineCommonTests(
     expect(values).toContain("app.json");
     expect(values).toContain("app.yaml");
     expect(values).not.toContain("deploy.yml");
+  });
+
+  it("matches extension-filtered files when part of the extension is typed", () => {
+    // Regression: globbing `<prefix>*.<ext>` (e.g. `app.j*.json`) never matched
+    // `app.json` once part of the extension was typed; enumerate + ext-filter.
+    const values = complete(["deploy", "--config", "app.j"], { cwd: getTestFilesDir() });
+    expect(values).toContain("app.json");
+    expect(values).not.toContain("app.yaml");
   });
 
   it("returns empty for non-existent directory path", () => {

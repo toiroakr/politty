@@ -168,6 +168,13 @@ describe.skipIf(!hasBash)("bash expand array dedup", () => {
       scriptPath: expandCtx.completionScripts.bash,
     });
 
+  it("falls through to positional completion when subcommands do not match the prefix", () => {
+    const values = completeE(["api", "Get"]);
+    expect(values).toContain("GetApplication");
+    expect(values).not.toContain("list");
+    expect(values).not.toContain("inspect");
+  });
+
   it("offers every key when none are consumed", () => {
     const values = completeE(["api", "GetApplication", "-f", ""]);
     expect(values).toContain("workspaceId=");

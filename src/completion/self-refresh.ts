@@ -8,22 +8,22 @@
  * stale body.
  */
 
-import { sanitize } from "./extractor.js";
+import { binEnvVarName, sanitize } from "./extractor.js";
 import { computeBinSig, resolveBinPath } from "./header.js";
+import { shSingleQuote, statSigExpr } from "./shell-shared.js";
 
 interface SelfRefreshOptions {
   programName: string;
   binPath?: string | undefined;
 }
 
-function statSigExpr(): string {
-  return `$(stat -L -c '%Y' "$_bin" 2>/dev/null || stat -L -f '%m' "$_bin" 2>/dev/null)`;
-}
-
 export function generateBashSelfRefresh(opts: SelfRefreshOptions): string[] {
   const { programName, binPath } = opts;
   const fn = sanitize(programName);
-  const sig = computeBinSig(resolveBinPath(programName, binPath));
+  const envName = binEnvVarName(fn);
+  const resolvedBinPath = resolveBinPath(programName, binPath);
+  const sig = computeBinSig(resolvedBinPath);
+  const quotedBinPath = shSingleQuote(resolvedBinPath);
   const refreshFn = `__${fn}_self_refresh`;
 
   return [
@@ -32,14 +32,15 @@ export function generateBashSelfRefresh(opts: SelfRefreshOptions): string[] {
     `    _self=\${BASH_SOURCE[0]:-}`,
     `    [[ -n "$_self" && -f "$_self" ]] || return 1`,
     `    head -n 8 "$_self" 2>/dev/null | grep -qF "# politty-completion-version:" || return 1`,
-    `    head -n 8 "$_self" 2>/dev/null | grep -qF "# program: ${programName}" || return 1`,
-    `    head -n 8 "$_self" 2>/dev/null | grep -qF "# shell: bash" || return 1`,
-    `    _bin=$(type -P ${programName} 2>/dev/null)`,
+    `    head -n 8 "$_self" 2>/dev/null | grep -qxF "# program: ${programName}" || return 1`,
+    `    head -n 8 "$_self" 2>/dev/null | grep -qxF "# shell: bash" || return 1`,
+    `    _bin="\${${envName}:-$(type -P ${programName} 2>/dev/null)}"`,
     `    [[ -n "$_bin" ]] || return 1`,
-    `    _sig=${statSigExpr()} || return 1`,
-    `    [[ "$_sig" != "${sig}" ]] || return 1`,
-    `    "$_bin" __refresh-completion bash "$_self" 2>/dev/null || return 1`,
-    `    head -n 8 "$_self" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig" || return 1`,
+    `    _sig=${statSigExpr("$_bin", { shell: "posix" })} || return 1`,
+    `    [[ "$_sig" != "${sig}" || "$_bin" != ${quotedBinPath} ]] || return 1`,
+    `    "$_bin" __refresh-completion bash "$_self" --static 2>/dev/null || return 1`,
+    `    head -n 8 "$_self" 2>/dev/null | grep -qxF "# politty-bin-sig: $_sig" || return 1`,
+    `    head -n 8 "$_self" 2>/dev/null | grep -qxF "# politty-bin-path: $_bin" || return 1`,
     `    source "$_self" 2>/dev/null || return 1`,
     `    return 0`,
     `}`,
@@ -56,8 +57,11 @@ export function generateBashSelfRefresh(opts: SelfRefreshOptions): string[] {
 export function generateZshSelfRefresh(opts: SelfRefreshOptions): string[] {
   const { programName, binPath } = opts;
   const fn = sanitize(programName);
+  const envName = binEnvVarName(fn);
   const completionFn = `_${programName}`;
-  const sig = computeBinSig(resolveBinPath(programName, binPath));
+  const resolvedBinPath = resolveBinPath(programName, binPath);
+  const sig = computeBinSig(resolvedBinPath);
+  const quotedBinPath = shSingleQuote(resolvedBinPath);
   const refreshFn = `__${fn}_self_refresh`;
 
   return [
@@ -68,14 +72,15 @@ export function generateZshSelfRefresh(opts: SelfRefreshOptions): string[] {
     `    _self="\${(%):-%x}"`,
     `    [[ -n "$_self" && -f "$_self" ]] || return 1`,
     `    head -n 8 "$_self" 2>/dev/null | grep -qF "# politty-completion-version:" || return 1`,
-    `    head -n 8 "$_self" 2>/dev/null | grep -qF "# program: ${programName}" || return 1`,
-    `    head -n 8 "$_self" 2>/dev/null | grep -qF "# shell: zsh" || return 1`,
-    `    _bin=$(whence -p ${programName} 2>/dev/null)`,
+    `    head -n 8 "$_self" 2>/dev/null | grep -qxF "# program: ${programName}" || return 1`,
+    `    head -n 8 "$_self" 2>/dev/null | grep -qxF "# shell: zsh" || return 1`,
+    `    _bin="\${${envName}:-$(whence -p ${programName} 2>/dev/null)}"`,
     `    [[ -n "$_bin" ]] || return 1`,
-    `    _sig=${statSigExpr()} || return 1`,
-    `    [[ "$_sig" != "${sig}" ]] || return 1`,
-    `    "$_bin" __refresh-completion zsh "$_self" 2>/dev/null || return 1`,
-    `    head -n 8 "$_self" 2>/dev/null | grep -qF "# politty-bin-sig: $_sig" || return 1`,
+    `    _sig=${statSigExpr("$_bin", { shell: "posix" })} || return 1`,
+    `    [[ "$_sig" != "${sig}" || "$_bin" != ${quotedBinPath} ]] || return 1`,
+    `    "$_bin" __refresh-completion zsh "$_self" --static 2>/dev/null || return 1`,
+    `    head -n 8 "$_self" 2>/dev/null | grep -qxF "# politty-bin-sig: $_sig" || return 1`,
+    `    head -n 8 "$_self" 2>/dev/null | grep -qxF "# politty-bin-path: $_bin" || return 1`,
     `    source "$_self" 2>/dev/null || return 1`,
     `    ${completionFn} "$@"`,
     `    return 0`,

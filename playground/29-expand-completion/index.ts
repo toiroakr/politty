@@ -85,6 +85,28 @@ export const apiCommand = defineCommand({
       },
     }),
   }),
+  subCommands: {
+    list: defineCommand({
+      name: "list",
+      description: "List available API endpoints.",
+      run: () => {
+        console.log(ENDPOINTS.join("\n"));
+      },
+    }),
+    inspect: defineCommand({
+      name: "inspect",
+      description: "Inspect an API endpoint.",
+      args: z.object({
+        endpoint: arg(z.string(), {
+          positional: true,
+          completion: { custom: { choices: ENDPOINTS } },
+        }),
+      }),
+      run: (args) => {
+        console.log(JSON.stringify(ENDPOINT_FIELDS[args.endpoint] ?? [], null, 2));
+      },
+    }),
+  },
   run: (args) => {
     const fields = Object.fromEntries(
       args.field.map((kv) => {
