@@ -609,12 +609,14 @@ export function renderSubcommandsTableFromArray(
     let cmdCell: string;
     if (generateAnchors) {
       const anchor = generateAnchor(sub.fullPath);
-      const subFile = fileMap?.[subCommandPath];
+      const hasSubFile =
+        fileMap !== undefined && Object.prototype.hasOwnProperty.call(fileMap, subCommandPath);
+      const subFile = hasSubFile ? fileMap[subCommandPath] : undefined;
 
       if (currentFile && subFile && currentFile !== subFile) {
         const relativePath = getRelativePath(currentFile, subFile);
         cmdCell = `[\`${fullName}\`](${relativePath}#${anchor})`;
-      } else if (fileMap && subFile === undefined) {
+      } else if (fileMap && !hasSubFile) {
         // A fileMap is present but this subcommand has no entry: in template mode this
         // means the child is not rendered as a heading anywhere, so a local #anchor link
         // would be dead. Render plain text instead. (Files mode populates an entry for
