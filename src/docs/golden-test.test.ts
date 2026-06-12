@@ -5796,7 +5796,7 @@ ${argsContent}
       // Render a subcommand (which gets a global-options link) plus the local global-options table.
       fs.writeFileSync(
         templatePath,
-        "{{politty:global-options}}\n\n{{politty:command:config get}}\n",
+        "{{politty:global-options}}\n\n{{politty:command:config:get}}\n",
       );
 
       const result = await generateDoc({

@@ -3072,12 +3072,6 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       }
     }
 
-    // Replace placeholders. A placeholder that resolves to empty AND occupies its own line is
-    // removed together with that line and the surrounding blank-line pair it would otherwise
-    // leave behind (one blank line is kept as the paragraph separator). All other content —
-    // including handwritten blank lines, e.g. inside fenced code blocks — is preserved verbatim;
-    // newlines are NOT collapsed globally. The leading `\n\n?` is only consumed for empty
-    // own-line placeholders; for any other case it is restored.
     // Substitute placeholders. Handwritten spacing is preserved verbatim; the ONLY whitespace we
     // touch is the gap an EMPTY own-line placeholder would otherwise leave. For such a placeholder
     // we consume the newlines immediately around it and re-emit a single break that matches the

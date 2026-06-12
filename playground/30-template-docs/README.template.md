@@ -22,7 +22,7 @@ The sections below are fully generated from the command definitions.
 {{politty:command:add}}
 
 You can also embed single sections with typed placeholders of the form
-`politty:command:<scope>:<type>` (wrapped in double curly braces). The `list`
+`politty:command:<scope>:<section>` (wrapped in double curly braces). The `list`
 section below intentionally omits the usage block:
 
 {{politty:command:list:heading}}

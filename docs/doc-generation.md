@@ -136,19 +136,19 @@ await assertDocMatch({
 
 Available placeholders:
 
-| Placeholder                          | Expands to                                          |
-| ------------------------------------ | --------------------------------------------------- |
-| `{{politty:command}}`                | Full section of the root command                    |
-| `{{politty:command:<scope>}}`        | Full section of the command at `<scope>`            |
-| `{{politty:command:<scope>:<type>}}` | A single section (`usage`, `options`, etc.)         |
-| `{{politty:global-options}}`         | Global options table (from `globalArgs` / rootDoc)  |
-| `{{politty:index}}`                  | Command index derived from other configured outputs |
+| Placeholder                             | Expands to                                          |
+| --------------------------------------- | --------------------------------------------------- |
+| `{{politty:command}}`                   | Root command and descendant command tree            |
+| `{{politty:command:<scope>}}`           | `<scope>` command and descendant command tree       |
+| `{{politty:command::<section>}}`        | A single root-command section                       |
+| `{{politty:command:<scope>:<section>}}` | A single section of `<scope>`                       |
+| `{{politty:global-options}}`            | Global options table (from `globalArgs` / rootDoc)  |
+| `{{politty:index}}`                     | Command index derived from other configured outputs |
 
-`<scope>` is a space-separated command path (e.g. `config get`); the root
-command uses an empty scope (`{{politty:command::usage}}`). `<type>` is one of
-the section types: `heading`, `description`, `usage`, `arguments`, `options`,
-`global-options-link`, `subcommands`, `examples`, `notes`. A typed placeholder
-for a section the command does not have expands to nothing.
+`<scope>` uses `:` between subcommands (e.g. `config:get`). `<section>` is one
+of the section types: `heading`, `description`, `usage`, `arguments`,
+`options`, `global-options-link`, `subcommands`, `examples`, `notes`. A typed
+placeholder for a section the command does not have expands to nothing.
 
 Template example:
 
@@ -161,7 +161,7 @@ Handwritten introduction.
 
 Handwritten notes between generated sections.
 
-{{politty:command:config get}}
+{{politty:command:config:get}}
 ```
 
 Exclude specific placeholders from generation with front matter. Excluded
@@ -173,7 +173,7 @@ or cross-output link maps:
 politty:
   exclude:
     - command:config
-    - command:config get:usage
+    - command:config:get:usage
 ---
 
 # My CLI
@@ -181,14 +181,15 @@ politty:
 {{politty:command}}
 
 <!-- The placeholders below are ignored by the docs generator. -->
+
 {{politty:command:config}}
-{{politty:command:config get:usage}}
+{{politty:command:config:get:usage}}
 ```
 
 Behavior notes:
 
-- Placeholders reference commands explicitly; subcommands are NOT expanded
-  automatically. Add a placeholder per command you want documented.
+- Command placeholders without a section expand the selected command and its
+  descendant commands. Use typed placeholders to render individual sections.
 - `politty.exclude` entries are exact placeholder directives without the
   `{{politty:...}}` wrapper. Quoted full placeholders such as
   `"{{politty:command:config}}"` are also accepted.
@@ -196,9 +197,9 @@ Behavior notes:
   excluded command scope is not required to exist, is not listed by
   `{{politty:index}}`, and is omitted from parent command output such as
   `{{politty:command}}` subcommand tables.
-- Excluded section entries such as `command:config get:usage` remove only that
+- Excluded section entries such as `command:config:get:usage` remove only that
   section, including when the full command is rendered with
-  `{{politty:command:config get}}`.
+  `{{politty:command:config:get}}`.
 - Validation happens before generation: unknown scopes, section types, or
   directives throw with the list of valid values.
 - `templates` can be combined with `files`/`path` in the same config, but an
