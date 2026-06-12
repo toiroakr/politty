@@ -271,7 +271,10 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
         });
         if (typeof exitCode === "number") {
           await flushStandardStreams();
-          process.exit(exitCode);
+          // Return the `never` from process.exit so the branch short-circuits:
+          // in real runs it terminates, and if process.exit is mocked (tests/
+          // embedding) execution won't fall through into setup/command run.
+          return process.exit(exitCode);
         }
       }
     }
