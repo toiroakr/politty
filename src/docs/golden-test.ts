@@ -987,6 +987,14 @@ function collapseBlankLinesOutsideCodeFences(content: string): string {
   return out.join("\n");
 }
 
+function detectLineEnding(content: string): "\r\n" | "\n" {
+  return content.includes("\r\n") ? "\r\n" : "\n";
+}
+
+function countLineBreaks(value: string): number {
+  return (value.match(/\n/g) ?? []).length;
+}
+
 /**
  * Type guard for SectionType values parsed from template placeholders.
  */
@@ -1915,6 +1923,7 @@ function generateCommandSection(
   fileMap?: Record<string, string>,
   rootDocPath?: string,
   hasGlobalOptions?: boolean,
+  ignores: readonly string[] = [],
   excludeOptionNames?: ReadonlySet<string>,
   templateExclusions?: TemplateExclusions,
 ): string | null {
@@ -1929,10 +1938,17 @@ function generateCommandSection(
 
   // Add file context to CommandInfo for cross-file link generation
   const enriched: CommandInfo = { ...info, filePath, fileMap, rootDocPath };
-  if (templateExclusions && templateExclusions.commandScopes.size > 0) {
-    enriched.subCommands = info.subCommands.filter(
-      (sub) => !isCommandScopeExcluded(sub.fullPath.join(" "), templateExclusions.commandScopes),
-    );
+  if (ignores.length > 0 || (templateExclusions && templateExclusions.commandScopes.size > 0)) {
+    enriched.subCommands = info.subCommands.filter((sub) => {
+      const subCommandPath = sub.fullPath.join(" ");
+      if (ignores.some((pattern) => matchesIgnorePattern(subCommandPath, pattern))) {
+        return false;
+      }
+      return !(
+        templateExclusions &&
+        isCommandScopeExcluded(subCommandPath, templateExclusions.commandScopes)
+      );
+    });
   }
   if (hasGlobalOptions !== undefined) {
     enriched.hasGlobalOptions = hasGlobalOptions;
@@ -1994,6 +2010,7 @@ function generateCommandTreeMarkdown(
       fileMap,
       rootDocPath,
       hasGlobalOptions,
+      ignores,
       excludeOptionNames,
       templateExclusions,
     );
@@ -2046,6 +2063,7 @@ function generateFileMarkdown(
   fileConfig?: FileConfig,
   rootDocPath?: string,
   hasGlobalOptions?: boolean,
+  ignores: string[] = [],
 ): string {
   const sections: string[] = [];
 
@@ -2067,6 +2085,7 @@ function generateFileMarkdown(
       fileMap,
       rootDocPath,
       hasGlobalOptions,
+      ignores,
     );
     if (section) {
       sections.push(section);
@@ -2676,6 +2695,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           templateFileMap,
           rootDoc?.path,
           globalOptionDefinitions.size > 0,
+          ignores,
         );
 
         if (!rawSection) {
@@ -2891,6 +2911,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         fileConfig,
         rootDoc?.path,
         globalOptionDefinitions.size > 0,
+        ignores,
       );
 
       // Apply formatter if provided
@@ -2954,6 +2975,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     }
 
     const meta = templateMeta.get(outputPath);
+    const templateLineEnding = detectLineEnding(templateContent);
 
     // Compute heading level adjustment from the scopes that actually render a heading. Typed-only
     // placeholders (which emit no heading) must not skew the depth, matching files-mode behaviour
@@ -3041,6 +3063,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
             templateFileMap,
             effectiveRootDocPath,
             sectionHasGlobalOptions,
+            ignores,
             excludeOptionNames,
             exclusions,
           );
@@ -3077,7 +3100,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     // larger of the two surrounding runs (so a blank-line paragraph gap stays a blank line, and a
     // tight single-newline gap stays a single newline — adjacent lines never concatenate).
     let generated = templateContent.replace(
-      /(\n*)([ \t]*)(\{\{politty:[^{}]*\}\})([ \t]*)(\n*)/g,
+      /((?:\r?\n)*)([ \t]*)(\{\{politty:[^{}]*\}\})([ \t]*)((?:\r?\n)*)/g,
       (
         match,
         leadNl: string,
@@ -3104,8 +3127,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           if (leadNl === "" || trailNl === "") {
             return "";
           }
-          const widest = Math.max(leadNl.length, trailNl.length);
-          return widest >= 2 ? "\n\n" : widest === 1 ? "\n" : "";
+          const leadBreaks = countLineBreaks(leadNl);
+          const trailBreaks = countLineBreaks(trailNl);
+          const widest = Math.max(leadBreaks, trailBreaks);
+          const lineEnding =
+            leadBreaks >= trailBreaks ? detectLineEnding(leadNl) : detectLineEnding(trailNl);
+          return widest >= 2 ? lineEnding + lineEnding : widest === 1 ? lineEnding : "";
         }
         // Otherwise restore the exact surrounding whitespace and substitute the content.
         return `${leadNl}${leadWs}${replacement}${trailWs}${trailNl}`;
@@ -3113,7 +3140,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     );
 
     // Ensure exactly one trailing newline.
-    generated = `${generated.trimEnd()}\n`;
+    generated = `${generated.trimEnd()}${templateLineEnding}`;
 
     // Apply formatter
     generated = await applyFormatter(generated, formatter);

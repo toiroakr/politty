@@ -4257,6 +4257,22 @@ ${argsContent}
       expect(content).not.toContain("<!-- politty:");
     });
 
+    it("empty own-line placeholder preserves CRLF template line endings", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "crlf-template.md");
+      const outputPath = path.join(testDir, "crlf-output.md");
+      fs.writeFileSync(templatePath, "Before\r\n{{politty:command:greet:examples}}\r\nAfter\r\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toBe("Before\r\nAfter\r\n");
+    });
+
     it("non-update mode with matching output succeeds", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "template.md");
@@ -4650,6 +4666,25 @@ ${argsContent}
       expect(content).not.toContain("[`greet`]");
       expect(content).not.toContain("Greet someone");
       expect(content).not.toContain("{{politty:command:greet}}");
+    });
+
+    it("ignores remove children from template command tables", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "ignore-child-template.md");
+      const outputPath = path.join(testDir, "ignore-child.md");
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+        ignores: ["greet"],
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).not.toContain("Greet someone");
+      expect(content).not.toContain("`greet`");
+      expect(content).toContain("Manage configuration");
     });
 
     it("front matter can exclude a typed command placeholder", async () => {
