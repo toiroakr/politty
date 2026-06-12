@@ -4570,6 +4570,27 @@ ${argsContent}
       expect(content).not.toContain("config set");
     });
 
+    it("index placeholder keeps documented parents when all file children are ignored", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "config.md");
+      const indexTemplatePath = path.join(testDir, "index-parent-template.md");
+      const indexOutputPath = path.join(testDir, "index-parent.md");
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["config"] },
+        templates: { [indexOutputPath]: indexTemplatePath },
+        ignores: ["config get", "config set"],
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(indexOutputPath, "utf-8");
+      expect(content).toContain("config");
+      expect(content).not.toContain("config get");
+      expect(content).not.toContain("config set");
+    });
+
     it("formatter is applied to the final output", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "template.md");

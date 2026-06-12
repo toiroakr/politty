@@ -47,6 +47,12 @@ function isLeafCommand(info: CommandInfo): boolean {
   return info.subCommands.length === 0;
 }
 
+function isSubcommandOf(childPath: string, parentPath: string): boolean {
+  if (parentPath === "") return childPath !== "";
+  if (childPath === parentPath) return true;
+  return childPath.startsWith(parentPath + " ");
+}
+
 /**
  * Expand commands to include their subcommands
  * If a command has subcommands, recursively find all commands under it
@@ -115,9 +121,19 @@ function renderCategory(
   const commandPaths = category.noExpand
     ? category.commands
     : expandCommands(category.commands, allCommands, leafOnly);
-  const visibleCommandPaths = category.allowedCommands
-    ? commandPaths.filter((cmdPath) => category.allowedCommands?.includes(cmdPath))
-    : commandPaths;
+  let visibleCommandPaths = commandPaths;
+  if (category.allowedCommands) {
+    const allowed = new Set(category.allowedCommands);
+    visibleCommandPaths = commandPaths.filter((cmdPath) => allowed.has(cmdPath));
+    for (const configuredPath of category.commands) {
+      if (
+        allowed.has(configuredPath) &&
+        !visibleCommandPaths.some((cmdPath) => isSubcommandOf(cmdPath, configuredPath))
+      ) {
+        visibleCommandPaths.push(configuredPath);
+      }
+    }
+  }
 
   // Build command table
   lines.push("| Command | Description |");
