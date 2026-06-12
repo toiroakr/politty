@@ -1461,8 +1461,7 @@ function deriveIndexFromFiles(
 /**
  * Build index categories for the {{politty:index}} placeholder from other template outputs.
  * Each category lists exactly the heading-producing scopes of that output (noExpand), so the
- * index never links to commands that template mode did not render. The root scope is excluded
- * because it represents the page itself, not an index entry.
+ * index never links to commands that template mode did not render.
  */
 function deriveIndexFromTemplateOutputs(
   templateMeta: ReadonlyMap<string, TemplateMeta>,
