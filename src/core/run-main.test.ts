@@ -807,6 +807,26 @@ describe("runMain onUnknownSubcommand", () => {
     expect(onUnknownSubcommand).not.toHaveBeenCalled();
     expect(childRun).toHaveBeenCalled();
   });
+
+  it("runs global cleanup before exiting on nested plugin dispatch", async () => {
+    // At the nested level, global setup has already run, so the dispatch exit
+    // path must run cleanup too — otherwise setup-acquired resources leak.
+    using _argv = useArgv(["node", "test", "parent", "plugin-name"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn().mockResolvedValue(0);
+    const setup = vi.fn();
+    const cleanup = vi.fn();
+    const child = defineCommand({ name: "child", run: () => {} });
+    const parent = defineCommand({ name: "parent", subCommands: { child } });
+    const cmd = defineCommand({ name: "test", subCommands: { parent } });
+
+    await runMain(cmd, { onUnknownSubcommand, setup, cleanup });
+
+    expect(onUnknownSubcommand).toHaveBeenCalled();
+    expect(setup).toHaveBeenCalled();
+    expect(cleanup).toHaveBeenCalled();
+  });
 });
 
 describe("runMain runMainHook", () => {

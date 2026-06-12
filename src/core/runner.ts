@@ -427,9 +427,23 @@ async function runCommandInternal<TResult = unknown>(
             collector?.stop();
             // In a real CLI run (runMain sets handleSignals), exit directly with
             // the plugin's code, mirroring root-level dispatch. Programmatic
-            // runCommand callers get a typed result instead.
+            // runCommand callers get a typed result instead and let their caller
+            // run cleanup.
             if (options.handleSignals) {
+              // Exiting here bypasses runMain's "Global cleanup (always)" block,
+              // so run cleanup explicitly: at this nested level global setup has
+              // already run, and leaving it unbalanced would leak resources.
+              if (options._globalCleanup) {
+                try {
+                  await options._globalCleanup({ error: undefined });
+                } catch {
+                  // Swallow - we're about to exit anyway.
+                }
+              }
               await flushStandardStreams();
+              // No `return` here: in a real run process.exit terminates, but
+              // when it is mocked (tests) execution must fall through to the
+              // typed result below so the recursion returns a valid RunResult.
               process.exit(exitCode);
             }
             return exitCode === 0
