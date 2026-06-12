@@ -4723,6 +4723,39 @@ ${argsContent}
       expect(content).not.toContain("{{politty:command:config}}");
     });
 
+    it("politty front matter is removed from generated output", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "front-matter-output-template.md");
+      const outputPath = path.join(testDir, "front-matter-output.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "title: CLI docs",
+          "politty:",
+          "  exclude:",
+          '    - "{{politty:command:config}}"',
+          "---",
+          "",
+          "{{politty:command}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("title: CLI docs");
+      expect(content).not.toContain("politty:");
+      expect(content).not.toContain('    - ""');
+      expect(content).not.toContain("{{politty:");
+      expect(content).not.toContain("Manage configuration");
+    });
+
     it("front matter command exclusions apply inside full parent command placeholders", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "parent-exclude-template.md");
@@ -5475,6 +5508,37 @@ ${argsContent}
       const content = fs.readFileSync(outputPath, "utf-8");
       expect(content).toContain("`toString`");
       expect(content).not.toContain("function");
+    });
+
+    it("template link map handles __proto__ command names", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const subCommands = {};
+      Object.defineProperty(subCommands, "__proto__", {
+        value: defineCommand({
+          name: "__proto__",
+          description: "Prototype setter command",
+          run: () => {},
+        }),
+        enumerable: true,
+      });
+      const protoCommand = defineCommand({
+        name: "proto-cli",
+        description: "CLI with __proto__ command",
+        subCommands,
+      });
+      const templatePath = path.join(testDir, "dunder-proto-template.md");
+      const outputPath = path.join(testDir, "dunder-proto.md");
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: protoCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("[`__proto__`](#__proto__)");
+      expect(content).toContain("# __proto__");
     });
 
     // An explicitly rendered child still links correctly within the same output.

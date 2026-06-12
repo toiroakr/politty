@@ -93,6 +93,51 @@ function extractYamlFrontMatter(content: string): string | null {
   return null;
 }
 
+function stripPolittyFrontMatterForOutput(content: string): string {
+  const lineEnding = detectLineEnding(content);
+  const lines = content.split(/\r?\n/);
+  if (lines[0] !== "---") {
+    return content;
+  }
+
+  let endIndex = -1;
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === "---" || line === "...") {
+      endIndex = i;
+      break;
+    }
+  }
+  if (endIndex === -1) {
+    return content;
+  }
+
+  const frontMatterLines = lines.slice(1, endIndex);
+  const keptFrontMatterLines: string[] = [];
+  for (let i = 0; i < frontMatterLines.length; i++) {
+    const line = frontMatterLines[i] ?? "";
+    if (!/^politty\s*:\s*(.*)$/.test(line)) {
+      keptFrontMatterLines.push(line);
+      continue;
+    }
+    while (i + 1 < frontMatterLines.length) {
+      const nextLine = frontMatterLines[i + 1] ?? "";
+      if (nextLine.trim() !== "" && !nextLine.startsWith(" ") && !nextLine.startsWith("\t")) {
+        break;
+      }
+      i++;
+    }
+  }
+
+  const bodyLines = lines.slice(endIndex + 1);
+  const hasKeptFrontMatter = keptFrontMatterLines.some((line) => line.trim() !== "");
+  if (!hasKeptFrontMatter) {
+    return bodyLines.join(lineEnding).replace(new RegExp(`^${lineEnding}`), "");
+  }
+
+  return ["---", ...keptFrontMatterLines, lines[endIndex] ?? "---", ...bodyLines].join(lineEnding);
+}
+
 function stripYamlScalarQuotes(value: string): string {
   const trimmed = value.trim();
   if (
@@ -300,6 +345,19 @@ function createTemplateExclusions(rawKeys: Set<string>): TemplateExclusions {
     globalOptions: false,
     index: false,
   };
+}
+
+function setFileMapEntry(
+  fileMap: Record<string, string>,
+  commandPath: string,
+  filePath: string,
+): void {
+  Object.defineProperty(fileMap, commandPath, {
+    value: filePath,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
 }
 
 /**
@@ -2125,7 +2183,7 @@ function buildFileMap(
     const { commandPaths } = resolveConfiguredCommandPaths(fileConfigRaw, allCommands, ignores);
 
     for (const cmdPath of commandPaths) {
-      fileMap[cmdPath] = filePath;
+      setFileMapEntry(fileMap, cmdPath, filePath);
     }
   }
 
@@ -2626,11 +2684,14 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // takes precedence over template outputs, and the first template wins over later ones, so a
   // command rendered in multiple places gets a stable, order-independent link target rather than
   // being overwritten by whichever output happens to be processed last.
-  const templateFileMap: Record<string, string> = { ...fileMap };
+  const templateFileMap: Record<string, string> = {};
+  for (const [scope, outputPath] of Object.entries(fileMap)) {
+    setFileMapEntry(templateFileMap, scope, outputPath);
+  }
   for (const [templateOutputPath, meta] of templateMeta.entries()) {
     for (const scope of meta.headingScopes) {
       if (!Object.prototype.hasOwnProperty.call(templateFileMap, scope)) {
-        templateFileMap[scope] = templateOutputPath;
+        setFileMapEntry(templateFileMap, scope, templateOutputPath);
       }
     }
   }
@@ -2992,6 +3053,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
     const meta = templateMeta.get(outputPath);
     const templateLineEnding = detectLineEnding(templateContent);
+    const outputTemplateContent = stripPolittyFrontMatterForOutput(templateContent);
 
     // Compute heading level adjustment from the scopes that actually render a heading. Typed-only
     // placeholders (which emit no heading) must not skew the depth, matching files-mode behaviour
@@ -3025,7 +3087,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
     // Parse placeholders and compute replacements (reuse TEMPLATE_PLACEHOLDER_REGEX via .match)
     const placeholders = Array.from(
-      new Set(templateContent.match(TEMPLATE_PLACEHOLDER_REGEX) ?? []),
+      new Set(outputTemplateContent.match(TEMPLATE_PLACEHOLDER_REGEX) ?? []),
     );
     const replacements = new Map<string, string>();
     const exclusions = templateExclusions.get(outputPath) ?? createTemplateExclusions(new Set());
@@ -3115,7 +3177,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     // we consume the newlines immediately around it and re-emit a single break that matches the
     // larger of the two surrounding runs (so a blank-line paragraph gap stays a blank line, and a
     // tight single-newline gap stays a single newline — adjacent lines never concatenate).
-    let generated = templateContent.replace(
+    let generated = outputTemplateContent.replace(
       /((?:\r?\n)*)([ \t]*)(\{\{politty:[^{}]*\}\})([ \t]*)((?:\r?\n)*)/g,
       (
         match,
