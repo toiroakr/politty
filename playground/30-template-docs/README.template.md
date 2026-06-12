@@ -7,7 +7,13 @@ This example demonstrates **template-based documentation generation**: the
 generated `README.md` contains no politty markers because all generated
 content is expanded from the politty placeholders in this template.
 
-{{politty:command}}
+{{politty:command::heading}}
+
+{{politty:command::description}}
+
+{{politty:command::usage}}
+
+{{politty:command::subcommands}}
 
 ## Subcommands in detail
 

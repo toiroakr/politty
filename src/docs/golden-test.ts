@@ -209,6 +209,81 @@ function collectExcludedTemplatePlaceholders(templateContent: string): Set<strin
   return exclusions;
 }
 
+interface TemplateIndexMetadata {
+  title?: string;
+  description?: string;
+}
+
+function collectTemplateIndexMetadata(templateContent: string): TemplateIndexMetadata {
+  const frontMatter = extractYamlFrontMatter(templateContent);
+  if (frontMatter === null) {
+    return {};
+  }
+
+  let inPolittyBlock = false;
+  let inIndexBlock = false;
+  let indexIndent = 0;
+  const metadata: TemplateIndexMetadata = {};
+
+  for (const line of frontMatter.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const topLevelPolitty = line.match(/^politty\s*:\s*(.*)$/);
+    if (topLevelPolitty) {
+      const value = topLevelPolitty[1]?.trim() ?? "";
+      inPolittyBlock = value === "";
+      inIndexBlock = false;
+      continue;
+    }
+
+    if (!line.startsWith(" ") && !line.startsWith("\t")) {
+      inPolittyBlock = false;
+      inIndexBlock = false;
+      continue;
+    }
+
+    if (!inPolittyBlock) {
+      continue;
+    }
+
+    const indexEntry = line.match(/^(\s+)index\s*:\s*(.*)$/);
+    if (indexEntry) {
+      const value = indexEntry[2]?.trim() ?? "";
+      inIndexBlock = value === "";
+      indexIndent = indexEntry[1]?.length ?? 0;
+      continue;
+    }
+
+    if (!inIndexBlock) {
+      continue;
+    }
+
+    const indent = line.match(/^(\s*)/)?.[1]?.length ?? 0;
+    if (indent <= indexIndent) {
+      inIndexBlock = false;
+      continue;
+    }
+
+    const property = line.match(/^\s+(title|description)\s*:\s*(.+)$/);
+    if (!property) {
+      continue;
+    }
+
+    const key = property[1];
+    const value = stripYamlScalarQuotes(property[2] ?? "");
+    if (key === "title") {
+      metadata.title = value;
+    } else if (key === "description") {
+      metadata.description = value;
+    }
+  }
+
+  return metadata;
+}
+
 interface TemplateExclusions {
   rawKeys: Set<string>;
   commandScopes: Set<string>;
@@ -968,6 +1043,35 @@ interface TemplateMeta {
   emitsGlobalOptions: boolean;
   /** Whether this output renders an index from configured outputs via `{{politty:index}}`. */
   emitsIndex: boolean;
+  /** Optional title for this output when included in `{{politty:index}}`. */
+  indexTitle?: string;
+  /** Optional description for this output when included in `{{politty:index}}`. */
+  indexDescription?: string;
+}
+
+function resolveTemplateCommandScope(
+  tokens: string[],
+  allCommands: ReadonlyMap<string, CommandInfo> | undefined,
+): string | null {
+  if (tokens.length === 0) {
+    return allCommands === undefined || allCommands.has("") ? "" : null;
+  }
+
+  const exactScope = tokens.join(":");
+  if (allCommands?.has(exactScope)) {
+    return exactScope;
+  }
+
+  const colonSeparatedScope = tokens.join(" ");
+  if (allCommands?.has(colonSeparatedScope)) {
+    return colonSeparatedScope;
+  }
+
+  return allCommands === undefined ? colonSeparatedScope : null;
+}
+
+function templateScopeFallback(tokens: string[]): string {
+  return tokens.join(" ");
 }
 
 /**
@@ -988,33 +1092,43 @@ function parsePlaceholder(
 
   if (directive === "command") {
     // tokens after "politty"/"command" form the scope, with an OPTIONAL trailing section type.
-    // The type is only consumed when the last token is a known SectionType; this keeps command
-    // names that themselves contain ":" (e.g. "db:migrate") referenceable, mirroring files mode.
+    // The public template API separates subcommands with ":" (e.g. config:get). Exact command
+    // names that themselves contain ":" still win when present, preserving files-mode parity.
     const rest = tokens.slice(2);
-    const fullScope = rest.join(":");
     // {{politty:command:}} — trailing colon with empty scope and no type is ambiguous with the
     // intentional root form {{politty:command}}; treat it as invalid. The typed-root form
     // {{politty:command::usage}} (scope="", type="usage") stays valid.
-    if (rest.length === 1 && fullScope === "") {
+    if (rest.length === 1 && rest[0] === "") {
       return {
         kind: "invalid",
         reason: `Trailing colon in "${placeholder}"; use {{politty:command}} for the root command.`,
       };
     }
-    if (allCommands?.has(fullScope)) {
+
+    const fullScope = resolveTemplateCommandScope(rest, allCommands);
+    if (fullScope !== null) {
       return { kind: "command", scope: fullScope, type: undefined };
     }
 
-    let type: SectionType | undefined;
     if (rest.length >= 2) {
       const last = rest[rest.length - 1];
+      const scopeTokens = rest.slice(0, -1);
+      const sectionScope = resolveTemplateCommandScope(scopeTokens, allCommands);
       if (last !== undefined && isSectionType(last)) {
-        type = last;
-        rest.pop();
+        return {
+          kind: "command",
+          scope: sectionScope ?? templateScopeFallback(scopeTokens),
+          type: last,
+        };
+      }
+      if (last !== undefined && sectionScope !== null) {
+        return {
+          kind: "invalid",
+          reason: `Unknown section type "${last}" for command scope "${formatCommandPath(sectionScope)}". Valid section types: ${SECTION_TYPES.join(", ")}`,
+        };
       }
     }
-    const scope = rest.join(":");
-    return { kind: "command", scope, type };
+    return { kind: "command", scope: templateScopeFallback(rest), type: undefined };
   }
 
   if (directive === "global-options") {
@@ -1091,6 +1205,19 @@ function isCommandSectionExcluded(
     return true;
   }
   return exclusions.commandSections.get(commandPath)?.has(sectionType) ?? false;
+}
+
+function getTemplateCommandTreePaths(
+  commandPath: string,
+  allCommands: Map<string, CommandInfo>,
+  ignores: string[],
+  exclusions: TemplateExclusions,
+): string[] {
+  const expandedPaths = expandCommandPaths([commandPath], allCommands);
+  const visiblePaths = filterIgnoredCommands(expandedPaths, ignores).filter(
+    (path) => !isCommandScopeExcluded(path, exclusions.commandScopes),
+  );
+  return sortDepthFirst(visiblePaths, [commandPath]);
 }
 
 function shouldSkipTemplatePlaceholder(
@@ -1355,8 +1482,9 @@ function deriveIndexFromTemplateOutputs(
     const firstScope = scopes[0];
     const cmdInfo = firstScope !== undefined ? allCommands.get(firstScope) : undefined;
     categories.push({
-      title: cmdInfo?.name ?? path.basename(outputPath, path.extname(outputPath)),
-      description: cmdInfo?.description ?? "",
+      title:
+        meta.indexTitle ?? cmdInfo?.name ?? path.basename(outputPath, path.extname(outputPath)),
+      description: meta.indexDescription ?? cmdInfo?.description ?? "",
       commands: scopes,
       docPath,
       noExpand: true,
@@ -1838,6 +1966,46 @@ function generateCommandSection(
   return rendered;
 }
 
+function generateCommandTreeMarkdown(
+  cmdPath: string,
+  allCommands: Map<string, CommandInfo>,
+  render: RenderFunction,
+  ignores: string[],
+  filePath: string | undefined,
+  fileMap: Record<string, string> | undefined,
+  rootDocPath: string | undefined,
+  hasGlobalOptions: boolean | undefined,
+  excludeOptionNames: ReadonlySet<string> | undefined,
+  templateExclusions: TemplateExclusions,
+): string | null {
+  const commandPaths = getTemplateCommandTreePaths(
+    cmdPath,
+    allCommands,
+    ignores,
+    templateExclusions,
+  );
+  const sections: string[] = [];
+
+  for (const commandPath of commandPaths) {
+    const section = generateCommandSection(
+      commandPath,
+      allCommands,
+      render,
+      filePath,
+      fileMap,
+      rootDocPath,
+      hasGlobalOptions,
+      excludeOptionNames,
+      templateExclusions,
+    );
+    if (section !== null) {
+      sections.push(section);
+    }
+  }
+
+  return sections.length === 0 ? null : sections.join("\n");
+}
+
 /**
  * Return a copy of ExtractedFields with the named options removed from every field collection
  * (top-level fields, union options, and discriminated-union variants). Used to exclude global
@@ -2241,6 +2409,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       let emitsGlobalOptions = false;
       let emitsIndex = false;
       const exclusions = templateExclusions.get(outputPath) ?? createTemplateExclusions(new Set());
+      const indexMetadata = collectTemplateIndexMetadata(templateContent);
 
       for (const placeholder of placeholders) {
         if (exclusions.rawKeys.has(templatePlaceholderKey(placeholder))) {
@@ -2278,16 +2447,28 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
             );
             continue;
           }
-          // Section type is already constrained to a valid SectionType by parsePlaceholder.
-          scopes.add(scope);
-          // A scope produces a #anchor heading when rendered as a full section (no type) or
-          // via the explicit "heading" section. Other typed placeholders (usage, options, …)
-          // emit no heading, so they must not feed cross-output links or index rows.
-          if (
-            (type === undefined || type === "heading") &&
-            !isCommandSectionExcluded(scope, "heading", exclusions)
-          ) {
-            headingScopes.add(scope);
+          if (type === undefined) {
+            const commandTreePaths = getTemplateCommandTreePaths(
+              scope,
+              allCommands,
+              ignores,
+              exclusions,
+            );
+            for (const commandTreePath of commandTreePaths) {
+              scopes.add(commandTreePath);
+              if (!isCommandSectionExcluded(commandTreePath, "heading", exclusions)) {
+                headingScopes.add(commandTreePath);
+              }
+            }
+          } else {
+            // Section type is already constrained to a valid SectionType by parsePlaceholder.
+            scopes.add(scope);
+            // A scope produces a #anchor heading only via the explicit "heading" section.
+            // Other typed placeholders (usage, options, …) emit no heading, so they must not
+            // feed cross-output links or index rows.
+            if (type === "heading" && !isCommandSectionExcluded(scope, "heading", exclusions)) {
+              headingScopes.add(scope);
+            }
           }
         } else if (parsed.kind === "global-options") {
           emitsGlobalOptions = true;
@@ -2312,6 +2493,10 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         headingScopes: Array.from(headingScopes),
         emitsGlobalOptions,
         emitsIndex,
+        ...(indexMetadata.title !== undefined ? { indexTitle: indexMetadata.title } : {}),
+        ...(indexMetadata.description !== undefined
+          ? { indexDescription: indexMetadata.description }
+          : {}),
       });
       templateValidationErrors.set(outputPath, validationErrors);
     }
@@ -2357,18 +2542,26 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     }
   }
 
+  const templateGlobalOptionsProviderPaths = Array.from(templateMeta.entries())
+    .filter(([, meta]) => meta.emitsGlobalOptions)
+    .map(([outputPath]) => outputPath);
+  const templateGlobalOptionsProviderPath =
+    templateGlobalOptionsProviderPaths.length === 1
+      ? templateGlobalOptionsProviderPaths[0]
+      : undefined;
+
   // Validate global option compatibility across ALL documented commands (files + template scopes),
   // then strip global options from command option tables. Both steps must happen before the files
   // loop and the template generation loop so that generated sections use the stripped options.
   validateGlobalOptionCompatibility(documentedCommandPaths, allCommands, globalOptionDefinitions);
   // When global options come only from globalArgs (no rootDoc), the destructive strip below does
   // not run, so validate them separately — but ONLY for scopes in templates that actually emit a
-  // global-options anchor (where options will be excluded). Templates without the anchor keep
-  // their option tables intact, so a same-named local option there is not a conflict.
+  // reachable global-options anchor (where options will be excluded). With a single template
+  // provider, every template output can link to that provider.
   if (globalOptionDefinitions.size === 0 && templateGlobalOptionFields.size > 0) {
     const emittingTemplateScopes = new Set<string>();
     for (const meta of activeTemplateMeta.values()) {
-      if (!meta.emitsGlobalOptions) {
+      if (!meta.emitsGlobalOptions && templateGlobalOptionsProviderPath === undefined) {
         continue;
       }
       for (const scope of meta.referencedScopes) {
@@ -2775,20 +2968,23 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     });
 
     // Global options affect command sections in this output ONLY when this output emits a
-    // reachable #global-options anchor (via {{politty:global-options}}) or a rootDoc provides one.
-    // Otherwise, leave command option tables intact and emit no global-options link, avoiding
-    // dead links / silently dropped options.
+    // reachable #global-options anchor, another template output provides one, or a rootDoc
+    // provides one. Otherwise, leave command option tables intact and emit no global-options link.
     const outputEmitsGlobalOptions = meta?.emitsGlobalOptions ?? false;
     const globalOptionsReachable =
-      (rootDoc !== undefined && globalOptionDefinitions.size > 0) || outputEmitsGlobalOptions;
+      (rootDoc !== undefined && globalOptionDefinitions.size > 0) ||
+      outputEmitsGlobalOptions ||
+      templateGlobalOptionsProviderPath !== undefined;
     const excludeOptionNames =
       globalOptionsReachable && templateGlobalOptionFields.size > 0
         ? new Set(templateGlobalOptionFields.keys())
         : undefined;
     const sectionHasGlobalOptions = excludeOptionNames !== undefined;
-    // Prefer this output's own #global-options anchor when it emits one, so a self-contained
-    // template links to its local table rather than to rootDoc; fall back to rootDoc otherwise.
-    const effectiveRootDocPath = outputEmitsGlobalOptions ? outputPath : rootDoc?.path;
+    // Prefer this output's own #global-options anchor when it emits one, then fall back to rootDoc
+    // or the single template output that provides global options.
+    const effectiveRootDocPath = outputEmitsGlobalOptions
+      ? outputPath
+      : (rootDoc?.path ?? templateGlobalOptionsProviderPath);
 
     // Parse placeholders and compute replacements (reuse TEMPLATE_PLACEHOLDER_REGEX via .match)
     const placeholders = Array.from(
@@ -2819,27 +3015,40 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       if (parsed.kind === "command") {
         const { scope, type } = parsed;
 
-        const rawSection = generateCommandSection(
-          scope,
-          allCommands,
-          templateRenderer,
-          outputPath,
-          templateFileMap,
-          effectiveRootDocPath,
-          sectionHasGlobalOptions,
-          excludeOptionNames,
-          exclusions,
-        );
-
-        if (rawSection === null) {
-          replacements.set(placeholder, "");
-          continue;
-        }
-
         if (type === undefined) {
-          // Full section, strip markers
+          const rawSection = generateCommandTreeMarkdown(
+            scope,
+            allCommands,
+            templateRenderer,
+            ignores,
+            outputPath,
+            templateFileMap,
+            effectiveRootDocPath,
+            sectionHasGlobalOptions,
+            excludeOptionNames,
+            exclusions,
+          );
+          if (rawSection === null) {
+            replacements.set(placeholder, "");
+            continue;
+          }
           replacements.set(placeholder, stripPolittyMarkers(rawSection));
         } else {
+          const rawSection = generateCommandSection(
+            scope,
+            allCommands,
+            templateRenderer,
+            outputPath,
+            templateFileMap,
+            effectiveRootDocPath,
+            sectionHasGlobalOptions,
+            excludeOptionNames,
+            exclusions,
+          );
+          if (rawSection === null) {
+            replacements.set(placeholder, "");
+            continue;
+          }
           // Single section type
           const extracted = extractSectionMarker(rawSection, type, scope);
           replacements.set(placeholder, extracted === null ? "" : stripPolittyMarkers(extracted));

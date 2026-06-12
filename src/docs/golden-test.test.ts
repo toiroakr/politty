@@ -4300,7 +4300,7 @@ ${argsContent}
       ).rejects.toThrow(outputPath);
     });
 
-    it("subcommand scope placeholder renders that subcommand section", async () => {
+    it("subcommand scope placeholder renders that command tree", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "template.md");
       const outputPath = path.join(testDir, "output.md");
@@ -4313,7 +4313,27 @@ ${argsContent}
       expect(result.success).toBe(true);
       const content = fs.readFileSync(outputPath, "utf-8");
       expect(content).toContain("config");
+      expect(content).toContain("config get");
+      expect(content).toContain("config set");
       expect(content).not.toContain("<!-- politty:");
+    });
+
+    it("colon-separated scope placeholder resolves nested subcommands", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "colon-template.md");
+      const outputPath = path.join(testDir, "colon-output.md");
+      fs.writeFileSync(templatePath, "{{politty:command:config:get}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("config get");
+      expect(content).toContain("Get a config value");
+      expect(content).not.toContain("config set");
     });
 
     it("unknown scope throws with available paths", async () => {
@@ -4477,6 +4497,43 @@ ${argsContent}
       expect(content).not.toContain("<!-- politty:");
     });
 
+    it("index placeholder uses template front matter metadata for categories", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplatePath = path.join(testDir, "index-template.md");
+      const indexOutputPath = path.join(testDir, "index.md");
+      const commandTemplatePath = path.join(testDir, "command-template.md");
+      const commandOutputPath = path.join(testDir, "command.md");
+
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+      fs.writeFileSync(
+        commandTemplatePath,
+        [
+          "---",
+          "politty:",
+          "  index:",
+          "    title: Configuration Commands",
+          "    description: Commands for managing CLI configuration.",
+          "---",
+          "",
+          "{{politty:command:config}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [commandOutputPath]: commandTemplatePath,
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(indexOutputPath, "utf-8");
+      expect(content).toContain("[Configuration Commands]");
+      expect(content).toContain("Commands for managing CLI configuration.");
+    });
+
     it("formatter is applied to the final output", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "template.md");
@@ -4605,10 +4662,10 @@ ${argsContent}
           "---",
           "politty:",
           "  exclude:",
-          "    - command:config get:usage",
+          "    - command:config:get:usage",
           "---",
           "",
-          "{{politty:command:config get}}",
+          "{{politty:command:config}}",
           "",
         ].join("\n"),
       );
@@ -4621,8 +4678,9 @@ ${argsContent}
       expect(result.success).toBe(true);
       const content = fs.readFileSync(outputPath, "utf-8");
       expect(content).toContain("config get");
+      expect(content).toContain("config set");
       expect(content).toContain("**Arguments**");
-      expect(content).not.toContain("**Usage**");
+      expect(content).not.toContain("test-cli config get");
     });
 
     it("excluded placeholders are ignored during validation", async () => {
@@ -4829,7 +4887,10 @@ ${argsContent}
       const rootOutputPath = path.join(testDir, "root.md");
       const configTemplatePath = path.join(testDir, "config-template.md");
       const configOutputPath = path.join(testDir, "config.md");
-      fs.writeFileSync(rootTemplatePath, "{{politty:command}}\n\n{{politty:command:greet}}\n");
+      fs.writeFileSync(
+        rootTemplatePath,
+        "{{politty:command::heading}}\n\n{{politty:command::subcommands}}\n\n{{politty:command:greet}}\n",
+      );
       fs.writeFileSync(configTemplatePath, "{{politty:command:config}}\n");
 
       const result = await generateDoc({
@@ -5122,9 +5183,7 @@ ${argsContent}
       expect(filesContent).not.toContain("#global-options");
     });
 
-    // Template-derived index lists only the scopes actually rendered as headings,
-    // each exactly once, never expanding a parent to unrendered sibling subcommands.
-    it("index placeholder lists only explicitly rendered scopes, once each", async () => {
+    it("index placeholder lists scopes rendered by command tree placeholders", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const indexTemplatePath = path.join(testDir, "index-template.md");
       const indexOutputPath = path.join(testDir, "index.md");
@@ -5133,12 +5192,8 @@ ${argsContent}
 
       // Template A: renders the index
       fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
-      // Template B: references both the root ("") and the "config get" subcommand explicitly.
-      // The root has other subcommands (greet, config set) that are NOT referenced.
-      fs.writeFileSync(
-        commandTemplatePath,
-        "{{politty:command}}\n\n{{politty:command:config get}}\n",
-      );
+      // Template B renders the config command tree only.
+      fs.writeFileSync(commandTemplatePath, "{{politty:command:config}}\n");
 
       const result = await generateDoc({
         command: testCommand,
@@ -5150,21 +5205,17 @@ ${argsContent}
       expect(result.success).toBe(true);
       const indexContent = fs.readFileSync(indexOutputPath, "utf-8");
 
-      // "config get" (explicitly rendered) appears exactly once.
-      expect(indexContent.match(/config get/g)?.length ?? 0).toBe(1);
-      // Unrendered sibling subcommands must not appear in the index.
-      expect(indexContent).not.toContain("config set");
+      expect(indexContent).toContain("config");
+      expect(indexContent).toContain("config get");
+      expect(indexContent).toContain("config set");
       expect(indexContent).not.toContain("greet");
     });
 
-    // A parent-only template must not emit local anchor links to children that have
-    // no heading in the output (template mode does not auto-expand subcommands).
-    it("parent-only template renders unrendered children without broken anchor links", async () => {
+    it("untyped root command placeholder renders the full command tree", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "root-only-template.md");
       const outputPath = path.join(testDir, "root-only.md");
 
-      // Only the root is rendered; its children (greet, config) get no heading here.
       fs.writeFileSync(templatePath, "{{politty:command}}\n");
 
       const result = await generateDoc({
@@ -5174,10 +5225,12 @@ ${argsContent}
       expect(result.success).toBe(true);
       const content = fs.readFileSync(outputPath, "utf-8");
 
-      // The subcommands table lists the children as plain text, not as dead local links.
+      expect(content).toContain("test-cli");
       expect(content).toContain("greet");
-      expect(content).not.toContain("(#greet)");
-      expect(content).not.toContain("(#config)");
+      expect(content).toContain("config get");
+      expect(content).toContain("config set");
+      expect(content).toContain("(#greet)");
+      expect(content).toContain("(#config)");
     });
 
     it("template link map handles command names from Object prototype", async () => {
@@ -5205,7 +5258,7 @@ ${argsContent}
 
       const content = fs.readFileSync(outputPath, "utf-8");
       expect(content).toContain("toString");
-      expect(content).not.toContain("(#toString)");
+      expect(content).toContain("(#tostring)");
     });
 
     // An explicitly rendered child still links correctly within the same output.
@@ -5228,10 +5281,7 @@ ${argsContent}
       expect(content).toContain("(#greet)");
     });
 
-    // Per-output global options: a template WITHOUT {{politty:global-options}} must not strip
-    // options or add a dead #global-options link, even when another template (or globalArgs)
-    // provides global options.
-    it("global options apply only to outputs that emit the global-options anchor", async () => {
+    it("a template global-options placeholder provides global options to other outputs", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const withGoTemplate = path.join(testDir, "with-go-template.md");
       const withGoOutput = path.join(testDir, "with-go.md");
@@ -5262,11 +5312,10 @@ ${argsContent}
       const withGo = fs.readFileSync(withGoOutput, "utf-8");
       expect(withGo.split("\n").filter((l) => l.includes("--verbose"))).toHaveLength(1);
 
-      // Output WITHOUT the anchor: verbose stays in the command's own options table and there is
-      // no dead #global-options link.
+      // Output WITHOUT the anchor links to the template output that provides global options.
       const noGo = fs.readFileSync(noGoOutput, "utf-8");
-      expect(noGo).toContain("--verbose");
-      expect(noGo).not.toContain("#global-options");
+      expect(noGo).not.toContain("--verbose");
+      expect(noGo).toContain("with-go.md#global-options");
     });
 
     // Typed-only placeholders do not produce a heading, so they must not appear in another
@@ -5428,10 +5477,10 @@ ${argsContent}
       // One template references config (typed-only) plus config get (full section).
       fs.writeFileSync(
         withAncestor,
-        "{{politty:command:config:options}}\n\n{{politty:command:config get}}\n",
+        "{{politty:command:config:options}}\n\n{{politty:command:config:get}}\n",
       );
       // The other renders config get alone.
-      fs.writeFileSync(aloneTemplate, "{{politty:command:config get}}\n");
+      fs.writeFileSync(aloneTemplate, "{{politty:command:config:get}}\n");
 
       const result = await generateDoc({
         command: testCommand,
@@ -5622,9 +5671,12 @@ ${argsContent}
       const childTemplate = path.join(testDir, "child-template.md");
       const childOutput = path.join(testDir, "child.md");
 
-      // The parent (config) is rendered in one output; its child (config get) only in the other.
-      fs.writeFileSync(parentTemplate, "{{politty:command:config}}\n");
-      fs.writeFileSync(childTemplate, "{{politty:command:config get}}\n");
+      // The parent sections are rendered in one output; its child heading is rendered in another.
+      fs.writeFileSync(
+        parentTemplate,
+        "{{politty:command:config:heading}}\n\n{{politty:command:config:subcommands}}\n",
+      );
+      fs.writeFileSync(childTemplate, "{{politty:command:config:get}}\n");
 
       const result = await generateDoc({
         command: testCommand,
