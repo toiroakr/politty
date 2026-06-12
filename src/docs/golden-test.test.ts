@@ -5067,6 +5067,35 @@ ${argsContent}
       expect(content).toContain("config.md#config");
     });
 
+    it("targetCommands processes global-options-only templates used by command outputs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const globalTemplatePath = path.join(testDir, "global-options-template.md");
+      const globalOutputPath = path.join(testDir, "global-options.md");
+      const commandTemplatePath = path.join(testDir, "greet-template.md");
+      const commandOutputPath = path.join(testDir, "greet.md");
+      fs.writeFileSync(globalTemplatePath, "{{politty:global-options}}\n");
+      fs.writeFileSync(commandTemplatePath, "{{politty:command:greet}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [globalOutputPath]: globalTemplatePath,
+          [commandOutputPath]: commandTemplatePath,
+        },
+        targetCommands: ["greet"],
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+        }),
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([globalOutputPath, commandOutputPath]);
+      const globalContent = fs.readFileSync(globalOutputPath, "utf-8");
+      const commandContent = fs.readFileSync(commandOutputPath, "utf-8");
+      expect(globalContent).toContain("global-options");
+      expect(commandContent).toContain("global-options.md#global-options");
+    });
+
     it("targetCommands keeps index entries for skipped template headings", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const indexTemplatePath = path.join(testDir, "index-template.md");

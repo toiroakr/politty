@@ -1572,7 +1572,11 @@ function templateMetaReferencesCommandTarget(
 }
 
 function templateMetaShouldProcessForTarget(meta: TemplateMeta, targetCommands: string[]): boolean {
-  return meta.emitsIndex || templateMetaReferencesCommandTarget(meta, targetCommands);
+  return (
+    meta.emitsIndex ||
+    meta.emitsGlobalOptions ||
+    templateMetaReferencesCommandTarget(meta, targetCommands)
+  );
 }
 
 /**
