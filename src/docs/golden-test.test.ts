@@ -4550,6 +4550,26 @@ ${argsContent}
       expect(content).toContain("Commands for managing CLI configuration.");
     });
 
+    it("index placeholder honors ignores from files outputs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "config.md");
+      const indexTemplatePath = path.join(testDir, "index-template.md");
+      const indexOutputPath = path.join(testDir, "index.md");
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["config"] },
+        templates: { [indexOutputPath]: indexTemplatePath },
+        ignores: ["config set"],
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(indexOutputPath, "utf-8");
+      expect(content).toContain("config get");
+      expect(content).not.toContain("config set");
+    });
+
     it("formatter is applied to the final output", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "template.md");
@@ -4716,6 +4736,41 @@ ${argsContent}
       expect(content).toContain("config set");
       expect(content).toContain("**Arguments**");
       expect(content).not.toContain("test-cli config get");
+    });
+
+    it("front matter section exclusions preserve fenced blank lines", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const commandWithNotes = defineCommand({
+        name: "notes-cli",
+        description: "CLI with notes",
+        notes: "```txt\nline1\n\n\nline2\n```",
+        run: () => {},
+      });
+      const templatePath = path.join(testDir, "notes-template.md");
+      const outputPath = path.join(testDir, "notes.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          "    - command::usage",
+          "---",
+          "",
+          "{{politty:command}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: commandWithNotes,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("line1\n\n\nline2");
+      expect(content).not.toContain("notes-cli [options]");
     });
 
     it("excluded placeholders are ignored during validation", async () => {

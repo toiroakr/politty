@@ -26,6 +26,8 @@ export type CommandCategory = {
   description: string;
   /** Command paths to include (parent commands will auto-expand to leaf commands) */
   commands: string[];
+  /** Optional post-expansion allowlist, used when a caller has already applied ignores */
+  allowedCommands?: string[];
   /** Path to documentation file for links (e.g., "./cli/application.md") */
   docPath: string;
   /**
@@ -113,12 +115,15 @@ function renderCategory(
   const commandPaths = category.noExpand
     ? category.commands
     : expandCommands(category.commands, allCommands, leafOnly);
+  const visibleCommandPaths = category.allowedCommands
+    ? commandPaths.filter((cmdPath) => category.allowedCommands?.includes(cmdPath))
+    : commandPaths;
 
   // Build command table
   lines.push("| Command | Description |");
   lines.push("|---------|-------------|");
 
-  for (const cmdPath of commandPaths) {
+  for (const cmdPath of visibleCommandPaths) {
     const info = allCommands.get(cmdPath);
     if (!info) continue;
 

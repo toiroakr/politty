@@ -1460,6 +1460,7 @@ function deriveIndexFromFiles(
       title: fileConfig?.title ?? cmdInfo?.name ?? path.basename(filePath, path.extname(filePath)),
       description: fileConfig?.description ?? cmdInfo?.description ?? "",
       commands: topLevelCommands,
+      allowedCommands: commandPaths,
       docPath,
     });
   }
@@ -1975,7 +1976,7 @@ function generateCommandSection(
           rendered = rendered.replace(section, "");
         }
       }
-      rendered = rendered.replace(/\n{3,}/g, "\n\n");
+      rendered = collapseBlankLinesOutsideCodeFences(rendered);
     }
   }
   return rendered;
