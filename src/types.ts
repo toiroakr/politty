@@ -230,8 +230,9 @@ export interface MainOptions {
    *
    * Return a number to treat the command as handled and exit with that code.
    * Return `undefined` (or omit the option) to fall back to the default
-   * "unknown subcommand" / help behavior. Not invoked for completion
-   * (`__complete`) invocations.
+   * "unknown subcommand" / help behavior. Not invoked for registered internal
+   * subcommands (any name starting with `__`, e.g. `__complete` or
+   * `__refresh-completion`).
    */
   onUnknownSubcommand?: UnknownSubcommandHandler | undefined;
 }

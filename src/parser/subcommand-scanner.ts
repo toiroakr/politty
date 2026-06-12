@@ -320,47 +320,77 @@ const BUILTIN_FLAGS = new Set(["--help", "-h", "--help-all", "-H", "--version"])
 
 /**
  * Find the index of the first positional argument in argv, properly skipping
- * global flag values. Returns -1 when no positional is present (or when a `--`
- * terminator is encountered before any positional).
- * Without globalExtracted, falls back to the first non-flag token.
+ * global flag values. Returns -1 when no positional is present.
+ *
+ * Mirrors `scanForSubcommand`'s conservative stop conditions: the scan stops
+ * (returning -1) on a `--` terminator, a builtin flag (`--help`/`--version`),
+ * an unknown long flag, or an unknown/combined short flag. Stopping is
+ * essential — past such tokens we cannot reliably tell a flag *value* from a
+ * positional, so continuing would misclassify e.g. `--help plugin` or
+ * `--unknown value` as having `plugin`/`value` as the first positional and
+ * trip `onUnknownSubcommand` plugin dispatch for inputs that should fall back
+ * to help / unknown-flag behavior.
+ *
+ * Without globalExtracted, no flag is recognized as global, so the same stop
+ * conditions apply with an empty lookup: any leading flag halts the scan and a
+ * positional is only found when it precedes every flag.
  */
 export function findFirstPositionalIndex(
   argv: string[],
   globalExtracted?: ExtractedFields,
 ): number {
-  if (!globalExtracted) {
-    return argv.findIndex((arg) => !arg.startsWith("-"));
-  }
-
-  const lookup = buildGlobalFlagLookup(globalExtracted);
+  const lookup: GlobalFlagLookup = globalExtracted
+    ? buildGlobalFlagLookup(globalExtracted)
+    : {
+        aliasMap: new Map(),
+        booleanFlags: new Set(),
+        flagNames: new Set(),
+        cliNames: new Set(),
+        aliases: new Set(),
+        negationMap: new Map(),
+        customNegatedFields: new Set(),
+      };
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
     if (!arg.startsWith("-")) return i;
-    if (arg === "--") return -1;
+
+    // `--` terminator or builtin flags (--help/--version/...): stop scanning.
+    if (arg === "--" || BUILTIN_FLAGS.has(arg)) return -1;
 
     // Long option
     if (arg.startsWith("--")) {
-      const { resolvedName, isNegated, isGlobal } = resolveGlobalLongOption(arg, lookup);
-      if (
-        isGlobal &&
-        shouldConsumeValue(arg, resolvedName, isNegated, argv[i + 1], lookup.booleanFlags)
-      ) {
-        i++;
+      const { resolvedName, isNegated, isGlobal, isSuppressedNegation } = resolveGlobalLongOption(
+        arg,
+        lookup,
+      );
+      if (isGlobal) {
+        if (shouldConsumeValue(arg, resolvedName, isNegated, argv[i + 1], lookup.booleanFlags)) {
+          i++;
+        }
+        continue;
       }
-      continue;
+      // Suppressed default `--no-X` for a custom-negation field: keep scanning
+      // so a trailing positional is still detected (mirrors scanForSubcommand).
+      if (isSuppressedNegation) continue;
+      // Unknown long flag: stop.
+      return -1;
     }
 
-    // Short option (-f)
-    if (arg.length === 2) {
-      const ch = arg[1]!;
-      if (lookup.aliases.has(ch)) {
-        const resolvedName = lookup.aliasMap.get(ch) ?? ch;
+    // Short option(s): -f, -f=value, or combined -abc
+    const withoutDash = arg.includes("=") ? arg.slice(1, arg.indexOf("=")) : arg.slice(1);
+    if (withoutDash.length === 1) {
+      const resolvedName = lookup.aliasMap.get(withoutDash) ?? withoutDash;
+      const isKnownGlobal = lookup.aliases.has(withoutDash) || lookup.flagNames.has(resolvedName);
+      if (isKnownGlobal) {
         if (shouldConsumeValue(arg, resolvedName, false, argv[i + 1], lookup.booleanFlags)) {
           i++;
         }
+        continue;
       }
     }
+    // Unknown short flag or combined short flags: stop.
+    return -1;
   }
   return -1;
 }

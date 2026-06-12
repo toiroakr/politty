@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { extractFields } from "../core/schema-extractor.js";
-import { scanForSubcommand } from "./subcommand-scanner.js";
+import { findFirstPositionalIndex, scanForSubcommand } from "./subcommand-scanner.js";
 
 describe("scanForSubcommand", () => {
   const globalSchema = z.object({
@@ -224,5 +224,69 @@ describe("scanForSubcommand", () => {
     expect(result.subCommandIndex).toBe(-1);
     expect(result.globalTokensBefore).toEqual([]);
     expect(result.tokensAfterSubcommand).toEqual([]);
+  });
+});
+
+describe("findFirstPositionalIndex", () => {
+  const globalSchema = z.object({
+    verbose: arg(z.boolean().default(false), { alias: "v", description: "Verbose" }),
+    config: arg(z.string().optional(), { description: "Config file" }),
+  });
+  const globalExtracted = extractFields(globalSchema);
+
+  it("returns the first non-flag token", () => {
+    expect(findFirstPositionalIndex(["plugin", "--flag"], globalExtracted)).toBe(0);
+  });
+
+  it("skips global flag values before the positional", () => {
+    expect(findFirstPositionalIndex(["--config", "app.json", "plugin"], globalExtracted)).toBe(2);
+  });
+
+  it("skips short global aliases before the positional", () => {
+    expect(findFirstPositionalIndex(["-v", "plugin"], globalExtracted)).toBe(1);
+  });
+
+  it("stops at builtin --help (does not misclassify the trailing token)", () => {
+    expect(findFirstPositionalIndex(["--help", "plugin"], globalExtracted)).toBe(-1);
+  });
+
+  it("stops at builtin --version", () => {
+    expect(findFirstPositionalIndex(["--version", "plugin"], globalExtracted)).toBe(-1);
+  });
+
+  it("stops at an unknown long flag", () => {
+    expect(findFirstPositionalIndex(["--unknown", "value"], globalExtracted)).toBe(-1);
+  });
+
+  it("stops at an unknown short flag", () => {
+    expect(findFirstPositionalIndex(["-x", "value", "plugin"], globalExtracted)).toBe(-1);
+  });
+
+  it("stops at combined short flags", () => {
+    expect(findFirstPositionalIndex(["-abc", "plugin"], globalExtracted)).toBe(-1);
+  });
+
+  it("stops at the `--` terminator", () => {
+    expect(findFirstPositionalIndex(["--", "plugin"], globalExtracted)).toBe(-1);
+  });
+
+  it("returns -1 when no positional is present", () => {
+    expect(findFirstPositionalIndex(["--verbose"], globalExtracted)).toBe(-1);
+  });
+
+  it("without a schema, returns a leading positional", () => {
+    expect(findFirstPositionalIndex(["plugin", "--unknown", "value"])).toBe(0);
+  });
+
+  it("without a schema, stops at a leading flag (nothing is global)", () => {
+    expect(findFirstPositionalIndex(["--unknown", "value", "plugin"])).toBe(-1);
+  });
+
+  it("keeps scanning past a suppressed default --no-X for a custom-negation field", () => {
+    const schemaWithCustomNegation = z.object({
+      dryRun: arg(z.boolean().default(false), { description: "Dry run", negation: "execute" }),
+    });
+    const extracted = extractFields(schemaWithCustomNegation);
+    expect(findFirstPositionalIndex(["--no-dry-run", "plugin"], extracted)).toBe(1);
   });
 });
