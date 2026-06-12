@@ -343,14 +343,21 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
  * Flush stdout/stderr before exit to prevent truncated output when piped.
  * When stdout/stderr is a pipe, writes are buffered asynchronously, so calling
  * process.exit() before the buffer is drained causes data loss.
+ *
+ * We enqueue a zero-byte write and await its callback rather than waiting for a
+ * `drain` event: `drain` only fires after a prior `write()` returned `false`
+ * (backpressure), so buffered writes that never tripped backpressure would hang
+ * an `once("drain")` wait. The write callback is ordered after all pending
+ * writes, so it reliably resolves once the buffer is flushed.
  */
 async function flushStandardStreams(): Promise<void> {
-  if (process.stdout.writableLength > 0) {
-    await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
-  }
-  if (process.stderr.writableLength > 0) {
-    await new Promise<void>((resolve) => process.stderr.once("drain", resolve));
-  }
+  await Promise.all(
+    [process.stdout, process.stderr].map((stream) =>
+      stream.writableLength > 0
+        ? new Promise<void>((resolve) => stream.write("", () => resolve()))
+        : Promise.resolve(),
+    ),
+  );
 }
 
 /**
