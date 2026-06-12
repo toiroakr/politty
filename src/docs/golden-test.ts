@@ -1316,6 +1316,30 @@ function shouldSkipTemplatePlaceholder(
   return false;
 }
 
+function isRawCommandPlaceholderUnderExcludedScope(
+  key: string,
+  exclusions: TemplateExclusions,
+): boolean {
+  if (!key.startsWith("command:")) {
+    return false;
+  }
+  const tokens = key.slice("command:".length).split(":");
+  for (const excludedScope of exclusions.commandScopes) {
+    if (excludedScope === "") {
+      return true;
+    }
+    const spaceTokens = excludedScope.split(" ");
+    if (tokens.slice(0, spaceTokens.length).join(" ") === excludedScope) {
+      return true;
+    }
+    const colonTokens = excludedScope.split(":");
+    if (tokens.slice(0, colonTokens.length).join(":") === excludedScope) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Regex matching {{politty:...}} placeholders.
  * NOTE: only use with String.match / String.replace, never with .exec in a loop,
@@ -2504,7 +2528,11 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       const indexMetadata = collectTemplateIndexMetadata(templateContent);
 
       for (const placeholder of placeholders) {
-        if (exclusions.rawKeys.has(templatePlaceholderKey(placeholder))) {
+        const placeholderKey = templatePlaceholderKey(placeholder);
+        if (
+          exclusions.rawKeys.has(placeholderKey) ||
+          isRawCommandPlaceholderUnderExcludedScope(placeholderKey, exclusions)
+        ) {
           continue;
         }
 
@@ -3093,7 +3121,11 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     const exclusions = templateExclusions.get(outputPath) ?? createTemplateExclusions(new Set());
 
     for (const placeholder of placeholders) {
-      if (exclusions.rawKeys.has(templatePlaceholderKey(placeholder))) {
+      const placeholderKey = templatePlaceholderKey(placeholder);
+      if (
+        exclusions.rawKeys.has(placeholderKey) ||
+        isRawCommandPlaceholderUnderExcludedScope(placeholderKey, exclusions)
+      ) {
         replacements.set(placeholder, "");
         continue;
       }

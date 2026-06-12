@@ -4790,6 +4790,37 @@ ${argsContent}
       expect(content).not.toContain("{{politty:command:greet}}");
     });
 
+    it("front matter parent exclusions skip invalid child placeholders", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "parent-exclude-invalid-child-template.md");
+      const outputPath = path.join(testDir, "parent-exclude-invalid-child.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          "    - command:config",
+          "---",
+          "",
+          "{{politty:command:greet}}",
+          "",
+          "{{politty:command:config:nope}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("Greet someone");
+      expect(content).not.toContain("{{politty:command:config:nope}}");
+    });
+
     it("ignores remove children from template command tables", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "ignore-child-template.md");
