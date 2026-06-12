@@ -1266,9 +1266,20 @@ function shouldSkipTemplatePlaceholder(
 const TEMPLATE_PLACEHOLDER_REGEX = /\{\{politty:[^{}]*\}\}/g;
 
 function validateTemplatePlaceholderSyntax(templateContent: string, templatePath: string): void {
-  const validPlaceholderStarts = new Set(
-    Array.from(templateContent.matchAll(TEMPLATE_PLACEHOLDER_REGEX), (match) => match.index),
-  );
+  const validPlaceholderStarts = new Set<number>();
+  for (const match of templateContent.matchAll(TEMPLATE_PLACEHOLDER_REGEX)) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (templateContent[start - 1] === "{" || templateContent[end] === "}") {
+      const snippet = templateContent
+        .slice(Math.max(0, start - 1), Math.min(templateContent.length, end + 1))
+        .split("\n")[0];
+      throw new Error(
+        `Malformed politty placeholder in template "${templatePath}": "${snippet}". Expected {{politty:...}}.`,
+      );
+    }
+    validPlaceholderStarts.add(start);
+  }
   let searchIndex = 0;
   while (true) {
     const placeholderStart = templateContent.indexOf("{{politty:", searchIndex);
@@ -2104,7 +2115,7 @@ function buildFileMap(
   allCommands: Map<string, CommandInfo>,
   ignores: string[],
 ): Record<string, string> {
-  const fileMap: Record<string, string> = Object.create(null);
+  const fileMap: Record<string, string> = {};
 
   for (const [filePath, fileConfigRaw] of Object.entries(files)) {
     const { commandPaths } = resolveConfiguredCommandPaths(fileConfigRaw, allCommands, ignores);
@@ -2611,7 +2622,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // takes precedence over template outputs, and the first template wins over later ones, so a
   // command rendered in multiple places gets a stable, order-independent link target rather than
   // being overwritten by whichever output happens to be processed last.
-  const templateFileMap: Record<string, string> = Object.assign(Object.create(null), fileMap);
+  const templateFileMap: Record<string, string> = { ...fileMap };
   for (const [templateOutputPath, meta] of templateMeta.entries()) {
     for (const scope of meta.headingScopes) {
       if (!Object.prototype.hasOwnProperty.call(templateFileMap, scope)) {

@@ -48,8 +48,8 @@ function isLeafCommand(info: CommandInfo): boolean {
 }
 
 function isSubcommandOf(childPath: string, parentPath: string): boolean {
-  if (parentPath === "") return childPath !== "";
   if (childPath === parentPath) return true;
+  if (parentPath === "") return childPath !== "";
   return childPath.startsWith(parentPath + " ");
 }
 

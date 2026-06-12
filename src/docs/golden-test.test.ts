@@ -4408,6 +4408,34 @@ ${argsContent}
       ).rejects.toThrow(/Malformed politty placeholder/);
     });
 
+    it("placeholder syntax with extra braces throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "extra-braces-template.md");
+      const outputPath = path.join(testDir, "extra-braces.md");
+      fs.writeFileSync(templatePath, "{{politty:command}}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow(/Malformed politty placeholder/);
+    });
+
+    it("placeholder syntax with extra opening brace throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "extra-open-brace-template.md");
+      const outputPath = path.join(testDir, "extra-open-brace.md");
+      fs.writeFileSync(templatePath, "{{{politty:command}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow(/Malformed politty placeholder/);
+    });
+
     it("missing template file gives error result in both modes", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
       const templatePath = path.join(testDir, "nonexistent-template.md");
@@ -4607,6 +4635,26 @@ ${argsContent}
       expect(result.success).toBe(true);
       const content = fs.readFileSync(outputPath, "utf-8");
       expect(content).toBe(content.toUpperCase());
+    });
+
+    it("passes fileMap with Object prototype to custom renderers", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "custom-render.md");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [""],
+            render: (info) => {
+              expect(info.fileMap?.hasOwnProperty("")).toBe(true);
+              return `# ${info.name}\n`;
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
     });
 
     it("initDocFile deletes output path but not template source", async () => {
