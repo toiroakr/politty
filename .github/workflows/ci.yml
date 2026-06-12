@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # Run on every PR regardless of base branch, so checks (including the macOS
+  # shell-completion job) cover stacked / feature-branch PRs too, not only
+  # main-targeting ones.
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -54,25 +56,32 @@ jobs:
         uses: k1LoW/octocov-action@b3b6ee60482a667950f87553abf1df63217235d9 # v1.5.1
 
   shell-completion:
-    name: Shell Completion (${{ matrix.shell }})
-    runs-on: ubuntu-latest
+    name: Shell Completion (${{ matrix.os }} / ${{ matrix.shell }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        shell: [bash, zsh, fish]
         include:
-          - shell: bash
+          - os: ubuntu-latest
+            shell: bash
             install: expect
-          - shell: zsh
+          - os: ubuntu-latest
+            shell: zsh
             install: zsh
-          - shell: fish
+          - os: ubuntu-latest
+            shell: fish
             install: fish
+          # macOS uses BSD userland (head/grep/stat) and a different fork/PTY
+          # profile; the runtime dispatcher zsh completion regresses there even
+          # though Linux passes. zsh ships on macOS runners, so no install step.
+          - os: macos-latest
+            shell: zsh
     steps:
       - name: Install shell tools
-        if: matrix.install
+        if: matrix.install && runner.os == 'Linux'
         run: |
           sudo apt-get install -y --no-install-recommends ${{ matrix.install }} \
             || (echo "apt-get install failed; updating package lists and retrying." \

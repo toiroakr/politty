@@ -153,6 +153,38 @@ export function ansiC(s: string): string {
 }
 
 /**
+ * Single-quote escape for a POSIX shell literal: `'` -> `'\''`. Inside single
+ * quotes the shell performs no expansion at all, so `$`, backticks, and
+ * `$(...)` stay inert. Used for hardcoded paths that may originate from
+ * env/config so path metachars never execute as commands when the generated
+ * snippet is sourced. Safe for bash, zsh, and fish.
+ */
+export function shSingleQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Shell sub-expression that prints a file's stat signature, trying GNU
+ * `stat -c` first (BSD `-f` is filesystem mode there) then falling back to
+ * BSD `stat -f`. `-L` follows symlinks so the shell-side mtime matches Node's
+ * `fs.statSync`. `posix` (bash/zsh) wraps it as `$(… || …)`; fish has no
+ * `$(…)` capture inside `(…)`, so it uses `(…; or …)`. With `withSize`, the
+ * signature is `mtime:size` so a worker cache rewritten within the same
+ * second still reads as stale; otherwise it is the bare mtime in whole
+ * seconds.
+ */
+export function statSigExpr(
+  fileVar: string,
+  opts: { shell: "posix" | "fish"; withSize?: boolean },
+): string {
+  const gnuFmt = opts.withSize ? "%Y:%s" : "%Y";
+  const bsdFmt = opts.withSize ? "%m:%z" : "%m";
+  const gnu = `stat -L -c '${gnuFmt}' "${fileVar}" 2>/dev/null`;
+  const bsd = `stat -L -f '${bsdFmt}' "${fileVar}" 2>/dev/null`;
+  return opts.shell === "fish" ? `(${gnu}; or ${bsd})` : `$(${gnu} || ${bsd})`;
+}
+
+/**
  * Render an alias as its CLI token form: single-char aliases become `-x`,
  * multi-char aliases become `--long`. Mirrors the parser's accepted shapes
  * and is the bare-token form (no quoting) used inside generated case

@@ -16,6 +16,9 @@
     "type": "git",
     "url": "https://github.com/toiroakr/politty.git"
   },
+  "bin": {
+    "politty": "./dist/cli.js"
+  },
   "files": [
     "dist"
   ],

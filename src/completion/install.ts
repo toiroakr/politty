@@ -26,7 +26,7 @@ import type { AnyCommand, ArgsSchema } from "../types.js";
 import { resolveBinPath } from "./header.js";
 import { generateCompletion } from "./index.js";
 import { defaultCacheDir } from "./loader.js";
-import type { ShellType } from "./types.js";
+import type { BundledWorkerOptions, CompletionMode, ShellType } from "./types.js";
 
 export interface InstallContext {
   rootCommand: AnyCommand;
@@ -35,7 +35,11 @@ export interface InstallContext {
   cacheDir?: string | undefined;
   binPath?: string | undefined;
   globalArgsSchema?: ArgsSchema | undefined;
+  bundledWorker?: BundledWorkerOptions | undefined;
   targetPath?: string | undefined;
+  completionMode?: CompletionMode | undefined;
+  staticWorker?: { functionSuffix: string } | undefined;
+  allowTargetCreate?: boolean | undefined;
 }
 
 /**
@@ -67,11 +71,14 @@ function generateScript(ctx: InstallContext, shell: ShellType): string {
   return generateCompletion(ctx.rootCommand, {
     shell,
     programName: ctx.programName,
+    mode: ctx.completionMode ?? "dispatcher",
     includeDescriptions: true,
     ...(ctx.programVersion !== undefined && { programVersion: ctx.programVersion }),
     ...(ctx.binPath !== undefined && { binPath: ctx.binPath }),
     ...(ctx.cacheDir !== undefined && { cacheDir: ctx.cacheDir }),
     ...(ctx.globalArgsSchema !== undefined && { globalArgsSchema: ctx.globalArgsSchema }),
+    ...(ctx.bundledWorker !== undefined && { bundledWorker: ctx.bundledWorker }),
+    ...(ctx.staticWorker !== undefined && { staticWorker: ctx.staticWorker }),
   }).script;
 }
 
@@ -98,14 +105,39 @@ function readCachedSig(path: string): string | null {
   }
 }
 
+function readCachedMode(path: string): CompletionMode | undefined {
+  try {
+    if (!existsSync(path)) return undefined;
+    const head = readFileSync(path, "utf8").split("\n", 10).join("\n");
+    const m = head.match(/^# politty-completion-mode: (dispatcher|static)$/m);
+    if (m) return m[1] as CompletionMode;
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readCachedBinPath(path: string): string | null {
+  try {
+    if (!existsSync(path)) return null;
+    const head = readFileSync(path, "utf8").split("\n", 10).join("\n");
+    const m = head.match(/^# politty-bin-path: (.*)$/m);
+    return m ? m[1]! : null;
+  } catch {
+    return null;
+  }
+}
+
 function isManagedTarget(path: string, programName: string, shell: ShellType): boolean {
   try {
     if (!existsSync(path)) return false;
-    const head = readFileSync(path, "utf8").split("\n", 8).join("\n");
+    const lines = readFileSync(path, "utf8")
+      .split("\n", 8)
+      .map((line) => line.trimEnd());
     return (
-      /^# politty-completion-version: \S+/m.test(head) &&
-      head.includes(`# program: ${programName}`) &&
-      head.includes(`# shell: ${shell}`)
+      lines.some((line) => /^# politty-completion-version: \S+$/.test(line)) &&
+      lines.includes(`# program: ${programName}`) &&
+      lines.includes(`# shell: ${shell}`)
     );
   } catch {
     return false;
@@ -128,9 +160,14 @@ function isManagedTarget(path: string, programName: string, shell: ShellType): b
 export function refreshIfStale(ctx: InstallContext, shell: ShellType): void {
   try {
     const target = ctx.targetPath
-      ? realpathSync(ctx.targetPath)
+      ? existsSync(ctx.targetPath)
+        ? realpathSync(ctx.targetPath)
+        : ctx.targetPath
       : installPath(ctx.programName, shell, ctx.cacheDir);
-    if (ctx.targetPath && !isManagedTarget(target, ctx.programName, shell)) return;
+    if (ctx.targetPath && existsSync(target) && !isManagedTarget(target, ctx.programName, shell)) {
+      return;
+    }
+    if (ctx.targetPath && !existsSync(target) && !ctx.allowTargetCreate) return;
     const binPath = resolveBinPath(ctx.programName, ctx.binPath);
     if (!binPath) return;
     let currentSig: string;
@@ -139,8 +176,16 @@ export function refreshIfStale(ctx: InstallContext, shell: ShellType): void {
     } catch {
       return;
     }
-    if (readCachedSig(target) === currentSig) return;
-    writeAtomic(target, generateScript(ctx, shell));
+    if (readCachedSig(target) === currentSig && readCachedBinPath(target) === binPath) return;
+    // A managed target that already exists but carries no mode header predates
+    // dispatcher mode — keep it static so an upgrade + self-refresh does not
+    // silently rewrite a user's static completion into a dispatcher one. Only a
+    // fresh install (no existing target) defaults to dispatcher.
+    const completionMode =
+      ctx.completionMode ??
+      readCachedMode(target) ??
+      (existsSync(target) ? "static" : "dispatcher");
+    writeAtomic(target, generateScript({ ...ctx, completionMode }, shell));
   } catch {
     // Best-effort.
   }

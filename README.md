@@ -297,6 +297,18 @@ Attach metadata to an argument.
 ## Shell Completion
 
 politty provides automatic shell completion generation for bash, zsh, and fish.
+The default generated script is a small runtime dispatcher: when the user
+presses TAB, it resolves the executable currently visible on `PATH` and uses a
+bundled static worker from that executable's package when one is available. If
+no package-relative bundled worker is found, it falls back to a per-binary
+static worker cache and regenerates that cache from the hidden
+`__refresh-completion` command when needed. Sourced workers are memoized for the
+shell session, so warm completions call the worker function directly.
+Completion fields that require runtime JavaScript still delegate to the
+binary's hidden `__complete` command.
+When `NODE_COMPILE_CACHE` is unset, the dispatcher sets it to a
+program-specific cache directory before invoking `__complete`, letting Node.js
+22+ reuse V8 module compile cache across repeated completion requests.
 
 ### Quick Setup
 
@@ -329,6 +341,41 @@ eval "$(mycli completion zsh)"
 
 # Fish
 mycli completion fish | source
+```
+
+For project-local CLIs, put the local binary directory in `PATH` with your
+environment manager, for example:
+
+```sh
+# .envrc
+PATH_add node_modules/.bin
+```
+
+Completion then follows the same executable the shell would run.
+
+Published CLIs can ship a fast worker artifact:
+
+```bash
+politty generate-worker --bin dist/cli/index.mjs --program mycli --shell zsh --verify
+```
+
+or call `generateBundledCompletionWorker()` from `politty/completion` in your
+own build script. The default output path is
+`dist/completion/<shell>-worker.<ext>`.
+
+The dispatcher looks for common package-relative worker paths such as
+`dist/completion/zsh-worker.zsh` from the visible binary. Use
+`withCompletionCommand({ bundledWorker: { relativePaths: { zsh: [...] } } })`
+to customize the package-relative lookup. For package layouts that cannot be
+expressed with relative paths, `bundledWorker.queryCommand: true` lets the
+dispatcher ask the binary's hidden `__completion-worker-path` command on the
+miss path.
+
+To generate the older static script with command metadata baked in, use:
+
+```bash
+eval "$(mycli completion bash --static)"
+eval "$(mycli completion zsh --static)"
 ```
 
 ### Value Completion

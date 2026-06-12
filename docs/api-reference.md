@@ -266,12 +266,13 @@ function withCompletionCommand<T extends AnyCommand>(
 
 **WithCompletionOptions:**
 
-| Property           | Type          | Description                                                                                                           |
-| ------------------ | ------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `programName`      | `string?`     | Override program name (defaults to command.name)                                                                      |
-| `globalArgsSchema` | `ArgsSchema?` | Global args schema for deriving global options in completion                                                          |
-| `cacheDir`         | `string?`     | Hardcode the on-disk cache directory used by the rc loader and the runMain background refresh (overrides XDG default) |
-| `programVersion`   | `string?`     | Program version embedded in the script header                                                                         |
+| Property           | Type                    | Description                                                                                                           |
+| ------------------ | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `programName`      | `string?`               | Override program name (defaults to command.name)                                                                      |
+| `globalArgsSchema` | `ArgsSchema?`           | Global args schema for deriving global options in completion                                                          |
+| `cacheDir`         | `string?`               | Hardcode the on-disk cache directory used by the rc loader and the runMain background refresh (overrides XDG default) |
+| `programVersion`   | `string?`               | Program version embedded in the script header                                                                         |
+| `bundledWorker`    | `BundledWorkerOptions?` | Package-relative bundled worker lookup configuration for dispatcher mode                                              |
 
 #### Example
 
@@ -291,6 +292,7 @@ const mainCommand = withCompletionCommand(
 // - mycli completion bash|zsh|fish [--install] [--loader] [--instructions]
 // - mycli __complete --shell <shell> -- <args>
 // - mycli __refresh-completion <shell>  (hidden; spawned by the rc loader / runMain hook)
+// - mycli __completion-worker-path <shell>  (hidden; prints a bundled worker path)
 
 runMain(mainCommand);
 ```
@@ -314,16 +316,18 @@ function generateCompletion(command: AnyCommand, options: CompletionOptions): Co
 
 **CompletionOptions:**
 
-| Property              | Type          | Description                                                                                            |
-| --------------------- | ------------- | ------------------------------------------------------------------------------------------------------ |
-| `shell`               | `ShellType`   | Target shell: "bash", "zsh", or "fish"                                                                 |
-| `programName`         | `string`      | Program name as invoked                                                                                |
-| `includeSubcommands`  | `boolean?`    | Include subcommand completions (default: true)                                                         |
-| `includeDescriptions` | `boolean?`    | Include descriptions (default: true)                                                                   |
-| `globalArgsSchema`    | `ArgsSchema?` | Global args schema for deriving global options in completion                                           |
-| `binPath`             | `string?`     | Path to the binary whose mtime is the freshness signature (defaults to `process.argv[1]`)              |
-| `programVersion`      | `string?`     | Program version embedded in the script header                                                          |
-| `cacheDir`            | `string?`     | Cache directory hardcoded into the generated rc loader (defaults to XDG cache dir resolved at runtime) |
+| Property              | Type                    | Description                                                                                            |
+| --------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------ |
+| `shell`               | `ShellType`             | Target shell: "bash", "zsh", or "fish"                                                                 |
+| `programName`         | `string`                | Program name as invoked                                                                                |
+| `includeSubcommands`  | `boolean?`              | Include subcommand completions (default: true)                                                         |
+| `includeDescriptions` | `boolean?`              | Include descriptions (default: true)                                                                   |
+| `mode`                | `CompletionMode?`       | Defaults to `static` (self-contained) for this direct API. Pass `dispatcher` for runtime resolution — it requires the CLI to register the hidden `__complete` / `__refresh-completion` commands via `withCompletionCommand` / `createCompletionCommand`. The `completion <shell>` subcommand defaults to `dispatcher`. |
+| `globalArgsSchema`    | `ArgsSchema?`           | Global args schema for deriving global options in completion                                           |
+| `binPath`             | `string?`               | Path to the binary whose mtime is the freshness signature (defaults to `process.argv[1]`)              |
+| `programVersion`      | `string?`               | Program version embedded in the script header                                                          |
+| `cacheDir`            | `string?`               | Cache directory hardcoded into the generated rc loader (defaults to XDG cache dir resolved at runtime) |
+| `bundledWorker`       | `BundledWorkerOptions?` | Package-relative bundled worker lookup configuration for dispatcher mode                               |
 
 #### Return Value
 
@@ -346,6 +350,56 @@ const result = generateCompletion(command, {
 });
 
 console.log(result.script);
+```
+
+> This direct API emits a self-contained **static** script by default. For runtime
+> dispatcher completion, pass `mode: "dispatcher"` and make sure the command tree
+> has the hidden runtime commands registered (use `withCompletionCommand` /
+> `createCompletionCommand`, which the `completion <shell>` subcommand relies on).
+
+---
+
+### `generateBundledCompletionWorker`
+
+Generates a bundled worker artifact for dispatcher completion and validates
+that it is usable by the built CLI package.
+
+```typescript
+function generateBundledCompletionWorker(
+  options: GenerateBundledCompletionWorkerOptions,
+): Promise<GenerateBundledCompletionWorkerResult>;
+```
+
+#### Parameters
+
+| Property      | Type         | Description                                                                 |
+| ------------- | ------------ | --------------------------------------------------------------------------- |
+| `bin`         | `string`     | CLI binary or built JS entry file to invoke                                 |
+| `programName` | `string`     | Program name expected in worker metadata                                    |
+| `shell`       | `ShellType`  | Worker shell to generate                                                    |
+| `outputPath`  | `string?`    | Output path, defaulting to `dist/completion/<shell>-worker.<ext>`           |
+| `verify`      | `boolean?`   | Also verify that `__completion-worker-path <shell>` resolves to `outputPath` |
+| `cwd`         | `string?`    | Working directory for relative paths                                        |
+| `env`         | `Record<string, string \| undefined>?` | Extra environment passed to the target binary                               |
+| `quiet`       | `boolean?`   | Suppress the success message                                                |
+
+#### Example
+
+```typescript
+import { generateBundledCompletionWorker } from "politty/completion";
+
+await generateBundledCompletionWorker({
+  bin: "dist/cli/index.mjs",
+  programName: "mycli",
+  shell: "zsh",
+  verify: true,
+});
+```
+
+The package-script equivalent is:
+
+```sh
+politty generate-worker --bin dist/cli/index.mjs --program mycli --shell zsh --verify
 ```
 
 ---
@@ -504,13 +558,13 @@ interface DynamicCompletionResult {
 }
 ```
 
-Specifying more than one of `choices`, `shellCommand`, `resolve`, or `expand` on the same field throws at command-definition time. Static shell scripts automatically delegate to `<program> __complete --shell <shell>` when a field uses `resolve`. With `expand`, the candidate table is computed at script-generation time and inlined into the script — TAB completion stays in-shell.
+Specifying more than one of `choices`, `shellCommand`, `resolve`, or `expand` on the same field throws at command-definition time. Dispatcher scripts delegate every completion request to `<program> __complete --shell <shell>`, resolving the executable currently visible on `PATH` at TAB time. Static shell scripts automatically delegate to `<program> __complete --shell <shell>` when a field uses `resolve`. With `expand`, dispatcher mode calls `enumerate` for the already typed dependency values inside `__complete`; static mode computes the candidate table at script-generation time and inlines it into the script.
 
 ---
 
 ### `ExpandCompletion`
 
-Pre-enumerated value completion. Use when candidates can be computed up front from a finite set of sibling arg values (each must have a static `choices` or enum schema). politty walks the cartesian product of the `dependsOn` values at script-generation time, calls `enumerate` for each combination, and bakes the resulting table into the static shell script.
+Pre-enumerated value completion. Use when candidates can be computed from a finite set of sibling arg values (each must have a static `choices` or enum schema). Dispatcher mode calls `enumerate` from `__complete` for the dependency values already typed on the command line. Static mode walks the cartesian product of the `dependsOn` values at script-generation time, calls `enumerate` for each combination, and bakes the resulting table into the static shell script.
 
 ```typescript
 interface ExpandCompletion {
@@ -535,7 +589,7 @@ interface ExpandCompletion {
 Properties and constraints:
 
 - `dependsOn` must be non-empty and may not reference the field itself or any sibling without a static value set. Validation errors throw at command-definition time with the offending field name.
-- `enumerate` runs synchronously at the time the user invokes `<program> completion <shell>`. politty does not retain it for runtime use; if it throws, the error is wrapped with the field name and the offending `deps` snapshot.
+- In dispatcher mode, `enumerate` runs synchronously inside `__complete` for the currently typed dependency values. In static mode, it runs when the user invokes `<program> completion <shell> --static`; if it throws, the error is wrapped with the field name and the offending `deps` snapshot.
 - bash emits one prefix-scalar variable per table entry (`<base>__<encKey>=<candidates>`) so the generated script runs on Bash 3.2 (macOS default `/bin/bash`) without associative arrays; zsh emits one global associative array per spec (`typeset -gA`); fish emits an inline `switch` (no associative arrays). bash drops descriptions; zsh uses `value:description` for `_describe`; fish uses tab-separated `value\tdescription`.
 
 #### Example

@@ -868,8 +868,16 @@ describe("Dynamic completion (in-process resolver)", () => {
     });
 
     it("bash: emits invoke_complete helper only when dynamic specs exist", () => {
-      const dyn = generateCompletion(dynamicCmd, { shell: "bash", programName: "mycli" }).script;
-      const stat = generateCompletion(staticCmd, { shell: "bash", programName: "mycli" }).script;
+      const dyn = generateCompletion(dynamicCmd, {
+        shell: "bash",
+        programName: "mycli",
+        mode: "static",
+      }).script;
+      const stat = generateCompletion(staticCmd, {
+        shell: "bash",
+        programName: "mycli",
+        mode: "static",
+      }).script;
 
       expect(dyn).toContain("__mycli_invoke_complete");
       expect(dyn).toContain("__mycli_apply_dynamic_output");
@@ -882,8 +890,16 @@ describe("Dynamic completion (in-process resolver)", () => {
     });
 
     it("zsh: emits apply helper only when dynamic specs exist", () => {
-      const dyn = generateCompletion(dynamicCmd, { shell: "zsh", programName: "mycli" }).script;
-      const stat = generateCompletion(staticCmd, { shell: "zsh", programName: "mycli" }).script;
+      const dyn = generateCompletion(dynamicCmd, {
+        shell: "zsh",
+        programName: "mycli",
+        mode: "static",
+      }).script;
+      const stat = generateCompletion(staticCmd, {
+        shell: "zsh",
+        programName: "mycli",
+        mode: "static",
+      }).script;
 
       expect(dyn).toContain("__mycli_invoke_complete");
       expect(dyn).toContain("__mycli_apply_dynamic_output");
@@ -891,8 +907,16 @@ describe("Dynamic completion (in-process resolver)", () => {
     });
 
     it("fish: emits apply helper only when dynamic specs exist", () => {
-      const dyn = generateCompletion(dynamicCmd, { shell: "fish", programName: "mycli" }).script;
-      const stat = generateCompletion(staticCmd, { shell: "fish", programName: "mycli" }).script;
+      const dyn = generateCompletion(dynamicCmd, {
+        shell: "fish",
+        programName: "mycli",
+        mode: "static",
+      }).script;
+      const stat = generateCompletion(staticCmd, {
+        shell: "fish",
+        programName: "mycli",
+        mode: "static",
+      }).script;
 
       expect(dyn).toContain("__mycli_invoke_complete");
       expect(dyn).toContain("__mycli_apply_dynamic_output");
@@ -904,14 +928,22 @@ describe("Dynamic completion (in-process resolver)", () => {
       // FileCompletion, the appended filesystem matches must carry the
       // `--path=` prefix the resolver candidates already have —
       // otherwise accepting a file match drops the option name.
-      const dyn = generateCompletion(dynamicCmd, { shell: "bash", programName: "mycli" }).script;
+      const dyn = generateCompletion(dynamicCmd, {
+        shell: "bash",
+        programName: "mycli",
+        mode: "static",
+      }).script;
       expect(dyn).toContain(`local _ip="\${_inline_prefix:-}"`);
       expect(dyn).toContain(`COMPREPLY+=("\${_ip}\${_d}")`);
       expect(dyn).toContain(`COMPREPLY+=("\${_ip}\${_f}")`);
     });
 
     it("supports MYCLI_BIN override in bash script", () => {
-      const dyn = generateCompletion(dynamicCmd, { shell: "bash", programName: "mycli" }).script;
+      const dyn = generateCompletion(dynamicCmd, {
+        shell: "bash",
+        programName: "mycli",
+        mode: "static",
+      }).script;
       expect(dyn).toContain("${MYCLI_BIN:-mycli}");
     });
 
@@ -925,19 +957,35 @@ describe("Dynamic completion (in-process resolver)", () => {
         }),
         run: () => {},
       });
-      const bash = generateCompletion(cmdDigit, { shell: "bash", programName: "2fa" }).script;
+      const bash = generateCompletion(cmdDigit, {
+        shell: "bash",
+        programName: "2fa",
+        mode: "static",
+      }).script;
       // bash/zsh forbid digit-leading parameter names; the override env
       // var must therefore be `_2FA_BIN`, not `2FA_BIN`.
       expect(bash).toContain("${_2FA_BIN:-2fa}");
       expect(bash).not.toContain("${2FA_BIN:-");
-      const zsh = generateCompletion(cmdDigit, { shell: "zsh", programName: "2fa" }).script;
+      const zsh = generateCompletion(cmdDigit, {
+        shell: "zsh",
+        programName: "2fa",
+        mode: "static",
+      }).script;
       expect(zsh).toContain("${_2FA_BIN:-2fa}");
-      const fish = generateCompletion(cmdDigit, { shell: "fish", programName: "2fa" }).script;
+      const fish = generateCompletion(cmdDigit, {
+        shell: "fish",
+        programName: "2fa",
+        mode: "static",
+      }).script;
       expect(fish).toContain("set -q _2FA_BIN");
     });
 
     it("bash: applies resolver-supplied directive bits via compopt", () => {
-      const dyn = generateCompletion(dynamicCmd, { shell: "bash", programName: "mycli" }).script;
+      const dyn = generateCompletion(dynamicCmd, {
+        shell: "bash",
+        programName: "mycli",
+        mode: "static",
+      }).script;
       // DirectoryCompletion=32, FileCompletion=16, NoSpace=1
       expect(dyn).toContain("(( _directive & 32 ))");
       // DirectoryCompletion populates COMPREPLY manually via `compgen -d`
@@ -955,7 +1003,11 @@ describe("Dynamic completion (in-process resolver)", () => {
     });
 
     it("zsh: dispatches resolver directive bits to _files", () => {
-      const dyn = generateCompletion(dynamicCmd, { shell: "zsh", programName: "mycli" }).script;
+      const dyn = generateCompletion(dynamicCmd, {
+        shell: "zsh",
+        programName: "mycli",
+        mode: "static",
+      }).script;
       expect(dyn).toContain("(( _directive & 32 ))");
       expect(dyn).toContain("_files -/");
       expect(dyn).toContain("(( _directive & 16 ))");
@@ -966,7 +1018,11 @@ describe("Dynamic completion (in-process resolver)", () => {
       // When the resolver returns both candidates and FileCompletion /
       // DirectoryCompletion, zsh must surface the candidates first and
       // then layer `_files` on top, the same way bash/fish do.
-      const zsh = generateCompletion(dynamicCmd, { shell: "zsh", programName: "mycli" }).script;
+      const zsh = generateCompletion(dynamicCmd, {
+        shell: "zsh",
+        programName: "mycli",
+        mode: "static",
+      }).script;
       // Candidates are pushed via __cdescribe before the directive block
       // handles `_files`. The new layout uses `elif` to chain directory →
       // file without `return`-ing early.
@@ -980,11 +1036,23 @@ describe("Dynamic completion (in-process resolver)", () => {
       // — they cannot appear from a dynamic resolver's perspective, so the
       // delegate apply helper must not drop them. Otherwise a resolver
       // returning a candidate literally named `@ext:tsx` would disappear.
-      const bash = generateCompletion(dynamicCmd, { shell: "bash", programName: "mycli" }).script;
+      const bash = generateCompletion(dynamicCmd, {
+        shell: "bash",
+        programName: "mycli",
+        mode: "static",
+      }).script;
       expect(bash).not.toContain(`"@ext:"*|"@matcher:"*`);
-      const zsh = generateCompletion(dynamicCmd, { shell: "zsh", programName: "mycli" }).script;
+      const zsh = generateCompletion(dynamicCmd, {
+        shell: "zsh",
+        programName: "mycli",
+        mode: "static",
+      }).script;
       expect(zsh).not.toContain("@ext:*|@matcher:*");
-      const fish = generateCompletion(dynamicCmd, { shell: "fish", programName: "mycli" }).script;
+      const fish = generateCompletion(dynamicCmd, {
+        shell: "fish",
+        programName: "mycli",
+        mode: "static",
+      }).script;
       expect(fish).not.toContain("'@ext:*' '@matcher:*'");
     });
 
@@ -993,13 +1061,21 @@ describe("Dynamic completion (in-process resolver)", () => {
       // cursor into the resolver context. The delegate must slice via
       // `${(@)words[2,CURRENT]}` so `parseCompletionContext` sees only
       // the prefix up to the position being completed.
-      const dyn = generateCompletion(dynamicCmd, { shell: "zsh", programName: "mycli" }).script;
+      const dyn = generateCompletion(dynamicCmd, {
+        shell: "zsh",
+        programName: "mycli",
+        mode: "static",
+      }).script;
       expect(dyn).toContain("${(@)words[2,CURRENT]}");
       expect(dyn).not.toContain("${words[@]:1}");
     });
 
     it("fish: dispatches resolver directive bits to __fish_complete_path", () => {
-      const dyn = generateCompletion(dynamicCmd, { shell: "fish", programName: "mycli" }).script;
+      const dyn = generateCompletion(dynamicCmd, {
+        shell: "fish",
+        programName: "mycli",
+        mode: "static",
+      }).script;
       // fish's `math` rejects the `&` operator with "Logical operations
       // are not supported"; the directive check must use the `bitand()`
       // function instead.
@@ -1015,7 +1091,11 @@ describe("Dynamic completion (in-process resolver)", () => {
       // helper buffers each line from `__complete` and re-emits it; the
       // re-emit must use `printf` so a resolver candidate equal to one
       // of those flags is not silently dropped.
-      const dyn = generateCompletion(dynamicCmd, { shell: "fish", programName: "mycli" }).script;
+      const dyn = generateCompletion(dynamicCmd, {
+        shell: "fish",
+        programName: "mycli",
+        mode: "static",
+      }).script;
       expect(dyn).toContain(`printf '%s\\n' "$_prev"`);
       expect(dyn).not.toMatch(/^\s*echo \$_prev$/m);
     });
