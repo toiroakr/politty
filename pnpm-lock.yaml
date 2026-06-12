@@ -52,8 +52,8 @@ importers:
         specifier: 1.0.0
         version: 1.0.0
       tsdown:
-        specifier: 0.22.1
-        version: 0.22.1(@typescript/native-preview@7.0.0-dev.20260603.1)(oxc-resolver@11.20.0)(tsx@4.22.4)(typescript@6.0.3)
+        specifier: 0.22.2
+        version: 0.22.2(@typescript/native-preview@7.0.0-dev.20260603.1)(oxc-resolver@11.20.0)(tsx@4.22.4)(typescript@6.0.3)
       tsx:
         specifier: 4.22.4
         version: 4.22.4
@@ -2070,14 +2070,14 @@ packages:
     resolution: {integrity: sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==}
     hasBin: true
 
-  tsdown@0.22.1:
-    resolution: {integrity: sha512-Ldx1jLyDFEzsN/fMBi2TBVaZe4fuEJhIiHjQhX0pV7oa5uYz5Imdivs5mNzEXOrMEtFRR6C9BQ2YqLoroffB+Q==}
+  tsdown@0.22.2:
+    resolution: {integrity: sha512-VX9gsyKXsTnBZjnIM4jsHl9aRv+GfgkE/k1hQslilaBfZMlaw3JuGR+6yhiU0QxWBtOCDnTjwOSoXzgB7Rr50g==}
     engines: {node: ^22.18.0 || >=24.0.0}
     hasBin: true
     peerDependencies:
       '@arethetypeswrong/core': ^0.18.1
-      '@tsdown/css': 0.22.1
-      '@tsdown/exe': 0.22.1
+      '@tsdown/css': 0.22.2
+      '@tsdown/exe': 0.22.2
       '@vitejs/devtools': '*'
       publint: ^0.3.8
       tsx: '*'
@@ -3905,7 +3905,7 @@ snapshots:
 
   tree-kill@1.2.2: {}
 
-  tsdown@0.22.1(@typescript/native-preview@7.0.0-dev.20260603.1)(oxc-resolver@11.20.0)(tsx@4.22.4)(typescript@6.0.3):
+  tsdown@0.22.2(@typescript/native-preview@7.0.0-dev.20260603.1)(oxc-resolver@11.20.0)(tsx@4.22.4)(typescript@6.0.3):
     dependencies:
       ansis: 4.3.1
       cac: 7.0.0
