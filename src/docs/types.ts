@@ -385,6 +385,13 @@ export interface GenerateDocConfig {
    * When provided, automatically derives `rootDoc.globalOptions` from this schema.
    */
   globalArgs?: ArgsSchema;
+  /**
+   * Template-based generation: output file path -> template file path.
+   * The template mixes handwritten markdown with {{politty:...}} placeholders.
+   * The output file is fully generated from the template and contains no
+   * politty markers. Can be combined with `files` or `path`.
+   */
+  templates?: Record<string, string>;
 }
 
 /**

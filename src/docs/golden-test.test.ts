@@ -4,7 +4,7 @@ import { format } from "oxfmt";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { arg, defineCommand } from "../index.js";
-import { assertDocMatch, generateDoc } from "./golden-test.js";
+import { assertDocMatch, generateDoc, initDocFile } from "./golden-test.js";
 import { renderArgsTable } from "./render-args.js";
 import { renderCommandIndex } from "./render-index.js";
 import {
@@ -4191,6 +4191,1939 @@ ${argsContent}
       const content = fs.readFileSync(rootPath, "utf-8");
       expect(content).toContain("# Custom Title");
       expect(content).toContain("Custom description for the CLI");
+    });
+  });
+
+  describe("template mode", () => {
+    it("creates output from template with handwritten text and command section", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(
+        templatePath,
+        "# My CLI Docs\n\nSome handwritten intro.\n\n{{politty:command}}\n\nSome handwritten footer.\n",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("created");
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("# My CLI Docs");
+      expect(content).toContain("Some handwritten intro.");
+      expect(content).toContain("Some handwritten footer.");
+      expect(content).toContain("test-cli");
+      // No politty markers in output
+      expect(content).not.toContain("<!-- politty:");
+    });
+
+    it("typed placeholder renders only that section without markers", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      // {{politty:command::usage}} - root command usage section
+      fs.writeFileSync(templatePath, "# Usage\n\n{{politty:command::usage}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("Usage");
+      expect(content).not.toContain("<!-- politty:");
+      expect(content).toContain("test-cli");
+    });
+
+    it("typed placeholder for missing section expands to empty without stray blank lines", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      // greet command has no examples
+      fs.writeFileSync(templatePath, "Before\n\n{{politty:command:greet:examples}}\n\nAfter\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).not.toMatch(/\n{3,}/); // No 3+ consecutive newlines
+      expect(content).not.toContain("<!-- politty:");
+    });
+
+    it("empty own-line placeholder preserves CRLF template line endings", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "crlf-template.md");
+      const outputPath = path.join(testDir, "crlf-output.md");
+      fs.writeFileSync(templatePath, "Before\r\n{{politty:command:greet:examples}}\r\nAfter\r\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toBe("Before\r\nAfter\r\n");
+    });
+
+    it("non-update mode with matching output succeeds", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "# Docs\n\n{{politty:command}}\n");
+
+      await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      expect(result.files[0]?.status).toBe("match");
+    });
+
+    it("non-update mode with stale output fails and includes diff and path", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "# Docs\n\n{{politty:command}}\n");
+      fs.writeFileSync(outputPath, "stale content\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.status).toBe("diff");
+
+      await expect(
+        assertDocMatch({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow(outputPath);
+    });
+
+    it("subcommand scope placeholder renders that command tree", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "# Config Docs\n\n{{politty:command:config}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("config");
+      expect(content).toContain("config get");
+      expect(content).toContain("config set");
+      expect(content).not.toContain("<!-- politty:");
+    });
+
+    it("colon-separated scope placeholder resolves nested subcommands", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "colon-template.md");
+      const outputPath = path.join(testDir, "colon-output.md");
+      fs.writeFileSync(templatePath, "{{politty:command:config:get}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("config get");
+      expect(content).toContain("Get a config value");
+      expect(content).not.toContain("config set");
+    });
+
+    it("unknown scope throws with available paths", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command:nonexistent}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow("nonexistent");
+    });
+
+    it("unknown type throws listing SECTION_TYPES", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command::badtype}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow(/Unknown section type "badtype".*Valid section types/);
+    });
+
+    it("unknown directive throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:unknown}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow("unknown");
+    });
+
+    it("malformed placeholder syntax throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow(/Malformed politty placeholder/);
+    });
+
+    it("placeholder syntax with extra braces throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "extra-braces-template.md");
+      const outputPath = path.join(testDir, "extra-braces.md");
+      fs.writeFileSync(templatePath, "{{politty:command}}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow(/Malformed politty placeholder/);
+    });
+
+    it("placeholder syntax with extra opening brace throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "extra-open-brace-template.md");
+      const outputPath = path.join(testDir, "extra-open-brace.md");
+      fs.writeFileSync(templatePath, "{{{politty:command}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow(/Malformed politty placeholder/);
+    });
+
+    it("missing template file gives error result in both modes", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "nonexistent-template.md");
+      const outputPath = path.join(testDir, "output.md");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(false);
+      expect(result.files[0]?.status).toBe("diff");
+      expect(result.files[0]?.diff).toContain("Template file not found");
+
+      // Also fails in check mode
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+      const result2 = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result2.success).toBe(false);
+    });
+
+    it("output path collision with files key throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          files: { [outputPath]: [""] },
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("output path equal to template source path throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(outputPath, "{{politty:command}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: outputPath },
+        }),
+      ).rejects.toThrow();
+    });
+
+    it("global-options placeholder renders table and excludes from command options", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:global-options}}\n\n{{politty:command:greet}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), {
+            alias: "v",
+            description: "Enable verbose output",
+          }),
+        }),
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("global-options");
+      expect(content).not.toContain("<!-- politty:");
+    });
+
+    it("global-options placeholder without any global options config throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:global-options}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow("global-options");
+    });
+
+    it("index placeholder with templates and files includes both in categories", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "greet.md");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:index}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["greet"] },
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      // Should contain a link to the greet file
+      expect(content).toContain("greet");
+      expect(content).not.toContain("<!-- politty:");
+    });
+
+    it("index placeholder uses template front matter metadata for categories", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplatePath = path.join(testDir, "index-template.md");
+      const indexOutputPath = path.join(testDir, "index.md");
+      const commandTemplatePath = path.join(testDir, "command-template.md");
+      const commandOutputPath = path.join(testDir, "command.md");
+
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+      fs.writeFileSync(
+        commandTemplatePath,
+        [
+          "---",
+          "politty:",
+          "  index:",
+          "    title: Configuration Commands",
+          "    description: Commands for managing CLI configuration.",
+          "---",
+          "",
+          "{{politty:command:config}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [commandOutputPath]: commandTemplatePath,
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(indexOutputPath, "utf-8");
+      expect(content).toContain("[Configuration Commands]");
+      expect(content).toContain("Commands for managing CLI configuration.");
+    });
+
+    it("index placeholder honors ignores from files outputs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "config.md");
+      const indexTemplatePath = path.join(testDir, "index-template.md");
+      const indexOutputPath = path.join(testDir, "index.md");
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["config"] },
+        templates: { [indexOutputPath]: indexTemplatePath },
+        ignores: ["config set"],
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(indexOutputPath, "utf-8");
+      expect(content).toContain("config get");
+      expect(content).not.toContain("config set");
+    });
+
+    it("index placeholder keeps documented parents when all file children are ignored", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "config.md");
+      const indexTemplatePath = path.join(testDir, "index-parent-template.md");
+      const indexOutputPath = path.join(testDir, "index-parent.md");
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["config"] },
+        templates: { [indexOutputPath]: indexTemplatePath },
+        ignores: ["config get", "config set"],
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(indexOutputPath, "utf-8");
+      expect(content).toContain("| [config](");
+      expect(content).not.toContain("config get");
+      expect(content).not.toContain("config set");
+    });
+
+    it("formatter is applied to the final output", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command::heading}}\n");
+
+      const uppercaseFormatter = (content: string) => content.toUpperCase();
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+        formatter: uppercaseFormatter,
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toBe(content.toUpperCase());
+    });
+
+    it("passes fileMap with Object prototype to custom renderers", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "custom-render.md");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: {
+          [filePath]: {
+            commands: [""],
+            render: (info) => {
+              expect(info.fileMap?.hasOwnProperty("")).toBe(true);
+              return `# ${info.name}\n`;
+            },
+          },
+        },
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it("initDocFile deletes output path but not template source", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+      fs.writeFileSync(outputPath, "old content\n");
+
+      initDocFile({ templates: { [outputPath]: templatePath } });
+
+      expect(fs.existsSync(outputPath)).toBe(false);
+      expect(fs.existsSync(templatePath)).toBe(true);
+    });
+
+    it("templates combined with files both processed", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "greet.md");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command:config}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["greet"] },
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const paths = result.files.map((f) => f.path);
+      expect(paths).toContain(filePath);
+      expect(paths).toContain(outputPath);
+      // files results come before templates results
+      expect(paths.indexOf(filePath)).toBeLessThan(paths.indexOf(outputPath));
+    });
+
+    it("front matter can exclude a specific command placeholder", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          "    - command:config",
+          "---",
+          "",
+          "{{politty:command:greet}}",
+          "",
+          "{{politty:command:config}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([outputPath]);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("Greet someone");
+      expect(content).not.toContain("Manage configuration");
+      expect(content).not.toContain("{{politty:command:config}}");
+    });
+
+    it("politty front matter is removed from generated output", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "front-matter-output-template.md");
+      const outputPath = path.join(testDir, "front-matter-output.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "title: CLI docs",
+          "politty:",
+          "  exclude:",
+          '    - "{{politty:command:config}}"',
+          "---",
+          "",
+          "{{politty:command}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("title: CLI docs");
+      expect(content).not.toContain("politty:");
+      expect(content).not.toContain('    - ""');
+      expect(content).not.toContain("{{politty:");
+      expect(content).not.toContain("Manage configuration");
+    });
+
+    it("front matter command exclusions apply inside full parent command placeholders", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "parent-exclude-template.md");
+      const outputPath = path.join(testDir, "parent-exclude.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          "    - command:greet",
+          "---",
+          "",
+          "{{politty:command}}",
+          "",
+          "{{politty:command:greet}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("test-cli");
+      expect(content).toContain("config");
+      expect(content).not.toContain("[`greet`]");
+      expect(content).not.toContain("Greet someone");
+      expect(content).not.toContain("{{politty:command:greet}}");
+    });
+
+    it("front matter parent exclusions skip invalid child placeholders", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "parent-exclude-invalid-child-template.md");
+      const outputPath = path.join(testDir, "parent-exclude-invalid-child.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          "    - command:config",
+          "---",
+          "",
+          "{{politty:command:greet}}",
+          "",
+          "{{politty:command:config:nope}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("Greet someone");
+      expect(content).not.toContain("{{politty:command:config:nope}}");
+    });
+
+    it("ignores remove children from template command tables", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "ignore-child-template.md");
+      const outputPath = path.join(testDir, "ignore-child.md");
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+        ignores: ["greet"],
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).not.toContain("Greet someone");
+      expect(content).not.toContain("`greet`");
+      expect(content).toContain("Manage configuration");
+    });
+
+    it("front matter can exclude a typed command placeholder", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "typed-exclude-template.md");
+      const outputPath = path.join(testDir, "typed-exclude.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          "    - command:config:get:usage",
+          "---",
+          "",
+          "{{politty:command:config}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("config get");
+      expect(content).toContain("config set");
+      expect(content).toContain("**Arguments**");
+      expect(content).not.toContain("test-cli config get");
+    });
+
+    it("front matter section exclusions preserve fenced blank lines", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const commandWithNotes = defineCommand({
+        name: "notes-cli",
+        description: "CLI with notes",
+        notes: "```txt\nline1\n\n\nline2\n```",
+        run: () => {},
+      });
+      const templatePath = path.join(testDir, "notes-template.md");
+      const outputPath = path.join(testDir, "notes.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          "    - command::usage",
+          "---",
+          "",
+          "{{politty:command}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: commandWithNotes,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("line1\n\n\nline2");
+      expect(content).not.toContain("notes-cli [options]");
+    });
+
+    it("excluded placeholders are ignored during validation", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "unknown-exclude-template.md");
+      const outputPath = path.join(testDir, "unknown-exclude.md");
+      fs.writeFileSync(
+        templatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          '    - "{{politty:command:nope}}"',
+          "---",
+          "",
+          "{{politty:command:greet}}",
+          "",
+          "{{politty:command:nope}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("Greet someone");
+      expect(content).not.toContain("{{politty:command:nope}}");
+    });
+
+    it("excluded command placeholders do not contribute index entries", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplatePath = path.join(testDir, "index-template.md");
+      const indexOutputPath = path.join(testDir, "index.md");
+      const commandTemplatePath = path.join(testDir, "command-template.md");
+      const commandOutputPath = path.join(testDir, "command.md");
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+      fs.writeFileSync(
+        commandTemplatePath,
+        [
+          "---",
+          "politty:",
+          "  exclude:",
+          "    - command:config",
+          "---",
+          "",
+          "{{politty:command:greet}}",
+          "",
+          "{{politty:command:config}}",
+          "",
+        ].join("\n"),
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [commandOutputPath]: commandTemplatePath,
+        },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([indexOutputPath, commandOutputPath]);
+      const indexContent = fs.readFileSync(indexOutputPath, "utf-8");
+      expect(indexContent).toContain("greet");
+      expect(indexContent).not.toContain("config");
+    });
+
+    it("targetCommands skips templates that do not reference target scopes", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "greet.md");
+      const templatePath = path.join(testDir, "config-template.md");
+      const outputPath = path.join(testDir, "config.md");
+      fs.writeFileSync(templatePath, "{{politty:command:config}}\n");
+
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["greet"] },
+        templates: { [outputPath]: templatePath },
+      });
+
+      fs.writeFileSync(outputPath, "stale config docs\n");
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["greet"] },
+        templates: { [outputPath]: templatePath },
+        targetCommands: ["greet"],
+      });
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([filePath]);
+    });
+
+    it("targetCommands ignores validation errors in skipped templates", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filePath = path.join(testDir, "greet.md");
+      const templatePath = path.join(testDir, "broken-template.md");
+      const outputPath = path.join(testDir, "broken.md");
+      fs.writeFileSync(templatePath, "{{politty:command:nope}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["greet"] },
+        templates: { [outputPath]: templatePath },
+        targetCommands: ["greet"],
+      });
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([filePath]);
+    });
+
+    it("targetCommands processes templates that reference target scopes", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "config-template.md");
+      const outputPath = path.join(testDir, "config.md");
+      fs.writeFileSync(templatePath, "{{politty:command:config}}\n");
+
+      await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+
+      fs.writeFileSync(outputPath, "stale config docs\n");
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+        targetCommands: ["config"],
+      });
+      expect(result.success).toBe(false);
+      expect(result.files).toHaveLength(1);
+      expect(result.files[0]?.path).toBe(outputPath);
+      expect(result.files[0]?.status).toBe("diff");
+    });
+
+    it("targetCommands validates all scopes in active templates", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const conflictCommand = defineCommand({
+        name: "conflict-cli",
+        description: "CLI with a non-target global option conflict",
+        subCommands: {
+          run: defineCommand({
+            name: "run",
+            description: "Target command",
+            run: () => {},
+          }),
+          other: defineCommand({
+            name: "other",
+            description: "Non-target command with a conflicting option",
+            args: z.object({
+              verbose: arg(z.string(), { description: "Verbosity label" }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const templatePath = path.join(testDir, "mixed-template.md");
+      const outputPath = path.join(testDir, "mixed.md");
+      fs.writeFileSync(
+        templatePath,
+        "{{politty:global-options}}\n\n{{politty:command:run}}\n\n{{politty:command:other}}\n",
+      );
+
+      await expect(
+        generateDoc({
+          command: conflictCommand,
+          templates: { [outputPath]: templatePath },
+          targetCommands: ["run"],
+          globalArgs: z.object({
+            verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+          }),
+        }),
+      ).rejects.toThrow('does not match globalOptions definition for "verbose"');
+    });
+
+    it("targetCommands keeps link targets for all headings in active templates", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "mixed-link-template.md");
+      const outputPath = path.join(testDir, "mixed-link.md");
+      fs.writeFileSync(
+        templatePath,
+        "{{politty:command}}\n\n{{politty:command:greet}}\n\n{{politty:command:config}}\n",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+        targetCommands: ["greet"],
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("(#greet)");
+      expect(content).toContain("(#config)");
+    });
+
+    it("targetCommands keeps cross-output links to skipped template headings", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const rootTemplatePath = path.join(testDir, "root-template.md");
+      const rootOutputPath = path.join(testDir, "root.md");
+      const configTemplatePath = path.join(testDir, "config-template.md");
+      const configOutputPath = path.join(testDir, "config.md");
+      fs.writeFileSync(
+        rootTemplatePath,
+        "{{politty:command::heading}}\n\n{{politty:command::subcommands}}\n\n{{politty:command:greet}}\n",
+      );
+      fs.writeFileSync(configTemplatePath, "{{politty:command:config}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [rootOutputPath]: rootTemplatePath,
+          [configOutputPath]: configTemplatePath,
+        },
+        targetCommands: ["greet"],
+      });
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([rootOutputPath]);
+
+      const content = fs.readFileSync(rootOutputPath, "utf-8");
+      expect(content).toContain("config.md#config");
+    });
+
+    it("targetCommands processes global-options-only templates used by command outputs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const globalTemplatePath = path.join(testDir, "global-options-template.md");
+      const globalOutputPath = path.join(testDir, "global-options.md");
+      const commandTemplatePath = path.join(testDir, "greet-template.md");
+      const commandOutputPath = path.join(testDir, "greet.md");
+      fs.writeFileSync(globalTemplatePath, "{{politty:global-options}}\n");
+      fs.writeFileSync(commandTemplatePath, "{{politty:command:greet}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [globalOutputPath]: globalTemplatePath,
+          [commandOutputPath]: commandTemplatePath,
+        },
+        targetCommands: ["greet"],
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+        }),
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([globalOutputPath, commandOutputPath]);
+      const globalContent = fs.readFileSync(globalOutputPath, "utf-8");
+      const commandContent = fs.readFileSync(commandOutputPath, "utf-8");
+      expect(globalContent).toContain("global-options");
+      expect(commandContent).toContain("global-options.md#global-options");
+    });
+
+    it("targetCommands keeps index entries for skipped template headings", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplatePath = path.join(testDir, "index-template.md");
+      const indexOutputPath = path.join(testDir, "index.md");
+      const configTemplatePath = path.join(testDir, "config-template.md");
+      const configOutputPath = path.join(testDir, "config.md");
+      fs.writeFileSync(
+        indexTemplatePath,
+        "{{politty:command:greet:heading}}\n\n{{politty:index}}\n",
+      );
+      fs.writeFileSync(configTemplatePath, "{{politty:command:config}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [configOutputPath]: configTemplatePath,
+        },
+        targetCommands: ["greet"],
+      });
+      expect(result.success).toBe(true);
+      expect(result.files.map((f) => f.path)).toEqual([indexOutputPath]);
+
+      const content = fs.readFileSync(indexOutputPath, "utf-8");
+      expect(content).toContain("config.md#config");
+    });
+
+    it("index includes root-only template outputs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplatePath = path.join(testDir, "root-index-template.md");
+      const indexOutputPath = path.join(testDir, "root-index.md");
+      const rootTemplatePath = path.join(testDir, "root-page-template.md");
+      const rootOutputPath = path.join(testDir, "root-page.md");
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+      fs.writeFileSync(rootTemplatePath, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [rootOutputPath]: rootTemplatePath,
+        },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(indexOutputPath, "utf-8");
+      expect(content).toContain("root-page.md#test-cli");
+    });
+
+    it("targetCommands validates index-only templates", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplatePath = path.join(testDir, "index-only-template.md");
+      const indexOutputPath = path.join(testDir, "index-only.md");
+      const greetTemplatePath = path.join(testDir, "greet-template.md");
+      const greetOutputPath = path.join(testDir, "greet.md");
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+      fs.writeFileSync(greetTemplatePath, "{{politty:command:greet}}\n");
+
+      await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [greetOutputPath]: greetTemplatePath,
+        },
+      });
+
+      fs.writeFileSync(indexOutputPath, "stale index\n");
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [greetOutputPath]: greetTemplatePath,
+        },
+        targetCommands: ["greet"],
+      });
+      expect(result.success).toBe(false);
+      expect(result.files.some((f) => f.path === indexOutputPath && f.status === "diff")).toBe(
+        true,
+      );
+    });
+
+    // A trailing colon is ambiguous with the root command placeholder and must be rejected.
+    it("{{politty:command:}} (trailing colon) throws with clear message", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "{{politty:command:}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: { [outputPath]: templatePath },
+        }),
+      ).rejects.toThrow(/trailing colon|use \{\{politty:command\}\}/);
+    });
+
+    // The explicit typed-root form uses an empty scope plus a section type.
+    it("{{politty:command::usage}} (typed root) renders root usage section without error", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      fs.writeFileSync(templatePath, "# Usage\n\n{{politty:command::usage}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("test-cli");
+      expect(content).not.toContain("<!-- politty:");
+      expect(content).not.toContain("{{politty:");
+    });
+
+    // Template-only commands must still participate in global option compatibility checks.
+    it("template-only command with incompatible global option throws compatibility error", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      const rootDocPath = path.join(testDir, "root.md");
+
+      // greet command has a "name" option (positional), so use a fresh command that has
+      // a "verbose" option on a subcommand with a DIFFERENT type than the global definition.
+      const conflictCommand = defineCommand({
+        name: "conflict-cli",
+        description: "CLI for testing template-only global option conflict",
+        subCommands: {
+          run: defineCommand({
+            name: "run",
+            description: "Run something",
+            args: z.object({
+              // verbose here is z.string() but globalOptions defines it as z.boolean() — incompatible
+              verbose: arg(z.string(), {
+                description: "Verbosity level (string, conflicts with global boolean)",
+              }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+
+      // "run" is referenced only via the template, not through files.
+      fs.writeFileSync(templatePath, "{{politty:command:run}}\n");
+
+      await expect(
+        generateDoc({
+          command: conflictCommand,
+          // No files entry for "run" — it is a template-only reference
+          templates: { [outputPath]: templatePath },
+          rootDoc: {
+            path: rootDocPath,
+            globalOptions: {
+              verbose: arg(z.boolean().default(false), {
+                alias: "v",
+                description: "Enable verbose output",
+              }),
+            },
+          },
+        }),
+      ).rejects.toThrow('does not match globalOptions definition for "verbose"');
+    });
+
+    // Template sources must never overlap with generated outputs.
+    it("template source path conflicting with a files key throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const sharedPath = path.join(testDir, "cli.md");
+      const outputPath = path.join(testDir, "readme.md");
+      fs.writeFileSync(sharedPath, "{{politty:command}}\n");
+
+      // sharedPath is both a files key and the template source — must throw
+      await expect(
+        generateDoc({
+          command: testCommand,
+          files: { [sharedPath]: [""] },
+          templates: { [outputPath]: sharedPath },
+        }),
+      ).rejects.toThrow(/Template source path.*conflicts with a files output key/);
+    });
+
+    it("template source path conflicting with another template output path throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templateA = path.join(testDir, "template-a.md");
+      const outputA = path.join(testDir, "output-a.md");
+      const outputB = path.join(testDir, "output-b.md");
+      fs.writeFileSync(templateA, "{{politty:command}}\n");
+
+      // outputA is both a template output and the source for templateB — must throw
+      await expect(
+        generateDoc({
+          command: testCommand,
+          templates: {
+            [outputA]: templateA,
+            [outputB]: outputA,
+          },
+        }),
+      ).rejects.toThrow(/Template source path.*conflicts with a template output path/);
+    });
+
+    it("template source path conflicting with rootDoc.path throws", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const rootDocPath = path.join(testDir, "root.md");
+      const outputPath = path.join(testDir, "readme.md");
+      // rootDocPath is used as the template source — must throw
+      fs.writeFileSync(rootDocPath, "{{politty:command}}\n");
+
+      await expect(
+        generateDoc({
+          command: testCommand,
+          rootDoc: { path: rootDocPath },
+          templates: { [outputPath]: rootDocPath },
+        }),
+      ).rejects.toThrow(/Template source path.*conflicts with rootDoc\.path/);
+    });
+
+    // globalArgs-derived options should not duplicate command options in templates-only mode.
+    it("templates-only with globalArgs: global option appears once and not in command options", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "template.md");
+      const outputPath = path.join(testDir, "output.md");
+      // Use root command scope ({{politty:command}}) — testCommand root has "verbose" in its
+      // own args; "--verbose" must not appear in both the global-options table and the
+      // root command's own options table.
+      fs.writeFileSync(templatePath, "{{politty:global-options}}\n\n{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), {
+            alias: "v",
+            description: "Enable verbose output",
+          }),
+        }),
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      // The global-options section must be present
+      expect(content).toContain("global-options");
+      // Count table rows containing "--verbose": the option name in a markdown table cell.
+      // "--verbose" should appear in exactly one table row (the global-options table).
+      const verboseOptionRows = content.split("\n").filter((line) => line.includes("--verbose"));
+      expect(verboseOptionRows).toHaveLength(1);
+    });
+
+    // globalArgs-derived stripping/linking must NOT leak into files outputs, which have no
+    // reachable #global-options anchor. Only templates-only mode derives from globalArgs.
+    it("globalArgs does not strip options or add dead global-options link in files outputs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const filesOutputPath = path.join(testDir, "cmd.md");
+      const templatePath = path.join(testDir, "readme-template.md");
+      const templateOutputPath = path.join(testDir, "readme.md");
+      // Template does not need a global-options placeholder for this test.
+      fs.writeFileSync(templatePath, "{{politty:command:greet}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filesOutputPath]: [""] },
+        templates: { [templateOutputPath]: templatePath },
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), {
+            alias: "v",
+            description: "Enable verbose output",
+          }),
+        }),
+      });
+      expect(result.success).toBe(true);
+      const filesContent = fs.readFileSync(filesOutputPath, "utf-8");
+      // The root command's own --verbose option must remain (not stripped).
+      expect(filesContent).toContain("--verbose");
+      // No dead link to a #global-options anchor that the files output never emits.
+      expect(filesContent).not.toContain("#global-options");
+    });
+
+    it("index placeholder lists scopes rendered by command tree placeholders", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplatePath = path.join(testDir, "index-template.md");
+      const indexOutputPath = path.join(testDir, "index.md");
+      const commandTemplatePath = path.join(testDir, "cmd-template.md");
+      const commandOutputPath = path.join(testDir, "cmd.md");
+
+      // Template A: renders the index
+      fs.writeFileSync(indexTemplatePath, "{{politty:index}}\n");
+      // Template B renders the config command tree only.
+      fs.writeFileSync(commandTemplatePath, "{{politty:command:config}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutputPath]: indexTemplatePath,
+          [commandOutputPath]: commandTemplatePath,
+        },
+      });
+      expect(result.success).toBe(true);
+      const indexContent = fs.readFileSync(indexOutputPath, "utf-8");
+
+      expect(indexContent).toContain("config");
+      expect(indexContent).toContain("config get");
+      expect(indexContent).toContain("config set");
+      expect(indexContent).not.toContain("greet");
+    });
+
+    it("untyped root command placeholder renders the full command tree", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "root-only-template.md");
+      const outputPath = path.join(testDir, "root-only.md");
+
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+
+      expect(content).toContain("test-cli");
+      expect(content).toContain("greet");
+      expect(content).toContain("config get");
+      expect(content).toContain("config set");
+      expect(content).toContain("(#greet)");
+      expect(content).toContain("(#config)");
+    });
+
+    it("template link map handles command names from Object prototype", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const protoCommand = defineCommand({
+        name: "proto-cli",
+        description: "CLI with prototype-named command",
+        subCommands: {
+          toString: defineCommand({
+            name: "toString",
+            description: "Prototype named command",
+            run: () => {},
+          }),
+        },
+      });
+      const templatePath = path.join(testDir, "proto-template.md");
+      const outputPath = path.join(testDir, "proto.md");
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: protoCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("toString");
+      expect(content).toContain("(#tostring)");
+    });
+
+    it("subcommands-only template handles command names from Object prototype", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const protoCommand = defineCommand({
+        name: "proto-cli",
+        description: "CLI with prototype-named command",
+        subCommands: {
+          toString: defineCommand({
+            name: "toString",
+            description: "Prototype named command",
+            run: () => {},
+          }),
+        },
+      });
+      const templatePath = path.join(testDir, "proto-subcommands-template.md");
+      const outputPath = path.join(testDir, "proto-subcommands.md");
+      fs.writeFileSync(templatePath, "{{politty:command::subcommands}}\n");
+
+      const result = await generateDoc({
+        command: protoCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("`toString`");
+      expect(content).not.toContain("function");
+    });
+
+    it("template link map handles __proto__ command names", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const subCommands = {};
+      Object.defineProperty(subCommands, "__proto__", {
+        value: defineCommand({
+          name: "__proto__",
+          description: "Prototype setter command",
+          run: () => {},
+        }),
+        enumerable: true,
+      });
+      const protoCommand = defineCommand({
+        name: "proto-cli",
+        description: "CLI with __proto__ command",
+        subCommands,
+      });
+      const templatePath = path.join(testDir, "dunder-proto-template.md");
+      const outputPath = path.join(testDir, "dunder-proto.md");
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: protoCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("[`__proto__`](#__proto__)");
+      expect(content).toContain("# __proto__");
+    });
+
+    // An explicitly rendered child still links correctly within the same output.
+    it("explicitly rendered child keeps its local anchor link", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "root-and-greet-template.md");
+      const outputPath = path.join(testDir, "root-and-greet.md");
+
+      // Both root and the greet subcommand are rendered in the same output.
+      fs.writeFileSync(templatePath, "{{politty:command}}\n\n{{politty:command:greet}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+
+      // greet is rendered, so its row in the subcommands table links to the local anchor.
+      expect(content).toContain("(#greet)");
+    });
+
+    it("a template global-options placeholder provides global options to other outputs", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const withGoTemplate = path.join(testDir, "with-go-template.md");
+      const withGoOutput = path.join(testDir, "with-go.md");
+      const noGoTemplate = path.join(testDir, "no-go-template.md");
+      const noGoOutput = path.join(testDir, "no-go.md");
+
+      // Template A emits the global-options anchor and a command section.
+      fs.writeFileSync(withGoTemplate, "{{politty:global-options}}\n\n{{politty:command}}\n");
+      // Template B renders the same root command but does NOT emit a global-options anchor.
+      fs.writeFileSync(noGoTemplate, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [withGoOutput]: withGoTemplate,
+          [noGoOutput]: noGoTemplate,
+        },
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), {
+            alias: "v",
+            description: "Enable verbose output",
+          }),
+        }),
+      });
+      expect(result.success).toBe(true);
+
+      // Output WITH the anchor: verbose appears once (in the global-options table only).
+      const withGo = fs.readFileSync(withGoOutput, "utf-8");
+      expect(withGo.split("\n").filter((l) => l.includes("--verbose"))).toHaveLength(1);
+
+      // Output WITHOUT the anchor links to the template output that provides global options.
+      const noGo = fs.readFileSync(noGoOutput, "utf-8");
+      expect(noGo).not.toContain("--verbose");
+      expect(noGo).toContain("with-go.md#global-options");
+    });
+
+    // Typed-only placeholders do not produce a heading, so they must not appear in another
+    // template's index (which would link to a nonexistent anchor).
+    it("index does not list scopes referenced only by typed placeholders", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplate = path.join(testDir, "idx-template.md");
+      const indexOutput = path.join(testDir, "idx.md");
+      const typedTemplate = path.join(testDir, "typed-template.md");
+      const typedOutput = path.join(testDir, "typed.md");
+
+      fs.writeFileSync(indexTemplate, "{{politty:index}}\n");
+      // Only a typed section of greet — no greet heading is rendered here.
+      fs.writeFileSync(typedTemplate, "{{politty:command:greet:usage}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutput]: indexTemplate,
+          [typedOutput]: typedTemplate,
+        },
+      });
+      expect(result.success).toBe(true);
+
+      // greet has no heading anywhere, so it must not be listed in the index.
+      const idx = fs.readFileSync(indexOutput, "utf-8");
+      expect(idx).not.toContain("greet");
+    });
+
+    // The explicit "heading" section DOES produce an anchor, so such scopes are indexable.
+    it("index lists scopes rendered via an explicit heading placeholder", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const indexTemplate = path.join(testDir, "idx2-template.md");
+      const indexOutput = path.join(testDir, "idx2.md");
+      const headingTemplate = path.join(testDir, "heading-template.md");
+      const headingOutput = path.join(testDir, "heading.md");
+
+      fs.writeFileSync(indexTemplate, "{{politty:index}}\n");
+      // Render greet via its heading section — this emits a #greet anchor.
+      fs.writeFileSync(headingTemplate, "{{politty:command:greet:heading}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [indexOutput]: indexTemplate,
+          [headingOutput]: headingTemplate,
+        },
+      });
+      expect(result.success).toBe(true);
+
+      const idx = fs.readFileSync(indexOutput, "utf-8");
+      expect(idx).toContain("greet");
+    });
+
+    // Handwritten blank lines (e.g. inside a fenced code block) must be preserved verbatim;
+    // template content is the source of truth and is not reflowed.
+    it("preserves handwritten blank lines around generated content", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "blanks-template.md");
+      const outputPath = path.join(testDir, "blanks.md");
+
+      // A fenced code block with an intentional internal blank line, then a placeholder.
+      const template = "```\nline1\n\n\nline2\n```\n\n{{politty:command:greet:heading}}\n";
+      fs.writeFileSync(templatePath, template);
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      // The three consecutive newlines inside the code block survive untouched.
+      expect(content).toContain("line1\n\n\nline2");
+    });
+
+    // An empty own-line placeholder between two single newlines must not concatenate the
+    // adjacent handwritten lines.
+    it("empty own-line placeholder keeps adjacent lines separated", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "tight-template.md");
+      const outputPath = path.join(testDir, "tight.md");
+      // greet has no examples, so the typed placeholder resolves to empty.
+      fs.writeFileSync(templatePath, "Before\n{{politty:command:greet:examples}}\nAfter\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).not.toContain("BeforeAfter");
+      expect(content).toContain("Before");
+      expect(content).toContain("After");
+    });
+
+    it("empty inline placeholder at line end keeps the following newline", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "inline-empty-template.md");
+      const outputPath = path.join(testDir, "inline-empty.md");
+      fs.writeFileSync(templatePath, "Before{{politty:command:greet:examples}}\nAfter\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toBe("Before\nAfter\n");
+    });
+
+    it("empty own-line placeholder at file start does not leave a leading blank line", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "leading-empty-template.md");
+      const outputPath = path.join(testDir, "leading-empty.md");
+      fs.writeFileSync(templatePath, "{{politty:command:greet:examples}}\nAfter\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toBe("After\n");
+    });
+
+    it("stacked empty own-line placeholders do not leave leading blank lines", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "stacked-empty-template.md");
+      const outputPath = path.join(testDir, "stacked-empty.md");
+      fs.writeFileSync(
+        templatePath,
+        "{{politty:command:greet:examples}}\n{{politty:command:greet:notes}}\nAfter\n",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toBe("After\n");
+    });
+
+    // A typed-only ancestor placeholder must not skew the heading depth of the full-section
+    // command. Here "config" is referenced only via a typed (options) placeholder, so the
+    // heading depth is computed from "config get" alone — identical to rendering it on its own.
+    it("typed-only ancestor does not skew heading depth of a full-section command", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const withAncestor = path.join(testDir, "with-ancestor-template.md");
+      const withAncestorOut = path.join(testDir, "with-ancestor.md");
+      const aloneTemplate = path.join(testDir, "alone-template.md");
+      const aloneOut = path.join(testDir, "alone.md");
+
+      // One template references config (typed-only) plus config get (full section).
+      fs.writeFileSync(
+        withAncestor,
+        "{{politty:command:config:options}}\n\n{{politty:command:config:get}}\n",
+      );
+      // The other renders config get alone.
+      fs.writeFileSync(aloneTemplate, "{{politty:command:config:get}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [withAncestorOut]: withAncestor,
+          [aloneOut]: aloneTemplate,
+        },
+      });
+      expect(result.success).toBe(true);
+
+      // The "config get" heading must render at the same level in both outputs (its depth is not
+      // pulled shallower by the typed-only "config" reference).
+      const withAncestorContent = fs.readFileSync(withAncestorOut, "utf-8");
+      const aloneContent = fs.readFileSync(aloneOut, "utf-8");
+      const headingOf = (c: string): string =>
+        c.split("\n").find((l) => /^#+\s+(config get|get)\b/.test(l)) ?? "";
+      expect(headingOf(withAncestorContent)).toBe(headingOf(aloneContent));
+      expect(headingOf(aloneContent)).not.toBe("");
+    });
+
+    // A template that does NOT emit the global-options anchor must not be subjected to
+    // globalArgs compatibility validation (its options are left intact).
+    it("globalArgs compatibility is not enforced on non-emitting templates", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const conflictCommand = defineCommand({
+        name: "conflict-cli",
+        description: "CLI whose subcommand has a local option clashing with a global name",
+        subCommands: {
+          run: defineCommand({
+            name: "run",
+            description: "Run",
+            // Local "verbose" is a string, differing from the global boolean definition.
+            args: z.object({
+              verbose: arg(z.string().optional(), { description: "Verbosity label" }),
+            }),
+            run: () => {},
+          }),
+        },
+      });
+      const templatePath = path.join(testDir, "conflict-template.md");
+      const outputPath = path.join(testDir, "conflict.md");
+      // No {{politty:global-options}} here, so the local verbose must not be validated.
+      fs.writeFileSync(templatePath, "{{politty:command:run}}\n");
+
+      const result = await generateDoc({
+        command: conflictCommand,
+        templates: { [outputPath]: templatePath },
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+        }),
+      });
+      // Must NOT throw a compatibility error; the command renders with its own verbose option.
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("--verbose");
+    });
+
+    // For a union/discriminated-union command, an excluded global option must not reappear in the
+    // grouped option table rendered from `extracted`.
+    it("excluded global option is removed from grouped (union) option tables", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const unionCommand = defineCommand({
+        name: "union-cli",
+        description: "CLI with a discriminated-union schema and a shared global option",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: z.literal("create"),
+            name: arg(z.string(), { description: "Resource name" }),
+            verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+          }),
+          z.object({
+            action: z.literal("delete"),
+            id: arg(z.string(), { description: "Resource id" }),
+            verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+          }),
+        ]),
+        run: () => {},
+      });
+      const templatePath = path.join(testDir, "union-template.md");
+      const outputPath = path.join(testDir, "union.md");
+      fs.writeFileSync(templatePath, "{{politty:global-options}}\n\n{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: unionCommand,
+        templates: { [outputPath]: templatePath },
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+        }),
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      // verbose appears once — in the global-options table — not again in the union option groups.
+      expect(content.split("\n").filter((l) => l.includes("--verbose"))).toHaveLength(1);
+    });
+
+    it("rootDoc global option is removed from grouped option tables in templates", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const unionCommand = defineCommand({
+        name: "union-cli",
+        description: "CLI with rootDoc global options and a grouped local schema",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: z.literal("create"),
+            name: arg(z.string(), { description: "Resource name" }),
+            verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+          }),
+          z.object({
+            action: z.literal("delete"),
+            id: arg(z.string(), { description: "Resource id" }),
+            verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+          }),
+        ]),
+        run: () => {},
+      });
+      const rootDocPath = path.join(testDir, "union-root.md");
+      const templatePath = path.join(testDir, "union-root-template.md");
+      const outputPath = path.join(testDir, "union-output.md");
+      const globalOptions = {
+        verbose: arg(z.boolean().default(false), { description: "Enable verbose output" }),
+      };
+      fs.writeFileSync(
+        rootDocPath,
+        [
+          "# union-cli",
+          "",
+          "CLI with rootDoc global options and a grouped local schema",
+          "",
+          "<!-- politty:global-options:start -->",
+          renderArgsTable(globalOptions),
+          "<!-- politty:global-options:end -->",
+          "",
+        ].join("\n"),
+      );
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      const result = await generateDoc({
+        command: unionCommand,
+        templates: { [outputPath]: templatePath },
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions,
+        },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).not.toContain("--verbose");
+    });
+
+    // initDocFile must never delete a path that is also used as a template source, so a
+    // misconfigured { [p]: p } entry surfaces as a generateDoc validation error, not data loss.
+    it("initDocFile does not delete a path also used as a template source", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const shared = path.join(testDir, "shared.md");
+      fs.writeFileSync(shared, "{{politty:command}}\n");
+
+      initDocFile({ templates: { [shared]: shared } });
+
+      // The source file must still exist (not deleted as if it were a disposable output).
+      expect(fs.existsSync(shared)).toBe(true);
+    });
+
+    it("initDocFile does not delete rootDoc when a template output collides with it", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const rootDocPath = path.join(testDir, "root.md");
+      const templatePath = path.join(testDir, "root-template.md");
+      fs.writeFileSync(
+        rootDocPath,
+        "<!-- politty:global-options:start -->\n<!-- politty:global-options:end -->\n",
+      );
+      fs.writeFileSync(templatePath, "{{politty:command}}\n");
+
+      initDocFile({
+        rootDoc: { path: rootDocPath },
+        templates: { [rootDocPath]: templatePath },
+      });
+
+      expect(fs.existsSync(rootDocPath)).toBe(true);
+    });
+
+    // Cross-output links between templates: a parent rendered in one template links its
+    // subcommand to the other template output where that subcommand's heading is rendered.
+    it("subcommands table links to a heading rendered in another template output", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const parentTemplate = path.join(testDir, "parent-template.md");
+      const parentOutput = path.join(testDir, "parent.md");
+      const childTemplate = path.join(testDir, "child-template.md");
+      const childOutput = path.join(testDir, "child.md");
+
+      // The parent sections are rendered in one output; its child heading is rendered in another.
+      fs.writeFileSync(
+        parentTemplate,
+        "{{politty:command:config:heading}}\n\n{{politty:command:config:subcommands}}\n",
+      );
+      fs.writeFileSync(childTemplate, "{{politty:command:config:get}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: {
+          [parentOutput]: parentTemplate,
+          [childOutput]: childTemplate,
+        },
+      });
+      expect(result.success).toBe(true);
+
+      // config's subcommands table links "config get" to the child output, not a dead local anchor.
+      const parentContent = fs.readFileSync(parentOutput, "utf-8");
+      expect(parentContent).toContain("child.md#config-get");
+    });
+
+    // A command whose name contains a colon must be referenceable from a template, matching
+    // files mode (the section type is only consumed when the last token is a known type).
+    it("supports colon-containing command names in template placeholders", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const colonCommand = defineCommand({
+        name: "db-cli",
+        description: "DB CLI",
+        subCommands: {
+          "db:migrate": defineCommand({
+            name: "db:migrate",
+            description: "Run migrations",
+            run: () => {},
+          }),
+        },
+      });
+      const templatePath = path.join(testDir, "colon-template.md");
+      const outputPath = path.join(testDir, "colon.md");
+      // Full section and a typed section of the colon-named command.
+      fs.writeFileSync(
+        templatePath,
+        "{{politty:command:db:migrate}}\n\n{{politty:command:db:migrate:usage}}\n",
+      );
+
+      const result = await generateDoc({
+        command: colonCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("db:migrate");
+    });
+
+    it("prefers full colon-containing command scope over trailing section type", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const colonCommand = defineCommand({
+        name: "db-cli",
+        description: "DB CLI",
+        subCommands: {
+          "db:usage": defineCommand({
+            name: "db:usage",
+            description: "Command whose name ends with a section type",
+            run: () => {},
+          }),
+        },
+      });
+      const templatePath = path.join(testDir, "colon-usage-template.md");
+      const outputPath = path.join(testDir, "colon-usage.md");
+      fs.writeFileSync(templatePath, "{{politty:command:db:usage}}\n");
+
+      const result = await generateDoc({
+        command: colonCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("# db:usage");
+      expect(content).toContain("Command whose name ends with a section type");
+    });
+
+    // Handwritten blank-line runs unrelated to placeholders must survive (no global reflow).
+    it("does not collapse handwritten blank-line runs outside placeholders", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const templatePath = path.join(testDir, "prose-template.md");
+      const outputPath = path.join(testDir, "prose.md");
+      // Three blank lines between two prose paragraphs, far from any placeholder.
+      fs.writeFileSync(templatePath, "Para one.\n\n\n\nPara two.\n\n{{politty:command:greet}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+      const content = fs.readFileSync(outputPath, "utf-8");
+      expect(content).toContain("Para one.\n\n\n\nPara two.");
+    });
+
+    // A self-contained template that emits {{politty:global-options}} must link its subcommand
+    // sections to its OWN #global-options anchor, even when rootDoc.globalOptions also exists.
+    it("self-contained template links global options locally, not to rootDoc", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      const rootDocPath = path.join(testDir, "root.md");
+      // rootDoc must exist with its markers for generateDoc to validate it.
+      fs.writeFileSync(
+        rootDocPath,
+        [
+          "# test-cli",
+          "",
+          "A test CLI for documentation generation",
+          "",
+          "<!-- politty:global-options:start -->",
+          '<a id="global-options"></a>',
+          "",
+          "| Option | Alias | Description | Required | Default |",
+          "| --- | --- | --- | --- | --- |",
+          "| `--verbose` | `-v` | Enable verbose output | No | `false` |",
+          "<!-- politty:global-options:end -->",
+          "",
+        ].join("\n"),
+      );
+      const templatePath = path.join(testDir, "tmpl-template.md");
+      const outputPath = path.join(testDir, "tmpl.md");
+      // Render a subcommand (which gets a global-options link) plus the local global-options table.
+      fs.writeFileSync(
+        templatePath,
+        "{{politty:global-options}}\n\n{{politty:command:config:get}}\n",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: { verbose: arg(z.boolean().default(false), { alias: "v" }) },
+        },
+        templates: { [outputPath]: templatePath },
+      });
+      expect(result.success).toBe(true);
+
+      const content = fs.readFileSync(outputPath, "utf-8");
+      // The global-options link in command sections must point at the local anchor, not root.md.
+      expect(content).toContain("#global-options");
+      expect(content).not.toContain("root.md#global-options");
     });
   });
 });

@@ -73,6 +73,7 @@ console.log(result.files); // Status for each file
 | `formatter`      | `FormatterFunction`      | Formatter for generated content                              |
 | `examples`       | `ExampleConfig`          | Example execution settings per command                       |
 | `targetCommands` | `string[]`               | Specific commands to validate/generate (for partial updates) |
+| `templates`      | `Record<string, string>` | Output path → template path for marker-free generation       |
 
 ### `FileMapping`
 
@@ -115,6 +116,103 @@ interface FileConfig {
   render?: RenderFunction; // Custom renderer (optional)
 }
 ```
+
+### `templates` (Template-Based Generation)
+
+Generates marker-free output files from template files. The template is the
+source of truth: it mixes handwritten markdown with `{{politty:...}}`
+placeholders, and the output file is fully generated from it. Unlike the
+marker-based modes, the output contains no politty markers, and accidental
+edits to the output can never corrupt marker boundaries — they are simply
+overwritten on the next update.
+
+```typescript
+await assertDocMatch({
+  command,
+  // output path -> template path
+  templates: { "docs/README.md": "docs/README.template.md" },
+});
+```
+
+Available placeholders:
+
+| Placeholder                             | Expands to                                          |
+| --------------------------------------- | --------------------------------------------------- |
+| `{{politty:command}}`                   | Root command and descendant command tree            |
+| `{{politty:command:<scope>}}`           | `<scope>` command and descendant command tree       |
+| `{{politty:command::<section>}}`        | A single root-command section                       |
+| `{{politty:command:<scope>:<section>}}` | A single section of `<scope>`                       |
+| `{{politty:global-options}}`            | Global options table (from `globalArgs` / rootDoc)  |
+| `{{politty:index}}`                     | Command index derived from other configured outputs |
+
+`<scope>` uses `:` between subcommands (e.g. `config:get`). `<section>` is one
+of the section types: `heading`, `description`, `usage`, `arguments`,
+`options`, `global-options-link`, `subcommands`, `examples`, `notes`. A typed
+placeholder for a section the command does not have expands to nothing.
+
+Template example:
+
+```markdown
+# My CLI
+
+Handwritten introduction.
+
+{{politty:command}}
+
+Handwritten notes between generated sections.
+
+{{politty:command:config:get}}
+```
+
+Exclude specific placeholders from generation with front matter. Excluded
+placeholders expand to nothing and do not participate in validation, indexes,
+or cross-output link maps:
+
+```markdown
+---
+politty:
+  exclude:
+    - command:config
+    - command:config:get:usage
+---
+
+# My CLI
+
+{{politty:command}}
+
+<!-- The placeholders below are ignored by the docs generator. -->
+
+{{politty:command:config}}
+{{politty:command:config:get:usage}}
+```
+
+Behavior notes:
+
+- Command placeholders without a section expand the selected command and its
+  descendant commands. Use typed placeholders to render individual sections.
+- `politty.exclude` entries are exact placeholder directives without the
+  `{{politty:...}}` wrapper. Quoted full placeholders such as
+  `"{{politty:command:config}}"` are also accepted.
+- Excluded command scopes are removed before validation and rendering, so an
+  excluded command scope is not required to exist, is not listed by
+  `{{politty:index}}`, and is omitted from parent command output such as
+  `{{politty:command}}` subcommand tables.
+- Excluded section entries such as `command:config:get:usage` remove only that
+  section, including when the full command is rendered with
+  `{{politty:command:config:get}}`.
+- Validation happens before generation: unknown scopes, section types, or
+  directives throw with the list of valid values.
+- `templates` can be combined with `files`/`path` in the same config, but an
+  output path must not collide with a `files` key or `rootDoc.path`.
+- In update mode (`POLITTY_DOCS_UPDATE=true`) the output file is (re)written;
+  otherwise the generated content is compared against the existing output and
+  differences fail the test.
+- `initDocFile` deletes template OUTPUT files (never the template sources).
+- Literal `{{politty:...}}` text cannot appear in a template as prose — it is
+  always treated as a placeholder. Write it without the curly braces when
+  documenting the syntax itself.
+
+See `playground/30-template-docs` for a complete example.
 
 ### `ignores`
 
