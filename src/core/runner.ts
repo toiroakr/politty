@@ -7,7 +7,7 @@ import {
 } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
-import { findFirstPositional } from "../parser/subcommand-scanner.js";
+import { findFirstPositional, findFirstPositionalIndex } from "../parser/subcommand-scanner.js";
 import type {
   AnyCommand,
   ArgsSchema,
@@ -250,6 +250,36 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
 
   const globalExtracted = extractAndValidateGlobal(effectiveOptions);
 
+  // Plugin dispatch: when the first positional is not a known subcommand and a
+  // handler is registered, delegate to it (e.g. exec an external `<cli>-<name>`
+  // binary). Runs before global setup/cleanup so plugins are independent of the
+  // host CLI's lifecycle, and is skipped for internal (`__*`) invocations.
+  if (
+    effectiveOptions.onUnknownSubcommand &&
+    !isInternalSubcommandInvocation(command, argv, globalExtractedForBypass)
+  ) {
+    const knownSubCommands = listSubCommandNamesWithAliases(command);
+    if (knownSubCommands.size > 0) {
+      const positionalIndex = findFirstPositionalIndex(argv, globalExtracted);
+      const name = positionalIndex >= 0 ? argv[positionalIndex] : undefined;
+      if (name && !knownSubCommands.has(name)) {
+        const forwardArgs = argv.slice(positionalIndex + 1);
+        const exitCode = await effectiveOptions.onUnknownSubcommand({
+          commandPath: [],
+          name,
+          args: forwardArgs,
+        });
+        if (typeof exitCode === "number") {
+          await flushStandardStreams();
+          // Return the `never` from process.exit so the branch short-circuits:
+          // in real runs it terminates, and if process.exit is mocked (tests/
+          // embedding) execution won't fall through into setup/command run.
+          return process.exit(exitCode);
+        }
+      }
+    }
+  }
+
   // Global setup
   if (effectiveOptions.setup) {
     try {
@@ -275,6 +305,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     logger: effectiveOptions.logger,
     globalArgs: effectiveOptions.globalArgs,
     prompt: effectiveOptions.prompt,
+    onUnknownSubcommand: effectiveOptions.onUnknownSubcommand,
     _globalExtracted: globalExtracted,
     _globalCleanup: effectiveOptions.cleanup,
     _context: {
@@ -303,17 +334,30 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     }
   }
 
-  // Flush stdout/stderr before exit to prevent truncated output when piped.
-  // When stdout/stderr is a pipe, writes are buffered asynchronously.
-  // Calling process.exit() before the buffer is drained causes data loss.
-  if (process.stdout.writableLength > 0) {
-    await new Promise<void>((resolve) => process.stdout.once("drain", resolve));
-  }
-  if (process.stderr.writableLength > 0) {
-    await new Promise<void>((resolve) => process.stderr.once("drain", resolve));
-  }
+  await flushStandardStreams();
 
   process.exit(result.exitCode);
+}
+
+/**
+ * Flush stdout/stderr before exit to prevent truncated output when piped.
+ * When stdout/stderr is a pipe, writes are buffered asynchronously, so calling
+ * process.exit() before the buffer is drained causes data loss.
+ *
+ * We enqueue a zero-byte write and await its callback rather than waiting for a
+ * `drain` event: `drain` only fires after a prior `write()` returned `false`
+ * (backpressure), so buffered writes that never tripped backpressure would hang
+ * an `once("drain")` wait. The write callback is ordered after all pending
+ * writes, so it reliably resolves once the buffer is flushed.
+ */
+async function flushStandardStreams(): Promise<void> {
+  await Promise.all(
+    [process.stdout, process.stderr].map((stream) =>
+      stream.writableLength > 0
+        ? new Promise<void>((resolve) => stream.write("", () => resolve()))
+        : Promise.resolve(),
+    ),
+  );
 }
 
 /**
@@ -360,6 +404,62 @@ async function runCommandInternal<TResult = unknown>(
       ...options._parsedGlobalArgs,
       ...parseResult.rawGlobalArgs,
     };
+
+    // Nested plugin dispatch: an unknown positional under a known parent
+    // command (e.g. `cli foo bar` -> `cli-foo-bar`). Runs before --help/--version
+    // handling so those flags are forwarded to the plugin, mirroring the
+    // root-level dispatch in runMain. Root level (empty command path) is handled
+    // in runMain before global setup; here we only cover nested levels.
+    const nestedCommandPath = context.commandPath ?? [];
+    if (options.onUnknownSubcommand && nestedCommandPath.length > 0) {
+      const knownSubCommands = listSubCommandNamesWithAliases(command);
+      if (knownSubCommands.size > 0) {
+        const positionalIndex = findFirstPositionalIndex(argv, options._globalExtracted);
+        const name = positionalIndex >= 0 ? argv[positionalIndex] : undefined;
+        if (name && !knownSubCommands.has(name)) {
+          const forwardArgs = argv.slice(positionalIndex + 1);
+          const exitCode = await options.onUnknownSubcommand({
+            commandPath: nestedCommandPath,
+            name,
+            args: forwardArgs,
+          });
+          if (typeof exitCode === "number") {
+            collector?.stop();
+            // In a real CLI run (runMain sets handleSignals), exit directly with
+            // the plugin's code, mirroring root-level dispatch. Programmatic
+            // runCommand callers get a typed result instead and let their caller
+            // run cleanup.
+            if (options.handleSignals) {
+              // Exiting here bypasses runMain's "Global cleanup (always)" block,
+              // so run cleanup explicitly: at this nested level global setup has
+              // already run, and leaving it unbalanced would leak resources.
+              if (options._globalCleanup) {
+                try {
+                  await options._globalCleanup({ error: undefined });
+                } catch {
+                  // Swallow - we're about to exit anyway.
+                }
+              }
+              await flushStandardStreams();
+              // No `return` here: in a real run process.exit terminates, but
+              // when it is mocked (tests) execution must fall through to the
+              // typed result below so the recursion returns a valid RunResult.
+              process.exit(exitCode);
+            }
+            return exitCode === 0
+              ? { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() }
+              : {
+                  success: false,
+                  error: new Error(
+                    `Plugin "${[...nestedCommandPath, name].join(" ")}" exited with code ${exitCode}`,
+                  ),
+                  exitCode,
+                  logs: getCurrentLogs(),
+                };
+          }
+        }
+      }
+    }
 
     // Handle --help or --help-all
     if (parseResult.helpRequested || parseResult.helpAllRequested) {
