@@ -251,6 +251,13 @@ export interface DefaultRendererOptions {
   generateAnchors?: boolean;
   /** Include subcommand details */
   includeSubcommandDetails?: boolean;
+  /**
+   * Omit the `<!-- politty:...:start/end -->` section markers from the rendered
+   * output. Used by marker-free `files` generation. When markers are omitted the
+   * output can only be regenerated wholesale (sections can no longer be located
+   * and updated in place), which is exactly how marker-free `files` mode works.
+   */
+  markerless?: boolean;
   /** Custom renderer for description section */
   renderDescription?: SimpleRenderFunction;
   /** Custom renderer for usage section */
@@ -392,6 +399,27 @@ export interface GenerateDocConfig {
    * politty markers. Can be combined with `files` or `path`.
    */
   templates?: Record<string, string>;
+  /**
+   * Declare that you will hand-customize the `files` output.
+   *
+   * Default `false`: the output is fully generated and regenerated wholesale on
+   * every run (with `targetCommands`, only files containing a target command are
+   * regenerated, but each such file is rebuilt in full). The output carries no
+   * `<!-- politty:...:start/end -->` markers — do not hand-edit it.
+   *
+   * Set to `true` when you want to hand-edit the output and have politty preserve
+   * your edits: generated sections are wrapped in markers and updated in place
+   * (with `targetCommands`), and handwritten content between them is kept. When a
+   * command in the generated output gains a section the file does not yet have,
+   * it is reported as a non-fatal warning (run with `POLITTY_DOCS_DOCTOR=true
+   * POLITTY_DOCS_UPDATE=true` to insert it, or leave it removed to opt that
+   * section out).
+   *
+   * This flag does not affect `path`/`rootDoc` output, which always uses markers
+   * to inject generated sections into a handwritten file, nor `templates`, which
+   * are always fully generated.
+   */
+  customizable?: boolean;
 }
 
 /**

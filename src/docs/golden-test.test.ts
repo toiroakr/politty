@@ -9,7 +9,6 @@ import { renderArgsTable } from "./render-args.js";
 import { renderCommandIndex } from "./render-index.js";
 import {
   DOCTOR_ENV,
-  SECTION_TYPES,
   sectionEndMarker,
   sectionStartMarker,
   UPDATE_GOLDEN_ENV,
@@ -124,24 +123,54 @@ describe("golden-test", () => {
       expect(content).toContain("# test-cli");
       expect(content).toContain("A test CLI for documentation generation");
 
-      // Verify all expected section markers are included
-      const expectedSections: SectionType[] = [
-        "heading",
-        "description",
-        "usage",
-        "options",
-        "subcommands",
-      ];
-      for (const section of expectedSections) {
-        expect(content).toContain(`<!-- politty:command::${section}:start -->`);
-        expect(content).toContain(`<!-- politty:command::${section}:end -->`);
-      }
+      // files mode is marker-free by default: the generated content carries no politty markers.
+      expect(content).not.toContain("<!-- politty:");
+      // The expected sections are still rendered, just without marker comments.
+      expect(content).toContain("**Usage**");
+      expect(content).toContain("**Options**");
+      expect(content).toContain("**Commands**");
+    });
 
-      // Verify sections without data are not included
-      const absentSections = SECTION_TYPES.filter((s) => !expectedSections.includes(s));
-      for (const section of absentSections) {
-        expect(content).not.toContain(`<!-- politty:command::${section}:start -->`);
-      }
+    it("regenerates the whole file (marker-free) when targetCommands is used", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "cli.md");
+      await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+      });
+
+      // Corrupt the file: marker-free files mode cannot do section surgery, so a targeted
+      // update must rebuild the whole file rather than patch an in-place section.
+      fs.writeFileSync(filePath, "corrupted\n", "utf-8");
+
+      const result = await generateDoc({
+        command: testCommand,
+        files: { [filePath]: ["", "greet", "config"] },
+        targetCommands: ["greet"],
+      });
+
+      expect(result.success).toBe(true);
+      const restored = fs.readFileSync(filePath, "utf-8");
+      expect(restored).not.toContain("<!-- politty:");
+      expect(restored).not.toContain("corrupted");
+      expect(restored).toContain("greet");
+      expect(restored).toContain("config");
+    });
+
+    it("emits section markers when customizable: true is set", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const filePath = path.join(testDir, "cli.md");
+      await generateDoc({
+        command: testCommand,
+        customizable: true,
+        files: { [filePath]: [""] },
+      });
+
+      const content = fs.readFileSync(filePath, "utf-8");
+      expect(content).toContain("<!-- politty:command::heading:start -->");
+      expect(content).toContain("<!-- politty:command::heading:end -->");
     });
 
     it("should report match when content is identical", async () => {
@@ -1452,6 +1481,7 @@ describe("golden-test", () => {
       // Create file with all commands
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["", "greet", "config"] },
       });
 
@@ -1460,6 +1490,7 @@ describe("golden-test", () => {
       // Validate only greet command - should match
       const result = await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["", "greet", "config"] },
         targetCommands: ["greet"],
       });
@@ -1476,6 +1507,7 @@ describe("golden-test", () => {
       // Create initial file
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["", "greet", "config"] },
       });
 
@@ -1494,6 +1526,7 @@ describe("golden-test", () => {
       // Update only greet command
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["", "greet", "config"] },
         targetCommands: ["greet"],
       });
@@ -1511,6 +1544,7 @@ describe("golden-test", () => {
       await expect(
         generateDoc({
           command: testCommand,
+          customizable: true,
           files: { [filePath]: [""] },
           targetCommands: ["nonexistent"],
         }),
@@ -1525,6 +1559,7 @@ describe("golden-test", () => {
       // Create file with all commands
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["", "greet", "config"] },
       });
 
@@ -1533,6 +1568,7 @@ describe("golden-test", () => {
       // Validate multiple commands - should match
       const result = await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["", "greet", "config"] },
         targetCommands: ["greet", "config"],
       });
@@ -1549,6 +1585,7 @@ describe("golden-test", () => {
       // Create initial file
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["", "greet", "config"] },
       });
 
@@ -1570,6 +1607,7 @@ describe("golden-test", () => {
       // Update both commands
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["", "greet", "config"] },
         targetCommands: ["greet", "config"],
       });
@@ -1591,6 +1629,7 @@ describe("golden-test", () => {
       // Create files with commands split across them
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: {
           [mainPath]: ["", "greet"],
           [configPath]: ["config"],
@@ -1602,6 +1641,7 @@ describe("golden-test", () => {
       // Validate commands from different files
       const result = await generateDoc({
         command: testCommand,
+        customizable: true,
         files: {
           [mainPath]: ["", "greet"],
           [configPath]: ["config"],
@@ -1622,6 +1662,7 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: {
           [targetPath]: ["greet"],
           [otherPath]: ["config"],
@@ -1636,6 +1677,7 @@ describe("golden-test", () => {
 
       const result = await generateDoc({
         command: testCommand,
+        customizable: true,
         files: {
           [targetPath]: ["greet"],
           [otherPath]: ["config"],
@@ -1657,6 +1699,7 @@ describe("golden-test", () => {
       // Create initial file with all sections
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["", "greet", "config"] },
       });
 
@@ -1671,6 +1714,7 @@ describe("golden-test", () => {
       // Run update targeting greet
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["", "greet", "config"] },
         targetCommands: ["greet"],
       });
@@ -1693,6 +1737,7 @@ describe("golden-test", () => {
       // Step 1: Generate initial doc with config command (has get & set subcommands)
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["config"] },
       });
 
@@ -1763,6 +1808,7 @@ describe("golden-test", () => {
       // This should auto-expand to include "config delete" as a new subcommand
       await generateDoc({
         command: extendedCommand,
+        customizable: true,
         files: { [filePath]: ["config"] },
         targetCommands: ["config"],
       });
@@ -1791,6 +1837,7 @@ describe("golden-test", () => {
       // Create initial file with all sections
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["", "greet", "config"] },
       });
 
@@ -1805,6 +1852,7 @@ describe("golden-test", () => {
       // Validate targeting greet — should succeed (opted-out sections should not cause diff)
       const result = await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["", "greet", "config"] },
         targetCommands: ["greet"],
       });
@@ -1829,6 +1877,7 @@ describe("golden-test", () => {
       const filePath = path.join(testDir, fileName);
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: filesConfig },
       });
 
@@ -1849,6 +1898,7 @@ describe("golden-test", () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "");
       const resultNormal = await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
@@ -1858,6 +1908,7 @@ describe("golden-test", () => {
       vi.stubEnv(DOCTOR_ENV, "true");
       const resultDoctor = await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
@@ -1874,6 +1925,7 @@ describe("golden-test", () => {
       vi.stubEnv(DOCTOR_ENV, "true");
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
@@ -1896,6 +1948,7 @@ describe("golden-test", () => {
 
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
@@ -1911,6 +1964,7 @@ describe("golden-test", () => {
       vi.stubEnv(DOCTOR_ENV, "true");
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
@@ -1936,6 +1990,7 @@ describe("golden-test", () => {
       vi.stubEnv(DOCTOR_ENV, "true");
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
@@ -1963,6 +2018,7 @@ describe("golden-test", () => {
       const filePath = path.join(testDir, "doctor-multi-missing.md");
       await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: filesConfig },
       });
 
@@ -1977,6 +2033,7 @@ describe("golden-test", () => {
       vi.stubEnv(DOCTOR_ENV, "true");
       const result = await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: filesConfig },
         targetCommands: ["greet"],
       });
@@ -3032,6 +3089,7 @@ This command was removed
 
       const result = await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["greet"] },
         targetCommands: ["greet"],
       });
@@ -3079,6 +3137,7 @@ test-cli greet <name>
 
       const result = await generateDoc({
         command: testCommand,
+        customizable: true,
         files: { [filePath]: ["greet"] },
         targetCommands: ["greet"],
       });
@@ -3934,6 +3993,7 @@ ${argsContent}
       async function generateWithOptionsMarkers(readmePath: string, refPath: string) {
         await generateDoc({
           command: commandAllGlobal,
+          customizable: true,
           rootDoc: { path: refPath },
           files: { [readmePath]: ["run"] },
         });
@@ -3956,6 +4016,7 @@ ${argsContent}
         // Run with globalOptions that filter ALL command options
         await generateDoc({
           command: commandAllGlobal,
+          customizable: true,
           rootDoc: { path: refPath, globalOptions: globalOptionsConfig },
           files: { [readmePath]: ["run"] },
           targetCommands: ["run"],
@@ -4005,6 +4066,7 @@ ${argsContent}
         // Step 2: Run with globalOptions → options content cleared
         await generateDoc({
           command: commandAllGlobal,
+          customizable: true,
           rootDoc: { path: refPath, globalOptions: globalOptionsConfig },
           files: { [readmePath]: ["run"] },
           targetCommands: ["run"],
@@ -4015,6 +4077,7 @@ ${argsContent}
         // Step 3: Run WITHOUT globalOptions again → options content restored
         await generateDoc({
           command: commandAllGlobal,
+          customizable: true,
           rootDoc: { path: refPath },
           files: { [readmePath]: ["run"] },
           targetCommands: ["run"],
@@ -4059,6 +4122,7 @@ ${argsContent}
         // Step 1: Generate with examples
         await generateDoc({
           command: commandWithExamples,
+          customizable: true,
           files: { [readmePath]: ["run"] },
         });
 
@@ -4069,6 +4133,7 @@ ${argsContent}
         // Step 2: Update with examples removed → content cleared, markers remain
         await generateDoc({
           command: commandWithoutExamples,
+          customizable: true,
           files: { [readmePath]: ["run"] },
           targetCommands: ["run"],
         });
@@ -4081,6 +4146,7 @@ ${argsContent}
         // Step 3: Update with examples restored → content restored
         await generateDoc({
           command: commandWithExamples,
+          customizable: true,
           files: { [readmePath]: ["run"] },
           targetCommands: ["run"],
         });
@@ -4332,6 +4398,33 @@ ${argsContent}
       expect(content).toContain("config get");
       expect(content).toContain("config set");
       expect(content).not.toContain("<!-- politty:");
+    });
+
+    it("resolves cross-output links to the most specific output regardless of registration order", async () => {
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+      // The full-tree page is registered FIRST; the dedicated config page SECOND. Link resolution
+      // must pick the dedicated page for config and its descendants by specificity, not by order.
+      const rootTpl = path.join(testDir, "root.template.md");
+      const rootOut = path.join(testDir, "root.md");
+      const configTpl = path.join(testDir, "config.template.md");
+      const configOut = path.join(testDir, "config.md");
+      fs.writeFileSync(rootTpl, "{{politty:command}}\n");
+      fs.writeFileSync(configTpl, "{{politty:command:config}}\n");
+
+      const result = await generateDoc({
+        command: testCommand,
+        templates: { [rootOut]: rootTpl, [configOut]: configTpl },
+      });
+
+      expect(result.success).toBe(true);
+      const rootContent = fs.readFileSync(rootOut, "utf-8");
+      const configContent = fs.readFileSync(configOut, "utf-8");
+
+      // Root page links config (and its subcommands) to the dedicated config page.
+      expect(rootContent).toContain("config.md#config");
+      // Dedicated config page links its own descendants in-page, never back to the root page.
+      expect(configContent).toContain("(#config-get)");
+      expect(configContent).not.toContain("root.md#config-get");
     });
 
     it("colon-separated scope placeholder resolves nested subcommands", async () => {

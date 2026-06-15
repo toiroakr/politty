@@ -1105,6 +1105,15 @@ interface TemplateMeta {
    * Used to build cross-output links and index rows that only point at real anchors.
    */
   headingScopes: string[];
+  /**
+   * The command scopes at which this output roots a heading: full-tree placeholder scopes
+   * (`{{politty:command}}` → `""`, `{{politty:command:<scope>}}` → `<scope>`) and typed
+   * `heading` placeholders (`{{politty:command:<scope>:heading}}` → `<scope>`). Used to resolve
+   * cross-output links by SPECIFICITY: a scope links to the output whose nearest (longest)
+   * ancestor root renders it, so a dedicated per-command page wins over a full-tree page
+   * regardless of registration order.
+   */
+  commandTreeRoots: string[];
   /** Whether this output emits a `#global-options` anchor via `{{politty:global-options}}`. */
   emitsGlobalOptions: boolean;
   /** Whether this output renders an index from configured outputs via `{{politty:index}}`. */
@@ -2305,6 +2314,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     examples: examplesConfig,
     targetCommands,
     globalArgs,
+    customizable = false,
   } = config;
 
   // Collect all commands early (needed for PathConfig conversion)
@@ -2505,6 +2515,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
         templateMeta.set(outputPath, {
           referencedScopes: [],
           headingScopes: [],
+          commandTreeRoots: [],
           emitsGlobalOptions: false,
           emitsIndex: false,
         });
@@ -2522,6 +2533,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       );
       const scopes = new Set<string>();
       const headingScopes = new Set<string>();
+      const commandTreeRoots = new Set<string>();
       let emitsGlobalOptions = false;
       let emitsIndex = false;
       const exclusions = templateExclusions.get(outputPath) ?? createTemplateExclusions(new Set());
@@ -2574,6 +2586,10 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
               ignores,
               exclusions,
             );
+            // The placeholder scope is the root of this rendered tree (used for link specificity).
+            if (!isCommandSectionExcluded(scope, "heading", exclusions)) {
+              commandTreeRoots.add(scope);
+            }
             for (const commandTreePath of commandTreePaths) {
               scopes.add(commandTreePath);
               if (!isCommandSectionExcluded(commandTreePath, "heading", exclusions)) {
@@ -2588,6 +2604,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
             // feed cross-output links or index rows.
             if (type === "heading" && !isCommandSectionExcluded(scope, "heading", exclusions)) {
               headingScopes.add(scope);
+              // A typed heading renders exactly this scope's heading: it is its own (maximally
+              // specific) root for link resolution.
+              commandTreeRoots.add(scope);
             }
           }
         } else if (parsed.kind === "global-options") {
@@ -2611,6 +2630,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       templateMeta.set(outputPath, {
         referencedScopes: Array.from(scopes),
         headingScopes: Array.from(headingScopes),
+        commandTreeRoots: Array.from(commandTreeRoots),
         emitsGlobalOptions,
         emitsIndex,
         ...(indexMetadata.title !== undefined ? { indexTitle: indexMetadata.title } : {}),
@@ -2709,19 +2729,41 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // Link map covering both files outputs and template-output headings, so a command rendered in
   // one place can link to its heading rendered in another (in either direction). Only scopes that
   // actually produce a heading in a template output are added. A files output (already in fileMap)
-  // takes precedence over template outputs, and the first template wins over later ones, so a
-  // command rendered in multiple places gets a stable, order-independent link target rather than
-  // being overwritten by whichever output happens to be processed last.
+  // takes precedence over template outputs; among template outputs, the most SPECIFIC renderer of
+  // a scope wins (see below), giving a stable, order-independent link target.
   const templateFileMap: Record<string, string> = {};
   for (const [scope, outputPath] of Object.entries(fileMap)) {
     setFileMapEntry(templateFileMap, scope, outputPath);
   }
+  // Resolve each template-rendered scope to the output that renders it most specifically: the
+  // output whose nearest (longest) command-tree root is an ancestor-or-equal of the scope wins.
+  // This makes a dedicated per-command page (`{{politty:command:module}}`) own `module` and its
+  // descendants over a full-tree page (`{{politty:command}}`), independent of registration order.
+  // Files outputs (already in fileMap) always take precedence; ties fall back to first registration.
+  const scopeRootLength = (root: string): number => (root === "" ? 0 : root.split(" ").length);
+  const templateOwners = new Map<string, { outputPath: string; rootLen: number }>();
   for (const [templateOutputPath, meta] of templateMeta.entries()) {
     for (const scope of meta.headingScopes) {
-      if (!Object.prototype.hasOwnProperty.call(templateFileMap, scope)) {
-        setFileMapEntry(templateFileMap, scope, templateOutputPath);
+      if (Object.prototype.hasOwnProperty.call(fileMap, scope)) {
+        continue;
+      }
+      let bestRootLen = -1;
+      for (const root of meta.commandTreeRoots) {
+        if (isSubcommandOf(scope, root)) {
+          bestRootLen = Math.max(bestRootLen, scopeRootLength(root));
+        }
+      }
+      if (bestRootLen < 0) {
+        continue;
+      }
+      const existing = templateOwners.get(scope);
+      if (!existing || bestRootLen > existing.rootLen) {
+        templateOwners.set(scope, { outputPath: templateOutputPath, rootLen: bestRootLen });
       }
     }
+  }
+  for (const [scope, { outputPath }] of templateOwners) {
+    setFileMapEntry(templateFileMap, scope, outputPath);
   }
 
   const results: GenerateDocResult["files"] = [];
@@ -2764,22 +2806,34 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       (format?.headingLevel ?? 1) - (minDepth - 1),
     ) as HeadingLevel;
 
+    // In PathConfig mode, the rootDoc file has extra content (header, global-options)
+    // managed by rootDoc processing and always uses markers to inject generated sections
+    // into handwritten content.
+    const isRootDocFile =
+      usingPathConfig &&
+      rootDoc &&
+      normalizeDocPathForComparison(filePath) === normalizeDocPathForComparison(rootDoc.path);
+    // `path` mode injects generated sections into hand-authored files, so every file in a
+    // path config uses markers. Plain `files` output is fully generated unless the caller opts
+    // into hand-customizable output via `customizable: true`. (isRootDocFile implies
+    // usingPathConfig, so it is already covered here.)
+    const fileUsesMarkers = usingPathConfig || customizable;
+
     // Create file-specific renderer with adjusted headingLevel (if no custom renderer)
     const fileRenderer = createCommandRenderer({
       ...format,
       headingLevel: adjustedHeadingLevel,
+      markerless: !fileUsesMarkers,
     });
 
     // Use custom renderer if provided, otherwise use file-specific renderer
     const render = fileConfig.render ?? fileRenderer;
 
-    // In PathConfig mode, the rootDoc file has extra content (header, global-options)
-    // managed by rootDoc processing. Use marker-based comparison to avoid mismatch.
-    const isRootDocFile =
-      usingPathConfig &&
-      rootDoc &&
-      normalizeDocPathForComparison(filePath) === normalizeDocPathForComparison(rootDoc.path);
-    const useMarkerBasedComparison = hasTargetCommands || isRootDocFile;
+    // Marker-based in-place comparison/update is only possible when the file carries markers:
+    // the rootDoc host file, or a `customizable` files output with partial (targetCommands)
+    // updates. Fully generated files are always compared/regenerated as a whole.
+    const useMarkerBasedComparison =
+      Boolean(isRootDocFile) || (hasTargetCommands && fileUsesMarkers);
 
     // Handle partial validation when targetCommands are specified
     // or when the file is the rootDoc in PathConfig mode
@@ -2929,8 +2983,12 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
           }
         }
 
-        // Doctor mode: detect and insert missing section markers
-        if (doctorMode) {
+        // Detect section markers present in the generated output but missing from the existing
+        // file. Doctor mode inserts them (update) or reports them as errors (check). When the
+        // output is `customizable` but doctor mode is off, surface a non-fatal warning instead:
+        // newly added sections stay visible without re-inserting markers the user may have
+        // deliberately removed to opt that section out.
+        if (doctorMode || customizable) {
           const generatedMarkers = collectSectionMarkers(generatedSection, targetCommand);
           const existingMarkerSet = new Set(existingMarkers);
 
@@ -2948,7 +3006,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
               continue;
             }
 
-            if (updateMode) {
+            if (doctorMode && updateMode) {
               existingContent = insertSectionMarkerAtOrder(
                 existingContent,
                 sectionType,
@@ -2959,12 +3017,17 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
               if (fileStatus !== "created") {
                 fileStatus = "updated";
               }
-            } else {
+            } else if (doctorMode) {
               hasError = true;
               hasDoctorIssues = true;
               fileStatus = "diff";
               diffs.push(
                 `[doctor] Missing section marker "${sectionType}" for command "${formatCommandPath(targetCommand)}". Run with ${DOCTOR_ENV}=true ${UPDATE_GOLDEN_ENV}=true to insert.\n${generatedSectionPart}`,
+              );
+            } else {
+              // customizable, doctor off: non-fatal nudge, no insertion.
+              console.warn(
+                `[politty] Missing "${sectionType}" section for command "${formatCommandPath(targetCommand)}" in ${filePath}. Run with ${DOCTOR_ENV}=true ${UPDATE_GOLDEN_ENV}=true to insert it, or leave it removed to opt that section out.`,
               );
             }
           }
