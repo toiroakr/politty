@@ -222,17 +222,13 @@ export interface MainOptions {
   /** Prompt resolver for interactive missing-arg prompts (e.g. from `politty/prompt/clack`). */
   prompt?: PromptResolver | undefined;
   /**
-   * Fallback hook invoked when a positional is not a known subcommand at any
-   * level whose command exposes subcommands. Enables CLI plugin dispatch: the
-   * handler receives the command path leading to the unknown name, the unknown
-   * name itself, and the args that follow it, and may exec an external
-   * `<cli>-<path...>-<name>` binary.
+   * Fallback hook for CLI plugin dispatch, invoked when a positional is not a
+   * known subcommand at any level whose command exposes subcommands (e.g. exec
+   * an external `<cli>-<path...>-<name>` binary).
    *
-   * Return a number to treat the command as handled and exit with that code.
-   * Return `undefined` (or omit the option) to fall back to the default
-   * "unknown subcommand" / help behavior. Not invoked for registered internal
-   * subcommands (any name starting with `__`, e.g. `__complete` or
-   * `__refresh-completion`).
+   * Return a number to treat it as handled and exit with that code; return
+   * `undefined` (or omit) to fall back to the default unknown-subcommand/help
+   * behavior. Not invoked for internal `__*` subcommands.
    */
   onUnknownSubcommand?: UnknownSubcommandHandler | undefined;
 }
