@@ -271,9 +271,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
         });
         if (typeof exitCode === "number") {
           await flushStandardStreams();
-          // Return the `never` from process.exit so the branch short-circuits:
-          // in real runs it terminates, and if process.exit is mocked (tests/
-          // embedding) execution won't fall through into setup/command run.
+          // `return` so a mocked process.exit (tests) still short-circuits.
           return process.exit(exitCode);
         }
       }
@@ -340,15 +338,13 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
 }
 
 /**
- * Flush stdout/stderr before exit to prevent truncated output when piped.
- * When stdout/stderr is a pipe, writes are buffered asynchronously, so calling
- * process.exit() before the buffer is drained causes data loss.
+ * Flush stdout/stderr before exit to prevent truncated output when piped
+ * (pipe writes are buffered asynchronously, so exiting early loses data).
  *
- * We enqueue a zero-byte write and await its callback rather than waiting for a
- * `drain` event: `drain` only fires after a prior `write()` returned `false`
- * (backpressure), so buffered writes that never tripped backpressure would hang
- * an `once("drain")` wait. The write callback is ordered after all pending
- * writes, so it reliably resolves once the buffer is flushed.
+ * We await a zero-byte write's callback rather than a `drain` event: `drain`
+ * only fires after a `write()` returned `false` (backpressure), so buffered
+ * writes that never tripped it would hang. The write callback is ordered after
+ * all pending writes, so it resolves once the buffer is flushed.
  */
 async function flushStandardStreams(): Promise<void> {
   await Promise.all(
@@ -425,14 +421,11 @@ async function runCommandInternal<TResult = unknown>(
           });
           if (typeof exitCode === "number") {
             collector?.stop();
-            // In a real CLI run (runMain sets handleSignals), exit directly with
-            // the plugin's code, mirroring root-level dispatch. Programmatic
-            // runCommand callers get a typed result instead and let their caller
-            // run cleanup.
+            // Real CLI run: exit with the plugin's code. Programmatic callers
+            // fall through to the typed result and run cleanup themselves.
             if (options.handleSignals) {
-              // Exiting here bypasses runMain's "Global cleanup (always)" block,
-              // so run cleanup explicitly: at this nested level global setup has
-              // already run, and leaving it unbalanced would leak resources.
+              // Direct exit bypasses runMain's cleanup, and global setup has
+              // already run at this nested level, so run cleanup here too.
               if (options._globalCleanup) {
                 try {
                   await options._globalCleanup({ error: undefined });
@@ -441,9 +434,8 @@ async function runCommandInternal<TResult = unknown>(
                 }
               }
               await flushStandardStreams();
-              // No `return` here: in a real run process.exit terminates, but
-              // when it is mocked (tests) execution must fall through to the
-              // typed result below so the recursion returns a valid RunResult.
+              // No `return`: a mocked process.exit (tests) must fall through to
+              // the typed result so the recursion returns a valid RunResult.
               process.exit(exitCode);
             }
             return exitCode === 0

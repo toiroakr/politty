@@ -324,16 +324,12 @@ const BUILTIN_FLAGS = new Set(["--help", "-h", "--help-all", "-H", "--version"])
  *
  * Mirrors `scanForSubcommand`'s conservative stop conditions: the scan stops
  * (returning -1) on a `--` terminator, a builtin flag (`--help`/`--version`),
- * an unknown long flag, or an unknown/combined short flag. Stopping is
- * essential — past such tokens we cannot reliably tell a flag *value* from a
- * positional, so continuing would misclassify e.g. `--help plugin` or
- * `--unknown value` as having `plugin`/`value` as the first positional and
- * trip `onUnknownSubcommand` plugin dispatch for inputs that should fall back
- * to help / unknown-flag behavior.
+ * an unknown long flag, or an unknown/combined short flag. Past such tokens we
+ * can't tell a flag *value* from a positional, so continuing would misclassify
+ * e.g. `--help plugin` or `--unknown value` and wrongly trip plugin dispatch.
  *
- * Without globalExtracted, no flag is recognized as global, so the same stop
- * conditions apply with an empty lookup: any leading flag halts the scan and a
- * positional is only found when it precedes every flag.
+ * Without globalExtracted, no flag is global, so any leading flag halts the
+ * scan and a positional is only found when it precedes every flag.
  */
 export function findFirstPositionalIndex(
   argv: string[],
@@ -398,12 +394,7 @@ export function findFirstPositionalIndex(
 /**
  * Find the first positional argument in argv, properly skipping global flag
  * values. Thin wrapper over {@link findFirstPositionalIndex} — see that
- * function for the exact scan and stop conditions. Returns `undefined` when no
- * positional is present.
- *
- * Note: without globalExtracted, the scan stops at the first leading flag
- * (builtin/unknown), so a positional is only returned when it precedes every
- * flag; it does not fall back to the first non-flag token anywhere in argv.
+ * function for the scan and stop conditions. Returns `undefined` when none.
  */
 export function findFirstPositional(
   argv: string[],
