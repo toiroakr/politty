@@ -69,6 +69,61 @@ function escapeZshDQ(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\$/g, "\\$").replace(/`/g, "\\`");
 }
 
+function zshArrayLiteral(values: readonly string[]): string {
+  return values.map((v) => `"${escapeZshDQ(v)}"`).join(" ");
+}
+
+function zshFilteredFileLines(
+  fn: string,
+  kind: "extensions" | "matchers",
+  values: readonly string[],
+): string[] {
+  const arrayName = kind === "extensions" ? "_exts" : "_matchers";
+  const lines = [
+    `setopt local_options null_glob`,
+    `local _cur="\${words[CURRENT]:-}" _dir _prefix _f _out`,
+    `local -a ${arrayName}=(${zshArrayLiteral(values)})`,
+    `if [[ -z "$_cur" || "$_cur" != */* ]]; then`,
+    `    _dir="."`,
+    `    _prefix="$_cur"`,
+    `elif [[ "$_cur" == */ ]]; then`,
+    `    _dir="\${_cur%/}"`,
+    `    _prefix=""`,
+    `else`,
+    `    _dir="\${_cur%/*}"`,
+    `    _prefix="\${_cur##*/}"`,
+    `fi`,
+    `for _f in "$_dir"/"$_prefix"*(N/); do`,
+    `    _out="\${_f#./}"`,
+    `    __${fn}_add_path_candidate "$_out"`,
+    `done`,
+  ];
+  if (kind === "extensions") {
+    // Enumerate prefix matches and filter by extension instead of globbing
+    // `<prefix>*.<ext>`, which never matches once the user has typed part of
+    // the extension (e.g. `app.j<TAB>` would miss `app.json`).
+    lines.push(`local _ext`);
+    lines.push(`for _f in "$_dir"/"$_prefix"*(N.); do`);
+    lines.push(`    _out="\${_f#./}"`);
+    lines.push(`    for _ext in "\${_exts[@]}"; do`);
+    lines.push(
+      `        [[ -n "$_ext" && "$_out" == *."$_ext" ]] && { __${fn}_add_path_candidate "$_out"; break; }`,
+    );
+    lines.push(`    done`);
+    lines.push(`done`);
+  } else {
+    lines.push(`local _pat`);
+    lines.push(`for _pat in "\${_matchers[@]}"; do`);
+    lines.push(`    [[ -n "$_pat" ]] || continue`);
+    lines.push(`    for _f in "$_dir"/\${~_pat}(N.); do`);
+    lines.push(`        _out="\${_f#./}"`);
+    lines.push(`        [[ "$_out" == "$_cur"* ]] && __${fn}_add_path_candidate "$_out"`);
+    lines.push(`    done`);
+    lines.push(`done`);
+  }
+  return lines;
+}
+
 /**
  * Generate zsh value completion lines for a ValueCompletion spec.
  * Uses `_vals` array (must be declared in the calling function scope).
@@ -190,10 +245,10 @@ function zshValueLines(
     }
     case "file": {
       if (vc.matcher?.length) {
-        return vc.matcher.map((p) => `_files -g "${p}"`);
+        return zshFilteredFileLines(fn, "matchers", vc.matcher);
       }
       if (vc.extensions?.length) {
-        return vc.extensions.map((ext) => `_files -g "*.${ext}"`);
+        return zshFilteredFileLines(fn, "extensions", vc.extensions);
       }
       return [`_files`];
     }
@@ -202,6 +257,8 @@ function zshValueLines(
     case "command":
       return [`_vals=("\${(@f)$(${vc.shellCommand!})}")`, `__${fn}_cdescribe 'completions' _vals`];
     case "none":
+      return [];
+    case "runtime-expand":
       return [];
   }
 }
@@ -264,6 +321,42 @@ function positionalBlock(
   }
   lines.push(`    esac`);
   return lines;
+}
+
+/**
+ * Subcommand completion via `_describe`. When the same node also has
+ * positionals, complete subcommand names only while the cursor still prefixes
+ * one and fall through to positional completion otherwise. Returns lines at
+ * base indentation; callers re-indent for their handler depth.
+ */
+function subOrPositionalLines(
+  subItems: Array<{ name: string; description?: string | undefined }>,
+  positionals: CompletablePositional[],
+  fn: string,
+  funcSuffix: string,
+  options: readonly CompletableOption[],
+): string[] {
+  const subDescribed = subItems
+    .map((s) => {
+      const desc = s.description ? `:${escapeDesc(s.description)}` : "";
+      return `"${s.name}${desc}"`;
+    })
+    .join(" ");
+  const describe = [`local -a _subs=(${subDescribed})`, `__${fn}_cdescribe 'subcommands' _subs`];
+  if (positionals.length === 0) return describe;
+  const subNames = subItems.map((s) => `"${escapeZshDQ(s.name)}"`).join(" ");
+  return [
+    `local -a _sub_names=(${subNames})`,
+    `local _cur_word="\${words[CURRENT]:-}" _sub_name _sub_match=0`,
+    `for _sub_name in "\${_sub_names[@]}"; do`,
+    `    [[ "$_sub_name" == "$_cur_word"* ]] && _sub_match=1 && break`,
+    `done`,
+    `if (( _sub_match )); then`,
+    ...describe.map((l) => `    ${l}`),
+    `else`,
+    ...positionalBlock(positionals, fn, funcSuffix, options),
+    `fi`,
+  ];
 }
 
 /** Generate prev-word value completion case block */
@@ -360,14 +453,12 @@ function generateSubHandler(sub: CompletableSubcommand, fn: string, path: string
 
   // 4. Subcommand or positional completion (includes aliases)
   if (visibleSubs.length > 0) {
-    const subItems = getSubNamesWithAliases(sub.subcommands)
-      .map((s) => {
-        const desc = s.description ? `:${escapeDesc(s.description)}` : "";
-        return `"${s.name}${desc}"`;
-      })
-      .join(" ");
-    lines.push(`    local -a _subs=(${subItems})`);
-    lines.push(`    __${fn}_cdescribe 'subcommands' _subs`);
+    const subItems = getSubNamesWithAliases(sub.subcommands);
+    lines.push(
+      ...subOrPositionalLines(subItems, sub.positionals, fn, funcSuffix, sub.options).map(
+        (l) => `    ${l}`,
+      ),
+    );
   } else if (sub.positionals.length > 0) {
     lines.push(...positionalBlock(sub.positionals, fn, funcSuffix, sub.options));
   }
@@ -383,8 +474,12 @@ export function generateZshCompletion(
 ): CompletionResult {
   const { programName } = options;
   const data = extractCompletionData(command, programName, options.globalArgsSchema);
-  const fn = sanitize(programName);
-  const completionFn = `_${programName}`;
+  const baseFn = sanitize(programName);
+  const fn = options.staticWorker
+    ? `${baseFn}_${sanitize(options.staticWorker.functionSuffix)}`
+    : baseFn;
+  const isWorker = options.staticWorker !== undefined;
+  const completionFn = isWorker ? `_${fn}_completions` : `_${programName}`;
   const autoloadCheck = `"\${funcstack[1]:-}" == "${escapeZshDQ(completionFn)}"`;
   const root = data.command;
   const visibleSubs = getVisibleSubs(root.subcommands);
@@ -395,8 +490,10 @@ export function generateZshCompletion(
   const hasArrayExpand = arrayExpandSpecs.length > 0;
 
   const lines: string[] = [];
-  lines.push(`#compdef ${programName}`);
-  lines.push(``);
+  if (!isWorker) {
+    lines.push(`#compdef ${programName}`);
+    lines.push(``);
+  }
   lines.push(
     ...buildHeaderLines({
       programName,
@@ -405,9 +502,13 @@ export function generateZshCompletion(
       programVersion: options.programVersion,
     }),
   );
+  lines.push(`# politty-completion-mode: ${isWorker ? "worker" : "static"}`);
+  if (isWorker) lines.push(`# politty-completion-worker: true`);
   lines.push(`# Generated by politty`);
   lines.push(``);
-  lines.push(...generateZshSelfRefresh({ programName, binPath: options.binPath }));
+  if (!isWorker) {
+    lines.push(...generateZshSelfRefresh({ programName, binPath: options.binPath }));
+  }
 
   // Expand-completion hoisted tables. One global associative array per
   // expand spec, populated via the array-literal form (which is the only
@@ -527,6 +628,11 @@ export function generateZshCompletion(
   lines.push(`    return 0`);
   lines.push(`}`);
   lines.push(``);
+  lines.push(`__${fn}_add_path_candidate() {`);
+  lines.push(`    compadd -f -- "$1" 2>/dev/null && return 0`);
+  lines.push(`    print -r -- "$1"`);
+  lines.push(`}`);
+  lines.push(``);
 
   // Helper: check if option takes a value
   lines.push(`__${fn}_opt_takes_value() {`);
@@ -610,14 +716,12 @@ export function generateZshCompletion(
   lines.push(`        __${fn}_cdescribe 'options' _opts`);
   if (visibleSubs.length > 0) {
     lines.push(`    else`);
-    const subItems = getSubNamesWithAliases(root.subcommands)
-      .map((s) => {
-        const desc = s.description ? `:${escapeDesc(s.description)}` : "";
-        return `"${s.name}${desc}"`;
-      })
-      .join(" ");
-    lines.push(`        local -a _subs=(${subItems})`);
-    lines.push(`        __${fn}_cdescribe 'subcommands' _subs`);
+    const subItems = getSubNamesWithAliases(root.subcommands);
+    lines.push(
+      ...subOrPositionalLines(subItems, root.positionals, fn, "root", root.options).map(
+        (l) => `        ${l}`,
+      ),
+    );
   } else if (root.positionals.length > 0) {
     lines.push(`    else`);
     lines.push(
@@ -726,22 +830,24 @@ export function generateZshCompletion(
     `zstyle ':completion:*:*:${programName}:*' file-patterns '%p:globbed-files *(-/):directories'`,
   );
   lines.push(``);
-  lines.push(`if [[ ${autoloadCheck} ]]; then`);
-  lines.push(`    ${completionFn} "$@"`);
-  lines.push(`else`);
-  lines.push(`    compdef ${completionFn} ${programName}`);
-  lines.push(`fi`);
-  lines.push(``);
+  if (!isWorker) {
+    lines.push(`if [[ ${autoloadCheck} ]]; then`);
+    lines.push(`    ${completionFn} "$@"`);
+    lines.push(`else`);
+    lines.push(`    compdef ${completionFn} ${programName}`);
+    lines.push(`fi`);
+    lines.push(``);
+  }
 
   return {
     script: lines.join("\n"),
     shell: "zsh",
     installInstructions: `# To enable auto-refreshing zsh completions, add this to your ~/.zshrc after compinit:
-eval "$(${programName} completion zsh)"
+eval "$(${programName} completion zsh --static)"
 
 # For faster shell startup, save the script in your fpath:
 mkdir -p ~/.zsh/completions
-${programName} completion zsh > ~/.zsh/completions/_${programName}
+${programName} completion zsh --static > ~/.zsh/completions/_${programName}
 
 # Make sure your ~/.zshrc includes the fpath line before compinit:
 fpath=(~/.zsh/completions $fpath)

@@ -7,10 +7,13 @@
 // Core exports
 // Completion exports
 export {
+  generateBundledCompletionWorker,
   generateCompletion,
   withCompletionCommand,
   type CompletionOptions,
   type CompletionResult,
+  type GenerateBundledCompletionWorkerOptions,
+  type GenerateBundledCompletionWorkerResult,
   type WithCompletionOptions,
 } from "./completion/index.js";
 export {
@@ -96,6 +99,7 @@ export type {
   SubCommandValue,
   // Subcommand types
   SubCommandsRecord,
+  UnknownSubcommandHandler,
 } from "./types.js";
 // Command definition validation
 export {

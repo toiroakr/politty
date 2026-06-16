@@ -1,5 +1,49 @@
 # politty
 
+## 0.8.0
+
+### Minor Changes
+
+- 16b8503: Make `files`-mode documentation fully generated (marker-free) by default and resolve template links by specificity.
+  - **Fully generated `files` output by default (breaking).** `files`-mode generation no longer emits `<!-- politty:...:start/end -->` markers; each file is regenerated as a whole. With `targetCommands`, only files containing a target command are processed, but each is rebuilt in full. Set the new `customizable: true` option on `GenerateDocConfig` when you want to hand-edit the output and have politty preserve your edits via markers (in-place section updates). When `customizable` is set, a command whose generated output gains a section the file lacks is reported as a non-fatal warning (run with `POLITTY_DOCS_DOCTOR=true POLITTY_DOCS_UPDATE=true` to insert it, or leave it removed to opt the section out). `path`/`rootDoc` output still uses markers; `templates` remain marker-free.
+  - **Specificity-based link resolution.** Cross-output links now point at the output that renders a command most specifically — a dedicated per-command page (`{{politty:command:config}}`) wins over a full-tree page (`{{politty:command}}`) for that command and its descendants, regardless of registration order.
+  - Adds a `markerless` option to `DefaultRendererOptions`.
+
+### Patch Changes
+
+- eea3f6a: Add template-based documentation generation. A new `templates` option on `GenerateDocConfig` maps output paths to template files containing `{{politty:...}}` placeholders; the output is fully generated from the template and contains no politty markers. Templates can exclude specific placeholders with `politty.exclude` front matter.
+
+## 0.7.0
+
+### Minor Changes
+
+- fc88d86: Add `onUnknownSubcommand` option to `runMain` for CLI plugin dispatch.
+
+  When a positional argument is not a known subcommand at any level whose command exposes subcommands, the handler is invoked with the command path traversed so far (`commandPath`), the unknown name, and the args that follow it. Returning a number treats the command as handled and exits with that code; returning `undefined` falls back to the default unknown-subcommand/help behavior. This enables `gh`-style external plugin binaries at the root (`mycli foo` → `mycli-foo`) and nested under known subcommands (`mycli foo bar` → `mycli-foo-bar`). The handler is skipped for internal (`__*`) completion invocations.
+
+  Also exports the `UnknownSubcommandHandler` type.
+
+## 0.6.0
+
+### Minor Changes
+
+- 7167924: Add runtime dispatcher shell completion with fast static-worker paths.
+
+  The default `completion <shell>` output now resolves the active CLI executable at completion time and uses bundled or cached static workers for fast bash, zsh, and fish completions. This keeps project-local binaries working with tools such as `direnv`, `mise`, and `node_modules/.bin`, while avoiding a JavaScript process on common warm completion paths.
+
+  Politty-based CLIs can generate bundled workers with `generateBundledCompletionWorker()` from `politty/completion` or the `politty generate-worker` package-script CLI.
+
+  Existing users:
+  - Existing `eval "$(mycli completion bash)"` and `eval "$(mycli completion zsh)"` setup keeps working and now uses dispatcher mode by default.
+  - Existing fish users can rerun `mycli completion fish --install` after upgrading to refresh the fish autoload file.
+  - If you saved a generated static completion script and want the new dispatcher behavior, regenerate it with `mycli completion <shell>`.
+  - If you prefer the previous command-tree script that does not resolve the active binary at TAB time, use `mycli completion <shell> --static`.
+
+  New users:
+  - Use `mycli completion bash`, `mycli completion zsh`, or `mycli completion fish --install` for the default dispatcher setup.
+  - For published CLIs, generate and ship a bundled worker artifact with `politty generate-worker --bin dist/cli/index.mjs --program mycli --shell zsh --verify` to avoid first-TAB worker generation.
+  - For package layouts that cannot be represented with package-relative worker paths, enable `bundledWorker.queryCommand` so the dispatcher can ask the CLI for `__completion-worker-path <shell>` on the miss path.
+
 ## 0.5.1
 
 ### Patch Changes

@@ -14,15 +14,21 @@ import {
 } from "../value-completion-resolver.js";
 
 /**
- * The dynamic completion path runs `__complete` at TAB time and never sees
- * "expand" fields (those are handled inline by the static shell script).
- * Strip the transient pending sentinel here so the rest of the runtime path
- * can stay strict about handling only resolved `ValueCompletion` values.
+ * `completion.custom.expand` is baked into static scripts, but dispatcher
+ * scripts call `__complete` at TAB time. Convert the pending sentinel into a
+ * runtime form that can call `enumerate` with the dependency values already
+ * typed on the command line.
  */
-function stripPendingExpand(
+function resolveRuntimeCompletion(
   vc: ValueCompletion | PendingExpandValueCompletion | undefined,
 ): ValueCompletion | undefined {
-  return vc?.type === "pending-expand" ? undefined : vc;
+  if (!vc) return undefined;
+  if (vc.type !== "pending-expand") return vc;
+  return {
+    type: "runtime-expand",
+    dependsOn: vc.spec.dependsOn,
+    enumerate: vc.spec.enumerate,
+  };
 }
 
 /**
@@ -112,7 +118,7 @@ function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
         // user opted out via `negation: false` or a custom-string negation.
         defaultNegationAccepted:
           field.type === "boolean" && (field.negation === undefined || field.negation === true),
-        valueCompletion: stripPendingExpand(resolveValueCompletion(field)),
+        valueCompletion: resolveRuntimeCompletion(resolveValueCompletion(field)),
       };
     });
 }
@@ -292,7 +298,7 @@ function extractPositionalsForContext(command: AnyCommand): CompletablePositiona
       description: field.description,
       required: field.required,
       variadic: field.type === "array",
-      valueCompletion: stripPendingExpand(resolveValueCompletion(field)),
+      valueCompletion: resolveRuntimeCompletion(resolveValueCompletion(field)),
     }));
 }
 

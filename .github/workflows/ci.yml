@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [main]
+  # Run on every PR regardless of base branch, so checks (including the macOS
+  # shell-completion job) cover stacked / feature-branch PRs too, not only
+  # main-targeting ones.
   pull_request:
-    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -24,7 +26,7 @@ jobs:
       actions: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
@@ -63,31 +65,38 @@ jobs:
         uses: k1LoW/octocov-action@b3b6ee60482a667950f87553abf1df63217235d9 # v1.5.1
 
   shell-completion:
-    name: Shell Completion (${{ matrix.shell }})
-    runs-on: ubuntu-latest
+    name: Shell Completion (${{ matrix.os }} / ${{ matrix.shell }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        shell: [bash, zsh, fish]
         include:
-          - shell: bash
+          - os: ubuntu-latest
+            shell: bash
             install: expect
-          - shell: zsh
+          - os: ubuntu-latest
+            shell: zsh
             install: zsh
-          - shell: fish
+          - os: ubuntu-latest
+            shell: fish
             install: fish
+          # macOS uses BSD userland (head/grep/stat) and a different fork/PTY
+          # profile; the runtime dispatcher zsh completion regresses there even
+          # though Linux passes. zsh ships on macOS runners, so no install step.
+          - os: macos-latest
+            shell: zsh
     steps:
       - name: Install shell tools
-        if: matrix.install
+        if: matrix.install && runner.os == 'Linux'
         run: |
           sudo apt-get install -y --no-install-recommends ${{ matrix.install }} \
             || (echo "apt-get install failed; updating package lists and retrying." \
                 && sudo apt-get update -o Acquire::http::Timeout=10 -o Acquire::Retries=3 \
                 && sudo apt-get install -o Acquire::http::Timeout=10 -o Acquire::Retries=3 -y --no-install-recommends ${{ matrix.install }})
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8

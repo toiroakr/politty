@@ -1,19 +1,32 @@
 import type * as childProcess from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
+import { resolveBundledWorkerPath } from "../src/completion/bundled-worker.js";
 import {
   CompletionDirective,
   createCompletionCommand,
+  createCompletionWorkerPathCommand,
   createDynamicCompleteCommand,
+  defaultBundledWorkerOutputPath,
   extractCompletionData,
   formatForShell,
+  generateBundledCompletionWorker,
   generateCandidates,
   generateCompletion,
   getSupportedShells,
   parseCompletionContext,
+  validateBundledWorkerFile,
   withCompletionCommand,
 } from "../src/completion/index.js";
 import {
@@ -43,6 +56,7 @@ vi.mock("node:child_process", async (importOriginal) => ({
   spawn: vi.fn(() => ({ unref: () => {} })),
 }));
 const childProcessMock = await import("node:child_process");
+const childProcessActual = await vi.importActual<typeof childProcess>("node:child_process");
 const spawnSpy = vi.mocked(childProcessMock.spawn);
 
 const useEnv = (env: Record<string, string | undefined>) => {
@@ -59,6 +73,39 @@ const useEnv = (env: Record<string, string | undefined>) => {
       }
     },
   };
+};
+
+const writeWorkerGeneratorCli = (root: string): string => {
+  const bin = join(root, "mycli.mjs");
+  writeFileSync(
+    bin,
+    [
+      'import { mkdirSync, writeFileSync } from "node:fs";',
+      'import { dirname } from "node:path";',
+      "const [cmd, shell, out, ...flags] = process.argv.slice(2);",
+      'if (cmd === "__refresh-completion") {',
+      '  if (!out || !flags.includes("--static") || !flags.includes("--worker")) process.exit(2);',
+      "  mkdirSync(dirname(out), { recursive: true });",
+      "  writeFileSync(out, [",
+      '    "# politty-completion-version: 1",',
+      '    "# politty-bin-sig: 0",',
+      '    `# program: ${process.env.PROGRAM_NAME ?? "mycli"}`,',
+      "    `# shell: ${shell}`,",
+      '    "# politty-completion-mode: worker",',
+      '    "# politty-completion-worker: true",',
+      '    "_mycli_worker_completions() { :; }",',
+      '  ].join("\\n") + "\\n");',
+      "  process.exit(0);",
+      "}",
+      'if (cmd === "__completion-worker-path") {',
+      "  if (!process.env.WORKER_PATH) process.exit(1);",
+      "  console.log(process.env.WORKER_PATH);",
+      "  process.exit(0);",
+      "}",
+      "process.exit(1);",
+    ].join("\n"),
+  );
+  return bin;
 };
 
 describe("Completion", () => {
@@ -484,8 +531,10 @@ describe("Completion", () => {
         });
 
         expect(result.installInstructions).toContain("~/.bashrc");
-        expect(result.installInstructions).toContain('eval "$(mycli completion bash)"');
-        expect(result.installInstructions).toContain("mycli completion bash >");
+        // Static-mode instructions must include `--static`; without it the
+        // documented command would install the now-default dispatcher.
+        expect(result.installInstructions).toContain('eval "$(mycli completion bash --static)"');
+        expect(result.installInstructions).toContain("mycli completion bash --static >");
         expect(result.installInstructions).not.toContain("mycli completion bash --loader");
       });
 
@@ -525,9 +574,9 @@ describe("Completion", () => {
           programName: "mycli",
         });
 
-        expect(result.installInstructions).toContain('eval "$(mycli completion zsh)"');
+        expect(result.installInstructions).toContain('eval "$(mycli completion zsh --static)"');
         expect(result.installInstructions).toContain("after compinit");
-        expect(result.installInstructions).toContain("mycli completion zsh >");
+        expect(result.installInstructions).toContain("mycli completion zsh --static >");
         expect(result.installInstructions).toContain("fpath line before compinit");
         expect(result.installInstructions).toContain("fpath=(~/.zsh/completions $fpath)");
         expect(result.installInstructions).toContain("~/.zsh/completions/_mycli");
@@ -572,9 +621,781 @@ describe("Completion", () => {
           programName: "mycli",
         });
 
-        expect(result.installInstructions).toContain("mycli completion fish --install");
+        expect(result.installInstructions).toContain("mycli completion fish --install --static");
         expect(result.installInstructions).not.toMatch(/^mycli completion fish \| source/m);
         expect(result.installInstructions).not.toMatch(/^mycli completion fish >/m);
+      });
+    });
+
+    describe("dispatcher mode", () => {
+      const dispatcherCommand = defineCommand({
+        name: "mycli",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            description: "Verbose output",
+          }),
+        }),
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            description: "Build the project",
+            run: () => {},
+          }),
+        },
+      });
+
+      it("emits dispatcher completion for every shell in dispatcher mode", () => {
+        const cases = [
+          ["bash", "type -P 'mycli'"],
+          ["zsh", "whence -p 'mycli'"],
+          ["fish", "command -v 'mycli'"],
+        ] as const;
+
+        for (const [shell, resolver] of cases) {
+          const { script } = generateCompletion(dispatcherCommand, {
+            shell,
+            programName: "mycli",
+            mode: "dispatcher",
+          });
+
+          expect(script).toContain("# politty-completion-mode: dispatcher");
+          expect(script).toContain(resolver);
+          expect(script).toContain("MYCLI_BIN");
+          expect(script).toContain("NODE_COMPILE_CACHE");
+          expect(script).toContain("__refresh-completion");
+          expect(script).toContain("--static --worker");
+          expect(script).toContain("__complete --shell");
+          expect(script).not.toContain("--verbose");
+          expect(script).not.toContain("Build the project");
+        }
+      });
+
+      it("defaults to a self-contained static script for the direct generateCompletion API", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        expect(script).toContain("# politty-completion-mode: static");
+        expect(script).not.toContain("# politty-completion-mode: dispatcher");
+        // Static scripts bake the command metadata directly into the body.
+        expect(script).toContain("--verbose");
+        expect(script).toContain("build");
+      });
+
+      it("suppresses bash file fallback for empty NoFileCompletion results (bash 3.2)", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "dispatcher",
+        });
+
+        // bash 3.2 ignores `compopt +o default`, so an empty COMPREPLY in the
+        // NoFileCompletion branch must be seeded with the empty sentinel only
+        // when compopt failed; Bash 4+ treats COMPREPLY=("") as a real empty
+        // candidate.
+        expect(script).toMatch(
+          /elif \(\( _directive & 2 \)\); then[\s\S]*?compopt \+o default 2>\/dev\/null \|\| _need_empty=1[\s\S]*?if \(\( _need_empty && \$\{#COMPREPLY\[@\]\} == 0 \)\); then COMPREPLY=\( "" \); fi/,
+        );
+        // Same fallback guard for the extension/matcher branch: when no file
+        // matched the filter, do not leak unrelated files on bash 3.2.
+        expect(script).toMatch(
+          /done < <\(compgen -f -- "\$_cur"\)\s*\n\s*if \(\( _need_empty && \$\{#COMPREPLY\[@\]\} == 0 \)\); then COMPREPLY=\( "" \); fi/,
+        );
+      });
+
+      it("validates bundled worker headers by whole line, not substring", () => {
+        // A worker built for another program (e.g. `mycli-extra`) or a future
+        // version must not be accepted by `mycli`; the runtime check anchors each
+        // header to a complete line, mirroring validateBundledWorkerFile.
+        for (const shell of ["bash", "zsh"] as const) {
+          const { script } = generateCompletion(dispatcherCommand, {
+            shell,
+            programName: "mycli",
+            mode: "dispatcher",
+          });
+          expect(script).toContain(`*$'\\n'"# program: mycli"$'\\n'*`);
+          expect(script).toContain(`*$'\\n'"# politty-completion-version: 1"$'\\n'*`);
+          expect(script).not.toContain(`*"# program: mycli"*`);
+        }
+
+        const { script: fish } = generateCompletion(dispatcherCommand, {
+          shell: "fish",
+          programName: "mycli",
+          mode: "dispatcher",
+        });
+        expect(fish).toContain(`string match -q -- "# program: mycli" $_head`);
+        expect(fish).not.toContain(`'*# program: mycli*'`);
+      });
+
+      it("passes NODE_COMPILE_CACHE to the warm worker path", () => {
+        // The worker's dynamic resolver may spawn `__complete`; it must inherit
+        // the compile cache the direct fallback already sets, or repeated TABs
+        // lose the latency win on the warm path.
+        const bash = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "dispatcher",
+        }).script;
+        expect(bash).toContain(
+          `NODE_COMPILE_CACHE="$_node_compile_cache" MYCLI_WORKER_BIN="$_bin" _mycli_worker_completions`,
+        );
+
+        const zsh = generateCompletion(dispatcherCommand, {
+          shell: "zsh",
+          programName: "mycli",
+          mode: "dispatcher",
+        }).script;
+        expect(zsh).toContain(
+          `NODE_COMPILE_CACHE="$_node_compile_cache" MYCLI_WORKER_BIN="$_bin" _mycli_worker_completions "$@"`,
+        );
+
+        const fish = generateCompletion(dispatcherCommand, {
+          shell: "fish",
+          programName: "mycli",
+          mode: "dispatcher",
+        }).script;
+        expect(fish).toContain(`set -lx NODE_COMPILE_CACHE "$_node_compile_cache"`);
+      });
+
+      it("memoizes the queried worker path so queryCommand does not spawn the CLI every TAB", () => {
+        for (const shell of ["bash", "zsh", "fish"] as const) {
+          const { script } = generateCompletion(dispatcherCommand, {
+            shell,
+            programName: "mycli",
+            mode: "dispatcher",
+            bundledWorker: { queryCommand: true },
+          });
+          // The `__completion-worker-path` query is cached per bin so warm
+          // completions reuse the resolved path instead of re-spawning the CLI.
+          expect(script).toContain("__mycli_queried_worker");
+          expect(script).toContain("__mycli_queried_bin");
+        }
+      });
+
+      it("loads the static worker only when its sig and bin path match", () => {
+        // A failed refresh leaves a stale worker on disk; the load is gated on
+        // both the worker's `# politty-bin-sig` and `# politty-bin-path`
+        // matching the current binary so the dispatcher falls through to
+        // `__complete` rather than serving outdated completions.
+        const bash = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "dispatcher",
+        }).script;
+        expect(bash).toContain(`grep -qxF "# politty-bin-path: $_bin" <<< "$_head"`);
+        expect(bash).toContain(
+          '__mycli_worker_matches_bin "$_worker" "$_sig" "$_bin" && __mycli_load_worker "$_worker"',
+        );
+
+        const zsh = generateCompletion(dispatcherCommand, {
+          shell: "zsh",
+          programName: "mycli",
+          mode: "dispatcher",
+        }).script;
+        // zsh matches the bin-path header in-process (no `grep` fork): whole-line
+        // anchored pattern match, mirroring the bundled-worker header check.
+        expect(zsh).toContain(`*$'\\n'"# politty-bin-path: $_bin"$'\\n'*`);
+        expect(zsh).toContain(
+          '__mycli_worker_matches_bin "$_worker" "$_sig" "$_bin" && __mycli_load_worker "$_worker"',
+        );
+
+        const fish = generateCompletion(dispatcherCommand, {
+          shell: "fish",
+          programName: "mycli",
+          mode: "dispatcher",
+        }).script;
+        expect(fish).toContain(`contains -- "# politty-bin-path: $_bin" $_head`);
+        expect(fish).toContain('__mycli_worker_matches_bin "$_worker" "$_sig" "$_bin"');
+      });
+
+      it("guards bash command substitutions so a miss does not abort under set -e", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "dispatcher",
+        });
+
+        // Expected helper misses (e.g. no bundled worker) must not abort the
+        // completion function when the user has `set -e` enabled.
+        expect(script).toContain(`|| _bundled_worker=""`);
+        expect(script).toContain(`|| _worker=""`);
+        expect(script).toContain(`|| _sig=""`);
+      });
+
+      it("does not split inline option prefixes after a -- separator in bash", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "dispatcher",
+        });
+
+        // A word like `-D=foo` after `--` is a positional, not an inline option
+        // value, so the inline split must be gated on not being after `--`.
+        expect(script).toContain(`local _after_dd=0`);
+        expect(script).toContain(`if (( ! _after_dd )) && [[ "$_cur" == -*=* ]]; then`);
+      });
+
+      it("keeps static mode available with baked command metadata", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "static",
+        });
+
+        expect(script).toContain("# politty-completion-mode: static");
+        expect(script).toContain("--verbose");
+        expect(script).toContain("build");
+      });
+
+      it("can generate an internal static worker without shell registration", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "static",
+          staticWorker: { functionSuffix: "worker" },
+        });
+
+        expect(script).toContain("# politty-completion-worker: true");
+        expect(script).toContain("# politty-completion-mode: worker");
+        expect(script).toContain("# politty-bin-path:");
+        expect(script).toContain("_mycli_worker_completions()");
+        expect(script).toContain("--verbose");
+        expect(script).toContain("build");
+        expect(script).not.toContain("complete -o default -F");
+        expect(script).not.toContain("__mycli_self_refresh()");
+      });
+
+      it("uses the PATH-visible executable and lets MYCLI_BIN override it in bash", () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-dispatcher-"));
+        const localDir = join(root, "local");
+        const globalDir = join(root, "global");
+        mkdirSync(localDir);
+        mkdirSync(globalDir);
+        const localBin = join(localDir, "mycli");
+        const globalBin = join(globalDir, "mycli");
+        const writeFake = (file: string, label: string) => {
+          writeFileSync(
+            file,
+            `#!/bin/sh\nif [ "$1" = "__complete" ]; then printf '%s\\n:6\\n' '${label}'; fi\n`,
+            { mode: 0o755 },
+          );
+        };
+        writeFake(localBin, "local-candidate");
+        writeFake(globalBin, "global-candidate");
+
+        const completionPath = join(root, "completion.bash");
+        writeFileSync(
+          completionPath,
+          generateCompletion(dispatcherCommand, {
+            shell: "bash",
+            programName: "mycli",
+            mode: "dispatcher",
+          }).script,
+        );
+        const runner = join(root, "run.sh");
+        writeFileSync(
+          runner,
+          [
+            `source '${completionPath}'`,
+            `COMP_WORDS=('mycli' '')`,
+            `COMP_CWORD=1`,
+            `COMP_LINE='mycli '`,
+            `COMP_POINT=\${#COMP_LINE}`,
+            `_mycli_completions`,
+            `printf '%s\\n' "\${COMPREPLY[@]}"`,
+          ].join("\n"),
+        );
+
+        const baseEnv = {
+          ...process.env,
+          BASH_ENV: "/dev/null",
+          PATH: `${localDir}:${globalDir}:${process.env.PATH}`,
+        };
+        const fromPath = childProcessActual.execFileSync(
+          "/bin/bash",
+          ["--noprofile", "--norc", runner],
+          { env: baseEnv, encoding: "utf8", timeout: 1000 },
+        );
+        expect(fromPath.trim()).toBe("local-candidate");
+
+        const fromOverride = childProcessActual.execFileSync(
+          "/bin/bash",
+          ["--noprofile", "--norc", runner],
+          { env: { ...baseEnv, MYCLI_BIN: globalBin }, encoding: "utf8", timeout: 1000 },
+        );
+        expect(fromOverride.trim()).toBe("global-candidate");
+      });
+
+      it("uses a bundled worker before cache refresh and memoizes sourcing in bash", () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-bundled-worker-"));
+        const distDir = join(root, "pkg", "dist");
+        const completionDir = join(distDir, "completion");
+        const binDir = join(root, "bin");
+        mkdirSync(completionDir, { recursive: true });
+        mkdirSync(binDir);
+
+        const callLog = join(root, "bin-calls.log");
+        const sourceLog = join(root, "worker-sources.log");
+        const bin = join(distDir, "mycli");
+        writeFileSync(
+          bin,
+          [
+            "#!/bin/sh",
+            `printf '%s\\n' "$1" >> "$CALL_LOG"`,
+            `if [ "$1" = "__complete" ]; then printf '%s\\n:6\\n' dynamic-candidate; fi`,
+          ].join("\n"),
+          { mode: 0o755 },
+        );
+        writeFileSync(
+          join(binDir, "mycli"),
+          `#!/bin/sh\nexec '${bin}' "$@"\n# cmd-shim-target=${bin}\n`,
+          {
+            mode: 0o755,
+          },
+        );
+
+        writeFileSync(
+          join(completionDir, "bash-worker.bash"),
+          [
+            "# politty-completion-version: 1",
+            "# politty-bin-sig: 0",
+            "# program: mycli",
+            "# shell: bash",
+            "# politty-completion-mode: worker",
+            "# politty-completion-worker: true",
+            `printf '%s\\n' sourced >> "$SOURCE_LOG"`,
+            `_mycli_worker_completions() { COMPREPLY=(bundled-candidate); }`,
+          ].join("\n"),
+        );
+
+        const completionPath = join(root, "completion.bash");
+        writeFileSync(
+          completionPath,
+          generateCompletion(dispatcherCommand, {
+            shell: "bash",
+            programName: "mycli",
+            mode: "dispatcher",
+          }).script,
+        );
+        const runner = join(root, "run.sh");
+        writeFileSync(
+          runner,
+          [
+            `source '${completionPath}'`,
+            `for _n in 1 2; do`,
+            `  COMP_WORDS=('mycli' '')`,
+            `  COMP_CWORD=1`,
+            `  COMP_LINE='mycli '`,
+            `  COMP_POINT=\${#COMP_LINE}`,
+            `  COMPREPLY=()`,
+            `  _mycli_completions`,
+            `  printf 'reply:%s\\n' "\${COMPREPLY[0]}"`,
+            `done`,
+            `if [ -f "$SOURCE_LOG" ]; then printf 'sources:%s\\n' "$(wc -l < "$SOURCE_LOG" | tr -d ' ')"; else printf 'sources:0\\n'; fi`,
+            `if [ -f "$CALL_LOG" ]; then printf 'calls:%s\\n' "$(wc -l < "$CALL_LOG" | tr -d ' ')"; else printf 'calls:0\\n'; fi`,
+          ].join("\n"),
+        );
+
+        const output = childProcessActual.execFileSync(
+          "/bin/bash",
+          ["--noprofile", "--norc", runner],
+          {
+            env: {
+              ...process.env,
+              BASH_ENV: "/dev/null",
+              CALL_LOG: callLog,
+              PATH: `${binDir}:${process.env.PATH}`,
+              SOURCE_LOG: sourceLog,
+            },
+            encoding: "utf8",
+            timeout: 1000,
+          },
+        );
+
+        expect(output.trim().split("\n")).toEqual([
+          "reply:bundled-candidate",
+          "reply:bundled-candidate",
+          "sources:1",
+          "calls:0",
+        ]);
+      });
+
+      it("uses __completion-worker-path before cache refresh when relative lookup misses in bash", () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-worker-path-fallback-"));
+        const workerDir = join(root, "workers");
+        const binDir = join(root, "bin");
+        mkdirSync(workerDir);
+        mkdirSync(binDir);
+
+        const callLog = join(root, "bin-calls.log");
+        const workerPath = join(workerDir, "custom-worker.bash");
+        const bin = join(binDir, "mycli");
+        writeFileSync(
+          bin,
+          [
+            "#!/bin/sh",
+            `printf '%s\\n' "$1" >> "$CALL_LOG"`,
+            `case "$1" in`,
+            `  __completion-worker-path) printf '%s\\n' "$WORKER_PATH"; exit 0 ;;`,
+            `  __refresh-completion) exit 1 ;;`,
+            `  __complete) printf '%s\\n:6\\n' dynamic-candidate; exit 0 ;;`,
+            `esac`,
+          ].join("\n"),
+          { mode: 0o755 },
+        );
+
+        writeFileSync(
+          workerPath,
+          [
+            "# politty-completion-version: 1",
+            "# politty-bin-sig: 0",
+            "# program: mycli",
+            "# shell: bash",
+            "# politty-completion-mode: worker",
+            "# politty-completion-worker: true",
+            `_mycli_worker_completions() { COMPREPLY=(path-command-candidate); }`,
+          ].join("\n"),
+        );
+
+        const completionPath = join(root, "completion.bash");
+        writeFileSync(
+          completionPath,
+          generateCompletion(dispatcherCommand, {
+            shell: "bash",
+            programName: "mycli",
+            mode: "dispatcher",
+            bundledWorker: { queryCommand: true, relativePaths: { bash: ["missing-worker.bash"] } },
+          }).script,
+        );
+        const runner = join(root, "run.sh");
+        writeFileSync(
+          runner,
+          [
+            `source '${completionPath}'`,
+            `COMP_WORDS=('mycli' '')`,
+            `COMP_CWORD=1`,
+            `COMP_LINE='mycli '`,
+            `COMP_POINT=\${#COMP_LINE}`,
+            `_mycli_completions`,
+            `printf 'reply:%s\\n' "\${COMPREPLY[0]}"`,
+          ].join("\n"),
+        );
+
+        const output = childProcessActual.execFileSync(
+          "/bin/bash",
+          ["--noprofile", "--norc", runner],
+          {
+            env: {
+              ...process.env,
+              BASH_ENV: "/dev/null",
+              CALL_LOG: callLog,
+              PATH: `${binDir}:${process.env.PATH}`,
+              WORKER_PATH: workerPath,
+            },
+            encoding: "utf8",
+            timeout: 1000,
+          },
+        );
+
+        expect(output.trim()).toBe("reply:path-command-candidate");
+        expect(readFileSync(callLog, "utf8").trim().split("\n")).toEqual([
+          "__completion-worker-path",
+        ]);
+      });
+
+      it("does not query __completion-worker-path by default", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+        });
+
+        expect(script).not.toContain("__completion-worker-path");
+      });
+
+      it("disables bundled worker lookup without leaving sentinel paths", () => {
+        const { script } = generateCompletion(dispatcherCommand, {
+          shell: "bash",
+          programName: "mycli",
+          bundledWorker: { disabled: true },
+        });
+
+        expect(script).not.toContain("__completion-worker-path");
+        expect(script).not.toContain("bash-worker.bash");
+        expect(script).not.toContain("__politty_no_bundled_worker__");
+      });
+
+      it("generates and verifies a bundled worker through the helper", async () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-generate-worker-"));
+        const bin = writeWorkerGeneratorCli(root);
+        const outputPath = join(root, "dist", "completion", "zsh-worker.zsh");
+
+        const result = await generateBundledCompletionWorker({
+          bin,
+          programName: "mycli",
+          shell: "zsh",
+          outputPath,
+          verify: true,
+          quiet: true,
+          env: { WORKER_PATH: outputPath },
+        });
+
+        expect(result).toEqual({
+          outputPath,
+          reportedPath: outputPath,
+          size: statSync(outputPath).size,
+        });
+        validateBundledWorkerFile(outputPath, "mycli", "zsh");
+      });
+
+      it("uses the default bundled worker output path", async () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-default-worker-path-"));
+        const bin = writeWorkerGeneratorCli(root);
+        const outputPath = join(root, defaultBundledWorkerOutputPath("fish"));
+
+        const result = await generateBundledCompletionWorker({
+          bin,
+          programName: "mycli",
+          shell: "fish",
+          cwd: root,
+          verify: false,
+          quiet: true,
+        });
+
+        expect(result.outputPath).toBe(outputPath);
+        validateBundledWorkerFile(outputPath, "mycli", "fish");
+      });
+
+      it("fails verification when the reported bundled worker path differs", async () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-worker-path-mismatch-"));
+        const bin = writeWorkerGeneratorCli(root);
+        const outputPath = join(root, "dist", "completion", "zsh-worker.zsh");
+        const otherPath = join(root, "dist", "completion", "other.zsh");
+        mkdirSync(dirname(otherPath), { recursive: true });
+        writeFileSync(otherPath, "other\n");
+
+        await expect(
+          generateBundledCompletionWorker({
+            bin,
+            programName: "mycli",
+            shell: "zsh",
+            outputPath,
+            verify: true,
+            quiet: true,
+            env: { WORKER_PATH: otherPath },
+          }),
+        ).rejects.toThrow(/path mismatch/);
+      });
+
+      it("forces a fresh bundled worker even when an existing artifact would be skipped", async () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-worker-force-"));
+        // Fake CLI whose __refresh-completion mimics the real sig-match no-op:
+        // it only writes when the target is absent. With a stale file present,
+        // a non-forcing generator would return the stale artifact unchanged.
+        const bin = join(root, "mycli.mjs");
+        writeFileSync(
+          bin,
+          [
+            'import { existsSync, mkdirSync, writeFileSync } from "node:fs";',
+            'import { dirname } from "node:path";',
+            "const [cmd, shell, out] = process.argv.slice(2);",
+            'if (cmd === "__refresh-completion") {',
+            "  if (existsSync(out)) process.exit(0);",
+            "  mkdirSync(dirname(out), { recursive: true });",
+            "  writeFileSync(out, [",
+            '    "# politty-completion-version: 1",',
+            '    "# politty-completion-mode: worker",',
+            '    "# politty-completion-worker: true",',
+            '    "# program: mycli",',
+            "    `# shell: ${shell}`,",
+            '    "# FRESH",',
+            '  ].join("\\n") + "\\n");',
+            "  process.exit(0);",
+            "}",
+            "process.exit(1);",
+          ].join("\n"),
+        );
+
+        const outputPath = join(root, "dist", "completion", "zsh-worker.zsh");
+        mkdirSync(dirname(outputPath), { recursive: true });
+        writeFileSync(
+          outputPath,
+          `${[
+            "# politty-completion-version: 1",
+            "# politty-completion-mode: worker",
+            "# politty-completion-worker: true",
+            "# program: mycli",
+            "# shell: zsh",
+            "# STALE",
+          ].join("\n")}\n`,
+        );
+
+        await generateBundledCompletionWorker({
+          bin,
+          programName: "mycli",
+          shell: "zsh",
+          outputPath,
+          verify: false,
+          quiet: true,
+        });
+
+        const regenerated = readFileSync(outputPath, "utf8");
+        expect(regenerated).toContain("# FRESH");
+        expect(regenerated).not.toContain("# STALE");
+      });
+
+      it("prefers the current executable over a same-named binary earlier on PATH", () => {
+        const rel = defaultBundledWorkerOutputPath("zsh");
+        const workerContent = `${[
+          "# politty-completion-version: 1",
+          "# politty-completion-mode: worker",
+          "# politty-completion-worker: true",
+          "# program: mycli",
+          "# shell: zsh",
+        ].join("\n")}\n`;
+        const root = mkdtempSync(join(tmpdir(), "politty-worker-precedence-"));
+
+        // Decoy install earlier on PATH, with its own valid worker.
+        const decoyDir = join(root, "decoy");
+        const decoyWorker = join(decoyDir, rel);
+        mkdirSync(dirname(decoyWorker), { recursive: true });
+        writeFileSync(join(decoyDir, "mycli"), "#!/bin/sh\n", { mode: 0o755 });
+        writeFileSync(decoyWorker, workerContent);
+
+        // The install actually being executed (process.argv[1]).
+        const realDir = join(root, "real");
+        const realWorker = join(realDir, rel);
+        mkdirSync(dirname(realWorker), { recursive: true });
+        const realBin = join(realDir, "mycli");
+        writeFileSync(realBin, "#!/bin/sh\n", { mode: 0o755 });
+        writeFileSync(realWorker, workerContent);
+
+        const prevArgv1 = process.argv[1] ?? "";
+        const prevPath = process.env.PATH;
+        process.argv[1] = realBin;
+        process.env.PATH = `${decoyDir}${delimiter}${prevPath ?? ""}`;
+        try {
+          // No explicit binPath: worker discovery must prefer the current
+          // executable (argv[1]) over the PATH-resolved decoy install's worker.
+          const resolved = resolveBundledWorkerPath({ programName: "mycli", shell: "zsh" });
+          expect(resolved).not.toBeNull();
+          expect(realpathSync(resolved!)).toBe(realpathSync(realWorker));
+          expect(realpathSync(resolved!)).not.toBe(realpathSync(decoyWorker));
+        } finally {
+          process.argv[1] = prevArgv1;
+          process.env.PATH = prevPath;
+        }
+      });
+
+      it("rejects bundled worker files missing required worker metadata", () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-invalid-worker-"));
+        const workerPath = join(root, "zsh-worker.zsh");
+        writeFileSync(
+          workerPath,
+          [
+            "# politty-completion-version: 1",
+            "# program: mycli",
+            "# shell: zsh",
+            "# politty-completion-worker: true",
+          ].join("\n"),
+        );
+
+        expect(() => validateBundledWorkerFile(workerPath, "mycli", "zsh")).toThrow(
+          /politty-completion-mode/,
+        );
+      });
+
+      it("rejects a bundled worker whose program header only matches as a substring", () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-worker-substring-"));
+        const workerPath = join(root, "zsh-worker.zsh");
+        writeFileSync(
+          workerPath,
+          [
+            "# politty-completion-version: 1",
+            "# politty-completion-mode: worker",
+            "# politty-completion-worker: true",
+            "# program: mycli-extra",
+            "# shell: zsh",
+          ].join("\n"),
+        );
+
+        // `mycli` must not accept a worker built for `mycli-extra`, even though
+        // "# program: mycli" is a substring of the "# program: mycli-extra" line.
+        expect(() => validateBundledWorkerFile(workerPath, "mycli", "zsh")).toThrow(
+          /# program: mycli/,
+        );
+      });
+
+      it("sets a default Node compile cache for bash and preserves user overrides", () => {
+        const root = mkdtempSync(join(tmpdir(), "politty-dispatcher-cache-"));
+        const binDir = join(root, "bin");
+        const xdgCache = join(root, "xdg-cache");
+        const home = join(root, "home");
+        mkdirSync(binDir);
+        mkdirSync(xdgCache);
+        mkdirSync(home);
+
+        const bin = join(binDir, "mycli");
+        writeFileSync(
+          bin,
+          [
+            "#!/bin/sh",
+            `if [ "$1" = "__complete" ]; then`,
+            `  printf '%s\\n:6\\n' "$NODE_COMPILE_CACHE"`,
+            "fi",
+          ].join("\n"),
+          { mode: 0o755 },
+        );
+
+        const completionPath = join(root, "completion.bash");
+        writeFileSync(
+          completionPath,
+          generateCompletion(dispatcherCommand, {
+            shell: "bash",
+            programName: "mycli",
+            mode: "dispatcher",
+          }).script,
+        );
+        const runner = join(root, "run.sh");
+        writeFileSync(
+          runner,
+          [
+            `source '${completionPath}'`,
+            `COMP_WORDS=('mycli' '')`,
+            `COMP_CWORD=1`,
+            `COMP_LINE='mycli '`,
+            `COMP_POINT=\${#COMP_LINE}`,
+            `_mycli_completions`,
+            `printf '%s\\n' "\${COMPREPLY[@]}"`,
+          ].join("\n"),
+        );
+
+        const baseEnv = {
+          ...process.env,
+          BASH_ENV: "/dev/null",
+          HOME: home,
+          PATH: `${binDir}:${process.env.PATH}`,
+          XDG_CACHE_HOME: xdgCache,
+          NODE_COMPILE_CACHE: undefined,
+        };
+        const fromDefault = childProcessActual.execFileSync(
+          "/bin/bash",
+          ["--noprofile", "--norc", runner],
+          { env: baseEnv, encoding: "utf8", timeout: 1000 },
+        );
+        expect(fromDefault.trim()).toBe(join(xdgCache, "mycli", "node-compile-cache"));
+
+        const customCache = join(root, "custom-node-cache");
+        const fromOverride = childProcessActual.execFileSync(
+          "/bin/bash",
+          ["--noprofile", "--norc", runner],
+          {
+            env: { ...baseEnv, NODE_COMPILE_CACHE: customCache },
+            encoding: "utf8",
+            timeout: 1000,
+          },
+        );
+        expect(fromOverride.trim()).toBe(customCache);
       });
     });
 
@@ -594,22 +1415,26 @@ describe("Completion", () => {
         const result = generateCompletion(matcherCmd, {
           shell: "bash",
           programName: "mycli",
+          mode: "static",
         });
         expect(result.script).toContain('[[ "${_f##*/}" == .env.* ]]');
       });
 
-      it("should generate zsh _files -g for matcher", () => {
+      it("should generate zsh manual file filtering for matcher", () => {
         const result = generateCompletion(matcherCmd, {
           shell: "zsh",
           programName: "mycli",
+          mode: "static",
         });
-        expect(result.script).toContain('_files -g ".env.*"');
+        expect(result.script).toContain('local -a _matchers=(".env.*")');
+        expect(result.script).toContain('for _f in "$_dir"/${~_pat}(N.); do');
       });
 
       it("should generate fish glob expansion for matcher", () => {
         const result = generateCompletion(matcherCmd, {
           shell: "fish",
           programName: "mycli",
+          mode: "static",
         });
         expect(result.script).toContain('"$_dir".env.*');
       });
@@ -952,6 +1777,8 @@ describe("Completion", () => {
         const subcommandCandidates = result.candidates.filter((c) => c.type === "subcommand");
         expect(subcommandCandidates.some((c) => c.value === "build")).toBe(true);
         expect(subcommandCandidates.some((c) => c.value === "test")).toBe(true);
+        // Name completion opts out of the shells' empty-result file fallback.
+        expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
       });
 
       it("should generate option candidates", async () => {
@@ -961,6 +1788,7 @@ describe("Completion", () => {
         const optionCandidates = result.candidates.filter((c) => c.type === "option");
         expect(optionCandidates.some((c) => c.value === "--verbose")).toBe(true);
         expect(optionCandidates.some((c) => c.value === "--format")).toBe(true);
+        expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
       });
 
       it("should generate enum value candidates for option-value", async () => {
@@ -969,6 +1797,74 @@ describe("Completion", () => {
 
         expect(result.candidates.some((c) => c.value === "json")).toBe(true);
         expect(result.candidates.some((c) => c.value === "yaml")).toBe(true);
+      });
+
+      it("uses the last value of an array dep for runtime expand completion", async () => {
+        let seenDeps: Record<string, string> | undefined;
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            env: arg(z.array(z.string()).default([]), {
+              completion: { custom: { choices: ["dev", "prod"] } },
+            }),
+            target: arg(z.string().optional(), {
+              completion: {
+                custom: {
+                  expand: {
+                    dependsOn: ["env"],
+                    enumerate: (deps) => {
+                      seenDeps = deps;
+                      return [`${deps.env}-a`];
+                    },
+                  },
+                },
+              },
+            }),
+          }),
+          run: () => {},
+        });
+
+        // `env` is repeatable, so parseCompletionContext stages it as string[];
+        // runtime expand must use the most recent value rather than treating
+        // the array dep as missing (which would yield no candidates).
+        const ctx = parseCompletionContext(["--env", "prod", "--target", ""], cmd);
+        const result = await generateCandidates(ctx, { shell: "bash" });
+
+        expect(seenDeps).toEqual({ env: "prod" });
+        expect(result.candidates.map((c) => c.value)).toContain("prod-a");
+      });
+
+      it("skips runtime expand when a dep value is outside its static choices", async () => {
+        let calls = 0;
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            env: arg(z.string(), {
+              completion: { custom: { choices: ["dev", "prod"] } },
+            }),
+            target: arg(z.string().optional(), {
+              completion: {
+                custom: {
+                  expand: {
+                    dependsOn: ["env"],
+                    enumerate: (deps) => {
+                      calls++;
+                      return [`${deps.env}-a`];
+                    },
+                  },
+                },
+              },
+            }),
+          }),
+          run: () => {},
+        });
+
+        const ctx = parseCompletionContext(["--env", "qa", "--target", ""], cmd);
+        const result = await generateCandidates(ctx, { shell: "bash" });
+
+        expect(calls).toBe(0);
+        expect(result.candidates).toEqual([]);
+        expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
       });
 
       it("should set file directive for file completion without extensions", async () => {
@@ -1250,7 +2146,7 @@ describe("Completion", () => {
         expect(lines[1]).toBe("--format=yaml");
       });
 
-      it("should include @matcher: metadata for file matchers", () => {
+      it("should include @matcher: metadata on the trailing directive line", () => {
         const result: Parameters<typeof formatForShell>[0] = {
           candidates: [],
           directive: CompletionDirective.FilterPrefix,
@@ -1258,9 +2154,27 @@ describe("Completion", () => {
         };
 
         const output = formatForShell(result, { shell: "bash", currentWord: "" });
+
+        // Metadata rides on the directive sentinel (tab-separated), not a
+        // standalone line, so candidate lines stay unambiguous.
+        expect(output).toBe(`:${CompletionDirective.FilterPrefix}\t@matcher:.env.*`);
+      });
+
+      it("keeps candidate values that look like @ext:/@matcher: metadata distinct", () => {
+        const directive = CompletionDirective.FilterPrefix | CompletionDirective.NoFileCompletion;
+        const result: Parameters<typeof formatForShell>[0] = {
+          candidates: [{ value: "@ext:tsx" }, { value: "normal" }],
+          directive,
+        };
+
+        const output = formatForShell(result, { shell: "bash", currentWord: "" });
         const lines = output.split("\n");
 
-        expect(lines).toContain("@matcher:.env.*");
+        // A resolver candidate that begins with `@ext:` must remain a candidate
+        // line; metadata/directive live only on the final line.
+        expect(lines[0]).toBe("@ext:tsx");
+        expect(lines[1]).toBe("normal");
+        expect(lines[lines.length - 1]).toBe(`:${directive}`);
       });
 
       it("should not include @matcher: when fileMatchers is empty", () => {
@@ -1326,6 +2240,7 @@ describe("Completion", () => {
         const result = generateCompletion(cmd, {
           shell: "bash",
           programName: "mycli",
+          mode: "static",
         });
 
         expect(result.script).toContain("# program: mycli");
@@ -1346,6 +2261,7 @@ describe("Completion", () => {
         const result = generateCompletion(cmd, {
           shell: "zsh",
           programName: "mycli",
+          mode: "static",
         });
 
         expect(result.script).toContain("# program: mycli");
@@ -1366,6 +2282,7 @@ describe("Completion", () => {
         const result = generateCompletion(cmd, {
           shell: "fish",
           programName: "mycli",
+          mode: "static",
         });
 
         expect(result.script).toContain("# program: mycli");
@@ -1385,7 +2302,7 @@ describe("Completion", () => {
         });
 
         for (const shell of ["bash", "zsh", "fish"] as const) {
-          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+          const result = generateCompletion(cmd, { shell, programName: "mycli", mode: "static" });
 
           // Should not contain empty else branch (bash/zsh syntax error)
           expect(result.script).not.toMatch(/else\s*\n\s*(fi|end)/);
@@ -1408,7 +2325,7 @@ describe("Completion", () => {
         });
 
         for (const shell of ["bash", "zsh", "fish"] as const) {
-          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+          const result = generateCompletion(cmd, { shell, programName: "mycli", mode: "static" });
 
           // Should contain opt_takes_value fallback check
           expect(result.script).toContain("opt_takes_value");
@@ -1428,7 +2345,7 @@ describe("Completion", () => {
         });
 
         for (const shell of ["bash", "zsh", "fish"] as const) {
-          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+          const result = generateCompletion(cmd, { shell, programName: "mycli", mode: "static" });
 
           // Should contain positional value candidates in the root handler
           expect(result.script).toContain("a.txt");
@@ -1449,7 +2366,7 @@ describe("Completion", () => {
         });
 
         for (const shell of ["zsh", "fish"] as const) {
-          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+          const result = generateCompletion(cmd, { shell, programName: "mycli", mode: "static" });
 
           // Should not contain unescaped double quotes inside description strings
           // The raw description 'Build "the" project ($var)' should be escaped
@@ -1475,7 +2392,7 @@ describe("Completion", () => {
         });
 
         for (const shell of ["bash", "zsh", "fish"] as const) {
-          const result = generateCompletion(cmd, { shell, programName: "mycli" });
+          const result = generateCompletion(cmd, { shell, programName: "mycli", mode: "static" });
 
           // Array option --tags should NOT go through not_used filter
           expect(result.script).not.toMatch(/not_used.*"--tags"/);
@@ -1502,16 +2419,28 @@ describe("Completion", () => {
           },
         });
 
-        const bashResult = generateCompletion(cmd, { shell: "bash", programName: "mycli" });
+        const bashResult = generateCompletion(cmd, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "static",
+        });
         // _used_opts should be reset when entering a subcommand via is_subcmd
         expect(bashResult.script).toContain("_used_opts=(); _pos_count=0");
         expect(bashResult.script).toContain("__mycli_is_subcmd");
 
-        const zshResult = generateCompletion(cmd, { shell: "zsh", programName: "mycli" });
+        const zshResult = generateCompletion(cmd, {
+          shell: "zsh",
+          programName: "mycli",
+          mode: "static",
+        });
         expect(zshResult.script).toContain("_used_opts=(); _pos_count=0");
         expect(zshResult.script).toContain("__mycli_is_subcmd");
 
-        const fishResult = generateCompletion(cmd, { shell: "fish", programName: "mycli" });
+        const fishResult = generateCompletion(cmd, {
+          shell: "fish",
+          programName: "mycli",
+          mode: "static",
+        });
         expect(fishResult.script).toContain("set _used_opts; set _pos_count 0");
         expect(fishResult.script).toContain("__mycli_is_subcmd");
       });
@@ -1528,17 +2457,29 @@ describe("Completion", () => {
         });
 
         // Bash: choice values should be escaped in array literals
-        const bashResult = generateCompletion(cmd, { shell: "bash", programName: "mycli" });
+        const bashResult = generateCompletion(cmd, {
+          shell: "bash",
+          programName: "mycli",
+          mode: "static",
+        });
         expect(bashResult.script).toContain('say \\"hi\\"');
         expect(bashResult.script).toContain("cost\\$5");
 
         // Zsh: choice values should be escaped via escapeDesc
-        const zshResult = generateCompletion(cmd, { shell: "zsh", programName: "mycli" });
+        const zshResult = generateCompletion(cmd, {
+          shell: "zsh",
+          programName: "mycli",
+          mode: "static",
+        });
         expect(zshResult.script).toContain('\\"hi\\"');
         expect(zshResult.script).toContain("\\$5");
 
         // Fish: choice values should be escaped via escapeDesc
-        const fishResult = generateCompletion(cmd, { shell: "fish", programName: "mycli" });
+        const fishResult = generateCompletion(cmd, {
+          shell: "fish",
+          programName: "mycli",
+          mode: "static",
+        });
         expect(fishResult.script).toContain('\\"hi\\"');
         expect(fishResult.script).toContain("\\$5");
       });
@@ -1599,6 +2540,7 @@ describe("Completion", () => {
         programName: "mycli",
         binPath: fakeBin,
         programVersion: "1.2.3",
+        mode: "static",
       });
       const expectedSig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
       expect(result.script).toContain(`# politty-bin-sig: ${expectedSig}`);
@@ -1611,6 +2553,7 @@ describe("Completion", () => {
         shell: "zsh",
         programName: "mycli",
         binPath: "/nonexistent/path/to/binary",
+        mode: "static",
       });
       expect(result.script).toContain("# politty-bin-sig: 0");
     });
@@ -1619,6 +2562,7 @@ describe("Completion", () => {
       const result = generateCompletion(cmd, {
         shell: "fish",
         programName: "mycli",
+        mode: "static",
       });
       expect(result.script).not.toContain("# program-version:");
     });
@@ -1630,12 +2574,18 @@ describe("Completion", () => {
         shell: "bash",
         programName: "mycli",
         binPath: fakeBin,
+        mode: "static",
       });
 
       expect(script).toContain("__mycli_self_refresh()");
-      expect(script).toContain('"$_bin" __refresh-completion bash "$_self" 2>/dev/null');
+      expect(script).toContain('"$_bin" __refresh-completion bash "$_self" --static 2>/dev/null');
       expect(script).toContain('source "$_self" 2>/dev/null');
       expect(script).toContain('head -n 8 "$_self"');
+      // Resolve the bin like resolveBinPath (env override → PATH) so the
+      // self-refresh sig check matches the embedded `# politty-bin-sig`.
+      expect(script).toContain('_bin="${MYCLI_BIN:-$(type -P mycli 2>/dev/null)}"');
+      expect(script).toContain(`"$_bin" != '${fakeBin}'`);
+      expect(script).toContain('grep -qxF "# politty-bin-path: $_bin"');
     });
 
     it("embeds a zsh self-refresh guard in static scripts", () => {
@@ -1645,15 +2595,19 @@ describe("Completion", () => {
         shell: "zsh",
         programName: "mycli",
         binPath: fakeBin,
+        mode: "static",
       });
 
       expect(script).toContain("__mycli_self_refresh()");
       expect(script).toContain('_self="${(%):-%x}"');
-      expect(script).toContain('"$_bin" __refresh-completion zsh "$_self" 2>/dev/null');
+      expect(script).toContain('"$_bin" __refresh-completion zsh "$_self" --static 2>/dev/null');
       expect(script).toContain('source "$_self" 2>/dev/null');
       expect(script).toContain('_mycli "$@"');
       expect(script).not.toContain('_mycli "$@" || return 1');
       expect(script).toContain('if __mycli_self_refresh "$@"; then');
+      expect(script).toContain('_bin="${MYCLI_BIN:-$(whence -p mycli 2>/dev/null)}"');
+      expect(script).toContain(`"$_bin" != '${fakeBin}'`);
+      expect(script).toContain('grep -qxF "# politty-bin-path: $_bin"');
     });
 
     it("zsh self-refresh re-enters the fpath entrypoint for dashed program names", () => {
@@ -1663,11 +2617,29 @@ describe("Completion", () => {
         shell: "zsh",
         programName: "tailor-sdk",
         binPath: fakeBin,
+        mode: "static",
       });
 
       expect(script).toContain("__tailor_sdk_self_refresh()");
       expect(script).toContain('_tailor-sdk "$@"');
       expect(script).not.toContain('_tailor_sdk "$@"');
+    });
+
+    it("fish self-refresh honors the bin override before PATH", () => {
+      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
+      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+      const { script } = generateCompletion(cmd, {
+        shell: "fish",
+        programName: "mycli",
+        binPath: fakeBin,
+        mode: "static",
+      });
+
+      // Resolve the bin like resolveBinPath (env override → PATH) so the sig
+      // check stats the same binary the embedded sig was computed from.
+      expect(script).toContain("set -l _bin $MYCLI_BIN");
+      expect(script).toContain('test -z "$_bin"; and set _bin (command -v mycli)');
+      expect(script).toContain(`and test "$_bin" = "${fakeBin}"; and return 1`);
     });
   });
 
@@ -1727,6 +2699,74 @@ describe("Completion", () => {
       expect(after).toContain(`# politty-bin-sig: ${newSig}`);
     });
 
+    it("refreshIfStale keeps a legacy (mode-less) cache static rather than dispatcher", () => {
+      const target = join(cacheDir, "completion.bash");
+      mkdirSync(cacheDir, { recursive: true });
+      // A completion file from a release predating dispatcher mode: managed
+      // headers, no `# politty-completion-mode`, and a stale sig to force a
+      // rewrite. The refresh must not silently upgrade it to dispatcher.
+      writeFileSync(
+        target,
+        `${[
+          "# politty-completion-version: 1",
+          "# politty-bin-sig: 0",
+          "# program: mycli",
+          "# shell: bash",
+          "_mycli_completions() { :; }",
+        ].join("\n")}\n`,
+      );
+
+      refreshIfStale(
+        { rootCommand: cmd, programName: "mycli", cacheDir, binPath: fakeBin },
+        "bash",
+      );
+
+      const after = readFileSync(target, "utf8");
+      expect(after).toContain("# politty-completion-mode: static");
+      expect(after).not.toContain("# politty-completion-mode: dispatcher");
+    });
+
+    it("refreshIfStale rewrites a same-sig worker cache when the bin path differs", () => {
+      const target = join(cacheDir, "completion-worker.bash");
+      const otherBin = join(dirname(fakeBin), "other-mycli");
+      writeFileSync(otherBin, "#!/bin/sh\nexit 0\n");
+      mkdirSync(cacheDir, { recursive: true });
+      const sig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+      writeFileSync(
+        target,
+        `${[
+          "# politty-completion-version: 1",
+          `# politty-bin-sig: ${sig}`,
+          `# politty-bin-path: ${otherBin}`,
+          "# program: mycli",
+          "# shell: bash",
+          "# politty-completion-mode: worker",
+          "# politty-completion-worker: true",
+          "_mycli_worker_completions() { COMPREPLY=(old); }",
+        ].join("\n")}\n`,
+      );
+
+      refreshIfStale(
+        {
+          rootCommand: cmd,
+          programName: "mycli",
+          binPath: fakeBin,
+          targetPath: target,
+          completionMode: "static",
+          staticWorker: { functionSuffix: "worker" },
+          allowTargetCreate: true,
+        },
+        "bash",
+      );
+
+      const after = readFileSync(target, "utf8");
+      expect(after).toContain(`# politty-bin-sig: ${sig}`);
+      expect(after).toContain(`# politty-bin-path: ${fakeBin}`);
+      expect(after).toContain("# politty-completion-mode: worker");
+      expect(after).toContain("_mycli_worker_completions()");
+      expect(after).not.toContain("COMPREPLY=(old)");
+    });
+
     it("refreshIfStale rewrites a matching politty-generated target file", () => {
       const target = join(mkdtempSync(join(tmpdir(), "politty-static-")), "mycli-completion.bash");
       writeFileSync(
@@ -1762,6 +2802,25 @@ describe("Completion", () => {
       );
 
       expect(readFileSync(target, "utf8")).toBe("important user file\n");
+    });
+
+    it("refreshIfStale does not overwrite a similarly named program target", () => {
+      const target = join(mkdtempSync(join(tmpdir(), "politty-static-")), "other-completion.bash");
+      const otherCompletion = `${[
+        "# politty-completion-version: 1",
+        "# politty-bin-sig: 0",
+        "# program: mycli-extra",
+        "# shell: bash",
+        "_mycli_extra_completions() { :; }",
+      ].join("\n")}\n`;
+      writeFileSync(target, otherCompletion);
+
+      refreshIfStale(
+        { rootCommand: cmd, programName: "mycli", binPath: fakeBin, targetPath: target },
+        "bash",
+      );
+
+      expect(readFileSync(target, "utf8")).toBe(otherCompletion);
     });
 
     it("refreshIfStale leaves the cache untouched when bin-sig matches", () => {
@@ -1806,6 +2865,8 @@ describe("Completion", () => {
       const snippet = generateLoader({ programName: "mycli", shell: "bash" });
       expect(snippet).toContain("__mycli_load_completion()");
       expect(snippet).toContain("politty-bin-sig:");
+      expect(snippet).toContain("politty-bin-path:");
+      expect(snippet).toContain("grep -qxF");
       expect(snippet).toContain("completion.bash");
       expect(snippet).toContain('source "$_cache"');
     });
@@ -1815,6 +2876,18 @@ describe("Completion", () => {
       expect(snippet).toContain("emulate -L zsh");
       expect(snippet).toContain("setopt local_options no_aliases");
       expect(snippet).toContain("completion.zsh");
+    });
+
+    it("resolves the bin via the env override before PATH to match the header sig", () => {
+      // `# politty-bin-sig` is computed from resolveBinPath (env override →
+      // PATH). The loader's freshness check must stat the same binary, or a set
+      // `<PROG>_BIN` that differs from PATH would mismatch and regenerate forever.
+      expect(generateLoader({ programName: "mycli", shell: "bash" })).toContain(
+        '_bin="${MYCLI_BIN:-$(type -P mycli 2>/dev/null)}"',
+      );
+      expect(generateLoader({ programName: "mycli", shell: "zsh" })).toContain(
+        '_bin="${MYCLI_BIN:-$(whence -p mycli 2>/dev/null)}"',
+      );
     });
 
     it("hardcodes the cache directory when cacheDir is provided", () => {
@@ -1868,9 +2941,10 @@ describe("Completion", () => {
         shell: "fish",
         programName: "mycli",
         binPath: fakeBin,
+        mode: "static",
       });
       // Refresh body uses the hidden subcommand so user setup/cleanup/prompt is skipped.
-      expect(script).toContain('"$_bin" __refresh-completion fish "$_target" 2>/dev/null');
+      expect(script).toContain('"$_bin" __refresh-completion fish "$_target" --static 2>/dev/null');
       expect(script).toContain("set -l _target (status current-filename)");
       // The stale body must be skipped after a successful refresh.
       expect(script).toContain("set -l _politty_refreshed $status");
@@ -1880,7 +2954,7 @@ describe("Completion", () => {
       expect(script).toContain("stat -L -f '%m'");
     });
 
-    it("embeds the resolved bin-sig so the refresh function can early-exit when fresh", () => {
+    it("embeds the resolved bin freshness key so the refresh function can early-exit when fresh", () => {
       const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
       writeFileSync(fakeBin, "#!/bin/sh\n");
       const sig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
@@ -1888,8 +2962,11 @@ describe("Completion", () => {
         shell: "fish",
         programName: "mycli",
         binPath: fakeBin,
+        mode: "static",
       });
-      expect(script).toContain(`test "$_sig" = "${sig}"; and return 1`);
+      expect(script).toContain(
+        `test "$_sig" = "${sig}"; and test "$_bin" = "${fakeBin}"; and return 1`,
+      );
     });
   });
 
@@ -1911,7 +2988,15 @@ describe("Completion", () => {
       using _errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
         captured.push(args.map(String).join(" "));
       });
-      subcommand.run?.({ shell: "bash", instructions: false, install: true, loader: false });
+      subcommand.run?.({
+        shell: "bash",
+        instructions: false,
+        install: true,
+        loader: false,
+        static: false,
+        dispatcher: false,
+        worker: false,
+      });
 
       const target = join(cacheDir, "completion.bash");
       const written = readFileSync(target, "utf8");
@@ -1931,7 +3016,15 @@ describe("Completion", () => {
         captured.push(args.map(String).join(" "));
       });
       try {
-        subcommand.run?.({ shell: "zsh", instructions: false, install: true, loader: false });
+        subcommand.run?.({
+          shell: "zsh",
+          instructions: false,
+          install: true,
+          loader: false,
+          static: false,
+          dispatcher: false,
+          worker: false,
+        });
 
         const target = join(cacheDir, "completion.zsh");
         const written = readFileSync(target, "utf8");
@@ -1960,7 +3053,15 @@ describe("Completion", () => {
       using _errSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
         captured.push(args.map(String).join(" "));
       });
-      subcommand.run?.({ shell: "fish", instructions: false, install: true, loader: false });
+      subcommand.run?.({
+        shell: "fish",
+        instructions: false,
+        install: true,
+        loader: false,
+        static: false,
+        dispatcher: false,
+        worker: false,
+      });
 
       const target = join(cfgRoot, "fish", "completions", "mycli.fish");
       expect(readFileSync(target, "utf8")).toContain("# shell: fish");
@@ -1979,7 +3080,15 @@ describe("Completion", () => {
           captured.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
           return true;
         });
-      subcommand.run?.({ shell: "zsh", instructions: false, install: false, loader: true });
+      subcommand.run?.({
+        shell: "zsh",
+        instructions: false,
+        install: false,
+        loader: true,
+        static: false,
+        dispatcher: false,
+        worker: false,
+      });
 
       const out = captured.join("");
       expect(out).toContain("__mycli_load_completion()");
@@ -1992,7 +3101,15 @@ describe("Completion", () => {
     it("--loader for fish throws because fish uses an autoload file instead", () => {
       const subcommand = createCompletionCommand(cmd, "mycli");
       expect(() =>
-        subcommand.run?.({ shell: "fish", instructions: false, install: false, loader: true }),
+        subcommand.run?.({
+          shell: "fish",
+          instructions: false,
+          install: false,
+          loader: true,
+          static: false,
+          dispatcher: false,
+          worker: false,
+        }),
       ).toThrow(/fish does not use an rc loader/);
     });
   });
@@ -2014,6 +3131,75 @@ describe("Completion", () => {
       const root = defineCommand({ name: "mycli", run: () => {} });
       createCompletionCommand(root, "mycli");
       expect(root.subCommands?.["__refresh-completion"]).toBeDefined();
+    });
+
+    it("registers __completion-worker-path for bundled worker discovery", () => {
+      const wrapped = withCompletionCommand(defineCommand({ name: "mycli", run: () => {} }));
+      const workerPath = wrapped.subCommands?.["__completion-worker-path"];
+      expect(workerPath).toBeDefined();
+      if (!workerPath || typeof workerPath === "function" || isLazyCommand(workerPath)) {
+        throw new Error("expected __completion-worker-path to be a registered command object");
+      }
+      expect(workerPath.name).toBe("__completion-worker-path");
+    });
+
+    it("__completion-worker-path prints an existing bundled worker and otherwise throws", () => {
+      const root = mkdtempSync(join(tmpdir(), "politty-worker-path-"));
+      const distDir = join(root, "dist");
+      const completionDir = join(distDir, "completion");
+      mkdirSync(completionDir, { recursive: true });
+      const bin = join(distDir, "mycli");
+      writeFileSync(bin, "#!/bin/sh\n", { mode: 0o755 });
+      const worker = join(completionDir, "zsh-worker.zsh");
+      writeFileSync(
+        worker,
+        [
+          "# politty-completion-version: 1",
+          "# program: mycli",
+          "# shell: zsh",
+          "# politty-completion-mode: worker",
+          "# politty-completion-worker: true",
+        ].join("\n"),
+      );
+
+      const command = createCompletionWorkerPathCommand("mycli", { binPath: bin });
+      const captured: string[] = [];
+      using _logSpy = vi.spyOn(console, "log").mockImplementation((value: unknown) => {
+        captured.push(String(value));
+      });
+
+      command.run?.({ shell: "zsh" });
+      expect(captured).toEqual([worker]);
+
+      const missing = createCompletionWorkerPathCommand("missing", { binPath: bin });
+      // A miss must throw so runMain surfaces a non-zero exit code; a bare
+      // `process.exitCode = 1` would be overwritten by runMain's process.exit.
+      expect(() => missing.run?.({ shell: "zsh" })).toThrow(/No bundled completion worker/);
+    });
+
+    it("completion --static --worker prints a worker artifact", () => {
+      const root = defineCommand({ name: "mycli", run: () => {} });
+      const subcommand = createCompletionCommand(root, "mycli");
+      const captured: string[] = [];
+      using _logSpy = vi.spyOn(console, "log").mockImplementation((value: unknown) => {
+        captured.push(String(value));
+      });
+
+      subcommand.run?.({
+        shell: "zsh",
+        instructions: false,
+        install: false,
+        loader: false,
+        static: true,
+        dispatcher: false,
+        worker: true,
+      });
+
+      const script = captured.join("\n");
+      expect(script).toContain("# politty-completion-mode: worker");
+      expect(script).toContain("# politty-completion-worker: true");
+      expect(script).toContain("_mycli_worker_completions()");
+      expect(script).not.toContain("compdef _mycli_worker_completions");
     });
   });
 

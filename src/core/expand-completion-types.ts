@@ -1,12 +1,13 @@
 /**
- * Types for "expand" completion — candidates that are pre-enumerated at
- * script-generation time and inlined into the static shell script.
+ * Types for "expand" completion — candidates that depend on sibling arg
+ * values.
  *
  * The user provides `dependsOn` (sibling arg names that must have static
- * `choices` or an enum schema) and `enumerate(deps)`. politty walks the
- * cartesian product of the dependsOn values, calls `enumerate` for each
- * combination, and emits a case lookup keyed on the runtime values of those
- * args. No Node process is spawned on TAB.
+ * `choices` or an enum schema) and `enumerate(deps)`. Dispatcher scripts call
+ * `enumerate` inside `__complete` for the dependency values already typed on
+ * the command line. Static scripts walk the cartesian product of the
+ * dependsOn values, call `enumerate` for each combination, and emit a shell
+ * lookup table.
  *
  * Defined under `core/` (not `completion/`) so `arg-registry.ts` can
  * reference these types without crossing the lint-enforced
@@ -34,10 +35,11 @@ export interface ResolvedExpandCandidate {
  * order of `dependsOn` is the order in which `deps` keys are exposed to
  * `enumerate`.
  *
- * `enumerate` runs once per cartesian-product combination at the time the
- * shell script is generated (e.g. when the user runs `<program> completion
- * zsh`). It must be a pure function of `deps`; politty does not retain it
- * for runtime use.
+ * In dispatcher mode, `enumerate` runs during `__complete` for the dependency
+ * values already typed by the user. In static mode, it runs once per
+ * cartesian-product combination at script-generation time (e.g. when the user
+ * runs `<program> completion zsh --static`). It must be a pure function of
+ * `deps`.
  */
 export interface ExpandCompletion {
   dependsOn: readonly string[];

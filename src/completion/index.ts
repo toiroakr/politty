@@ -29,6 +29,8 @@ import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
 import type { AnyCommand, ArgsSchema, Command } from "../types.js";
 import { generateBashCompletion } from "./bash.js";
+import { resolveBundledWorkerPath } from "./bundled-worker.js";
+import { generateDispatcherCompletion } from "./dispatcher.js";
 import { createDynamicCompleteCommand } from "./dynamic/index.js";
 import { generateFishCompletion } from "./fish.js";
 import {
@@ -38,7 +40,13 @@ import {
   spawnBackgroundRefresh,
 } from "./install.js";
 import { generateLoader } from "./loader.js";
-import type { CompletionOptions, CompletionResult, ShellType } from "./types.js";
+import { shSingleQuote } from "./shell-shared.js";
+import type {
+  BundledWorkerOptions,
+  CompletionOptions,
+  CompletionResult,
+  ShellType,
+} from "./types.js";
 import { generateZshCompletion } from "./zsh.js";
 
 // Re-export dynamic completion types (in-process resolver)
@@ -64,12 +72,23 @@ export {
 } from "./dynamic/index.js";
 // Re-export extractor
 export { extractCompletionData, extractPositionals } from "./extractor.js";
+// Re-export bundled worker helpers
+export {
+  bundledWorkerShellExtension,
+  defaultBundledWorkerOutputPath,
+  generateBundledCompletionWorker,
+  validateBundledWorkerFile,
+  type GenerateBundledCompletionWorkerOptions,
+  type GenerateBundledCompletionWorkerResult,
+} from "./bundled-worker.js";
 // Re-export types
 export type {
+  BundledWorkerOptions,
   CompletableOption,
   CompletableSubcommand,
   CompletionData,
   CompletionGenerator,
+  CompletionMode,
   CompletionOptions,
   CompletionResult,
   ShellType,
@@ -84,6 +103,16 @@ export function generateCompletion(
   command: AnyCommand,
   options: CompletionOptions,
 ): CompletionResult {
+  // The direct API defaults to the self-contained static script: dispatcher
+  // mode needs the runtime `__complete`/`__refresh-completion` commands, which
+  // only `withCompletionCommand`/`createCompletionCommand` register, so a raw
+  // `generateCompletion(command, { shell })` must not silently emit an unwired
+  // dispatcher. The `completion <shell>` subcommand opts into dispatcher
+  // explicitly (`mode: "dispatcher"`).
+  if (options.mode === "dispatcher") {
+    return generateDispatcherCompletion(command, options);
+  }
+
   switch (options.shell) {
     case "bash":
       return generateBashCompletion(command, options);
@@ -101,10 +130,6 @@ export function generateCompletion(
  */
 export function getSupportedShells(): ShellType[] {
   return ["bash", "zsh", "fish"];
-}
-
-function shSingleQuote(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 function printZshFpathSetup(programName: string, target: string): void {
@@ -167,6 +192,15 @@ const completionArgsSchema = z.object({
     description:
       "Write the completion script to its on-disk cache (bash/zsh) or autoload location (fish) instead of printing it.",
   }),
+  static: arg(z.boolean().default(false), {
+    description: "Generate the legacy static completion script with command metadata baked in.",
+  }),
+  dispatcher: arg(z.boolean().default(false), {
+    description: "Generate the runtime dispatcher completion script. This is the default.",
+  }),
+  worker: arg(z.boolean().default(false), {
+    description: "Generate an internal static worker artifact for dispatcher mode.",
+  }),
 });
 
 type CompletionArgs = z.infer<typeof completionArgsSchema>;
@@ -182,9 +216,25 @@ const refreshArgsSchema = z.object({
     description: "Existing politty-generated completion file to refresh",
     placeholder: "TARGET",
   }),
+  static: arg(z.boolean().default(false), {
+    description: "Refresh using the legacy static completion script mode.",
+  }),
+  worker: arg(z.boolean().default(false), {
+    description: "Refresh an internal static worker completion script.",
+  }),
 });
 
 type RefreshArgs = z.infer<typeof refreshArgsSchema>;
+
+const workerPathArgsSchema = z.object({
+  shell: arg(z.enum(["bash", "zsh", "fish"]), {
+    positional: true,
+    description: "Shell worker to locate",
+    placeholder: "SHELL",
+  }),
+});
+
+type WorkerPathArgs = z.infer<typeof workerPathArgsSchema>;
 
 /**
  * Create a completion subcommand for your CLI
@@ -205,7 +255,7 @@ export function createCompletionCommand(
   rootCommand: AnyCommand,
   programName?: string,
   globalArgsSchema?: ArgsSchema,
-  extra: { cacheDir?: string; programVersion?: string } = {},
+  extra: { cacheDir?: string; programVersion?: string; bundledWorker?: BundledWorkerOptions } = {},
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Command<typeof completionArgsSchema, CompletionArgs, any> {
   const resolvedProgramName = programName ?? rootCommand.name;
@@ -217,10 +267,12 @@ export function createCompletionCommand(
     cacheDir?: string;
     programVersion?: string;
     globalArgsSchema?: ArgsSchema;
+    bundledWorker?: BundledWorkerOptions;
   } = {
     ...(cacheDir !== undefined && { cacheDir }),
     ...(programVersion !== undefined && { programVersion }),
     ...(globalArgsSchema !== undefined && { globalArgsSchema }),
+    ...(extra.bundledWorker !== undefined && { bundledWorker: extra.bundledWorker }),
   };
   const installCtxBase: Omit<Parameters<typeof installCompletion>[0], "rootCommand"> = {
     programName: resolvedProgramName,
@@ -254,6 +306,15 @@ export function createCompletionCommand(
       ),
     };
   }
+  if (!rootCommand.subCommands?.["__completion-worker-path"]) {
+    rootCommand.subCommands = {
+      ...rootCommand.subCommands,
+      "__completion-worker-path": createCompletionWorkerPathCommand(
+        resolvedProgramName,
+        refreshExtra,
+      ),
+    };
+  }
 
   return defineCommand({
     name: "completion",
@@ -269,10 +330,22 @@ export function createCompletionCommand(
         return;
       }
 
+      if (args.static && args.dispatcher) {
+        throw new Error("Choose only one completion mode: --dispatcher or --static.");
+      }
+      if (args.worker && !args.static) {
+        throw new Error("`--worker` requires `--static`.");
+      }
+      if (args.worker && (args.install || args.loader || args.instructions)) {
+        throw new Error("`--worker` can only print a worker artifact.");
+      }
+
+      const completionMode = args.static ? "static" : "dispatcher";
+
       if (args.install) {
         let target: string;
         try {
-          target = installCompletion({ rootCommand, ...installCtxBase }, shellType);
+          target = installCompletion({ rootCommand, ...installCtxBase, completionMode }, shellType);
         } catch (e) {
           throw new Error(`install failed: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -305,10 +378,13 @@ export function createCompletionCommand(
       const result = generateCompletion(rootCommand, {
         shell: shellType,
         programName: resolvedProgramName,
+        mode: completionMode,
         includeDescriptions: true,
         ...(globalArgsSchema !== undefined && { globalArgsSchema }),
         ...(programVersion !== undefined && { programVersion }),
         ...(cacheDir !== undefined && { cacheDir }),
+        ...(extra.bundledWorker !== undefined && { bundledWorker: extra.bundledWorker }),
+        ...(args.worker && { staticWorker: { functionSuffix: "worker" } }),
       });
 
       if (args.instructions) {
@@ -328,7 +404,12 @@ export function createCompletionCommand(
 export function createRefreshCompletionCommand(
   rootCommand: AnyCommand,
   programName: string,
-  extra: { cacheDir?: string; programVersion?: string; globalArgsSchema?: ArgsSchema } = {},
+  extra: {
+    cacheDir?: string;
+    programVersion?: string;
+    globalArgsSchema?: ArgsSchema;
+    bundledWorker?: BundledWorkerOptions;
+  } = {},
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Command<typeof refreshArgsSchema, RefreshArgs, any> {
   return defineCommand({
@@ -341,10 +422,40 @@ export function createRefreshCompletionCommand(
           rootCommand,
           programName,
           ...extra,
+          completionMode: args.static || args.worker ? "static" : undefined,
+          ...(args.worker && { staticWorker: { functionSuffix: "worker" } }),
+          ...(args.worker && { allowTargetCreate: true }),
           ...(args.target !== undefined && { targetPath: args.target }),
         },
         args.shell,
       );
+    },
+  });
+}
+
+export function createCompletionWorkerPathCommand(
+  programName: string,
+  extra: { binPath?: string; bundledWorker?: BundledWorkerOptions } = {},
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Command<typeof workerPathArgsSchema, WorkerPathArgs, any> {
+  return defineCommand({
+    name: "__completion-worker-path",
+    description: "(internal) Print the bundled completion worker path when available.",
+    args: workerPathArgsSchema,
+    run(args) {
+      const path = resolveBundledWorkerPath({
+        programName,
+        shell: args.shell,
+        ...(extra.binPath !== undefined && { binPath: extra.binPath }),
+        ...(extra.bundledWorker !== undefined && { bundledWorker: extra.bundledWorker }),
+      });
+      if (!path) {
+        // Throw so runMain reports a non-zero exit code: a bare
+        // `process.exitCode = 1` is overwritten by runMain's final
+        // `process.exit(0)`, leaving build scripts unable to detect the miss.
+        throw new Error(`No bundled completion worker found for ${programName} (${args.shell}).`);
+      }
+      console.log(path);
     },
   });
 }
@@ -366,6 +477,8 @@ export interface WithCompletionOptions {
   cacheDir?: string;
   /** Program version embedded in the script header. */
   programVersion?: string;
+  /** Published worker artifact lookup used by dispatcher mode. */
+  bundledWorker?: BundledWorkerOptions;
 }
 
 /**
@@ -396,12 +509,18 @@ export function withCompletionCommand<T extends AnyCommand>(
   const opts: WithCompletionOptions =
     typeof options === "string" ? { programName: options } : (options ?? {});
 
-  const { programName, globalArgsSchema, cacheDir, programVersion } = opts;
+  const { programName, globalArgsSchema, cacheDir, programVersion, bundledWorker } = opts;
   const resolvedProgramName = programName ?? command.name;
-  const extra: { cacheDir?: string; programVersion?: string; globalArgsSchema?: ArgsSchema } = {
+  const extra: {
+    cacheDir?: string;
+    programVersion?: string;
+    globalArgsSchema?: ArgsSchema;
+    bundledWorker?: BundledWorkerOptions;
+  } = {
     ...(cacheDir !== undefined && { cacheDir }),
     ...(programVersion !== undefined && { programVersion }),
     ...(globalArgsSchema !== undefined && { globalArgsSchema }),
+    ...(bundledWorker !== undefined && { bundledWorker }),
   };
 
   const wrappedCommand = {
@@ -417,6 +536,7 @@ export function withCompletionCommand<T extends AnyCommand>(
       resolvedProgramName,
       extra,
     ),
+    "__completion-worker-path": createCompletionWorkerPathCommand(resolvedProgramName, extra),
   };
 
   wrappedCommand.runMainHook = (argv) => {
@@ -453,6 +573,7 @@ function maybeSpawnRefresh(
   if (
     firstPositional === "__complete" ||
     firstPositional === "__refresh-completion" ||
+    firstPositional === "__completion-worker-path" ||
     firstPositional === "completion"
   ) {
     return;

@@ -4,9 +4,9 @@
  * A `resolve` callback registered on `arg(...)` receives parsed context
  * (other arg values typed so far, previous values supplied to the same
  * option, the current word being completed, target shell) and returns
- * candidates. The callback runs inside the `__complete` command, so static
- * shell scripts delegate to `<program> __complete` for any spec that uses
- * `resolve`.
+ * candidates. The callback runs inside the `__complete` command. Dispatcher
+ * shell scripts call `__complete` for every completion request; static shell
+ * scripts delegate to it for any spec that uses `resolve`.
  *
  * Defined under `core/` (not `completion/`) so `arg-registry.ts` can
  * reference the resolver type without crossing the lint-enforced

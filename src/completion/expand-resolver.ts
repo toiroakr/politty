@@ -43,11 +43,12 @@ export function resolveExpandTargets(
   sub: CompletableSubcommand,
   targets: readonly PendingExpandTarget[],
   globalOptions: readonly CompletableOption[] = [],
+  validateOnly = false,
 ): void {
   if (targets.length === 0) return;
   const siblingIndex = buildSiblingIndex(sub, globalOptions);
   for (const target of targets) {
-    target.set(resolveOne(target, siblingIndex));
+    target.set(resolveOne(target, siblingIndex, validateOnly));
   }
 }
 
@@ -94,6 +95,7 @@ function buildSiblingIndex(
 function resolveOne(
   target: PendingExpandTarget,
   siblings: Map<string, readonly string[]>,
+  validateOnly = false,
 ): ValueCompletion {
   const { spec } = target;
   const deps = spec.dependsOn;
@@ -118,6 +120,14 @@ function resolveOne(
       );
     }
     valueLists.push([...values]);
+  }
+
+  // The structural validation above is all the dispatcher needs: it resolves
+  // `dependsOn` against typed values at runtime via `__complete`. Skip the
+  // generation-time cartesian `enumerate` that only the static table requires —
+  // running it eagerly would be slow and could fail on unused dep combinations.
+  if (validateOnly) {
+    return { type: "expand", dependsOn: deps, table: [] };
   }
 
   const table: ExpandTableEntry[] = [];

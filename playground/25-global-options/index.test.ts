@@ -321,6 +321,7 @@ describe("25-global-options", () => {
         shell: "bash",
         programName: "my-app",
         globalArgsSchema,
+        mode: "static",
       });
 
       // Global options should appear in the completion script
