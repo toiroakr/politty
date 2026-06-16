@@ -1,25 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("05-lifecycle-hooks", () => {
-  let console: ConsoleSpy;
-  let errorSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-    errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-    errorSpy.mockRestore();
-  });
-
   it("runs setup, run, and cleanup in order", async () => {
+    using console = spyOnConsoleLog();
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+
     const result = await runCommand(command, [
       "--database",
       "postgres://localhost/mydb",
@@ -39,6 +29,9 @@ describe("05-lifecycle-hooks", () => {
   });
 
   it("returns result from run function", async () => {
+    using _console = spyOnConsoleLog();
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+
     const result = await runCommand(command, [
       "--database",
       "mysql://localhost/test",
@@ -53,6 +46,9 @@ describe("05-lifecycle-hooks", () => {
   });
 
   it("calls cleanup with error when run fails", async () => {
+    using _console = spyOnConsoleLog();
+    using errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+
     const result = await runCommand(command, [
       "--database",
       "postgres://localhost/mydb",
@@ -68,18 +64,25 @@ describe("05-lifecycle-hooks", () => {
   });
 
   it("fails when database is not provided", async () => {
+    using _console = spyOnConsoleLog();
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+
     const result = await runCommand(command, ["--query", "SELECT 1"]);
 
     expect(result.exitCode).toBe(1);
   });
 
   it("fails when query is not provided", async () => {
+    using _console = spyOnConsoleLog();
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+
     const result = await runCommand(command, ["--database", "postgres://localhost/mydb"]);
 
     expect(result.exitCode).toBe(1);
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/05-lifecycle-hooks/README.md": [""] },

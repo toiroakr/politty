@@ -119,9 +119,8 @@ describe("arg effect", () => {
       run: () => {},
     });
 
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    using _consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const result = await runCommand(cmd, ["--name", "test"]);
-    consoleSpy.mockRestore();
 
     expect(result.success).toBe(false);
     expect(result.exitCode).toBe(1);
@@ -138,9 +137,8 @@ describe("arg effect", () => {
       run: () => {},
     });
 
-    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    using _consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCommand(cmd, ["--help"]);
-    consoleSpy.mockRestore();
 
     expect(effect).not.toHaveBeenCalled();
   });
@@ -288,9 +286,8 @@ describe("arg effect", () => {
         run: () => {},
       });
 
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      using _consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const result = await runCommand(cmd, ["--verbose"], { globalArgs: globalSchema });
-      consoleSpy.mockRestore();
 
       expect(result.success).toBe(false);
       expect(globalEffect).not.toHaveBeenCalled();

@@ -3,6 +3,23 @@ import { z } from "zod";
 import { defineCommand, runCommand } from "../index.js";
 import { createLogCollector, emptyLogs, mergeLogs } from "./log-collector.js";
 
+const useMockedConsole = () => {
+  const spies = [
+    vi.spyOn(console, "log").mockImplementation(() => {}),
+    vi.spyOn(console, "info").mockImplementation(() => {}),
+    vi.spyOn(console, "debug").mockImplementation(() => {}),
+    vi.spyOn(console, "error").mockImplementation(() => {}),
+    vi.spyOn(console, "warn").mockImplementation(() => {}),
+  ];
+  return {
+    [Symbol.dispose]() {
+      for (const spy of spies) {
+        spy.mockRestore();
+      }
+    },
+  };
+};
+
 describe("createLogCollector", () => {
   let originalLog: typeof console.log;
   let originalInfo: typeof console.info;
@@ -305,19 +322,8 @@ describe("mergeLogs", () => {
 });
 
 describe("runCommand with log collection", () => {
-  beforeEach(() => {
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    vi.spyOn(console, "info").mockImplementation(() => {});
-    vi.spyOn(console, "debug").mockImplementation(() => {});
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it("should not collect logs when captureLogs is false (default)", async () => {
+    using _consoleMocks = useMockedConsole();
     const command = defineCommand({
       name: "test",
       run: () => {
@@ -334,6 +340,7 @@ describe("runCommand with log collection", () => {
   });
 
   it("should collect all log levels when captureLogs is true", async () => {
+    using _consoleMocks = useMockedConsole();
     const command = defineCommand({
       name: "test",
       run: () => {
@@ -355,6 +362,7 @@ describe("runCommand with log collection", () => {
   });
 
   it("should collect logs from setup hook", async () => {
+    using _consoleMocks = useMockedConsole();
     const command = defineCommand({
       name: "test",
       setup: () => {
@@ -371,6 +379,7 @@ describe("runCommand with log collection", () => {
   });
 
   it("should collect logs from cleanup hook", async () => {
+    using _consoleMocks = useMockedConsole();
     const command = defineCommand({
       name: "test",
       run: () => {},
@@ -387,6 +396,7 @@ describe("runCommand with log collection", () => {
   });
 
   it("should return error on validation failure without logging", async () => {
+    using _consoleMocks = useMockedConsole();
     const command = defineCommand({
       name: "test",
       args: z.object({
@@ -409,6 +419,7 @@ describe("runCommand with log collection", () => {
   });
 
   it("should collect logs across subcommand routing", async () => {
+    using _consoleMocks = useMockedConsole();
     const subCommand = defineCommand({
       name: "sub",
       run: () => {
@@ -429,6 +440,7 @@ describe("runCommand with log collection", () => {
   });
 
   it("should capture stdout logs (console.log)", async () => {
+    using _consoleMocks = useMockedConsole();
     const command = defineCommand({
       name: "test",
       run: () => {

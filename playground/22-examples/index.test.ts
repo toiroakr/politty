@@ -1,13 +1,13 @@
 import * as fs from "node:fs";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { assertDocMatch, initDocFile, type GenerateDocConfig } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { checkCommand, command, deleteCommand, readCommand, writeCommand } from "./index.js";
 
 vi.mock("node:fs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:fs")>();
+  const actual = await importOriginal<typeof fs>();
   return {
     ...actual,
     readFileSync: vi.fn((path: fs.PathOrFileDescriptor, options?: unknown) => {
@@ -53,15 +53,12 @@ const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
 };
 
 describe("22-examples", () => {
-  let consoleSpy: ConsoleSpy;
-
   // Initialize doc file before all tests (deletes file when update mode is enabled)
   beforeAll(() => {
     initDocFile(baseDocConfig, realFs);
   });
 
   beforeEach(() => {
-    consoleSpy = spyOnConsoleLog();
     vi.resetAllMocks();
 
     // By default, delegate to real fs for doc-comparator operations
@@ -75,13 +72,10 @@ describe("22-examples", () => {
     vi.mocked(fs.mkdirSync).mockImplementation((path, options) => realFs.mkdirSync(path, options));
   });
 
-  afterEach(() => {
-    consoleSpy.mockRestore();
-  });
-
   describe("root command", () => {
     describe("documentation", () => {
       it("generates documentation", { timeout: 10000 }, async () => {
+        using _console = spyOnConsoleLog();
         await assertDocMatch({
           ...baseDocConfig,
           targetCommands: [""],
@@ -93,6 +87,7 @@ describe("22-examples", () => {
 
   describe("read command", () => {
     it("reads file content", async () => {
+      using consoleSpy = spyOnConsoleLog();
       vi.mocked(fs.readFileSync).mockReturnValue("file content");
 
       const result = await runCommand(readCommand, ["test.txt"]);
@@ -102,6 +97,7 @@ describe("22-examples", () => {
     });
 
     it("reads and parses JSON file", async () => {
+      using _console = spyOnConsoleLog();
       vi.mocked(fs.readFileSync).mockReturnValue('{"key": "value"}');
 
       const result = await runCommand(readCommand, ["config.json", "-f", "json"]);
@@ -113,6 +109,7 @@ describe("22-examples", () => {
     });
 
     it("documentation", async () => {
+      using _console = spyOnConsoleLog();
       const readFileSyncSpy = vi.mocked(fs.readFileSync);
 
       await assertDocMatch({
@@ -145,6 +142,7 @@ describe("22-examples", () => {
 
   describe("write command", () => {
     it("writes content to file", async () => {
+      using consoleSpy = spyOnConsoleLog();
       vi.mocked(fs.writeFileSync).mockImplementation(() => {});
 
       const result = await runCommand(writeCommand, ["output.txt", "Hello"]);
@@ -155,6 +153,7 @@ describe("22-examples", () => {
     });
 
     it("appends content to file", async () => {
+      using consoleSpy = spyOnConsoleLog();
       vi.mocked(fs.writeFileSync).mockImplementation(() => {});
 
       const result = await runCommand(writeCommand, ["log.txt", "entry", "--append"]);
@@ -165,6 +164,7 @@ describe("22-examples", () => {
     });
 
     it("documentation", async () => {
+      using _console = spyOnConsoleLog();
       const writeFileSyncSpy = vi.mocked(fs.writeFileSync);
 
       await assertDocMatch({
@@ -194,6 +194,7 @@ describe("22-examples", () => {
 
   describe("check command", () => {
     it("checks existing file", async () => {
+      using consoleSpy = spyOnConsoleLog();
       vi.mocked(fs.existsSync).mockReturnValue(true);
 
       const result = await runCommand(checkCommand, ["config.json"]);
@@ -203,6 +204,7 @@ describe("22-examples", () => {
     });
 
     it("checks non-existing file", async () => {
+      using consoleSpy = spyOnConsoleLog();
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
       const result = await runCommand(checkCommand, ["missing.txt"]);
@@ -212,6 +214,7 @@ describe("22-examples", () => {
     });
 
     it("documentation", async () => {
+      using _console = spyOnConsoleLog();
       const existsSyncSpy = vi.mocked(fs.existsSync);
 
       await assertDocMatch({
@@ -239,6 +242,7 @@ describe("22-examples", () => {
 
   describe("delete command", () => {
     it("deletes existing file", async () => {
+      using consoleSpy = spyOnConsoleLog();
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.unlinkSync).mockImplementation(() => {});
 
@@ -250,6 +254,7 @@ describe("22-examples", () => {
     });
 
     it("handles non-existing file", async () => {
+      using consoleSpy = spyOnConsoleLog();
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
       const result = await runCommand(deleteCommand, ["missing.txt"]);

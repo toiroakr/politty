@@ -1,23 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { main } from "./index.js";
 
 describe("19-xor-types", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   describe("token auth (first xor option)", () => {
     it("authenticates with token", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(main, ["--token", "abc123"]);
 
       expect(result.exitCode).toBe(0);
@@ -27,6 +18,7 @@ describe("19-xor-types", () => {
 
   describe("credentials auth (second xor option)", () => {
     it("authenticates with username and password", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(main, ["--username", "admin", "--password", "secret"]);
 
       expect(result.exitCode).toBe(0);
@@ -38,6 +30,7 @@ describe("19-xor-types", () => {
 
   describe("help", () => {
     it("shows help with xor options", async () => {
+      using console = spyOnConsoleLog();
       const result = await runCommand(main, ["--help"]);
 
       expect(result.exitCode).toBe(0);
@@ -50,6 +43,7 @@ describe("19-xor-types", () => {
   });
 
   it("succeeds with anonymous auth (no options)", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(main, []);
 
     expect(result.exitCode).toBe(0);
@@ -57,6 +51,7 @@ describe("19-xor-types", () => {
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command: main,
       files: { "playground/19-xor-types/README.md": [""] },

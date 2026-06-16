@@ -12,7 +12,15 @@
  */
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import { resolveBinPath } from "./header.js";
@@ -27,6 +35,7 @@ export interface InstallContext {
   cacheDir?: string | undefined;
   binPath?: string | undefined;
   globalArgsSchema?: ArgsSchema | undefined;
+  targetPath?: string | undefined;
 }
 
 /**
@@ -89,6 +98,20 @@ function readCachedSig(path: string): string | null {
   }
 }
 
+function isManagedTarget(path: string, programName: string, shell: ShellType): boolean {
+  try {
+    if (!existsSync(path)) return false;
+    const head = readFileSync(path, "utf8").split("\n", 8).join("\n");
+    return (
+      /^# politty-completion-version: \S+/m.test(head) &&
+      head.includes(`# program: ${programName}`) &&
+      head.includes(`# shell: ${shell}`)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Rewrite the cache only when stale. Used by:
  *   - `<program> __refresh-completion <shell>` (the hidden subcommand
@@ -104,7 +127,10 @@ function readCachedSig(path: string): string | null {
  */
 export function refreshIfStale(ctx: InstallContext, shell: ShellType): void {
   try {
-    const target = installPath(ctx.programName, shell, ctx.cacheDir);
+    const target = ctx.targetPath
+      ? realpathSync(ctx.targetPath)
+      : installPath(ctx.programName, shell, ctx.cacheDir);
+    if (ctx.targetPath && !isManagedTarget(target, ctx.programName, shell)) return;
     const binPath = resolveBinPath(ctx.programName, ctx.binPath);
     if (!binPath) return;
     let currentSig: string;

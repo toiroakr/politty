@@ -1,7 +1,7 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { assertDocMatch, initDocFile, type GenerateDocConfig } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { buildCommand, command, commonOptions, deployCommand, initCommand } from "./index.js";
 
@@ -18,23 +18,14 @@ const docConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
 };
 
 describe("23-global-options-index-markers", () => {
-  let consoleSpy: ConsoleSpy;
-
   beforeAll(() => {
     initDocFile("playground/23-global-options-index-markers/README.md");
     initDocFile("playground/23-global-options-index-markers/README-CUSTOM-HEADING.md");
   });
 
-  beforeEach(() => {
-    consoleSpy = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
-  });
-
   describe("init command", () => {
     it("initializes a project with default template", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(initCommand, ["my-app"]);
 
       expect(result.success).toBe(true);
@@ -44,6 +35,7 @@ describe("23-global-options-index-markers", () => {
     });
 
     it("documentation", async () => {
+      using _console = spyOnConsoleLog();
       await assertDocMatch({
         ...docConfig,
         targetCommands: ["init"],
@@ -54,6 +46,7 @@ describe("23-global-options-index-markers", () => {
 
   describe("build command", () => {
     it("builds in default mode", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(buildCommand, []);
 
       expect(result.success).toBe(true);
@@ -61,6 +54,7 @@ describe("23-global-options-index-markers", () => {
     });
 
     it("documentation", async () => {
+      using _console = spyOnConsoleLog();
       await assertDocMatch({
         ...docConfig,
         targetCommands: ["build"],
@@ -71,6 +65,7 @@ describe("23-global-options-index-markers", () => {
 
   describe("deploy command", () => {
     it("deploys to staging with force", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(deployCommand, ["--env", "staging", "--force"]);
 
       expect(result.success).toBe(true);
@@ -78,6 +73,7 @@ describe("23-global-options-index-markers", () => {
     });
 
     it("documentation", async () => {
+      using _console = spyOnConsoleLog();
       await assertDocMatch({
         ...docConfig,
         targetCommands: ["deploy"],
@@ -88,6 +84,7 @@ describe("23-global-options-index-markers", () => {
 
   describe("globalOptions marker", () => {
     it("validates globalOptions table", async () => {
+      using _console = spyOnConsoleLog();
       await assertDocMatch({
         ...docConfig,
         examples: {},
@@ -97,6 +94,7 @@ describe("23-global-options-index-markers", () => {
 
   describe("index marker", () => {
     it("validates commands index", async () => {
+      using _console = spyOnConsoleLog();
       await assertDocMatch({
         ...docConfig,
         examples: {},
@@ -124,6 +122,7 @@ describe("23-global-options-index-markers", () => {
     };
 
     it("validates rootDoc with custom heading levels", async () => {
+      using _console = spyOnConsoleLog();
       await assertDocMatch({
         ...customHeadingDocConfig,
         examples: {},

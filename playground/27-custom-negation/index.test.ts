@@ -1,7 +1,7 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { assertDocMatch, initDocFile, type GenerateDocConfig } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { cli } from "./index.js";
 
@@ -14,22 +14,13 @@ const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
 };
 
 describe("27-custom-negation", () => {
-  let consoleSpy: ConsoleSpy;
-
   beforeAll(() => {
     initDocFile(baseDocConfig);
   });
 
-  beforeEach(() => {
-    consoleSpy = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
-  });
-
   describe("custom negation parsing", () => {
     it("uses default values when no flags are given", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, []);
 
       expect(result.exitCode).toBe(0);
@@ -40,6 +31,7 @@ describe("27-custom-negation", () => {
     });
 
     it("accepts --disable-cache as the negation of --cache", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["--disable-cache"]);
 
       expect(result.exitCode).toBe(0);
@@ -48,6 +40,7 @@ describe("27-custom-negation", () => {
     });
 
     it("accepts the camelCase variant --disableCache", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["--disableCache"]);
 
       expect(result.exitCode).toBe(0);
@@ -55,6 +48,7 @@ describe("27-custom-negation", () => {
     });
 
     it("accepts --monochrome as the negation of --color", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["--monochrome"]);
 
       expect(result.exitCode).toBe(0);
@@ -63,6 +57,7 @@ describe("27-custom-negation", () => {
     });
 
     it("ignores the default --no-cache form when negation is configured", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["--no-cache"]);
 
       // Unknown option is a warning, not an error; cache stays at its default
@@ -71,6 +66,7 @@ describe("27-custom-negation", () => {
     });
 
     it("flips verbose on via --verbose when negation is disabled", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["--verbose"]);
 
       expect(result.exitCode).toBe(0);
@@ -78,6 +74,7 @@ describe("27-custom-negation", () => {
     });
 
     it("accepts --no-pretty (advertised default negation) when negation: true", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["--no-pretty"]);
 
       expect(result.exitCode).toBe(0);
@@ -85,6 +82,7 @@ describe("27-custom-negation", () => {
     });
 
     it("ignores --no-verbose when negation: false suppresses the default form", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["--no-verbose"]);
 
       // Unknown option is a warning, not an error; verbose stays at its default
@@ -95,6 +93,7 @@ describe("27-custom-negation", () => {
 
   describe("help", () => {
     it("renders negation inline when no negationDescription is set", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);
@@ -107,6 +106,7 @@ describe("27-custom-negation", () => {
     });
 
     it("renders negation on a separate line when negationDescription is set", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);
@@ -121,6 +121,7 @@ describe("27-custom-negation", () => {
     });
 
     it("shows only --verbose without any negation form when negation: false", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);
@@ -133,6 +134,7 @@ describe("27-custom-negation", () => {
     });
 
     it("advertises --pretty / --no-pretty in help when negation: true", async () => {
+      using consoleSpy = spyOnConsoleLog();
       const result = await runCommand(cli, ["--help"]);
 
       expect(result.exitCode).toBe(0);
@@ -144,6 +146,7 @@ describe("27-custom-negation", () => {
 
   describe("documentation", () => {
     it("root command", async () => {
+      using _console = spyOnConsoleLog();
       await assertDocMatch({
         ...baseDocConfig,
         targetCommands: [""],

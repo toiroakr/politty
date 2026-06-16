@@ -1,22 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assertDocMatch } from "../../src/docs/index.js";
 import { runCommand } from "../../src/index.js";
-import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
+import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";
 
 describe("20-meta", () => {
-  let console: ConsoleSpy;
-
-  beforeEach(() => {
-    console = spyOnConsoleLog();
-  });
-
-  afterEach(() => {
-    console.mockRestore();
-  });
-
   it("greets with positional name (via meta)", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["World"]);
 
     expect(result.exitCode).toBe(0);
@@ -24,6 +15,7 @@ describe("20-meta", () => {
   });
 
   it("greets with custom greeting using -g (via meta)", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["World", "-g", "Hi"]);
 
     expect(result.exitCode).toBe(0);
@@ -31,6 +23,7 @@ describe("20-meta", () => {
   });
 
   it("greets with custom greeting using --greeting (via meta)", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["World", "--greeting", "Howdy"]);
 
     expect(result.exitCode).toBe(0);
@@ -38,6 +31,7 @@ describe("20-meta", () => {
   });
 
   it("shows help with meta-defined options", async () => {
+    using console = spyOnConsoleLog();
     const result = await runCommand(command, ["--help"]);
 
     expect(result.exitCode).toBe(0);
@@ -48,13 +42,15 @@ describe("20-meta", () => {
   });
 
   it("fails when name is not provided", async () => {
-    vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
+    using _console = spyOnConsoleLog();
+    using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, []);
 
     expect(result.exitCode).toBe(1);
   });
 
   it("documentation", async () => {
+    using _console = spyOnConsoleLog();
     await assertDocMatch({
       command,
       files: { "playground/20-meta/README.md": [""] },

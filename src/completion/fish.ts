@@ -460,8 +460,9 @@ export function generateFishCompletion(
     `    set -l _sig (stat -L -c '%Y' "$_bin" 2>/dev/null; or stat -L -f '%m' "$_bin" 2>/dev/null)`,
   );
   lines.push(`    test "$_sig" = "${sig}"; and return 1`);
-  lines.push(`    set -l _target "$__fish_config_dir/completions/${programName}.fish"`);
-  lines.push(`    "$_bin" __refresh-completion fish 2>/dev/null`);
+  lines.push(`    set -l _target (status current-filename)`);
+  lines.push(`    test -n "$_target"; and test -f "$_target"; or return 1`);
+  lines.push(`    "$_bin" __refresh-completion fish "$_target" 2>/dev/null`);
   lines.push(`    and source "$_target" 2>/dev/null`);
   lines.push(`    and return 0`);
   lines.push(`    return 1`);
@@ -859,16 +860,7 @@ export function generateFishCompletion(
   return {
     script: lines.join("\n"),
     shell: "fish",
-    installInstructions: `# To enable completions, run one of the following:
-
-# Option 1: Source directly
-${programName} completion fish | source
-
-# Option 2: Save to the fish completions directory
-${programName} completion fish > ~/.config/fish/completions/${programName}.fish
-
-# The completion will be available immediately in new shell sessions.
-# To use in the current session, run:
-source ~/.config/fish/completions/${programName}.fish`,
+    installInstructions: `# To enable auto-refreshing fish completions, run:
+${programName} completion fish --install`,
   };
 }
