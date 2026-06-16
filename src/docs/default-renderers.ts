@@ -609,11 +609,19 @@ export function renderSubcommandsTableFromArray(
     let cmdCell: string;
     if (generateAnchors) {
       const anchor = generateAnchor(sub.fullPath);
-      const subFile = fileMap?.[subCommandPath];
+      const hasSubFile =
+        fileMap !== undefined && Object.prototype.hasOwnProperty.call(fileMap, subCommandPath);
+      const subFile = hasSubFile ? fileMap[subCommandPath] : undefined;
 
       if (currentFile && subFile && currentFile !== subFile) {
         const relativePath = getRelativePath(currentFile, subFile);
         cmdCell = `[\`${fullName}\`](${relativePath}#${anchor})`;
+      } else if (fileMap && !hasSubFile) {
+        // A fileMap is present but this subcommand has no entry: in template mode this
+        // means the child is not rendered as a heading anywhere, so a local #anchor link
+        // would be dead. Render plain text instead. (Files mode populates an entry for
+        // every documented command, so this branch is not reached there.)
+        cmdCell = `\`${fullName}\``;
       } else {
         cmdCell = `[\`${fullName}\`](#${anchor})`;
       }
@@ -730,6 +738,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     optionStyle = "table",
     generateAnchors = true,
     includeSubcommandDetails = true,
+    markerless = false,
     renderDescription: customRenderDescription,
     renderUsage: customRenderUsage,
     renderArguments: customRenderArguments,
@@ -739,6 +748,11 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     renderFooter: customRenderFooter,
     renderExamples: customRenderExamples,
   } = options;
+
+  // When markerless, sections are emitted as plain content with no marker comments.
+  const wrap = markerless
+    ? (_type: SectionType, _scope: string, content: string): string => content
+    : wrapWithMarker;
 
   return (info: CommandInfo): string => {
     const sections: string[] = [];
@@ -750,7 +764,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
 
     // Title - use commandPath for subcommands, name for root
     const title = info.commandPath || info.name;
-    sections.push(wrapWithMarker("heading", scope, `${h} ${title}`));
+    sections.push(wrap("heading", scope, `${h} ${title}`));
 
     // Description (includes aliases when present)
     {
@@ -772,7 +786,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
           ? customRenderDescription(context)
           : context.content;
         if (content) {
-          sections.push(wrapWithMarker("description", scope, content));
+          sections.push(wrap("description", scope, content));
         }
       }
     }
@@ -787,7 +801,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       };
       const content = customRenderUsage ? customRenderUsage(context) : context.content;
       if (content) {
-        sections.push(wrapWithMarker("usage", scope, content));
+        sections.push(wrap("usage", scope, content));
       }
     }
 
@@ -814,7 +828,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         ? customRenderArguments(context)
         : renderArgs(context.args);
       if (content) {
-        sections.push(wrapWithMarker("arguments", scope, content));
+        sections.push(wrap("arguments", scope, content));
       }
     }
 
@@ -858,7 +872,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         ? customRenderOptions(context)
         : renderOpts(context.options);
       if (content) {
-        sections.push(wrapWithMarker("options", scope, content));
+        sections.push(wrap("options", scope, content));
       }
     }
 
@@ -866,7 +880,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     {
       const globalLink = getGlobalOptionsLink(info);
       if (globalLink) {
-        sections.push(wrapWithMarker("global-options-link", scope, globalLink));
+        sections.push(wrap("global-options-link", scope, globalLink));
       }
     }
 
@@ -892,7 +906,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         ? customRenderSubcommands(context)
         : renderSubs(context.subcommands);
       if (content) {
-        sections.push(wrapWithMarker("subcommands", scope, content));
+        sections.push(wrap("subcommands", scope, content));
       }
     }
 
@@ -924,7 +938,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         ? customRenderExamples(context)
         : renderEx(context.examples, context.results);
       if (content) {
-        sections.push(wrapWithMarker("examples", scope, content));
+        sections.push(wrap("examples", scope, content));
       }
     }
 
@@ -937,7 +951,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       };
       const content = customRenderNotes ? customRenderNotes(context) : context.content;
       if (content) {
-        sections.push(wrapWithMarker("notes", scope, content));
+        sections.push(wrap("notes", scope, content));
       }
     }
 

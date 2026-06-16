@@ -45,11 +45,16 @@ vi.mock("node:fs", async (importOriginal) => {
 // Get actual fs module (not mocked)
 const realFs = await vi.importActual<typeof fs>("node:fs");
 
-// Shared config for all documentation tests - fileMap is built from this
+// Shared config for all documentation tests - fileMap is built from this.
+// This playground updates one command's section at a time via `targetCommands`, with
+// per-command example mocks installed in separate tests. That incremental, section-level
+// workflow requires marker-based generation (`customizable: true`); marker-free files mode
+// regenerates each file as a whole and cannot preserve sections produced by other tests.
 const baseDocConfig: Omit<GenerateDocConfig, "examples" | "targetCommands"> = {
   command,
   files: { "playground/22-examples/README.md": ["", "read", "write", "check"] },
   formatter: mdFormatter,
+  customizable: true,
 };
 
 describe("22-examples", () => {
