@@ -20,82 +20,40 @@
     "politty": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist/**/*.js",
+    "dist/**/*.d.ts"
   ],
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
-      }
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./augment": {
-      "import": {
-        "types": "./dist/augment.d.ts",
-        "default": "./dist/augment.js"
-      },
-      "require": {
-        "types": "./dist/augment.d.cts",
-        "default": "./dist/augment.cjs"
-      }
+      "types": "./dist/augment.d.ts",
+      "default": "./dist/augment.js"
     },
     "./docs": {
-      "import": {
-        "types": "./dist/docs/index.d.ts",
-        "default": "./dist/docs/index.js"
-      },
-      "require": {
-        "types": "./dist/docs/index.d.cts",
-        "default": "./dist/docs/index.cjs"
-      }
+      "types": "./dist/docs/index.d.ts",
+      "default": "./dist/docs/index.js"
     },
     "./completion": {
-      "import": {
-        "types": "./dist/completion/index.d.ts",
-        "default": "./dist/completion/index.js"
-      },
-      "require": {
-        "types": "./dist/completion/index.d.cts",
-        "default": "./dist/completion/index.cjs"
-      }
+      "types": "./dist/completion/index.d.ts",
+      "default": "./dist/completion/index.js"
     },
     "./prompt": {
-      "import": {
-        "types": "./dist/prompt/index.d.ts",
-        "default": "./dist/prompt/index.js"
-      },
-      "require": {
-        "types": "./dist/prompt/index.d.cts",
-        "default": "./dist/prompt/index.cjs"
-      }
+      "types": "./dist/prompt/index.d.ts",
+      "default": "./dist/prompt/index.js"
     },
     "./prompt/clack": {
-      "import": {
-        "types": "./dist/prompt/clack/index.d.ts",
-        "default": "./dist/prompt/clack/index.js"
-      },
-      "require": {
-        "types": "./dist/prompt/clack/index.d.cts",
-        "default": "./dist/prompt/clack/index.cjs"
-      }
+      "types": "./dist/prompt/clack/index.d.ts",
+      "default": "./dist/prompt/clack/index.js"
     },
     "./prompt/inquirer": {
-      "import": {
-        "types": "./dist/prompt/inquirer/index.d.ts",
-        "default": "./dist/prompt/inquirer/index.js"
-      },
-      "require": {
-        "types": "./dist/prompt/inquirer/index.d.cts",
-        "default": "./dist/prompt/inquirer/index.cjs"
-      }
+      "types": "./dist/prompt/inquirer/index.d.ts",
+      "default": "./dist/prompt/inquirer/index.js"
     }
   },
   "scripts": {
