@@ -122,11 +122,7 @@ describe("resolveSkillOptions", () => {
     const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue(root);
     try {
       const resolved = resolveSkillOptions({ sourceDir: "/x", package: PACKAGE }, CLI);
-      // findProjectRoot may still discover a marker above tmpdir; in that
-      // case resolved.cwd is some ancestor — the contract is "a string,
-      // never undefined". The explicit-fallback path is covered by the
-      // override test above.
-      expect(typeof resolved.cwd).toBe("string");
+      expect(resolved.cwd).toBe(root);
     } finally {
       cwdSpy.mockRestore();
       rmSync(root, { recursive: true, force: true });
