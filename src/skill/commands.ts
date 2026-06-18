@@ -202,7 +202,7 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
           erroredSlotNames.add(basename(err.path));
           if (err.skillName !== undefined) erroredSlotNames.add(err.skillName);
         }
-        for (const orphan of findOwnedInstalledSkills(stamp, resolved.cwd, resolved.sourceDir)) {
+        for (const orphan of ownedInstalled) {
           if (sourceNames.has(orphan) || excluded.has(orphan) || erroredSlotNames.has(orphan)) {
             continue;
           }
