@@ -136,12 +136,13 @@ describe("scanSourceDir", () => {
   });
 
   it("should report missing-source for non-existent source directory", () => {
-    const { skills, errors } = scanSourceDir("/nonexistent/path");
+    const missingPath = join(tempDir, "definitely-missing");
+    const { skills, errors } = scanSourceDir(missingPath);
 
     expect(skills).toHaveLength(0);
     expect(errors).toHaveLength(1);
     expect(errors[0]!.reason).toBe("missing-source");
-    expect(errors[0]!.path).toBe("/nonexistent/path");
+    expect(errors[0]!.path).toBe(missingPath);
   });
 
   it("should report missing-source when sourceDir is a file, not a directory", () => {
