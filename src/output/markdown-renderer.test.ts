@@ -1,7 +1,7 @@
-import stringWidth from "string-width";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setColorEnabled } from "./logger.js";
 import { renderInline, renderMarkdown } from "./markdown-renderer.js";
+import stringWidth from "./string-width.js";
 
 // Disable color for predictable test output
 beforeEach(() => {

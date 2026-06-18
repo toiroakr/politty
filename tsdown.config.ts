@@ -19,6 +19,6 @@ export default defineConfig({
   minify: false,
   target: "node18",
   outDir: "dist",
-  external: ["zod", "string-width", "@clack/prompts", "@inquirer/prompts"],
+  external: ["zod", "@clack/prompts", "@inquirer/prompts"],
   fixedExtension: false,
 });
