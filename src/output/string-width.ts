@@ -92,16 +92,23 @@ function isFullWidth(cp: number): boolean {
 function graphemeWidth(grapheme: string): number {
   let hasVisible = false;
   let hasWide = false;
+  let hasEmojiVariation = false;
 
   for (const char of grapheme) {
     const cp = char.codePointAt(0)!;
+    // Variation Selector-16 promotes the base character to emoji
+    // presentation, which renders as a double-width glyph (e.g. ©️, ™️, 1️⃣).
+    if (cp === 0xfe0f) {
+      hasEmojiVariation = true;
+      continue;
+    }
     if (isZeroWidth(cp)) continue;
     hasVisible = true;
     if (isFullWidth(cp)) hasWide = true;
   }
 
   if (!hasVisible) return 0;
-  return hasWide ? 2 : 1;
+  return hasWide || hasEmojiVariation ? 2 : 1;
 }
 
 // `Intl.Segmenter` lets us iterate by grapheme cluster, but it may be missing

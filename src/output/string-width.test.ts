@@ -11,6 +11,9 @@ const THUMBS_UP_TONE = "\u{1F44D}\u{1F3FD}"; // 👍🏽
 const E_ACUTE_COMBINING = "e\u0301"; // é (e + combining acute accent)
 const ZERO_WIDTH_SPACE = "\u200B";
 const ZERO_WIDTH_NO_BREAK_SPACE = "\uFEFF"; // BOM
+const COPYRIGHT_EMOJI = "\u00A9\uFE0F"; // copyright sign + Variation Selector-16
+const TRADEMARK_EMOJI = "\u2122\uFE0F"; // trademark sign + Variation Selector-16
+const KEYCAP_ONE = "1\uFE0F\u20E3"; // digit one + VS16 + combining enclosing keycap
 
 describe("stringWidth", () => {
   it("should return 0 for an empty string", () => {
@@ -50,6 +53,17 @@ describe("stringWidth", () => {
 
     it("should count a base character with a combining mark as width 1", () => {
       expect(stringWidth(E_ACUTE_COMBINING)).toBe(1);
+    });
+
+    it("should count emoji-presentation sequences (VS16) as width 2", () => {
+      expect(stringWidth(COPYRIGHT_EMOJI)).toBe(2);
+      expect(stringWidth(TRADEMARK_EMOJI)).toBe(2);
+      expect(stringWidth(KEYCAP_ONE)).toBe(2);
+    });
+
+    it("should count the bare (text-presentation) form as width 1", () => {
+      expect(stringWidth("©")).toBe(1);
+      expect(stringWidth("™")).toBe(1);
     });
   });
 
