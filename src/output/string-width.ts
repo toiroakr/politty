@@ -104,7 +104,16 @@ function graphemeWidth(grapheme: string): number {
   return hasWide ? 2 : 1;
 }
 
-const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
+// `Intl.Segmenter` lets us iterate by grapheme cluster, but it may be missing
+// in Node builds without full ICU. Probe once and fall back to per-code-point
+// iteration so importing this module never throws.
+const segmenter: Intl.Segmenter | undefined = (() => {
+  try {
+    return new Intl.Segmenter("en", { granularity: "grapheme" });
+  } catch {
+    return undefined;
+  }
+})();
 
 /**
  * Compute the visual width of a string as rendered in a terminal.
@@ -112,11 +121,21 @@ const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
 export default function stringWidth(input: string): number {
   if (input.length === 0) return 0;
 
-  const str = input.includes("\x1b") ? stripVTControlCharacters(input) : input;
+  // ANSI/VT sequences start with ESC (\x1b) or the C1 CSI (\x9b).
+  const str =
+    input.includes("\x1b") || input.includes("\x9b") ? stripVTControlCharacters(input) : input;
   let width = 0;
 
-  for (const { segment } of segmenter.segment(str)) {
-    width += graphemeWidth(segment);
+  if (segmenter) {
+    for (const { segment } of segmenter.segment(str)) {
+      width += graphemeWidth(segment);
+    }
+  } else {
+    // Fallback: iterate by code point. Multi-code-point clusters are
+    // over-counted, but the module still loads and width stays usable.
+    for (const char of str) {
+      width += graphemeWidth(char);
+    }
   }
 
   return width;
