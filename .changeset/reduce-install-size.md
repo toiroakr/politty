@@ -2,8 +2,8 @@
 "politty": minor
 ---
 
-インストールサイズを削減（2.9MB → 約630KB、約78%減）
+Reduced installation size (2.9MB to approx. 630KB, approx. 78% reduction)
 
-- ソースマップ（`.map`）を配布物から除外
-- ビルドキャッシュ（`tsconfig.tsbuildinfo`）などの副産物を `files` で明示的に除外
-- **BREAKING**: CJS 配布を廃止し ESM-only に変更（`require()` での読み込み不可、`.cjs` / `index.d.cts` を廃止）
+- Excluded source maps (.map) from the distribution
+- Explicitly excluded build artifacts such as build cache (tsconfig.tsbuildinfo) using the files field
+- BREAKING: Discontinued CJS distribution and changed to ESM-only (loading via require() is no longer possible, removed .cjs and index.d.cts)
