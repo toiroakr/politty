@@ -7,6 +7,7 @@ export default defineConfig({
     "src/augment.ts",
     "src/docs/index.ts",
     "src/completion/index.ts",
+    "src/skill/index.ts",
     "src/prompt/index.ts",
     "src/prompt/clack/index.ts",
     "src/prompt/inquirer/index.ts",
@@ -19,6 +20,6 @@ export default defineConfig({
   minify: false,
   target: "node18",
   outDir: "dist",
-  external: ["zod", "@clack/prompts", "@inquirer/prompts"],
+  external: ["zod", "yaml", "@clack/prompts", "@inquirer/prompts"],
   fixedExtension: false,
 });
