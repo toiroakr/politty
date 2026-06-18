@@ -1,5 +1,20 @@
 # politty
 
+## 0.9.0
+
+### Minor Changes
+
+- b7c8ebc: Reduced installation size (2.9MB to approx. 630KB, approx. 78% reduction)
+  - Excluded source maps (.map) from the distribution
+  - Explicitly excluded build artifacts such as build cache (tsconfig.tsbuildinfo) using the files field
+  - BREAKING: Discontinued CJS distribution and changed to ESM-only (loading via require() is no longer possible, removed .cjs and index.d.cts)
+
+### Patch Changes
+
+- dfd1241: Removed the `string-width` runtime dependency
+  - Replaced it with a lightweight built-in implementation (using Node's `stripVTControlCharacters` for ANSI stripping) used by the Markdown renderer
+  - `politty` now has zero runtime dependencies
+
 ## 0.8.0
 
 ### Minor Changes
