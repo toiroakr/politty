@@ -1,6 +1,6 @@
 {
   "name": "politty",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "A lightweight CLI framework inspired by citty with zod v4 registry integration for type-safe metadata management",
   "keywords": [
     "argument-parser",
@@ -20,92 +20,44 @@
     "politty": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist/**/*.js",
+    "dist/**/*.d.ts"
   ],
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
-      }
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./augment": {
-      "import": {
-        "types": "./dist/augment.d.ts",
-        "default": "./dist/augment.js"
-      },
-      "require": {
-        "types": "./dist/augment.d.cts",
-        "default": "./dist/augment.cjs"
-      }
+      "types": "./dist/augment.d.ts",
+      "default": "./dist/augment.js"
     },
     "./docs": {
-      "import": {
-        "types": "./dist/docs/index.d.ts",
-        "default": "./dist/docs/index.js"
-      },
-      "require": {
-        "types": "./dist/docs/index.d.cts",
-        "default": "./dist/docs/index.cjs"
-      }
+      "types": "./dist/docs/index.d.ts",
+      "default": "./dist/docs/index.js"
     },
     "./completion": {
-      "import": {
-        "types": "./dist/completion/index.d.ts",
-        "default": "./dist/completion/index.js"
-      },
-      "require": {
-        "types": "./dist/completion/index.d.cts",
-        "default": "./dist/completion/index.cjs"
-      }
+      "types": "./dist/completion/index.d.ts",
+      "default": "./dist/completion/index.js"
     },
     "./skill": {
-      "import": {
-        "types": "./dist/skill/index.d.ts",
-        "default": "./dist/skill/index.js"
-      },
-      "require": {
-        "types": "./dist/skill/index.d.cts",
-        "default": "./dist/skill/index.cjs"
-      }
+      "types": "./dist/skill/index.d.ts",
+      "default": "./dist/skill/index.js"
     },
     "./prompt": {
-      "import": {
-        "types": "./dist/prompt/index.d.ts",
-        "default": "./dist/prompt/index.js"
-      },
-      "require": {
-        "types": "./dist/prompt/index.d.cts",
-        "default": "./dist/prompt/index.cjs"
-      }
+      "types": "./dist/prompt/index.d.ts",
+      "default": "./dist/prompt/index.js"
     },
     "./prompt/clack": {
-      "import": {
-        "types": "./dist/prompt/clack/index.d.ts",
-        "default": "./dist/prompt/clack/index.js"
-      },
-      "require": {
-        "types": "./dist/prompt/clack/index.d.cts",
-        "default": "./dist/prompt/clack/index.cjs"
-      }
+      "types": "./dist/prompt/clack/index.d.ts",
+      "default": "./dist/prompt/clack/index.js"
     },
     "./prompt/inquirer": {
-      "import": {
-        "types": "./dist/prompt/inquirer/index.d.ts",
-        "default": "./dist/prompt/inquirer/index.js"
-      },
-      "require": {
-        "types": "./dist/prompt/inquirer/index.d.cts",
-        "default": "./dist/prompt/inquirer/index.cjs"
-      }
+      "types": "./dist/prompt/inquirer/index.d.ts",
+      "default": "./dist/prompt/inquirer/index.js"
     }
   },
   "scripts": {
@@ -129,7 +81,6 @@
     "release": "pnpm build && changeset publish"
   },
   "dependencies": {
-    "string-width": "^8.2.0",
     "yaml": "^2.8.3"
   },
   "devDependencies": {

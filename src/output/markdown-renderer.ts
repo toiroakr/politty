@@ -1,5 +1,5 @@
-import stringWidth from "string-width";
 import { styles } from "./logger.js";
+import stringWidth from "./string-width.js";
 
 /**
  * Lightweight Markdown-to-terminal renderer.
