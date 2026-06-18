@@ -137,8 +137,8 @@
     "@clack/prompts": "1.2.0",
     "@inquirer/prompts": "8.5.2",
     "@quansync/fs": "1.0.0",
-    "@types/node": "25.9.2",
-    "@typescript/native-preview": "7.0.0-dev.20260608.1",
+    "@types/node": "25.9.3",
+    "@typescript/native-preview": "7.0.0-dev.20260610.1",
     "@vitest/coverage-v8": "4.1.8",
     "knip": "6.16.1",
     "lefthook": "2.1.9",
@@ -168,5 +168,5 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@11.5.2"
+  "packageManager": "pnpm@11.5.3"
 }
