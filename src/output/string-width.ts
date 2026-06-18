@@ -82,6 +82,31 @@ function isFullWidth(cp: number): boolean {
 }
 
 /**
+ * Visual width of a single grapheme cluster (a user-perceived character).
+ *
+ * Iterating by code point would over-count multi-code-point clusters such as
+ * ZWJ emoji sequences (👨‍👩‍👧), regional-indicator flags (🇯🇵), and emoji with
+ * skin-tone modifiers (👍🏽). These render as a single glyph, so the whole
+ * cluster contributes width 0/1/2 once.
+ */
+function graphemeWidth(grapheme: string): number {
+  let hasVisible = false;
+  let hasWide = false;
+
+  for (const char of grapheme) {
+    const cp = char.codePointAt(0)!;
+    if (isZeroWidth(cp)) continue;
+    hasVisible = true;
+    if (isFullWidth(cp)) hasWide = true;
+  }
+
+  if (!hasVisible) return 0;
+  return hasWide ? 2 : 1;
+}
+
+const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
+
+/**
  * Compute the visual width of a string as rendered in a terminal.
  */
 export default function stringWidth(input: string): number {
@@ -90,10 +115,8 @@ export default function stringWidth(input: string): number {
   const str = input.includes("\x1b") ? stripVTControlCharacters(input) : input;
   let width = 0;
 
-  for (const char of str) {
-    const cp = char.codePointAt(0)!;
-    if (isZeroWidth(cp)) continue;
-    width += isFullWidth(cp) ? 2 : 1;
+  for (const { segment } of segmenter.segment(str)) {
+    width += graphemeWidth(segment);
   }
 
   return width;
