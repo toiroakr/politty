@@ -866,243 +866,255 @@ describe("Completion", () => {
         expect(script).not.toContain("__mycli_self_refresh()");
       });
 
-      it("uses the PATH-visible executable and lets MYCLI_BIN override it in bash", () => {
-        const root = mkdtempSync(join(tmpdir(), "politty-dispatcher-"));
-        const localDir = join(root, "local");
-        const globalDir = join(root, "global");
-        mkdirSync(localDir);
-        mkdirSync(globalDir);
-        const localBin = join(localDir, "mycli");
-        const globalBin = join(globalDir, "mycli");
-        const writeFake = (file: string, label: string) => {
+      it.skipIf(process.platform === "win32")(
+        "uses the PATH-visible executable and lets MYCLI_BIN override it in bash",
+        () => {
+          const root = mkdtempSync(join(tmpdir(), "politty-dispatcher-"));
+          const localDir = join(root, "local");
+          const globalDir = join(root, "global");
+          mkdirSync(localDir);
+          mkdirSync(globalDir);
+          const localBin = join(localDir, "mycli");
+          const globalBin = join(globalDir, "mycli");
+          const writeFake = (file: string, label: string) => {
+            writeFileSync(
+              file,
+              `#!/bin/sh\nif [ "$1" = "__complete" ]; then printf '%s\\n:6\\n' '${label}'; fi\n`,
+              { mode: 0o755 },
+            );
+          };
+          writeFake(localBin, "local-candidate");
+          writeFake(globalBin, "global-candidate");
+
+          const completionPath = join(root, "completion.bash");
           writeFileSync(
-            file,
-            `#!/bin/sh\nif [ "$1" = "__complete" ]; then printf '%s\\n:6\\n' '${label}'; fi\n`,
+            completionPath,
+            generateCompletion(dispatcherCommand, {
+              shell: "bash",
+              programName: "mycli",
+              mode: "dispatcher",
+            }).script,
+          );
+          const runner = join(root, "run.sh");
+          writeFileSync(
+            runner,
+            [
+              `source '${completionPath}'`,
+              `COMP_WORDS=('mycli' '')`,
+              `COMP_CWORD=1`,
+              `COMP_LINE='mycli '`,
+              `COMP_POINT=\${#COMP_LINE}`,
+              `_mycli_completions`,
+              `printf '%s\\n' "\${COMPREPLY[@]}"`,
+            ].join("\n"),
+          );
+
+          const baseEnv = {
+            ...process.env,
+            BASH_ENV: "/dev/null",
+            PATH: `${localDir}:${globalDir}:${process.env.PATH}`,
+          };
+          const fromPath = childProcessActual.execFileSync(
+            "/bin/bash",
+            ["--noprofile", "--norc", runner],
+            { env: baseEnv, encoding: "utf8", timeout: 1000 },
+          );
+          expect(fromPath.trim()).toBe("local-candidate");
+
+          const fromOverride = childProcessActual.execFileSync(
+            "/bin/bash",
+            ["--noprofile", "--norc", runner],
+            { env: { ...baseEnv, MYCLI_BIN: globalBin }, encoding: "utf8", timeout: 1000 },
+          );
+          expect(fromOverride.trim()).toBe("global-candidate");
+        },
+      );
+
+      it.skipIf(process.platform === "win32")(
+        "uses a bundled worker before cache refresh and memoizes sourcing in bash",
+        () => {
+          const root = mkdtempSync(join(tmpdir(), "politty-bundled-worker-"));
+          const distDir = join(root, "pkg", "dist");
+          const completionDir = join(distDir, "completion");
+          const binDir = join(root, "bin");
+          mkdirSync(completionDir, { recursive: true });
+          mkdirSync(binDir);
+
+          const callLog = join(root, "bin-calls.log");
+          const sourceLog = join(root, "worker-sources.log");
+          const bin = join(distDir, "mycli");
+          writeFileSync(
+            bin,
+            [
+              "#!/bin/sh",
+              `printf '%s\\n' "$1" >> "$CALL_LOG"`,
+              `if [ "$1" = "__complete" ]; then printf '%s\\n:6\\n' dynamic-candidate; fi`,
+            ].join("\n"),
             { mode: 0o755 },
           );
-        };
-        writeFake(localBin, "local-candidate");
-        writeFake(globalBin, "global-candidate");
-
-        const completionPath = join(root, "completion.bash");
-        writeFileSync(
-          completionPath,
-          generateCompletion(dispatcherCommand, {
-            shell: "bash",
-            programName: "mycli",
-            mode: "dispatcher",
-          }).script,
-        );
-        const runner = join(root, "run.sh");
-        writeFileSync(
-          runner,
-          [
-            `source '${completionPath}'`,
-            `COMP_WORDS=('mycli' '')`,
-            `COMP_CWORD=1`,
-            `COMP_LINE='mycli '`,
-            `COMP_POINT=\${#COMP_LINE}`,
-            `_mycli_completions`,
-            `printf '%s\\n' "\${COMPREPLY[@]}"`,
-          ].join("\n"),
-        );
-
-        const baseEnv = {
-          ...process.env,
-          BASH_ENV: "/dev/null",
-          PATH: `${localDir}:${globalDir}:${process.env.PATH}`,
-        };
-        const fromPath = childProcessActual.execFileSync(
-          "/bin/bash",
-          ["--noprofile", "--norc", runner],
-          { env: baseEnv, encoding: "utf8", timeout: 1000 },
-        );
-        expect(fromPath.trim()).toBe("local-candidate");
-
-        const fromOverride = childProcessActual.execFileSync(
-          "/bin/bash",
-          ["--noprofile", "--norc", runner],
-          { env: { ...baseEnv, MYCLI_BIN: globalBin }, encoding: "utf8", timeout: 1000 },
-        );
-        expect(fromOverride.trim()).toBe("global-candidate");
-      });
-
-      it("uses a bundled worker before cache refresh and memoizes sourcing in bash", () => {
-        const root = mkdtempSync(join(tmpdir(), "politty-bundled-worker-"));
-        const distDir = join(root, "pkg", "dist");
-        const completionDir = join(distDir, "completion");
-        const binDir = join(root, "bin");
-        mkdirSync(completionDir, { recursive: true });
-        mkdirSync(binDir);
-
-        const callLog = join(root, "bin-calls.log");
-        const sourceLog = join(root, "worker-sources.log");
-        const bin = join(distDir, "mycli");
-        writeFileSync(
-          bin,
-          [
-            "#!/bin/sh",
-            `printf '%s\\n' "$1" >> "$CALL_LOG"`,
-            `if [ "$1" = "__complete" ]; then printf '%s\\n:6\\n' dynamic-candidate; fi`,
-          ].join("\n"),
-          { mode: 0o755 },
-        );
-        writeFileSync(
-          join(binDir, "mycli"),
-          `#!/bin/sh\nexec '${bin}' "$@"\n# cmd-shim-target=${bin}\n`,
-          {
-            mode: 0o755,
-          },
-        );
-
-        writeFileSync(
-          join(completionDir, "bash-worker.bash"),
-          [
-            "# politty-completion-version: 1",
-            "# politty-bin-sig: 0",
-            "# program: mycli",
-            "# shell: bash",
-            "# politty-completion-mode: worker",
-            "# politty-completion-worker: true",
-            `printf '%s\\n' sourced >> "$SOURCE_LOG"`,
-            `_mycli_worker_completions() { COMPREPLY=(bundled-candidate); }`,
-          ].join("\n"),
-        );
-
-        const completionPath = join(root, "completion.bash");
-        writeFileSync(
-          completionPath,
-          generateCompletion(dispatcherCommand, {
-            shell: "bash",
-            programName: "mycli",
-            mode: "dispatcher",
-          }).script,
-        );
-        const runner = join(root, "run.sh");
-        writeFileSync(
-          runner,
-          [
-            `source '${completionPath}'`,
-            `for _n in 1 2; do`,
-            `  COMP_WORDS=('mycli' '')`,
-            `  COMP_CWORD=1`,
-            `  COMP_LINE='mycli '`,
-            `  COMP_POINT=\${#COMP_LINE}`,
-            `  COMPREPLY=()`,
-            `  _mycli_completions`,
-            `  printf 'reply:%s\\n' "\${COMPREPLY[0]}"`,
-            `done`,
-            `if [ -f "$SOURCE_LOG" ]; then printf 'sources:%s\\n' "$(wc -l < "$SOURCE_LOG" | tr -d ' ')"; else printf 'sources:0\\n'; fi`,
-            `if [ -f "$CALL_LOG" ]; then printf 'calls:%s\\n' "$(wc -l < "$CALL_LOG" | tr -d ' ')"; else printf 'calls:0\\n'; fi`,
-          ].join("\n"),
-        );
-
-        const output = childProcessActual.execFileSync(
-          "/bin/bash",
-          ["--noprofile", "--norc", runner],
-          {
-            env: {
-              ...process.env,
-              BASH_ENV: "/dev/null",
-              CALL_LOG: callLog,
-              PATH: `${binDir}:${process.env.PATH}`,
-              SOURCE_LOG: sourceLog,
+          writeFileSync(
+            join(binDir, "mycli"),
+            `#!/bin/sh\nexec '${bin}' "$@"\n# cmd-shim-target=${bin}\n`,
+            {
+              mode: 0o755,
             },
-            encoding: "utf8",
-            timeout: 1000,
-          },
-        );
+          );
 
-        expect(output.trim().split("\n")).toEqual([
-          "reply:bundled-candidate",
-          "reply:bundled-candidate",
-          "sources:1",
-          "calls:0",
-        ]);
-      });
+          writeFileSync(
+            join(completionDir, "bash-worker.bash"),
+            [
+              "# politty-completion-version: 1",
+              "# politty-bin-sig: 0",
+              "# program: mycli",
+              "# shell: bash",
+              "# politty-completion-mode: worker",
+              "# politty-completion-worker: true",
+              `printf '%s\\n' sourced >> "$SOURCE_LOG"`,
+              `_mycli_worker_completions() { COMPREPLY=(bundled-candidate); }`,
+            ].join("\n"),
+          );
 
-      it("uses __completion-worker-path before cache refresh when relative lookup misses in bash", () => {
-        const root = mkdtempSync(join(tmpdir(), "politty-worker-path-fallback-"));
-        const workerDir = join(root, "workers");
-        const binDir = join(root, "bin");
-        mkdirSync(workerDir);
-        mkdirSync(binDir);
+          const completionPath = join(root, "completion.bash");
+          writeFileSync(
+            completionPath,
+            generateCompletion(dispatcherCommand, {
+              shell: "bash",
+              programName: "mycli",
+              mode: "dispatcher",
+            }).script,
+          );
+          const runner = join(root, "run.sh");
+          writeFileSync(
+            runner,
+            [
+              `source '${completionPath}'`,
+              `for _n in 1 2; do`,
+              `  COMP_WORDS=('mycli' '')`,
+              `  COMP_CWORD=1`,
+              `  COMP_LINE='mycli '`,
+              `  COMP_POINT=\${#COMP_LINE}`,
+              `  COMPREPLY=()`,
+              `  _mycli_completions`,
+              `  printf 'reply:%s\\n' "\${COMPREPLY[0]}"`,
+              `done`,
+              `if [ -f "$SOURCE_LOG" ]; then printf 'sources:%s\\n' "$(wc -l < "$SOURCE_LOG" | tr -d ' ')"; else printf 'sources:0\\n'; fi`,
+              `if [ -f "$CALL_LOG" ]; then printf 'calls:%s\\n' "$(wc -l < "$CALL_LOG" | tr -d ' ')"; else printf 'calls:0\\n'; fi`,
+            ].join("\n"),
+          );
 
-        const callLog = join(root, "bin-calls.log");
-        const workerPath = join(workerDir, "custom-worker.bash");
-        const bin = join(binDir, "mycli");
-        writeFileSync(
-          bin,
-          [
-            "#!/bin/sh",
-            `printf '%s\\n' "$1" >> "$CALL_LOG"`,
-            `case "$1" in`,
-            `  __completion-worker-path) printf '%s\\n' "$WORKER_PATH"; exit 0 ;;`,
-            `  __refresh-completion) exit 1 ;;`,
-            `  __complete) printf '%s\\n:6\\n' dynamic-candidate; exit 0 ;;`,
-            `esac`,
-          ].join("\n"),
-          { mode: 0o755 },
-        );
-
-        writeFileSync(
-          workerPath,
-          [
-            "# politty-completion-version: 1",
-            "# politty-bin-sig: 0",
-            "# program: mycli",
-            "# shell: bash",
-            "# politty-completion-mode: worker",
-            "# politty-completion-worker: true",
-            `_mycli_worker_completions() { COMPREPLY=(path-command-candidate); }`,
-          ].join("\n"),
-        );
-
-        const completionPath = join(root, "completion.bash");
-        writeFileSync(
-          completionPath,
-          generateCompletion(dispatcherCommand, {
-            shell: "bash",
-            programName: "mycli",
-            mode: "dispatcher",
-            bundledWorker: { queryCommand: true, relativePaths: { bash: ["missing-worker.bash"] } },
-          }).script,
-        );
-        const runner = join(root, "run.sh");
-        writeFileSync(
-          runner,
-          [
-            `source '${completionPath}'`,
-            `COMP_WORDS=('mycli' '')`,
-            `COMP_CWORD=1`,
-            `COMP_LINE='mycli '`,
-            `COMP_POINT=\${#COMP_LINE}`,
-            `_mycli_completions`,
-            `printf 'reply:%s\\n' "\${COMPREPLY[0]}"`,
-          ].join("\n"),
-        );
-
-        const output = childProcessActual.execFileSync(
-          "/bin/bash",
-          ["--noprofile", "--norc", runner],
-          {
-            env: {
-              ...process.env,
-              BASH_ENV: "/dev/null",
-              CALL_LOG: callLog,
-              PATH: `${binDir}:${process.env.PATH}`,
-              WORKER_PATH: workerPath,
+          const output = childProcessActual.execFileSync(
+            "/bin/bash",
+            ["--noprofile", "--norc", runner],
+            {
+              env: {
+                ...process.env,
+                BASH_ENV: "/dev/null",
+                CALL_LOG: callLog,
+                PATH: `${binDir}:${process.env.PATH}`,
+                SOURCE_LOG: sourceLog,
+              },
+              encoding: "utf8",
+              timeout: 1000,
             },
-            encoding: "utf8",
-            timeout: 1000,
-          },
-        );
+          );
 
-        expect(output.trim()).toBe("reply:path-command-candidate");
-        expect(readFileSync(callLog, "utf8").trim().split("\n")).toEqual([
-          "__completion-worker-path",
-        ]);
-      });
+          expect(output.trim().split("\n")).toEqual([
+            "reply:bundled-candidate",
+            "reply:bundled-candidate",
+            "sources:1",
+            "calls:0",
+          ]);
+        },
+      );
+
+      it.skipIf(process.platform === "win32")(
+        "uses __completion-worker-path before cache refresh when relative lookup misses in bash",
+        () => {
+          const root = mkdtempSync(join(tmpdir(), "politty-worker-path-fallback-"));
+          const workerDir = join(root, "workers");
+          const binDir = join(root, "bin");
+          mkdirSync(workerDir);
+          mkdirSync(binDir);
+
+          const callLog = join(root, "bin-calls.log");
+          const workerPath = join(workerDir, "custom-worker.bash");
+          const bin = join(binDir, "mycli");
+          writeFileSync(
+            bin,
+            [
+              "#!/bin/sh",
+              `printf '%s\\n' "$1" >> "$CALL_LOG"`,
+              `case "$1" in`,
+              `  __completion-worker-path) printf '%s\\n' "$WORKER_PATH"; exit 0 ;;`,
+              `  __refresh-completion) exit 1 ;;`,
+              `  __complete) printf '%s\\n:6\\n' dynamic-candidate; exit 0 ;;`,
+              `esac`,
+            ].join("\n"),
+            { mode: 0o755 },
+          );
+
+          writeFileSync(
+            workerPath,
+            [
+              "# politty-completion-version: 1",
+              "# politty-bin-sig: 0",
+              "# program: mycli",
+              "# shell: bash",
+              "# politty-completion-mode: worker",
+              "# politty-completion-worker: true",
+              `_mycli_worker_completions() { COMPREPLY=(path-command-candidate); }`,
+            ].join("\n"),
+          );
+
+          const completionPath = join(root, "completion.bash");
+          writeFileSync(
+            completionPath,
+            generateCompletion(dispatcherCommand, {
+              shell: "bash",
+              programName: "mycli",
+              mode: "dispatcher",
+              bundledWorker: {
+                queryCommand: true,
+                relativePaths: { bash: ["missing-worker.bash"] },
+              },
+            }).script,
+          );
+          const runner = join(root, "run.sh");
+          writeFileSync(
+            runner,
+            [
+              `source '${completionPath}'`,
+              `COMP_WORDS=('mycli' '')`,
+              `COMP_CWORD=1`,
+              `COMP_LINE='mycli '`,
+              `COMP_POINT=\${#COMP_LINE}`,
+              `_mycli_completions`,
+              `printf 'reply:%s\\n' "\${COMPREPLY[0]}"`,
+            ].join("\n"),
+          );
+
+          const output = childProcessActual.execFileSync(
+            "/bin/bash",
+            ["--noprofile", "--norc", runner],
+            {
+              env: {
+                ...process.env,
+                BASH_ENV: "/dev/null",
+                CALL_LOG: callLog,
+                PATH: `${binDir}:${process.env.PATH}`,
+                WORKER_PATH: workerPath,
+              },
+              encoding: "utf8",
+              timeout: 1000,
+            },
+          );
+
+          expect(output.trim()).toBe("reply:path-command-candidate");
+          expect(readFileSync(callLog, "utf8").trim().split("\n")).toEqual([
+            "__completion-worker-path",
+          ]);
+        },
+      );
 
       it("does not query __completion-worker-path by default", () => {
         const { script } = generateCompletion(dispatcherCommand, {
@@ -1326,77 +1338,80 @@ describe("Completion", () => {
         );
       });
 
-      it("sets a default Node compile cache for bash and preserves user overrides", () => {
-        const root = mkdtempSync(join(tmpdir(), "politty-dispatcher-cache-"));
-        const binDir = join(root, "bin");
-        const xdgCache = join(root, "xdg-cache");
-        const home = join(root, "home");
-        mkdirSync(binDir);
-        mkdirSync(xdgCache);
-        mkdirSync(home);
+      it.skipIf(process.platform === "win32")(
+        "sets a default Node compile cache for bash and preserves user overrides",
+        () => {
+          const root = mkdtempSync(join(tmpdir(), "politty-dispatcher-cache-"));
+          const binDir = join(root, "bin");
+          const xdgCache = join(root, "xdg-cache");
+          const home = join(root, "home");
+          mkdirSync(binDir);
+          mkdirSync(xdgCache);
+          mkdirSync(home);
 
-        const bin = join(binDir, "mycli");
-        writeFileSync(
-          bin,
-          [
-            "#!/bin/sh",
-            `if [ "$1" = "__complete" ]; then`,
-            `  printf '%s\\n:6\\n' "$NODE_COMPILE_CACHE"`,
-            "fi",
-          ].join("\n"),
-          { mode: 0o755 },
-        );
+          const bin = join(binDir, "mycli");
+          writeFileSync(
+            bin,
+            [
+              "#!/bin/sh",
+              `if [ "$1" = "__complete" ]; then`,
+              `  printf '%s\\n:6\\n' "$NODE_COMPILE_CACHE"`,
+              "fi",
+            ].join("\n"),
+            { mode: 0o755 },
+          );
 
-        const completionPath = join(root, "completion.bash");
-        writeFileSync(
-          completionPath,
-          generateCompletion(dispatcherCommand, {
-            shell: "bash",
-            programName: "mycli",
-            mode: "dispatcher",
-          }).script,
-        );
-        const runner = join(root, "run.sh");
-        writeFileSync(
-          runner,
-          [
-            `source '${completionPath}'`,
-            `COMP_WORDS=('mycli' '')`,
-            `COMP_CWORD=1`,
-            `COMP_LINE='mycli '`,
-            `COMP_POINT=\${#COMP_LINE}`,
-            `_mycli_completions`,
-            `printf '%s\\n' "\${COMPREPLY[@]}"`,
-          ].join("\n"),
-        );
+          const completionPath = join(root, "completion.bash");
+          writeFileSync(
+            completionPath,
+            generateCompletion(dispatcherCommand, {
+              shell: "bash",
+              programName: "mycli",
+              mode: "dispatcher",
+            }).script,
+          );
+          const runner = join(root, "run.sh");
+          writeFileSync(
+            runner,
+            [
+              `source '${completionPath}'`,
+              `COMP_WORDS=('mycli' '')`,
+              `COMP_CWORD=1`,
+              `COMP_LINE='mycli '`,
+              `COMP_POINT=\${#COMP_LINE}`,
+              `_mycli_completions`,
+              `printf '%s\\n' "\${COMPREPLY[@]}"`,
+            ].join("\n"),
+          );
 
-        const baseEnv = {
-          ...process.env,
-          BASH_ENV: "/dev/null",
-          HOME: home,
-          PATH: `${binDir}:${process.env.PATH}`,
-          XDG_CACHE_HOME: xdgCache,
-          NODE_COMPILE_CACHE: undefined,
-        };
-        const fromDefault = childProcessActual.execFileSync(
-          "/bin/bash",
-          ["--noprofile", "--norc", runner],
-          { env: baseEnv, encoding: "utf8", timeout: 1000 },
-        );
-        expect(fromDefault.trim()).toBe(join(xdgCache, "mycli", "node-compile-cache"));
+          const baseEnv = {
+            ...process.env,
+            BASH_ENV: "/dev/null",
+            HOME: home,
+            PATH: `${binDir}:${process.env.PATH}`,
+            XDG_CACHE_HOME: xdgCache,
+            NODE_COMPILE_CACHE: undefined,
+          };
+          const fromDefault = childProcessActual.execFileSync(
+            "/bin/bash",
+            ["--noprofile", "--norc", runner],
+            { env: baseEnv, encoding: "utf8", timeout: 1000 },
+          );
+          expect(fromDefault.trim()).toBe(join(xdgCache, "mycli", "node-compile-cache"));
 
-        const customCache = join(root, "custom-node-cache");
-        const fromOverride = childProcessActual.execFileSync(
-          "/bin/bash",
-          ["--noprofile", "--norc", runner],
-          {
-            env: { ...baseEnv, NODE_COMPILE_CACHE: customCache },
-            encoding: "utf8",
-            timeout: 1000,
-          },
-        );
-        expect(fromOverride.trim()).toBe(customCache);
-      });
+          const customCache = join(root, "custom-node-cache");
+          const fromOverride = childProcessActual.execFileSync(
+            "/bin/bash",
+            ["--noprofile", "--norc", runner],
+            {
+              env: { ...baseEnv, NODE_COMPILE_CACHE: customCache },
+              encoding: "utf8",
+              timeout: 1000,
+            },
+          );
+          expect(fromOverride.trim()).toBe(customCache);
+        },
+      );
     });
 
     describe("matcher in static scripts", () => {
@@ -2625,22 +2640,25 @@ describe("Completion", () => {
       expect(script).not.toContain('_tailor_sdk "$@"');
     });
 
-    it("fish self-refresh honors the bin override before PATH", () => {
-      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
-      writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
-      const { script } = generateCompletion(cmd, {
-        shell: "fish",
-        programName: "mycli",
-        binPath: fakeBin,
-        mode: "static",
-      });
+    it.skipIf(process.platform === "win32")(
+      "fish self-refresh honors the bin override before PATH",
+      () => {
+        const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
+        writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+        const { script } = generateCompletion(cmd, {
+          shell: "fish",
+          programName: "mycli",
+          binPath: fakeBin,
+          mode: "static",
+        });
 
-      // Resolve the bin like resolveBinPath (env override → PATH) so the sig
-      // check stats the same binary the embedded sig was computed from.
-      expect(script).toContain("set -l _bin $MYCLI_BIN");
-      expect(script).toContain('test -z "$_bin"; and set _bin (command -v mycli)');
-      expect(script).toContain(`and test "$_bin" = "${fakeBin}"; and return 1`);
-    });
+        // Resolve the bin like resolveBinPath (env override → PATH) so the sig
+        // check stats the same binary the embedded sig was computed from.
+        expect(script).toContain("set -l _bin $MYCLI_BIN");
+        expect(script).toContain('test -z "$_bin"; and set _bin (command -v mycli)');
+        expect(script).toContain(`and test "$_bin" = "${fakeBin}"; and return 1`);
+      },
+    );
   });
 
   describe("install / refreshIfStale", () => {
@@ -2954,20 +2972,23 @@ describe("Completion", () => {
       expect(script).toContain("stat -L -f '%m'");
     });
 
-    it("embeds the resolved bin freshness key so the refresh function can early-exit when fresh", () => {
-      const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
-      writeFileSync(fakeBin, "#!/bin/sh\n");
-      const sig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
-      const { script } = generateCompletion(cmd, {
-        shell: "fish",
-        programName: "mycli",
-        binPath: fakeBin,
-        mode: "static",
-      });
-      expect(script).toContain(
-        `test "$_sig" = "${sig}"; and test "$_bin" = "${fakeBin}"; and return 1`,
-      );
-    });
+    it.skipIf(process.platform === "win32")(
+      "embeds the resolved bin freshness key so the refresh function can early-exit when fresh",
+      () => {
+        const fakeBin = join(mkdtempSync(join(tmpdir(), "politty-bin-")), "mycli");
+        writeFileSync(fakeBin, "#!/bin/sh\n");
+        const sig = Math.floor(statSync(fakeBin).mtimeMs / 1000).toString();
+        const { script } = generateCompletion(cmd, {
+          shell: "fish",
+          programName: "mycli",
+          binPath: fakeBin,
+          mode: "static",
+        });
+        expect(script).toContain(
+          `test "$_sig" = "${sig}"; and test "$_bin" = "${fakeBin}"; and return 1`,
+        );
+      },
+    );
   });
 
   describe("completion subcommand --install / --loader flags", () => {
