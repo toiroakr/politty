@@ -15,13 +15,12 @@ export interface LongOptionLookup {
 }
 
 export function resolveLongOption(arg: string, lookup: LongOptionLookup): LongOptionResolution {
-  const withoutDashes = arg.slice(2);
-  const bareToken = arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : withoutDashes;
+  const withoutDashes = arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : arg.slice(2);
 
   // Phase 1: Custom negation (e.g. --disable-cache → cache=false)
   // Only the bare form (no `=`), since custom negation is a boolean shortcut.
   if (!arg.includes("=")) {
-    const negatedField = lookup.negationMap.get(bareToken);
+    const negatedField = lookup.negationMap.get(withoutDashes);
     if (negatedField && lookup.booleanFlags.has(negatedField)) {
       return {
         resolvedName: negatedField,
@@ -37,14 +36,14 @@ export function resolveLongOption(arg: string, lookup: LongOptionLookup): LongOp
 
   // Phase 2: Kebab-case default negation --no-<flag>
   // Negation is a boolean shortcut; `--no-flag=value` is not negation.
-  if (!hasEquals && bareToken.startsWith("no-")) {
-    const flagName = bareToken.slice(3);
+  if (!hasEquals && withoutDashes.startsWith("no-")) {
+    const flagName = withoutDashes.slice(3);
     // Block mixed form: --no-dryRun (kebab prefix + camelCase)
     if (flagName === flagName.toLowerCase()) {
       const resolvedName = lookup.aliasMap.get(flagName) ?? flagName;
       if (lookup.booleanFlags.has(resolvedName)) {
         // Literal-name disambiguation: "no-dry-run" itself is a defined field
-        const asIsResolved = lookup.aliasMap.get(bareToken) ?? bareToken;
+        const asIsResolved = lookup.aliasMap.get(withoutDashes) ?? withoutDashes;
         if (!lookup.definedNames.has(asIsResolved)) {
           if (lookup.customNegatedFields.has(resolvedName)) {
             return {
@@ -71,14 +70,14 @@ export function resolveLongOption(arg: string, lookup: LongOptionLookup): LongOp
   // Same as Phase 2: `--noFlag=value` is not negation.
   if (
     !hasEquals &&
-    bareToken.length > 2 &&
-    bareToken.startsWith("no") &&
-    /[A-Z]/.test(bareToken[2]!)
+    withoutDashes.length > 2 &&
+    withoutDashes.startsWith("no") &&
+    /[A-Z]/.test(withoutDashes[2]!)
   ) {
-    const camelFlagName = bareToken[2]!.toLowerCase() + bareToken.slice(3);
+    const camelFlagName = withoutDashes[2]!.toLowerCase() + withoutDashes.slice(3);
     const resolvedName = lookup.aliasMap.get(camelFlagName) ?? camelFlagName;
     if (lookup.booleanFlags.has(resolvedName)) {
-      const asIsResolved = lookup.aliasMap.get(bareToken) ?? bareToken;
+      const asIsResolved = lookup.aliasMap.get(withoutDashes) ?? withoutDashes;
       if (!lookup.definedNames.has(asIsResolved)) {
         if (lookup.customNegatedFields.has(resolvedName)) {
           return {
@@ -102,7 +101,7 @@ export function resolveLongOption(arg: string, lookup: LongOptionLookup): LongOp
 
   // No negation matched
   return {
-    resolvedName: lookup.aliasMap.get(bareToken) ?? bareToken,
+    resolvedName: lookup.aliasMap.get(withoutDashes) ?? withoutDashes,
     withoutDashes,
     isNegated: false,
     isCustomNegation: false,

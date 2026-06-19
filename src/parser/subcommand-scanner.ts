@@ -80,18 +80,16 @@ export function resolveGlobalLongOption(
     return { resolvedName, withoutDashes, isNegated: false, isGlobal: false, isSuppressedNegation };
   }
 
-  // Derive the bare flag name for cliNames lookup
-  const bareToken = arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : arg.slice(2);
   const flagName =
     isNegated && !isCustomNegation
-      ? bareToken.startsWith("no-")
-        ? bareToken.slice(3)
-        : bareToken[2]!.toLowerCase() + bareToken.slice(3)
-      : bareToken;
+      ? withoutDashes.startsWith("no-")
+        ? withoutDashes.slice(3)
+        : withoutDashes[2]!.toLowerCase() + withoutDashes.slice(3)
+      : withoutDashes;
 
   const isGlobal =
     lookup.flagNames.has(resolvedName) ||
-    lookup.cliNames.has(bareToken) ||
+    lookup.cliNames.has(withoutDashes) ||
     lookup.cliNames.has(flagName);
 
   return { resolvedName, withoutDashes, isNegated, isGlobal, isSuppressedNegation: false };
