@@ -32,7 +32,7 @@ describe("default-renderers", () => {
       expect(usage).toBe("greet <name>");
     });
 
-    it("should render command with options and subcommands", async () => {
+    it("should render <command> when parent has no run handler", async () => {
       const subCmd = defineCommand({
         name: "sub",
         description: "Sub command",
@@ -49,6 +49,32 @@ describe("default-renderers", () => {
           }),
         }),
         subCommands: { sub: subCmd },
+      });
+
+      const info = await buildCommandInfo(cmd, "cli");
+      const usage = renderUsage(info);
+
+      expect(usage).toBe("cli [options] <command>");
+    });
+
+    it("should render [command] when parent has run handler", async () => {
+      const subCmd = defineCommand({
+        name: "sub",
+        description: "Sub command",
+        run: () => {},
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        description: "CLI",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            alias: "v",
+            description: "Verbose",
+          }),
+        }),
+        subCommands: { sub: subCmd },
+        run: () => {},
       });
 
       const info = await buildCommandInfo(cmd, "cli");

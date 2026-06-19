@@ -14,7 +14,7 @@ A tiny task manager CLI
 **Usage**
 
 ```
-task-cli [command]
+task-cli <command>
 ```
 
 **Commands**

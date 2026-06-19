@@ -55,7 +55,11 @@ export function renderUsage(info: CommandInfo): string {
   }
 
   if (info.subCommands.length > 0) {
-    parts.push("[command]");
+    if (info.command.run) {
+      parts.push("[command]");
+    } else {
+      parts.push("<command>");
+    }
   }
 
   for (const arg of info.positionalArgs) {

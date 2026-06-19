@@ -5,7 +5,7 @@ A package manager CLI with command aliases
 **Usage**
 
 ```
-pkg [command]
+pkg <command>
 ```
 
 **Commands**
