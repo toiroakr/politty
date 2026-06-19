@@ -5,7 +5,7 @@ Git-style nested subcommand example
 **Usage**
 
 ```
-git-like [command]
+git-like <command>
 ```
 
 **Commands**
@@ -21,7 +21,7 @@ Manage configuration
 **Usage**
 
 ```
-git-like config [command]
+git-like config <command>
 ```
 
 **Commands**

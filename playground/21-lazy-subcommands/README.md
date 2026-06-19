@@ -5,7 +5,7 @@ CLI demonstrating lazy loading subcommands with dynamic imports
 **Usage**
 
 ```
-my-app [command]
+my-app <command>
 ```
 
 **Commands**

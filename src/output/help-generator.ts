@@ -119,9 +119,13 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
       parts.push(styles.placeholder("[options]"));
     }
 
-    // Add [command] if there are subcommands
+    // Add <command> or [command] if there are subcommands
     if (command.subCommands && getVisibleSubcommandEntries(command.subCommands).length > 0) {
-      parts.push(styles.placeholder("[command]"));
+      if (command.run) {
+        parts.push(styles.placeholder("[command]"));
+      } else {
+        parts.push(styles.option("<command>"));
+      }
     }
 
     // Add positional arguments
@@ -133,9 +137,13 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
       }
     }
   } else {
-    // Add [command] if there are subcommands
+    // Add <command> or [command] if there are subcommands
     if (command.subCommands && getVisibleSubcommandEntries(command.subCommands).length > 0) {
-      parts.push(styles.placeholder("[command]"));
+      if (command.run) {
+        parts.push(styles.placeholder("[command]"));
+      } else {
+        parts.push(styles.option("<command>"));
+      }
     }
   }
 

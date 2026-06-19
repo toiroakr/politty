@@ -19,7 +19,7 @@ Application CLI with global options
 **Usage**
 
 ```
-my-app [command]
+my-app <command>
 ```
 
 <!-- politty:command::usage:end -->

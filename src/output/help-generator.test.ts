@@ -62,7 +62,7 @@ describe("Help Generator", () => {
       expect(result).toContain("[options]");
     });
 
-    it("should render [command] when subcommands exist", () => {
+    it("should render <command> when subcommands exist and no run", () => {
       const cmd = defineCommand({
         name: "cli",
         subCommands: {
@@ -72,7 +72,23 @@ describe("Help Generator", () => {
 
       const result = renderUsageLine(cmd);
 
+      expect(result).toContain("<command>");
+      expect(result).not.toContain("[command]");
+    });
+
+    it("should render [command] when subcommands exist and run is defined", () => {
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({ name: "build" }),
+        },
+        run: () => {},
+      });
+
+      const result = renderUsageLine(cmd);
+
       expect(result).toContain("[command]");
+      expect(result).not.toContain("<command>");
     });
   });
 

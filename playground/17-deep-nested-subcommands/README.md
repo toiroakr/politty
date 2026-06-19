@@ -5,7 +5,7 @@ Example of 3-level nested subcommands
 **Usage**
 
 ```
-git-like [command]
+git-like <command>
 ```
 
 **Commands**
@@ -21,7 +21,7 @@ Manage configuration
 **Usage**
 
 ```
-git-like config [command]
+git-like config <command>
 ```
 
 **Commands**
@@ -38,7 +38,7 @@ Manage core settings
 **Usage**
 
 ```
-git-like config core [command]
+git-like config core <command>
 ```
 
 **Commands**
@@ -88,7 +88,7 @@ Manage user settings
 **Usage**
 
 ```
-git-like config user [command]
+git-like config user <command>
 ```
 
 **Commands**

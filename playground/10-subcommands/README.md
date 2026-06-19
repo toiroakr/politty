@@ -5,7 +5,7 @@ CLI example with subcommands
 **Usage**
 
 ```
-my-cli [command]
+my-cli <command>
 ```
 
 **Commands**

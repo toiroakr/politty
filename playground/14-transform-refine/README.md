@@ -5,7 +5,7 @@ Demo of transform/refine
 **Usage**
 
 ```
-validation-demo [command]
+validation-demo <command>
 ```
 
 **Commands**

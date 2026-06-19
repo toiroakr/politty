@@ -5,7 +5,7 @@ Example of displaying subcommand options together
 **Usage**
 
 ```
-git-like [command]
+git-like <command>
 ```
 
 **Commands**
@@ -22,7 +22,7 @@ Manage configuration
 **Usage**
 
 ```
-git-like config [command]
+git-like config <command>
 ```
 
 **Commands**
@@ -90,7 +90,7 @@ Manage remotes
 **Usage**
 
 ```
-git-like remote [command]
+git-like remote <command>
 ```
 
 **Commands**
