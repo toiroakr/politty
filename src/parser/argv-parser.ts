@@ -1,4 +1,5 @@
 import { getAllAliases, toCamelCase, type ExtractedFields } from "../core/schema-extractor.js";
+import { resolveLongOption, type LongOptionLookup } from "./long-option-resolver.js";
 
 /**
  * Parsed arguments result
@@ -74,6 +75,14 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     customNegatedFields = new Set(),
   } = options;
 
+  const longOptionLookup: LongOptionLookup = {
+    aliasMap,
+    booleanFlags,
+    definedNames,
+    negationMap,
+    customNegatedFields,
+  };
+
   const result: ParsedArgv = {
     options: {},
     positionals: [],
@@ -123,53 +132,11 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     if (arg.startsWith("--")) {
       const withoutDashes = arg.slice(2);
 
-      // Handle custom negation names (e.g. --disable-cache → cache=false)
-      // Only matches the bare form `--<negation>` (no `=` value), since
-      // negation is a boolean shortcut that does not carry a value.
-      if (!withoutDashes.includes("=")) {
-        const negatedField = negationMap.get(withoutDashes);
-        if (negatedField && booleanFlags.has(negatedField)) {
-          setOption(negatedField, false);
-          i++;
-          continue;
-        }
-      }
-
-      // Handle --no-flag for boolean negation (kebab-case only)
-      if (withoutDashes.startsWith("no-")) {
-        const flagName = withoutDashes.slice(3);
-        // Block mixed form: --no-dryRun (kebab prefix + camelCase)
-        if (flagName === flagName.toLowerCase()) {
-          const resolvedName = aliasMap.get(flagName) ?? flagName;
-          if (booleanFlags.has(resolvedName) && !customNegatedFields.has(resolvedName)) {
-            // "no-dry-run" itself is a defined field → treat as that field, not negation
-            const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
-            if (!definedNames.has(asIsResolved)) {
-              setOption(flagName, false);
-              i++;
-              continue;
-            }
-          }
-        }
-      }
-
-      // Handle camelCase negation: --noDryRun -> dryRun = false
-      if (
-        withoutDashes.length > 2 &&
-        withoutDashes.startsWith("no") &&
-        /[A-Z]/.test(withoutDashes[2]!)
-      ) {
-        const camelFlagName = withoutDashes[2]!.toLowerCase() + withoutDashes.slice(3);
-        const resolvedName = aliasMap.get(camelFlagName) ?? camelFlagName;
-        if (booleanFlags.has(resolvedName) && !customNegatedFields.has(resolvedName)) {
-          // "noDryRun" itself is a defined field → treat as that field, not negation
-          const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
-          if (!definedNames.has(asIsResolved)) {
-            setOption(camelFlagName, false);
-            i++;
-            continue;
-          }
-        }
+      const resolution = resolveLongOption(arg, longOptionLookup);
+      if (resolution.isNegated) {
+        setOption(resolution.resolvedName, false);
+        i++;
+        continue;
       }
 
       const eqIndex = withoutDashes.indexOf("=");
