@@ -1,5 +1,11 @@
 # politty
 
+## 0.9.2
+
+### Patch Changes
+
+- 3d338d5: Show subcommands as `<command>` (required) when the parent command has no `run` handler, and `[command]` (optional) when it does
+
 ## 0.9.1
 
 ### Patch Changes
