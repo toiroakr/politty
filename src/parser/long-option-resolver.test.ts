@@ -164,6 +164,20 @@ describe("scanner / parser symmetry", () => {
       expectedNegated: false,
       label: "mixed form --no-dryRun (blocked)",
     },
+
+    // Negation with =value (not negation — = syntax overrides)
+    {
+      token: "--no-verbose=true",
+      expectedRecognized: false,
+      expectedNegated: false,
+      label: "--no-flag=value is not negation",
+    },
+    {
+      token: "--noVerbose=true",
+      expectedRecognized: false,
+      expectedNegated: false,
+      label: "--noFlag=value is not negation",
+    },
   ];
 
   function scannerRecognizes(token: string): { recognized: boolean; negated: boolean } {

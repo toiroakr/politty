@@ -33,8 +33,11 @@ export function resolveLongOption(arg: string, lookup: LongOptionLookup): LongOp
     }
   }
 
+  const hasEquals = arg.includes("=");
+
   // Phase 2: Kebab-case default negation --no-<flag>
-  if (bareToken.startsWith("no-")) {
+  // Negation is a boolean shortcut; `--no-flag=value` is not negation.
+  if (!hasEquals && bareToken.startsWith("no-")) {
     const flagName = bareToken.slice(3);
     // Block mixed form: --no-dryRun (kebab prefix + camelCase)
     if (flagName === flagName.toLowerCase()) {
@@ -65,7 +68,13 @@ export function resolveLongOption(arg: string, lookup: LongOptionLookup): LongOp
   }
 
   // Phase 3: CamelCase default negation --noFlag
-  if (bareToken.length > 2 && bareToken.startsWith("no") && /[A-Z]/.test(bareToken[2]!)) {
+  // Same as Phase 2: `--noFlag=value` is not negation.
+  if (
+    !hasEquals &&
+    bareToken.length > 2 &&
+    bareToken.startsWith("no") &&
+    /[A-Z]/.test(bareToken[2]!)
+  ) {
     const camelFlagName = bareToken[2]!.toLowerCase() + bareToken.slice(3);
     const resolvedName = lookup.aliasMap.get(camelFlagName) ?? camelFlagName;
     if (lookup.booleanFlags.has(resolvedName)) {
