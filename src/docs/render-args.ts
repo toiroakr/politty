@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
-import { negationRelationMarker, renderOptionsTableFromArray } from "./default-renderers.js";
+import { type ColumnId, emitMarkdownTable, toOptionRows } from "./option-rows.js";
 
 /**
  * Args shape type (Record of string keys to Zod schemas)
@@ -13,7 +13,7 @@ export type ArgsShape = Record<string, z.ZodType>;
  */
 export type ArgsTableOptions = {
   /** Columns to include in the table (default: all columns) */
-  columns?: ("option" | "alias" | "description" | "required" | "default" | "env")[];
+  columns?: ColumnId[];
 };
 
 /**
@@ -62,154 +62,7 @@ export function renderArgsTable(args: ArgsShape, options?: ArgsTableOptions): st
     return "";
   }
 
-  // Use existing renderOptionsTableFromArray for consistency
-  // Note: column filtering is not yet supported by renderOptionsTableFromArray
-  // If columns option is needed, we would need to implement custom rendering
-  if (options?.columns) {
-    return renderFilteredTable(optionFields, options.columns);
-  }
-
-  return renderOptionsTableFromArray(optionFields);
-}
-
-/**
- * Escape markdown special characters in table cells
- */
-function escapeTableCell(str: string): string {
-  return str.replace(/\|/g, "\\|").replace(/\n/g, " ");
-}
-
-/**
- * Format default value for display
- */
-function formatDefaultValue(value: unknown): string {
-  if (value === undefined) {
-    return "-";
-  }
-  return `\`${JSON.stringify(value)}\``;
-}
-
-/**
- * Render table with filtered columns
- */
-function renderFilteredTable(
-  options: ResolvedFieldMeta[],
-  columns: ("option" | "alias" | "description" | "required" | "default" | "env")[],
-): string {
-  const lines: string[] = [];
-
-  // Build header
-  const headerCells: string[] = [];
-  const separatorCells: string[] = [];
-
-  for (const col of columns) {
-    switch (col) {
-      case "option":
-        headerCells.push("Option");
-        separatorCells.push("------");
-        break;
-      case "alias":
-        headerCells.push("Alias");
-        separatorCells.push("-----");
-        break;
-      case "description":
-        headerCells.push("Description");
-        separatorCells.push("-----------");
-        break;
-      case "required":
-        headerCells.push("Required");
-        separatorCells.push("--------");
-        break;
-      case "default":
-        headerCells.push("Default");
-        separatorCells.push("-------");
-        break;
-      case "env":
-        headerCells.push("Env");
-        separatorCells.push("---");
-        break;
-    }
-  }
-
-  lines.push(`| ${headerCells.join(" | ")} |`);
-  lines.push(`| ${separatorCells.join(" | ")} |`);
-
-  // Build rows
-  for (const opt of options) {
-    const cells: string[] = [];
-
-    for (const col of columns) {
-      switch (col) {
-        case "option": {
-          const placeholder = opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
-          let optionName: string;
-          if (opt.type === "boolean") {
-            optionName = `\`--${opt.cliName}\``;
-            if (opt.negationDisplay && !opt.negationDescription) {
-              optionName += ` / \`--${opt.negationDisplay}\``;
-            }
-          } else {
-            optionName = `\`--${opt.cliName} <${placeholder}>\``;
-          }
-          cells.push(optionName);
-          break;
-        }
-        case "alias":
-          cells.push(
-            opt.alias && opt.alias.length > 0
-              ? opt.alias.map((a) => `\`${a.length === 1 ? `-${a}` : `--${a}`}\``).join(", ")
-              : "-",
-          );
-          break;
-        case "description":
-          cells.push(escapeTableCell(opt.description ?? ""));
-          break;
-        case "required":
-          cells.push(opt.required ? "Yes" : "No");
-          break;
-        case "default":
-          cells.push(formatDefaultValue(opt.defaultValue));
-          break;
-        case "env": {
-          const envNames = opt.env
-            ? Array.isArray(opt.env)
-              ? opt.env.map((e) => `\`${e}\``).join(", ")
-              : `\`${opt.env}\``
-            : "-";
-          cells.push(envNames);
-          break;
-        }
-      }
-    }
-
-    lines.push(`| ${cells.join(" | ")} |`);
-
-    // Append a separate row for the negation when description is provided
-    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
-      const negCells: string[] = [];
-      for (const col of columns) {
-        switch (col) {
-          case "option":
-            negCells.push(`\`--${opt.negationDisplay}\``);
-            break;
-          case "description":
-            negCells.push(
-              `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`,
-            );
-            break;
-          case "required":
-            negCells.push(opt.required ? "Yes" : "No");
-            break;
-          case "alias":
-          case "default":
-          case "env":
-            negCells.push("-");
-            break;
-        }
-      }
-      lines.push(`| ${negCells.join(" | ")} |`);
-    }
-  }
-
-  return lines.join("\n");
+  // Both the default and column-filtered paths share the same (rows × columns)
+  // intermediate; passing `columns` simply restricts/reorders the emitted columns.
+  return emitMarkdownTable(toOptionRows(optionFields), options?.columns);
 }
