@@ -175,7 +175,7 @@ describe("renderArgsTable", () => {
       expect(headerLine).toBe("| Description | Option | Alias |");
     });
 
-    it("should use header-length, space-padded separators for filtered columns", () => {
+    it("should use the canonical fixed-width separator for filtered columns", () => {
       const args = {
         verbose: arg(z.boolean().default(false), {
           alias: "v",
@@ -187,10 +187,10 @@ describe("renderArgsTable", () => {
         columns: ["option", "description"],
       });
 
-      // Matches the legacy renderFilteredTable separator format byte-for-byte
-      // ("Option" → 6 dashes, "Description" → 11 dashes, space-padded).
+      // Column-filtered tables share the same fixed-width separator format as
+      // the default table (no per-path branching).
       const separatorLine = table.split("\n")[1];
-      expect(separatorLine).toBe("| ------ | ----------- |");
+      expect(separatorLine).toBe("|--------|-------------|");
     });
   });
 });
