@@ -217,6 +217,11 @@ function negationTableCell(neg: NegationRow, col: ColumnId): string {
  * When `columns` is omitted, the canonical column set is used and the `Env`
  * column is appended automatically iff any row has env configured. When
  * `columns` is provided, exactly those columns are emitted, in that order.
+ *
+ * The separator row matches the legacy output of each path byte-for-byte: the
+ * default (auto-column) path uses fixed-width dashes with no padding
+ * (`|--------|-------------|`), while the explicit-column path uses
+ * header-length dashes with `| ... |` spacing (`| ------ | ----------- |`).
  */
 export function emitMarkdownTable(rows: OptionRow[], columns?: ColumnId[]): string {
   if (rows.length === 0) {
@@ -229,7 +234,14 @@ export function emitMarkdownTable(rows: OptionRow[], columns?: ColumnId[]): stri
 
   const lines: string[] = [];
   lines.push(`| ${cols.map((c) => COLUMN_META[c].header).join(" | ")} |`);
-  lines.push(`|${cols.map((c) => COLUMN_META[c].separator).join("|")}|`);
+  // Explicit columns reproduce the former renderFilteredTable separator
+  // (header-length dashes, space-padded); the default path keeps the legacy
+  // fixed-width, unpadded form used by the playground goldens.
+  lines.push(
+    columns
+      ? `| ${cols.map((c) => "-".repeat(COLUMN_META[c].header.length)).join(" | ")} |`
+      : `|${cols.map((c) => COLUMN_META[c].separator).join("|")}|`,
+  );
 
   for (const row of rows) {
     lines.push(`| ${cols.map((c) => tableCell(row, c)).join(" | ")} |`);
