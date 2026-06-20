@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
 import type { Example } from "../types.js";
+import { emitMarkdownList, emitMarkdownTable, toOptionRows } from "./option-rows.js";
 import type {
   ArgumentsRenderContext,
   CommandInfo,
@@ -24,24 +25,6 @@ import { sectionEndMarker, sectionStartMarker } from "./types.js";
  */
 function escapeTableCell(str: string): string {
   return str.replace(/\|/g, "\\|").replace(/\n/g, " ");
-}
-
-/**
- * Marker appended to a custom negation row/line so readers can see which
- * positive flag it negates (e.g. `--monochrome` → `(↔ \`--color\`)`).
- */
-export function negationRelationMarker(opt: ResolvedFieldMeta): string {
-  return `(↔ \`--${opt.cliName}\`)`;
-}
-
-/**
- * Format default value for display
- */
-function formatDefaultValue(value: unknown): string {
-  if (value === undefined) {
-    return "-";
-  }
-  return `\`${JSON.stringify(value)}\``;
 }
 
 /**
@@ -113,89 +96,6 @@ export function renderArgumentsList(info: CommandInfo): string {
 }
 
 /**
- * Format environment variable info for display
- */
-function formatEnvInfo(env: string | string[] | undefined): string {
-  if (!env) return "";
-  const envNames = Array.isArray(env) ? env : [env];
-  return ` [env: ${envNames.join(", ")}]`;
-}
-
-/**
- * Resolve placeholder for an option (uses kebab-case cliName)
- */
-function resolvePlaceholder(opt: ResolvedFieldMeta): string {
-  return opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
-}
-
-/**
- * Format option name for table display (e.g., `--dry-run` or `--port <PORT>`)
- *
- * Boolean fields with a custom inline `negation` (no separate description) are
- * shown as `\`--cache\` / \`--disable-cache\``.
- */
-function formatOptionName(opt: ResolvedFieldMeta): string {
-  const placeholder = resolvePlaceholder(opt);
-  if (opt.type === "boolean") {
-    const positive = `\`--${opt.cliName}\``;
-    if (opt.negationDisplay && !opt.negationDescription) {
-      return `${positive} / \`--${opt.negationDisplay}\``;
-    }
-    return positive;
-  }
-  return `\`--${opt.cliName} <${placeholder}>\``;
-}
-
-/**
- * Format option flags for list display (uses kebab-case cliName).
- * Aliases are joined with `, `; the inline negation (when no separate
- * `negationDescription` is set) is appended with ` / ` so it stays
- * visually distinct from aliases, matching help and table output.
- */
-function formatOptionFlags(opt: ResolvedFieldMeta): string {
-  const placeholder = resolvePlaceholder(opt);
-  const longFlag =
-    opt.type === "boolean" ? `--${opt.cliName}` : `--${opt.cliName} <${placeholder}>`;
-
-  const parts: string[] = [];
-  if (opt.alias) {
-    for (const a of opt.alias) {
-      if (a.length === 1) parts.push(`\`-${a}\``);
-    }
-  }
-  parts.push(`\`${longFlag}\``);
-  if (opt.alias) {
-    for (const a of opt.alias) {
-      if (a.length > 1) parts.push(`\`--${a}\``);
-    }
-  }
-  const aliasJoined = parts.join(", ");
-  if (opt.type === "boolean" && opt.negationDisplay && !opt.negationDescription) {
-    return `${aliasJoined} / \`--${opt.negationDisplay}\``;
-  }
-  return aliasJoined;
-}
-
-/**
- * Format aliases for a markdown table cell
- */
-function formatAliasCell(alias: string[] | undefined): string {
-  if (!alias || alias.length === 0) return "-";
-  return alias.map((a) => `\`${a.length === 1 ? `-${a}` : `--${a}`}\``).join(", ");
-}
-
-/**
- * Format env variable names for table display
- */
-function formatEnvNames(env: string | string[] | undefined): string {
-  if (!env) return "-";
-  if (Array.isArray(env)) {
-    return env.map((e) => `\`${e}\``).join(", ");
-  }
-  return `\`${env}\``;
-}
-
-/**
  * Render options as markdown table
  *
  * Features:
@@ -210,51 +110,7 @@ function formatEnvNames(env: string | string[] | undefined): string {
  * | `--port <PORT>` | - | Server port | Yes | - | `PORT`, `SERVER_PORT` |
  */
 export function renderOptionsTable(info: CommandInfo): string {
-  if (info.options.length === 0) {
-    return "";
-  }
-
-  // Check if any option has env configured
-  const hasEnv = info.options.some((opt) => opt.env);
-
-  const lines: string[] = [];
-  if (hasEnv) {
-    lines.push("| Option | Alias | Description | Required | Default | Env |");
-    lines.push("|--------|-------|-------------|----------|---------|-----|");
-  } else {
-    lines.push("| Option | Alias | Description | Required | Default |");
-    lines.push("|--------|-------|-------------|----------|---------|");
-  }
-
-  for (const opt of info.options) {
-    const optionName = formatOptionName(opt);
-    const alias = formatAliasCell(opt.alias);
-    const desc = escapeTableCell(opt.description ?? "");
-    const required = opt.required ? "Yes" : "No";
-    const defaultVal = formatDefaultValue(opt.defaultValue);
-
-    if (hasEnv) {
-      const envNames = formatEnvNames(opt.env);
-      lines.push(
-        `| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} | ${envNames} |`,
-      );
-    } else {
-      lines.push(`| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} |`);
-    }
-
-    // Add a separate row for the negation when a description is provided
-    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
-      const negName = `\`--${opt.negationDisplay}\``;
-      const negDesc = `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`;
-      if (hasEnv) {
-        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - | - |`);
-      } else {
-        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - |`);
-      }
-    }
-  }
-
-  return lines.join("\n");
+  return emitMarkdownTable(toOptionRows(info.options));
 }
 
 /**
@@ -269,27 +125,7 @@ export function renderOptionsTable(info: CommandInfo): string {
  * - `--port <PORT>` - Server port (required) [env: PORT, SERVER_PORT]
  */
 export function renderOptionsList(info: CommandInfo): string {
-  if (info.options.length === 0) {
-    return "";
-  }
-
-  const lines: string[] = [];
-  for (const opt of info.options) {
-    const flags = formatOptionFlags(opt);
-    const desc = opt.description ? ` - ${opt.description}` : "";
-    const required = opt.required ? " (required)" : "";
-    const defaultVal =
-      opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
-    const envInfo = formatEnvInfo(opt.env);
-    lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
-    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
-      lines.push(
-        `- \`--${opt.negationDisplay}\` - ${opt.negationDescription} ${negationRelationMarker(opt)}`,
-      );
-    }
-  }
-
-  return lines.join("\n");
+  return emitMarkdownList(toOptionRows(info.options));
 }
 
 /**
@@ -320,50 +156,7 @@ export function renderSubcommandsTable(info: CommandInfo, generateAnchors = true
  * Render options from array as table
  */
 export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): string {
-  if (options.length === 0) {
-    return "";
-  }
-
-  // Check if any option has env configured
-  const hasEnv = options.some((opt) => opt.env);
-
-  const lines: string[] = [];
-  if (hasEnv) {
-    lines.push("| Option | Alias | Description | Required | Default | Env |");
-    lines.push("|--------|-------|-------------|----------|---------|-----|");
-  } else {
-    lines.push("| Option | Alias | Description | Required | Default |");
-    lines.push("|--------|-------|-------------|----------|---------|");
-  }
-
-  for (const opt of options) {
-    const optionName = formatOptionName(opt);
-    const alias = formatAliasCell(opt.alias);
-    const desc = escapeTableCell(opt.description ?? "");
-    const required = opt.required ? "Yes" : "No";
-    const defaultVal = formatDefaultValue(opt.defaultValue);
-
-    if (hasEnv) {
-      const envNames = formatEnvNames(opt.env);
-      lines.push(
-        `| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} | ${envNames} |`,
-      );
-    } else {
-      lines.push(`| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} |`);
-    }
-
-    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
-      const negName = `\`--${opt.negationDisplay}\``;
-      const negDesc = `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`;
-      if (hasEnv) {
-        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - | - |`);
-      } else {
-        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - |`);
-      }
-    }
-  }
-
-  return lines.join("\n");
+  return emitMarkdownTable(toOptionRows(options));
 }
 
 /**
@@ -510,27 +303,7 @@ export function renderDiscriminatedUnionOptionsMarkdown(
  * Render options from array as list
  */
 export function renderOptionsListFromArray(options: ResolvedFieldMeta[]): string {
-  if (options.length === 0) {
-    return "";
-  }
-
-  const lines: string[] = [];
-  for (const opt of options) {
-    const flags = formatOptionFlags(opt);
-    const desc = opt.description ? ` - ${opt.description}` : "";
-    const required = opt.required ? " (required)" : "";
-    const defaultVal =
-      opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
-    const envInfo = formatEnvInfo(opt.env);
-    lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
-    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
-      lines.push(
-        `- \`--${opt.negationDisplay}\` - ${opt.negationDescription} ${negationRelationMarker(opt)}`,
-      );
-    }
-  }
-
-  return lines.join("\n");
+  return emitMarkdownList(toOptionRows(options));
 }
 
 /**
