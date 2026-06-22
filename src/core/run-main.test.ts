@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { spyOnConsoleError, spyOnConsoleLog } from "../../tests/utils/console.js";
+import { spyOnConsoleError, spyOnConsoleLog, spyOnConsoleWarn } from "../../tests/utils/console.js";
 import { arg } from "./arg-registry.js";
 import { defineCommand } from "./command.js";
 import { runCommand, runMain } from "./runner.js";
@@ -937,7 +937,7 @@ describe("Redundant positionals", () => {
 
   describe("command without subcommands", () => {
     it("should warn about unexpected positional with default z.object (strip mode)", async () => {
-      using consoleSpy = spyOnConsoleError();
+      using consoleSpy = spyOnConsoleWarn();
       const runFn = vi.fn();
 
       const cmd = defineCommand({

@@ -45,6 +45,7 @@ import { extractFields, type ExtractedFields } from "./schema-extractor.js";
 const defaultLogger: Logger = {
   log: (message: string) => console.log(message),
   error: (message: string) => console.error(message),
+  warn: (message: string) => console.warn(message),
 };
 
 /**
@@ -642,7 +643,7 @@ async function runCommandInternal<TResult = unknown>(
         };
       } else if (unknownKeysMode === "strip") {
         for (const positional of extraPositionals) {
-          logger.error(`Warning: Unexpected positional argument: ${positional}`);
+          (logger.warn ?? logger.error)(`Warning: Unexpected positional argument: ${positional}`);
         }
         // Continue execution
       }

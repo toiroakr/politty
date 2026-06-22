@@ -42,6 +42,8 @@ export interface Logger {
   log(message: string): void;
   /** Log error message to stderr */
   error(message: string): void;
+  /** Log warning message to stderr */
+  warn?(message: string): void;
 }
 
 /**
