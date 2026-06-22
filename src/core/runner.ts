@@ -584,6 +584,53 @@ async function runCommandInternal<TResult = unknown>(
       // passthrough mode: silently ignore unknown flags
     }
 
+    // Handle unexpected positionals (tokens not consumed by positional field definitions)
+    const positionalFields = parseResult.extractedFields?.fields.filter((f) => f.positional) ?? [];
+    const hasArrayPositional = positionalFields.some((f) => f.type === "array");
+    const consumedPositionalCount = hasArrayPositional
+      ? parseResult.positionals.length
+      : positionalFields.length;
+    const extraPositionals = parseResult.positionals.slice(consumedPositionalCount);
+
+    if (extraPositionals.length > 0) {
+      const subCmdNames = listSubCommandNamesWithAliases(command);
+      if (subCmdNames.size > 0) {
+        // Command has subcommands: treat first extra positional as unknown subcommand attempt
+        const unknownCmd = extraPositionals[0]!;
+        const similar = findSimilar(unknownCmd, [...subCmdNames]);
+        const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
+        collector?.stop();
+        return {
+          success: false,
+          error: new Error(
+            `Unknown subcommand: ${unknownCmd}${suggestion ? `.${suggestion}` : ""}`,
+          ),
+          exitCode: 1,
+          logs: getCurrentLogs(),
+        };
+      }
+
+      // No subcommands: follow schema's unknownKeysMode
+      const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
+      if (unknownKeysMode === "strict") {
+        collector?.stop();
+        return {
+          success: false,
+          error: new Error(
+            `Unexpected positional argument${extraPositionals.length > 1 ? "s" : ""}: ${extraPositionals.join(", ")}`,
+          ),
+          exitCode: 1,
+          logs: getCurrentLogs(),
+        };
+      } else if (unknownKeysMode === "strip") {
+        for (const positional of extraPositionals) {
+          logger.error(`Warning: Unexpected positional argument: ${positional}`);
+        }
+        // Continue execution
+      }
+      // passthrough: silently ignore
+    }
+
     // Validate global args at the leaf command level. The internal
     // `__complete` command is the exception: shell scripts invoke
     // `mycli __complete --shell <s> -- <partial input>` whenever the

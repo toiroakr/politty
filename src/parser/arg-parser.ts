@@ -184,8 +184,9 @@ export function parseArgs(
     rawGlobalArgs = globalParsed;
   }
 
-  // If no schema, return minimal result (but include any parsed global args)
+  // If no schema, still parse argv to capture positionals (needed to detect unexpected tokens)
   if (!extracted) {
+    const parsed = parseArgv(commandArgv, {});
     return {
       helpRequested: false,
       helpAllRequested: false,
@@ -193,7 +194,7 @@ export function parseArgs(
       subCommand: undefined,
       remainingArgs: [],
       rawArgs: {},
-      positionals: [],
+      positionals: parsed.positionals,
       unknownFlags: [],
       rawGlobalArgs,
     };

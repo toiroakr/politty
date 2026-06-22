@@ -829,6 +829,165 @@ describe("runMain onUnknownSubcommand", () => {
   });
 });
 
+describe("Redundant positionals", () => {
+  describe("command with subcommands", () => {
+    it("should reject an unrecognized bare token as unknown subcommand when command also has run", async () => {
+      const runFn = vi.fn();
+      const subRunFn = vi.fn();
+
+      const subCmd = defineCommand({ name: "sub", run: subRunFn });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({
+          verbose: z.boolean().default(false),
+        }),
+        subCommands: { sub: subCmd },
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["unknown-token", "--verbose"]);
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      expect(runFn).not.toHaveBeenCalled();
+      expect(subRunFn).not.toHaveBeenCalled();
+      if (!result.success) {
+        expect(result.error.message).toContain("Unknown subcommand");
+        expect(result.error.message).toContain("unknown-token");
+      }
+    });
+
+    it("should suggest a similar subcommand name when the token is a close typo", async () => {
+      const subCmd = defineCommand({ name: "deploy", run: () => {} });
+      const cmd = defineCommand({
+        name: "cmd",
+        subCommands: { deploy: subCmd },
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["depoy"]); // typo of "deploy"
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain("deploy");
+      }
+    });
+  });
+
+  describe("command without subcommands", () => {
+    it("should warn about unexpected positional with default z.object (strip mode)", async () => {
+      using consoleSpy = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({
+          verbose: z.boolean().default(false),
+        }),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["stray-token"]);
+
+      expect(consoleSpy).toHaveBeenCalled();
+      const output = consoleSpy.mock.calls[0]?.[0] ?? "";
+      expect(output).toContain("Warning");
+      expect(output).toContain("stray-token");
+      expect(runFn).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+    });
+
+    it("should error on unexpected positional with z.object().strict() (strict mode)", async () => {
+      using consoleSpy = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z
+          .object({
+            verbose: z.boolean().default(false),
+          })
+          .strict(),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["stray-token"]);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      if (!result.success) {
+        expect(result.error.message).toContain("stray-token");
+      }
+    });
+
+    it("should silently ignore unexpected positional with z.looseObject (passthrough mode)", async () => {
+      using consoleSpy = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.looseObject({
+          verbose: z.boolean().default(false),
+        }),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["stray-token"]);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(runFn).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+    });
+
+    it("should not error when all positionals are consumed by positional fields", async () => {
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z
+          .object({
+            target: arg(z.string(), { positional: true }),
+          })
+          .strict(),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["value"]);
+
+      expect(runFn).toHaveBeenCalledWith({ target: "value" });
+      expect(result.success).toBe(true);
+    });
+
+    it("should error on extra positionals beyond positional field count (strict mode)", async () => {
+      using consoleSpy = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z
+          .object({
+            target: arg(z.string(), { positional: true }),
+          })
+          .strict(),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["value", "extra-token"]);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      if (!result.success) {
+        expect(result.error.message).toContain("extra-token");
+      }
+    });
+  });
+});
+
 describe("runMain runMainHook", () => {
   it("invokes the hook once with the parsed argv before any command execution", async () => {
     using _argv = useArgv(["node", "test", "--flag", "value"]);
