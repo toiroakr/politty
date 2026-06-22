@@ -11,6 +11,7 @@ import type { InternalSchema } from "./internal-schema.js";
 import {
   getChildSchema,
   getJsonSchema,
+  getUnionOptionSchemas,
   getVendor,
   unwrapStandardSchema,
   type JsonSchema,
@@ -913,18 +914,153 @@ function resolveFieldMetaFromJson(
 }
 
 /**
+ * Read a single-valued string discriminant from a JSON Schema property,
+ * accepting both `const: "x"` and single-entry `enum: ["x"]` encodings (which
+ * different converters emit for literal fields).
+ */
+function jsonConstString(prop: JsonSchema | undefined): string | undefined {
+  if (!prop) return undefined;
+  if (typeof prop.const === "string") return prop.const;
+  if (Array.isArray(prop.enum) && prop.enum.length === 1 && typeof prop.enum[0] === "string") {
+    return prop.enum[0];
+  }
+  return undefined;
+}
+
+/**
+ * Detect a discriminator across union branches: a property present in every
+ * branch as a distinct string literal. Mirrors Zod's discriminatedUnion so
+ * non-Zod discriminated unions get variant-aware help/docs/prompting. Returns
+ * the discriminator key plus each branch's value (aligned to `branches` order).
+ */
+function detectJsonDiscriminator(
+  branches: JsonSchema[],
+): { discriminator: string; values: string[] } | undefined {
+  if (branches.length < 2) return undefined;
+  const firstProps = branches[0]?.properties;
+  if (!firstProps) return undefined;
+  for (const key of Object.keys(firstProps)) {
+    const values: string[] = [];
+    let ok = true;
+    for (const branch of branches) {
+      const value = jsonConstString(branch.properties?.[key]);
+      if (value === undefined) {
+        ok = false;
+        break;
+      }
+      values.push(value);
+    }
+    if (ok && new Set(values).size === values.length) {
+      return { discriminator: key, values };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Resolve the fields of a single object-shaped JSON Schema branch. `metaRoot`
+ * is the original sub-schema used to recover `arg()` metadata by reference
+ * (undefined when the vendor does not expose branch sub-schemas).
+ */
+function extractObjectBranchFields(branch: JsonSchema, metaRoot: unknown): ResolvedFieldMeta[] {
+  const properties = branch.properties ?? {};
+  const requiredSet = new Set(branch.required ?? []);
+  return Object.entries(properties).map(([name, prop]) =>
+    resolveFieldMetaFromJson((metaRoot ?? {}) as object, name, prop, requiredSet.has(name)),
+  );
+}
+
+/** Merge branch field lists into a deduped list (first occurrence wins). */
+function mergeBranchFields(branchFields: ResolvedFieldMeta[][]): ResolvedFieldMeta[] {
+  const merged = new Map<string, ResolvedFieldMeta>();
+  for (const fields of branchFields) {
+    for (const field of fields) {
+      if (!merged.has(field.name)) merged.set(field.name, field);
+    }
+  }
+  return Array.from(merged.values());
+}
+
+/**
  * Extract fields from a non-Zod Standard Schema by converting it to JSON Schema.
- * Initial scope: object schemas. Unions/intersections degrade to no fields.
+ *
+ * Object schemas map directly; composite schemas are recognized from JSON
+ * Schema combinators so they reach parity with the Zod path:
+ * - `allOf` → intersection (merged fields)
+ * - `oneOf` / `anyOf` → discriminated union when a discriminator is detectable,
+ *   otherwise xor (`oneOf`) or union (`anyOf`)
+ *
+ * Per-branch `arg()` metadata is recovered from the original sub-schemas when
+ * the vendor exposes them in order (Valibot `.options`); otherwise branch
+ * fields fall back to JSON-Schema-only info.
  */
 function extractFieldsFromStandardSchema(schema: ArgsSchema): ExtractedFields {
   const json = getJsonSchema(schema);
+  const optionSchemas = getUnionOptionSchemas(schema);
+
+  // Intersection: allOf of object branches, fields merged.
+  if (Array.isArray(json.allOf) && json.allOf.length > 0) {
+    const branchFields = json.allOf.map((branch, i) =>
+      extractObjectBranchFields(branch, optionSchemas?.[i]),
+    );
+    return {
+      fields: mergeBranchFields(branchFields),
+      schema,
+      schemaType: "intersection",
+      unknownKeysMode: jsonUnknownKeysMode(json),
+      ...(json.description ? { description: json.description } : {}),
+    };
+  }
+
+  // Union-like: oneOf (exclusive) or anyOf.
+  const branches = json.oneOf ?? json.anyOf;
+  if (Array.isArray(branches) && branches.length > 0) {
+    const branchFields = branches.map((branch, i) =>
+      extractObjectBranchFields(branch, optionSchemas?.[i]),
+    );
+    const fields = mergeBranchFields(branchFields);
+    const disc = detectJsonDiscriminator(branches);
+
+    if (disc) {
+      const variants = branches.map((branch, i) => ({
+        discriminatorValue: disc.values[i]!,
+        fields: branchFields[i]!,
+        ...(branch.description ? { description: branch.description } : {}),
+      }));
+      return {
+        fields,
+        schema,
+        schemaType: "discriminatedUnion",
+        unknownKeysMode: jsonUnknownKeysMode(json),
+        discriminator: disc.discriminator,
+        variants,
+        ...(json.description ? { description: json.description } : {}),
+      };
+    }
+
+    const unionOptions: ExtractedFields[] = branches.map((branch, i) => ({
+      fields: branchFields[i]!,
+      schema,
+      schemaType: "object",
+      unknownKeysMode: jsonUnknownKeysMode(branch),
+      ...(branch.description ? { description: branch.description } : {}),
+    }));
+    return {
+      fields,
+      schema,
+      schemaType: json.oneOf ? "xor" : "union",
+      unknownKeysMode: jsonUnknownKeysMode(json),
+      unionOptions,
+      ...(json.description ? { description: json.description } : {}),
+    };
+  }
+
+  // Plain object.
   const properties = json.properties ?? {};
   const requiredSet = new Set(json.required ?? []);
-
   const fields = Object.entries(properties).map(([name, prop]) =>
     resolveFieldMetaFromJson(schema as object, name, prop, requiredSet.has(name)),
   );
-
   return {
     fields,
     schema,

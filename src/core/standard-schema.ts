@@ -200,10 +200,38 @@ interface ValibotObjectLike {
   readonly type?: string;
   readonly entries?: Record<string, unknown>;
   readonly wrapped?: unknown;
+  readonly options?: readonly unknown[];
 }
 
 interface ArkTypeLike {
   get?: (key: string) => unknown;
+}
+
+/**
+ * Valibot composite schema types whose `.options` array holds the original
+ * sub-schemas, used to recover per-field `arg()` metadata inside the branches
+ * of a union / variant / intersection.
+ */
+const VALIBOT_COMPOSITES: ReadonlySet<string> = new Set(["union", "variant", "intersect"]);
+
+/**
+ * Recover the original sub-schemas of a composite schema (union / discriminated
+ * union / intersection), in declaration order, so `arg()` metadata stored by
+ * reference on each branch's fields can be looked up.
+ *
+ * Returns undefined when the vendor does not expose stable, order-preserving
+ * branch references (e.g. ArkType, whose JSON Schema branch order is not
+ * guaranteed to match its internal order); callers then fall back to
+ * JSON-Schema-only field info without `arg()` recovery.
+ */
+export function getUnionOptionSchemas(schema: unknown): readonly unknown[] | undefined {
+  if (getVendor(schema) === "valibot") {
+    const s = schema as ValibotObjectLike;
+    if (typeof s.type === "string" && VALIBOT_COMPOSITES.has(s.type) && Array.isArray(s.options)) {
+      return s.options;
+    }
+  }
+  return undefined;
 }
 
 /**

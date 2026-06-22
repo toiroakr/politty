@@ -142,4 +142,105 @@ describe("Standard Schema support", () => {
       expect(result.success).toBe(false);
     });
   });
+
+  describe("composite schemas", () => {
+    it("extracts a Valibot variant as a discriminated union", async () => {
+      const schema = v.variant("kind", [
+        v.object({
+          kind: v.literal("add"),
+          path: arg(v.string(), { description: "file to add", alias: "p" }),
+        }),
+        v.object({ kind: v.literal("remove"), force: v.optional(v.boolean(), false) }),
+      ]);
+      await prepareSchema(schema);
+      const extracted = extractFields(schema);
+
+      expect(extracted.schemaType).toBe("discriminatedUnion");
+      expect(extracted.discriminator).toBe("kind");
+      // Merged unique fields across variants.
+      expect(extracted.fields.map((f) => f.name).sort()).toEqual(["force", "kind", "path"]);
+
+      const variantValues = extracted.variants?.map((variant) => variant.discriminatorValue);
+      expect(variantValues).toEqual(["add", "remove"]);
+
+      // arg() metadata is recovered by reference inside the variant branch.
+      const addVariant = extracted.variants?.find(
+        (variant) => variant.discriminatorValue === "add",
+      );
+      const pathField = addVariant?.fields.find((f) => f.name === "path");
+      expect(pathField?.description).toBe("file to add");
+      expect(pathField?.alias).toEqual(["p"]);
+    });
+
+    it("extracts a Valibot union (no discriminator) with union options", async () => {
+      const schema = v.union([
+        v.object({ foo: v.string() }),
+        v.object({ bar: v.optional(v.number()) }),
+      ]);
+      await prepareSchema(schema);
+      const extracted = extractFields(schema);
+
+      expect(extracted.schemaType).toBe("union");
+      expect(extracted.discriminator).toBeUndefined();
+      expect(extracted.unionOptions?.map((option) => option.fields.map((f) => f.name))).toEqual([
+        ["foo"],
+        ["bar"],
+      ]);
+      expect(extracted.fields.map((f) => f.name).sort()).toEqual(["bar", "foo"]);
+    });
+
+    it("extracts a Valibot intersection with merged fields", async () => {
+      const schema = v.intersect([
+        v.object({ foo: arg(v.string(), { description: "the foo" }) }),
+        v.object({ bar: v.optional(v.number()) }),
+      ]);
+      await prepareSchema(schema);
+      const extracted = extractFields(schema);
+
+      expect(extracted.schemaType).toBe("intersection");
+      expect(extracted.fields.map((f) => f.name).sort()).toEqual(["bar", "foo"]);
+      const fooField = extracted.fields.find((f) => f.name === "foo");
+      expect(fooField?.description).toBe("the foo");
+    });
+
+    it("detects an ArkType discriminated union from anyOf", async () => {
+      const schema = type({ kind: "'add'", path: "string" }).or({
+        kind: "'remove'",
+        force: "boolean",
+      });
+      await prepareSchema(schema);
+      const extracted = extractFields(schema);
+
+      expect(extracted.schemaType).toBe("discriminatedUnion");
+      expect(extracted.discriminator).toBe("kind");
+      expect(extracted.variants?.map((variant) => variant.discriminatorValue).sort()).toEqual([
+        "add",
+        "remove",
+      ]);
+    });
+
+    it("runs a command whose args are a Valibot variant", async () => {
+      const seen: Record<string, unknown>[] = [];
+      const schema = v.variant("kind", [
+        v.object({ kind: v.literal("add"), path: arg(v.string(), { positional: true }) }),
+        v.object({ kind: v.literal("remove"), force: v.optional(v.boolean(), false) }),
+      ]);
+      const cmd = defineCommand({
+        name: "c",
+        args: schema,
+        run: (args) => {
+          seen.push({ ...(args as Record<string, unknown>) });
+        },
+      });
+
+      const ok = await runCommand(cmd, ["--kind", "add", "file.txt"]);
+      expect(ok.success).toBe(true);
+      expect(seen[0]).toMatchObject({ kind: "add", path: "file.txt" });
+
+      // Validation still flows through ~standard.validate: a value violating the
+      // active variant is rejected.
+      const bad = await runCommand(cmd, ["--kind", "add"]);
+      expect(bad.success).toBe(false);
+    });
+  });
 });
