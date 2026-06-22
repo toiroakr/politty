@@ -20,6 +20,15 @@ export default defineConfig({
   minify: false,
   target: "node18",
   outDir: "dist",
-  external: ["zod", "yaml", "@clack/prompts", "@inquirer/prompts"],
+  external: [
+    "zod",
+    "yaml",
+    "@clack/prompts",
+    "@inquirer/prompts",
+    "@standard-community/standard-json",
+    "@valibot/to-json-schema",
+    "valibot",
+    "arktype",
+  ],
   fixedExtension: false,
 });

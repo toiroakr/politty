@@ -2,6 +2,12 @@
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "project": ["src/**/*.ts"],
   "ignore": ["playground/**", "tests/**"],
-  "ignoreDependencies": ["@quansync/fs", "quansync", "tsx"],
+  "ignoreDependencies": [
+    "@quansync/fs",
+    "quansync",
+    "tsx",
+    "@standard-community/standard-json",
+    "@valibot/to-json-schema"
+  ],
   "ignoreExportsUsedInFile": true
 }

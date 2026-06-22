@@ -1,3 +1,4 @@
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { z } from "zod";
 import type {
   ArgsSchema,
@@ -14,10 +15,15 @@ import type { WithCaseVariants } from "./case-types.js";
 /**
  * Infer args type from schema, defaults to empty object if undefined.
  * Wraps with WithCaseVariants so both camelCase and kebab-case access is typed.
+ *
+ * Zod schemas use `z.infer` for maximum fidelity; any other Standard Schema
+ * library (Valibot, ArkType, ...) falls back to the Standard Schema output type.
  */
 type InferArgs<TArgsSchema> = TArgsSchema extends z.ZodType
   ? WithCaseVariants<z.infer<TArgsSchema>>
-  : Record<string, never>;
+  : TArgsSchema extends StandardSchemaV1
+    ? WithCaseVariants<StandardSchemaV1.InferOutput<TArgsSchema>>
+    : Record<string, never>;
 
 /**
  * Merge local args with global args.

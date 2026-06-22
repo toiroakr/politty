@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 import type { ExtractedFields } from "./core/schema-extractor.js";
 import type { LazyCommand } from "./lazy.js";
@@ -45,10 +45,15 @@ export interface Logger {
 }
 
 /**
- * Supported schema types for args
+ * Supported schema types for args.
+ *
+ * Any library implementing the {@link https://standardschema.dev/ Standard
+ * Schema} interface whose output is a record is accepted (Zod, Valibot,
+ * ArkType, ...). Zod schemas are handled via native introspection; other
+ * vendors are introspected by converting to JSON Schema.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ArgsSchema = z.ZodType<Record<string, any>>;
+export type ArgsSchema = StandardSchemaV1<unknown, Record<string, any>>;
 
 /**
  * Context provided to setup function

@@ -7,6 +7,13 @@ import {
   type EffectContext,
   type PromptMeta,
 } from "./arg-registry.js";
+import {
+  getChildSchema,
+  getJsonSchema,
+  getVendor,
+  unwrapStandardSchema,
+  type JsonSchema,
+} from "./standard-schema.js";
 
 /**
  * Get ArgMeta from both the custom registry and Zod's _def
@@ -431,20 +438,42 @@ function extractDescription(schema: z.ZodType): string | undefined {
 }
 
 /**
- * Resolve field metadata from schema and argRegistry
+ * Schema-derived inputs for a field, computed by the introspection backend
+ * (Zod native `_def` walk, or JSON Schema walk) and then normalized identically.
  */
-function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
-  // Get metadata from argRegistry
-  const argMeta = getArgMeta(schema) ?? getArgMeta(unwrapSchema(schema));
+export interface DerivedFieldInfo {
+  /** Description sourced from the schema (arg() metadata still takes priority). */
+  description?: string | undefined;
+  /** Detected base type. */
+  type: "string" | "number" | "boolean" | "array" | "unknown";
+  /** Whether the field is required. */
+  required: boolean;
+  /** Default value, if any. */
+  defaultValue: unknown;
+  /** Enum values, if the field is an enum/literal-union. */
+  enumValues?: string[] | undefined;
+  /** Original sub-schema reference (used by docs/golden tests). */
+  schema: z.ZodType;
+}
 
-  // Priority: argRegistry > schema.describe()
-  const description = argMeta?.description ?? extractDescription(schema);
+/**
+ * Build a {@link ResolvedFieldMeta} from `arg()` metadata plus schema-derived
+ * info. Holds all CLI-metadata normalization (alias / hiddenAlias / negation /
+ * ...) and is shared by the Zod and JSON Schema extraction backends.
+ */
+function buildFieldMeta(
+  name: string,
+  argMeta: ArgMeta | undefined,
+  derived: DerivedFieldInfo,
+): ResolvedFieldMeta {
+  // Priority: argRegistry > schema description
+  const description = argMeta?.description ?? derived.description;
 
   // Convert camelCase field name to kebab-case for CLI usage
   const cliName = toKebabCase(name);
 
-  // Extract enum values from schema
-  const enumValues = extractEnumValues(schema);
+  const enumValues = derived.enumValues;
+  const fieldType = derived.type;
 
   // Normalize alias-like inputs to a deduped, validated array (or undefined when empty).
   // Leading dashes are stripped for convenience; entries that still fail the pattern after
@@ -483,8 +512,6 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   );
   const hiddenAlias = hiddenAliasRaw?.filter((a) => !visibleSet.has(a));
   const hiddenAliasFinal = hiddenAlias && hiddenAlias.length > 0 ? hiddenAlias : undefined;
-
-  const fieldType = detectType(schema);
 
   // Validate and normalize `negation` (only meaningful for boolean fields).
   // Accepts:
@@ -576,10 +603,10 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
     positional: argMeta?.positional ?? false,
     placeholder: argMeta?.placeholder,
     env: argMeta?.env,
-    required: isRequired(schema),
-    defaultValue: extractDefaultValue(schema),
+    required: derived.required,
+    defaultValue: derived.defaultValue,
     type: fieldType,
-    schema,
+    schema: derived.schema,
     enumValues,
     completion: argMeta?.completion,
     prompt: argMeta?.prompt,
@@ -595,6 +622,23 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   }
 
   return meta;
+}
+
+/**
+ * Resolve field metadata from a Zod sub-schema and the arg() registry.
+ */
+function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
+  // Get metadata from argRegistry (checking the wrapped inner schema too)
+  const argMeta = getArgMeta(schema) ?? getArgMeta(unwrapSchema(schema));
+
+  return buildFieldMeta(name, argMeta, {
+    description: extractDescription(schema),
+    type: detectType(schema),
+    required: isRequired(schema),
+    defaultValue: extractDefaultValue(schema),
+    enumValues: extractEnumValues(schema),
+    schema,
+  });
 }
 
 /**
@@ -771,6 +815,124 @@ function extractFromIntersection(schema: z.ZodType): ExtractedFields {
   };
 }
 
+// ---------------------------------------------------------------------------
+// JSON Schema extraction backend (non-Zod Standard Schema vendors)
+// ---------------------------------------------------------------------------
+
+/**
+ * Detect the base field type from a JSON Schema property.
+ * Enums of string values are treated as "string".
+ */
+function jsonBaseType(prop: JsonSchema): "string" | "number" | "boolean" | "array" | "unknown" {
+  if (
+    Array.isArray(prop.enum) &&
+    prop.enum.length > 0 &&
+    prop.enum.every((v) => typeof v === "string")
+  ) {
+    return "string";
+  }
+  let t = prop.type;
+  if (Array.isArray(t)) {
+    t = t.find((x) => x !== "null");
+  }
+  switch (t) {
+    case "string":
+      return "string";
+    case "number":
+    case "integer":
+      return "number";
+    case "boolean":
+      return "boolean";
+    case "array":
+      return "array";
+    default:
+      if (typeof prop.const === "string") return "string";
+      return "unknown";
+  }
+}
+
+/**
+ * Extract string enum values from a JSON Schema property (including arrays of
+ * enums). Returns undefined when not a string enum.
+ */
+function jsonEnumValues(prop: JsonSchema): string[] | undefined {
+  if (Array.isArray(prop.enum) && prop.enum.length > 0) {
+    const strings = prop.enum.filter((v): v is string => typeof v === "string");
+    if (strings.length === prop.enum.length) return strings;
+  }
+  if (prop.type === "array" && prop.items && !Array.isArray(prop.items)) {
+    return jsonEnumValues(prop.items);
+  }
+  return undefined;
+}
+
+/**
+ * Map JSON Schema `additionalProperties` to politty's unknown-keys mode.
+ * - `false` → "strict"
+ * - `true` / object → "passthrough"
+ * - absent → "strip" (default)
+ */
+function jsonUnknownKeysMode(json: JsonSchema): UnknownKeysMode {
+  const ap = json.additionalProperties;
+  if (ap === false) return "strict";
+  if (ap === true || (ap && typeof ap === "object")) return "passthrough";
+  return "strip";
+}
+
+/**
+ * Resolve field metadata for a single JSON Schema property, recovering `arg()`
+ * metadata from the original child sub-schema by reference where available.
+ */
+function resolveFieldMetaFromJson(
+  rootSchema: object,
+  name: string,
+  prop: JsonSchema,
+  required: boolean,
+): ResolvedFieldMeta {
+  const child = getChildSchema(rootSchema, name);
+  let argMeta: ArgMeta | undefined;
+  // ArkType `Type` instances are callable (typeof === "function"); both
+  // functions and objects are valid WeakMap keys, so accept either.
+  if (child && (typeof child === "object" || typeof child === "function")) {
+    argMeta =
+      getArgMetaFromRegistry(child as object) ??
+      getArgMetaFromRegistry(unwrapStandardSchema(child) as object);
+  }
+
+  return buildFieldMeta(name, argMeta, {
+    description: prop.description,
+    type: jsonBaseType(prop),
+    required: required && prop.default === undefined,
+    defaultValue: prop.default,
+    enumValues: jsonEnumValues(prop),
+    // `schema` is only consumed by Zod-specific docs tooling; expose the
+    // original child (or root) reference for completeness.
+    schema: (child ?? rootSchema) as z.ZodType,
+  });
+}
+
+/**
+ * Extract fields from a non-Zod Standard Schema by converting it to JSON Schema.
+ * Initial scope: object schemas. Unions/intersections degrade to no fields.
+ */
+function extractFieldsFromStandardSchema(schema: ArgsSchema): ExtractedFields {
+  const json = getJsonSchema(schema);
+  const properties = json.properties ?? {};
+  const requiredSet = new Set(json.required ?? []);
+
+  const fields = Object.entries(properties).map(([name, prop]) =>
+    resolveFieldMetaFromJson(schema as object, name, prop, requiredSet.has(name)),
+  );
+
+  return {
+    fields,
+    schema,
+    schemaType: "object",
+    unknownKeysMode: jsonUnknownKeysMode(json),
+    ...(json.description ? { description: json.description } : {}),
+  };
+}
+
 /**
  * Cache for extractFields results to avoid redundant schema extraction
  */
@@ -786,19 +948,31 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
   const cached = extractFieldsCache.get(schema);
   if (cached) return cached;
 
+  // Non-Zod Standard Schema vendors are introspected via JSON Schema instead of
+  // Zod's native `_def`. This path never touches Zod at runtime.
+  const vendor = getVendor(schema);
+  if (vendor !== undefined && vendor !== "zod") {
+    const result = extractFieldsFromStandardSchema(schema);
+    extractFieldsCache.set(schema, result);
+    return result;
+  }
+
   let result: ExtractedFields;
-  const typeName = getTypeName(schema);
+  // Zod native introspection path. Cast once to the Zod type the helpers below
+  // expect; `schema` remains the broader ArgsSchema for the result payloads.
+  const zodSchema = schema as z.ZodType;
+  const typeName = getTypeName(zodSchema);
   const s = schema as ZodSchemaWithDef;
   const def = s.def ?? s._def;
 
   switch (typeName) {
     case "object": {
-      const description = extractDescription(schema);
+      const description = extractDescription(zodSchema);
       result = {
-        fields: extractFromObject(schema),
+        fields: extractFromObject(zodSchema),
         schema,
         schemaType: "object",
-        unknownKeysMode: getUnknownKeysMode(schema),
+        unknownKeysMode: getUnknownKeysMode(zodSchema),
         ...(description ? { description } : {}),
       };
       break;
@@ -807,18 +981,18 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
     case "union":
       // In Zod v4, discriminatedUnion has type "union" with a discriminator property
       if (def?.discriminator) {
-        result = extractFromDiscriminatedUnion(schema);
+        result = extractFromDiscriminatedUnion(zodSchema);
       } else {
-        result = extractFromUnionLike(schema, "union");
+        result = extractFromUnionLike(zodSchema, "union");
       }
       break;
 
     case "xor":
-      result = extractFromUnionLike(schema, "xor");
+      result = extractFromUnionLike(zodSchema, "xor");
       break;
 
     case "intersection":
-      result = extractFromIntersection(schema);
+      result = extractFromIntersection(zodSchema);
       break;
 
     case "pipe": {
@@ -826,7 +1000,7 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
       const pipeInner = def?.in ?? def?.schema;
       if (pipeInner) {
         const innerResult = extractFields(pipeInner as ArgsSchema);
-        const pipeDescription = extractDescription(schema);
+        const pipeDescription = extractDescription(zodSchema);
         result = {
           ...innerResult,
           schema,
@@ -834,25 +1008,25 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
         };
         break;
       }
-      const pipeDescription = extractDescription(schema);
+      const pipeDescription = extractDescription(zodSchema);
       result = {
         fields: [],
         schema,
         schemaType: "object",
-        unknownKeysMode: getUnknownKeysMode(schema),
+        unknownKeysMode: getUnknownKeysMode(zodSchema),
         ...(pipeDescription ? { description: pipeDescription } : {}),
       };
       break;
     }
 
     default: {
-      const description = extractDescription(schema);
+      const description = extractDescription(zodSchema);
       // Fallback: try to treat as object
       result = {
         fields: [],
         schema,
         schemaType: "object",
-        unknownKeysMode: getUnknownKeysMode(schema),
+        unknownKeysMode: getUnknownKeysMode(zodSchema),
         ...(description ? { description } : {}),
       };
       break;

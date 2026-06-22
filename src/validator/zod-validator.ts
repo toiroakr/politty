@@ -1,5 +1,13 @@
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { z } from "zod";
 import type { ArgsSchema } from "../types.js";
+
+/** Minimal Zod-like surface used to invoke `safeParse` without coupling. */
+interface ZodLike {
+  safeParse(
+    value: unknown,
+  ): { success: true; data: unknown } | { success: false; error: z.ZodError };
+}
 
 /**
  * Validation error details
@@ -47,13 +55,13 @@ function formatZodErrors(error: z.ZodError): ValidationError[] {
 export function validateArgs<T extends ArgsSchema>(
   rawArgs: Record<string, unknown>,
   schema: T,
-): ValidationResult<z.infer<T>> {
-  const result = schema.safeParse(rawArgs);
+): ValidationResult<StandardSchemaV1.InferOutput<T>> {
+  const result = (schema as unknown as ZodLike).safeParse(rawArgs);
 
   if (result.success) {
     return {
       success: true,
-      data: result.data as z.infer<T>,
+      data: result.data as StandardSchemaV1.InferOutput<T>,
     };
   }
 

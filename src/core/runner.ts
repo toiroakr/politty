@@ -31,13 +31,31 @@ import {
   formatRuntimeError,
   formatUnknownFlagWarning,
 } from "../validator/error-formatter.js";
+import { validateStandard } from "../validator/standard-validator.js";
 import {
   formatValidationErrors as formatPlainValidationErrors,
   validateArgs,
+  type ValidationResult,
 } from "../validator/zod-validator.js";
 import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import { extractFields, type ExtractedFields } from "./schema-extractor.js";
+import { isZodSchema, prepareSchema } from "./standard-schema.js";
+
+/**
+ * Validate raw args against a command/global schema, choosing the backend by
+ * vendor: Zod uses native `safeParse`; any other Standard Schema library uses
+ * its `~standard.validate` (awaited, since it may be asynchronous).
+ */
+async function validateArgsByVendor<T extends ArgsSchema>(
+  rawArgs: Record<string, unknown>,
+  schema: T,
+): Promise<ValidationResult<unknown>> {
+  if (isZodSchema(schema)) {
+    return validateArgs(rawArgs, schema);
+  }
+  return validateStandard(rawArgs, schema);
+}
 
 /**
  * Default logger using console
@@ -94,6 +112,9 @@ export async function runCommand<TResult = unknown>(
   argv: string[],
   options: RunCommandOptions = {},
 ): Promise<RunResult<TResult>> {
+  // Pre-convert a non-Zod global schema to JSON Schema so the synchronous
+  // introspection pipeline can run.
+  if (options.globalArgs) await prepareSchema(options.globalArgs);
   const globalExtracted = extractAndValidateGlobal(options);
 
   // Start log collection for global setup/cleanup if enabled
@@ -227,6 +248,8 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
   // foreground.
   let globalExtractedForBypass: ExtractedFields | undefined;
   if (options.globalArgs) {
+    // Pre-convert a non-Zod global schema before synchronous introspection.
+    await prepareSchema(options.globalArgs);
     try {
       globalExtractedForBypass = extractFields(options.globalArgs);
     } catch {
@@ -387,6 +410,11 @@ async function runCommandInternal<TResult = unknown>(
   };
 
   try {
+    // Pre-convert non-Zod schemas (command + global) to JSON Schema so the
+    // synchronous parse/introspection pipeline below can run. No-op for Zod.
+    await prepareSchema(command.args);
+    if (options.globalArgs) await prepareSchema(options.globalArgs);
+
     // Parse arguments
     const parseResult = parseArgs(argv, command, {
       skipValidation: options.skipValidation,
@@ -618,7 +646,10 @@ async function runCommandInternal<TResult = unknown>(
       // (e.g., --verboes) are treated as local flags by the scanner, so a strict
       // global schema cannot catch them. They are rejected only if the local
       // command schema is also strict.
-      const globalValidation = validateArgs(accumulatedGlobalArgs, options.globalArgs);
+      const globalValidation = await validateArgsByVendor(
+        accumulatedGlobalArgs,
+        options.globalArgs,
+      );
       if (!globalValidation.success) {
         collector?.stop();
         return {
@@ -656,7 +687,7 @@ async function runCommandInternal<TResult = unknown>(
       argsToValidate = { ...argsToValidate, ...resolved };
     }
 
-    const validationResult = validateArgs(argsToValidate, command.args);
+    const validationResult = await validateArgsByVendor(argsToValidate, command.args);
 
     if (!validationResult.success) {
       collector?.stop();

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 import type { GlobalArgs, IsEmpty } from "../types.js";
 import type { DynamicCompletionResolver } from "./dynamic-completion-types.js";
@@ -295,10 +295,37 @@ export interface BuiltinOverrideArgMeta<TValue = unknown> extends BaseArgMeta<TV
 export type ArgMeta<TValue = unknown> = RegularArgMeta<TValue> | BuiltinOverrideArgMeta<TValue>;
 
 /**
- * Custom registry for politty argument metadata
- * This avoids polluting Zod's GlobalMeta
+ * Custom registry for politty argument metadata.
+ *
+ * Implemented as a plain WeakMap keyed by the schema object rather than Zod's
+ * `z.registry()`, so that:
+ *   1. importing the politty core never pulls Zod into the runtime bundle, and
+ *   2. metadata works for any Standard Schema library (Valibot, ArkType, ...),
+ *      not just Zod.
+ *
+ * Mirrors the small subset of the Zod registry API that politty relies on
+ * (`add` / `get`).
  */
-export const argRegistry = z.registry<ArgMeta>();
+const argMetaStore = new WeakMap<object, ArgMeta>();
+
+interface ArgRegistry {
+  add(schema: object, meta: ArgMeta): ArgRegistry;
+  get(schema: object): ArgMeta | undefined;
+  has(schema: object): boolean;
+}
+
+export const argRegistry: ArgRegistry = {
+  add(schema, meta) {
+    argMetaStore.set(schema, meta);
+    return argRegistry;
+  },
+  get(schema) {
+    return argMetaStore.get(schema);
+  },
+  has(schema) {
+    return argMetaStore.has(schema);
+  },
+};
 
 /**
  * Register metadata for a Zod schema
@@ -410,17 +437,17 @@ type ValidateArgMeta<M, TValue = unknown> = M extends { overrideBuiltinAlias: tr
       ? ReservedAliasTypeError<M>
       : ValidateNegation<M, TValue>;
 
-export function arg<T extends z.ZodType>(schema: T): T;
-export function arg<T extends z.ZodType, M extends ArgMeta<z.output<T>>>(
+export function arg<T extends StandardSchemaV1>(schema: T): T;
+export function arg<T extends StandardSchemaV1, M extends ArgMeta<StandardSchemaV1.InferOutput<T>>>(
   schema: T,
-  meta: ValidateArgMeta<M, z.output<T>>,
+  meta: ValidateArgMeta<M, StandardSchemaV1.InferOutput<T>>,
 ): T;
-export function arg<T extends z.ZodType>(
+export function arg<T extends StandardSchemaV1>(
   schema: T,
-  meta?: ValidateArgMeta<ArgMeta, z.output<T>>,
+  meta?: ValidateArgMeta<ArgMeta, StandardSchemaV1.InferOutput<T>>,
 ): T {
   if (meta) {
-    argRegistry.add(schema, meta as ArgMeta);
+    argRegistry.add(schema as object, meta as ArgMeta);
   }
   return schema;
 }
@@ -431,11 +458,6 @@ export function arg<T extends z.ZodType>(
  * @param schema - The Zod schema
  * @returns The metadata if registered, undefined otherwise
  */
-export function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
-  // Zod's `$replace<Meta, S>` recursively rewrites the meta type, which mangles
-  // the generic `then` signature of `PromiseLike<void>` inside `effect`'s return
-  // type under newer TypeScript builds (@typescript/native-preview ≥ 20260504).
-  // The runtime value is always the original ArgMeta we stored, so we restore
-  // the static type at the boundary.
-  return argRegistry.get(schema) as ArgMeta | undefined;
+export function getArgMeta(schema: object): ArgMeta | undefined {
+  return argRegistry.get(schema);
 }
