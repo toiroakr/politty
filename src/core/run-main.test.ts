@@ -858,6 +858,27 @@ describe("Redundant positionals", () => {
       }
     });
 
+    it("should not misclassify a token after -- as an unknown subcommand", async () => {
+      using _consoleSpy = spyOnConsoleError();
+      const runFn = vi.fn();
+      const subCmd = defineCommand({ name: "sub", run: () => {} });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({ verbose: z.boolean().default(false) }),
+        subCommands: { sub: subCmd },
+        run: runFn,
+      });
+
+      // "stray" after -- is an explicit positional, not a subcommand attempt
+      const result = await runCommand(cmd, ["--", "stray"]);
+
+      // Should not be "Unknown subcommand: stray" — no subcommand error
+      if (!result.success) {
+        expect(result.error.message).not.toContain("Unknown subcommand");
+      }
+    });
+
     it("should suggest a similar subcommand name when the token is a close typo", async () => {
       const subCmd = defineCommand({ name: "deploy", run: () => {} });
       const cmd = defineCommand({
@@ -940,6 +961,27 @@ describe("Redundant positionals", () => {
       expect(consoleSpy).not.toHaveBeenCalled();
       expect(runFn).toHaveBeenCalled();
       expect(result.success).toBe(true);
+    });
+
+    it("should error on a token after -- that is not consumed by any positional field (strict mode)", async () => {
+      using consoleSpy = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({ verbose: z.boolean().default(false) }).strict(),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--", "stray-token"]);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      if (!result.success) {
+        expect(result.error.message).toContain("stray-token");
+      }
     });
 
     it("should not error when all positionals are consumed by positional fields", async () => {

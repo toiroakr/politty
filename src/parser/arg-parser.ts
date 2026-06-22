@@ -36,6 +36,8 @@ export interface ParseResult {
   rawArgs: Record<string, unknown>;
   /** Positional argument values */
   positionals: string[];
+  /** Arguments after -- (passed as explicit positionals) */
+  rest: string[];
   /** Unknown flags that were detected */
   unknownFlags: string[];
   /** Extracted fields from schema (for internal use) */
@@ -93,6 +95,7 @@ export function parseArgs(
           remainingArgs: scanResult.tokensAfterSubcommand,
           rawArgs: {},
           positionals: [],
+          rest: [],
           unknownFlags: scanResult.suppressedTokens,
           rawGlobalArgs,
         };
@@ -109,6 +112,7 @@ export function parseArgs(
           remainingArgs: argv.slice(1),
           rawArgs: {},
           positionals: [],
+          rest: [],
           unknownFlags: [],
         };
       }
@@ -167,6 +171,7 @@ export function parseArgs(
       remainingArgs: [],
       rawArgs: {},
       positionals: [],
+      rest: [],
       unknownFlags: [],
     };
   }
@@ -195,6 +200,7 @@ export function parseArgs(
       remainingArgs: [],
       rawArgs: {},
       positionals: parsed.positionals,
+      rest: parsed.rest,
       unknownFlags: [],
       rawGlobalArgs,
     };
@@ -259,6 +265,7 @@ export function parseArgs(
     remainingArgs: [],
     rawArgs,
     positionals: parsed.positionals,
+    rest: parsed.rest,
     unknownFlags,
     extractedFields: extracted,
     rawGlobalArgs,

@@ -584,33 +584,40 @@ async function runCommandInternal<TResult = unknown>(
       // passthrough mode: silently ignore unknown flags
     }
 
-    // Handle unexpected positionals (tokens not consumed by positional field definitions)
+    // Handle unexpected positionals (tokens not consumed by positional field definitions).
+    // allPositionals combines regular positionals with tokens explicitly passed after --,
+    // since mergeWithPositionals already consumes both sources in order.
     const positionalFields = parseResult.extractedFields?.fields.filter((f) => f.positional) ?? [];
     const hasArrayPositional = positionalFields.some((f) => f.type === "array");
-    const consumedPositionalCount = hasArrayPositional
-      ? parseResult.positionals.length
-      : positionalFields.length;
-    const extraPositionals = parseResult.positionals.slice(consumedPositionalCount);
+    const allPositionals = [...parseResult.positionals, ...parseResult.rest];
+    const extraPositionals = hasArrayPositional
+      ? []
+      : allPositionals.slice(positionalFields.length);
 
     if (extraPositionals.length > 0) {
       const subCmdNames = listSubCommandNamesWithAliases(command);
       if (subCmdNames.size > 0) {
-        // Command has subcommands: treat first extra positional as unknown subcommand attempt
-        const unknownCmd = extraPositionals[0]!;
-        const similar = findSimilar(unknownCmd, [...subCmdNames]);
-        const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
-        collector?.stop();
-        return {
-          success: false,
-          error: new Error(
-            `Unknown subcommand: ${unknownCmd}${suggestion ? `.${suggestion}` : ""}`,
-          ),
-          exitCode: 1,
-          logs: getCurrentLogs(),
-        };
+        // Only regular positionals (not after --) that don't start with '-' are treated as
+        // unknown subcommand attempts. Tokens after -- are explicitly positional by the user,
+        // and '-' is a conventional stdin marker, so neither should be misclassified.
+        const unconsumedRegulars = parseResult.positionals.slice(positionalFields.length);
+        const unknownCmd = unconsumedRegulars.find((t) => !t.startsWith("-"));
+        if (unknownCmd) {
+          const similar = findSimilar(unknownCmd, [...subCmdNames]);
+          const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
+          collector?.stop();
+          return {
+            success: false,
+            error: new Error(
+              `Unknown subcommand: ${unknownCmd}${suggestion ? `.${suggestion}` : ""}`,
+            ),
+            exitCode: 1,
+            logs: getCurrentLogs(),
+          };
+        }
       }
 
-      // No subcommands: follow schema's unknownKeysMode
+      // No subcommands (or all extras are '-'-prefixed / after --): follow schema's unknownKeysMode
       const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
       if (unknownKeysMode === "strict") {
         collector?.stop();
