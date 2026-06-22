@@ -1,12 +1,13 @@
-import { z } from "zod";
-import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
+import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { extractShapeFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
 import { type ColumnId, emitMarkdownTable, toOptionRows } from "./option-rows.js";
 
 /**
- * Args shape type (Record of string keys to Zod schemas)
+ * Args shape type (Record of string keys to arg schemas).
  * This matches the typical structure of `commonArgs`, `workspaceArgs`, etc.
+ * Any Standard Schema library (Zod, Valibot, ArkType, ...) is accepted.
  */
-export type ArgsShape = Record<string, z.ZodType>;
+export type ArgsShape = Record<string, StandardSchemaV1>;
 
 /**
  * Options for rendering args table
@@ -23,10 +24,7 @@ export type ArgsTableOptions = {
  * ResolvedFieldMeta format used by politty's rendering functions.
  */
 function extractArgsFields(args: ArgsShape): ResolvedFieldMeta[] {
-  // Wrap in z.object to use extractFields
-  const schema = z.object(args);
-  const extracted = extractFields(schema);
-  return extracted.fields;
+  return extractShapeFields(args);
 }
 
 /**

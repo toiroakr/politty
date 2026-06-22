@@ -958,22 +958,30 @@ function internalKindToFieldType(
 }
 
 /**
+ * Resolve field metadata from a single internal-schema child by reading its
+ * state directly (no JSON Schema conversion, no Zod).
+ */
+function resolveInternalFieldMeta(name: string, child: InternalSchema): ResolvedFieldMeta {
+  const argMeta = getArgMetaFromRegistry(child as object);
+  return buildFieldMeta(name, argMeta, {
+    description: child.state.description,
+    type: internalKindToFieldType(child.state.kind),
+    required: !child.state.optional,
+    defaultValue: child.state.defaultValue,
+    enumValues: child.state.enumValues,
+    schema: child as unknown as z.ZodType,
+  });
+}
+
+/**
  * Extract fields from politty's zero-dependency internal schema by reading its
  * state directly (no JSON Schema conversion, no Zod).
  */
 function extractFieldsFromInternalSchema(schema: InternalSchema): ExtractedFields {
   const shape = schema.state.shape ?? {};
-  const fields = Object.entries(shape).map(([name, child]) => {
-    const argMeta = getArgMetaFromRegistry(child as object);
-    return buildFieldMeta(name, argMeta, {
-      description: child.state.description,
-      type: internalKindToFieldType(child.state.kind),
-      required: !child.state.optional,
-      defaultValue: child.state.defaultValue,
-      enumValues: child.state.enumValues,
-      schema: child as unknown as z.ZodType,
-    });
-  });
+  const fields = Object.entries(shape).map(([name, child]) =>
+    resolveInternalFieldMeta(name, child),
+  );
 
   return {
     fields,
@@ -981,6 +989,61 @@ function extractFieldsFromInternalSchema(schema: InternalSchema): ExtractedField
     schemaType: "object",
     unknownKeysMode: "strip",
   };
+}
+
+/**
+ * Resolve field metadata for a single standalone non-Zod Standard Schema field
+ * (e.g. a Valibot/ArkType arg schema used as a value in a docs `ArgsShape`).
+ *
+ * Standalone optionality is not reliably expressed in JSON Schema (it normally
+ * lives in the parent object's `required` list), so `required` is best-effort:
+ * a field is treated as optional only when it carries a default.
+ */
+function resolveStandaloneStandardFieldMeta(
+  name: string,
+  fieldSchema: ArgsSchema,
+): ResolvedFieldMeta {
+  const prop = getJsonSchema(fieldSchema);
+  const argMeta =
+    getArgMetaFromRegistry(fieldSchema as object) ??
+    getArgMetaFromRegistry(unwrapStandardSchema(fieldSchema) as object);
+  return buildFieldMeta(name, argMeta, {
+    description: prop.description,
+    type: jsonBaseType(prop),
+    required: prop.default === undefined,
+    defaultValue: prop.default,
+    enumValues: jsonEnumValues(prop),
+    schema: fieldSchema as unknown as z.ZodType,
+  });
+}
+
+/**
+ * Resolve a single field's metadata, dispatching on the field schema's vendor
+ * so any Standard Schema library (Zod, politty's internal schema, Valibot,
+ * ArkType, ...) works without importing Zod at runtime.
+ */
+function resolveAnyFieldMeta(name: string, fieldSchema: unknown): ResolvedFieldMeta {
+  const vendor = getVendor(fieldSchema);
+  if (vendor === "politty") {
+    return resolveInternalFieldMeta(name, fieldSchema as InternalSchema);
+  }
+  if (vendor !== undefined && vendor !== "zod") {
+    return resolveStandaloneStandardFieldMeta(name, fieldSchema as ArgsSchema);
+  }
+  // Zod (or an unrecognized object treated as Zod) goes through `_def` reflection,
+  // which is type-only and never imports Zod at runtime.
+  return resolveFieldMeta(name, fieldSchema as z.ZodType);
+}
+
+/**
+ * Extract field metadata from a raw args *shape* — a `Record` of field name to
+ * field schema — without wrapping it in any vendor's object schema. Each field
+ * is resolved by its own vendor, so shapes built from Zod, politty's internal
+ * schema, or other Standard Schema libraries all work. Used by the docs tooling
+ * (`renderArgsTable`, global-options handling) which receive shapes directly.
+ */
+export function extractShapeFields(shape: Record<string, unknown>): ResolvedFieldMeta[] {
+  return Object.entries(shape).map(([name, fieldSchema]) => resolveAnyFieldMeta(name, fieldSchema));
 }
 
 /**

@@ -1,11 +1,12 @@
 import * as path from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { z } from "zod";
 import {
   extractFields,
+  extractShapeFields,
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
+import { getVendor } from "../core/standard-schema.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import { createCommandRenderer } from "./default-renderers.js";
 import {
@@ -1470,9 +1471,10 @@ function isGlobalOptionsConfigWithOptions(
   if (typeof config !== "object" || config === null || !("args" in config)) {
     return false;
   }
-  // If config.args is a ZodType, this is shorthand with an option named "args"
-  // If config.args is an object (ArgsShape), this is the { args, options? } shape
-  return !(config.args instanceof z.ZodType);
+  // If config.args is itself a schema (has a Standard Schema vendor), this is
+  // shorthand with an option named "args"; if it's a plain object (ArgsShape,
+  // a Record of schemas, which has no `~standard`), this is the { args, options? } shape.
+  return getVendor(config.args) === undefined;
 }
 
 /**
@@ -1480,8 +1482,7 @@ function isGlobalOptionsConfigWithOptions(
  * Positional args are not rendered in args tables, so they must not be excluded.
  */
 function collectRenderableGlobalOptionFields(argsShape: ArgsShape): ResolvedFieldMeta[] {
-  const extracted = extractFields(z.object(argsShape));
-  return extracted.fields.filter((field) => !field.positional);
+  return extractShapeFields(argsShape).filter((field) => !field.positional);
 }
 
 /**
