@@ -24,9 +24,9 @@
  * ```
  */
 
-import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
+import { s, type InferInternal } from "../core/internal-schema.js";
 import type { AnyCommand, ArgsSchema, Command } from "../types.js";
 import { generateBashCompletion } from "./bash.js";
 import { resolveBundledWorkerPath } from "./bundled-worker.js";
@@ -168,9 +168,9 @@ export function detectShell(): ShellType | null {
 /**
  * Schema for the completion command arguments
  */
-const completionArgsSchema = z.object({
+const completionArgsSchema = s.object({
   shell: arg(
-    z
+    s
       .enum(["bash", "zsh", "fish"])
       .optional()
       .describe("Shell type (auto-detected if not specified)"),
@@ -180,61 +180,61 @@ const completionArgsSchema = z.object({
       placeholder: "SHELL",
     },
   ),
-  instructions: arg(z.boolean().default(false), {
+  instructions: arg(s.boolean().default(false), {
     alias: "i",
     description: "Show installation instructions",
   }),
-  loader: arg(z.boolean().default(false), {
+  loader: arg(s.boolean().default(false), {
     description:
       "Print just the rc loader snippet (bash/zsh). Add it to ~/.bashrc or ~/.zshrc; it auto-regenerates the cache when the binary changes.",
   }),
-  install: arg(z.boolean().default(false), {
+  install: arg(s.boolean().default(false), {
     description:
       "Write the completion script to its on-disk cache (bash/zsh) or autoload location (fish) instead of printing it.",
   }),
-  static: arg(z.boolean().default(false), {
+  static: arg(s.boolean().default(false), {
     description: "Generate the legacy static completion script with command metadata baked in.",
   }),
-  dispatcher: arg(z.boolean().default(false), {
+  dispatcher: arg(s.boolean().default(false), {
     description: "Generate the runtime dispatcher completion script. This is the default.",
   }),
-  worker: arg(z.boolean().default(false), {
+  worker: arg(s.boolean().default(false), {
     description: "Generate an internal static worker artifact for dispatcher mode.",
   }),
 });
 
-type CompletionArgs = z.infer<typeof completionArgsSchema>;
+type CompletionArgs = InferInternal<typeof completionArgsSchema>;
 
-const refreshArgsSchema = z.object({
-  shell: arg(z.enum(["bash", "zsh", "fish"]), {
+const refreshArgsSchema = s.object({
+  shell: arg(s.enum(["bash", "zsh", "fish"]), {
     positional: true,
     description: "Shell to refresh",
     placeholder: "SHELL",
   }),
-  target: arg(z.string().optional(), {
+  target: arg(s.string().optional(), {
     positional: true,
     description: "Existing politty-generated completion file to refresh",
     placeholder: "TARGET",
   }),
-  static: arg(z.boolean().default(false), {
+  static: arg(s.boolean().default(false), {
     description: "Refresh using the legacy static completion script mode.",
   }),
-  worker: arg(z.boolean().default(false), {
+  worker: arg(s.boolean().default(false), {
     description: "Refresh an internal static worker completion script.",
   }),
 });
 
-type RefreshArgs = z.infer<typeof refreshArgsSchema>;
+type RefreshArgs = InferInternal<typeof refreshArgsSchema>;
 
-const workerPathArgsSchema = z.object({
-  shell: arg(z.enum(["bash", "zsh", "fish"]), {
+const workerPathArgsSchema = s.object({
+  shell: arg(s.enum(["bash", "zsh", "fish"]), {
     positional: true,
     description: "Shell worker to locate",
     placeholder: "SHELL",
   }),
 });
 
-type WorkerPathArgs = z.infer<typeof workerPathArgsSchema>;
+type WorkerPathArgs = InferInternal<typeof workerPathArgsSchema>;
 
 /**
  * Create a completion subcommand for your CLI

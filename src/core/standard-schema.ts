@@ -147,10 +147,14 @@ function conversionOptions(vendor: string | undefined): Record<string, unknown> 
  * Must be awaited before the synchronous {@link getJsonSchema} /
  * `extractFields` pipeline runs for that schema. Calling it also populates the
  * underlying converter's internal map so later synchronous conversions work.
- * No-op for Zod schemas and for already-prepared schemas.
+ * No-op for Zod schemas, politty's built-in internal schemas, and
+ * already-prepared schemas.
  */
 export async function prepareSchema(schema: unknown): Promise<void> {
   if (!isStandardSchema(schema) || isZodSchema(schema)) return;
+  // politty's built-in internal schema is introspected directly and needs no
+  // JSON Schema conversion.
+  if (getVendor(schema) === "politty") return;
   if (jsonSchemaCache.has(schema as object)) return;
   const mod = await loadStandardJson();
   const json = await mod.toJsonSchema(schema, conversionOptions(getVendor(schema)));

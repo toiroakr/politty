@@ -7,6 +7,7 @@ import {
   type EffectContext,
   type PromptMeta,
 } from "./arg-registry.js";
+import type { InternalSchema } from "./internal-schema.js";
 import {
   getChildSchema,
   getJsonSchema,
@@ -933,6 +934,55 @@ function extractFieldsFromStandardSchema(schema: ArgsSchema): ExtractedFields {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Internal schema extraction backend (politty's built-in commands)
+// ---------------------------------------------------------------------------
+
+/** Map an internal schema field kind to politty's CLI field type. */
+function internalKindToFieldType(
+  kind: string,
+): "string" | "number" | "boolean" | "array" | "unknown" {
+  switch (kind) {
+    case "string":
+    case "enum":
+      return "string";
+    case "number":
+      return "number";
+    case "boolean":
+      return "boolean";
+    case "array":
+      return "array";
+    default:
+      return "unknown";
+  }
+}
+
+/**
+ * Extract fields from politty's zero-dependency internal schema by reading its
+ * state directly (no JSON Schema conversion, no Zod).
+ */
+function extractFieldsFromInternalSchema(schema: InternalSchema): ExtractedFields {
+  const shape = schema.state.shape ?? {};
+  const fields = Object.entries(shape).map(([name, child]) => {
+    const argMeta = getArgMetaFromRegistry(child as object);
+    return buildFieldMeta(name, argMeta, {
+      description: child.state.description,
+      type: internalKindToFieldType(child.state.kind),
+      required: !child.state.optional,
+      defaultValue: child.state.defaultValue,
+      enumValues: child.state.enumValues,
+      schema: child as unknown as z.ZodType,
+    });
+  });
+
+  return {
+    fields,
+    schema: schema as unknown as ArgsSchema,
+    schemaType: "object",
+    unknownKeysMode: "strip",
+  };
+}
+
 /**
  * Cache for extractFields results to avoid redundant schema extraction
  */
@@ -948,9 +998,15 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
   const cached = extractFieldsCache.get(schema);
   if (cached) return cached;
 
-  // Non-Zod Standard Schema vendors are introspected via JSON Schema instead of
-  // Zod's native `_def`. This path never touches Zod at runtime.
   const vendor = getVendor(schema);
+  // politty's built-in internal schema is introspected directly from its state.
+  if (vendor === "politty") {
+    const result = extractFieldsFromInternalSchema(schema as unknown as InternalSchema);
+    extractFieldsCache.set(schema, result);
+    return result;
+  }
+  // Other non-Zod Standard Schema vendors are introspected via JSON Schema
+  // instead of Zod's native `_def`. This path never touches Zod at runtime.
   if (vendor !== undefined && vendor !== "zod") {
     const result = extractFieldsFromStandardSchema(schema);
     extractFieldsCache.set(schema, result);

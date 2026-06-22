@@ -13,9 +13,9 @@
  *   fish: value\tdescription pairs, last line :directive
  */
 
-import { z } from "zod";
 import { arg } from "../../core/arg-registry.js";
 import { defineCommand } from "../../core/command.js";
+import { s, type InferInternal } from "../../core/internal-schema.js";
 import type { AnyCommand, ArgsSchema, Command } from "../../types.js";
 import { detectInlineOptionPrefix, generateCandidates } from "./candidate-generator.js";
 import { parseCompletionContext } from "./context-parser.js";
@@ -24,19 +24,19 @@ import { formatForShell } from "./shell-formatter.js";
 /**
  * Schema for the __complete command
  */
-const completeArgsSchema = z.object({
-  shell: arg(z.enum(["bash", "zsh", "fish"]), {
+const completeArgsSchema = s.object({
+  shell: arg(s.enum(["bash", "zsh", "fish"]), {
     description: "Target shell for output formatting",
   }),
   // The arguments to complete are passed after --
-  args: arg(z.array(z.string()).default([]), {
+  args: arg(s.array(s.string()).default([]), {
     positional: true,
     description: "Arguments to complete",
     variadic: true,
   }),
 });
 
-type CompleteArgs = z.infer<typeof completeArgsSchema>;
+type CompleteArgs = InferInternal<typeof completeArgsSchema>;
 
 /**
  * Create the dynamic completion command
