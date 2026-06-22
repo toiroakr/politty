@@ -559,7 +559,9 @@ async function runCommandInternal<TResult = unknown>(
     // Only regular positionals (not after --) that don't start with '-' are treated as
     // unknown subcommand attempts. Tokens after -- are explicitly positional by the user,
     // and '-' is a conventional stdin marker, so neither should be misclassified.
-    const unconsumedRegulars = parseResult.positionals.slice(positionalFields.length);
+    const unconsumedRegulars = hasArrayPositional
+      ? []
+      : parseResult.positionals.slice(positionalFields.length);
 
     // If command has subcommands but none specified, show help.
     // If there is an unrecognised bare token, fall through so the

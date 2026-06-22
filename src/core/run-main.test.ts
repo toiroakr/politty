@@ -858,6 +858,25 @@ describe("Redundant positionals", () => {
       }
     });
 
+    it("should show help for run-less command when all positionals are consumed by an array field", async () => {
+      using consoleSpy = spyOnConsoleLog();
+      const subCmd = defineCommand({ name: "sub", run: () => {} });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({ files: arg(z.array(z.string()), { positional: true }) }),
+        subCommands: { sub: subCmd },
+        // no run — routing-only command
+      });
+
+      // file1 and file2 are consumed by the array positional; they should NOT
+      // be misclassified as unknown-subcommand attempts.
+      const result = await runCommand(cmd, ["file1", "file2"]);
+
+      expect(result.success).toBe(true);
+      expect(consoleSpy).toHaveBeenCalled(); // help was displayed
+    });
+
     it("should reject an unrecognized bare token as unknown subcommand when command has no run", async () => {
       const subRunFn = vi.fn();
       const subCmd = defineCommand({ name: "sub", run: subRunFn });
