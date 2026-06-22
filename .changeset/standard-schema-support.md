@@ -1,8 +1,14 @@
 ---
-"politty": patch
+"politty": minor
 ---
 
 Add Standard Schema support so schema libraries other than Zod (Valibot, ArkType, ...) can be used for command argument definitions.
+
+Breaking changes (hence a minor bump under the pre-1.0 policy):
+
+- `ArgsSchema` is now `StandardSchemaV1<unknown, Record<string, any>>` instead of `z.ZodType<...>`, so the type no longer exposes Zod-specific methods. Zod schemas still satisfy it and work unchanged.
+- `skillFrontmatterSchema` (exported from `politty/skill`) is no longer a Zod schema; it is now politty's internal schema. `.safeParse(...)` and inferred types still work, but Zod-only methods (`.parse`, `.extend`, ...) do not.
+- `zod` is now an optional peer dependency.
 
 - Non-Zod schemas are introspected by converting them to JSON Schema via the optional `@standard-community/standard-json` package (plus the vendor converter, e.g. `@valibot/to-json-schema` for Valibot or `arktype` for ArkType). Zod continues to use its native, fully-featured introspection path.
 - `arg()` metadata (alias, positional, description, completion, ...) now works for any Standard Schema library: metadata is stored in a vendor-agnostic `WeakMap` registry and recovered from the original schema's child references (Valibot `.entries`, ArkType `.get()`).
