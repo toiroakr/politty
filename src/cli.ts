@@ -1,34 +1,34 @@
 #!/usr/bin/env node
 
-import { z } from "zod";
 import { arg } from "./core/arg-registry.js";
 import { defineCommand } from "./core/command.js";
+import { type InferInternal, s } from "./core/internal-schema.js";
 import { runMain } from "./core/runner.js";
 import { generateBundledCompletionWorker } from "./index.js";
 
-const generateWorkerArgsSchema = z.object({
-  bin: arg(z.string(), {
+const generateWorkerArgsSchema = s.object({
+  bin: arg(s.string(), {
     description: "CLI binary or built JS entry file to invoke",
     placeholder: "PATH",
   }),
-  program: arg(z.string(), {
+  program: arg(s.string(), {
     description: "Program name embedded in worker metadata",
     placeholder: "NAME",
   }),
-  shell: arg(z.enum(["bash", "zsh", "fish"]), {
+  shell: arg(s.enum(["bash", "zsh", "fish"]), {
     description: "Shell worker to generate",
     placeholder: "SHELL",
   }),
-  out: arg(z.string().optional(), {
+  out: arg(s.string().optional(), {
     description: "Output worker path (defaults to dist/completion/<shell>-worker.<ext>)",
     placeholder: "PATH",
   }),
-  verify: arg(z.boolean().default(false), {
+  verify: arg(s.boolean().default(false), {
     description: "Verify __completion-worker-path resolves to the generated worker",
   }),
 });
 
-type GenerateWorkerArgs = z.infer<typeof generateWorkerArgsSchema>;
+type GenerateWorkerArgs = InferInternal<typeof generateWorkerArgsSchema>;
 
 const generateWorkerCommand = defineCommand({
   name: "generate-worker",

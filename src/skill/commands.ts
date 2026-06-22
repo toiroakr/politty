@@ -8,9 +8,9 @@ import {
   type Dirent,
 } from "node:fs";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { z } from "zod";
 import { arg, type RegularArgMeta } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
+import { s as p } from "../core/internal-schema.js";
 import { logger, symbols } from "../output/logger.js";
 import {
   AGENTS_SKILLS_DIR,
@@ -120,9 +120,9 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
   return defineCommand({
     name: "sync",
     description: "Remove and reinstall all skills from source",
-    args: z.object({
-      exclude: arg(z.array(z.string()).default([]), excludeArgMeta(resolved)),
-      verbose: arg(z.boolean().default(false), {
+    args: p.object({
+      exclude: arg(p.array(p.string()).default([]), excludeArgMeta(resolved)),
+      verbose: arg(p.boolean().default(false), {
         alias: "v",
         description: "Print install paths and modes",
       }),
@@ -253,13 +253,13 @@ export function createSkillAddCommand(resolved: ResolvedSkillOptions) {
     name: "add",
     aliases: ["install"],
     description: "Install skills from source",
-    args: z.object({
-      name: arg(z.array(z.string()).default([]), {
+    args: p.object({
+      name: arg(p.array(p.string()).default([]), {
         positional: true,
         description: "Skill name(s) to install (default: all)",
         placeholder: "NAME",
       }),
-      verbose: arg(z.boolean().default(false), {
+      verbose: arg(p.boolean().default(false), {
         alias: "v",
         description: "Print install paths and modes",
       }),
@@ -328,8 +328,8 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
     name: "remove",
     aliases: ["uninstall"],
     description: "Remove installed skills",
-    args: z.object({
-      name: arg(z.string().optional(), {
+    args: p.object({
+      name: arg(p.string().optional(), {
         positional: true,
         description: "Skill name to remove (default: all)",
         placeholder: "NAME",
@@ -485,8 +485,8 @@ export function createSkillListCommand(resolved: ResolvedSkillOptions) {
   return defineCommand({
     name: "list",
     description: "List available skills from source",
-    args: z.object({
-      json: arg(z.boolean().default(false), {
+    args: p.object({
+      json: arg(p.boolean().default(false), {
         description: "Output as JSON",
       }),
     }),

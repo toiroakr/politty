@@ -1,5 +1,5 @@
 import { parse as parseYaml } from "yaml";
-import { z } from "zod";
+import { type InferInternal, s } from "../core/internal-schema.js";
 
 /**
  * Skill name pattern from the Agent Skills specification:
@@ -19,7 +19,7 @@ const DESCRIPTION_MAX = 1024;
 const COMPATIBILITY_MAX = 500;
 
 /**
- * Zod schema for SKILL.md frontmatter.
+ * Schema for SKILL.md frontmatter.
  *
  * Strictly validates the fields defined in the Agent Skills specification
  * (https://agentskills.io/specification). Unknown fields are preserved via
@@ -28,22 +28,22 @@ const COMPATIBILITY_MAX = 500;
  * Provenance / ownership for politty-managed installs is recorded under
  * `metadata["politty-cli"]` as `"{packageName}:{cliName}"`.
  */
-export const skillFrontmatterSchema = z
+export const skillFrontmatterSchema = s
   .object({
     /** Skill identifier. Lowercase alphanumerics + hyphens, 1..64 chars. */
-    name: z.string().min(1).max(NAME_MAX).regex(SKILL_NAME_PATTERN, {
+    name: s.string().min(1).max(NAME_MAX).regex(SKILL_NAME_PATTERN, {
       message: "name must be lowercase alphanumerics separated by single hyphens",
     }),
     /** Human-readable description (1..1024 chars). */
-    description: z.string().min(1).max(DESCRIPTION_MAX),
+    description: s.string().min(1).max(DESCRIPTION_MAX),
     /** SPDX license identifier or free-form string. */
-    license: z.string().min(1).optional(),
+    license: s.string().min(1).optional(),
     /** Runtime / tool compatibility string (<=500 chars). */
-    compatibility: z.string().max(COMPATIBILITY_MAX).optional(),
+    compatibility: s.string().max(COMPATIBILITY_MAX).optional(),
     /** Metadata map (spec: string keys, string values). */
-    metadata: z.record(z.string(), z.string()).optional(),
+    metadata: s.record(s.string()).optional(),
     /** Experimental spec field. */
-    "allowed-tools": z.string().optional(),
+    "allowed-tools": s.string().optional(),
   })
   .passthrough();
 
@@ -52,7 +52,7 @@ export const skillFrontmatterSchema = z
  */
 export interface ParsedSkillMd {
   /** Parsed and validated frontmatter */
-  frontmatter: z.infer<typeof skillFrontmatterSchema>;
+  frontmatter: InferInternal<typeof skillFrontmatterSchema>;
   /** Markdown body (content after frontmatter) */
   body: string;
   /** Full raw content */

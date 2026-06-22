@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type { InferInternal } from "../core/internal-schema.js";
 import type { skillFrontmatterSchema } from "./frontmatter.js";
 
 /**
@@ -8,7 +8,7 @@ import type { skillFrontmatterSchema } from "./frontmatter.js";
  * Provenance for politty-managed installs is recorded under
  * `metadata["politty-cli"]` as `"{packageName}:{cliName}"`.
  */
-export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
+export type SkillFrontmatter = InferInternal<typeof skillFrontmatterSchema>;
 
 /**
  * A skill discovered from a source directory (npm package).

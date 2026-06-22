@@ -21,7 +21,7 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 const VENDOR = "politty";
 
-type FieldKind = "string" | "number" | "boolean" | "enum" | "array" | "object";
+type FieldKind = "string" | "number" | "boolean" | "enum" | "array" | "object" | "record";
 
 interface SchemaState {
   kind: FieldKind;
@@ -32,9 +32,24 @@ interface SchemaState {
   enumValues?: string[] | undefined;
   element?: InternalSchema | undefined;
   shape?: Record<string, InternalSchema> | undefined;
+  /** String length constraints. */
+  minLength?: number | undefined;
+  maxLength?: number | undefined;
+  /** String pattern constraint and its custom error message. */
+  pattern?: RegExp | undefined;
+  patternMessage?: string | undefined;
+  /** Object: keep unknown keys instead of stripping them. */
+  passthrough?: boolean | undefined;
+  /** Record: schema applied to each value. */
+  valueSchema?: InternalSchema | undefined;
 }
 
-type Issue = { message: string; path?: (string | number)[] };
+type Issue = { message: string; path: (string | number)[] };
+
+/** Zod-compatible `safeParse` result (the subset politty's internals consume). */
+export type SafeParseResult<Output> =
+  | { success: true; data: Output }
+  | { success: false; error: { issues: Issue[] } };
 
 /** A minimal, introspectable Standard Schema for politty's built-in commands. */
 export class InternalSchema<Output = unknown> implements StandardSchemaV1<unknown, Output> {
@@ -68,11 +83,38 @@ export class InternalSchema<Output = unknown> implements StandardSchemaV1<unknow
     return new InternalSchema<Output>({ ...this.state, description });
   }
 
-  #validate(value: unknown): { value: Output; issues?: undefined } | { issues: readonly Issue[] } {
+  min(length: number): InternalSchema<Output> {
+    return new InternalSchema<Output>({ ...this.state, minLength: length });
+  }
+
+  max(length: number): InternalSchema<Output> {
+    return new InternalSchema<Output>({ ...this.state, maxLength: length });
+  }
+
+  regex(pattern: RegExp, options?: { message?: string }): InternalSchema<Output> {
+    return new InternalSchema<Output>({
+      ...this.state,
+      pattern,
+      patternMessage: options?.message,
+    });
+  }
+
+  passthrough(): InternalSchema<Output> {
+    return new InternalSchema<Output>({ ...this.state, passthrough: true });
+  }
+
+  /** Zod-compatible synchronous validation entry point. */
+  safeParse(value: unknown): SafeParseResult<Output> {
     const issues: Issue[] = [];
     const out = validateNode(this.state, value, [], issues);
-    if (issues.length > 0) return { issues };
-    return { value: out as Output };
+    if (issues.length > 0) return { success: false, error: { issues } };
+    return { success: true, data: out as Output };
+  }
+
+  #validate(value: unknown): { value: Output; issues?: undefined } | { issues: readonly Issue[] } {
+    const result = this.safeParse(value);
+    if (result.success) return { value: result.data };
+    return { issues: result.error.issues };
   }
 }
 
@@ -83,13 +125,15 @@ function validateNode(
   issues: Issue[],
 ): unknown {
   if (state.kind === "object") {
-    if (typeof value !== "object" || value === null) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
       issues.push({ message: "Expected an object", path });
       return value;
     }
     const source = value as Record<string, unknown>;
     const result: Record<string, unknown> = {};
+    const known = new Set<string>();
     for (const [key, child] of Object.entries(state.shape ?? {})) {
+      known.add(key);
       const raw = source[key];
       if (raw === undefined) {
         if (child.state.hasDefault) {
@@ -102,6 +146,27 @@ function validateNode(
         continue;
       }
       result[key] = validateNode(child.state, raw, [...path, key], issues);
+    }
+    // passthrough: preserve unknown keys instead of stripping them
+    if (state.passthrough) {
+      for (const [key, raw] of Object.entries(source)) {
+        if (!known.has(key)) result[key] = raw;
+      }
+    }
+    return result;
+  }
+
+  if (state.kind === "record") {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      issues.push({ message: "Expected an object", path });
+      return value;
+    }
+    const source = value as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const [key, raw] of Object.entries(source)) {
+      result[key] = state.valueSchema
+        ? validateNode(state.valueSchema.state, raw, [...path, key], issues)
+        : raw;
     }
     return result;
   }
@@ -128,6 +193,22 @@ function validateNode(
     case "string":
       if (typeof value !== "string") {
         issues.push({ message: "Expected a string", path });
+        return value;
+      }
+      if (state.minLength !== undefined && value.length < state.minLength) {
+        issues.push({
+          message: `Must be at least ${state.minLength} character(s)`,
+          path,
+        });
+      }
+      if (state.maxLength !== undefined && value.length > state.maxLength) {
+        issues.push({
+          message: `Must be at most ${state.maxLength} character(s)`,
+          path,
+        });
+      }
+      if (state.pattern && !state.pattern.test(value)) {
+        issues.push({ message: state.patternMessage ?? "Invalid format", path });
       }
       return value;
     case "array": {
@@ -149,9 +230,20 @@ function validateNode(
 
 type Infer<S> = S extends InternalSchema<infer O> ? O : never;
 
-type InferShape<Shape extends Record<string, InternalSchema>> = {
-  [K in keyof Shape]: Infer<Shape[K]>;
-};
+type Simplify<T> = { [K in keyof T]: T[K] } & {};
+
+/**
+ * Infer an object output type from a shape, making fields whose output includes
+ * `undefined` (i.e. `.optional()` without a default) optional keys — mirroring
+ * Zod's `z.infer` so existing consumers keep their `key?:` shapes.
+ */
+type InferShape<Shape extends Record<string, InternalSchema>> = Simplify<
+  {
+    [K in keyof Shape as undefined extends Infer<Shape[K]> ? never : K]: Infer<Shape[K]>;
+  } & {
+    [K in keyof Shape as undefined extends Infer<Shape[K]> ? K : never]?: Infer<Shape[K]>;
+  }
+>;
 
 /** Builders for the internal schema (mirrors the small subset of the Zod API used internally). */
 export const s = {
@@ -178,6 +270,14 @@ export const s = {
       optional: false,
       hasDefault: false,
       element,
+    });
+  },
+  record<E>(valueSchema: InternalSchema<E>): InternalSchema<Record<string, E>> {
+    return new InternalSchema<Record<string, E>>({
+      kind: "record",
+      optional: false,
+      hasDefault: false,
+      valueSchema,
     });
   },
   object<Shape extends Record<string, InternalSchema>>(
