@@ -1027,12 +1027,20 @@ function resolveAnyFieldMeta(name: string, fieldSchema: unknown): ResolvedFieldM
   if (vendor === "politty") {
     return resolveInternalFieldMeta(name, fieldSchema as InternalSchema);
   }
-  if (vendor !== undefined && vendor !== "zod") {
+  if (vendor === "zod") {
+    // Zod goes through `_def` reflection, which is type-only and never imports
+    // Zod at runtime.
+    return resolveFieldMeta(name, fieldSchema as z.ZodType);
+  }
+  if (vendor !== undefined) {
     return resolveStandaloneStandardFieldMeta(name, fieldSchema as ArgsSchema);
   }
-  // Zod (or an unrecognized object treated as Zod) goes through `_def` reflection,
-  // which is type-only and never imports Zod at runtime.
-  return resolveFieldMeta(name, fieldSchema as z.ZodType);
+  // No `~standard` marker: not a recognized schema. Every supported library
+  // (Zod, politty's internal schema, Valibot, ArkType, ...) reports a vendor,
+  // so this is an error rather than a value to guess at.
+  throw new Error(
+    `Cannot extract arg metadata for field "${name}": value is not a Standard Schema (missing "~standard" marker).`,
+  );
 }
 
 /**
