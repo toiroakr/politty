@@ -858,6 +858,27 @@ describe("Redundant positionals", () => {
       }
     });
 
+    it("should reject an unrecognized bare token as unknown subcommand when command has no run", async () => {
+      const subRunFn = vi.fn();
+      const subCmd = defineCommand({ name: "sub", run: subRunFn });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        subCommands: { sub: subCmd },
+        // no run — routing-only command
+      });
+
+      const result = await runCommand(cmd, ["unknown-token"]);
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      expect(subRunFn).not.toHaveBeenCalled();
+      if (!result.success) {
+        expect(result.error.message).toContain("Unknown subcommand");
+        expect(result.error.message).toContain("unknown-token");
+      }
+    });
+
     it("should not misclassify a token after -- as an unknown subcommand", async () => {
       using _consoleSpy = spyOnConsoleError();
       const runFn = vi.fn();

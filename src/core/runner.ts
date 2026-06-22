@@ -548,9 +548,29 @@ async function runCommandInternal<TResult = unknown>(
       }
     }
 
-    // If command has subcommands but none specified, show help
+    // Pre-compute positional field metadata shared between the help-fallback
+    // guard and the unexpected-positionals check below.
+    const positionalFields = parseResult.extractedFields?.fields.filter((f) => f.positional) ?? [];
+    const hasArrayPositional = positionalFields.some((f) => f.type === "array");
+    const allPositionals = [...parseResult.positionals, ...parseResult.rest];
+    const extraPositionals = hasArrayPositional
+      ? []
+      : allPositionals.slice(positionalFields.length);
+    // Only regular positionals (not after --) that don't start with '-' are treated as
+    // unknown subcommand attempts. Tokens after -- are explicitly positional by the user,
+    // and '-' is a conventional stdin marker, so neither should be misclassified.
+    const unconsumedRegulars = parseResult.positionals.slice(positionalFields.length);
+
+    // If command has subcommands but none specified, show help.
+    // If there is an unrecognised bare token, fall through so the
+    // unexpected-positionals check below surfaces it as "Unknown subcommand".
     const subCmds = listSubCommands(command);
-    if (subCmds.length > 0 && !parseResult.subCommand && !command.run) {
+    if (
+      subCmds.length > 0 &&
+      !parseResult.subCommand &&
+      !command.run &&
+      !unconsumedRegulars.some((t) => !t.startsWith("-"))
+    ) {
       const help = generateHelp(command, {
         showSubcommands: options.showSubcommands ?? true,
         context,
@@ -587,20 +607,9 @@ async function runCommandInternal<TResult = unknown>(
     // Handle unexpected positionals (tokens not consumed by positional field definitions).
     // allPositionals combines regular positionals with tokens explicitly passed after --,
     // since mergeWithPositionals already consumes both sources in order.
-    const positionalFields = parseResult.extractedFields?.fields.filter((f) => f.positional) ?? [];
-    const hasArrayPositional = positionalFields.some((f) => f.type === "array");
-    const allPositionals = [...parseResult.positionals, ...parseResult.rest];
-    const extraPositionals = hasArrayPositional
-      ? []
-      : allPositionals.slice(positionalFields.length);
-
     if (extraPositionals.length > 0) {
       const subCmdNames = listSubCommandNamesWithAliases(command);
       if (subCmdNames.size > 0) {
-        // Only regular positionals (not after --) that don't start with '-' are treated as
-        // unknown subcommand attempts. Tokens after -- are explicitly positional by the user,
-        // and '-' is a conventional stdin marker, so neither should be misclassified.
-        const unconsumedRegulars = parseResult.positionals.slice(positionalFields.length);
         const unknownCmd = unconsumedRegulars.find((t) => !t.startsWith("-"));
         if (unknownCmd) {
           const similar = findSimilar(unknownCmd, [...subCmdNames]);
