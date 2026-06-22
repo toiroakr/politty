@@ -870,13 +870,12 @@ describe("Redundant positionals", () => {
         run: runFn,
       });
 
-      // "stray" after -- is an explicit positional, not a subcommand attempt
+      // "stray" after -- is an explicit positional, not a subcommand attempt.
+      // strip mode: warns and continues — the command must succeed and run.
       const result = await runCommand(cmd, ["--", "stray"]);
 
-      // Should not be "Unknown subcommand: stray" — no subcommand error
-      if (!result.success) {
-        expect(result.error.message).not.toContain("Unknown subcommand");
-      }
+      expect(result.success).toBe(true);
+      expect(runFn).toHaveBeenCalled();
     });
 
     it("should suggest a similar subcommand name when the token is a close typo", async () => {

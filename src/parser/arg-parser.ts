@@ -189,9 +189,12 @@ export function parseArgs(
     rawGlobalArgs = globalParsed;
   }
 
-  // If no schema, still parse argv to capture positionals (needed to detect unexpected tokens)
+  // If no schema, split on -- manually so that flag-like tokens (e.g. `-x stray`)
+  // are not silently consumed by the parser; everything before -- is a positional.
   if (!extracted) {
-    const parsed = parseArgv(commandArgv, {});
+    const ddIdx = commandArgv.indexOf("--");
+    const positionals = ddIdx >= 0 ? commandArgv.slice(0, ddIdx) : commandArgv;
+    const rest = ddIdx >= 0 ? commandArgv.slice(ddIdx + 1) : [];
     return {
       helpRequested: false,
       helpAllRequested: false,
@@ -199,8 +202,8 @@ export function parseArgs(
       subCommand: undefined,
       remainingArgs: [],
       rawArgs: {},
-      positionals: parsed.positionals,
-      rest: parsed.rest,
+      positionals,
+      rest,
       unknownFlags: [],
       rawGlobalArgs,
     };
