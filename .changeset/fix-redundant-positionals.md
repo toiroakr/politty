@@ -4,7 +4,7 @@
 
 Positional tokens not consumed by the schema are now surfaced rather than silently ignored.
 
-For commands with subcommands, any unconsumed bare token is treated as an unknown subcommand attempt and exits with code 1 (with a did-you-mean suggestion when a similar name exists). Tokens after `--` and dash-prefixed tokens are excluded from this check — they are positional values, not subcommand attempts.
+For commands with subcommands, any unconsumed bare token that is not a known subcommand name is treated as an unknown subcommand attempt and exits with code 1 (with a did-you-mean suggestion when a similar name exists). Tokens after `--`, dash-prefixed tokens, and tokens that match a known subcommand name are excluded from this check — they fall through to the `unknownKeysMode` positional handling instead.
 
 For commands without subcommands, behaviour follows the schema's `unknownKeysMode`:
 
