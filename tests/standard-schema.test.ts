@@ -3,6 +3,7 @@ import * as v from "valibot";
 import { beforeAll, describe, expect, it } from "vitest";
 import { prepareSchema } from "../src/core/standard-schema.js";
 import { arg, defineCommand, extractFields, runCommand } from "../src/index.js";
+import { validateStandard } from "../src/validator/standard-validator.js";
 
 /**
  * Standard Schema support: politty introspects non-Zod schema libraries
@@ -81,6 +82,20 @@ describe("Standard Schema support", () => {
       expect(result.success).toBe(false);
       expect(result.success ? "" : result.error?.message).toContain("count");
     });
+
+    it("enriches validation errors with code/expected/received", async () => {
+      const schema = v.object({ count: v.number() });
+      await prepareSchema(schema);
+      const result = await validateStandard({ count: "x" }, schema);
+
+      expect(result.success).toBe(false);
+      const error = result.success ? undefined : result.errors[0];
+      expect(error?.path).toEqual(["count"]);
+      // Valibot exposes `type` (used as code), `expected`, and `received`.
+      expect(error?.code).toBe("number");
+      expect(error?.expected).toBe("number");
+      expect(error?.received).toBe('"x"');
+    });
   });
 
   describe("ArkType", () => {
@@ -140,6 +155,20 @@ describe("Standard Schema support", () => {
       const cmd = defineCommand({ name: "a", args: schema, run: () => {} });
       const result = await runCommand(cmd, []);
       expect(result.success).toBe(false);
+    });
+
+    it("enriches validation errors with code/expected/received", async () => {
+      const argSchema = type({ count: "number" });
+      await prepareSchema(argSchema);
+      const result = await validateStandard({ count: "x" }, argSchema);
+
+      expect(result.success).toBe(false);
+      const error = result.success ? undefined : result.errors[0];
+      expect(error?.path).toEqual(["count"]);
+      // ArkType exposes `code`, `expected`, and `actual` (mapped to received).
+      expect(error?.code).toBe("domain");
+      expect(error?.expected).toBe("a number");
+      expect(error?.received).toBe("a string");
     });
   });
 

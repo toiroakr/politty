@@ -12,23 +12,53 @@ type StandardIssue = {
   readonly path?: ReadonlyArray<PropertyKey | { key: PropertyKey }> | undefined;
 };
 
+/** Read a property as a string, or undefined when absent / not a string. */
+function readString(source: Record<string, unknown>, key: string): string | undefined {
+  const value = source[key];
+  return typeof value === "string" ? value : undefined;
+}
+
 /**
  * Convert a Standard Schema issue into politty's {@link ValidationError}.
  *
- * Standard Schema only guarantees `message` and `path`, so `code` is reported
- * as a generic `"custom"` and `expected`/`received` are omitted.
+ * The Standard Schema spec only guarantees `message` and `path`, but the common
+ * libraries attach richer fields to their issue objects that we recover on a
+ * best-effort, vendor-agnostic basis (read by name, never branching on vendor):
+ * - `code`: ArkType `code`; Valibot `type` / `kind` (fallback `"custom"`).
+ * - `expected`: ArkType and Valibot both expose `expected`.
+ * - `received`: Valibot `received` (pre-formatted); ArkType `actual`.
+ *
+ * Fields that no library provides stay `undefined`, matching the Zod path's
+ * optional surface.
  */
 function formatStandardIssue(issue: StandardIssue): ValidationError {
-  const path = (issue.path ?? []).map((segment) =>
-    typeof segment === "object" && segment !== null && "key" in segment
-      ? String(segment.key)
-      : String(segment),
-  );
-  return {
+  // Build a plain `string[]`: some libraries (ArkType) return an exotic array
+  // subclass carrying extra own-properties (e.g. `cache`) that would otherwise
+  // leak through `.map`.
+  const path: string[] = [];
+  for (const segment of issue.path ?? []) {
+    path.push(
+      typeof segment === "object" && segment !== null && "key" in segment
+        ? String(segment.key)
+        : String(segment),
+    );
+  }
+
+  const raw = issue as unknown as Record<string, unknown>;
+  const error: ValidationError = {
     path,
     message: issue.message,
-    code: "custom",
+    code: readString(raw, "code") ?? readString(raw, "type") ?? readString(raw, "kind") ?? "custom",
   };
+
+  const expected = readString(raw, "expected");
+  if (expected !== undefined) error.expected = expected;
+
+  // Valibot pre-formats `received`; ArkType uses `actual`.
+  const received = "received" in raw ? raw.received : raw.actual;
+  if (received !== undefined) error.received = received;
+
+  return error;
 }
 
 /**
