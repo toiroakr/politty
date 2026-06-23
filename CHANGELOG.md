@@ -1,5 +1,28 @@
 # politty
 
+## 0.10.0
+
+### Minor Changes
+
+- b45b891: Positional tokens not consumed by the schema are now surfaced rather than silently ignored.
+
+  For commands with subcommands, any unconsumed bare token that is not a known subcommand name is treated as an unknown subcommand attempt and exits with code 1 (with a did-you-mean suggestion when a similar name exists). Tokens after `--`, dash-prefixed tokens, and tokens that match a known subcommand name are excluded from this check — they fall through to the `unknownKeysMode` positional handling instead.
+
+  For commands without subcommands, behaviour follows the schema's `unknownKeysMode`:
+
+  - `strict` (`z.strictObject` / `.strict()`): exits with code 1
+  - `strip` / default (`z.object`): emits a warning and continues
+  - `passthrough` (`z.looseObject` / `.passthrough()`): silently ignores (no change)
+
+  Schema-less commands (no `args` defined) now correctly capture all tokens — including flag-like ones such as `-x` — as positionals so stray tokens are still detected.
+
+### Patch Changes
+
+- ebbd553: Extract shared `resolveLongOption()` for long-option resolution, eliminating duplicated negation rules between argv-parser and subcommand-scanner.
+- 0429277: Unify the options-rendering paths in `src/docs` through a shared `(rows × columns)` intermediate (`toOptionRows` + `emitMarkdownTable`/`emitMarkdownList`). The markdown table and list renderers, their `*FromArray` variants, and `renderArgsTable`'s column-filtered path now share one place where per-option display decisions (negation handling, alias ordering, placeholder resolution) live.
+
+  Rendered output is unchanged except for one cosmetic detail: `renderArgsTable(args, { columns })` now emits the canonical fixed-width table separator (`|--------|...`) instead of header-length, space-padded dashes (`| ------ | ... |`). The two forms render identically as Markdown.
+
 ## 0.9.2
 
 ### Patch Changes
@@ -12,6 +35,7 @@
 
 - 860dbe2: `skills add` now accepts `install` and `skills remove` accepts `uninstall` as aliases, matching the verbs most package-manager-trained users reach for first. Both spellings dispatch to the same command, so existing invocations continue to work; help output lists the aliases under each command.
 - b631ccd: Address Copilot review feedback on `politty/skill`
+
   - `scanSourceDir` now wraps the source directory's `statSync` in try/catch instead of guarding with `existsSync`. Permission/IO errors (EACCES/EPERM) on the source directory are surfaced as `read-failed` ScanErrors with the original error message, where previously they were silently misclassified as `missing-source`.
   - `assertSafeName` in the installer now also rejects names longer than 64 characters, matching the frontmatter schema's documented 1..64 length constraint. The check stays a deliberately independent (defense-in-depth) duplicate of the schema rather than a shared import.
   - `skills list --json` no longer interleaves scan-error summary lines into stdout. The machine-readable JSON payload stays the only thing on stdout in `--json` mode; per-error stderr warnings still fire so operators can see what was skipped. Previously a malformed source SKILL.md could corrupt the JSON output.
@@ -47,6 +71,7 @@
   - `readStampAt` now only swallows ENOENT/ENOTDIR (a missing SKILL.md, or a broken symlink upstream that surfaces as either) and propagates other read failures (EACCES/EPERM/IO). The function gates `clearInstallSlot`/`removeInstalledSlot`'s destructive branches: a silently-`null` permission failure would either let `uninstallSkill` report success after deleting the canonical slot while leaving an unreadable agent slot behind, or let `clearInstallSlot` throw the misleading "looks like a legacy or manual install" message that points users at the wrong remediation. Symmetric with the ENOENT/ENOTDIR-only carve-out `readInstalledOwnership` already uses for the same reason.
 
 - 7a26f2b: Add `politty/skill` module for managing SKILL.md-based agent skills
+
   - `withSkillCommand(cli, { sourceDir, package })` wraps a command with `skills sync | add | remove | list` subcommands
   - Frontmatter is validated against the Agent Skills specification (https://agentskills.io/specification): `name` is lowercase-hyphenated, `description` <=1024 chars, `metadata` is a string->string map, and `license`/`compatibility`/`allowed-tools` are accepted. Unknown top-level keys round-trip via `.passthrough()`
   - Installer populates `.agents/skills/<name>` (canonical) and each agent-specific dir (e.g. `.claude/skills/<name>`) from the source; the materialization is controlled by `mode`: `"symlink"` (default — source updates propagate live; throws with guidance to retry with `"copy"` on filesystems without symlink support, e.g. Windows without Developer Mode) or `"copy"` (recursive copy that works anywhere but requires re-running `sync` to propagate updates). Agent-specific slots route through the canonical slot so one `sync` swaps all hops at once
@@ -125,12 +150,14 @@
   Politty-based CLIs can generate bundled workers with `generateBundledCompletionWorker()` from `politty/completion` or the `politty generate-worker` package-script CLI.
 
   Existing users:
+
   - Existing `eval "$(mycli completion bash)"` and `eval "$(mycli completion zsh)"` setup keeps working and now uses dispatcher mode by default.
   - Existing fish users can rerun `mycli completion fish --install` after upgrading to refresh the fish autoload file.
   - If you saved a generated static completion script and want the new dispatcher behavior, regenerate it with `mycli completion <shell>`.
   - If you prefer the previous command-tree script that does not resolve the active binary at TAB time, use `mycli completion <shell> --static`.
 
   New users:
+
   - Use `mycli completion bash`, `mycli completion zsh`, or `mycli completion fish --install` for the default dispatcher setup.
   - For published CLIs, generate and ship a bundled worker artifact with `politty generate-worker --bin dist/cli/index.mjs --program mycli --shell zsh --verify` to avoid first-TAB worker generation.
   - For package layouts that cannot be represented with package-relative worker paths, enable `bundledWorker.queryCommand` so the dispatcher can ask the CLI for `__completion-worker-path <shell>` on the miss path.
@@ -160,6 +187,7 @@
 - 6f75710: Add auto-refresh for shell completion caches.
 
   Generated bash/zsh/fish scripts now embed a `# politty-bin-sig: <mtime>` header. The cache is regenerated automatically through two complementary paths:
+
   - A small rc-loader snippet (printed by `<program> completion <shell> --loader`) that bash/zsh source on every shell startup. It compares the binary's mtime against the cache header and rewrites the cache when they differ before sourcing it.
   - A detached `__refresh-completion` child that `runMain` spawns on every CLI invocation, keeping caches warm even when shells aren't restarted.
 
@@ -169,6 +197,7 @@
 
 - 83ca319: Add a `negation` option for boolean fields. Set it to a string (e.g. `"disable-cache"`) to replace the default `--no-<name>` form with a custom name, to `true` to keep the default `--no-<name>` and advertise it in help/docs/completions, or to `false` to disable negation entirely (both the default `--no-*` and any custom name are rejected). An optional `negationDescription` renders a separate row in help and generated docs. Help output, generated documentation, and shell completions (bash/zsh/fish) all reflect the configuration. Non-boolean fields are rejected at the type level and at runtime.
 - 98de327: Fix Windows path separators leaking into generated docs:
+
   - Cross-file Markdown links now use forward slashes (`commands/config.md#config`) instead of `commands\config.md`, so links render correctly on every Markdown renderer.
   - Index marker scopes embedded in `rootDoc` files (`<!-- politty:index:<path>:start -->`) are normalized too, so docs generated on Windows can be regenerated on macOS/Linux without silently skipping the index update.
 
@@ -389,6 +418,7 @@
 - b4d3be6: Initial release of politty - A type-safe CLI framework built on Zod.
 
   Features:
+
   - Type-safe argument parsing with Zod schemas
   - Positional arguments and named options (flags)
   - Subcommands with infinite nesting and lazy loading
