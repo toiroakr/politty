@@ -938,6 +938,31 @@ describe("Redundant positionals", () => {
       expect(runFn).toHaveBeenCalled();
     });
 
+    it("should not report 'unknown subcommand' for a known subcommand name appearing after consumed positionals", async () => {
+      using warnSpy = spyOnConsoleWarn();
+      const runFn = vi.fn();
+      const subCmd = defineCommand({ name: "sub", run: () => {} });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({ target: arg(z.string(), { positional: true }) }),
+        subCommands: { sub: subCmd },
+        run: runFn,
+      });
+
+      // "file.txt" is consumed by `target`; "sub" is an extra positional that
+      // happens to share a name with a known subcommand.
+      // strip mode: should warn about it, NOT produce "Unknown subcommand: sub"
+      const result = await runCommand(cmd, ["file.txt", "sub"]);
+
+      expect(result.success).toBe(true);
+      expect(runFn).toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalled();
+      if (result.success === false) {
+        expect(result.error.message).not.toContain("Unknown subcommand");
+      }
+    });
+
     it("should suggest a similar subcommand name when the token is a close typo", async () => {
       const subCmd = defineCommand({ name: "deploy", run: () => {} });
       const cmd = defineCommand({

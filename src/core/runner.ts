@@ -613,7 +613,9 @@ async function runCommandInternal<TResult = unknown>(
     if (extraPositionals.length > 0) {
       const subCmdNames = listSubCommandNamesWithAliases(command);
       if (subCmdNames.size > 0) {
-        const unknownCmd = unconsumedRegulars.find((t) => !t.startsWith("-"));
+        const unknownCmd = unconsumedRegulars.find(
+          (t) => !t.startsWith("-") && !subCmdNames.has(t),
+        );
         if (unknownCmd) {
           const similar = findSimilar(unknownCmd, [...subCmdNames]);
           const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
