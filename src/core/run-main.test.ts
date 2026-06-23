@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { spyOnConsoleError, spyOnConsoleLog } from "../../tests/utils/console.js";
+import { spyOnConsoleError, spyOnConsoleLog, spyOnConsoleWarn } from "../../tests/utils/console.js";
 import { arg } from "./arg-registry.js";
 import { defineCommand } from "./command.js";
 import { runCommand, runMain } from "./runner.js";
@@ -826,6 +826,291 @@ describe("runMain onUnknownSubcommand", () => {
     expect(onUnknownSubcommand).toHaveBeenCalled();
     expect(setup).toHaveBeenCalled();
     expect(cleanup).toHaveBeenCalled();
+  });
+});
+
+describe("Redundant positionals", () => {
+  describe("command with subcommands", () => {
+    it("should reject an unrecognized bare token as unknown subcommand when command also has run", async () => {
+      const runFn = vi.fn();
+      const subRunFn = vi.fn();
+
+      const subCmd = defineCommand({ name: "sub", run: subRunFn });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({
+          verbose: z.boolean().default(false),
+        }),
+        subCommands: { sub: subCmd },
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["unknown-token", "--verbose"]);
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      expect(runFn).not.toHaveBeenCalled();
+      expect(subRunFn).not.toHaveBeenCalled();
+      if (!result.success) {
+        expect(result.error.message).toContain("Unknown subcommand");
+        expect(result.error.message).toContain("unknown-token");
+      }
+    });
+
+    it("should show help for run-less command when all positionals are consumed by an array field", async () => {
+      using consoleSpy = spyOnConsoleLog();
+      const subCmd = defineCommand({ name: "sub", run: () => {} });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({ files: arg(z.array(z.string()), { positional: true }) }),
+        subCommands: { sub: subCmd },
+        // no run — routing-only command
+      });
+
+      // file1 and file2 are consumed by the array positional; they should NOT
+      // be misclassified as unknown-subcommand attempts.
+      const result = await runCommand(cmd, ["file1", "file2"]);
+
+      expect(result.success).toBe(true);
+      expect(consoleSpy).toHaveBeenCalled(); // help was displayed
+    });
+
+    it("should warn (not show help) when a rest token is unconsumed in a run-less routing command", async () => {
+      using consoleSpy = spyOnConsoleLog();
+      using warnSpy = spyOnConsoleWarn();
+      const subCmd = defineCommand({ name: "sub", run: () => {} });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        subCommands: { sub: subCmd },
+        // no run — routing-only command
+      });
+
+      // "stray" after -- is unconsumed. The routing command must NOT silently
+      // show help but must surface the token via the strip-mode warning path.
+      const result = await runCommand(cmd, ["--", "stray"]);
+
+      expect(consoleSpy).not.toHaveBeenCalled(); // help was NOT displayed
+      expect(warnSpy).toHaveBeenCalled(); // strip-mode warning was emitted
+      expect(result.success).toBe(true); // strip mode continues
+    });
+
+    it("should reject an unrecognized bare token as unknown subcommand when command has no run", async () => {
+      const subRunFn = vi.fn();
+      const subCmd = defineCommand({ name: "sub", run: subRunFn });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        subCommands: { sub: subCmd },
+        // no run — routing-only command
+      });
+
+      const result = await runCommand(cmd, ["unknown-token"]);
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      expect(subRunFn).not.toHaveBeenCalled();
+      if (!result.success) {
+        expect(result.error.message).toContain("Unknown subcommand");
+        expect(result.error.message).toContain("unknown-token");
+      }
+    });
+
+    it("should not misclassify a token after -- as an unknown subcommand", async () => {
+      using _consoleSpy = spyOnConsoleError();
+      const runFn = vi.fn();
+      const subCmd = defineCommand({ name: "sub", run: () => {} });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({ verbose: z.boolean().default(false) }),
+        subCommands: { sub: subCmd },
+        run: runFn,
+      });
+
+      // "stray" after -- is an explicit positional, not a subcommand attempt.
+      // strip mode: warns and continues — the command must succeed and run.
+      const result = await runCommand(cmd, ["--", "stray"]);
+
+      expect(result.success).toBe(true);
+      expect(runFn).toHaveBeenCalled();
+    });
+
+    it("should not report 'unknown subcommand' for a known subcommand name appearing after consumed positionals", async () => {
+      using warnSpy = spyOnConsoleWarn();
+      const runFn = vi.fn();
+      const subCmd = defineCommand({ name: "sub", run: () => {} });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({ target: arg(z.string(), { positional: true }) }),
+        subCommands: { sub: subCmd },
+        run: runFn,
+      });
+
+      // "file.txt" is consumed by `target`; "sub" is an extra positional that
+      // happens to share a name with a known subcommand.
+      // strip mode: should warn about it, NOT produce "Unknown subcommand: sub"
+      const result = await runCommand(cmd, ["file.txt", "sub"]);
+
+      expect(result.success).toBe(true);
+      expect(runFn).toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalled();
+      if (result.success === false) {
+        expect(result.error.message).not.toContain("Unknown subcommand");
+      }
+    });
+
+    it("should suggest a similar subcommand name when the token is a close typo", async () => {
+      const subCmd = defineCommand({ name: "deploy", run: () => {} });
+      const cmd = defineCommand({
+        name: "cmd",
+        subCommands: { deploy: subCmd },
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["depoy"]); // typo of "deploy"
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain("deploy");
+      }
+    });
+  });
+
+  describe("command without subcommands", () => {
+    it("should warn about unexpected positional with default z.object (strip mode)", async () => {
+      using consoleSpy = spyOnConsoleWarn();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({
+          verbose: z.boolean().default(false),
+        }),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["stray-token"]);
+
+      expect(consoleSpy).toHaveBeenCalled();
+      const output = consoleSpy.mock.calls[0]?.[0] ?? "";
+      expect(output).toContain("Warning");
+      expect(output).toContain("stray-token");
+      expect(runFn).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+    });
+
+    it("should error on unexpected positional with z.object().strict() (strict mode)", async () => {
+      using consoleSpy = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z
+          .object({
+            verbose: z.boolean().default(false),
+          })
+          .strict(),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["stray-token"]);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      if (!result.success) {
+        expect(result.error.message).toContain("stray-token");
+      }
+    });
+
+    it("should silently ignore unexpected positional with z.looseObject (passthrough mode)", async () => {
+      using consoleSpy = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.looseObject({
+          verbose: z.boolean().default(false),
+        }),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["stray-token"]);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(runFn).toHaveBeenCalled();
+      expect(result.success).toBe(true);
+    });
+
+    it("should error on a token after -- that is not consumed by any positional field (strict mode)", async () => {
+      using consoleSpy = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({ verbose: z.boolean().default(false) }).strict(),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--", "stray-token"]);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      if (!result.success) {
+        expect(result.error.message).toContain("stray-token");
+      }
+    });
+
+    it("should not error when all positionals are consumed by positional fields", async () => {
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z
+          .object({
+            target: arg(z.string(), { positional: true }),
+          })
+          .strict(),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["value"]);
+
+      expect(runFn).toHaveBeenCalledWith({ target: "value" });
+      expect(result.success).toBe(true);
+    });
+
+    it("should error on extra positionals beyond positional field count (strict mode)", async () => {
+      using consoleSpy = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z
+          .object({
+            target: arg(z.string(), { positional: true }),
+          })
+          .strict(),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["value", "extra-token"]);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(1);
+      if (!result.success) {
+        expect(result.error.message).toContain("extra-token");
+      }
+    });
   });
 });
 

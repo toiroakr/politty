@@ -10,6 +10,11 @@ export type ConsoleErrorSpy = ReturnType<typeof vi.spyOn> & {
   getLogs: () => string[];
 };
 
+export type ConsoleWarnSpy = ReturnType<typeof vi.spyOn> & {
+  warn: (...args: unknown[]) => void;
+  getLogs: () => string[];
+};
+
 const formatConsoleArg = (arg: unknown): string => {
   if (typeof arg === "string") return arg;
   if (typeof arg === "number" || typeof arg === "boolean" || typeof arg === "bigint") {
@@ -59,4 +64,19 @@ export const spyOnConsoleError = (): ConsoleErrorSpy => {
   spy.getLogs = () => logs;
 
   return spy as ConsoleErrorSpy;
+};
+
+export const spyOnConsoleWarn = (): ConsoleWarnSpy => {
+  const logs: string[] = [];
+  const spy = vi.spyOn(console, "warn").mockImplementation((...args: unknown[]) => {
+    logs.push(args.map(formatConsoleArg).join(" "));
+  }) as ConsoleWarnSpy;
+
+  spy.warn = (...args: unknown[]) => {
+    console.warn(...args);
+  };
+
+  spy.getLogs = () => logs;
+
+  return spy as ConsoleWarnSpy;
 };

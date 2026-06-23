@@ -36,6 +36,8 @@ export interface ParseResult {
   rawArgs: Record<string, unknown>;
   /** Positional argument values */
   positionals: string[];
+  /** Arguments after -- (passed as explicit positionals) */
+  rest: string[];
   /** Unknown flags that were detected */
   unknownFlags: string[];
   /** Extracted fields from schema (for internal use) */
@@ -93,6 +95,7 @@ export function parseArgs(
           remainingArgs: scanResult.tokensAfterSubcommand,
           rawArgs: {},
           positionals: [],
+          rest: [],
           unknownFlags: scanResult.suppressedTokens,
           rawGlobalArgs,
         };
@@ -109,6 +112,7 @@ export function parseArgs(
           remainingArgs: argv.slice(1),
           rawArgs: {},
           positionals: [],
+          rest: [],
           unknownFlags: [],
         };
       }
@@ -167,6 +171,7 @@ export function parseArgs(
       remainingArgs: [],
       rawArgs: {},
       positionals: [],
+      rest: [],
       unknownFlags: [],
     };
   }
@@ -184,8 +189,12 @@ export function parseArgs(
     rawGlobalArgs = globalParsed;
   }
 
-  // If no schema, return minimal result (but include any parsed global args)
+  // If no schema, split on -- manually so that flag-like tokens (e.g. `-x stray`)
+  // are not silently consumed by the parser; everything before -- is a positional.
   if (!extracted) {
+    const ddIdx = commandArgv.indexOf("--");
+    const positionals = ddIdx >= 0 ? commandArgv.slice(0, ddIdx) : commandArgv;
+    const rest = ddIdx >= 0 ? commandArgv.slice(ddIdx + 1) : [];
     return {
       helpRequested: false,
       helpAllRequested: false,
@@ -193,7 +202,8 @@ export function parseArgs(
       subCommand: undefined,
       remainingArgs: [],
       rawArgs: {},
-      positionals: [],
+      positionals,
+      rest,
       unknownFlags: [],
       rawGlobalArgs,
     };
@@ -258,6 +268,7 @@ export function parseArgs(
     remainingArgs: [],
     rawArgs,
     positionals: parsed.positionals,
+    rest: parsed.rest,
     unknownFlags,
     extractedFields: extracted,
     rawGlobalArgs,
