@@ -877,6 +877,26 @@ describe("Redundant positionals", () => {
       expect(consoleSpy).toHaveBeenCalled(); // help was displayed
     });
 
+    it("should warn (not show help) when a rest token is unconsumed in a run-less routing command", async () => {
+      using consoleSpy = spyOnConsoleLog();
+      using warnSpy = spyOnConsoleWarn();
+      const subCmd = defineCommand({ name: "sub", run: () => {} });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        subCommands: { sub: subCmd },
+        // no run — routing-only command
+      });
+
+      // "stray" after -- is unconsumed. The routing command must NOT silently
+      // show help but must surface the token via the strip-mode warning path.
+      const result = await runCommand(cmd, ["--", "stray"]);
+
+      expect(consoleSpy).not.toHaveBeenCalled(); // help was NOT displayed
+      expect(warnSpy).toHaveBeenCalled(); // strip-mode warning was emitted
+      expect(result.success).toBe(true); // strip mode continues
+    });
+
     it("should reject an unrecognized bare token as unknown subcommand when command has no run", async () => {
       const subRunFn = vi.fn();
       const subCmd = defineCommand({ name: "sub", run: subRunFn });

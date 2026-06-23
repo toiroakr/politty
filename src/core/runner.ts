@@ -565,14 +565,14 @@ async function runCommandInternal<TResult = unknown>(
       : parseResult.positionals.slice(positionalFields.length);
 
     // If command has subcommands but none specified, show help.
-    // If there is an unrecognised bare token, fall through so the
-    // unexpected-positionals check below surfaces it as "Unknown subcommand".
+    // If there are any unconsumed positionals (including tokens after --), fall
+    // through so the unexpected-positionals check below surfaces them.
     const subCmds = listSubCommands(command);
     if (
       subCmds.length > 0 &&
       !parseResult.subCommand &&
       !command.run &&
-      !unconsumedRegulars.some((t) => !t.startsWith("-"))
+      extraPositionals.length === 0
     ) {
       const help = generateHelp(command, {
         showSubcommands: options.showSubcommands ?? true,
