@@ -816,6 +816,28 @@ describe("runMain onUnknownSubcommand", () => {
     expect(exitSpy).toHaveBeenCalledWith(5);
   });
 
+  it("does not dispatch nested plugin past a stripped global suppressed negation", async () => {
+    using _argv = useArgv(["node", "test", "parent", "--no-cache", "plugin-name"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    using _logSpy = spyOnConsoleLog();
+    using errorSpy = spyOnConsoleError();
+
+    const onUnknownSubcommand = vi.fn().mockReturnValue(0);
+    const child = defineCommand({ name: "child", run: () => {} });
+    const parent = defineCommand({ name: "parent", subCommands: { child } });
+    const cmd = defineCommand({ name: "test", subCommands: { parent } });
+
+    await runMain(cmd, {
+      onUnknownSubcommand,
+      globalArgs: z.object({
+        cache: arg(z.boolean().default(true)),
+      }),
+    });
+
+    expect(onUnknownSubcommand).not.toHaveBeenCalled();
+    expect(errorSpy.getLogs().join("\n")).toContain("Unknown option: no-cache");
+  });
+
   it("forwards --help to a nested plugin instead of showing parent help", async () => {
     using _argv = useArgv(["node", "test", "parent", "plugin-name", "--help"]);
     using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);

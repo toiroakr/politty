@@ -435,7 +435,9 @@ async function runCommandInternal<TResult = unknown>(
     if (options.onUnknownSubcommand && nestedCommandPath.length > 0) {
       const knownSubCommands = listSubCommandNamesWithAliases(command);
       if (knownSubCommands.size > 0) {
-        const positionalIndex = findFirstPositionalIndex(argv, options._globalExtracted);
+        const positionalIndex = findFirstPositionalIndex(argv, options._globalExtracted, {
+          stopOnSuppressedNegation: true,
+        });
         const name = positionalIndex >= 0 ? argv[positionalIndex] : undefined;
         if (name && !knownSubCommands.has(name)) {
           const forwardArgs = argv.slice(positionalIndex + 1);
