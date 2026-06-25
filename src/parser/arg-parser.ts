@@ -311,9 +311,9 @@ function separateGlobalArgs(
   // recognised as local when the field is named `fooBar` (cliName `foo-bar`).
   const localFieldNames = new Set(localExtracted?.fields.map((f) => f.name) ?? []);
   const localCliNames = new Set(localExtracted?.fields.map((f) => f.cliName) ?? []);
-  const localAliasMapKeys = localExtracted
-    ? new Set(buildParserOptions(localExtracted).aliasMap?.keys() ?? [])
-    : new Set<string>();
+  const localParserOptions = localExtracted ? buildParserOptions(localExtracted) : undefined;
+  const localAliasMapKeys = new Set(localParserOptions?.aliasMap?.keys() ?? []);
+  const localNegationMapKeys = new Set(localParserOptions?.negationMap?.keys() ?? []);
 
   const globalTokens: string[] = [];
   const commandTokens: string[] = [];
@@ -344,7 +344,9 @@ function separateGlobalArgs(
         localCliNames.has(withoutDashes) ||
         localCliNames.has(flagName) ||
         localAliasMapKeys.has(withoutDashes) ||
-        localAliasMapKeys.has(flagName);
+        localAliasMapKeys.has(flagName) ||
+        localNegationMapKeys.has(withoutDashes) ||
+        localNegationMapKeys.has(flagName);
 
       if (isGlobal && !isLocalCollision) {
         // collectGlobalFlag returns 1 or 2; subtract 1 because the for-loop increments

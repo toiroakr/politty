@@ -143,11 +143,14 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         // Block mixed form: --no-dryRun (kebab prefix + camelCase)
         if (flagName === flagName.toLowerCase()) {
           const resolvedName = aliasMap.get(flagName) ?? flagName;
-          if (booleanFlags.has(resolvedName) && !defaultNegationDisabledFields.has(resolvedName)) {
-            // "no-dry-run" itself is a defined field → treat as that field, not negation
+          if (booleanFlags.has(resolvedName)) {
             const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
             if (!definedNames.has(asIsResolved)) {
-              setOption(flagName, false);
+              if (defaultNegationDisabledFields.has(resolvedName)) {
+                setOption(withoutDashes, true);
+              } else {
+                setOption(flagName, false);
+              }
               i++;
               continue;
             }
@@ -163,11 +166,14 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
       ) {
         const camelFlagName = withoutDashes[2]!.toLowerCase() + withoutDashes.slice(3);
         const resolvedName = aliasMap.get(camelFlagName) ?? camelFlagName;
-        if (booleanFlags.has(resolvedName) && !defaultNegationDisabledFields.has(resolvedName)) {
-          // "noDryRun" itself is a defined field → treat as that field, not negation
+        if (booleanFlags.has(resolvedName)) {
           const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
           if (!definedNames.has(asIsResolved)) {
-            setOption(camelFlagName, false);
+            if (defaultNegationDisabledFields.has(resolvedName)) {
+              setOption(withoutDashes, true);
+            } else {
+              setOption(camelFlagName, false);
+            }
             i++;
             continue;
           }

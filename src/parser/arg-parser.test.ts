@@ -29,6 +29,16 @@ describe("ArgParser", () => {
       expect(result.options["no-cache"]).toBe(true);
     });
 
+    it("should not consume positionals after disabled --no-flag in direct parseArgv usage", () => {
+      const result = parseArgv(["--no-cache", "input.txt"], {
+        booleanFlags: new Set(["cache"]),
+      });
+
+      expect(result.options.cache).toBeUndefined();
+      expect(result.options["no-cache"]).toBe(true);
+      expect(result.positionals).toEqual(["input.txt"]);
+    });
+
     it("should support --no-flag in direct parseArgv usage when explicitly enabled", () => {
       const result = parseArgv(["--no-cache"], {
         booleanFlags: new Set(["cache"]),

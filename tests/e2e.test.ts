@@ -1066,6 +1066,34 @@ describe("E2E Tests", () => {
       }
     });
 
+    it("lets local custom negation shadow a disabled global default negation token", async () => {
+      const captured: Record<string, unknown> = {};
+      const globalArgs = z
+        .object({
+          cache: arg(z.boolean().default(true)),
+        })
+        .strict();
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              feature: arg(z.boolean().default(true), { negation: "no-cache" }),
+            }),
+            run: (args) => {
+              Object.assign(captured, args);
+            },
+          }),
+        },
+      });
+
+      const result = await runCommand(cmd, ["build", "--no-cache"], { globalArgs });
+
+      expect(result.success).toBe(true);
+      expect(captured.feature).toBe(false);
+    });
+
     it("advertises default --no-X in help when negation is true", async () => {
       using console = spyOnConsoleLog();
       const cmd = defineCommand({
