@@ -1232,6 +1232,39 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.profile).toBe("prod");
     });
 
+    it("skips suppressed global negations while pre-scanning globals before descent", () => {
+      // Runtime's global scan skips a default `--no-*` negation when that
+      // boolean did not opt in, then keeps scanning later global tokens.
+      // Completion must do the same or a shadowing local boolean can overwrite
+      // a later global scalar value during subcommand descent.
+      const globals = z.object({
+        cache: arg(z.boolean().default(true)),
+        profile: arg(z.string().optional()),
+      });
+      const build = defineCommand({
+        name: "build",
+        args: z.object({
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const parentWithShadow = defineCommand({
+        name: "mycli",
+        args: z.object({
+          profile: arg(z.boolean().default(false)),
+        }),
+        subCommands: { build },
+      });
+      const ctx = parseCompletionContext(
+        ["--no-cache", "--profile", "prod", "build", "--field", ""],
+        parentWithShadow,
+        globals,
+      );
+      expect(ctx.subcommandPath).toEqual(["build"]);
+      expect(ctx.parsedArgs.profile).toBe("prod");
+      expect(ctx.parsedArgs.cache).toBeUndefined();
+    });
+
     it("migrates a parent's shadowed-global value into globals on descent", () => {
       // Runtime's `scanForSubcommand` only knows the global schema, so a
       // global-named flag placed at a parent frame that has a child is

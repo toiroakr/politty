@@ -203,7 +203,13 @@ function parsePreSubGlobals(
     // list keeps local-precedence rules dormant — there are no locals to
     // shadow against during the pre-sub scan.
     const opt = findOption(globalOptions, parsed);
-    if (!opt) break;
+    if (!opt) {
+      if (isSuppressedDefaultNegation(globalOptions, parsed)) {
+        i++;
+        continue;
+      }
+      break;
+    }
     if (opt.takesValue) {
       if (hasInlineValue(word)) {
         const eqIdx = word.indexOf("=");
@@ -392,10 +398,13 @@ function hasInlineValue(word: string): boolean {
  * callers must say so via `isLong` to prevent a short option from being read
  * as a negation.
  */
-function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong: boolean): boolean {
+function isDefaultBooleanNegationToken(
+  opt: CompletableOption,
+  name: string,
+  isLong: boolean,
+): boolean {
   if (!isLong) return false;
   if (opt.valueType !== "boolean") return false;
-  if (opt.defaultNegationAccepted !== true) return false;
   const candidates = [opt.cliName, ...(opt.alias ?? [])];
   for (const c of candidates) {
     const hyphenated = `no-${c}`;
@@ -403,6 +412,21 @@ function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong:
     if (name === toCamelCase(hyphenated)) return true;
   }
   return false;
+}
+
+function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong: boolean): boolean {
+  return opt.defaultNegationAccepted === true && isDefaultBooleanNegationToken(opt, name, isLong);
+}
+
+function isSuppressedDefaultNegation(
+  options: readonly CompletableOption[],
+  parsed: ParsedOption,
+): boolean {
+  return options.some(
+    (opt) =>
+      opt.defaultNegationAccepted !== true &&
+      isDefaultBooleanNegationToken(opt, parsed.name, parsed.isLong),
+  );
 }
 
 /** True when `source` is hyphenated and its camelCase form equals `name`. */
