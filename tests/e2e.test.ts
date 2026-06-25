@@ -842,6 +842,24 @@ describe("E2E Tests", () => {
       expect(captured.cache).toBe(true);
     });
 
+    it("should not accept default --no-X when negation is unset", async () => {
+      const captured: Record<string, unknown> = {};
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          cache: arg(z.boolean().default(true)),
+        }),
+        run: (args) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--no-cache"]);
+      expect(result.success).toBe(true);
+      expect(captured.cache).toBe(true);
+    });
+
     it("should show custom negation in help output", async () => {
       using console = spyOnConsoleLog();
 
@@ -1043,7 +1061,7 @@ describe("E2E Tests", () => {
       expect(output).toMatch(/--pretty\s+\/\s+--no-pretty/);
     });
 
-    it("still accepts default --no-X when negation is true (parser unchanged)", async () => {
+    it("accepts default --no-X when negation is true", async () => {
       const captured: Record<string, unknown> = {};
       const cmd = defineCommand({
         name: "test",

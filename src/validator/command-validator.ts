@@ -214,15 +214,11 @@ function checkDuplicateNegations(
       }
     }
 
-    // Reserve implicit default negation tokens so a custom `negation: "no-X"`
+    // Reserve opt-in default negation tokens so a custom `negation: "no-X"`
     // cannot silently shadow another field's default `--no-X`. Uses the
     // first-wins `claim()` helper so an earlier, higher-priority field/cliName
     // claim isn't replaced by a default negation slot.
-    if (
-      field.type === "boolean" &&
-      field.negation !== false &&
-      typeof field.negation !== "string"
-    ) {
+    if (field.type === "boolean" && field.negation === true) {
       const defaultKebab = `no-${field.cliName}`;
       claim(defaultKebab, field.name, "default negation");
       // Derive the camelCase form from cliName via toCamelCase so kebab-case

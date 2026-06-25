@@ -97,8 +97,7 @@ export interface ResolvedFieldMeta {
    *   help, generated docs, and shell completions.
    * - `false`: neither the default `--no-<cliName>` nor any custom name is
    *   accepted; the field only responds to the positive flag.
-   * - `undefined`: the default `--no-<cliName>` is accepted by the parser
-   *   but hidden from help/docs/completions.
+   * - `undefined`: no negation form is accepted or shown.
    *
    * Only applies to boolean fields; populated as `undefined` otherwise.
    */
@@ -489,8 +488,8 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   // Validate and normalize `negation` (only meaningful for boolean fields).
   // Accepts:
   //   - string: custom negation CLI name (suppresses default `--no-*`)
-  //   - true:   keep default `--no-*` and advertise it in help/docs/completion
-  //   - false:  disable negation entirely (default `--no-*` also rejected)
+  //   - true:   accept default `--no-*` and advertise it in help/docs/completion
+  //   - false:  disable negation entirely (same as the default, but explicit)
   const rawNegation = (argMeta as { negation?: unknown } | undefined)?.negation;
   let negation: string | boolean | undefined;
   if (rawNegation !== undefined && rawNegation !== null) {

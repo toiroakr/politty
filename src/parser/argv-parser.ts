@@ -36,11 +36,10 @@ export interface ParserOptions {
    */
   negationMap?: Map<string, string>;
   /**
-   * Canonical field names that have a custom `negation` configured.
-   * For these fields the default `--no-<name>` / `--no<Name>` negation
-   * forms are suppressed.
+   * Canonical field names whose default `--no-<name>` / `--no<Name>`
+   * negation forms are suppressed.
    */
-  customNegatedFields?: Set<string>;
+  defaultNegationDisabledFields?: Set<string>;
 }
 
 /**
@@ -52,7 +51,7 @@ export interface ParserOptions {
  * - Combined short options: -abc (treated as -a -b -c if all are boolean)
  * - Positional arguments
  * - -- to stop parsing options
- * - Boolean negation: --no-flag, --noFlag (requires `booleanFlags`)
+ * - Boolean negation: --no-flag, --noFlag (requires `booleanFlags` and `negation: true`)
  *
  * **Note:** When using negation detection (`--noFlag` / `--no-flag`),
  * supply `definedNames` so that options whose names happen to start with
@@ -71,7 +70,7 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     arrayFlags = new Set(),
     definedNames = new Set(),
     negationMap = new Map(),
-    customNegatedFields = new Set(),
+    defaultNegationDisabledFields = new Set(),
   } = options;
 
   const result: ParsedArgv = {
@@ -141,7 +140,7 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         // Block mixed form: --no-dryRun (kebab prefix + camelCase)
         if (flagName === flagName.toLowerCase()) {
           const resolvedName = aliasMap.get(flagName) ?? flagName;
-          if (booleanFlags.has(resolvedName) && !customNegatedFields.has(resolvedName)) {
+          if (booleanFlags.has(resolvedName) && !defaultNegationDisabledFields.has(resolvedName)) {
             // "no-dry-run" itself is a defined field → treat as that field, not negation
             const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
             if (!definedNames.has(asIsResolved)) {
@@ -161,7 +160,7 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
       ) {
         const camelFlagName = withoutDashes[2]!.toLowerCase() + withoutDashes.slice(3);
         const resolvedName = aliasMap.get(camelFlagName) ?? camelFlagName;
-        if (booleanFlags.has(resolvedName) && !customNegatedFields.has(resolvedName)) {
+        if (booleanFlags.has(resolvedName) && !defaultNegationDisabledFields.has(resolvedName)) {
           // "noDryRun" itself is a defined field → treat as that field, not negation
           const asIsResolved = aliasMap.get(withoutDashes) ?? withoutDashes;
           if (!definedNames.has(asIsResolved)) {
@@ -262,7 +261,7 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
   const arrayFlags = new Set<string>();
   const definedNames = new Set<string>();
   const negationMap = new Map<string, string>();
-  const customNegatedFields = new Set<string>();
+  const defaultNegationDisabledFields = new Set<string>();
 
   // First pass: collect all canonical field names
   for (const field of extracted.fields) {
@@ -310,14 +309,11 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
     }
 
     // Register negation behavior for boolean fields.
-    //   - string: replace default `--no-X` with the custom name.
-    //   - false:  suppress default `--no-X` entirely.
-    //   - true / undefined: parser accepts default `--no-X` (no change needed).
-    if (
-      field.type === "boolean" &&
-      (typeof field.negation === "string" || field.negation === false)
-    ) {
-      customNegatedFields.add(field.name);
+    //   - string: accept only the custom name.
+    //   - true:   accept the default `--no-X` form.
+    //   - false / undefined: suppress the default `--no-X` form.
+    if (field.type === "boolean" && field.negation !== true) {
+      defaultNegationDisabledFields.add(field.name);
       if (typeof field.negation === "string") {
         negationMap.set(field.negation, field.name);
         // Also accept the camelCase variant if the negation name is hyphenated
@@ -331,7 +327,14 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
     }
   }
 
-  return { aliasMap, booleanFlags, arrayFlags, definedNames, negationMap, customNegatedFields };
+  return {
+    aliasMap,
+    booleanFlags,
+    arrayFlags,
+    definedNames,
+    negationMap,
+    defaultNegationDisabledFields,
+  };
 }
 
 /**

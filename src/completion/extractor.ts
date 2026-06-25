@@ -124,11 +124,9 @@ function fieldToOption(
   field: ResolvedFieldMeta,
   pending: PendingExpandTarget[],
 ): CompletableOption {
-  // Runtime accepts the implicit `--no-<cliName>` form only when `negation`
-  // is undefined or `true`. A custom-string or explicit `false` disables
-  // the default form.
-  const defaultNegationAccepted =
-    field.type === "boolean" && (field.negation === undefined || field.negation === true);
+  // Runtime accepts the default `--no-<cliName>` form only when `negation`
+  // is explicitly true. A custom string replaces it; false or unset disables it.
+  const defaultNegationAccepted = field.type === "boolean" && field.negation === true;
 
   const opt: CompletableOption = {
     name: field.name,

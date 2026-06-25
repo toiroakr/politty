@@ -789,11 +789,25 @@ describe("ArgParser", () => {
       expect(() => parseArgs([], cmd)).toThrow(/conflicts with the same field's own alias/);
     });
 
-    it("should throw when custom negation shadows another field's implicit `--no-X`", () => {
+    it("should allow custom negation that matches another field's disabled-by-default `--no-X`", () => {
       const cmd = defineCommand({
         name: "test-cmd",
         args: z.object({
           color: arg(z.boolean().default(true)),
+          cache: arg(z.boolean().default(true), { negation: "no-color" }),
+        }),
+      });
+
+      const result = parseArgs(["--no-color"], cmd);
+      expect(result.rawArgs.cache).toBe(false);
+      expect(result.rawArgs.color).toBeUndefined();
+    });
+
+    it("should throw when custom negation shadows another field's opted-in `--no-X`", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          color: arg(z.boolean().default(true), { negation: true }),
           cache: arg(z.boolean().default(true), { negation: "no-color" }),
         }),
       });
@@ -804,11 +818,11 @@ describe("ArgParser", () => {
       );
     });
 
-    it("should throw when custom negation shadows another field's implicit `--noX` (camelCase)", () => {
+    it("should throw when custom negation shadows another field's opted-in `--noX` (camelCase)", () => {
       const cmd = defineCommand({
         name: "test-cmd",
         args: z.object({
-          color: arg(z.boolean().default(true)),
+          color: arg(z.boolean().default(true), { negation: true }),
           cache: arg(z.boolean().default(true), { negation: "noColor" }),
         }),
       });
@@ -817,11 +831,11 @@ describe("ArgParser", () => {
       expect(() => parseArgs([], cmd)).toThrow(/conflicts with default negation "noColor"/);
     });
 
-    it("should throw when custom negation shadows kebab-case field's implicit `--noX` (camelCase derived from cliName)", () => {
+    it("should throw when custom negation shadows kebab-case field's opted-in `--noX` (camelCase derived from cliName)", () => {
       const cmd = defineCommand({
         name: "test-cmd",
         args: z.object({
-          "dry-run": arg(z.boolean().default(true)),
+          "dry-run": arg(z.boolean().default(true), { negation: true }),
           cache: arg(z.boolean().default(true), { negation: "noDryRun" }),
         }),
       });
@@ -1078,11 +1092,11 @@ describe("ArgParser", () => {
       expect(result.rawArgs.outputDir).toBe("./build");
     });
 
-    it("should support --no-kebab-case for boolean negation", () => {
+    it("should support --no-kebab-case for opt-in boolean negation", () => {
       const cmd = defineCommand({
         name: "test-cmd",
         args: z.object({
-          dryRun: arg(z.boolean().default(true)),
+          dryRun: arg(z.boolean().default(true), { negation: true }),
         }),
       });
 
@@ -1402,7 +1416,7 @@ describe("ArgParser", () => {
     });
 
     describe("boolean negation", () => {
-      it("should support --no-dry-run for kebab-case negation", () => {
+      it("should not support --no-dry-run by default", () => {
         const cmd = defineCommand({
           name: "test-cmd",
           args: z.object({
@@ -1412,14 +1426,28 @@ describe("ArgParser", () => {
 
         const result = parseArgs(["--no-dry-run"], cmd);
 
-        expect(result.rawArgs["dry-run"]).toBe(false);
+        expect(result.rawArgs["dry-run"]).toBeUndefined();
+        expect(result.unknownFlags).toContain("no-dry-run");
       });
 
-      it("should support --noDryRun for camelCase negation", () => {
+      it("should support --no-dry-run for kebab-case negation when opted in", () => {
         const cmd = defineCommand({
           name: "test-cmd",
           args: z.object({
-            dryRun: arg(z.boolean().default(true)),
+            "dry-run": arg(z.boolean().default(true), { negation: true }),
+          }),
+        });
+
+        const result = parseArgs(["--no-dry-run"], cmd);
+
+        expect(result.rawArgs["dry-run"]).toBe(false);
+      });
+
+      it("should support --noDryRun for camelCase negation when opted in", () => {
+        const cmd = defineCommand({
+          name: "test-cmd",
+          args: z.object({
+            dryRun: arg(z.boolean().default(true), { negation: true }),
           }),
         });
 
@@ -1428,11 +1456,11 @@ describe("ArgParser", () => {
         expect(result.rawArgs.dryRun).toBe(false);
       });
 
-      it("should support --noDryRun for kebab-case field 'dry-run'", () => {
+      it("should support --noDryRun for kebab-case field 'dry-run' when opted in", () => {
         const cmd = defineCommand({
           name: "test-cmd",
           args: z.object({
-            "dry-run": arg(z.boolean().default(true)),
+            "dry-run": arg(z.boolean().default(true), { negation: true }),
           }),
         });
 
@@ -1505,11 +1533,11 @@ describe("ArgParser", () => {
         expect(result.rawArgs["dry-run"]).toBeUndefined();
       });
 
-      it("should still negate --no-dry-run when no-dry-run is NOT a defined field", () => {
+      it("should still negate --no-dry-run when no-dry-run is NOT a defined field and negation is opted in", () => {
         const cmd = defineCommand({
           name: "test-cmd",
           args: z.object({
-            "dry-run": arg(z.boolean().default(true)),
+            "dry-run": arg(z.boolean().default(true), { negation: true }),
           }),
         });
 

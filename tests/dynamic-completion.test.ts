@@ -209,15 +209,15 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.cache).toBe(false);
     });
 
-    it("records alias-based implicit negation forms as `false`", () => {
+    it("records alias-based opt-in negation forms as `false`", () => {
       // Runtime parser resolves the post-`no-` segment through aliasMap,
       // so `--no-c` and `--noC` both flip a boolean `cache` declared with
-      // `alias: "c"`. The completion parser must mirror that to keep
-      // resolver-visible flag state aligned.
+      // `alias: "c", negation: true`. The completion parser must mirror that
+      // to keep resolver-visible flag state aligned.
       const aliasNegCmd = defineCommand({
         name: "negaliascli",
         args: z.object({
-          cache: arg(z.boolean().default(true), { alias: "c" }),
+          cache: arg(z.boolean().default(true), { alias: "c", negation: true }),
           field: arg(z.string().optional()),
         }),
         run: () => {},
@@ -458,9 +458,7 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.noFoo).toBe("bar");
     });
 
-    it("records the implicit `--no-<flag>` negation even without opt-in", () => {
-      // Runtime parser accepts the implicit form regardless of `negation`
-      // metadata, so dynamic resolvers must see the same value.
+    it("does not record the default `--no-<flag>` negation without opt-in", () => {
       const implicitCmd = defineCommand({
         name: "implicitcli",
         args: z.object({
@@ -470,10 +468,10 @@ describe("Dynamic completion (in-process resolver)", () => {
         run: () => {},
       });
       const ctxHyphen = parseCompletionContext(["--no-cache", "--field", ""], implicitCmd);
-      expect(ctxHyphen.parsedArgs.cache).toBe(false);
+      expect(ctxHyphen.parsedArgs.cache).toBeUndefined();
 
       const ctxCamel = parseCompletionContext(["--noCache", "--field", ""], implicitCmd);
-      expect(ctxCamel.parsedArgs.cache).toBe(false);
+      expect(ctxCamel.parsedArgs.cache).toBeUndefined();
     });
 
     it("resets parsedArgs when descending into a subcommand", () => {

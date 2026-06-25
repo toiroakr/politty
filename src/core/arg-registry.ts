@@ -187,18 +187,17 @@ export interface BaseArgMeta<TValue = unknown> {
   /**
    * Control the boolean negation option.
    *
-   * Boolean fields automatically accept `--no-<cliName>` (and the camelCase
-   * `--no<Name>` form) to set the value to `false`. By default this form is
-   * accepted by the parser but hidden from help, generated docs, and shell
-   * completions. This option lets you customize or expose that behavior:
+   * Boolean fields accept `--no-<cliName>` (and the camelCase `--no<Name>`
+   * form) to set the value to `false` only when `negation: true` is set.
+   * By default no negation form is accepted. This option lets you customize
+   * or expose that behavior:
    *
    * - `string` — replaces the auto-generated `--no-*` form with a custom
    *   name. The default `--no-*` is no longer recognized.
-   * - `true`  — opt-in to advertising the default `--no-<cliName>` form in
-   *   help, generated docs, and shell completions. Parser behavior is
-   *   unchanged.
-   * - `false` — disables negation entirely; neither the default `--no-*`
-   *   nor any custom name is accepted.
+   * - `true`  — enables the default `--no-<cliName>` form and advertises it
+   *   in help, generated docs, and shell completions.
+   * - `false` — disables negation entirely; same as the default, but explicit.
+   *   Neither the default `--no-*` nor any custom name is accepted.
    *
    * String values follow the same naming conventions as `cliName`
    * (kebab-case is recommended). Only valid on boolean fields; setting
@@ -215,7 +214,7 @@ export interface BaseArgMeta<TValue = unknown> {
    * // Accepts: --cache (true), --disable-cache (false)
    * // No longer accepts: --no-cache
    *
-   * // Expose default `--no-X` in help/docs/completion
+   * // Enable default `--no-X` in parsing/help/docs/completion
    * verbose: arg(z.boolean().default(false), {
    *   negation: true,
    * })

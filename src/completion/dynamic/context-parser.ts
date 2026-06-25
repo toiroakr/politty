@@ -114,10 +114,9 @@ function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
         takesValue: field.type !== "boolean",
         valueType: field.type,
         required: field.required,
-        // Mirror runtime: default `--no-<cliName>` is accepted unless the
-        // user opted out via `negation: false` or a custom-string negation.
-        defaultNegationAccepted:
-          field.type === "boolean" && (field.negation === undefined || field.negation === true),
+        // Mirror runtime: default `--no-<cliName>` is accepted only when the
+        // user opts in via `negation: true`.
+        defaultNegationAccepted: field.type === "boolean" && field.negation === true,
         valueCompletion: resolveRuntimeCompletion(resolveValueCompletion(field)),
       };
     });
@@ -384,15 +383,14 @@ function hasInlineValue(word: string): boolean {
 }
 
 /**
- * For boolean options, the runtime parser accepts the implicit
- * `--no-<cliName>` (and camelCase `--noCliName`) form unless the user
- * opted out via `negation: false` or supplied a custom-string negation
- * (which suppresses the default form). Aliases participate too: a
- * boolean with `alias: "c"` accepts `--no-c` / `--noC` because the
- * runtime resolves the post-`no-` segment through `aliasMap`. Implicit
- * negation is LONG-FORM only — `-no-c` is never an accepted negation —
- * so callers must say so via `isLong` to prevent a short option from
- * being read as a negation.
+ * For boolean options, the runtime parser accepts the default
+ * `--no-<cliName>` (and camelCase `--noCliName`) form only when the user
+ * opts in via `negation: true`. Aliases participate too: a boolean with
+ * `alias: "c", negation: true` accepts `--no-c` / `--noC` because the
+ * runtime resolves the post-`no-` segment through `aliasMap`. Default
+ * negation is LONG-FORM only — `-no-c` is never an accepted negation — so
+ * callers must say so via `isLong` to prevent a short option from being read
+ * as a negation.
  */
 function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong: boolean): boolean {
   if (!isLong) return false;
