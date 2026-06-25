@@ -142,6 +142,23 @@ export function parseArgs(
     }
   }
 
+  // When global args are defined, separate global flags from command-local args.
+  // Do this before help/version handling so suppressed global negations still
+  // honor the global unknownKeysMode instead of being bypassed by early help.
+  let commandArgv = argv;
+  let rawGlobalArgs: Record<string, unknown> | undefined;
+  let suppressedGlobalFlags: string[] = [];
+  if (options.globalExtracted) {
+    const { separated, globalParsed, suppressedTokens } = separateGlobalArgs(
+      argv,
+      options.globalExtracted,
+      extracted,
+    );
+    commandArgv = separated;
+    rawGlobalArgs = globalParsed;
+    suppressedGlobalFlags = suppressedTokens;
+  }
+
   // Check for help/version flags only when no subcommand is detected.
   // -h/-H are treated as --help/--help-all unless explicitly overridden by user.
   // Note: only the current command's overrideBuiltinAlias is checked here.
@@ -176,22 +193,9 @@ export function parseArgs(
       rawArgs: {},
       positionals: [],
       unknownFlags: [],
+      unknownGlobalFlags: suppressedGlobalFlags,
+      rawGlobalArgs,
     };
-  }
-
-  // When global args are defined, separate global flags from command-local args
-  let commandArgv = argv;
-  let rawGlobalArgs: Record<string, unknown> | undefined;
-  let suppressedGlobalFlags: string[] = [];
-  if (options.globalExtracted) {
-    const { separated, globalParsed, suppressedTokens } = separateGlobalArgs(
-      argv,
-      options.globalExtracted,
-      extracted,
-    );
-    commandArgv = separated;
-    rawGlobalArgs = globalParsed;
-    suppressedGlobalFlags = suppressedTokens;
   }
 
   // If no schema, return minimal result (but include any parsed global args)

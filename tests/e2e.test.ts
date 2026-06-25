@@ -1066,6 +1066,30 @@ describe("E2E Tests", () => {
       }
     });
 
+    it("surfaces suppressed --no-X before subcommand help via the global unknownKeysMode", async () => {
+      const globalArgs = z
+        .object({
+          cache: arg(z.boolean().default(true)),
+        })
+        .strict();
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            run: () => {},
+          }),
+        },
+      });
+
+      const result = await runCommand(cmd, ["build", "--no-cache", "--help"], { globalArgs });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(String(result.error)).toMatch(/Unknown flags:.*no-cache/);
+      }
+    });
+
     it("lets local custom negation shadow a disabled global default negation token", async () => {
       const captured: Record<string, unknown> = {};
       const globalArgs = z
