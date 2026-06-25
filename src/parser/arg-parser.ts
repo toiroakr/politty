@@ -38,6 +38,8 @@ export interface ParseResult {
   positionals: string[];
   /** Unknown flags that were detected */
   unknownFlags: string[];
+  /** Unknown flags from the global schema portion of argv */
+  unknownGlobalFlags?: string[] | undefined;
   /** Extracted fields from schema (for internal use) */
   extractedFields?: ExtractedFields | undefined;
   /** Raw parsed global args (before validation) */
@@ -94,6 +96,7 @@ export function parseArgs(
           rawArgs: {},
           positionals: [],
           unknownFlags: scanResult.suppressedTokens,
+          unknownGlobalFlags: scanResult.suppressedTokens,
           rawGlobalArgs,
         };
       }
@@ -174,14 +177,16 @@ export function parseArgs(
   // When global args are defined, separate global flags from command-local args
   let commandArgv = argv;
   let rawGlobalArgs: Record<string, unknown> | undefined;
+  let suppressedGlobalFlags: string[] = [];
   if (options.globalExtracted) {
-    const { separated, globalParsed } = separateGlobalArgs(
+    const { separated, globalParsed, suppressedTokens } = separateGlobalArgs(
       argv,
       options.globalExtracted,
       extracted,
     );
     commandArgv = separated;
     rawGlobalArgs = globalParsed;
+    suppressedGlobalFlags = suppressedTokens;
   }
 
   // If no schema, return minimal result (but include any parsed global args)
@@ -195,6 +200,7 @@ export function parseArgs(
       rawArgs: {},
       positionals: [],
       unknownFlags: [],
+      unknownGlobalFlags: suppressedGlobalFlags,
       rawGlobalArgs,
     };
   }
@@ -259,6 +265,7 @@ export function parseArgs(
     rawArgs,
     positionals: parsed.positionals,
     unknownFlags,
+    unknownGlobalFlags: suppressedGlobalFlags,
     extractedFields: extracted,
     rawGlobalArgs,
   };
@@ -294,7 +301,7 @@ function separateGlobalArgs(
   argv: string[],
   globalExtracted: ExtractedFields,
   localExtracted?: ExtractedFields,
-): { separated: string[]; globalParsed: Record<string, unknown> } {
+): { separated: string[]; globalParsed: Record<string, unknown>; suppressedTokens: string[] } {
   const lookup = buildGlobalFlagLookup(globalExtracted);
 
   // Local schema fields for collision detection: local takes precedence.
@@ -310,6 +317,7 @@ function separateGlobalArgs(
 
   const globalTokens: string[] = [];
   const commandTokens: string[] = [];
+  const suppressedTokens: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -321,10 +329,8 @@ function separateGlobalArgs(
 
     // Long option
     if (arg.startsWith("--")) {
-      const { resolvedName, withoutDashes, isNegated, isGlobal } = resolveGlobalLongOption(
-        arg,
-        lookup,
-      );
+      const { resolvedName, withoutDashes, isNegated, isGlobal, isSuppressedNegation } =
+        resolveGlobalLongOption(arg, lookup);
       // Use resolvedName for local collision check so that both default
       // (`--no-cache` → cache) and custom (`--disable-cache` → cache)
       // negation forms shadow correctly when `cache` is defined locally.
@@ -345,6 +351,11 @@ function separateGlobalArgs(
         i +=
           collectGlobalFlag(argv, i, resolvedName, isNegated, lookup.booleanFlags, globalTokens) -
           1;
+        continue;
+      }
+
+      if (isSuppressedNegation && !isLocalCollision) {
+        suppressedTokens.push(arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : arg.slice(2));
         continue;
       }
     } else if (arg.startsWith("-") && arg.length > 1) {
@@ -369,5 +380,5 @@ function separateGlobalArgs(
   }
 
   const globalParsed = parseGlobalArgs(globalTokens, globalExtracted);
-  return { separated: commandTokens, globalParsed };
+  return { separated: commandTokens, globalParsed, suppressedTokens };
 }

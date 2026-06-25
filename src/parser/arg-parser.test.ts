@@ -9,6 +9,7 @@ import {
   PositionalConfigError,
 } from "../validator/command-validator.js";
 import { parseArgs } from "./arg-parser.js";
+import { parseArgv } from "./argv-parser.js";
 
 /**
  * Task 4.2: Argument parser tests
@@ -19,6 +20,25 @@ import { parseArgs } from "./arg-parser.js";
  */
 describe("ArgParser", () => {
   describe("parseArgs", () => {
+    it("should not support --no-flag by default in direct parseArgv usage", () => {
+      const result = parseArgv(["--no-cache"], {
+        booleanFlags: new Set(["cache"]),
+      });
+
+      expect(result.options.cache).toBeUndefined();
+      expect(result.options["no-cache"]).toBe(true);
+    });
+
+    it("should support --no-flag in direct parseArgv usage when explicitly enabled", () => {
+      const result = parseArgv(["--no-cache"], {
+        booleanFlags: new Set(["cache"]),
+        defaultNegationDisabledFields: new Set(),
+      });
+
+      expect(result.options.cache).toBe(false);
+      expect(result.options["no-cache"]).toBeUndefined();
+    });
+
     it("should detect help flag (--help)", () => {
       const cmd = defineCommand({
         name: "test-cmd",

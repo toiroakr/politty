@@ -37,7 +37,8 @@ export interface ParserOptions {
   negationMap?: Map<string, string>;
   /**
    * Canonical field names whose default `--no-<name>` / `--no<Name>`
-   * negation forms are suppressed.
+   * negation forms are suppressed. When omitted, every field in
+   * `booleanFlags` has default negation suppressed.
    */
   defaultNegationDisabledFields?: Set<string>;
 }
@@ -70,8 +71,10 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     arrayFlags = new Set(),
     definedNames = new Set(),
     negationMap = new Map(),
-    defaultNegationDisabledFields = new Set(),
+    defaultNegationDisabledFields: configuredDefaultNegationDisabledFields,
   } = options;
+  const defaultNegationDisabledFields =
+    configuredDefaultNegationDisabledFields ?? new Set(booleanFlags);
 
   const result: ParsedArgv = {
     options: {},

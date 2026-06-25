@@ -505,22 +505,23 @@ async function runCommandInternal<TResult = unknown>(
     if (parseResult.subCommand) {
       // Surface unknown flags from the pre-subcommand portion of argv before
       // descending. Currently these are suppressed default `--no-X` tokens
-      // for global fields that declared a custom `negation`; they belong to
-      // the global schema, so use the global `unknownKeysMode`.
-      if (parseResult.unknownFlags.length > 0) {
+      // for global fields; they belong to the global schema, so use the
+      // global `unknownKeysMode`.
+      const unknownGlobalFlags = parseResult.unknownGlobalFlags ?? parseResult.unknownFlags;
+      if (unknownGlobalFlags.length > 0) {
         const globalMode = context.globalExtracted?.unknownKeysMode ?? "strip";
         if (globalMode === "strict") {
           collector?.stop();
           return {
             success: false,
-            error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
+            error: new Error(`Unknown flags: ${unknownGlobalFlags.join(", ")}`),
             exitCode: 1,
             logs: getCurrentLogs(),
           };
         }
         if (globalMode === "strip") {
           const knownGlobalFlags = context.globalExtracted?.fields.map((f) => f.name) ?? [];
-          for (const flag of parseResult.unknownFlags) {
+          for (const flag of unknownGlobalFlags) {
             logger.error(formatUnknownFlagWarning(flag, knownGlobalFlags));
           }
         }
@@ -561,6 +562,26 @@ async function runCommandInternal<TResult = unknown>(
     }
 
     // Handle unknown flags based on schema's unknownKeysMode
+    if (parseResult.unknownGlobalFlags && parseResult.unknownGlobalFlags.length > 0) {
+      const globalMode = context.globalExtracted?.unknownKeysMode ?? "strip";
+      if (globalMode === "strict") {
+        collector?.stop();
+        return {
+          success: false,
+          error: new Error(`Unknown flags: ${parseResult.unknownGlobalFlags.join(", ")}`),
+          exitCode: 1,
+          logs: getCurrentLogs(),
+        };
+      }
+      if (globalMode === "strip") {
+        const knownGlobalFlags = context.globalExtracted?.fields.map((f) => f.name) ?? [];
+        for (const flag of parseResult.unknownGlobalFlags) {
+          logger.error(formatUnknownFlagWarning(flag, knownGlobalFlags));
+        }
+      }
+      // passthrough: silently ignore
+    }
+
     if (parseResult.unknownFlags.length > 0) {
       const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
       const knownFlags = parseResult.extractedFields?.fields.map((f) => f.name) ?? [];
