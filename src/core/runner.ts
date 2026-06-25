@@ -45,6 +45,7 @@ import { extractFields, type ExtractedFields } from "./schema-extractor.js";
 const defaultLogger: Logger = {
   log: (message: string) => console.log(message),
   error: (message: string) => console.error(message),
+  warn: (message: string) => console.warn(message),
 };
 
 /**
@@ -254,8 +255,12 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
   // handler is registered, delegate to it (e.g. exec an external `<cli>-<name>`
   // binary). Runs before global setup/cleanup so plugins are independent of the
   // host CLI's lifecycle, and is skipped for internal (`__*`) invocations.
+  // Commands with their own `run` are excluded: their first positional is a
+  // real argument, so an installed plugin must never shadow it (which would
+  // make the command's meaning depend on what is on PATH).
   if (
     effectiveOptions.onUnknownSubcommand &&
+    !command.run &&
     !isInternalSubcommandInvocation(command, argv, globalExtractedForBypass)
   ) {
     const knownSubCommands = listSubCommandNamesWithAliases(command);
@@ -408,8 +413,10 @@ async function runCommandInternal<TResult = unknown>(
     // handling so those flags are forwarded to the plugin, mirroring the
     // root-level dispatch in runMain. Root level (empty command path) is handled
     // in runMain before global setup; here we only cover nested levels.
+    // Commands with their own `run` are excluded so a plugin on PATH can never
+    // shadow a real positional argument (see the root-level dispatch above).
     const nestedCommandPath = context.commandPath ?? [];
-    if (options.onUnknownSubcommand && nestedCommandPath.length > 0) {
+    if (options.onUnknownSubcommand && !command.run && nestedCommandPath.length > 0) {
       const knownSubCommands = listSubCommandNamesWithAliases(command);
       if (knownSubCommands.size > 0) {
         const positionalIndex = findFirstPositionalIndex(argv, options._globalExtracted, {
@@ -552,9 +559,31 @@ async function runCommandInternal<TResult = unknown>(
       }
     }
 
-    // If command has subcommands but none specified, show help
+    // Pre-compute positional field metadata shared between the help-fallback
+    // guard and the unexpected-positionals check below.
+    const positionalFields = parseResult.extractedFields?.fields.filter((f) => f.positional) ?? [];
+    const hasArrayPositional = positionalFields.some((f) => f.type === "array");
+    const allPositionals = [...parseResult.positionals, ...parseResult.rest];
+    const extraPositionals = hasArrayPositional
+      ? []
+      : allPositionals.slice(positionalFields.length);
+    // Only regular positionals (not after --) that don't start with '-' are treated as
+    // unknown subcommand attempts. Tokens after -- are explicitly positional by the user,
+    // and '-' is a conventional stdin marker, so neither should be misclassified.
+    const unconsumedRegulars = hasArrayPositional
+      ? []
+      : parseResult.positionals.slice(positionalFields.length);
+
+    // If command has subcommands but none specified, show help.
+    // If there are any unconsumed positionals (including tokens after --), fall
+    // through so the unexpected-positionals check below surfaces them.
     const subCmds = listSubCommands(command);
-    if (subCmds.length > 0 && !parseResult.subCommand && !command.run) {
+    if (
+      subCmds.length > 0 &&
+      !parseResult.subCommand &&
+      !command.run &&
+      extraPositionals.length === 0
+    ) {
       const help = generateHelp(command, {
         showSubcommands: options.showSubcommands ?? true,
         context,
@@ -586,6 +615,51 @@ async function runCommandInternal<TResult = unknown>(
         // Continue execution - don't return error
       }
       // passthrough mode: silently ignore unknown flags
+    }
+
+    // Handle unexpected positionals (tokens not consumed by positional field definitions).
+    // allPositionals combines regular positionals with tokens explicitly passed after --,
+    // since mergeWithPositionals already consumes both sources in order.
+    if (extraPositionals.length > 0) {
+      const subCmdNames = listSubCommandNamesWithAliases(command);
+      if (subCmdNames.size > 0) {
+        const unknownCmd = unconsumedRegulars.find(
+          (t) => !t.startsWith("-") && !subCmdNames.has(t),
+        );
+        if (unknownCmd) {
+          const similar = findSimilar(unknownCmd, [...subCmdNames]);
+          const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
+          collector?.stop();
+          return {
+            success: false,
+            error: new Error(
+              `Unknown subcommand: ${unknownCmd}${suggestion ? `.${suggestion}` : ""}`,
+            ),
+            exitCode: 1,
+            logs: getCurrentLogs(),
+          };
+        }
+      }
+
+      // No subcommands (or all extras are '-'-prefixed / after --): follow schema's unknownKeysMode
+      const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
+      if (unknownKeysMode === "strict") {
+        collector?.stop();
+        return {
+          success: false,
+          error: new Error(
+            `Unexpected positional argument${extraPositionals.length > 1 ? "s" : ""}: ${extraPositionals.join(", ")}`,
+          ),
+          exitCode: 1,
+          logs: getCurrentLogs(),
+        };
+      } else if (unknownKeysMode === "strip") {
+        for (const positional of extraPositionals) {
+          (logger.warn ?? logger.error)(`Warning: Unexpected positional argument: ${positional}`);
+        }
+        // Continue execution
+      }
+      // passthrough: silently ignore
     }
 
     // Validate global args at the leaf command level. The internal

@@ -14,18 +14,22 @@ concurrency:
 
 jobs:
   ci:
-    name: CI
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: CI (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     permissions:
       contents: read
       actions: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         name: Install pnpm
         with:
           standalone: true
@@ -35,7 +39,9 @@ jobs:
         shell: bash
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+        shell: bash
       - name: Typecheck, lint, format, and knip
+        shell: bash
         run: |
           pnpm typecheck &
           TYPECHECK_PID=$!
@@ -51,8 +57,11 @@ jobs:
           done
           exit $FAIL
       - name: Test with coverage
+        shell: bash
         run: npx vitest run --coverage --project unit
       - name: Run octocov
+        # octocov is Linux-only and uploads coverage once; skip on Windows.
+        if: matrix.os == 'ubuntu-latest'
         uses: k1LoW/octocov-action@b3b6ee60482a667950f87553abf1df63217235d9 # v1.5.1
 
   shell-completion:
@@ -87,10 +96,10 @@ jobs:
             || (echo "apt-get install failed; updating package lists and retrying." \
                 && sudo apt-get update -o Acquire::http::Timeout=10 -o Acquire::Retries=3 \
                 && sudo apt-get install -o Acquire::http::Timeout=10 -o Acquire::Retries=3 -y --no-install-recommends ${{ matrix.install }})
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         name: Install pnpm
         with:
           standalone: true

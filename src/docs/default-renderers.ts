@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
 import type { Example } from "../types.js";
+import { emitMarkdownList, emitMarkdownTable, toOptionRows } from "./option-rows.js";
 import type {
   ArgumentsRenderContext,
   CommandInfo,
@@ -27,24 +28,6 @@ function escapeTableCell(str: string): string {
 }
 
 /**
- * Marker appended to a custom negation row/line so readers can see which
- * positive flag it negates (e.g. `--monochrome` → `(↔ \`--color\`)`).
- */
-export function negationRelationMarker(opt: ResolvedFieldMeta): string {
-  return `(↔ \`--${opt.cliName}\`)`;
-}
-
-/**
- * Format default value for display
- */
-function formatDefaultValue(value: unknown): string {
-  if (value === undefined) {
-    return "-";
-  }
-  return `\`${JSON.stringify(value)}\``;
-}
-
-/**
  * Render usage line
  */
 export function renderUsage(info: CommandInfo): string {
@@ -55,7 +38,11 @@ export function renderUsage(info: CommandInfo): string {
   }
 
   if (info.subCommands.length > 0) {
-    parts.push("[command]");
+    if (info.command.run) {
+      parts.push("[command]");
+    } else {
+      parts.push("<command>");
+    }
   }
 
   for (const arg of info.positionalArgs) {
@@ -109,89 +96,6 @@ export function renderArgumentsList(info: CommandInfo): string {
 }
 
 /**
- * Format environment variable info for display
- */
-function formatEnvInfo(env: string | string[] | undefined): string {
-  if (!env) return "";
-  const envNames = Array.isArray(env) ? env : [env];
-  return ` [env: ${envNames.join(", ")}]`;
-}
-
-/**
- * Resolve placeholder for an option (uses kebab-case cliName)
- */
-function resolvePlaceholder(opt: ResolvedFieldMeta): string {
-  return opt.placeholder ?? opt.cliName.toUpperCase().replace(/-/g, "_");
-}
-
-/**
- * Format option name for table display (e.g., `--dry-run` or `--port <PORT>`)
- *
- * Boolean fields with a custom inline `negation` (no separate description) are
- * shown as `\`--cache\` / \`--disable-cache\``.
- */
-function formatOptionName(opt: ResolvedFieldMeta): string {
-  const placeholder = resolvePlaceholder(opt);
-  if (opt.type === "boolean") {
-    const positive = `\`--${opt.cliName}\``;
-    if (opt.negationDisplay && !opt.negationDescription) {
-      return `${positive} / \`--${opt.negationDisplay}\``;
-    }
-    return positive;
-  }
-  return `\`--${opt.cliName} <${placeholder}>\``;
-}
-
-/**
- * Format option flags for list display (uses kebab-case cliName).
- * Aliases are joined with `, `; the inline negation (when no separate
- * `negationDescription` is set) is appended with ` / ` so it stays
- * visually distinct from aliases, matching help and table output.
- */
-function formatOptionFlags(opt: ResolvedFieldMeta): string {
-  const placeholder = resolvePlaceholder(opt);
-  const longFlag =
-    opt.type === "boolean" ? `--${opt.cliName}` : `--${opt.cliName} <${placeholder}>`;
-
-  const parts: string[] = [];
-  if (opt.alias) {
-    for (const a of opt.alias) {
-      if (a.length === 1) parts.push(`\`-${a}\``);
-    }
-  }
-  parts.push(`\`${longFlag}\``);
-  if (opt.alias) {
-    for (const a of opt.alias) {
-      if (a.length > 1) parts.push(`\`--${a}\``);
-    }
-  }
-  const aliasJoined = parts.join(", ");
-  if (opt.type === "boolean" && opt.negationDisplay && !opt.negationDescription) {
-    return `${aliasJoined} / \`--${opt.negationDisplay}\``;
-  }
-  return aliasJoined;
-}
-
-/**
- * Format aliases for a markdown table cell
- */
-function formatAliasCell(alias: string[] | undefined): string {
-  if (!alias || alias.length === 0) return "-";
-  return alias.map((a) => `\`${a.length === 1 ? `-${a}` : `--${a}`}\``).join(", ");
-}
-
-/**
- * Format env variable names for table display
- */
-function formatEnvNames(env: string | string[] | undefined): string {
-  if (!env) return "-";
-  if (Array.isArray(env)) {
-    return env.map((e) => `\`${e}\``).join(", ");
-  }
-  return `\`${env}\``;
-}
-
-/**
  * Render options as markdown table
  *
  * Features:
@@ -206,51 +110,7 @@ function formatEnvNames(env: string | string[] | undefined): string {
  * | `--port <PORT>` | - | Server port | Yes | - | `PORT`, `SERVER_PORT` |
  */
 export function renderOptionsTable(info: CommandInfo): string {
-  if (info.options.length === 0) {
-    return "";
-  }
-
-  // Check if any option has env configured
-  const hasEnv = info.options.some((opt) => opt.env);
-
-  const lines: string[] = [];
-  if (hasEnv) {
-    lines.push("| Option | Alias | Description | Required | Default | Env |");
-    lines.push("|--------|-------|-------------|----------|---------|-----|");
-  } else {
-    lines.push("| Option | Alias | Description | Required | Default |");
-    lines.push("|--------|-------|-------------|----------|---------|");
-  }
-
-  for (const opt of info.options) {
-    const optionName = formatOptionName(opt);
-    const alias = formatAliasCell(opt.alias);
-    const desc = escapeTableCell(opt.description ?? "");
-    const required = opt.required ? "Yes" : "No";
-    const defaultVal = formatDefaultValue(opt.defaultValue);
-
-    if (hasEnv) {
-      const envNames = formatEnvNames(opt.env);
-      lines.push(
-        `| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} | ${envNames} |`,
-      );
-    } else {
-      lines.push(`| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} |`);
-    }
-
-    // Add a separate row for the negation when a description is provided
-    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
-      const negName = `\`--${opt.negationDisplay}\``;
-      const negDesc = `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`;
-      if (hasEnv) {
-        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - | - |`);
-      } else {
-        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - |`);
-      }
-    }
-  }
-
-  return lines.join("\n");
+  return emitMarkdownTable(toOptionRows(info.options));
 }
 
 /**
@@ -265,27 +125,7 @@ export function renderOptionsTable(info: CommandInfo): string {
  * - `--port <PORT>` - Server port (required) [env: PORT, SERVER_PORT]
  */
 export function renderOptionsList(info: CommandInfo): string {
-  if (info.options.length === 0) {
-    return "";
-  }
-
-  const lines: string[] = [];
-  for (const opt of info.options) {
-    const flags = formatOptionFlags(opt);
-    const desc = opt.description ? ` - ${opt.description}` : "";
-    const required = opt.required ? " (required)" : "";
-    const defaultVal =
-      opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
-    const envInfo = formatEnvInfo(opt.env);
-    lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
-    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
-      lines.push(
-        `- \`--${opt.negationDisplay}\` - ${opt.negationDescription} ${negationRelationMarker(opt)}`,
-      );
-    }
-  }
-
-  return lines.join("\n");
+  return emitMarkdownList(toOptionRows(info.options));
 }
 
 /**
@@ -316,50 +156,7 @@ export function renderSubcommandsTable(info: CommandInfo, generateAnchors = true
  * Render options from array as table
  */
 export function renderOptionsTableFromArray(options: ResolvedFieldMeta[]): string {
-  if (options.length === 0) {
-    return "";
-  }
-
-  // Check if any option has env configured
-  const hasEnv = options.some((opt) => opt.env);
-
-  const lines: string[] = [];
-  if (hasEnv) {
-    lines.push("| Option | Alias | Description | Required | Default | Env |");
-    lines.push("|--------|-------|-------------|----------|---------|-----|");
-  } else {
-    lines.push("| Option | Alias | Description | Required | Default |");
-    lines.push("|--------|-------|-------------|----------|---------|");
-  }
-
-  for (const opt of options) {
-    const optionName = formatOptionName(opt);
-    const alias = formatAliasCell(opt.alias);
-    const desc = escapeTableCell(opt.description ?? "");
-    const required = opt.required ? "Yes" : "No";
-    const defaultVal = formatDefaultValue(opt.defaultValue);
-
-    if (hasEnv) {
-      const envNames = formatEnvNames(opt.env);
-      lines.push(
-        `| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} | ${envNames} |`,
-      );
-    } else {
-      lines.push(`| ${optionName} | ${alias} | ${desc} | ${required} | ${defaultVal} |`);
-    }
-
-    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
-      const negName = `\`--${opt.negationDisplay}\``;
-      const negDesc = `${escapeTableCell(opt.negationDescription)} ${negationRelationMarker(opt)}`;
-      if (hasEnv) {
-        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - | - |`);
-      } else {
-        lines.push(`| ${negName} | - | ${negDesc} | ${required} | - |`);
-      }
-    }
-  }
-
-  return lines.join("\n");
+  return emitMarkdownTable(toOptionRows(options));
 }
 
 /**
@@ -506,27 +303,7 @@ export function renderDiscriminatedUnionOptionsMarkdown(
  * Render options from array as list
  */
 export function renderOptionsListFromArray(options: ResolvedFieldMeta[]): string {
-  if (options.length === 0) {
-    return "";
-  }
-
-  const lines: string[] = [];
-  for (const opt of options) {
-    const flags = formatOptionFlags(opt);
-    const desc = opt.description ? ` - ${opt.description}` : "";
-    const required = opt.required ? " (required)" : "";
-    const defaultVal =
-      opt.defaultValue !== undefined ? ` (default: ${JSON.stringify(opt.defaultValue)})` : "";
-    const envInfo = formatEnvInfo(opt.env);
-    lines.push(`- ${flags}${desc}${required}${defaultVal}${envInfo}`);
-    if (opt.type === "boolean" && opt.negationDisplay && opt.negationDescription) {
-      lines.push(
-        `- \`--${opt.negationDisplay}\` - ${opt.negationDescription} ${negationRelationMarker(opt)}`,
-      );
-    }
-  }
-
-  return lines.join("\n");
+  return emitMarkdownList(toOptionRows(options));
 }
 
 /**
@@ -609,11 +386,19 @@ export function renderSubcommandsTableFromArray(
     let cmdCell: string;
     if (generateAnchors) {
       const anchor = generateAnchor(sub.fullPath);
-      const subFile = fileMap?.[subCommandPath];
+      const hasSubFile =
+        fileMap !== undefined && Object.prototype.hasOwnProperty.call(fileMap, subCommandPath);
+      const subFile = hasSubFile ? fileMap[subCommandPath] : undefined;
 
       if (currentFile && subFile && currentFile !== subFile) {
         const relativePath = getRelativePath(currentFile, subFile);
         cmdCell = `[\`${fullName}\`](${relativePath}#${anchor})`;
+      } else if (fileMap && !hasSubFile) {
+        // A fileMap is present but this subcommand has no entry: in template mode this
+        // means the child is not rendered as a heading anywhere, so a local #anchor link
+        // would be dead. Render plain text instead. (Files mode populates an entry for
+        // every documented command, so this branch is not reached there.)
+        cmdCell = `\`${fullName}\``;
       } else {
         cmdCell = `[\`${fullName}\`](#${anchor})`;
       }
@@ -730,6 +515,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     optionStyle = "table",
     generateAnchors = true,
     includeSubcommandDetails = true,
+    markerless = false,
     renderDescription: customRenderDescription,
     renderUsage: customRenderUsage,
     renderArguments: customRenderArguments,
@@ -739,6 +525,11 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     renderFooter: customRenderFooter,
     renderExamples: customRenderExamples,
   } = options;
+
+  // When markerless, sections are emitted as plain content with no marker comments.
+  const wrap = markerless
+    ? (_type: SectionType, _scope: string, content: string): string => content
+    : wrapWithMarker;
 
   return (info: CommandInfo): string => {
     const sections: string[] = [];
@@ -750,7 +541,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
 
     // Title - use commandPath for subcommands, name for root
     const title = info.commandPath || info.name;
-    sections.push(wrapWithMarker("heading", scope, `${h} ${title}`));
+    sections.push(wrap("heading", scope, `${h} ${title}`));
 
     // Description (includes aliases when present)
     {
@@ -772,7 +563,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
           ? customRenderDescription(context)
           : context.content;
         if (content) {
-          sections.push(wrapWithMarker("description", scope, content));
+          sections.push(wrap("description", scope, content));
         }
       }
     }
@@ -787,7 +578,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       };
       const content = customRenderUsage ? customRenderUsage(context) : context.content;
       if (content) {
-        sections.push(wrapWithMarker("usage", scope, content));
+        sections.push(wrap("usage", scope, content));
       }
     }
 
@@ -814,7 +605,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         ? customRenderArguments(context)
         : renderArgs(context.args);
       if (content) {
-        sections.push(wrapWithMarker("arguments", scope, content));
+        sections.push(wrap("arguments", scope, content));
       }
     }
 
@@ -858,7 +649,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         ? customRenderOptions(context)
         : renderOpts(context.options);
       if (content) {
-        sections.push(wrapWithMarker("options", scope, content));
+        sections.push(wrap("options", scope, content));
       }
     }
 
@@ -866,7 +657,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
     {
       const globalLink = getGlobalOptionsLink(info);
       if (globalLink) {
-        sections.push(wrapWithMarker("global-options-link", scope, globalLink));
+        sections.push(wrap("global-options-link", scope, globalLink));
       }
     }
 
@@ -892,7 +683,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         ? customRenderSubcommands(context)
         : renderSubs(context.subcommands);
       if (content) {
-        sections.push(wrapWithMarker("subcommands", scope, content));
+        sections.push(wrap("subcommands", scope, content));
       }
     }
 
@@ -924,7 +715,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
         ? customRenderExamples(context)
         : renderEx(context.examples, context.results);
       if (content) {
-        sections.push(wrapWithMarker("examples", scope, content));
+        sections.push(wrap("examples", scope, content));
       }
     }
 
@@ -937,7 +728,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       };
       const content = customRenderNotes ? customRenderNotes(context) : context.content;
       if (content) {
-        sections.push(wrapWithMarker("notes", scope, content));
+        sections.push(wrap("notes", scope, content));
       }
     }
 

@@ -15,7 +15,7 @@ File operations CLI with examples
 **Usage**
 
 ```
-file-cli [command]
+file-cli <command>
 ```
 
 <!-- politty:command::usage:end -->

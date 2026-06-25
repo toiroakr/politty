@@ -1,0 +1,16 @@
+# Force LF line endings for text files so oxfmt --check, vitest snapshots,
+# and shell-script heredocs behave identically on Linux/macOS and Windows
+# (where Git's default core.autocrlf would otherwise convert to CRLF on
+# checkout). Listed assets are flagged binary so Git skips line-ending
+# munging for them.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.zip binary
+*.gz binary
+*.tgz binary

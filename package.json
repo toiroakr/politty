@@ -1,6 +1,6 @@
 {
   "name": "politty",
-  "version": "0.7.0",
+  "version": "0.10.1",
   "description": "A lightweight CLI framework inspired by citty with zod v4 registry integration for type-safe metadata management",
   "keywords": [
     "argument-parser",
@@ -20,82 +20,44 @@
     "politty": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist/**/*.js",
+    "dist/**/*.d.ts"
   ],
   "type": "module",
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
-      }
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./augment": {
-      "import": {
-        "types": "./dist/augment.d.ts",
-        "default": "./dist/augment.js"
-      },
-      "require": {
-        "types": "./dist/augment.d.cts",
-        "default": "./dist/augment.cjs"
-      }
+      "types": "./dist/augment.d.ts",
+      "default": "./dist/augment.js"
     },
     "./docs": {
-      "import": {
-        "types": "./dist/docs/index.d.ts",
-        "default": "./dist/docs/index.js"
-      },
-      "require": {
-        "types": "./dist/docs/index.d.cts",
-        "default": "./dist/docs/index.cjs"
-      }
+      "types": "./dist/docs/index.d.ts",
+      "default": "./dist/docs/index.js"
     },
     "./completion": {
-      "import": {
-        "types": "./dist/completion/index.d.ts",
-        "default": "./dist/completion/index.js"
-      },
-      "require": {
-        "types": "./dist/completion/index.d.cts",
-        "default": "./dist/completion/index.cjs"
-      }
+      "types": "./dist/completion/index.d.ts",
+      "default": "./dist/completion/index.js"
+    },
+    "./skill": {
+      "types": "./dist/skill/index.d.ts",
+      "default": "./dist/skill/index.js"
     },
     "./prompt": {
-      "import": {
-        "types": "./dist/prompt/index.d.ts",
-        "default": "./dist/prompt/index.js"
-      },
-      "require": {
-        "types": "./dist/prompt/index.d.cts",
-        "default": "./dist/prompt/index.cjs"
-      }
+      "types": "./dist/prompt/index.d.ts",
+      "default": "./dist/prompt/index.js"
     },
     "./prompt/clack": {
-      "import": {
-        "types": "./dist/prompt/clack/index.d.ts",
-        "default": "./dist/prompt/clack/index.js"
-      },
-      "require": {
-        "types": "./dist/prompt/clack/index.d.cts",
-        "default": "./dist/prompt/clack/index.cjs"
-      }
+      "types": "./dist/prompt/clack/index.d.ts",
+      "default": "./dist/prompt/clack/index.js"
     },
     "./prompt/inquirer": {
-      "import": {
-        "types": "./dist/prompt/inquirer/index.d.ts",
-        "default": "./dist/prompt/inquirer/index.js"
-      },
-      "require": {
-        "types": "./dist/prompt/inquirer/index.d.cts",
-        "default": "./dist/prompt/inquirer/index.cjs"
-      }
+      "types": "./dist/prompt/inquirer/index.d.ts",
+      "default": "./dist/prompt/inquirer/index.js"
     }
   },
   "scripts": {
@@ -119,26 +81,26 @@
     "release": "pnpm build && changeset publish"
   },
   "dependencies": {
-    "string-width": "^8.2.0"
+    "yaml": "^2.8.3"
   },
   "devDependencies": {
     "@changesets/cli": "2.31.0",
     "@clack/prompts": "1.2.0",
     "@inquirer/prompts": "8.5.2",
     "@quansync/fs": "1.0.0",
-    "@types/node": "25.9.2",
-    "@typescript/native-preview": "7.0.0-dev.20260607.1",
-    "@vitest/coverage-v8": "4.1.8",
-    "knip": "6.16.1",
+    "@types/node": "25.9.3",
+    "@typescript/native-preview": "7.0.0-dev.20260617.2",
+    "@vitest/coverage-v8": "4.1.9",
+    "knip": "6.17.1",
     "lefthook": "2.1.9",
     "organize-imports-cli": "1.0.2",
-    "oxfmt": "0.53.0",
-    "oxlint": "1.68.0",
+    "oxfmt": "0.55.0",
+    "oxlint": "1.70.0",
     "quansync": "1.0.0",
-    "tsdown": "0.22.2",
+    "tsdown": "0.22.3",
     "tsx": "4.22.4",
     "typescript": "6.0.3",
-    "vitest": "4.1.8",
+    "vitest": "4.1.9",
     "zod": "4.4.3"
   },
   "peerDependencies": {
@@ -157,5 +119,5 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@11.5.2"
+  "packageManager": "pnpm@11.7.0"
 }

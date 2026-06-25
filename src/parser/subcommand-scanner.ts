@@ -1,5 +1,6 @@
 import { getAllAliases, type ExtractedFields } from "../core/schema-extractor.js";
 import { buildParserOptions } from "./argv-parser.js";
+import { resolveLongOption } from "./long-option-resolver.js";
 
 /**
  * Pre-computed lookup tables for recognizing global flags in argv scanning.
@@ -7,6 +8,8 @@ import { buildParserOptions } from "./argv-parser.js";
 export interface GlobalFlagLookup {
   aliasMap: Map<string, string>;
   booleanFlags: Set<string>;
+  /** All canonical option names (as defined in the schema) */
+  definedNames: Set<string>;
   /** camelCase field names */
   flagNames: Set<string>;
   /** kebab-case CLI names */
@@ -27,6 +30,7 @@ export function buildGlobalFlagLookup(globalExtracted: ExtractedFields): GlobalF
   const {
     aliasMap = new Map(),
     booleanFlags = new Set(),
+    definedNames = new Set(),
     negationMap = new Map(),
     defaultNegationDisabledFields = new Set(),
   } = buildParserOptions(globalExtracted);
@@ -39,6 +43,7 @@ export function buildGlobalFlagLookup(globalExtracted: ExtractedFields): GlobalF
   return {
     aliasMap,
     booleanFlags,
+    definedNames,
     flagNames: new Set(globalExtracted.fields.map((f) => f.name)),
     cliNames: new Set(globalExtracted.fields.map((f) => f.cliName)),
     aliases: shortAliases,
@@ -67,71 +72,27 @@ export function resolveGlobalLongOption(
   isGlobal: boolean;
   isSuppressedNegation: boolean;
 } {
-  const withoutDashes = arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : arg.slice(2);
+  const resolution = resolveLongOption(arg, lookup);
+  const { resolvedName, withoutDashes, isNegated, isCustomNegation, isSuppressedNegation } =
+    resolution;
 
-  // Custom negation: `--disable-cache` (or its camelCase variant) → cache=false
-  const customNegated = !arg.includes("=") ? lookup.negationMap.get(withoutDashes) : undefined;
-  if (customNegated) {
-    return {
-      resolvedName: customNegated,
-      withoutDashes,
-      isNegated: true,
-      isGlobal: lookup.flagNames.has(customNegated),
-      isSuppressedNegation: false,
-    };
+  if (isSuppressedNegation) {
+    return { resolvedName, withoutDashes, isNegated: false, isGlobal: false, isSuppressedNegation };
   }
 
-  // Default negation matches both `--no-flag` (kebab) and `--noFlag`
-  // (camelCase), mirroring argv-parser for fields that opt in with
-  // `negation: true`.
-  const kebabNegated = withoutDashes.startsWith("no-");
-  const camelNegated =
-    !kebabNegated &&
-    withoutDashes.length > 2 &&
-    withoutDashes.startsWith("no") &&
-    /[A-Z]/.test(withoutDashes[2]!);
-
-  // argv-parser only treats `--no-foo` / `--noFoo` as negation when the literal
-  // name is not itself a defined option (see argv-parser.ts:147/167). Mirror
-  // that disambiguation so a global flag literally named `no-foo` isn't
-  // misclassified as the negation of a (possibly non-existent) `foo`.
-  if (kebabNegated || camelNegated) {
-    const literalResolved = lookup.aliasMap.get(withoutDashes) ?? withoutDashes;
-    if (lookup.flagNames.has(literalResolved) || lookup.cliNames.has(withoutDashes)) {
-      return {
-        resolvedName: literalResolved,
-        withoutDashes,
-        isNegated: false,
-        isGlobal: true,
-        isSuppressedNegation: false,
-      };
-    }
-  }
-
-  const defaultIsNegated = kebabNegated || camelNegated;
-  const flagName = kebabNegated
-    ? withoutDashes.slice(3)
-    : camelNegated
-      ? withoutDashes[2]!.toLowerCase() + withoutDashes.slice(3)
+  const flagName =
+    isNegated && !isCustomNegation
+      ? withoutDashes.startsWith("no-")
+        ? withoutDashes.slice(3)
+        : withoutDashes[2]!.toLowerCase() + withoutDashes.slice(3)
       : withoutDashes;
-  const resolvedName = lookup.aliasMap.get(flagName) ?? flagName;
-  // When the target field has not opted in to default negation, the default
-  // `--no-X` form is suppressed: treat it as if it were not a known global flag.
-  const suppressDefaultNegation =
-    defaultIsNegated && lookup.defaultNegationDisabledFields.has(resolvedName);
-  const isNegated = defaultIsNegated && !suppressDefaultNegation;
+
   const isGlobal =
-    !suppressDefaultNegation &&
-    (lookup.flagNames.has(resolvedName) ||
-      lookup.cliNames.has(withoutDashes) ||
-      lookup.cliNames.has(flagName));
-  return {
-    resolvedName,
-    withoutDashes,
-    isNegated,
-    isGlobal,
-    isSuppressedNegation: suppressDefaultNegation,
-  };
+    lookup.flagNames.has(resolvedName) ||
+    lookup.cliNames.has(withoutDashes) ||
+    lookup.cliNames.has(flagName);
+
+  return { resolvedName, withoutDashes, isNegated, isGlobal, isSuppressedNegation: false };
 }
 
 /**
@@ -344,6 +305,7 @@ export function findFirstPositionalIndex(
     : {
         aliasMap: new Map(),
         booleanFlags: new Set(),
+        definedNames: new Set(),
         flagNames: new Set(),
         cliNames: new Set(),
         aliases: new Set(),

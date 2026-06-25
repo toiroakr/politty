@@ -174,5 +174,23 @@ describe("renderArgsTable", () => {
       const headerLine = table.split("\n")[0];
       expect(headerLine).toBe("| Description | Option | Alias |");
     });
+
+    it("should use the canonical fixed-width separator for filtered columns", () => {
+      const args = {
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Enable verbose mode",
+        }),
+      };
+
+      const table = renderArgsTable(args, {
+        columns: ["option", "description"],
+      });
+
+      // Column-filtered tables share the same fixed-width separator format as
+      // the default table (no per-path branching).
+      const separatorLine = table.split("\n")[1];
+      expect(separatorLine).toBe("|--------|-------------|");
+    });
   });
 });
