@@ -395,7 +395,7 @@ function hasInlineValue(word: string): boolean {
 function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong: boolean): boolean {
   if (!isLong) return false;
   if (opt.valueType !== "boolean") return false;
-  if (opt.defaultNegationAccepted === false) return false;
+  if (opt.defaultNegationAccepted !== true) return false;
   const candidates = [opt.cliName, ...(opt.alias ?? [])];
   for (const c of candidates) {
     const hyphenated = `no-${c}`;
@@ -438,8 +438,8 @@ function writeOptionValue(
 
 /**
  * True when the typed token is the boolean option's negation form — either
- * the explicit `negation` name (or its camelCase variant) or the implicit
- * `--no-<name>` form. Long-form only; short tokens are never negations.
+ * the explicit `negation` name (or its camelCase variant) or the opt-in
+ * default `--no-<name>` form. Long-form only; short tokens are never negations.
  */
 function isNegationOf(opt: CompletableOption, parsed: ParsedOption): boolean {
   if (!parsed.isLong) return false;
