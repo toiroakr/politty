@@ -255,8 +255,12 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
   // handler is registered, delegate to it (e.g. exec an external `<cli>-<name>`
   // binary). Runs before global setup/cleanup so plugins are independent of the
   // host CLI's lifecycle, and is skipped for internal (`__*`) invocations.
+  // Commands with their own `run` are excluded: their first positional is a
+  // real argument, so an installed plugin must never shadow it (which would
+  // make the command's meaning depend on what is on PATH).
   if (
     effectiveOptions.onUnknownSubcommand &&
+    !command.run &&
     !isInternalSubcommandInvocation(command, argv, globalExtractedForBypass)
   ) {
     const knownSubCommands = listSubCommandNamesWithAliases(command);
@@ -407,8 +411,10 @@ async function runCommandInternal<TResult = unknown>(
     // handling so those flags are forwarded to the plugin, mirroring the
     // root-level dispatch in runMain. Root level (empty command path) is handled
     // in runMain before global setup; here we only cover nested levels.
+    // Commands with their own `run` are excluded so a plugin on PATH can never
+    // shadow a real positional argument (see the root-level dispatch above).
     const nestedCommandPath = context.commandPath ?? [];
-    if (options.onUnknownSubcommand && nestedCommandPath.length > 0) {
+    if (options.onUnknownSubcommand && !command.run && nestedCommandPath.length > 0) {
       const knownSubCommands = listSubCommandNamesWithAliases(command);
       if (knownSubCommands.size > 0) {
         const positionalIndex = findFirstPositionalIndex(argv, options._globalExtracted);

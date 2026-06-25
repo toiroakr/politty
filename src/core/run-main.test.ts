@@ -679,6 +679,47 @@ describe("runMain onUnknownSubcommand", () => {
     expect(knownRun).toHaveBeenCalled();
   });
 
+  it("does not dispatch when the command has its own run (positional is a real arg)", async () => {
+    using _argv = useArgv(["node", "test", "some-value"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn();
+    const rootRun = vi.fn();
+    const known = defineCommand({ name: "known", run: () => {} });
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({ value: arg(z.string().optional(), { positional: true }) }),
+      subCommands: { known },
+      run: rootRun,
+    });
+
+    await runMain(cmd, { onUnknownSubcommand });
+
+    expect(onUnknownSubcommand).not.toHaveBeenCalled();
+    expect(rootRun).toHaveBeenCalled();
+  });
+
+  it("does not dispatch under a nested command that has its own run", async () => {
+    using _argv = useArgv(["node", "test", "parent", "some-value"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn();
+    const parentRun = vi.fn();
+    const child = defineCommand({ name: "child", run: () => {} });
+    const parent = defineCommand({
+      name: "parent",
+      args: z.object({ value: arg(z.string().optional(), { positional: true }) }),
+      subCommands: { child },
+      run: parentRun,
+    });
+    const cmd = defineCommand({ name: "test", subCommands: { parent } });
+
+    await runMain(cmd, { onUnknownSubcommand });
+
+    expect(onUnknownSubcommand).not.toHaveBeenCalled();
+    expect(parentRun).toHaveBeenCalled();
+  });
+
   it("falls back to default behavior when the handler returns undefined", async () => {
     using _argv = useArgv(["node", "test", "plugin-name"]);
     using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
