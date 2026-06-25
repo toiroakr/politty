@@ -260,7 +260,9 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
   ) {
     const knownSubCommands = listSubCommandNamesWithAliases(command);
     if (knownSubCommands.size > 0) {
-      const positionalIndex = findFirstPositionalIndex(argv, globalExtracted);
+      const positionalIndex = findFirstPositionalIndex(argv, globalExtracted, {
+        stopOnSuppressedNegation: true,
+      });
       const name = positionalIndex >= 0 ? argv[positionalIndex] : undefined;
       if (name && !knownSubCommands.has(name)) {
         const forwardArgs = argv.slice(positionalIndex + 1);

@@ -755,6 +755,27 @@ describe("runMain onUnknownSubcommand", () => {
     expect(onUnknownSubcommand).not.toHaveBeenCalled();
   });
 
+  it("does not dispatch past a stripped global suppressed negation", async () => {
+    using _argv = useArgv(["node", "test", "--no-cache", "plugin-name"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    using _logSpy = spyOnConsoleLog();
+    using errorSpy = spyOnConsoleError();
+
+    const onUnknownSubcommand = vi.fn().mockReturnValue(0);
+    const known = defineCommand({ name: "known", run: () => {} });
+    const cmd = defineCommand({ name: "test", subCommands: { known } });
+
+    await runMain(cmd, {
+      onUnknownSubcommand,
+      globalArgs: z.object({
+        cache: arg(z.boolean().default(true)),
+      }),
+    });
+
+    expect(onUnknownSubcommand).not.toHaveBeenCalled();
+    expect(errorSpy.getLogs().join("\n")).toContain("Unknown option: no-cache");
+  });
+
   it("does not dispatch past a strict global suppressed negation", async () => {
     using _argv = useArgv(["node", "test", "--no-cache", "plugin-name"]);
     using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);

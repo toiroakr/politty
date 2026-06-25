@@ -335,8 +335,10 @@ const BUILTIN_FLAGS = new Set(["--help", "-h", "--help-all", "-H", "--version"])
 export function findFirstPositionalIndex(
   argv: string[],
   globalExtracted?: ExtractedFields,
+  options: { stopOnSuppressedNegation?: boolean } = {},
 ): number {
-  const stopOnSuppressedNegation = globalExtracted?.unknownKeysMode === "strict";
+  const stopOnSuppressedNegation =
+    options.stopOnSuppressedNegation === true || globalExtracted?.unknownKeysMode === "strict";
   const lookup: GlobalFlagLookup = globalExtracted
     ? buildGlobalFlagLookup(globalExtracted)
     : {
