@@ -307,4 +307,14 @@ describe("findFirstPositionalIndex", () => {
     const extracted = extractFields(schemaWithCustomNegation);
     expect(findFirstPositionalIndex(["--no-dry-run", "plugin"], extracted)).toBe(1);
   });
+
+  it("stops at a suppressed default --no-X when the global schema is strict", () => {
+    const strictSchema = z
+      .object({
+        cache: arg(z.boolean().default(true), { description: "Enable cache" }),
+      })
+      .strict();
+    const extracted = extractFields(strictSchema);
+    expect(findFirstPositionalIndex(["--no-cache", "plugin"], extracted)).toBe(-1);
+  });
 });

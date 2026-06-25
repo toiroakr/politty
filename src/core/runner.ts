@@ -401,6 +401,29 @@ async function runCommandInternal<TResult = unknown>(
       ...parseResult.rawGlobalArgs,
     };
 
+    // Suppressed default `--no-X` tokens for global fields belong to the
+    // global schema, so honor its unknownKeysMode before plugin dispatch,
+    // help rendering, or subcommand descent can bypass strict handling.
+    if (parseResult.unknownGlobalFlags && parseResult.unknownGlobalFlags.length > 0) {
+      const globalMode = context.globalExtracted?.unknownKeysMode ?? "strip";
+      if (globalMode === "strict") {
+        collector?.stop();
+        return {
+          success: false,
+          error: new Error(`Unknown flags: ${parseResult.unknownGlobalFlags.join(", ")}`),
+          exitCode: 1,
+          logs: getCurrentLogs(),
+        };
+      }
+      if (globalMode === "strip") {
+        const knownGlobalFlags = context.globalExtracted?.fields.map((f) => f.name) ?? [];
+        for (const flag of parseResult.unknownGlobalFlags) {
+          logger.error(formatUnknownFlagWarning(flag, knownGlobalFlags));
+        }
+      }
+      // passthrough: silently ignore
+    }
+
     // Nested plugin dispatch: an unknown positional under a known parent
     // command (e.g. `cli foo bar` -> `cli-foo-bar`). Runs before --help/--version
     // handling so those flags are forwarded to the plugin, mirroring the
@@ -503,31 +526,6 @@ async function runCommandInternal<TResult = unknown>(
 
     // Handle subcommand
     if (parseResult.subCommand) {
-      // Surface unknown flags from the pre-subcommand portion of argv before
-      // descending. Currently these are suppressed default `--no-X` tokens
-      // for global fields; they belong to the global schema, so use the
-      // global `unknownKeysMode`.
-      const unknownGlobalFlags = parseResult.unknownGlobalFlags ?? parseResult.unknownFlags;
-      if (unknownGlobalFlags.length > 0) {
-        const globalMode = context.globalExtracted?.unknownKeysMode ?? "strip";
-        if (globalMode === "strict") {
-          collector?.stop();
-          return {
-            success: false,
-            error: new Error(`Unknown flags: ${unknownGlobalFlags.join(", ")}`),
-            exitCode: 1,
-            logs: getCurrentLogs(),
-          };
-        }
-        if (globalMode === "strip") {
-          const knownGlobalFlags = context.globalExtracted?.fields.map((f) => f.name) ?? [];
-          for (const flag of unknownGlobalFlags) {
-            logger.error(formatUnknownFlagWarning(flag, knownGlobalFlags));
-          }
-        }
-        // passthrough: silently ignore
-      }
-
       const resolved = await resolveSubcommandWithAlias(command, parseResult.subCommand);
       if (resolved) {
         // Build new context for subcommand
@@ -562,26 +560,6 @@ async function runCommandInternal<TResult = unknown>(
     }
 
     // Handle unknown flags based on schema's unknownKeysMode
-    if (parseResult.unknownGlobalFlags && parseResult.unknownGlobalFlags.length > 0) {
-      const globalMode = context.globalExtracted?.unknownKeysMode ?? "strip";
-      if (globalMode === "strict") {
-        collector?.stop();
-        return {
-          success: false,
-          error: new Error(`Unknown flags: ${parseResult.unknownGlobalFlags.join(", ")}`),
-          exitCode: 1,
-          logs: getCurrentLogs(),
-        };
-      }
-      if (globalMode === "strip") {
-        const knownGlobalFlags = context.globalExtracted?.fields.map((f) => f.name) ?? [];
-        for (const flag of parseResult.unknownGlobalFlags) {
-          logger.error(formatUnknownFlagWarning(flag, knownGlobalFlags));
-        }
-      }
-      // passthrough: silently ignore
-    }
-
     if (parseResult.unknownFlags.length > 0) {
       const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
       const knownFlags = parseResult.extractedFields?.fields.map((f) => f.name) ?? [];

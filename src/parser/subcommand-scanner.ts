@@ -336,6 +336,7 @@ export function findFirstPositionalIndex(
   argv: string[],
   globalExtracted?: ExtractedFields,
 ): number {
+  const stopOnSuppressedNegation = globalExtracted?.unknownKeysMode === "strict";
   const lookup: GlobalFlagLookup = globalExtracted
     ? buildGlobalFlagLookup(globalExtracted)
     : {
@@ -369,7 +370,10 @@ export function findFirstPositionalIndex(
       }
       // Suppressed default `--no-X` for a field without opt-in negation: keep scanning
       // so a trailing positional is still detected (mirrors scanForSubcommand).
-      if (isSuppressedNegation) continue;
+      if (isSuppressedNegation) {
+        if (stopOnSuppressedNegation) return -1;
+        continue;
+      }
       // Unknown long flag: stop.
       return -1;
     }
