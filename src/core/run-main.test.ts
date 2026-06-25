@@ -816,6 +816,32 @@ describe("runMain onUnknownSubcommand", () => {
     expect(exitSpy).toHaveBeenCalledWith(5);
   });
 
+  it("forwards suppressed-global-shaped args after a nested plugin name", async () => {
+    using _argv = useArgv(["node", "test", "parent", "plugin-name", "--no-cache"]);
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn().mockReturnValue(0);
+    const child = defineCommand({ name: "child", run: () => {} });
+    const parent = defineCommand({ name: "parent", subCommands: { child } });
+    const cmd = defineCommand({ name: "test", subCommands: { parent } });
+
+    await runMain(cmd, {
+      onUnknownSubcommand,
+      globalArgs: z
+        .object({
+          cache: arg(z.boolean().default(true)),
+        })
+        .strict(),
+    });
+
+    expect(onUnknownSubcommand).toHaveBeenCalledWith({
+      commandPath: ["parent"],
+      name: "plugin-name",
+      args: ["--no-cache"],
+    });
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
   it("does not dispatch nested plugin past a stripped global suppressed negation", async () => {
     using _argv = useArgv(["node", "test", "parent", "--no-cache", "plugin-name"]);
     using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);

@@ -403,29 +403,6 @@ async function runCommandInternal<TResult = unknown>(
       ...parseResult.rawGlobalArgs,
     };
 
-    // Suppressed default `--no-X` tokens for global fields belong to the
-    // global schema, so honor its unknownKeysMode before plugin dispatch,
-    // help rendering, or subcommand descent can bypass strict handling.
-    if (parseResult.unknownGlobalFlags && parseResult.unknownGlobalFlags.length > 0) {
-      const globalMode = context.globalExtracted?.unknownKeysMode ?? "strip";
-      if (globalMode === "strict") {
-        collector?.stop();
-        return {
-          success: false,
-          error: new Error(`Unknown flags: ${parseResult.unknownGlobalFlags.join(", ")}`),
-          exitCode: 1,
-          logs: getCurrentLogs(),
-        };
-      }
-      if (globalMode === "strip") {
-        const knownGlobalFlags = context.globalExtracted?.fields.map((f) => f.name) ?? [];
-        for (const flag of parseResult.unknownGlobalFlags) {
-          logger.error(formatUnknownFlagWarning(flag, knownGlobalFlags));
-        }
-      }
-      // passthrough: silently ignore
-    }
-
     // Nested plugin dispatch: an unknown positional under a known parent
     // command (e.g. `cli foo bar` -> `cli-foo-bar`). Runs before --help/--version
     // handling so those flags are forwarded to the plugin, mirroring the
@@ -478,6 +455,30 @@ async function runCommandInternal<TResult = unknown>(
           }
         }
       }
+    }
+
+    // Suppressed default `--no-X` tokens for global fields belong to the
+    // global schema, so honor its unknownKeysMode before help rendering or
+    // subcommand descent can bypass strict handling. This runs after nested
+    // plugin dispatch so plugin arguments are not interpreted by the host.
+    if (parseResult.unknownGlobalFlags && parseResult.unknownGlobalFlags.length > 0) {
+      const globalMode = context.globalExtracted?.unknownKeysMode ?? "strip";
+      if (globalMode === "strict") {
+        collector?.stop();
+        return {
+          success: false,
+          error: new Error(`Unknown flags: ${parseResult.unknownGlobalFlags.join(", ")}`),
+          exitCode: 1,
+          logs: getCurrentLogs(),
+        };
+      }
+      if (globalMode === "strip") {
+        const knownGlobalFlags = context.globalExtracted?.fields.map((f) => f.name) ?? [];
+        for (const flag of parseResult.unknownGlobalFlags) {
+          logger.error(formatUnknownFlagWarning(flag, knownGlobalFlags));
+        }
+      }
+      // passthrough: silently ignore
     }
 
     // Handle --help or --help-all
