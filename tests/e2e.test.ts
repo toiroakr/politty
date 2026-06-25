@@ -1094,6 +1094,34 @@ describe("E2E Tests", () => {
       expect(captured.feature).toBe(false);
     });
 
+    it("lets local opt-in alias negation shadow a disabled global alias negation token", async () => {
+      const captured: Record<string, unknown> = {};
+      const globalArgs = z
+        .object({
+          cache: arg(z.boolean().default(true), { alias: "c" }),
+        })
+        .strict();
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              feature: arg(z.boolean().default(true), { alias: "c", negation: true }),
+            }),
+            run: (args) => {
+              Object.assign(captured, args);
+            },
+          }),
+        },
+      });
+
+      const result = await runCommand(cmd, ["build", "--no-c"], { globalArgs });
+
+      expect(result.success).toBe(true);
+      expect(captured.feature).toBe(false);
+    });
+
     it("advertises default --no-X in help when negation is true", async () => {
       using console = spyOnConsoleLog();
       const cmd = defineCommand({

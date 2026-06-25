@@ -1,4 +1,9 @@
-import { extractFields, getAllAliases, type ExtractedFields } from "../core/schema-extractor.js";
+import {
+  extractFields,
+  getAllAliases,
+  toCamelCase,
+  type ExtractedFields,
+} from "../core/schema-extractor.js";
 import { listSubCommandNamesWithAliases } from "../executor/subcommand-router.js";
 import type { AnyCommand } from "../types.js";
 import {
@@ -314,6 +319,15 @@ function separateGlobalArgs(
   const localParserOptions = localExtracted ? buildParserOptions(localExtracted) : undefined;
   const localAliasMapKeys = new Set(localParserOptions?.aliasMap?.keys() ?? []);
   const localNegationMapKeys = new Set(localParserOptions?.negationMap?.keys() ?? []);
+  const localDefaultNegationKeys = new Set<string>();
+  for (const field of localExtracted?.fields ?? []) {
+    if (field.type !== "boolean" || field.negation !== true) continue;
+    for (const name of [field.cliName, ...getAllAliases(field)]) {
+      const kebab = `no-${name}`;
+      localDefaultNegationKeys.add(kebab);
+      localDefaultNegationKeys.add(toCamelCase(kebab));
+    }
+  }
 
   const globalTokens: string[] = [];
   const commandTokens: string[] = [];
@@ -346,7 +360,9 @@ function separateGlobalArgs(
         localAliasMapKeys.has(withoutDashes) ||
         localAliasMapKeys.has(flagName) ||
         localNegationMapKeys.has(withoutDashes) ||
-        localNegationMapKeys.has(flagName);
+        localNegationMapKeys.has(flagName) ||
+        localDefaultNegationKeys.has(withoutDashes) ||
+        localDefaultNegationKeys.has(flagName);
 
       if (isGlobal && !isLocalCollision) {
         // collectGlobalFlag returns 1 or 2; subtract 1 because the for-loop increments
