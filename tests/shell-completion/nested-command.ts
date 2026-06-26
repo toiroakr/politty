@@ -13,7 +13,7 @@
  */
 
 import { z } from "zod";
-import { arg, defineCommand, runMain, withCompletionCommand } from "../../src/index.js";
+import { arg, defineCommand, runMain, withCompletionCommand } from "../../src/zod.js";
 
 const getArgs = z.object({
   key: arg(z.string(), { positional: true, description: "Config key" }),

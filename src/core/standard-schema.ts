@@ -71,11 +71,6 @@ export function getVendor(schema: unknown): string | undefined {
   return std && typeof std === "object" ? std.vendor : undefined;
 }
 
-/** Whether a schema is a Zod schema (handled by the native introspection path). */
-export function isZodSchema(schema: unknown): boolean {
-  return getVendor(schema) === "zod";
-}
-
 /** Whether a schema implements the Standard Schema interface. */
 export function isStandardSchema(schema: unknown): schema is StandardSchemaLike {
   return getVendor(schema) !== undefined;
@@ -151,7 +146,7 @@ function conversionOptions(vendor: string | undefined): Record<string, unknown> 
  * already-prepared schemas.
  */
 export async function prepareSchema(schema: unknown): Promise<void> {
-  if (!isStandardSchema(schema) || isZodSchema(schema)) return;
+  if (!isStandardSchema(schema)) return;
   // politty's built-in internal schema is introspected directly and needs no
   // JSON Schema conversion.
   if (getVendor(schema) === "politty") return;

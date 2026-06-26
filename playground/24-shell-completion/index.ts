@@ -24,7 +24,7 @@
  */
 
 import { z } from "zod";
-import { arg, defineCommand, runMain, withCompletionCommand } from "../../src/index.js";
+import { arg, defineCommand, runMain, withCompletionCommand } from "../../src/zod.js";
 
 // Subcommand: build
 export const buildCommand = defineCommand({

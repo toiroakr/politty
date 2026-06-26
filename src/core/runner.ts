@@ -39,7 +39,17 @@ import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import { extractFields, type ExtractedFields } from "./schema-extractor.js";
 import { resolveSchemaAdapter } from "./schema-registry.js";
-import { prepareSchema } from "./standard-schema.js";
+
+/**
+ * Pre-process a schema via its registered adapter so later synchronous
+ * introspection works. No-op for adapters that need no preparation (Zod,
+ * native Valibot, the internal schema); the generic Standard Schema adapter
+ * uses it to convert to JSON Schema.
+ */
+async function prepareSchema(schema: ArgsSchema | undefined): Promise<void> {
+  if (!schema) return;
+  await resolveSchemaAdapter(schema).prepare?.(schema);
+}
 
 /**
  * Validate raw args against a command/global schema using the adapter

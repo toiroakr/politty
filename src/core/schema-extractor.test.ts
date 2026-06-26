@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { extractFields, getUnknownKeysMode, toCamelCase } from "./schema-extractor.js";
+import { getUnknownKeysMode } from "../adapters/zod.js";
+import { extractFields, toCamelCase } from "./schema-extractor.js";
 
 describe("schema-extractor", () => {
   describe("getUnknownKeysMode", () => {

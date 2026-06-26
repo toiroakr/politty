@@ -3,6 +3,9 @@ import { defineConfig } from "tsdown";
 export default defineConfig({
   entry: [
     "src/index.ts",
+    "src/zod.ts",
+    "src/valibot.ts",
+    "src/standard-schema.ts",
     "src/cli.ts",
     "src/augment.ts",
     "src/docs/index.ts",
