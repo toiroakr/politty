@@ -31,30 +31,26 @@ import {
   formatRuntimeError,
   formatUnknownFlagWarning,
 } from "../validator/error-formatter.js";
-import { validateStandard } from "../validator/standard-validator.js";
 import {
   formatValidationErrors as formatPlainValidationErrors,
-  validateArgs,
   type ValidationResult,
-} from "../validator/zod-validator.js";
+} from "../validator/types.js";
 import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import { extractFields, type ExtractedFields } from "./schema-extractor.js";
-import { isZodSchema, prepareSchema } from "./standard-schema.js";
+import { resolveSchemaAdapter } from "./schema-registry.js";
+import { prepareSchema } from "./standard-schema.js";
 
 /**
- * Validate raw args against a command/global schema, choosing the backend by
- * vendor: Zod uses native `safeParse`; any other Standard Schema library uses
- * its `~standard.validate` (awaited, since it may be asynchronous).
+ * Validate raw args against a command/global schema using the adapter
+ * registered for the schema's vendor (Zod's `safeParse`, the Standard Schema
+ * `~standard.validate` path, ...). Awaited since adapters may be asynchronous.
  */
 async function validateArgsByVendor<T extends ArgsSchema>(
   rawArgs: Record<string, unknown>,
   schema: T,
 ): Promise<ValidationResult<unknown>> {
-  if (isZodSchema(schema)) {
-    return validateArgs(rawArgs, schema);
-  }
-  return validateStandard(rawArgs, schema);
+  return resolveSchemaAdapter(schema).validate(rawArgs, schema);
 }
 
 /**

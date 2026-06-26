@@ -1,7 +1,7 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { StandardSchemaLike } from "../core/standard-schema.js";
 import type { ArgsSchema } from "../types.js";
-import type { ValidationError, ValidationResult } from "./zod-validator.js";
+import type { ValidationError, ValidationResult } from "./types.js";
 
 /**
  * Standard Schema validation result issue shape (path segments may be either a

@@ -121,6 +121,6 @@ export {
   type CommandValidationError,
   type CommandValidationResult,
 } from "./validator/command-validator.js";
-export { formatValidationErrors } from "./validator/zod-validator.js";
+export { formatValidationErrors } from "./validator/types.js";
 // Validation types
-export type { ValidationError, ValidationResult } from "./validator/zod-validator.js";
+export type { ValidationError, ValidationResult } from "./validator/types.js";

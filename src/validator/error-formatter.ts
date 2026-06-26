@@ -1,5 +1,5 @@
 import { styles, symbols } from "../output/logger.js";
-import type { ValidationError } from "./zod-validator.js";
+import type { ValidationError } from "./types.js";
 
 /**
  * Calculate Levenshtein distance between two strings

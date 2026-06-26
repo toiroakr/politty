@@ -1,6 +1,12 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import type { z } from "zod";
 import type { ArgsSchema } from "../types.js";
+import type { ValidationError, ValidationResult } from "./types.js";
+
+// Re-exported for backwards compatibility; the canonical definitions are
+// vendor-neutral and live in ./types.js.
+export { formatValidationErrors } from "./types.js";
+export type { ValidationError, ValidationResult } from "./types.js";
 
 /** Minimal Zod-like surface used to invoke `safeParse` without coupling. */
 interface ZodLike {
@@ -8,29 +14,6 @@ interface ZodLike {
     value: unknown,
   ): { success: true; data: unknown } | { success: false; error: z.ZodError };
 }
-
-/**
- * Validation error details
- */
-export interface ValidationError {
-  /** Path to the invalid field */
-  path: string[];
-  /** Error message */
-  message: string;
-  /** Zod error code */
-  code: string;
-  /** Value that was received */
-  received?: unknown | undefined;
-  /** Expected type or value */
-  expected?: string | undefined;
-}
-
-/**
- * Validation result
- */
-export type ValidationResult<T> =
-  | { success: true; data: T }
-  | { success: false; errors: ValidationError[] };
 
 /**
  * Convert ZodError to ValidationError array (zod v4 compatible)
@@ -69,16 +52,4 @@ export function validateArgs<T extends ArgsSchema>(
     success: false,
     errors: formatZodErrors(result.error),
   };
-}
-
-/**
- * Format validation errors for display
- */
-export function formatValidationErrors(errors: ValidationError[]): string {
-  return errors
-    .map((e) => {
-      const path = e.path.length > 0 ? `${e.path.join(".")}: ` : "";
-      return `${path}${e.message}`;
-    })
-    .join("\n");
 }

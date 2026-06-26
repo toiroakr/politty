@@ -1,21 +1,44 @@
 import type { z } from "zod";
 import type { AnyCommand, ArgsSchema } from "../types.js";
+import { validateStandard } from "../validator/standard-validator.js";
+import { validateArgs } from "../validator/zod-validator.js";
+import { getArgMeta as getArgMetaFromRegistry, type ArgMeta } from "./arg-registry.js";
 import {
-  getArgMeta as getArgMetaFromRegistry,
-  type ArgMeta,
-  type CompletionMeta,
-  type EffectContext,
-  type PromptMeta,
-} from "./arg-registry.js";
+  buildFieldMeta,
+  getAllAliases,
+  toCamelCase,
+  toKebabCase,
+  type DerivedFieldInfo,
+  type ExtractedFields,
+  type ResolvedFieldMeta,
+  type UnknownKeysMode,
+} from "./field-meta.js";
 import type { InternalSchema } from "./internal-schema.js";
+import {
+  registerSchemaAdapter,
+  resolveSchemaAdapter,
+  type SchemaAdapter,
+} from "./schema-registry.js";
 import {
   getChildSchema,
   getJsonSchema,
   getUnionOptionSchemas,
-  getVendor,
   unwrapStandardSchema,
   type JsonSchema,
 } from "./standard-schema.js";
+
+// Re-export the shared field-metadata model so existing importers of these
+// names from "./schema-extractor.js" (and from "politty") keep working.
+export {
+  buildFieldMeta,
+  getAllAliases,
+  toCamelCase,
+  toKebabCase,
+  type DerivedFieldInfo,
+  type ExtractedFields,
+  type ResolvedFieldMeta,
+  type UnknownKeysMode,
+};
 
 /**
  * Get ArgMeta from both the custom registry and Zod's _def
@@ -43,125 +66,6 @@ function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
 
   return undefined;
 }
-
-/**
- * Long flag names reserved for built-in handling (parseArgs / scanForSubcommand
- * intercept these before option parsing), so custom negation names must avoid them.
- */
-const RESERVED_NEGATION_NAMES: ReadonlySet<string> = new Set(["help", "help-all", "version"]);
-
-/**
- * Resolved metadata for an argument field
- */
-export interface ResolvedFieldMeta {
-  /** Field name (camelCase, as defined in schema) */
-  name: string;
-  /** CLI option name (kebab-case, for command line usage) */
-  cliName: string;
-  /**
-   * Aliases for this option, normalized to an array.
-   * 1-char entries are short aliases (`-v`); multi-char entries are long
-   * aliases (`--to-be`).
-   */
-  alias?: string[] | undefined;
-  /**
-   * Aliases that are accepted at parse time but hidden from help,
-   * generated docs, and shell completion.
-   */
-  hiddenAlias?: string[] | undefined;
-  /** Argument description */
-  description?: string | undefined;
-  /** Whether this is a positional argument */
-  positional: boolean;
-  /** Placeholder for help display */
-  placeholder?: string | undefined;
-  /**
-   * Environment variable name(s) to read value from.
-   * If an array, earlier entries take priority.
-   */
-  env?: string | string[] | undefined;
-  /** Whether this argument is required */
-  required: boolean;
-  /** Default value if any */
-  defaultValue?: unknown;
-  /** Detected type from schema */
-  type: "string" | "number" | "boolean" | "array" | "unknown";
-  /** Original Zod schema */
-  schema: z.ZodType;
-  /** True if this overrides built-in aliases (-h, -H) */
-  overrideBuiltinAlias?: true;
-  /** Enum values if detected from schema (z.enum) */
-  enumValues?: string[] | undefined;
-  /** Completion metadata from arg() */
-  completion?: CompletionMeta | undefined;
-  /** Prompt metadata from arg() for interactive input */
-  prompt?: PromptMeta | undefined;
-  /**
-   * Negation configuration for this boolean field.
-   *
-   * - String (e.g. `"disable-cache"`): the default `--no-<cliName>` form is
-   *   suppressed and only `--<negation>` (plus its camelCase variant) is
-   *   accepted as the negation flag.
-   * - `true`: the default `--no-<cliName>` form is accepted **and** shown in
-   *   help, generated docs, and shell completions.
-   * - `false`: neither the default `--no-<cliName>` nor any custom name is
-   *   accepted; the field only responds to the positive flag.
-   * - `undefined`: the default `--no-<cliName>` is accepted by the parser
-   *   but hidden from help/docs/completions.
-   *
-   * Only applies to boolean fields; populated as `undefined` otherwise.
-   */
-  negation?: string | boolean | undefined;
-  /**
-   * Derived display name (no `--` prefix) for the negation flag in help,
-   * generated docs, and shell completions. `undefined` means the negation
-   * is hidden from those surfaces. Computed from `negation` + `cliName`.
-   */
-  negationDisplay?: string | undefined;
-  /** Description shown for the negation option in help/docs. */
-  negationDescription?: string | undefined;
-  /** Side-effect callback from arg() metadata */
-  effect?: ((value: unknown, context: EffectContext) => void | PromiseLike<void>) | undefined;
-}
-
-/**
- * Extracted fields from a schema
- */
-export interface ExtractedFields {
-  /** All field definitions */
-  fields: ResolvedFieldMeta[];
-  /** Original schema for validation */
-  schema: ArgsSchema;
-  /** Schema type */
-  schemaType: "object" | "discriminatedUnion" | "union" | "xor" | "intersection";
-  /** Discriminator key (for discriminatedUnion) */
-  discriminator?: string;
-  /** Variants (for discriminatedUnion) */
-  variants?: Array<{
-    discriminatorValue: string;
-    fields: ResolvedFieldMeta[];
-    description?: string;
-  }>;
-  /** Options (for union) */
-  unionOptions?: ExtractedFields[];
-  /** Schema description */
-  description?: string;
-  /**
-   * Unknown keys handling mode
-   * - "strict": Unknown keys cause validation errors (z.strictObject or z.object().strict())
-   * - "strip": Unknown keys trigger warnings (default, z.object())
-   * - "passthrough": Unknown keys are silently ignored (z.looseObject or z.object().passthrough())
-   */
-  unknownKeysMode: UnknownKeysMode;
-}
-
-/**
- * Unknown keys handling mode for object schemas
- * - "strict": Unknown keys cause validation errors
- * - "strip": Unknown keys are silently ignored (default)
- * - "passthrough": Unknown keys are passed through
- */
-export type UnknownKeysMode = "strict" | "strip" | "passthrough";
 
 // Internal type for accessing zod v4 internals
 interface ZodV4Def {
@@ -349,34 +253,6 @@ export function extractEnumValues(schema: z.ZodType): string[] | undefined {
 }
 
 /**
- * Convert camelCase to kebab-case
- * @example toKebabCase("dryRun") => "dry-run"
- * @example toKebabCase("outputDir") => "output-dir"
- * @example toKebabCase("XMLParser") => "xml-parser"
- */
-export function toKebabCase(str: string): string {
-  return str
-    .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
-    .toLowerCase();
-}
-
-/**
- * Convert hyphen-separated sequences to camelCase.
- *
- * Replaces `-x` (hyphen followed by a lowercase letter) with the uppercase
- * variant. Non-hyphenated input (e.g., already camelCase) is returned as-is.
- *
- * @param str - A string that may contain hyphens
- * @example toCamelCase("dry-run") => "dryRun"
- * @example toCamelCase("output-dir") => "outputDir"
- * @example toCamelCase("dryRun") => "dryRun"
- */
-export function toCamelCase(str: string): string {
-  return str.replace(/-([a-z])/g, (_, char) => char.toUpperCase());
-}
-
-/**
  * Check if a schema is required (not optional or has default)
  *
  * Note: We only check isOptional(), not isNullable(), because CLI arguments
@@ -440,193 +316,6 @@ function extractDescription(schema: z.ZodType): string | undefined {
 }
 
 /**
- * Schema-derived inputs for a field, computed by the introspection backend
- * (Zod native `_def` walk, or JSON Schema walk) and then normalized identically.
- */
-export interface DerivedFieldInfo {
-  /** Description sourced from the schema (arg() metadata still takes priority). */
-  description?: string | undefined;
-  /** Detected base type. */
-  type: "string" | "number" | "boolean" | "array" | "unknown";
-  /** Whether the field is required. */
-  required: boolean;
-  /** Default value, if any. */
-  defaultValue: unknown;
-  /** Enum values, if the field is an enum/literal-union. */
-  enumValues?: string[] | undefined;
-  /** Original sub-schema reference (used by docs/golden tests). */
-  schema: z.ZodType;
-}
-
-/**
- * Build a {@link ResolvedFieldMeta} from `arg()` metadata plus schema-derived
- * info. Holds all CLI-metadata normalization (alias / hiddenAlias / negation /
- * ...) and is shared by the Zod and JSON Schema extraction backends.
- */
-function buildFieldMeta(
-  name: string,
-  argMeta: ArgMeta | undefined,
-  derived: DerivedFieldInfo,
-): ResolvedFieldMeta {
-  // Priority: argRegistry > schema description
-  const description = argMeta?.description ?? derived.description;
-
-  // Convert camelCase field name to kebab-case for CLI usage
-  const cliName = toKebabCase(name);
-
-  const enumValues = derived.enumValues;
-  const fieldType = derived.type;
-
-  // Normalize alias-like inputs to a deduped, validated array (or undefined when empty).
-  // Leading dashes are stripped for convenience; entries that still fail the pattern after
-  // stripping cause a validation error so that invalid aliases are never silently ignored.
-  const aliasPattern = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
-  const normalizeAliasList = (
-    input: unknown,
-    metaKey: "alias" | "hiddenAlias",
-  ): string[] | undefined => {
-    if (input == null) return undefined;
-    const arr = Array.isArray(input) ? input : [input];
-    const normalized = arr.map((a) => {
-      if (typeof a !== "string") {
-        throw new Error(
-          `Invalid ${metaKey} for field "${name}": expected string or string[], received ${typeof a}.`,
-        );
-      }
-      const candidate = a.trim().replace(/^-+/, "");
-      if (candidate.length === 0 || !aliasPattern.test(candidate)) {
-        throw new Error(
-          `Invalid ${metaKey} "${a}" for field "${name}": aliases must match ${aliasPattern}.`,
-        );
-      }
-      return candidate;
-    });
-    const result = Array.from(new Set(normalized));
-    return result.length > 0 ? result : undefined;
-  };
-
-  const alias = normalizeAliasList(argMeta?.alias, "alias");
-  // Filter hiddenAlias so it never overlaps with visible alias (visible wins)
-  const visibleSet = new Set(alias ?? []);
-  const hiddenAliasRaw = normalizeAliasList(
-    (argMeta as { hiddenAlias?: string | string[] } | undefined)?.hiddenAlias,
-    "hiddenAlias",
-  );
-  const hiddenAlias = hiddenAliasRaw?.filter((a) => !visibleSet.has(a));
-  const hiddenAliasFinal = hiddenAlias && hiddenAlias.length > 0 ? hiddenAlias : undefined;
-
-  // Validate and normalize `negation` (only meaningful for boolean fields).
-  // Accepts:
-  //   - string: custom negation CLI name (suppresses default `--no-*`)
-  //   - true:   keep default `--no-*` and advertise it in help/docs/completion
-  //   - false:  disable negation entirely (default `--no-*` also rejected)
-  const rawNegation = (argMeta as { negation?: unknown } | undefined)?.negation;
-  let negation: string | boolean | undefined;
-  if (rawNegation !== undefined && rawNegation !== null) {
-    if (typeof rawNegation === "boolean") {
-      if (fieldType !== "boolean") {
-        throw new Error(
-          `Invalid negation for field "${name}": negation can only be used on boolean fields.`,
-        );
-      }
-      negation = rawNegation;
-    } else {
-      if (typeof rawNegation !== "string") {
-        throw new Error(
-          `Invalid negation for field "${name}": expected string or boolean, received ${typeof rawNegation}.`,
-        );
-      }
-      const candidate = rawNegation.trim().replace(/^-+/, "");
-      if (candidate.length === 0 || !aliasPattern.test(candidate)) {
-        throw new Error(
-          `Invalid negation "${rawNegation}" for field "${name}": negation names must match ${aliasPattern}.`,
-        );
-      }
-      if (RESERVED_NEGATION_NAMES.has(candidate)) {
-        throw new Error(
-          `Invalid negation "${rawNegation}" for field "${name}": negation cannot use reserved built-in flag names (${[
-            ...RESERVED_NEGATION_NAMES,
-          ]
-            .map((n) => `--${n}`)
-            .join(", ")}).`,
-        );
-      }
-      if (fieldType !== "boolean") {
-        throw new Error(
-          `Invalid negation for field "${name}": negation can only be used on boolean fields.`,
-        );
-      }
-      negation = candidate;
-    }
-  }
-
-  const rawNegationDescription = (argMeta as { negationDescription?: unknown } | undefined)
-    ?.negationDescription;
-  let negationDescription: string | undefined;
-  if (rawNegationDescription !== undefined && rawNegationDescription !== null) {
-    if (typeof rawNegationDescription !== "string") {
-      throw new Error(
-        `Invalid negationDescription for field "${name}": expected string, received ${typeof rawNegationDescription}.`,
-      );
-    }
-    if (negation === false) {
-      throw new Error(
-        `Invalid negationDescription for field "${name}": negationDescription cannot be used when negation is false.`,
-      );
-    }
-    if (negation === undefined) {
-      throw new Error(
-        `Invalid negationDescription for field "${name}": negationDescription requires \`negation\` to be set (string or true).`,
-      );
-    }
-    // Reject blank strings: downstream rendering treats falsy values as
-    // "no description provided" and collapses to the inline `/` form, so
-    // an empty/whitespace-only string would be silently ignored.
-    const trimmed = rawNegationDescription.trim();
-    if (trimmed.length === 0) {
-      throw new Error(
-        `Invalid negationDescription for field "${name}": negationDescription must be a non-empty string.`,
-      );
-    }
-    negationDescription = trimmed;
-  }
-
-  // Compute the displayed negation name (without leading `--`) for help,
-  // generated docs, and shell completions. `undefined` means hidden.
-  const negationDisplay: string | undefined =
-    typeof negation === "string" ? negation : negation === true ? `no-${cliName}` : undefined;
-
-  const meta: ResolvedFieldMeta = {
-    name,
-    cliName,
-    alias,
-    hiddenAlias: hiddenAliasFinal,
-    description,
-    positional: argMeta?.positional ?? false,
-    placeholder: argMeta?.placeholder,
-    env: argMeta?.env,
-    required: derived.required,
-    defaultValue: derived.defaultValue,
-    type: fieldType,
-    schema: derived.schema,
-    enumValues,
-    completion: argMeta?.completion,
-    prompt: argMeta?.prompt,
-    negation,
-    negationDisplay,
-    negationDescription,
-    effect: argMeta?.effect,
-  };
-
-  // Add overrideBuiltinAlias only if it's true
-  if (argMeta && "overrideBuiltinAlias" in argMeta && argMeta.overrideBuiltinAlias === true) {
-    meta.overrideBuiltinAlias = true;
-  }
-
-  return meta;
-}
-
-/**
  * Resolve field metadata from a Zod sub-schema and the arg() registry.
  */
 function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
@@ -641,16 +330,6 @@ function resolveFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
     enumValues: extractEnumValues(schema),
     schema,
   });
-}
-
-/**
- * Get the combined list of visible + hidden aliases for a field.
- * Used by the parser and validators which treat both equally,
- * while help/docs/completion rely on `field.alias` only.
- */
-export function getAllAliases(field: ResolvedFieldMeta): string[] {
-  if (!field.alias && !field.hiddenAlias) return [];
-  return [...(field.alias ?? []), ...(field.hiddenAlias ?? [])];
 }
 
 /**
@@ -1158,71 +837,11 @@ function resolveStandaloneStandardFieldMeta(
  * so any Standard Schema library (Zod, politty's internal schema, Valibot,
  * ArkType, ...) works without importing Zod at runtime.
  */
-function resolveAnyFieldMeta(name: string, fieldSchema: unknown): ResolvedFieldMeta {
-  const vendor = getVendor(fieldSchema);
-  if (vendor === "politty") {
-    return resolveInternalFieldMeta(name, fieldSchema as InternalSchema);
-  }
-  if (vendor === "zod") {
-    // Zod goes through `_def` reflection, which is type-only and never imports
-    // Zod at runtime.
-    return resolveFieldMeta(name, fieldSchema as z.ZodType);
-  }
-  if (vendor !== undefined) {
-    return resolveStandaloneStandardFieldMeta(name, fieldSchema as ArgsSchema);
-  }
-  // No `~standard` marker: not a recognized schema. Every supported library
-  // (Zod, politty's internal schema, Valibot, ArkType, ...) reports a vendor,
-  // so this is an error rather than a value to guess at.
-  throw new Error(
-    `Cannot extract arg metadata for field "${name}": value is not a Standard Schema (missing "~standard" marker).`,
-  );
-}
-
 /**
- * Extract field metadata from a raw args *shape* — a `Record` of field name to
- * field schema — without wrapping it in any vendor's object schema. Each field
- * is resolved by its own vendor, so shapes built from Zod, politty's internal
- * schema, or other Standard Schema libraries all work. Used by the docs tooling
- * (`renderArgsTable`, global-options handling) which receive shapes directly.
+ * Zod native introspection (`_def` walk) — the Zod adapter's extractor. Zod is
+ * imported only as a type, so this never pulls Zod into the runtime bundle.
  */
-export function extractShapeFields(shape: Record<string, unknown>): ResolvedFieldMeta[] {
-  return Object.entries(shape).map(([name, fieldSchema]) => resolveAnyFieldMeta(name, fieldSchema));
-}
-
-/**
- * Cache for extractFields results to avoid redundant schema extraction
- */
-const extractFieldsCache = new WeakMap<ArgsSchema, ExtractedFields>();
-
-/**
- * Extract all fields from a schema
- *
- * @param schema - The args schema (ZodObject, ZodDiscriminatedUnion, etc.)
- * @returns Extracted field information
- */
-export function extractFields(schema: ArgsSchema): ExtractedFields {
-  const cached = extractFieldsCache.get(schema);
-  if (cached) return cached;
-
-  const vendor = getVendor(schema);
-  // politty's built-in internal schema is introspected directly from its state.
-  if (vendor === "politty") {
-    const result = extractFieldsFromInternalSchema(schema as unknown as InternalSchema);
-    extractFieldsCache.set(schema, result);
-    return result;
-  }
-  // Other non-Zod Standard Schema vendors are introspected via JSON Schema
-  // instead of Zod's native `_def`. This path never touches Zod at runtime.
-  if (vendor !== undefined && vendor !== "zod") {
-    const result = extractFieldsFromStandardSchema(schema);
-    extractFieldsCache.set(schema, result);
-    return result;
-  }
-
-  let result: ExtractedFields;
-  // Zod native introspection path. Cast once to the Zod type the helpers below
-  // expect; `schema` remains the broader ArgsSchema for the result payloads.
+function extractFieldsZod(schema: ArgsSchema): ExtractedFields {
   const zodSchema = schema as z.ZodType;
   const typeName = getTypeName(zodSchema);
   const s = schema as ZodSchemaWithDef;
@@ -1231,71 +850,130 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
   switch (typeName) {
     case "object": {
       const description = extractDescription(zodSchema);
-      result = {
+      return {
         fields: extractFromObject(zodSchema),
         schema,
         schemaType: "object",
         unknownKeysMode: getUnknownKeysMode(zodSchema),
         ...(description ? { description } : {}),
       };
-      break;
     }
 
     case "union":
       // In Zod v4, discriminatedUnion has type "union" with a discriminator property
-      if (def?.discriminator) {
-        result = extractFromDiscriminatedUnion(zodSchema);
-      } else {
-        result = extractFromUnionLike(zodSchema, "union");
-      }
-      break;
+      return def?.discriminator
+        ? extractFromDiscriminatedUnion(zodSchema)
+        : extractFromUnionLike(zodSchema, "union");
 
     case "xor":
-      result = extractFromUnionLike(zodSchema, "xor");
-      break;
+      return extractFromUnionLike(zodSchema, "xor");
 
     case "intersection":
-      result = extractFromIntersection(zodSchema);
-      break;
+      return extractFromIntersection(zodSchema);
 
     case "pipe": {
       // Handle transform/refine on top-level schema (e.g., z.object({...}).transform(...))
       const pipeInner = def?.in ?? def?.schema;
+      const pipeDescription = extractDescription(zodSchema);
       if (pipeInner) {
         const innerResult = extractFields(pipeInner as ArgsSchema);
-        const pipeDescription = extractDescription(zodSchema);
-        result = {
+        return {
           ...innerResult,
           schema,
           ...(pipeDescription ? { description: pipeDescription } : {}),
         };
-        break;
       }
-      const pipeDescription = extractDescription(zodSchema);
-      result = {
+      return {
         fields: [],
         schema,
         schemaType: "object",
         unknownKeysMode: getUnknownKeysMode(zodSchema),
         ...(pipeDescription ? { description: pipeDescription } : {}),
       };
-      break;
     }
 
     default: {
       const description = extractDescription(zodSchema);
       // Fallback: try to treat as object
-      result = {
+      return {
         fields: [],
         schema,
         schemaType: "object",
         unknownKeysMode: getUnknownKeysMode(zodSchema),
         ...(description ? { description } : {}),
       };
-      break;
     }
   }
+}
 
+// ---------------------------------------------------------------------------
+// Adapters
+//
+// Stage 1: all three adapters are defined and registered here in core so
+// behavior is identical to the previous hard-coded vendor dispatch. A later
+// stage moves the Zod adapter to the `politty/zod` entrypoint and the generic
+// Standard Schema adapter to `politty/standard-schema`, leaving core to
+// register only the internal adapter plus the generic fallback.
+// ---------------------------------------------------------------------------
+
+const zodAdapter: SchemaAdapter = {
+  vendors: ["zod"],
+  extractFields: extractFieldsZod,
+  resolveField: (name, fieldSchema) => resolveFieldMeta(name, fieldSchema as z.ZodType),
+  validate: (rawArgs, schema) => validateArgs(rawArgs, schema),
+};
+
+const internalAdapter: SchemaAdapter = {
+  vendors: ["politty"],
+  extractFields: (schema) => extractFieldsFromInternalSchema(schema as unknown as InternalSchema),
+  resolveField: (name, fieldSchema) =>
+    resolveInternalFieldMeta(name, fieldSchema as InternalSchema),
+  validate: (rawArgs, schema) => validateStandard(rawArgs, schema),
+};
+
+const standardAdapter: SchemaAdapter = {
+  vendors: [],
+  extractFields: extractFieldsFromStandardSchema,
+  resolveField: (name, fieldSchema) =>
+    resolveStandaloneStandardFieldMeta(name, fieldSchema as ArgsSchema),
+  validate: (rawArgs, schema) => validateStandard(rawArgs, schema),
+};
+
+registerSchemaAdapter(internalAdapter);
+registerSchemaAdapter(zodAdapter);
+registerSchemaAdapter(standardAdapter, { fallback: true });
+
+/**
+ * Extract field metadata from a raw args *shape* — a `Record` of field name to
+ * field schema — without wrapping it in any vendor's object schema. Each field
+ * is resolved by the adapter for its own vendor, so shapes built from Zod,
+ * politty's internal schema, or other Standard Schema libraries all work. Used
+ * by the docs tooling (`renderArgsTable`, global-options handling).
+ */
+export function extractShapeFields(shape: Record<string, unknown>): ResolvedFieldMeta[] {
+  return Object.entries(shape).map(([name, fieldSchema]) =>
+    resolveSchemaAdapter(fieldSchema).resolveField(name, fieldSchema),
+  );
+}
+
+/**
+ * Cache for extractFields results to avoid redundant schema extraction
+ */
+const extractFieldsCache = new WeakMap<ArgsSchema, ExtractedFields>();
+
+/**
+ * Extract all fields from a schema, dispatching to the registered adapter for
+ * the schema's Standard Schema vendor.
+ *
+ * @param schema - The args schema (ZodObject, ZodDiscriminatedUnion, Valibot/
+ *   ArkType object, politty internal schema, ...)
+ * @returns Extracted field information
+ */
+export function extractFields(schema: ArgsSchema): ExtractedFields {
+  const cached = extractFieldsCache.get(schema);
+  if (cached) return cached;
+
+  const result = resolveSchemaAdapter(schema).extractFields(schema);
   extractFieldsCache.set(schema, result);
   return result;
 }
