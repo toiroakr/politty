@@ -750,6 +750,26 @@ describe("runMain onUnknownSubcommand", () => {
     expect(onUnknownSubcommand).not.toHaveBeenCalled();
   });
 
+  it("shows help even when a suppressed global negation is present", async () => {
+    using _argv = useArgv(["node", "test", "--no-cache", "--help"]);
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    using logSpy = spyOnConsoleLog();
+    using errorSpy = spyOnConsoleError();
+
+    const known = defineCommand({ name: "known", run: () => {} });
+    const cmd = defineCommand({ name: "test", subCommands: { known } });
+
+    await runMain(cmd, {
+      globalArgs: z.object({
+        cache: arg(z.boolean().default(true)),
+      }),
+    });
+
+    expect(logSpy.getLogs().join("\n")).toContain("test");
+    expect(errorSpy.getLogs().join("\n")).not.toContain("Unknown option: no-cache");
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
   it("does not treat a global option value as an unknown subcommand", async () => {
     using _argv = useArgv(["node", "test", "--name", "value"]);
     using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
@@ -815,6 +835,31 @@ describe("runMain onUnknownSubcommand", () => {
 
     expect(onUnknownSubcommand).not.toHaveBeenCalled();
     expect(errorSpy.getLogs().join("\n")).toContain("Unknown option: no-cache");
+  });
+
+  it("dispatches past a passthrough global suppressed negation", async () => {
+    using _argv = useArgv(["node", "test", "--no-cache", "plugin-name", "--flag"]);
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn().mockReturnValue(0);
+    const known = defineCommand({ name: "known", run: () => {} });
+    const cmd = defineCommand({ name: "test", subCommands: { known } });
+
+    await runMain(cmd, {
+      onUnknownSubcommand,
+      globalArgs: z
+        .object({
+          cache: arg(z.boolean().default(true)),
+        })
+        .passthrough(),
+    });
+
+    expect(onUnknownSubcommand).toHaveBeenCalledWith({
+      commandPath: [],
+      name: "plugin-name",
+      args: ["--flag"],
+    });
+    expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
   it("does not dispatch past a strict global suppressed negation", async () => {
@@ -903,6 +948,32 @@ describe("runMain onUnknownSubcommand", () => {
 
     expect(onUnknownSubcommand).not.toHaveBeenCalled();
     expect(errorSpy.getLogs().join("\n")).toContain("Unknown option: no-cache");
+  });
+
+  it("dispatches nested plugin past a passthrough global suppressed negation", async () => {
+    using _argv = useArgv(["node", "test", "parent", "--no-cache", "plugin-name", "rest"]);
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn().mockReturnValue(0);
+    const child = defineCommand({ name: "child", run: () => {} });
+    const parent = defineCommand({ name: "parent", subCommands: { child } });
+    const cmd = defineCommand({ name: "test", subCommands: { parent } });
+
+    await runMain(cmd, {
+      onUnknownSubcommand,
+      globalArgs: z
+        .object({
+          cache: arg(z.boolean().default(true)),
+        })
+        .passthrough(),
+    });
+
+    expect(onUnknownSubcommand).toHaveBeenCalledWith({
+      commandPath: ["parent"],
+      name: "plugin-name",
+      args: ["rest"],
+    });
+    expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
   it("forwards --help to a nested plugin instead of showing parent help", async () => {

@@ -376,8 +376,7 @@ function separateGlobalArgs(
         localAliasMapKeys.has(flagName) ||
         localNegationMapKeys.has(withoutDashes) ||
         localNegationMapKeys.has(flagName) ||
-        localDefaultNegationKeys.has(withoutDashes) ||
-        localDefaultNegationKeys.has(flagName);
+        localDefaultNegationKeys.has(withoutDashes);
 
       if (isGlobal && !isLocalCollision) {
         // collectGlobalFlag returns 1 or 2; subtract 1 because the for-loop increments

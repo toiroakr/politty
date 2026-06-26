@@ -1066,7 +1066,8 @@ describe("E2E Tests", () => {
       }
     });
 
-    it("surfaces suppressed --no-X before subcommand help via the global unknownKeysMode", async () => {
+    it("shows subcommand help before suppressed --no-X unknown handling", async () => {
+      using logSpy = spyOnConsoleLog();
       const globalArgs = z
         .object({
           cache: arg(z.boolean().default(true)),
@@ -1084,10 +1085,8 @@ describe("E2E Tests", () => {
 
       const result = await runCommand(cmd, ["build", "--no-cache", "--help"], { globalArgs });
 
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(String(result.error)).toMatch(/Unknown flags:.*no-cache/);
-      }
+      expect(result.success).toBe(true);
+      expect(logSpy.getLogs().join("\n")).toContain("Usage: cli build");
     });
 
     it("lets local custom negation shadow a disabled global default negation token", async () => {
