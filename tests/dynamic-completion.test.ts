@@ -209,15 +209,15 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.cache).toBe(false);
     });
 
-    it("records alias-based implicit negation forms as `false`", () => {
+    it("records alias-based opt-in negation forms as `false`", () => {
       // Runtime parser resolves the post-`no-` segment through aliasMap,
       // so `--no-c` and `--noC` both flip a boolean `cache` declared with
-      // `alias: "c"`. The completion parser must mirror that to keep
-      // resolver-visible flag state aligned.
+      // `alias: "c", negation: true`. The completion parser must mirror that
+      // to keep resolver-visible flag state aligned.
       const aliasNegCmd = defineCommand({
         name: "negaliascli",
         args: z.object({
-          cache: arg(z.boolean().default(true), { alias: "c" }),
+          cache: arg(z.boolean().default(true), { alias: "c", negation: true }),
           field: arg(z.string().optional()),
         }),
         run: () => {},
@@ -458,9 +458,7 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.noFoo).toBe("bar");
     });
 
-    it("records the implicit `--no-<flag>` negation even without opt-in", () => {
-      // Runtime parser accepts the implicit form regardless of `negation`
-      // metadata, so dynamic resolvers must see the same value.
+    it("does not record the default `--no-<flag>` negation without opt-in", () => {
       const implicitCmd = defineCommand({
         name: "implicitcli",
         args: z.object({
@@ -470,10 +468,10 @@ describe("Dynamic completion (in-process resolver)", () => {
         run: () => {},
       });
       const ctxHyphen = parseCompletionContext(["--no-cache", "--field", ""], implicitCmd);
-      expect(ctxHyphen.parsedArgs.cache).toBe(false);
+      expect(ctxHyphen.parsedArgs.cache).toBeUndefined();
 
       const ctxCamel = parseCompletionContext(["--noCache", "--field", ""], implicitCmd);
-      expect(ctxCamel.parsedArgs.cache).toBe(false);
+      expect(ctxCamel.parsedArgs.cache).toBeUndefined();
     });
 
     it("resets parsedArgs when descending into a subcommand", () => {
@@ -1232,6 +1230,39 @@ describe("Dynamic completion (in-process resolver)", () => {
       // The global `profile` value supplied before the subcommand survives
       // the descent and is visible to the subcommand resolver.
       expect(ctx.parsedArgs.profile).toBe("prod");
+    });
+
+    it("skips suppressed global negations while pre-scanning globals before descent", () => {
+      // Runtime's global scan skips a default `--no-*` negation when that
+      // boolean did not opt in, then keeps scanning later global tokens.
+      // Completion must do the same or a shadowing local boolean can overwrite
+      // a later global scalar value during subcommand descent.
+      const globals = z.object({
+        cache: arg(z.boolean().default(true)),
+        profile: arg(z.string().optional()),
+      });
+      const build = defineCommand({
+        name: "build",
+        args: z.object({
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const parentWithShadow = defineCommand({
+        name: "mycli",
+        args: z.object({
+          profile: arg(z.boolean().default(false)),
+        }),
+        subCommands: { build },
+      });
+      const ctx = parseCompletionContext(
+        ["--no-cache", "--profile", "prod", "build", "--field", ""],
+        parentWithShadow,
+        globals,
+      );
+      expect(ctx.subcommandPath).toEqual(["build"]);
+      expect(ctx.parsedArgs.profile).toBe("prod");
+      expect(ctx.parsedArgs.cache).toBeUndefined();
     });
 
     it("migrates a parent's shadowed-global value into globals on descent", () => {

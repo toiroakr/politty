@@ -14,8 +14,8 @@ import { buildGlobalFlagLookup, resolveGlobalLongOption } from "./subcommand-sca
  */
 describe("scanner / parser symmetry", () => {
   const schema = z.object({
-    verbose: arg(z.boolean().default(false), { description: "Verbose" }),
-    "dry-run": arg(z.boolean().default(false), { description: "Dry run" }),
+    verbose: arg(z.boolean().default(false), { description: "Verbose", negation: true }),
+    "dry-run": arg(z.boolean().default(false), { description: "Dry run", negation: true }),
     config: arg(z.string().optional(), { description: "Config file" }),
     cache: arg(z.boolean().default(true), {
       description: "Enable cache",
@@ -225,7 +225,7 @@ describe("resolveLongOption", () => {
       booleanFlags: new Set(["cache"]),
       definedNames: new Set(["cache"]),
       negationMap: new Map([["disable-cache", "cache"]]),
-      customNegatedFields: new Set(["cache"]),
+      defaultNegationDisabledFields: new Set(["cache"]),
     };
 
     const result = resolveLongOption("--disable-cache", lookup);
@@ -240,7 +240,7 @@ describe("resolveLongOption", () => {
       booleanFlags: new Set(["cache"]),
       definedNames: new Set(["cache"]),
       negationMap: new Map([["disable-cache", "cache"]]),
-      customNegatedFields: new Set(["cache"]),
+      defaultNegationDisabledFields: new Set(["cache"]),
     };
 
     const result = resolveLongOption("--no-cache", lookup);
@@ -255,7 +255,7 @@ describe("resolveLongOption", () => {
       booleanFlags: new Set(["cache"]),
       definedNames: new Set(["cache"]),
       negationMap: new Map([["disable-cache", "cache"]]),
-      customNegatedFields: new Set(["cache"]),
+      defaultNegationDisabledFields: new Set(["cache"]),
     };
 
     const result = resolveLongOption("--disable-cache=true", lookup);

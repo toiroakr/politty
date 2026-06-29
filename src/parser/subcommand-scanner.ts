@@ -18,8 +18,8 @@ export interface GlobalFlagLookup {
   aliases: Set<string>;
   /** custom negation names mapped to their target field name */
   negationMap: Map<string, string>;
-  /** fields with a custom `negation` configured */
-  customNegatedFields: Set<string>;
+  /** fields whose default `--no-*` negation is disabled */
+  defaultNegationDisabledFields: Set<string>;
 }
 
 /**
@@ -32,7 +32,7 @@ export function buildGlobalFlagLookup(globalExtracted: ExtractedFields): GlobalF
     booleanFlags = new Set(),
     definedNames = new Set(),
     negationMap = new Map(),
-    customNegatedFields = new Set(),
+    defaultNegationDisabledFields = new Set(),
   } = buildParserOptions(globalExtracted);
   const shortAliases = new Set<string>();
   for (const field of globalExtracted.fields) {
@@ -48,7 +48,7 @@ export function buildGlobalFlagLookup(globalExtracted: ExtractedFields): GlobalF
     cliNames: new Set(globalExtracted.fields.map((f) => f.cliName)),
     aliases: shortAliases,
     negationMap,
-    customNegatedFields,
+    defaultNegationDisabledFields,
   };
 }
 
@@ -57,8 +57,8 @@ export function buildGlobalFlagLookup(globalExtracted: ExtractedFields): GlobalF
  * against global flag lookup. Returns the resolved camelCase name and whether
  * it is a known global flag.
  *
- * `isSuppressedNegation` is true when the token matches a default `--no-X`
- * form that has been suppressed by a custom `negation` on the target field.
+ * `isSuppressedNegation` is true when the token matches a disabled default
+ * `--no-X` form on the target field.
  * The caller may use this to keep argv scanning past such tokens (so a
  * trailing subcommand is still detected) even though they no longer negate.
  */
@@ -148,8 +148,8 @@ export interface ScanResult {
   /** All tokens after the subcommand (the subcommand itself is excluded) */
   tokensAfterSubcommand: string[];
   /**
-   * Default `--no-X` tokens that were skipped because the target field has a
-   * custom negation configured. They are unknown long flags from the parser's
+   * Default `--no-X` tokens that were skipped because the target field has not
+   * opted in to default negation. They are unknown long flags from the parser's
    * point of view, so the caller should surface them through `unknownFlags`
    * to keep `unknownKeysMode` ("strict" / "strip" / "passthrough") consistent
    * with flags that appear after the subcommand.
@@ -206,7 +206,7 @@ export function scanForSubcommand(
       };
     }
 
-    // Long option: --flag or --flag=value or --no-flag
+    // Long option: --flag or --flag=value or opt-in --no-flag
     if (arg.startsWith("--")) {
       const { resolvedName, isNegated, isGlobal, isSuppressedNegation } = resolveGlobalLongOption(
         arg,
@@ -225,7 +225,7 @@ export function scanForSubcommand(
         continue;
       }
 
-      // Suppressed default `--no-X` for a field with custom negation: keep
+      // Suppressed default `--no-X` for a field without opt-in negation: keep
       // scanning so a trailing subcommand is still detected, but record the
       // token in `suppressedTokens` (not `globalTokensBefore`). The caller
       // surfaces these as unknown flags so that `unknownKeysMode` applies
@@ -296,7 +296,10 @@ const BUILTIN_FLAGS = new Set(["--help", "-h", "--help-all", "-H", "--version"])
 export function findFirstPositionalIndex(
   argv: string[],
   globalExtracted?: ExtractedFields,
+  options: { stopOnSuppressedNegation?: boolean } = {},
 ): number {
+  const stopOnSuppressedNegation =
+    options.stopOnSuppressedNegation === true || globalExtracted?.unknownKeysMode === "strict";
   const lookup: GlobalFlagLookup = globalExtracted
     ? buildGlobalFlagLookup(globalExtracted)
     : {
@@ -307,7 +310,7 @@ export function findFirstPositionalIndex(
         cliNames: new Set(),
         aliases: new Set(),
         negationMap: new Map(),
-        customNegatedFields: new Set(),
+        defaultNegationDisabledFields: new Set(),
       };
 
   for (let i = 0; i < argv.length; i++) {
@@ -329,9 +332,12 @@ export function findFirstPositionalIndex(
         }
         continue;
       }
-      // Suppressed default `--no-X` for a custom-negation field: keep scanning
+      // Suppressed default `--no-X` for a field without opt-in negation: keep scanning
       // so a trailing positional is still detected (mirrors scanForSubcommand).
-      if (isSuppressedNegation) continue;
+      if (isSuppressedNegation) {
+        if (stopOnSuppressedNegation) return -1;
+        continue;
+      }
       // Unknown long flag: stop.
       return -1;
     }

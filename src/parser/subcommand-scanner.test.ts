@@ -6,7 +6,11 @@ import { findFirstPositionalIndex, scanForSubcommand } from "./subcommand-scanne
 
 describe("scanForSubcommand", () => {
   const globalSchema = z.object({
-    verbose: arg(z.boolean().default(false), { alias: "v", description: "Verbose" }),
+    verbose: arg(z.boolean().default(false), {
+      alias: "v",
+      description: "Verbose",
+      negation: true,
+    }),
     config: arg(z.string().optional(), { description: "Config file" }),
   });
   const globalExtracted = extractFields(globalSchema);
@@ -134,22 +138,36 @@ describe("scanForSubcommand", () => {
     expect(result.globalTokensBefore).toEqual(["--no-verbose"]);
   });
 
-  it("handles --noFlag camelCase negation for boolean global", () => {
+  it("handles --noFlag camelCase negation for opt-in boolean global", () => {
     const result = scanForSubcommand(["--noVerbose", "build"], subCommandNames, globalExtracted);
 
     expect(result.subCommandIndex).toBe(1);
     expect(result.globalTokensBefore).toEqual(["--noVerbose"]);
   });
 
-  it("handles camelCase negation for kebab-case field name", () => {
+  it("handles camelCase negation for opt-in kebab-case field name", () => {
     const schemaWithKebab = z.object({
-      "dry-run": arg(z.boolean().default(false), { description: "Dry run" }),
+      "dry-run": arg(z.boolean().default(false), { description: "Dry run", negation: true }),
     });
     const extracted = extractFields(schemaWithKebab);
     const result = scanForSubcommand(["--noDryRun", "build"], subCommandNames, extracted);
 
     expect(result.subCommandIndex).toBe(1);
     expect(result.globalTokensBefore).toEqual(["--noDryRun"]);
+  });
+
+  it("keeps scanning past disabled-by-default --no-X and surfaces it as a suppressed token", () => {
+    const schemaWithoutNegation = z.object({
+      cache: arg(z.boolean().default(true), {
+        description: "Enable cache",
+      }),
+    });
+    const extracted = extractFields(schemaWithoutNegation);
+    const result = scanForSubcommand(["--no-cache", "build"], subCommandNames, extracted);
+
+    expect(result.subCommandIndex).toBe(1);
+    expect(result.globalTokensBefore).toEqual([]);
+    expect(result.suppressedTokens).toEqual(["no-cache"]);
   });
 
   it("treats --no-foo as a positive flag when a global is literally named 'no-foo'", () => {
@@ -288,5 +306,15 @@ describe("findFirstPositionalIndex", () => {
     });
     const extracted = extractFields(schemaWithCustomNegation);
     expect(findFirstPositionalIndex(["--no-dry-run", "plugin"], extracted)).toBe(1);
+  });
+
+  it("stops at a suppressed default --no-X when the global schema is strict", () => {
+    const strictSchema = z
+      .object({
+        cache: arg(z.boolean().default(true), { description: "Enable cache" }),
+      })
+      .strict();
+    const extracted = extractFields(strictSchema);
+    expect(findFirstPositionalIndex(["--no-cache", "plugin"], extracted)).toBe(-1);
   });
 });

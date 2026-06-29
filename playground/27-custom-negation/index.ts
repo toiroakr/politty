@@ -6,12 +6,12 @@
  * - `string` — replace the default `--no-<name>` with a custom name.
  *   The default `--no-<cliName>` (and camelCase `--no<Name>`) forms are
  *   suppressed; only the custom name is recognized.
- * - `true`   — keep the default `--no-<cliName>` form **and** advertise it
+ * - `true`   — enable the default `--no-<cliName>` form **and** advertise it
  *   in help, generated docs, and shell completions.
  * - `false`  — disable negation entirely. Neither `--no-<cliName>` nor any
  *   custom name is accepted, so the boolean can only be flipped on.
- * - (unset)  — parser still accepts `--no-<cliName>` but the form stays
- *   hidden from help/docs/completions (the current default).
+ * - (unset)  — disable negation entirely. No negation form is accepted or
+ *   shown (the current default).
  *
  * Optionally, `negationDescription` can be provided alongside a string
  * `negation` or `negation: true` to render the negation option on its own
@@ -51,7 +51,7 @@ export const cli = defineCommand({
       negation: "monochrome",
       negationDescription: "Disable colorized output",
     }),
-    // Opt-in to advertising the default `--no-pretty` in help/docs/completion.
+    // Opt in to accepting and advertising the default `--no-pretty`.
     pretty: arg(z.boolean().default(true), {
       description: "Format output for humans",
       negation: true,

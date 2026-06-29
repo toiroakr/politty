@@ -114,10 +114,9 @@ function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
         takesValue: field.type !== "boolean",
         valueType: field.type,
         required: field.required,
-        // Mirror runtime: default `--no-<cliName>` is accepted unless the
-        // user opted out via `negation: false` or a custom-string negation.
-        defaultNegationAccepted:
-          field.type === "boolean" && (field.negation === undefined || field.negation === true),
+        // Mirror runtime: default `--no-<cliName>` is accepted only when the
+        // user opts in via `negation: true`.
+        defaultNegationAccepted: field.type === "boolean" && field.negation === true,
         valueCompletion: resolveRuntimeCompletion(resolveValueCompletion(field)),
       };
     });
@@ -204,7 +203,13 @@ function parsePreSubGlobals(
     // list keeps local-precedence rules dormant — there are no locals to
     // shadow against during the pre-sub scan.
     const opt = findOption(globalOptions, parsed);
-    if (!opt) break;
+    if (!opt) {
+      if (isSuppressedDefaultNegation(globalOptions, parsed)) {
+        i++;
+        continue;
+      }
+      break;
+    }
     if (opt.takesValue) {
       if (hasInlineValue(word)) {
         const eqIdx = word.indexOf("=");
@@ -384,20 +389,22 @@ function hasInlineValue(word: string): boolean {
 }
 
 /**
- * For boolean options, the runtime parser accepts the implicit
- * `--no-<cliName>` (and camelCase `--noCliName`) form unless the user
- * opted out via `negation: false` or supplied a custom-string negation
- * (which suppresses the default form). Aliases participate too: a
- * boolean with `alias: "c"` accepts `--no-c` / `--noC` because the
- * runtime resolves the post-`no-` segment through `aliasMap`. Implicit
- * negation is LONG-FORM only — `-no-c` is never an accepted negation —
- * so callers must say so via `isLong` to prevent a short option from
- * being read as a negation.
+ * For boolean options, the runtime parser accepts the default
+ * `--no-<cliName>` (and camelCase `--noCliName`) form only when the user
+ * opts in via `negation: true`. Aliases participate too: a boolean with
+ * `alias: "c", negation: true` accepts `--no-c` / `--noC` because the
+ * runtime resolves the post-`no-` segment through `aliasMap`. Default
+ * negation is LONG-FORM only — `-no-c` is never an accepted negation — so
+ * callers must say so via `isLong` to prevent a short option from being read
+ * as a negation.
  */
-function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong: boolean): boolean {
+function isDefaultBooleanNegationToken(
+  opt: CompletableOption,
+  name: string,
+  isLong: boolean,
+): boolean {
   if (!isLong) return false;
   if (opt.valueType !== "boolean") return false;
-  if (opt.defaultNegationAccepted === false) return false;
   const candidates = [opt.cliName, ...(opt.alias ?? [])];
   for (const c of candidates) {
     const hyphenated = `no-${c}`;
@@ -405,6 +412,21 @@ function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong:
     if (name === toCamelCase(hyphenated)) return true;
   }
   return false;
+}
+
+function isImplicitBooleanNegation(opt: CompletableOption, name: string, isLong: boolean): boolean {
+  return opt.defaultNegationAccepted === true && isDefaultBooleanNegationToken(opt, name, isLong);
+}
+
+function isSuppressedDefaultNegation(
+  options: readonly CompletableOption[],
+  parsed: ParsedOption,
+): boolean {
+  return options.some(
+    (opt) =>
+      opt.defaultNegationAccepted !== true &&
+      isDefaultBooleanNegationToken(opt, parsed.name, parsed.isLong),
+  );
 }
 
 /** True when `source` is hyphenated and its camelCase form equals `name`. */
@@ -440,8 +462,8 @@ function writeOptionValue(
 
 /**
  * True when the typed token is the boolean option's negation form — either
- * the explicit `negation` name (or its camelCase variant) or the implicit
- * `--no-<name>` form. Long-form only; short tokens are never negations.
+ * the explicit `negation` name (or its camelCase variant) or the opt-in
+ * default `--no-<name>` form. Long-form only; short tokens are never negations.
  */
 function isNegationOf(opt: CompletableOption, parsed: ParsedOption): boolean {
   if (!parsed.isLong) return false;

@@ -11,7 +11,8 @@ export interface LongOptionLookup {
   booleanFlags: Set<string>;
   definedNames: Set<string>;
   negationMap: Map<string, string>;
-  customNegatedFields: Set<string>;
+  /** Fields whose default `--no-*` negation is disabled. */
+  defaultNegationDisabledFields: Set<string>;
 }
 
 export function resolveLongOption(arg: string, lookup: LongOptionLookup): LongOptionResolution {
@@ -45,7 +46,7 @@ export function resolveLongOption(arg: string, lookup: LongOptionLookup): LongOp
         // Literal-name disambiguation: "no-dry-run" itself is a defined field
         const asIsResolved = lookup.aliasMap.get(withoutDashes) ?? withoutDashes;
         if (!lookup.definedNames.has(asIsResolved)) {
-          if (lookup.customNegatedFields.has(resolvedName)) {
+          if (lookup.defaultNegationDisabledFields.has(resolvedName)) {
             return {
               resolvedName,
               withoutDashes,
@@ -79,7 +80,7 @@ export function resolveLongOption(arg: string, lookup: LongOptionLookup): LongOp
     if (lookup.booleanFlags.has(resolvedName)) {
       const asIsResolved = lookup.aliasMap.get(withoutDashes) ?? withoutDashes;
       if (!lookup.definedNames.has(asIsResolved)) {
-        if (lookup.customNegatedFields.has(resolvedName)) {
+        if (lookup.defaultNegationDisabledFields.has(resolvedName)) {
           return {
             resolvedName,
             withoutDashes,

@@ -265,7 +265,9 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
   ) {
     const knownSubCommands = listSubCommandNamesWithAliases(command);
     if (knownSubCommands.size > 0) {
-      const positionalIndex = findFirstPositionalIndex(argv, globalExtracted);
+      const positionalIndex = findFirstPositionalIndex(argv, globalExtracted, {
+        stopOnSuppressedNegation: globalExtracted?.unknownKeysMode !== "passthrough",
+      });
       const name = positionalIndex >= 0 ? argv[positionalIndex] : undefined;
       if (name && !knownSubCommands.has(name)) {
         const forwardArgs = argv.slice(positionalIndex + 1);
@@ -417,7 +419,9 @@ async function runCommandInternal<TResult = unknown>(
     if (options.onUnknownSubcommand && !command.run && nestedCommandPath.length > 0) {
       const knownSubCommands = listSubCommandNamesWithAliases(command);
       if (knownSubCommands.size > 0) {
-        const positionalIndex = findFirstPositionalIndex(argv, options._globalExtracted);
+        const positionalIndex = findFirstPositionalIndex(argv, options._globalExtracted, {
+          stopOnSuppressedNegation: options._globalExtracted?.unknownKeysMode !== "passthrough",
+        });
         const name = positionalIndex >= 0 ? argv[positionalIndex] : undefined;
         if (name && !knownSubCommands.has(name)) {
           const forwardArgs = argv.slice(positionalIndex + 1);
@@ -497,6 +501,30 @@ async function runCommandInternal<TResult = unknown>(
       return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
     }
 
+    // Suppressed default `--no-X` tokens for global fields belong to the
+    // global schema, so honor its unknownKeysMode before version handling or
+    // subcommand descent can bypass strict handling. Help is handled first so
+    // it remains available even when argv also contains an unknown global flag.
+    if (parseResult.unknownGlobalFlags && parseResult.unknownGlobalFlags.length > 0) {
+      const globalMode = context.globalExtracted?.unknownKeysMode ?? "strip";
+      if (globalMode === "strict") {
+        collector?.stop();
+        return {
+          success: false,
+          error: new Error(`Unknown flags: ${parseResult.unknownGlobalFlags.join(", ")}`),
+          exitCode: 1,
+          logs: getCurrentLogs(),
+        };
+      }
+      if (globalMode === "strip") {
+        const knownGlobalFlags = context.globalExtracted?.fields.map((f) => f.name) ?? [];
+        for (const flag of parseResult.unknownGlobalFlags) {
+          logger.error(formatUnknownFlagWarning(flag, knownGlobalFlags));
+        }
+      }
+      // passthrough: silently ignore
+    }
+
     // Handle --version
     if (parseResult.versionRequested) {
       // For subcommands, show root version
@@ -510,30 +538,6 @@ async function runCommandInternal<TResult = unknown>(
 
     // Handle subcommand
     if (parseResult.subCommand) {
-      // Surface unknown flags from the pre-subcommand portion of argv before
-      // descending. Currently these are suppressed default `--no-X` tokens
-      // for global fields that declared a custom `negation`; they belong to
-      // the global schema, so use the global `unknownKeysMode`.
-      if (parseResult.unknownFlags.length > 0) {
-        const globalMode = context.globalExtracted?.unknownKeysMode ?? "strip";
-        if (globalMode === "strict") {
-          collector?.stop();
-          return {
-            success: false,
-            error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
-            exitCode: 1,
-            logs: getCurrentLogs(),
-          };
-        }
-        if (globalMode === "strip") {
-          const knownGlobalFlags = context.globalExtracted?.fields.map((f) => f.name) ?? [];
-          for (const flag of parseResult.unknownFlags) {
-            logger.error(formatUnknownFlagWarning(flag, knownGlobalFlags));
-          }
-        }
-        // passthrough: silently ignore
-      }
-
       const resolved = await resolveSubcommandWithAlias(command, parseResult.subCommand);
       if (resolved) {
         // Build new context for subcommand

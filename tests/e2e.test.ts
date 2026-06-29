@@ -842,6 +842,24 @@ describe("E2E Tests", () => {
       expect(captured.cache).toBe(true);
     });
 
+    it("should not accept default --no-X when negation is unset", async () => {
+      const captured: Record<string, unknown> = {};
+
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          cache: arg(z.boolean().default(true)),
+        }),
+        run: (args) => {
+          Object.assign(captured, args);
+        },
+      });
+
+      const result = await runCommand(cmd, ["--no-cache"]);
+      expect(result.success).toBe(true);
+      expect(captured.cache).toBe(true);
+    });
+
     it("should show custom negation in help output", async () => {
       using console = spyOnConsoleLog();
 
@@ -1024,6 +1042,109 @@ describe("E2E Tests", () => {
       }
     });
 
+    it("surfaces suppressed --no-X after a no-args subcommand via the global unknownKeysMode", async () => {
+      const globalArgs = z
+        .object({
+          cache: arg(z.boolean().default(true)),
+        })
+        .strict();
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            run: () => {},
+          }),
+        },
+      });
+
+      const result = await runCommand(cmd, ["build", "--no-cache"], { globalArgs });
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(String(result.error)).toMatch(/Unknown flags:.*no-cache/);
+      }
+    });
+
+    it("shows subcommand help before suppressed --no-X unknown handling", async () => {
+      using logSpy = spyOnConsoleLog();
+      const globalArgs = z
+        .object({
+          cache: arg(z.boolean().default(true)),
+        })
+        .strict();
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            run: () => {},
+          }),
+        },
+      });
+
+      const result = await runCommand(cmd, ["build", "--no-cache", "--help"], { globalArgs });
+
+      expect(result.success).toBe(true);
+      expect(logSpy.getLogs().join("\n")).toContain("Usage: cli build");
+    });
+
+    it("lets local custom negation shadow a disabled global default negation token", async () => {
+      const captured: Record<string, unknown> = {};
+      const globalArgs = z
+        .object({
+          cache: arg(z.boolean().default(true)),
+        })
+        .strict();
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              feature: arg(z.boolean().default(true), { negation: "no-cache" }),
+            }),
+            run: (args) => {
+              Object.assign(captured, args);
+            },
+          }),
+        },
+      });
+
+      const result = await runCommand(cmd, ["build", "--no-cache"], { globalArgs });
+
+      expect(result.success).toBe(true);
+      expect(captured.feature).toBe(false);
+    });
+
+    it("lets local opt-in alias negation shadow a disabled global alias negation token", async () => {
+      const captured: Record<string, unknown> = {};
+      const globalArgs = z
+        .object({
+          cache: arg(z.boolean().default(true), { alias: "c" }),
+        })
+        .strict();
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            args: z.object({
+              feature: arg(z.boolean().default(true), { alias: "c", negation: true }),
+            }),
+            run: (args) => {
+              Object.assign(captured, args);
+            },
+          }),
+        },
+      });
+
+      const result = await runCommand(cmd, ["build", "--no-c"], { globalArgs });
+
+      expect(result.success).toBe(true);
+      expect(captured.feature).toBe(false);
+    });
+
     it("advertises default --no-X in help when negation is true", async () => {
       using console = spyOnConsoleLog();
       const cmd = defineCommand({
@@ -1043,7 +1164,7 @@ describe("E2E Tests", () => {
       expect(output).toMatch(/--pretty\s+\/\s+--no-pretty/);
     });
 
-    it("still accepts default --no-X when negation is true (parser unchanged)", async () => {
+    it("accepts default --no-X when negation is true", async () => {
       const captured: Record<string, unknown> = {};
       const cmd = defineCommand({
         name: "test",
