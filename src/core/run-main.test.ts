@@ -602,6 +602,30 @@ describe("runMain internal subcommand bypass", () => {
     expect(setup).toHaveBeenCalled();
   });
 
+  it("does not bypass for `__proto__` and other Object.prototype-inherited names", async () => {
+    // A bare `command.subCommands?.[firstPositional]` lookup resolves
+    // `__proto__`, `__defineGetter__`, etc. through the prototype chain even
+    // though no such subcommand is registered, silently bypassing lifecycle
+    // hooks for an unrelated typo'd invocation. Requires a command with at
+    // least one registered subcommand, otherwise `subCommands` itself is
+    // `undefined` and the optional-chained lookup short-circuits before
+    // ever touching the prototype chain.
+    using _argv = useArgv(["node", "test", "__proto__"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const setup = vi.fn();
+    const regular = defineCommand({ name: "regular", run: () => {} });
+    const cmd = defineCommand({
+      name: "test",
+      run: () => {},
+      subCommands: { regular },
+    });
+
+    await runMain(cmd, { setup });
+
+    expect(setup).toHaveBeenCalled();
+  });
+
   it("does not bypass when `__name` appears as a global option *value*", async () => {
     // `--name __internal` is a value for --name, not the subcommand
     // token. Without schema-aware scanning, the naive
