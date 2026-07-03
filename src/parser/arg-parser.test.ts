@@ -49,6 +49,45 @@ describe("ArgParser", () => {
       expect(result.options["no-cache"]).toBeUndefined();
     });
 
+    it("should accept a negative number as a long option's value", () => {
+      const result = parseArgv(["--count", "-5"], {
+        booleanFlags: new Set(),
+      });
+
+      expect(result.options.count).toBe("-5");
+      expect(result.positionals).toEqual([]);
+    });
+
+    it("should accept a negative number as a short option's value", () => {
+      const result = parseArgv(["-c", "-5"], {
+        booleanFlags: new Set(),
+      });
+
+      expect(result.options.c).toBe("-5");
+    });
+
+    it("should still treat the next token as absent when the option is a boolean flag", () => {
+      const result = parseArgv(["--verbose", "-5"], {
+        booleanFlags: new Set(["verbose"]),
+      });
+
+      expect(result.options.verbose).toBe(true);
+      // -5 is combined short flags (-5 -> flag "5"), not a positional or value.
+      expect(result.options["5"]).toBe(true);
+    });
+
+    it("should coerce --flag=true / --flag=false to booleans for boolean flags", () => {
+      const trueResult = parseArgv(["--verbose=true"], {
+        booleanFlags: new Set(["verbose"]),
+      });
+      expect(trueResult.options.verbose).toBe(true);
+
+      const falseResult = parseArgv(["--verbose=false"], {
+        booleanFlags: new Set(["verbose"]),
+      });
+      expect(falseResult.options.verbose).toBe(false);
+    });
+
     it("should detect help flag (--help)", () => {
       const cmd = defineCommand({
         name: "test-cmd",

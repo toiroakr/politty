@@ -45,6 +45,18 @@ export interface ParserOptions {
 }
 
 /**
+ * Coerce a `--flag=value` string to a boolean for boolean-typed flags.
+ * Values other than "true"/"false" are passed through unchanged so
+ * downstream validation reports the invalid input instead of silently
+ * guessing.
+ */
+function coerceBoolean(value: string): unknown {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return value;
+}
+
+/**
  * Parse argv into a flat record
  *
  * Supports:
@@ -151,7 +163,8 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         // --flag=value
         const name = withoutDashes.slice(0, eqIndex);
         const value = withoutDashes.slice(eqIndex + 1);
-        setOption(name, value);
+        const resolvedName = aliasMap.get(name) ?? name;
+        setOption(name, booleanFlags.has(resolvedName) ? coerceBoolean(value) : value);
         i++;
       } else {
         // --flag or --flag value
@@ -163,9 +176,13 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
           setOption(name, true);
           i++;
         } else {
-          // Check if next arg is a value
+          // Check if next arg is a value. A non-boolean option consumes
+          // the next token even if it looks like another flag (e.g.
+          // `--count -5`), since the flag's schema says it needs a
+          // value. `--` is excluded so it still terminates option
+          // parsing rather than being swallowed as a literal value.
           const nextArg = argv[i + 1];
-          if (nextArg !== undefined && !nextArg.startsWith("-")) {
+          if (nextArg !== undefined && nextArg !== "--") {
             setOption(name, nextArg);
             i += 2;
           } else {
@@ -187,7 +204,8 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         // -f=value
         const name = withoutDash.slice(0, eqIndex);
         const value = withoutDash.slice(eqIndex + 1);
-        setOption(name, value);
+        const resolvedName = aliasMap.get(name) ?? name;
+        setOption(name, booleanFlags.has(resolvedName) ? coerceBoolean(value) : value);
         i++;
       } else if (withoutDash.length === 1) {
         // Single short option: -f
@@ -198,9 +216,10 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
           setOption(name, true);
           i++;
         } else {
-          // Check if next arg is a value
+          // Same rationale as the long-option case above: a non-boolean
+          // short option consumes the next token as its value, except `--`.
           const nextArg = argv[i + 1];
-          if (nextArg !== undefined && !nextArg.startsWith("-")) {
+          if (nextArg !== undefined && nextArg !== "--") {
             setOption(name, nextArg);
             i += 2;
           } else {
