@@ -18,7 +18,7 @@ export default defineConfig({
   treeshake: true,
   sourcemap: false,
   minify: false,
-  target: "node18",
+  target: "node20.12",
   outDir: "dist",
   external: ["zod", "yaml", "@clack/prompts", "@inquirer/prompts"],
   fixedExtension: false,
