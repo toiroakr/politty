@@ -4,6 +4,7 @@
 node_modules/
 bin/
 dist/
+package-lock.json
 *.log
 .DS_Store
 *.db
