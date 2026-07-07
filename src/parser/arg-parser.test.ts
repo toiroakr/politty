@@ -76,6 +76,24 @@ describe("ArgParser", () => {
       expect(result.options["5"]).toBe(true);
     });
 
+    it("should not swallow a following flag as a value (long option)", () => {
+      const result = parseArgv(["--name", "--verbose"], {
+        booleanFlags: new Set(["verbose"]),
+      });
+
+      expect(result.options.name).toBe(true);
+      expect(result.options.verbose).toBe(true);
+    });
+
+    it("should not swallow a following flag as a value (short option)", () => {
+      const result = parseArgv(["-n", "--verbose"], {
+        booleanFlags: new Set(["verbose"]),
+      });
+
+      expect(result.options.n).toBe(true);
+      expect(result.options.verbose).toBe(true);
+    });
+
     it("should coerce --flag=true / --flag=false to booleans for boolean flags", () => {
       const trueResult = parseArgv(["--verbose=true"], {
         booleanFlags: new Set(["verbose"]),

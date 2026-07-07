@@ -57,6 +57,17 @@ function coerceBoolean(value: string): unknown {
 }
 
 /**
+ * Matches tokens that look like a negative number (e.g. "-5", "-5.2", "-.5"),
+ * as opposed to another flag. Used to decide whether a dash-prefixed token
+ * should still be consumed as a value-taking option's value.
+ */
+const NEGATIVE_NUMBER_PATTERN = /^-\.?\d/;
+
+function looksLikeNegativeNumber(value: string): boolean {
+  return NEGATIVE_NUMBER_PATTERN.test(value);
+}
+
+/**
  * Parse argv into a flat record
  *
  * Supports:
@@ -176,13 +187,16 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
           setOption(name, true);
           i++;
         } else {
-          // Check if next arg is a value. A non-boolean option consumes
-          // the next token even if it looks like another flag (e.g.
-          // `--count -5`), since the flag's schema says it needs a
-          // value. `--` is excluded so it still terminates option
-          // parsing rather than being swallowed as a literal value.
+          // Check if next arg is a value. A dash-prefixed token is only
+          // consumed as the value when it looks like a negative number
+          // (e.g. `--count -5`); other dash-prefixed tokens (`--`, other
+          // flags) are left for the next iteration to parse as their own
+          // option, so they aren't silently swallowed as a literal value.
           const nextArg = argv[i + 1];
-          if (nextArg !== undefined && nextArg !== "--") {
+          if (
+            nextArg !== undefined &&
+            (!nextArg.startsWith("-") || looksLikeNegativeNumber(nextArg))
+          ) {
             setOption(name, nextArg);
             i += 2;
           } else {
@@ -216,10 +230,14 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
           setOption(name, true);
           i++;
         } else {
-          // Same rationale as the long-option case above: a non-boolean
-          // short option consumes the next token as its value, except `--`.
+          // Same rationale as the long-option case above: only consume a
+          // dash-prefixed next token as the value when it looks like a
+          // negative number.
           const nextArg = argv[i + 1];
-          if (nextArg !== undefined && nextArg !== "--") {
+          if (
+            nextArg !== undefined &&
+            (!nextArg.startsWith("-") || looksLikeNegativeNumber(nextArg))
+          ) {
             setOption(name, nextArg);
             i += 2;
           } else {
