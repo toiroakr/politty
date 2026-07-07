@@ -19,7 +19,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 
 ## Requirements
 
-- Node.js >= 18
+- Node.js >= 20.12.0 (excluding 21.0.0 - 21.6.x)
 - Zod >= 4.2.1
 
 ## Installation
