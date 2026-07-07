@@ -178,7 +178,7 @@ function isInternalSubcommandInvocation(
 ): boolean {
   const firstPositional = findFirstPositional(argv, globalExtracted);
   if (!firstPositional || !firstPositional.startsWith("__")) return false;
-  return Boolean(command.subCommands?.[firstPositional]);
+  return Object.hasOwn(command.subCommands ?? {}, firstPositional);
 }
 
 /**
