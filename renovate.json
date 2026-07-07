@@ -13,7 +13,7 @@
   "customManagers": [
     {
       "customType": "regex",
-      "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"],
+      "managerFilePatterns": ["/^\\.github/workflows/.*\\.ya?ml$/"],
       "matchStrings": ["pnpm dlx pkg-pr-new@(?<currentValue>\\S+)"],
       "datasourceTemplate": "npm",
       "depNameTemplate": "pkg-pr-new"
