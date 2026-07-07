@@ -73,15 +73,12 @@ describe("SubcommandRouter", () => {
 
     it("should not resolve Object.prototype-inherited names as subcommands", async () => {
       // A bare `command.subCommands[name]` lookup resolves `__proto__`,
-      // `constructor`, `toString`, etc. through the prototype chain even
-      // though no such subcommand is registered. Requires at least one
-      // registered subcommand, otherwise `subCommands` is an object
-      // literal whose own emptiness doesn't matter for the prototype
-      // chain read.
-      const cmd = defineCommand({
-        name: "cli",
-        subCommands: { build: defineCommand({ name: "build" }) },
-      });
+      // `constructor`, `toString`, etc. through the prototype chain as
+      // soon as `subCommands` is a defined object — even an empty one,
+      // since the vulnerable read doesn't depend on how many subcommands
+      // are actually registered. (Only an *undefined* `subCommands`
+      // short-circuits via the `!command.subCommands` guard above.)
+      const cmd = defineCommand({ name: "cli", subCommands: {} });
 
       expect(await resolveSubcommand(cmd, "__proto__")).toBeUndefined();
       expect(await resolveSubcommand(cmd, "constructor")).toBeUndefined();
@@ -144,10 +141,10 @@ describe("SubcommandRouter", () => {
 
   describe("resolveSubcommandWithAlias", () => {
     it("should not resolve Object.prototype-inherited names as subcommands", async () => {
-      const cmd = defineCommand({
-        name: "cli",
-        subCommands: { build: defineCommand({ name: "build" }) },
-      });
+      // See the equivalent `resolveSubcommand` test above: the guard
+      // only depends on `subCommands` being defined, not on it having
+      // any own entries.
+      const cmd = defineCommand({ name: "cli", subCommands: {} });
 
       expect(await resolveSubcommandWithAlias(cmd, "__proto__")).toBeUndefined();
       expect(await resolveSubcommandWithAlias(cmd, "constructor")).toBeUndefined();
