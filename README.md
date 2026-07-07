@@ -264,7 +264,6 @@ CLI entry point. Handles signals and calls `process.exit()`.
 ```typescript
 runMain(command, {
   version: "1.0.0", // Displayed with --version flag
-  argv: process.argv, // Custom argv
 });
 ```
 
