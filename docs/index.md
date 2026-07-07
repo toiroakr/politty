@@ -37,7 +37,7 @@ const command = defineCommand({
     name: arg(z.string(), { positional: true }),
     loud: arg(z.boolean().default(false), { alias: "l" }),
   }),
-  run: ({ args }) => {
+  run: (args) => {
     const msg = `Hello, ${args.name}!`;
     console.log(args.loud ? msg.toUpperCase() : msg);
   },
