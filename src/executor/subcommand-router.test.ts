@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { defineCommand } from "../core/command.js";
 import { lazy } from "../lazy.js";
-import { listSubCommands, resolveLazyCommand, resolveSubcommand } from "./subcommand-router.js";
+import {
+  listSubCommands,
+  resolveLazyCommand,
+  resolveSubcommand,
+  resolveSubcommandWithAlias,
+} from "./subcommand-router.js";
 
 /**
  * Task 7.1: Subcommand router tests
@@ -66,6 +71,22 @@ describe("SubcommandRouter", () => {
       expect(result).toBeUndefined();
     });
 
+    it("should not resolve Object.prototype-inherited names as subcommands", async () => {
+      // A bare `command.subCommands[name]` lookup resolves `__proto__`,
+      // `constructor`, `toString`, etc. through the prototype chain even
+      // though no such subcommand is registered. Requires at least one
+      // registered subcommand, otherwise `subCommands` is an object
+      // literal whose own emptiness doesn't matter for the prototype
+      // chain read.
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: defineCommand({ name: "build" }) },
+      });
+
+      expect(await resolveSubcommand(cmd, "__proto__")).toBeUndefined();
+      expect(await resolveSubcommand(cmd, "constructor")).toBeUndefined();
+    });
+
     it("should resolve LazyCommand subcommand via load()", async () => {
       const fullCommand = defineCommand({
         name: "deploy",
@@ -118,6 +139,18 @@ describe("SubcommandRouter", () => {
       const result = await resolveLazyCommand(cmd);
 
       expect(result).toBe(cmd);
+    });
+  });
+
+  describe("resolveSubcommandWithAlias", () => {
+    it("should not resolve Object.prototype-inherited names as subcommands", async () => {
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: { build: defineCommand({ name: "build" }) },
+      });
+
+      expect(await resolveSubcommandWithAlias(cmd, "__proto__")).toBeUndefined();
+      expect(await resolveSubcommandWithAlias(cmd, "constructor")).toBeUndefined();
     });
   });
 

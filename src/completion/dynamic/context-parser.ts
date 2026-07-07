@@ -335,8 +335,10 @@ function resolveSubcommand(command: AnyCommand, name: string): AnyCommand | null
     return null;
   }
 
-  // Direct lookup
-  const sub = command.subCommands[name];
+  // Direct lookup. `Object.hasOwn` guards against `name` resolving through
+  // the prototype chain (e.g. `__proto__`, `constructor`) as if it were a
+  // registered subcommand.
+  const sub = Object.hasOwn(command.subCommands, name) ? command.subCommands[name] : undefined;
   if (sub) {
     return resolveSubCommandMeta(sub);
   }

@@ -493,6 +493,24 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.root).toBeUndefined();
       expect(ctx.parsedArgs.endpoint).toBe("Get");
     });
+
+    it("does not descend into Object.prototype-inherited names as subcommands", () => {
+      // A bare `command.subCommands[name]` lookup resolves `__proto__`,
+      // `constructor`, etc. through the prototype chain even though no
+      // such subcommand is registered, corrupting completion context by
+      // "descending" into `Object.prototype`. Requires at least one
+      // registered subcommand to reach the vulnerable lookup.
+      const parent = defineCommand({
+        name: "mycli",
+        args: z.object({ endpoint: arg(z.string().optional(), { positional: true }) }),
+        subCommands: {
+          api: defineCommand({ name: "api", run: () => {} }),
+        },
+      });
+      const ctx = parseCompletionContext(["__proto__"], parent);
+      expect(ctx.subcommandPath).toEqual([]);
+      expect(ctx.currentCommand).toBe(parent);
+    });
   });
 
   describe("generateCandidates dynamic branch", () => {
