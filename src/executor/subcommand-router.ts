@@ -36,8 +36,10 @@ export async function resolveSubcommand(
     return undefined;
   }
 
-  // Direct lookup first
-  const subCmd = command.subCommands[name];
+  // Direct lookup first. `Object.hasOwn` guards against `name` resolving
+  // through the prototype chain (e.g. `__proto__`, `constructor`) as if it
+  // were a registered subcommand.
+  const subCmd = Object.hasOwn(command.subCommands, name) ? command.subCommands[name] : undefined;
   if (subCmd) {
     return resolveLazyCommand(subCmd);
   }
@@ -65,8 +67,10 @@ export async function resolveSubcommandWithAlias(
     return undefined;
   }
 
-  // Direct lookup
-  const subCmd = command.subCommands[name];
+  // Direct lookup. `Object.hasOwn` guards against `name` resolving through
+  // the prototype chain (e.g. `__proto__`, `constructor`) as if it were a
+  // registered subcommand.
+  const subCmd = Object.hasOwn(command.subCommands, name) ? command.subCommands[name] : undefined;
   if (subCmd) {
     return { command: await resolveLazyCommand(subCmd), aliasFor: undefined };
   }
