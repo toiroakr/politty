@@ -480,14 +480,19 @@ export function validateReservedAliases(
 }
 
 /**
- * Validate that no field name, cliName, or alias starts with `$`
+ * Validate that no field name starts with `$`
  *
  * The `$` prefix is reserved for framework-injected helpers on the final
  * args object (e.g. `$source`), and is unusable as a real CLI flag anyway
  * since an unquoted `$name` gets shell-expanded before the program sees it.
  *
+ * Checking `field.name` alone is sufficient: aliases can't start with `$`
+ * (schema extraction already restricts alias characters to `[A-Za-z0-9-]`),
+ * and `cliName` is derived from `name` via `toKebabCase`, which never strips
+ * or moves a leading `$`. See {@link checkReservedFieldNames}.
+ *
  * @param extracted - Extracted fields from schema
- * @throws {ReservedFieldNameError} If a field name/cliName/alias starts with "$"
+ * @throws {ReservedFieldNameError} If a field name starts with "$"
  */
 export function validateReservedFieldNames(extracted: ExtractedFields): void {
   const errors = checkReservedFieldNames(extracted, []);
