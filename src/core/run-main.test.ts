@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { spyOnConsoleError, spyOnConsoleLog, spyOnConsoleWarn } from "../../tests/utils/console.js";
 import { arg } from "./arg-registry.js";
@@ -83,6 +83,123 @@ describe("runCommand", () => {
       if (result.success) {
         expect(result.result).toEqual({ success: true });
       }
+    });
+  });
+
+  describe("$source", () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it("reports 'cli' for a flag value provided on the CLI", async () => {
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({ name: arg(z.string(), { env: "MY_NAME" }) }),
+        run: runFn,
+      });
+
+      await runCommand(cmd, ["--name", "Alice"]);
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$source?.("name")).toBe("cli");
+    });
+
+    it("reports 'env' for a value resolved via env fallback", async () => {
+      process.env.MY_NAME = "Bob";
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({ name: arg(z.string(), { env: "MY_NAME" }) }),
+        run: runFn,
+      });
+
+      await runCommand(cmd, []);
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$source?.("name")).toBe("env");
+    });
+
+    it("reports 'cli' for a positional value even when it equals the env var", async () => {
+      // Regression: a naive argv-scan-based classifier would misreport this
+      // as "env" since it can't distinguish "typed the same value" from
+      // "fell back to the env var" by comparing values alone.
+      process.env.MY_NAME = "same-value";
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({ name: arg(z.string(), { positional: true, env: "MY_NAME" }) }),
+        run: runFn,
+      });
+
+      await runCommand(cmd, ["same-value"]);
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$source?.("name")).toBe("cli");
+    });
+
+    it("reports 'default' for a value resolved via schema default", async () => {
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({ verbose: arg(z.boolean().default(false)) }),
+        run: runFn,
+      });
+
+      await runCommand(cmd, []);
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$source?.("verbose")).toBe("default");
+    });
+
+    it("resolves both camelCase and kebab-case lookups to the same source", async () => {
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({ apiKey: arg(z.string()) }),
+        run: runFn,
+      });
+
+      await runCommand(cmd, ["--api-key", "secret"]);
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$source?.("apiKey")).toBe("cli");
+      expect(args.$source?.("api-key")).toBe("cli");
+    });
+
+    it("covers global args, with a same-named local field taking precedence on collision", async () => {
+      process.env.FOO_ENV = "from-global-env";
+      const runFn = vi.fn();
+      const globalArgs = z.object({ foo: arg(z.string().optional(), { env: "FOO_ENV" }) });
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({ foo: arg(z.string().default("local-default")) }),
+        run: runFn,
+      });
+
+      await runCommand(cmd, [], { globalArgs });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.foo).toBe("local-default");
+      expect(args.$source?.("foo")).toBe("default");
+    });
+
+    it("reports 'env' for a global-only field resolved via env fallback", async () => {
+      process.env.FOO_ENV = "from-global-env";
+      const runFn = vi.fn();
+      const globalArgs = z.object({ foo: arg(z.string().optional(), { env: "FOO_ENV" }) });
+      const cmd = defineCommand({ name: "test", run: runFn });
+
+      await runCommand(cmd, [], { globalArgs });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$source?.("foo")).toBe("env");
     });
   });
 

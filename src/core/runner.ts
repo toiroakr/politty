@@ -806,8 +806,20 @@ async function runCommandInternal<TResult = unknown>(
     for (const name of cliProvidedGlobalFields) argSourceMap.set(name, "cli");
     for (const name of envFallbackGlobalFields) argSourceMap.set(name, "env");
     const localEnvFallbackFields = parseResult.envFallbackFields ?? new Set<string>();
-    for (const name of Object.keys(parseResult.rawArgs)) {
-      argSourceMap.set(name, localEnvFallbackFields.has(name) ? "env" : "cli");
+    // Local fields take precedence on collision, mirroring the value merge above:
+    // classify every declared local field explicitly (not just ones present in
+    // rawArgs) so a local field resolved via schema default/prompt correctly
+    // overrides a same-named global field's "cli"/"env" classification instead
+    // of leaking it through unchanged.
+    for (const field of parseResult.extractedFields?.fields ?? []) {
+      argSourceMap.set(
+        field.name,
+        Object.hasOwn(parseResult.rawArgs, field.name)
+          ? localEnvFallbackFields.has(field.name)
+            ? "env"
+            : "cli"
+          : "default",
+      );
     }
     attachArgSource(mergedPlainArgs, argSourceMap);
     const mergedArgs = createDualCaseProxy(mergedPlainArgs);
