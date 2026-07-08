@@ -68,6 +68,21 @@ describe("validateCommand", () => {
       }
     });
 
+    it("should detect field names starting with $", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          $source: arg(z.string().optional(), { description: "Reserved" }),
+        }),
+      });
+
+      const result = await validateCommand(cmd);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.some((e) => e.type === "reserved_field_name")).toBe(true);
+      }
+    });
+
     it("should detect positional config errors", async () => {
       const cmd = defineCommand({
         name: "test",

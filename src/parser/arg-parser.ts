@@ -14,6 +14,7 @@ import {
   validateDuplicateNegations,
   validatePositionalConfig,
   validateReservedAliases,
+  validateReservedFieldNames,
 } from "../validator/command-validator.js";
 import { buildParserOptions, mergeWithPositionals, parseArgv } from "./argv-parser.js";
 import {
@@ -142,6 +143,7 @@ export function parseArgs(
       validateDuplicateNegations(extracted);
       validatePositionalConfig(extracted);
       validateReservedAliases(extracted, hasSubCommands);
+      validateReservedFieldNames(extracted);
       if (options.globalExtracted) {
         validateCrossSchemaCollisions(options.globalExtracted, extracted);
       }

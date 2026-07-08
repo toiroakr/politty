@@ -26,6 +26,7 @@ import {
   validateDuplicateFields,
   validateDuplicateNegations,
   validateReservedAliases,
+  validateReservedFieldNames,
 } from "../validator/command-validator.js";
 import {
   findSimilar,
@@ -38,7 +39,12 @@ import {
 } from "../validator/zod-validator.js";
 import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
-import { extractFields, type ExtractedFields } from "./schema-extractor.js";
+import {
+  extractFields,
+  toCamelCase,
+  toKebabCase,
+  type ExtractedFields,
+} from "./schema-extractor.js";
 
 /**
  * Default logger using console
@@ -51,12 +57,21 @@ const defaultLogger: Logger = {
 
 /**
  * Attach a non-enumerable `$source` helper to the final args object so it
- * survives `Object.keys`/`JSON.stringify`/spread but is still reachable via
- * property access (including through `createDualCaseProxy`).
+ * stays invisible to `Object.keys`/`JSON.stringify`/spread (those only ever
+ * see real field values) while still being reachable via property access
+ * (including through `createDualCaseProxy`).
  */
 function attachArgSource(target: Record<string, unknown>, sourceMap: Map<string, ArgSource>): void {
   Object.defineProperty(target, "$source", {
-    value: (name: string): ArgSource => sourceMap.get(name) ?? "default",
+    // `sourceMap` is keyed by the field's canonical schema name, which may
+    // itself be camelCase or kebab-case. Since `createDualCaseProxy` lets
+    // callers query either case variant, try the name as-is and both
+    // normalized forms so `$source` agrees with dual-case property access.
+    value: (name: string): ArgSource =>
+      sourceMap.get(name) ??
+      sourceMap.get(toCamelCase(name)) ??
+      sourceMap.get(toKebabCase(name)) ??
+      "default",
     enumerable: false,
   });
 }
@@ -837,6 +852,7 @@ function extractAndValidateGlobal(options: {
     validateDuplicateAliases(extracted);
     validateDuplicateNegations(extracted);
     validateReservedAliases(extracted, true);
+    validateReservedFieldNames(extracted);
     const positionalNames = extracted.fields.filter((f) => f.positional).map((f) => f.name);
     if (positionalNames.length > 0) {
       throw new Error(

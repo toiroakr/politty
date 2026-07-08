@@ -110,6 +110,7 @@ export {
   DuplicateNegationError,
   PositionalConfigError,
   ReservedAliasError,
+  ReservedFieldNameError,
   formatCommandValidationErrors,
   validateCaseVariantCollisions,
   validateCommand,
@@ -119,6 +120,7 @@ export {
   validateDuplicateNegations,
   validatePositionalConfig,
   validateReservedAliases,
+  validateReservedFieldNames,
   type CommandValidationError,
   type CommandValidationResult,
 } from "./validator/command-validator.js";

@@ -59,3 +59,14 @@ export class DuplicateNegationError extends Error {
     this.name = "DuplicateNegationError";
   }
 }
+
+/**
+ * Error thrown when a field name collides with a reserved, framework-injected
+ * key on the final args object (e.g. `$source`).
+ */
+export class ReservedFieldNameError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ReservedFieldNameError";
+  }
+}
