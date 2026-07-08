@@ -1,5 +1,19 @@
 # politty
 
+## 0.11.1
+
+### Patch Changes
+
+- cdab697: Fix two argv-parsing bugs that silently produced wrong values instead of erroring:
+
+  - An option expecting a value (e.g. `z.coerce.number()`) followed by a negative-number-looking token, such as `--count -5`, no longer treats the flag as boolean `true` and mis-parses the following token as combined short flags. The token is now consumed as the option's value. Other dash-prefixed tokens (`--`, or another flag like `--verbose`) are left alone so they aren't silently swallowed as a literal value.
+  - `--flag=true` / `--flag=false` now correctly coerce to booleans for `z.boolean()`-typed fields instead of failing validation with "expected boolean, received string".
+
+- c69cee6: Fix the internal-subcommand bypass in `runMain` incorrectly matching prototype-inherited property names such as `__proto__`, `__defineGetter__`, or `__lookupGetter__`. Previously, invoking a CLI with one of these as the first positional (e.g. `mycli __proto__`) would silently skip the user-provided `setup`/`cleanup`/`prompt` hooks even though no such subcommand was ever registered, because the lookup read through `Object.prototype` instead of checking for an own property.
+- fd67602: Fix `engines.node` to accurately reflect the runtime requirement. The package uses `node:util`'s `styleText`, which was added in Node 20.12.0 / 21.7.0; the previous `>=18` declaration allowed installs that crashed on import with `SyntaxError: The requested module 'node:util' does not provide an export named 'styleText'`. The build target was also updated from `node18` to `node20.12` to match.
+- 6515894: Fix subcommand resolution (`resolveSubcommand`, `resolveSubcommandWithAlias`, and the shell-completion context parser) incorrectly matching prototype-inherited property names such as `__proto__` or `constructor` as if they were registered subcommands. This follows up on the same class of bug fixed in `runMain`'s internal-subcommand bypass, applying the `Object.hasOwn` guard to the remaining lookups that read through `Object.prototype`.
+- df62418: Add the missing MIT LICENSE file (the package has declared `"license": "MIT"` without shipping the license text) and set the previously empty `author` field in `package.json`. Also remove the stale `package-lock.json` that had been accidentally committed to this pnpm-managed project, and pin the `pkg-pr-new` preview-publish tool to an exact version instead of running `pnpm dlx`'s latest unconditionally in a `pull-requests: write` job.
+
 ## 0.11.0
 
 ### Minor Changes
