@@ -10,6 +10,7 @@ import { parseArgs } from "../parser/arg-parser.js";
 import { findFirstPositional, findFirstPositionalIndex } from "../parser/subcommand-scanner.js";
 import type {
   AnyCommand,
+  ArgSource,
   ArgsSchema,
   CollectedLogs,
   GlobalCleanupContext,
@@ -47,6 +48,18 @@ const defaultLogger: Logger = {
   error: (message: string) => console.error(message),
   warn: (message: string) => console.warn(message),
 };
+
+/**
+ * Attach a non-enumerable `$source` helper to the final args object so it
+ * survives `Object.keys`/`JSON.stringify`/spread but is still reachable via
+ * property access (including through `createDualCaseProxy`).
+ */
+function attachArgSource(target: Record<string, unknown>, sourceMap: Map<string, ArgSource>): void {
+  Object.defineProperty(target, "$source", {
+    value: (name: string): ArgSource => sourceMap.get(name) ?? "default",
+    enumerable: false,
+  });
+}
 
 /**
  * Internal options for runCommand (includes context tracking)
@@ -671,6 +684,10 @@ async function runCommandInternal<TResult = unknown>(
     // receive a context, even when the typed line is not yet valid.
     let validatedGlobalArgs: Record<string, unknown> = {};
     const isCompletionInvocation = command.name === "__complete";
+    // Snapshot which global fields came from the CLI (this level or an
+    // ancestor's) before env fallbacks below mutate accumulatedGlobalArgs.
+    const cliProvidedGlobalFields = new Set(Object.keys(accumulatedGlobalArgs));
+    const envFallbackGlobalFields = new Set<string>();
     if (options.globalArgs && options._globalExtracted && !isCompletionInvocation) {
       // Apply env fallbacks for global args
       for (const field of options._globalExtracted.fields) {
@@ -680,6 +697,7 @@ async function runCommandInternal<TResult = unknown>(
             const envValue = process.env[envName];
             if (envValue !== undefined) {
               accumulatedGlobalArgs[field.name] = envValue;
+              envFallbackGlobalFields.add(field.name);
               break;
             }
           }
@@ -712,6 +730,10 @@ async function runCommandInternal<TResult = unknown>(
     // Validate arguments
     if (!command.args) {
       // No schema, run with global args (or empty args)
+      const globalSourceMap = new Map<string, ArgSource>();
+      for (const name of cliProvidedGlobalFields) globalSourceMap.set(name, "cli");
+      for (const name of envFallbackGlobalFields) globalSourceMap.set(name, "env");
+      attachArgSource(validatedGlobalArgs, globalSourceMap);
       const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
       if (options._globalExtracted && !isCompletionInvocation) {
         await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
@@ -761,7 +783,19 @@ async function runCommandInternal<TResult = unknown>(
     }
 
     // Merge global args with command args (command args take precedence on collision)
-    const mergedArgs = createDualCaseProxy({ ...proxiedGlobalArgs, ...proxiedCommandArgs });
+    const mergedPlainArgs: Record<string, unknown> = {
+      ...proxiedGlobalArgs,
+      ...proxiedCommandArgs,
+    };
+    const argSourceMap = new Map<string, ArgSource>();
+    for (const name of cliProvidedGlobalFields) argSourceMap.set(name, "cli");
+    for (const name of envFallbackGlobalFields) argSourceMap.set(name, "env");
+    const localEnvFallbackFields = parseResult.envFallbackFields ?? new Set<string>();
+    for (const name of Object.keys(parseResult.rawArgs)) {
+      argSourceMap.set(name, localEnvFallbackFields.has(name) ? "env" : "cli");
+    }
+    attachArgSource(mergedPlainArgs, argSourceMap);
+    const mergedArgs = createDualCaseProxy(mergedPlainArgs);
 
     // Run the command
     // Stop this collector and pass logs to executeLifecycle

@@ -139,6 +139,14 @@ const command = defineCommand({
 });
 ```
 
+Use `args.$source(name)` to check whether a value came from an explicit CLI token, an `env` fallback, or neither (e.g. a schema default):
+
+```typescript
+run: (args) => {
+  args.$source("apiKey"); // "cli" | "env" | "default"
+};
+```
+
 ### Subcommands
 
 Define Git-style subcommands:

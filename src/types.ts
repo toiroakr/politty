@@ -22,6 +22,15 @@ export interface GlobalArgs {}
 export type IsEmpty<T> = keyof T extends never ? true : false;
 
 /**
+ * Where a resolved arg value came from:
+ * - `"cli"`: an explicit CLI token (flag or positional)
+ * - `"env"`: `field.env` fallback (no CLI token was provided)
+ * - `"default"`: neither of the above (e.g. a schema default, or a value
+ *   resolved by a `prompt` handler)
+ */
+export type ArgSource = "cli" | "env" | "default";
+
+/**
  * Example definition for a command
  */
 export interface Example {

@@ -66,6 +66,7 @@ export { parseArgv, type ParsedArgv, type ParserOptions } from "./parser/argv-pa
 // Type exports
 export type {
   AnyCommand,
+  ArgSource,
   ArgsSchema,
   CleanupContext,
   // Log types
