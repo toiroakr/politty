@@ -57,7 +57,7 @@ import {
   createSkillSyncCommand,
 } from "./commands.js";
 import { resolveSkillOptions } from "./options.js";
-import type { SkillCommandOptions } from "./types.js";
+import type { SkillCommandOptions, WithSkillCommand } from "./types.js";
 
 // Public API re-exports
 export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./frontmatter.js";
@@ -82,6 +82,7 @@ export type {
   SkillFlagOverrides,
   SkillFrontmatter,
   UninstallSkillOptions,
+  WithSkillCommand,
 } from "./types.js";
 
 /**
@@ -110,7 +111,7 @@ export type {
 export function withSkillCommand<T extends AnyCommand>(
   command: T,
   options: SkillCommandOptions,
-): T {
+): WithSkillCommand<T> {
   if (command.subCommands && Object.hasOwn(command.subCommands, "skills")) {
     throw new Error(
       `withSkillCommand: command "${command.name}" already defines a "skills" subcommand.`,
@@ -118,13 +119,23 @@ export function withSkillCommand<T extends AnyCommand>(
   }
 
   const resolved = resolveSkillOptions(options, command.name);
+  const addName = resolved.commandNames.add.name;
+  const removeName = resolved.commandNames.remove.name;
+  const subCommandNames = ["sync", addName, removeName, "list"];
+  const duplicate = subCommandNames.find((name, i) => subCommandNames.indexOf(name) !== i);
+  if (duplicate) {
+    throw new Error(
+      `withSkillCommand: commandMap produced duplicate subcommand name "${duplicate}".`,
+    );
+  }
+
   const skillsSubCommand = defineCommand({
     name: "skills",
     description: "Manage agent skills",
     subCommands: {
       sync: createSkillSyncCommand(resolved),
-      add: createSkillAddCommand(resolved),
-      remove: createSkillRemoveCommand(resolved),
+      [addName]: createSkillAddCommand(resolved),
+      [removeName]: createSkillRemoveCommand(resolved),
       list: createSkillListCommand(resolved),
     },
   });
@@ -136,7 +147,7 @@ export function withSkillCommand<T extends AnyCommand>(
       ...command.subCommands,
       skills: skillsSubCommand,
     },
-  } as T;
+  } as unknown as WithSkillCommand<T>;
 }
 
 /**

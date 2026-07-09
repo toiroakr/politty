@@ -1192,7 +1192,10 @@ Validates SKILL.md files against the [Agent Skills specification](https://agents
 Wraps a command with a `skills` subcommand for managing SKILL.md-based agent skills.
 
 ```typescript
-function withSkillCommand<T extends AnyCommand>(command: T, options: SkillCommandOptions): T;
+function withSkillCommand<T extends AnyCommand>(
+  command: T,
+  options: SkillCommandOptions,
+): WithSkillCommand<T>;
 ```
 
 Throws if `command.subCommands.skills` already exists.
@@ -1206,14 +1209,17 @@ Throws if `command.subCommands.skills` already exists.
 
 **SkillCommandOptions:**
 
-| Property            | Type                  | Description                                                                                                                                                                                                                                                                       |
-| ------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sourceDir`         | `string`              | Source directory containing SKILL.md files (symlinks within the source tree are followed)                                                                                                                                                                                         |
-| `package`           | `string`              | npm package name that owns these skills. Combined with the command name as `"{package}:{cliName}"` and compared against each source SKILL.md's `metadata["politty-cli"]` stamp; mismatches are refused                                                                            |
-| `mode`              | `InstallMode`         | Install materialization strategy (`"symlink"` \| `"copy"`). Defaults to `"symlink"` — symlink the source into place; install throws with guidance to retry with `"copy"` on filesystems without symlink support (e.g. Windows without Developer Mode)                             |
-| `cwd`               | `string?`             | Install-root directory used by every `skills` subcommand. Default: walk up from `process.cwd()` to the first ancestor containing `.git/` or `package.json`, falling back to `process.cwd()`. Pass an absolute (or cwd-relative) path to override — e.g. a CLI-specific config dir |
-| `flags`             | `SkillFlagOverrides?` | Per-flag overrides for the built-in subcommands. Currently only `flags.exclude.alias` is supported: pass a string to rename `skills sync --exclude`'s short alias (default `"x"`) or `false` to drop it entirely                                                                  |
-| `descriptionAppend` | `string \| false`     | Hint appended to the wrapped command's `description` so `--help` advertises the skills subcommand. Default: a one-line auto-generated hint. Pass a string to override the hint, or `false` to leave the description untouched                                                     |
+| Property            | Type                  | Description                                                                                                                                                                                                                                                                                                                                                         |
+| ------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sourceDir`         | `string`              | Source directory containing SKILL.md files (symlinks within the source tree are followed)                                                                                                                                                                                                                                                                           |
+| `package`           | `string`              | npm package name that owns these skills. Combined with the command name as `"{package}:{cliName}"` and compared against each source SKILL.md's `metadata["politty-cli"]` stamp; mismatches are refused                                                                                                                                                              |
+| `mode`              | `InstallMode`         | Install materialization strategy (`"symlink"` \| `"copy"`). Defaults to `"symlink"` — symlink the source into place; install throws with guidance to retry with `"copy"` on filesystems without symlink support (e.g. Windows without Developer Mode)                                                                                                               |
+| `cwd`               | `string?`             | Install-root directory used by every `skills` subcommand. Default: walk up from `process.cwd()` to the first ancestor containing `.git/` or `package.json`, falling back to `process.cwd()`. Pass an absolute (or cwd-relative) path to override — e.g. a CLI-specific config dir                                                                                   |
+| `globalArgs`        | `ArgsSchema?`         | The same schema passed to `runMain`/`runCommand`'s `globalArgs`. When it already declares a `verbose`/`json` field, `skills add`/`skills sync`'s `--verbose` and `skills list`'s `--json` are omitted from their own schema automatically, so the host's global flag of the same name takes priority — no manual configuration                                      |
+| `flags`             | `SkillFlagOverrides?` | Per-flag overrides: `exclude.alias` (rename/disable `skills sync --exclude`'s short alias, default `"x"`) and `verbose.alias` (rename/disable `skills add`/`skills sync --verbose`'s short alias — a collision independent of `globalArgs`'s field-name auto-detection, e.g. the host's `-v` belongs to an unrelated flag)                                          |
+| `commandMap`        | `{ add?, remove? }?`  | Primary name + aliases for `skills add`/`skills remove`. In each array the first element becomes the dispatched name, the rest become aliases. Default: `add: ["add", "install"]`, `remove: ["remove", "uninstall"]`                                                                                                                                                |
+| `unknownKeys`       | `UnknownKeysMode?`    | Unknown-flag handling for `add`/`sync`/`remove`/`list`'s own schemas (`"strict"` \| `"strip"` \| `"passthrough"`). Default `"strip"` (warn and drop, matching politty's own `z.object()`); `"passthrough"` drops the value the same way but suppresses the warning. Applied uniformly to all four; never rejects a value that legitimately arrives via `globalArgs` |
+| `descriptionAppend` | `string \| false`     | Hint appended to the wrapped command's `description` so `--help` advertises the skills subcommand. Default: a one-line auto-generated hint. Pass a string to override the hint, or `false` to leave the description untouched                                                                                                                                       |
 
 #### Generated Subcommands
 
@@ -1612,5 +1618,6 @@ export type {
   SkillFlagOverrides,
   SkillFrontmatter,
   UninstallSkillOptions,
+  WithSkillCommand,
 } from "./skill/types.js";
 ```

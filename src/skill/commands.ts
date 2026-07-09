@@ -11,7 +11,9 @@ import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path
 import { z } from "zod";
 import { arg, type RegularArgMeta } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
+import type { UnknownKeysMode } from "../core/schema-extractor.js";
 import { logger, symbols } from "../output/logger.js";
+import type { AnyCommand, ArgsSchema } from "../types.js";
 import {
   AGENTS_SKILLS_DIR,
   hasInstalledSkill,
@@ -110,131 +112,198 @@ function excludeArgMeta(options: ResolvedSkillOptions): RegularArgMeta<string[]>
 }
 
 /**
+ * Build the metadata for `--verbose` (shared by `add`/`sync`) honouring the
+ * configured alias. `undefined` alias means `arg()` is called without an
+ * alias key. Only called when `options.verbose.disabled` is `false`.
+ */
+function verboseArgMeta(options: ResolvedSkillOptions): RegularArgMeta<boolean> {
+  const meta: RegularArgMeta<boolean> = {
+    description: "Print install paths and modes",
+  };
+  if (options.verbose.alias !== undefined) {
+    meta.alias = options.verbose.alias;
+  }
+  return meta;
+}
+
+/**
+ * Read a same-named boolean out of a leaf command's (already-merged) args
+ * object. When a built-in flag is `disabled` (see `SkillFlagOverrides`),
+ * the local schema no longer declares it, but politty's runner still
+ * merges the host's `globalArgs`-parsed values into every leaf command's
+ * `args` regardless of the leaf's own schema shape. Reading it here (rather
+ * than hardcoding `false`) means `disabled` hands control to a
+ * same-named host global flag instead of just turning the feature off.
+ */
+function mergedFlag(args: object, name: string): boolean {
+  return Boolean((args as Record<string, unknown>)[name]);
+}
+
+/**
+ * Apply the configured unknown-keys mode to a subcommand's args schema.
+ *
+ * Declared to return the general {@link ArgsSchema} type rather than the
+ * precise `z.object(...)` literal, so passing its result into
+ * `defineCommand({ args: ... })` gives every call site a single stable
+ * type to infer `TArgsSchema` from — the same reason the `verbose`/`json`
+ * disabled/enabled variants below are two full monomorphic `defineCommand`
+ * calls rather than one call fed a ternary: threading a schema whose type
+ * varies per branch directly into `args:` collapses `run`'s parameter type
+ * into an unusable intersection for external callers (TypeScript infers a
+ * type parameter used in both covariant and contravariant positions from a
+ * union-typed argument as an intersection).
+ */
+function applyUnknownKeys(schema: z.ZodObject<z.ZodRawShape>, mode: UnknownKeysMode): ArgsSchema {
+  if (mode === "strict") return schema.strict();
+  if (mode === "passthrough") return schema.passthrough();
+  return schema;
+}
+
+/**
  * Create the `skills sync` subcommand.
  *
  * Removes and reinstalls all skills discovered in sourceDir. Skills owned
  * by this CLI that are no longer present in sourceDir are also removed so
  * stale skills do not linger after the CLI drops them from its bundle.
  */
-export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
+export function createSkillSyncCommand(resolved: ResolvedSkillOptions): AnyCommand {
+  function runSync(args: { exclude: string[] }, verbose: boolean): void {
+    const { skills: allSkills, errors } = loadSkills(resolved);
+    const stamp = resolved.stamp;
+    // Pre-validate every `--exclude` value before any install side
+    // effect. A typo (e.g. `--exclude nonexistent`) previously slid
+    // through as a no-op; now it aborts the run with a single error
+    // listing every unknown name so the user can fix the whole
+    // invocation in one round-trip. Mirrors `skills add`'s unknown-name
+    // handling.
+    //
+    // `--exclude` does double duty: it skips installation of a source
+    // skill *and* protects an installed orphan (a skill this CLI owns
+    // but no longer ships) from sync's removal pass. Both names are
+    // legitimate, so accept either match before raising.
+    const sourceNamesAll = new Set(allSkills.map((s) => s.frontmatter.name));
+    const ownedInstalled = new Set(
+      findOwnedInstalledSkills(stamp, resolved.cwd, resolved.sourceDir),
+    );
+    const requestedExclude = Array.from(new Set(args.exclude));
+    const unknownExclude = requestedExclude.filter(
+      (n) => !sourceNamesAll.has(n) && !ownedInstalled.has(n),
+    );
+    if (unknownExclude.length > 0) {
+      const subject = unknownExclude.length === 1 ? "Skill" : "Skills";
+      const quoted = unknownExclude.map((n) => JSON.stringify(n)).join(", ");
+      throw new Error(
+        `--exclude: ${subject} ${quoted} not found in source directory ` +
+          `or among installed skills.\n` +
+          formatSkillUniverse({ source: allSkills, installed: ownedInstalled }),
+      );
+    }
+    const excluded = new Set(args.exclude);
+    const skills = allSkills.filter((s) => !excluded.has(s.frontmatter.name));
+
+    // Refuse orphan reconciliation when the scan itself could not produce
+    // an authoritative view of "what this CLI bundles":
+    //   * `missing-source` — sourceDir missing or not a directory.
+    //   * any error whose `path === sourceDir` — includes the
+    //     single-skill-source case where sourceDir's own SKILL.md failed
+    //     to parse; without a single valid skill there, we cannot tell
+    //     orphan-vs-intentionally-dropped.
+    //   * every discovered SKILL.md failed validation (errors > 0 but no
+    //     valid skill returned) — we would otherwise interpret a totally
+    //     broken bundle as "CLI ships nothing" and rm every owned install.
+    //     Check `allSkills` (pre-exclusion), not `skills`, so excluding
+    //     the only valid skill does not flip the bundle to "invalid" when
+    //     an unrelated per-skill error is present.
+    // Per-skill errors on *subdirectories* alongside at least one valid
+    // skill do not block cleanup: the valid siblings still provide an
+    // authoritative bundle listing.
+    const rootScanFailed = scanFailedAtRoot({ skills: allSkills, errors }, resolved.sourceDir);
+
+    let removed = 0;
+    if (!rootScanFailed) {
+      // Remove skills we previously owned that the CLI no longer bundles.
+      // Errored source subdirectories are *retained*: an installed slot
+      // whose source SKILL.md is currently unreadable / malformed must
+      // not be reaped as an orphan — the source entry still exists, it
+      // just couldn't be scanned this run. Without this guard a transient
+      // packaging issue (one broken SKILL.md alongside healthy siblings)
+      // would silently rm-rf the install for the broken one.
+      //
+      // For most reasons the install slot matches the subdirectory name
+      // (spec-mandated equality). For `name-mismatch`, though, the two
+      // diverge — only one side was just renamed — and the prior install
+      // could be at either the directory basename *or* the frontmatter
+      // name, depending on which side moved. Protect both so a transient
+      // rename mistake never reaps the live install.
+      const sourceNames = new Set(skills.map((s) => s.frontmatter.name));
+      const erroredSlotNames = new Set<string>();
+      for (const err of errors) {
+        if (err.path === resolved.sourceDir) continue;
+        erroredSlotNames.add(basename(err.path));
+        if (err.skillName !== undefined) erroredSlotNames.add(err.skillName);
+      }
+      for (const orphan of ownedInstalled) {
+        if (sourceNames.has(orphan) || excluded.has(orphan) || erroredSlotNames.has(orphan)) {
+          continue;
+        }
+        removeOwnedSkill(orphan, stamp, resolved.cwd, resolved.sourceDir);
+        removed += 1;
+      }
+    }
+
+    // Reinstall in-place. `installSkill` clears the slot before
+    // writing, so a remove-all-first pass is not needed. `addSkill`'s
+    // ownership guard still refuses to clobber skills owned by another CLI.
+    let installed = 0;
+    for (const skill of skills) {
+      addSkill(skill, stamp, resolved, verbose);
+      installed += 1;
+    }
+
+    // Sync is the canonical "make it match the bundle" operation; an
+    // empty bundle or a fully-excluded run was previously silent. Always
+    // print a summary so users know the no-op was intentional, and
+    // differentiate the scan-failure case so a stdout-only pipeline
+    // doesn't misread "no skills bundled" as an intentional empty bundle.
+    if (installed === 0 && removed === 0) {
+      const reason = rootScanFailed
+        ? "source directory scan failed; see warnings"
+        : allSkills.length > 0 && skills.length === 0
+          ? "all skills excluded"
+          : "no skills bundled";
+      logger.info(`No skills installed (${reason}).`);
+    } else {
+      logger.info(`Sync complete: ${installed} installed, ${removed} removed.`);
+    }
+  }
+
+  if (resolved.verbose.disabled) {
+    return defineCommand({
+      name: "sync",
+      description: "Remove and reinstall all skills from source",
+      args: applyUnknownKeys(
+        z.object({
+          exclude: arg(z.array(z.string()).default([]), excludeArgMeta(resolved)),
+        }),
+        resolved.unknownKeys,
+      ),
+      run(args) {
+        runSync(args, mergedFlag(args, "verbose"));
+      },
+    });
+  }
   return defineCommand({
     name: "sync",
     description: "Remove and reinstall all skills from source",
-    args: z.object({
-      exclude: arg(z.array(z.string()).default([]), excludeArgMeta(resolved)),
-      verbose: arg(z.boolean().default(false), {
-        alias: "v",
-        description: "Print install paths and modes",
+    args: applyUnknownKeys(
+      z.object({
+        exclude: arg(z.array(z.string()).default([]), excludeArgMeta(resolved)),
+        verbose: arg(z.boolean().default(false), verboseArgMeta(resolved)),
       }),
-    }),
+      resolved.unknownKeys,
+    ),
     run(args) {
-      const { skills: allSkills, errors } = loadSkills(resolved);
-      const stamp = resolved.stamp;
-      // Pre-validate every `--exclude` value before any install side
-      // effect. A typo (e.g. `--exclude nonexistent`) previously slid
-      // through as a no-op; now it aborts the run with a single error
-      // listing every unknown name so the user can fix the whole
-      // invocation in one round-trip. Mirrors `skills add`'s unknown-name
-      // handling.
-      //
-      // `--exclude` does double duty: it skips installation of a source
-      // skill *and* protects an installed orphan (a skill this CLI owns
-      // but no longer ships) from sync's removal pass. Both names are
-      // legitimate, so accept either match before raising.
-      const sourceNamesAll = new Set(allSkills.map((s) => s.frontmatter.name));
-      const ownedInstalled = new Set(
-        findOwnedInstalledSkills(stamp, resolved.cwd, resolved.sourceDir),
-      );
-      const requestedExclude = Array.from(new Set(args.exclude));
-      const unknownExclude = requestedExclude.filter(
-        (n) => !sourceNamesAll.has(n) && !ownedInstalled.has(n),
-      );
-      if (unknownExclude.length > 0) {
-        const subject = unknownExclude.length === 1 ? "Skill" : "Skills";
-        const quoted = unknownExclude.map((n) => JSON.stringify(n)).join(", ");
-        throw new Error(
-          `--exclude: ${subject} ${quoted} not found in source directory ` +
-            `or among installed skills.\n` +
-            formatSkillUniverse({ source: allSkills, installed: ownedInstalled }),
-        );
-      }
-      const excluded = new Set(args.exclude);
-      const skills = allSkills.filter((s) => !excluded.has(s.frontmatter.name));
-
-      // Refuse orphan reconciliation when the scan itself could not produce
-      // an authoritative view of "what this CLI bundles":
-      //   * `missing-source` — sourceDir missing or not a directory.
-      //   * any error whose `path === sourceDir` — includes the
-      //     single-skill-source case where sourceDir's own SKILL.md failed
-      //     to parse; without a single valid skill there, we cannot tell
-      //     orphan-vs-intentionally-dropped.
-      //   * every discovered SKILL.md failed validation (errors > 0 but no
-      //     valid skill returned) — we would otherwise interpret a totally
-      //     broken bundle as "CLI ships nothing" and rm every owned install.
-      //     Check `allSkills` (pre-exclusion), not `skills`, so excluding
-      //     the only valid skill does not flip the bundle to "invalid" when
-      //     an unrelated per-skill error is present.
-      // Per-skill errors on *subdirectories* alongside at least one valid
-      // skill do not block cleanup: the valid siblings still provide an
-      // authoritative bundle listing.
-      const rootScanFailed = scanFailedAtRoot({ skills: allSkills, errors }, resolved.sourceDir);
-
-      let removed = 0;
-      if (!rootScanFailed) {
-        // Remove skills we previously owned that the CLI no longer bundles.
-        // Errored source subdirectories are *retained*: an installed slot
-        // whose source SKILL.md is currently unreadable / malformed must
-        // not be reaped as an orphan — the source entry still exists, it
-        // just couldn't be scanned this run. Without this guard a transient
-        // packaging issue (one broken SKILL.md alongside healthy siblings)
-        // would silently rm-rf the install for the broken one.
-        //
-        // For most reasons the install slot matches the subdirectory name
-        // (spec-mandated equality). For `name-mismatch`, though, the two
-        // diverge — only one side was just renamed — and the prior install
-        // could be at either the directory basename *or* the frontmatter
-        // name, depending on which side moved. Protect both so a transient
-        // rename mistake never reaps the live install.
-        const sourceNames = new Set(skills.map((s) => s.frontmatter.name));
-        const erroredSlotNames = new Set<string>();
-        for (const err of errors) {
-          if (err.path === resolved.sourceDir) continue;
-          erroredSlotNames.add(basename(err.path));
-          if (err.skillName !== undefined) erroredSlotNames.add(err.skillName);
-        }
-        for (const orphan of ownedInstalled) {
-          if (sourceNames.has(orphan) || excluded.has(orphan) || erroredSlotNames.has(orphan)) {
-            continue;
-          }
-          removeOwnedSkill(orphan, stamp, resolved.cwd, resolved.sourceDir);
-          removed += 1;
-        }
-      }
-
-      // Reinstall in-place. `installSkill` clears the slot before
-      // writing, so a remove-all-first pass is not needed. `addSkill`'s
-      // ownership guard still refuses to clobber skills owned by another CLI.
-      let installed = 0;
-      for (const skill of skills) {
-        addSkill(skill, stamp, resolved, args.verbose);
-        installed += 1;
-      }
-
-      // Sync is the canonical "make it match the bundle" operation; an
-      // empty bundle or a fully-excluded run was previously silent. Always
-      // print a summary so users know the no-op was intentional, and
-      // differentiate the scan-failure case so a stdout-only pipeline
-      // doesn't misread "no skills bundled" as an intentional empty bundle.
-      if (installed === 0 && removed === 0) {
-        const reason = rootScanFailed
-          ? "source directory scan failed; see warnings"
-          : allSkills.length > 0 && skills.length === 0
-            ? "all skills excluded"
-            : "no skills bundled";
-        logger.info(`No skills installed (${reason}).`);
-      } else {
-        logger.info(`Sync complete: ${installed} installed, ${removed} removed.`);
-      }
+      runSync(args, args.verbose);
     },
   });
 }
@@ -248,69 +317,95 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions) {
  * proceeds with the valid neighbours — a single unknown name aborts the run
  * and lists every unknown name at once. Duplicates are deduplicated.
  */
-export function createSkillAddCommand(resolved: ResolvedSkillOptions) {
-  return defineCommand({
-    name: "add",
-    aliases: ["install"],
-    description: "Install skills from source",
-    args: z.object({
-      name: arg(z.array(z.string()).default([]), {
-        positional: true,
-        description: "Skill name(s) to install (default: all)",
-        placeholder: "NAME",
-      }),
-      verbose: arg(z.boolean().default(false), {
-        alias: "v",
-        description: "Print install paths and modes",
-      }),
-    }),
-    run(args) {
-      const scanResult = loadSkills(resolved);
-      const sourceSkills = scanResult.skills;
-      const stamp = resolved.stamp;
+export function createSkillAddCommand(resolved: ResolvedSkillOptions): AnyCommand {
+  const nameArgMeta = {
+    positional: true,
+    description: "Skill name(s) to install (default: all)",
+    placeholder: "NAME",
+  } as const;
 
-      if (args.name.length > 0) {
-        // Pre-validate every requested name in one pass. A single unknown
-        // name aborts the run before any install side effect, and we list
-        // every unknown name so the user can fix the whole CLI invocation
-        // in one round-trip rather than discovering typos one at a time.
-        const known = new Set(sourceSkills.map((s) => s.frontmatter.name));
-        const requested = Array.from(new Set(args.name));
-        const unknown = requested.filter((n) => !known.has(n));
-        if (unknown.length > 0) {
-          const subject = unknown.length === 1 ? "Skill" : "Skills";
-          const quoted = unknown.map((n) => JSON.stringify(n)).join(", ");
-          throw new Error(
-            `${subject} ${quoted} not found in source directory.\n` +
-              formatSkillUniverse({ source: sourceSkills }),
-          );
-        }
-        // Preserve source order for deterministic install logs even when
-        // the user supplied names in arbitrary order.
-        const wanted = new Set(requested);
-        for (const skill of sourceSkills) {
-          if (wanted.has(skill.frontmatter.name)) {
-            addSkill(skill, stamp, resolved, args.verbose);
-          }
-        }
-        return;
+  function runAdd(args: { name: string[] }, verbose: boolean): void {
+    const scanResult = loadSkills(resolved);
+    const sourceSkills = scanResult.skills;
+    const stamp = resolved.stamp;
+
+    if (args.name.length > 0) {
+      // Pre-validate every requested name in one pass. A single unknown
+      // name aborts the run before any install side effect, and we list
+      // every unknown name so the user can fix the whole CLI invocation
+      // in one round-trip rather than discovering typos one at a time.
+      const known = new Set(sourceSkills.map((s) => s.frontmatter.name));
+      const requested = Array.from(new Set(args.name));
+      const unknown = requested.filter((n) => !known.has(n));
+      if (unknown.length > 0) {
+        const subject = unknown.length === 1 ? "Skill" : "Skills";
+        const quoted = unknown.map((n) => JSON.stringify(n)).join(", ");
+        throw new Error(
+          `${subject} ${quoted} not found in source directory.\n` +
+            formatSkillUniverse({ source: sourceSkills }),
+        );
       }
-
-      if (sourceSkills.length === 0) {
-        // Differentiate a directory-level scan failure from a legitimately
-        // empty source so a stdout-only consumer doesn't read a misconfigured
-        // sourceDir as "we have no skills to install".
-        if (scanFailedAtRoot(scanResult, resolved.sourceDir)) {
-          logger.info("No skills installed (source directory scan failed; see warnings).");
-        } else {
-          logger.info("No skills found in source directory.");
-        }
-        return;
-      }
-
+      // Preserve source order for deterministic install logs even when
+      // the user supplied names in arbitrary order.
+      const wanted = new Set(requested);
       for (const skill of sourceSkills) {
-        addSkill(skill, stamp, resolved, args.verbose);
+        if (wanted.has(skill.frontmatter.name)) {
+          addSkill(skill, stamp, resolved, verbose);
+        }
       }
+      return;
+    }
+
+    if (sourceSkills.length === 0) {
+      // Differentiate a directory-level scan failure from a legitimately
+      // empty source so a stdout-only consumer doesn't read a misconfigured
+      // sourceDir as "we have no skills to install".
+      if (scanFailedAtRoot(scanResult, resolved.sourceDir)) {
+        logger.info("No skills installed (source directory scan failed; see warnings).");
+      } else {
+        logger.info("No skills found in source directory.");
+      }
+      return;
+    }
+
+    for (const skill of sourceSkills) {
+      addSkill(skill, stamp, resolved, verbose);
+    }
+  }
+
+  if (resolved.verbose.disabled) {
+    return defineCommand({
+      name: resolved.commandNames.add.name,
+      ...(resolved.commandNames.add.aliases.length > 0
+        ? { aliases: resolved.commandNames.add.aliases }
+        : {}),
+      description: "Install skills from source",
+      args: applyUnknownKeys(
+        z.object({
+          name: arg(z.array(z.string()).default([]), nameArgMeta),
+        }),
+        resolved.unknownKeys,
+      ),
+      run(args) {
+        runAdd(args, mergedFlag(args, "verbose"));
+      },
+    });
+  }
+  return defineCommand({
+    name: resolved.commandNames.add.name,
+    ...(resolved.commandNames.add.aliases.length > 0
+      ? { aliases: resolved.commandNames.add.aliases }
+      : {}),
+    description: "Install skills from source",
+    args: applyUnknownKeys(
+      z.object({
+        name: arg(z.array(z.string()).default([]), nameArgMeta),
+        verbose: arg(z.boolean().default(false), verboseArgMeta(resolved)),
+      }),
+      resolved.unknownKeys,
+    ),
+    run(args) {
+      runAdd(args, args.verbose);
     },
   });
 }
@@ -323,18 +418,23 @@ export function createSkillAddCommand(resolved: ResolvedSkillOptions) {
  * (`metadata["politty-cli"] === "{package}:{cli}"`) are removed — skills
  * another tool installed are left untouched.
  */
-export function createSkillRemoveCommand(resolved: ResolvedSkillOptions) {
+export function createSkillRemoveCommand(resolved: ResolvedSkillOptions): AnyCommand {
   return defineCommand({
-    name: "remove",
-    aliases: ["uninstall"],
+    name: resolved.commandNames.remove.name,
+    ...(resolved.commandNames.remove.aliases.length > 0
+      ? { aliases: resolved.commandNames.remove.aliases }
+      : {}),
     description: "Remove installed skills",
-    args: z.object({
-      name: arg(z.string().optional(), {
-        positional: true,
-        description: "Skill name to remove (default: all)",
-        placeholder: "NAME",
+    args: applyUnknownKeys(
+      z.object({
+        name: arg(z.string().optional(), {
+          positional: true,
+          description: "Skill name to remove (default: all)",
+          placeholder: "NAME",
+        }),
       }),
-    }),
+      resolved.unknownKeys,
+    ),
     run(args) {
       const scanResult = loadSkills(resolved);
       const sourceSkills = scanResult.skills;
@@ -481,63 +581,80 @@ function slotPresent(name: string, cwd: string): boolean {
  *
  * Lists available skills from the source directory.
  */
-export function createSkillListCommand(resolved: ResolvedSkillOptions) {
+export function createSkillListCommand(resolved: ResolvedSkillOptions): AnyCommand {
+  function runList(json: boolean): void {
+    // In `--json` mode, suppress stdout summary lines from the scan-error
+    // logger so the JSON array on stdout stays parseable. Per-error
+    // stderr warnings still fire so the operator can see what was skipped.
+    const scanResult = loadSkills(resolved, { silentStdout: json });
+    const sourceSkills = scanResult.skills;
+    const stamp = resolved.stamp;
+
+    if (json) {
+      console.log(
+        JSON.stringify(
+          sourceSkills.map((s) => ({
+            name: s.frontmatter.name,
+            description: s.frontmatter.description,
+            // `owner` is what the source SKILL.md actually declares; it
+            // may be null or differ from `expectedOwner` when the
+            // packaging is wrong, and in that case `skills add` refuses.
+            // Surfacing both lets tooling detect the mismatch without
+            // having to re-read SKILL.md.
+            owner: s.frontmatter.metadata?.[OWNERSHIP_METADATA_KEY] ?? null,
+            expectedOwner: stamp,
+            status: listStatus(s.frontmatter.name, stamp, resolved.cwd, resolved.sourceDir),
+            sourcePath: s.sourcePath,
+          })),
+        ),
+      );
+      return;
+    }
+
+    if (sourceSkills.length === 0) {
+      // Same rationale as `skills add`: a stdout-only consumer must be
+      // able to tell apart a legitimately empty source from a misconfigured
+      // sourceDir that failed to scan.
+      if (scanFailedAtRoot(scanResult, resolved.sourceDir)) {
+        logger.info("Source directory scan failed; see warnings.");
+      } else {
+        logger.info("No skills found in source directory.");
+      }
+      return;
+    }
+
+    logger.info("Available skills:");
+    for (const skill of sourceSkills) {
+      const status = listStatus(skill.frontmatter.name, stamp, resolved.cwd, resolved.sourceDir);
+      logger.info(
+        `  ${skill.frontmatter.name.padEnd(20)} ${status.padEnd(14)} ${skill.frontmatter.description}`,
+      );
+    }
+  }
+
+  if (resolved.json.disabled) {
+    return defineCommand({
+      name: "list",
+      description: "List available skills from source",
+      args: applyUnknownKeys(z.object({}), resolved.unknownKeys),
+      run(args) {
+        runList(mergedFlag(args, "json"));
+      },
+    });
+  }
   return defineCommand({
     name: "list",
     description: "List available skills from source",
-    args: z.object({
-      json: arg(z.boolean().default(false), {
-        description: "Output as JSON",
+    args: applyUnknownKeys(
+      z.object({
+        json: arg(z.boolean().default(false), {
+          description: "Output as JSON",
+        }),
       }),
-    }),
+      resolved.unknownKeys,
+    ),
     run(args) {
-      // In `--json` mode, suppress stdout summary lines from the scan-error
-      // logger so the JSON array on stdout stays parseable. Per-error
-      // stderr warnings still fire so the operator can see what was skipped.
-      const scanResult = loadSkills(resolved, { silentStdout: args.json });
-      const sourceSkills = scanResult.skills;
-      const stamp = resolved.stamp;
-
-      if (args.json) {
-        console.log(
-          JSON.stringify(
-            sourceSkills.map((s) => ({
-              name: s.frontmatter.name,
-              description: s.frontmatter.description,
-              // `owner` is what the source SKILL.md actually declares; it
-              // may be null or differ from `expectedOwner` when the
-              // packaging is wrong, and in that case `skills add` refuses.
-              // Surfacing both lets tooling detect the mismatch without
-              // having to re-read SKILL.md.
-              owner: s.frontmatter.metadata?.[OWNERSHIP_METADATA_KEY] ?? null,
-              expectedOwner: stamp,
-              status: listStatus(s.frontmatter.name, stamp, resolved.cwd, resolved.sourceDir),
-              sourcePath: s.sourcePath,
-            })),
-          ),
-        );
-        return;
-      }
-
-      if (sourceSkills.length === 0) {
-        // Same rationale as `skills add`: a stdout-only consumer must be
-        // able to tell apart a legitimately empty source from a misconfigured
-        // sourceDir that failed to scan.
-        if (scanFailedAtRoot(scanResult, resolved.sourceDir)) {
-          logger.info("Source directory scan failed; see warnings.");
-        } else {
-          logger.info("No skills found in source directory.");
-        }
-        return;
-      }
-
-      logger.info("Available skills:");
-      for (const skill of sourceSkills) {
-        const status = listStatus(skill.frontmatter.name, stamp, resolved.cwd, resolved.sourceDir);
-        logger.info(
-          `  ${skill.frontmatter.name.padEnd(20)} ${status.padEnd(14)} ${skill.frontmatter.description}`,
-        );
-      }
+      runList(args.json);
     },
   });
 }

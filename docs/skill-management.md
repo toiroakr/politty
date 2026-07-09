@@ -144,6 +144,108 @@ withSkillCommand(cmd, {
 });
 ```
 
+### Resolving flag and alias collisions with a host CLI
+
+`skills add`/`skills sync` also define `--verbose`/`-v`, and `skills list`
+defines `--json`. If your host CLI already has global flags of the same
+name, pass the same `globalArgs` schema you give to `runMain`/`runCommand`
+as `globalArgs` here too, and the collision resolves itself:
+
+```ts
+const globalArgs = z.object({
+  verbose: arg(z.boolean().default(false), { alias: "v" }),
+});
+
+const cli = withSkillCommand(baseCommand, {
+  sourceDir,
+  package: "@my-agent/skills",
+  globalArgs, // skills add/sync auto-detect verbose and drop their own --verbose
+});
+
+runMain(cli, { globalArgs }); // same schema passed to the real entry point
+```
+
+Because `globalArgs` already declares a `verbose` field, `withSkillCommand`
+automatically omits `skills add`/`skills sync`'s own `--verbose` (same for
+`json` on `skills list`), and the host's global value takes priority for
+those subcommands too — no manual `flags.verbose.disabled` needed.
+
+Note that _keeping_ a local field of the same name instead does not
+reliably achieve the same thing: a global flag typed before the subcommand
+(`mycli --verbose skills add`, the natural position for a global flag)
+resolves correctly at the global level, but the local schema's own default
+value then overwrites it during the final merge, silently discarding what
+the user typed. This is exactly why `withSkillCommand` auto-omits the
+local field instead of just letting both coexist.
+
+`--verbose`'s short alias can still collide independently of the field-name
+auto-detection above — e.g. the host's `globalArgs` uses `-v` for an
+unrelated flag (not named `verbose`), so auto-detection doesn't kick in,
+but the single-character alias still clashes. Rename it via
+`flags.verbose.alias`:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  flags: { verbose: { alias: "V" } },
+});
+```
+
+(`skills list --json` has no default alias, so there's nothing to rename
+there — `globalArgs` auto-detection is the only lever for `--json`.)
+
+The primary name and backward-compatibility aliases of `skills add`/`skills
+remove` can be customized via `commandMap`. In each array, the _first_
+element becomes the subcommand's dispatched name; the rest become aliases:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  commandMap: {
+    add: ["add", "install", "get"], // keep "add"/"install", add "get"
+    remove: ["remove"], // drop the "uninstall" alias entirely
+  },
+});
+```
+
+Renaming the primary name outright works the same way — put the new name
+first:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  commandMap: {
+    add: ["setup", "add", "install"], // dispatches as "setup"; "add"/"install" still work
+  },
+});
+```
+
+### Unknown-flag strictness
+
+By default, an unrecognized flag on any `skills` subcommand (e.g.
+`skills add --typo`) prints a warning and is dropped — matching politty's
+own `z.object()` default. If your host CLI uses `z.strictObject()`/
+`.strict()` throughout and wants the same behavior here, set
+`unknownKeys: "strict"` to make it a hard error instead. `"passthrough"` is
+also available — it behaves exactly like `"strip"` (the flag's value is
+still dropped, not preserved anywhere) but suppresses the warning:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  unknownKeys: "strict",
+});
+```
+
+This applies uniformly to `add`/`sync`/`remove`/`list` and only affects
+flags the parser can't attribute to this subcommand or to `globalArgs` — a
+value that legitimately arrives via `globalArgs` is validated separately
+and merged in afterward, so `unknownKeys: "strict"` never rejects it.
+
 ### `skills add` (alias: `install`)
 
 Install one or more named skills, or all skills when no name is given. Multiple positional names are pre-validated against the source directory before any install side effect — any unknown name aborts the run with a single error listing every typo, so the whole invocation can be fixed in one round-trip.
