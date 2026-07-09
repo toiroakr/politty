@@ -364,6 +364,26 @@ describe("runCommand", () => {
       const args = runFn.mock.calls[0]?.[0];
       expect(args.name).toBe("Alice");
     });
+
+    it("fails with exitCode 1 and reports the conflict when a same-named field has a different definition on globalArgs vs the local schema", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ level: arg(z.string().optional()) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ level: arg(z.enum(["a", "b"]).optional()) }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+
+      const result = await runCommand(root, ["sub", "--level", "a"], { globalArgs });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain("different definitions");
+      }
+      expect(runFn).not.toHaveBeenCalled();
+    });
   });
 
   describe("Help handling", () => {
