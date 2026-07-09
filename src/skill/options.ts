@@ -183,12 +183,15 @@ function resolveVerbose(
 /**
  * Does `globalArgs` (the host's `runMain`/`runCommand` global args schema,
  * if passed through `SkillCommandOptions.globalArgs`) already declare a
- * field with this name? Determines whether the matching built-in local
- * flag (`verbose`/`json`) is omitted — see {@link SkillCommandOptions.globalArgs}.
+ * *non-positional* field with this name? Determines whether the matching
+ * built-in local flag (`verbose`/`json`) is omitted — see
+ * {@link SkillCommandOptions.globalArgs}. Positional fields are excluded:
+ * a positional named `verbose`/`json` has no `--verbose`/`--json` flag
+ * syntax at all, so it can't actually collide with one.
  */
 function hasGlobalField(globalArgs: ArgsSchema | undefined, name: string): boolean {
   if (!globalArgs) return false;
-  return extractFields(globalArgs).fields.some((field) => field.name === name);
+  return extractFields(globalArgs).fields.some((field) => field.name === name && !field.positional);
 }
 
 function resolveDescriptionAppend(

@@ -128,12 +128,14 @@ function verboseArgMeta(options: ResolvedSkillOptions): RegularArgMeta<boolean> 
 
 /**
  * Read a same-named boolean out of a leaf command's (already-merged) args
- * object. When a built-in flag is `disabled` (see `SkillFlagOverrides`),
- * the local schema no longer declares it, but politty's runner still
- * merges the host's `globalArgs`-parsed values into every leaf command's
- * `args` regardless of the leaf's own schema shape. Reading it here (rather
- * than hardcoding `false`) means `disabled` hands control to a
- * same-named host global flag instead of just turning the feature off.
+ * object. When a built-in flag is omitted because `SkillCommandOptions.
+ * globalArgs` already declares a same-named field (see
+ * `ResolvedSkillOptions.verbose`/`.json`), the local schema no longer
+ * declares it, but politty's runner still merges the host's
+ * `globalArgs`-parsed values into every leaf command's `args` regardless of
+ * the leaf's own schema shape. Reading it here (rather than hardcoding
+ * `false`) means the omission hands control to that global flag instead of
+ * just turning the feature off.
  */
 function mergedFlag(args: object, name: string): boolean {
   return Boolean((args as Record<string, unknown>)[name]);

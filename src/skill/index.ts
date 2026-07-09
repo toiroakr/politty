@@ -135,6 +135,21 @@ export function withSkillCommand<T extends AnyCommand>(
     removeName,
     ...resolved.commandNames.remove.aliases,
   ];
+  // Same safe-token pattern politty's own command validator enforces for
+  // subcommand aliases (`checkSubCommandAliasConflicts` in
+  // src/validator/command-validator.ts) — that check only runs when a host
+  // explicitly calls `validateCommand()`, not automatically from
+  // `runMain`/`runCommand`, so `commandMap` entries need their own check
+  // here to reject empty strings, leading dashes, whitespace, etc. up front.
+  const invalid = allNames
+    .slice(2) // "sync"/"list" are always valid; only check commandMap-derived entries
+    .find((name) => !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(name));
+  if (invalid !== undefined) {
+    throw new Error(
+      `withSkillCommand: commandMap entry "${invalid}" is invalid. Names/aliases must start ` +
+        `with an alphanumeric character and contain only alphanumeric characters, hyphens, or underscores.`,
+    );
+  }
   const duplicate = allNames.find((name, i) => allNames.indexOf(name) !== i);
   if (duplicate) {
     throw new Error(

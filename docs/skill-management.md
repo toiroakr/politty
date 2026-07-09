@@ -227,7 +227,9 @@ withSkillCommand(cmd, {
 `sync`/`list` or with each other's names/aliases — a silent collision would
 otherwise either make an alias unreachable (a subcommand's own name always
 wins over another subcommand's alias) or make two subcommands ambiguously
-share one alias (whichever is declared first wins).
+share one alias (whichever is declared first wins). It also rejects entries
+that aren't safe tokens (empty strings, leading dashes, whitespace, etc.) —
+the same format politty enforces for ordinary subcommand aliases.
 
 ### Unknown-flag strictness
 

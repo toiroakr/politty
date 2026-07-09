@@ -89,6 +89,30 @@ describe("withSkillCommand", () => {
     ).toThrow(/duplicate subcommand name\/alias "manage"/);
   });
 
+  it("should throw when a commandMap entry is an empty string", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["add", ""] } })).toThrow(
+      /commandMap entry "" is invalid/,
+    );
+  });
+
+  it("should throw when a commandMap entry starts with a dash", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() =>
+      withSkillCommand(base, { ...opts, commandMap: { remove: ["remove", "-rm"] } }),
+    ).toThrow(/commandMap entry "-rm" is invalid/);
+  });
+
+  it("should throw when a commandMap entry contains whitespace", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["add install"] } })).toThrow(
+      /commandMap entry "add install" is invalid/,
+    );
+  });
+
   it("should preserve existing subcommands", () => {
     const existing = defineCommand({ name: "run", description: "Run" });
     const base = defineCommand({

@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { getArgMeta } from "../../core/arg-registry.js";
+import { arg, getArgMeta } from "../../core/arg-registry.js";
 import { getUnknownKeysMode } from "../../core/schema-extractor.js";
 import {
   createSkillAddCommand,
@@ -83,6 +83,17 @@ describe("globalArgs auto-detection", () => {
     const resolved = resolve(opts("/tmp"));
     expect(resolved.verbose.disabled).toBe(false);
     expect(resolved.json.disabled).toBe(false);
+  });
+
+  it("should not auto-disable when the same-named globalArgs field is positional", () => {
+    // A positional named "verbose"/"json" has no `--verbose`/`--json` flag
+    // syntax at all, so it can't actually collide with the option of the
+    // same name — only non-positional (option) fields count as a collision.
+    const globalArgs = z.object({
+      verbose: arg(z.string(), { positional: true }),
+    });
+    const resolved = resolve({ ...opts("/tmp"), globalArgs });
+    expect(resolved.verbose.disabled).toBe(false);
   });
 
   it("should apply auto-detection end-to-end to createSkillAddCommand's schema", () => {
