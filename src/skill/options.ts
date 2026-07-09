@@ -20,6 +20,15 @@ const DEFAULT_ADD_NAMES = ["add", "install"];
 /** Default primary name + aliases for `skills remove`. */
 const DEFAULT_REMOVE_NAMES = ["remove", "uninstall"];
 
+/**
+ * Same safe-token pattern politty's own command validator enforces for
+ * subcommand aliases (`checkSubCommandAliasConflicts` in
+ * src/validator/command-validator.ts). That check only runs when a host
+ * explicitly calls `validateCommand()`, not automatically from
+ * `runMain`/`runCommand`, so `commandMap` entries need their own check.
+ */
+const SAFE_TOKEN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+
 /** Marker files identifying a project root for find-up. */
 const PROJECT_ROOT_MARKERS = [".git", "package.json"] as const;
 
@@ -165,6 +174,14 @@ function resolveCommandNaming(
   const names = value ?? defaults;
   if (names.length === 0) {
     throw new Error(`SkillCommandOptions.commandMap.${label} must include at least one name.`);
+  }
+  const invalid = names.find((name) => !SAFE_TOKEN.test(name));
+  if (invalid !== undefined) {
+    throw new Error(
+      `SkillCommandOptions.commandMap.${label} contains an invalid entry ${JSON.stringify(invalid)}. ` +
+        `Names/aliases must start with an alphanumeric character and contain only alphanumeric ` +
+        `characters, hyphens, or underscores.`,
+    );
   }
   return { name: names[0]!, aliases: names.slice(1) };
 }

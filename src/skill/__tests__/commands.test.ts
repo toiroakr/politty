@@ -59,6 +59,30 @@ function argShape(command: { args?: unknown }): Record<string, z.ZodType> {
   return (command.args as { shape: Record<string, z.ZodType> }).shape;
 }
 
+describe("resolveSkillOptions commandMap validation", () => {
+  // `resolveSkillOptions` must validate commandMap tokens itself, not rely
+  // on `withSkillCommand`'s later duplicate check — it's called directly
+  // here (bypassing withSkillCommand entirely), the same way a caller could
+  // use it outside of withSkillCommand's wrapping.
+  it("should throw when a commandMap entry is an empty string", () => {
+    expect(() => resolve({ ...opts("/tmp"), commandMap: { add: ["add", ""] } })).toThrow(
+      /commandMap\.add contains an invalid entry ""/,
+    );
+  });
+
+  it("should throw when a commandMap entry is whitespace-only", () => {
+    expect(() => resolve({ ...opts("/tmp"), commandMap: { remove: ["remove", "  "] } })).toThrow(
+      /commandMap\.remove contains an invalid entry "\s+"/,
+    );
+  });
+
+  it("should throw when a commandMap entry starts with a dash", () => {
+    expect(() => resolve({ ...opts("/tmp"), commandMap: { add: ["-add"] } })).toThrow(
+      /commandMap\.add contains an invalid entry "-add"/,
+    );
+  });
+});
+
 describe("globalArgs auto-detection", () => {
   it("should auto-disable --verbose when globalArgs already defines verbose", () => {
     const globalArgs = z.object({ verbose: z.boolean().default(false) });

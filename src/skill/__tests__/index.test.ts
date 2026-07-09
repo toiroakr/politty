@@ -93,7 +93,7 @@ describe("withSkillCommand", () => {
     const base = defineCommand({ name: "my-cli", description: "Test CLI" });
 
     expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["add", ""] } })).toThrow(
-      /commandMap entry "" is invalid/,
+      /commandMap\.add contains an invalid entry ""/,
     );
   });
 
@@ -101,7 +101,7 @@ describe("withSkillCommand", () => {
     const base = defineCommand({ name: "my-cli", description: "Test CLI" });
 
     expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["add", "   "] } })).toThrow(
-      /commandMap entry "\s+" is invalid/,
+      /commandMap\.add contains an invalid entry "\s+"/,
     );
   });
 
@@ -110,14 +110,14 @@ describe("withSkillCommand", () => {
 
     expect(() =>
       withSkillCommand(base, { ...opts, commandMap: { remove: ["remove", "-rm"] } }),
-    ).toThrow(/commandMap entry "-rm" is invalid/);
+    ).toThrow(/commandMap\.remove contains an invalid entry "-rm"/);
   });
 
   it("should throw when a commandMap entry contains whitespace", () => {
     const base = defineCommand({ name: "my-cli", description: "Test CLI" });
 
     expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["add install"] } })).toThrow(
-      /commandMap entry "add install" is invalid/,
+      /commandMap\.add contains an invalid entry "add install"/,
     );
   });
 
