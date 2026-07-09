@@ -66,8 +66,27 @@ describe("withSkillCommand", () => {
     const base = defineCommand({ name: "my-cli", description: "Test CLI" });
 
     expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["list"] } })).toThrow(
-      /duplicate subcommand name "list"/,
+      /duplicate subcommand name\/alias "list"/,
     );
+  });
+
+  it("should throw when a commandMap alias collides with another subcommand's primary name", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["add", "list"] } })).toThrow(
+      /duplicate subcommand name\/alias "list"/,
+    );
+  });
+
+  it("should throw when add and remove commandMap aliases collide with each other", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() =>
+      withSkillCommand(base, {
+        ...opts,
+        commandMap: { add: ["add", "manage"], remove: ["remove", "manage"] },
+      }),
+    ).toThrow(/duplicate subcommand name\/alias "manage"/);
   });
 
   it("should preserve existing subcommands", () => {

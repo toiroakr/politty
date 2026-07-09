@@ -223,6 +223,12 @@ withSkillCommand(cmd, {
 });
 ```
 
+`withSkillCommand` throws if any name or alias in `commandMap` collides with
+`sync`/`list` or with each other's names/aliases — a silent collision would
+otherwise either make an alias unreachable (a subcommand's own name always
+wins over another subcommand's alias) or make two subcommands ambiguously
+share one alias (whichever is declared first wins).
+
 ### Unknown-flag strictness
 
 By default, an unrecognized flag on any `skills` subcommand (e.g.

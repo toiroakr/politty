@@ -121,11 +121,24 @@ export function withSkillCommand<T extends AnyCommand>(
   const resolved = resolveSkillOptions(options, command.name);
   const addName = resolved.commandNames.add.name;
   const removeName = resolved.commandNames.remove.name;
-  const subCommandNames = ["sync", addName, removeName, "list"];
-  const duplicate = subCommandNames.find((name, i) => subCommandNames.indexOf(name) !== i);
+  // Check every dispatched name AND alias together — an alias colliding with
+  // another subcommand's name or alias is just as ambiguous as two primary
+  // names colliding: `resolveSubcommandWithAlias` resolves the direct key
+  // first, so an alias shadowed by another subcommand's name is silently
+  // unreachable, and `resolveSubCommandAlias` returns the first match when
+  // two subcommands share an alias, silently dropping the other.
+  const allNames = [
+    "sync",
+    "list",
+    addName,
+    ...resolved.commandNames.add.aliases,
+    removeName,
+    ...resolved.commandNames.remove.aliases,
+  ];
+  const duplicate = allNames.find((name, i) => allNames.indexOf(name) !== i);
   if (duplicate) {
     throw new Error(
-      `withSkillCommand: commandMap produced duplicate subcommand name "${duplicate}".`,
+      `withSkillCommand: commandMap produced duplicate subcommand name/alias "${duplicate}".`,
     );
   }
 
