@@ -198,13 +198,16 @@ export interface SkillCommandOptions {
    *
    * When provided, `skills add`/`skills sync`'s `--verbose` and `skills
    * list`'s `--json` are automatically omitted from their own schema if
-   * this schema already defines a same-named field — no manual
-   * configuration needed. This is required (not just convenient): keeping
-   * both a local and a same-named global field is unreliable, since
-   * `--verbose` typed before the subcommand (the natural position for a
-   * global flag, e.g. `mycli --verbose skills add`) resolves correctly as a
-   * global value, but the local field's own default then overwrites it
-   * during the merge, silently discarding the global flag.
+   * this schema already defines a same-named *non-positional boolean*
+   * field — no manual configuration needed. (A same-named field of another
+   * type, e.g. a string verbosity level, isn't treated as the same flag and
+   * doesn't trigger this — the local boolean flag stays.) This omission is
+   * required (not just convenient): keeping both a local and a same-named
+   * global field is unreliable, since `--verbose` typed before the
+   * subcommand (the natural position for a global flag, e.g. `mycli
+   * --verbose skills add`) resolves correctly as a global value, but the
+   * local field's own default then overwrites it during the merge,
+   * silently discarding the global flag.
    *
    * @example
    * ```ts

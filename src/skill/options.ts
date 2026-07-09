@@ -200,15 +200,22 @@ function resolveVerbose(
 /**
  * Does `globalArgs` (the host's `runMain`/`runCommand` global args schema,
  * if passed through `SkillCommandOptions.globalArgs`) already declare a
- * *non-positional* field with this name? Determines whether the matching
- * built-in local flag (`verbose`/`json`) is omitted — see
- * {@link SkillCommandOptions.globalArgs}. Positional fields are excluded:
- * a positional named `verbose`/`json` has no `--verbose`/`--json` flag
- * syntax at all, so it can't actually collide with one.
+ * *non-positional boolean* field with this name? Determines whether the
+ * matching built-in local flag (`verbose`/`json`) is omitted — see
+ * {@link SkillCommandOptions.globalArgs}. Positional fields are excluded: a
+ * positional named `verbose`/`json` has no `--verbose`/`--json` flag syntax
+ * at all, so it can't actually collide with one. Non-boolean fields are
+ * excluded too: `mergedFlag` boolean-coerces whatever value flows through,
+ * and a same-named string/number field (e.g. a verbosity level or enum)
+ * isn't really the same flag — coercing it (e.g. `Boolean("off")` is `true`)
+ * would silently misread it, so it's not treated as a collision at all and
+ * the local boolean flag stays.
  */
 function hasGlobalField(globalArgs: ArgsSchema | undefined, name: string): boolean {
   if (!globalArgs) return false;
-  return extractFields(globalArgs).fields.some((field) => field.name === name && !field.positional);
+  return extractFields(globalArgs).fields.some(
+    (field) => field.name === name && !field.positional && field.type === "boolean",
+  );
 }
 
 function resolveDescriptionAppend(

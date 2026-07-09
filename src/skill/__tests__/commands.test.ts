@@ -120,6 +120,18 @@ describe("globalArgs auto-detection", () => {
     expect(resolved.verbose.disabled).toBe(false);
   });
 
+  it("should not auto-disable when the same-named globalArgs field isn't boolean", () => {
+    // mergedFlag boolean-coerces whatever value flows through. A same-named
+    // string field (e.g. an enum-like verbosity level) isn't really the
+    // same flag: Boolean("off") is true, so treating this as a collision
+    // would silently misread it. Only a same-named boolean field counts.
+    const globalArgs = z.object({
+      verbose: z.enum(["off", "info", "debug"]).default("off"),
+    });
+    const resolved = resolve({ ...opts("/tmp"), globalArgs });
+    expect(resolved.verbose.disabled).toBe(false);
+  });
+
   it("should apply auto-detection end-to-end to createSkillAddCommand's schema", () => {
     const globalArgs = z.object({ verbose: z.boolean().default(false) });
     const command = createSkillAddCommand(resolve({ ...opts("/tmp"), globalArgs }));
