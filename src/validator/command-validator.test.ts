@@ -415,6 +415,21 @@ describe("validateCrossSchemaCollisions", () => {
     expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).not.toThrow();
   });
 
+  it("should not throw when a same-named union-of-literals field has a duplicate literal but the same allowed-value set", () => {
+    // extractEnumValues() doesn't dedupe union-of-literal options, so the
+    // extracted list can contain duplicates even when the actual set of
+    // allowed values is identical to the other side.
+    const globalSchema = z.object({
+      level: arg(z.union([z.literal("a"), z.literal("b")]).optional()),
+    });
+    const commandSchema = z.object({
+      level: arg(z.union([z.literal("a"), z.literal("a"), z.literal("b")]).optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).not.toThrow();
+  });
+
   it("should not throw when a same-named field has an identical definition", () => {
     const globalSchema = z.object({
       verbose: arg(z.boolean().optional()),

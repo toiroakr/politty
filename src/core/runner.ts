@@ -766,9 +766,11 @@ async function runCommandInternal<TResult = unknown>(
 
     // Prompt for missing command args (if prompt resolver is provided)
     let argsToValidate = parseResult.rawArgs;
+    const promptResolvedFields = new Set<string>();
     if (options.prompt && parseResult.extractedFields) {
       const resolved = await options.prompt(argsToValidate, parseResult.extractedFields);
       argsToValidate = { ...argsToValidate, ...resolved };
+      for (const key of Object.keys(resolved)) promptResolvedFields.add(key);
     }
 
     const validationResult = validateArgs(argsToValidate, command.args);
@@ -812,8 +814,13 @@ async function runCommandInternal<TResult = unknown>(
     // overrides a same-named global field's "cli"/"env" classification instead
     // of leaking it through unchanged.
     for (const field of parseResult.extractedFields?.fields ?? []) {
-      const localHasOwnValue =
+      const localHasCliOrEnvValue =
         Object.hasOwn(parseResult.rawArgs, field.name) || localEnvFallbackFields.has(field.name);
+      // A prompt resolver can also fill in a local value (see above); that
+      // counts as the local field having "its own value" for the override
+      // decision below, even though it isn't tracked as a `$source` bucket
+      // of its own and still classifies as "default" like it always has.
+      const localHasOwnValue = localHasCliOrEnvValue || promptResolvedFields.has(field.name);
 
       if (!localHasOwnValue && cliProvidedGlobalFields.has(field.name)) {
         // Same-named field on both schemas (validateCrossSchemaCollisions
@@ -831,7 +838,11 @@ async function runCommandInternal<TResult = unknown>(
 
       argSourceMap.set(
         field.name,
-        localHasOwnValue ? (localEnvFallbackFields.has(field.name) ? "env" : "cli") : "default",
+        localHasCliOrEnvValue
+          ? localEnvFallbackFields.has(field.name)
+            ? "env"
+            : "cli"
+          : "default",
       );
     }
     attachArgSource(mergedPlainArgs, argSourceMap);

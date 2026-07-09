@@ -284,6 +284,24 @@ describe("runCommand", () => {
       expect(args.level).toBe("from-local-env");
       expect(args.$source?.("level")).toBe("env");
     });
+
+    it("does not discard a value a prompt resolver filled in for the local field", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ level: arg(z.string().default("global-default")) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ level: arg(z.string().default("local-default")) }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+      const prompt = vi.fn().mockResolvedValue({ level: "from-prompt" });
+
+      await runCommand(root, ["--level", "cli-global", "sub"], { globalArgs, prompt });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.level).toBe("from-prompt");
+      expect(args.$source?.("level")).toBe("default");
+    });
   });
 
   describe("Help handling", () => {

@@ -549,7 +549,16 @@ function fieldsAreIdentical(a: ResolvedFieldMeta, b: ResolvedFieldMeta): boolean
   const bEnum = b.enumValues;
   if (!aEnum && !bEnum) return true;
   if (!aEnum || !bEnum) return false;
-  return aEnum.length === bEnum.length && aEnum.every((value) => bEnum.includes(value));
+  // Compare as sets, not arrays: extractEnumValues() can return duplicate
+  // entries for literal-union-style enums, which would otherwise make two
+  // schemas with an identical *set* of allowed values compare unequal.
+  const aSet = new Set(aEnum);
+  const bSet = new Set(bEnum);
+  if (aSet.size !== bSet.size) return false;
+  for (const value of aSet) {
+    if (!bSet.has(value)) return false;
+  }
+  return true;
 }
 
 /**
