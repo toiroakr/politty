@@ -769,13 +769,17 @@ async function runCommandInternal<TResult = unknown>(
     const promptResolvedFields = new Set<string>();
     if (options.prompt && parseResult.extractedFields) {
       const resolved = await options.prompt(argsToValidate, parseResult.extractedFields);
-      argsToValidate = { ...argsToValidate, ...resolved };
       // A resolver may return `{ field: undefined }` for a field it chose
-      // not to prompt for; that isn't an explicit value, so don't count it
-      // as one below (or it would block the global-value pre-fill for a
-      // resolver that legitimately skips a field).
-      for (const key of Object.keys(resolved)) {
-        if (resolved[key] !== undefined) promptResolvedFields.add(key);
+      // not to prompt for; that isn't an explicit value, so skip it here
+      // instead of spreading it in verbatim -- otherwise it would either
+      // clobber a real CLI/env value already in argsToValidate, or (if
+      // tracked anyway) block the global-value pre-fill below for a
+      // resolver that legitimately skips a field.
+      for (const [key, value] of Object.entries(resolved)) {
+        if (value !== undefined) {
+          argsToValidate = { ...argsToValidate, [key]: value };
+          promptResolvedFields.add(key);
+        }
       }
     }
 

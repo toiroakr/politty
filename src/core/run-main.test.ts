@@ -346,6 +346,24 @@ describe("runCommand", () => {
       expect(args.output).toBe("mine");
       expect(args.$source?.("output")).toBe("cli");
     });
+
+    it("does not let a prompt resolver's explicit undefined for a field clobber that field's existing CLI value", async () => {
+      // Not a global/local collision -- a resolver that returns
+      // { field: undefined } for a field it chose not to prompt for must
+      // not erase a real value already present in rawArgs.
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({ name: arg(z.string()) }),
+        run: runFn,
+      });
+      const prompt = vi.fn().mockResolvedValue({ name: undefined });
+
+      await runCommand(cmd, ["--name", "Alice"], { prompt });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.name).toBe("Alice");
+    });
   });
 
   describe("Help handling", () => {
