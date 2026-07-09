@@ -176,10 +176,11 @@ same-named field of another type (e.g. a string verbosity level) doesn't
 trigger it, so the local boolean flag stays declared. That combination
 still isn't usable, though: politty itself rejects a same-named field with
 conflicting definitions between `globalArgs` and a command's own schema,
-throwing `FieldTypeConflictError` at parse time. If your host CLI's global
-`verbose`/`json` field isn't a plain boolean, rename it, remove it, or
-rename the skills-side flag via `flags.verbose.alias` instead of relying on
-auto-detection.
+throwing `FieldTypeConflictError` at parse time. `flags.verbose.alias`
+can't fix this — it only renames the short `-v`/`-x` alias, not the
+conflicting `--verbose`/`--json` field name. If your host CLI's global
+`verbose`/`json` field isn't a plain boolean, rename or remove that global
+field (or make it a plain boolean) instead.
 
 `--verbose`'s short alias can still collide independently of the field-name
 auto-detection above — e.g. the host's `globalArgs` uses `-v` for an

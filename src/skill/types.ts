@@ -207,11 +207,12 @@ export interface SkillCommandOptions {
    * politty itself independently rejects that combination: when
    * `globalArgs` and a command's own schema declare a same-named field
    * with different definitions, `runMain`/`runCommand` throws
-   * `FieldTypeConflictError` at parse time. So a host whose `globalArgs`
-   * uses a non-boolean `verbose`/`json` field must rename it, remove it, or
-   * rename the skills-side flag via {@link SkillFlagOverrides} — keeping
-   * both under the same name isn't a usable configuration either way, only
-   * omission avoids it here.
+   * `FieldTypeConflictError` at parse time. {@link SkillFlagOverrides} can't
+   * help here — it only renames the short alias (`-v`/`-x`), not the long
+   * `--verbose`/`--json` field name itself, so the conflicting name stays
+   * either way. A host whose `globalArgs` uses a non-boolean `verbose`/
+   * `json` field must rename or remove that global field (or make it a
+   * plain boolean) instead.
    *
    * (Historical note: this omission used to also be required to work around
    * a politty core bug where a global flag typed *before* the subcommand
