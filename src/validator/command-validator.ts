@@ -14,6 +14,7 @@ import {
   DuplicateNegationError,
   PositionalConfigError,
   ReservedAliasError,
+  ReservedFieldNameError,
 } from "./validation-errors.js";
 
 // Re-export error classes for convenience
@@ -24,6 +25,7 @@ export {
   DuplicateNegationError,
   PositionalConfigError,
   ReservedAliasError,
+  ReservedFieldNameError,
 };
 
 /**
@@ -39,6 +41,7 @@ export interface CommandValidationError {
     | "invalid_alias"
     | "positional_config"
     | "reserved_alias"
+    | "reserved_field_name"
     | "case_variant_collision"
     | "duplicate_negation";
   /** Error message */
@@ -356,6 +359,38 @@ function checkReservedAliases(
   return errors;
 }
 
+/**
+ * Check for field names starting with `$`.
+ *
+ * The `$` prefix is reserved for framework-injected helpers on the final
+ * args object (e.g. `$source`). It is also impractical as a real CLI flag
+ * since an unquoted `$name` is expanded by the shell before it ever reaches
+ * the program, so this is rejected outright rather than merely discouraged.
+ *
+ * Aliases can't start with `$` (schema extraction already restricts alias
+ * characters to `[A-Za-z0-9-]`), and `cliName` is derived from `name` via
+ * `toKebabCase`, which never strips or moves a leading `$` — so checking
+ * `field.name` alone covers every way `$` could reach the final args object.
+ */
+function checkReservedFieldNames(
+  extracted: ExtractedFields,
+  commandPath: string[],
+): CommandValidationError[] {
+  const errors: CommandValidationError[] = [];
+
+  for (const field of extracted.fields) {
+    if (field.name.startsWith("$")) {
+      errors.push({
+        commandPath,
+        type: "reserved_field_name",
+        message: `Field "${field.name}" starts with "$", which is reserved for framework-injected helpers (e.g. $source).`,
+        field: field.name,
+      });
+    }
+  }
+  return errors;
+}
+
 // ============================================================================
 // Public throwing validators (for runtime validation)
 // ============================================================================
@@ -445,6 +480,29 @@ export function validateReservedAliases(
 }
 
 /**
+ * Validate that no field name starts with `$`
+ *
+ * The `$` prefix is reserved for framework-injected helpers on the final
+ * args object (e.g. `$source`), and is unusable as a real CLI flag anyway
+ * since an unquoted `$name` gets shell-expanded before the program sees it.
+ *
+ * Checking `field.name` alone is sufficient: aliases can't start with `$`
+ * (schema extraction already restricts alias characters to `[A-Za-z0-9-]`),
+ * and `cliName` is derived from `name` via `toKebabCase`, which never strips
+ * or moves a leading `$`. See {@link checkReservedFieldNames}.
+ *
+ * @param extracted - Extracted fields from schema
+ * @throws {ReservedFieldNameError} If a field name starts with "$"
+ */
+export function validateReservedFieldNames(extracted: ExtractedFields): void {
+  const errors = checkReservedFieldNames(extracted, []);
+  if (errors.length > 0) {
+    const err = errors[0]!;
+    throw new ReservedFieldNameError(err.message);
+  }
+}
+
+/**
  * Validate that custom boolean negation names do not collide with anything
  *
  * @param extracted - Extracted fields from schema
@@ -520,6 +578,7 @@ function collectSchemaErrors(
     ...checkDuplicateNegations(extracted, commandPath),
     ...checkPositionalConfig(extracted, commandPath),
     ...checkReservedAliases(extracted, commandPath),
+    ...checkReservedFieldNames(extracted, commandPath),
   ];
 }
 
