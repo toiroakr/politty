@@ -7,7 +7,7 @@ import {
 } from "../core/schema-extractor.js";
 import { resolveLazyCommand } from "../executor/subcommand-router.js";
 import { isLazyCommand } from "../lazy.js";
-import type { AnyCommand } from "../types.js";
+import type { AnyCommand, ArgsSchema } from "../types.js";
 import {
   CaseVariantCollisionError,
   DuplicateAliasError,
@@ -67,6 +67,14 @@ export type CommandValidationResult =
 export interface ValidateCommandOptions {
   /** Starting command path (for nested validation) */
   commandPath?: string[];
+  /**
+   * Global args schema to check the command tree against for cross-schema
+   * field collisions (case-variant collisions and `FieldTypeConflictError`
+   * conflicts) -- the same check `runCommand()` performs per-invocation at
+   * parse time, but here applied eagerly to every command and subcommand
+   * regardless of which subcommand path actually gets invoked at runtime.
+   */
+  globalArgs?: ArgsSchema;
 }
 
 // ============================================================================
@@ -537,14 +545,15 @@ export function validateCaseVariantCollisions(extracted: ExtractedFields): void 
 /**
  * Check whether two same-named fields from different schemas (e.g. global
  * args and command args) have identical definitions. Only the facts
- * `extractFields()` already exposes are compared: the coarse type bucket
- * and, for enum-like fields, the exact set of allowed values. Anything
- * `extractFields()` can't see (e.g. a `.refine()`) is intentionally not
- * compared — this is a coarse, cheap equality check, not a full schema
- * comparison.
+ * `extractFields()` already exposes are compared: the coarse type bucket,
+ * whether the field is positional, and, for enum-like fields, the exact
+ * set of allowed values. Anything `extractFields()` can't see (e.g. a
+ * `.refine()`) is intentionally not compared — this is a coarse, cheap
+ * equality check, not a full schema comparison.
  */
 function fieldsAreIdentical(a: ResolvedFieldMeta, b: ResolvedFieldMeta): boolean {
   if (a.type !== b.type) return false;
+  if (a.positional !== b.positional) return false;
   const aEnum = a.enumValues;
   const bEnum = b.enumValues;
   if (!aEnum && !bEnum) return true;
@@ -559,6 +568,49 @@ function fieldsAreIdentical(a: ResolvedFieldMeta, b: ResolvedFieldMeta): boolean
     if (!bSet.has(value)) return false;
   }
   return true;
+}
+
+/**
+ * Check for cross-schema collisions between two schemas (e.g., global args
+ * and command args): neither a case-variant collision (same canonical name,
+ * different spelling) nor a same-named field with a different definition
+ * (same spelling, but the two schemas don't agree on what values are valid).
+ */
+function checkCrossSchemaCollisions(
+  extractedA: ExtractedFields,
+  extractedB: ExtractedFields,
+  commandPath: string[],
+): CommandValidationError[] {
+  const errors: CommandValidationError[] = [];
+  const canonicalMap = new Map<string, ResolvedFieldMeta>();
+
+  for (const field of extractedA.fields) {
+    canonicalMap.set(toCamelCase(field.name), field);
+  }
+
+  for (const field of extractedB.fields) {
+    const camel = toCamelCase(field.name);
+    const existing = canonicalMap.get(camel);
+    if (!existing) continue;
+    if (existing.name !== field.name) {
+      errors.push({
+        commandPath,
+        type: "case_variant_collision",
+        message: `Global field "${existing.name}" and command field "${field.name}" are case variants of each other and would collide.`,
+        field: field.name,
+      });
+      continue;
+    }
+    if (!fieldsAreIdentical(existing, field)) {
+      errors.push({
+        commandPath,
+        type: "field_type_conflict",
+        message: `Global field "${existing.name}" and command field "${field.name}" share the same name but have different definitions.`,
+        field: field.name,
+      });
+    }
+  }
+  return errors;
 }
 
 /**
@@ -577,27 +629,13 @@ export function validateCrossSchemaCollisions(
   extractedA: ExtractedFields,
   extractedB: ExtractedFields,
 ): void {
-  const canonicalMap = new Map<string, ResolvedFieldMeta>();
-
-  for (const field of extractedA.fields) {
-    canonicalMap.set(toCamelCase(field.name), field);
+  const errors = checkCrossSchemaCollisions(extractedA, extractedB, []);
+  const err = errors[0];
+  if (!err) return;
+  if (err.type === "case_variant_collision") {
+    throw new CaseVariantCollisionError(err.message);
   }
-
-  for (const field of extractedB.fields) {
-    const camel = toCamelCase(field.name);
-    const existing = canonicalMap.get(camel);
-    if (!existing) continue;
-    if (existing.name !== field.name) {
-      throw new CaseVariantCollisionError(
-        `Global field "${existing.name}" and command field "${field.name}" are case variants of each other and would collide.`,
-      );
-    }
-    if (!fieldsAreIdentical(existing, field)) {
-      throw new FieldTypeConflictError(
-        `Global field "${existing.name}" and command field "${field.name}" share the same name but have different definitions.`,
-      );
-    }
-  }
+  throw new FieldTypeConflictError(err.message);
 }
 
 // ============================================================================
@@ -726,11 +764,15 @@ export async function validateCommand(
   const commandPath = options.commandPath ?? [command.name];
   const errors: CommandValidationError[] = [];
   const hasSubCommands = command.subCommands ? Object.keys(command.subCommands).length > 0 : false;
+  const globalExtracted = options.globalArgs ? extractFields(options.globalArgs) : undefined;
 
   // Validate current command's schema
   if (command.args) {
     const extracted = extractFields(command.args);
     errors.push(...collectSchemaErrors(extracted, hasSubCommands, commandPath));
+    if (globalExtracted) {
+      errors.push(...checkCrossSchemaCollisions(globalExtracted, extracted, commandPath));
+    }
   }
 
   // Validate subcommand alias conflicts
@@ -742,6 +784,7 @@ export async function validateCommand(
       const resolvedSubCmd = await resolveLazyCommand(subCmd);
       const subResult = await validateCommand(resolvedSubCmd, {
         commandPath: [...commandPath, name],
+        ...(options.globalArgs ? { globalArgs: options.globalArgs } : {}),
       });
       if (!subResult.valid) {
         errors.push(...subResult.errors);
