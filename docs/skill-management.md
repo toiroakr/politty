@@ -170,13 +170,16 @@ automatically omits `skills add`/`skills sync`'s own `--verbose` (same for
 `json` on `skills list`), and the host's global value takes priority for
 those subcommands too — no manual configuration needed.
 
-Note that _keeping_ a local field of the same name instead does not
-reliably achieve the same thing: a global flag typed before the subcommand
-(`mycli --verbose skills add`, the natural position for a global flag)
-resolves correctly at the global level, but the local schema's own default
-value then overwrites it during the final merge, silently discarding what
-the user typed. This is exactly why `withSkillCommand` auto-omits the
-local field instead of just letting both coexist.
+This auto-detection only kicks in when the global field is a
+_non-positional boolean_ — matching `--verbose`/`--json`'s own type. A
+same-named field of another type (e.g. a string verbosity level) doesn't
+trigger it, so the local boolean flag stays declared. That combination
+still isn't usable, though: politty itself rejects a same-named field with
+conflicting definitions between `globalArgs` and a command's own schema,
+throwing `FieldTypeConflictError` at parse time. If your host CLI's global
+`verbose`/`json` field isn't a plain boolean, rename it, remove it, or
+rename the skills-side flag via `flags.verbose.alias` instead of relying on
+auto-detection.
 
 `--verbose`'s short alias can still collide independently of the field-name
 auto-detection above — e.g. the host's `globalArgs` uses `-v` for an

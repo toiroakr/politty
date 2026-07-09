@@ -199,15 +199,29 @@ export interface SkillCommandOptions {
    * When provided, `skills add`/`skills sync`'s `--verbose` and `skills
    * list`'s `--json` are automatically omitted from their own schema if
    * this schema already defines a same-named *non-positional boolean*
-   * field — no manual configuration needed. (A same-named field of another
-   * type, e.g. a string verbosity level, isn't treated as the same flag and
-   * doesn't trigger this — the local boolean flag stays.) This omission is
-   * required (not just convenient): keeping both a local and a same-named
-   * global field is unreliable, since `--verbose` typed before the
-   * subcommand (the natural position for a global flag, e.g. `mycli
-   * --verbose skills add`) resolves correctly as a global value, but the
-   * local field's own default then overwrites it during the merge,
-   * silently discarding the global flag.
+   * field — no manual configuration needed, and the host's global flag of
+   * the same name takes over instead.
+   *
+   * A same-named field of another type (e.g. a string verbosity level)
+   * doesn't trigger this — the local boolean flag stays declared. However,
+   * politty itself independently rejects that combination: when
+   * `globalArgs` and a command's own schema declare a same-named field
+   * with different definitions, `runMain`/`runCommand` throws
+   * `FieldTypeConflictError` at parse time. So a host whose `globalArgs`
+   * uses a non-boolean `verbose`/`json` field must rename it, remove it, or
+   * rename the skills-side flag via {@link SkillFlagOverrides} — keeping
+   * both under the same name isn't a usable configuration either way, only
+   * omission avoids it here.
+   *
+   * (Historical note: this omission used to also be required to work around
+   * a politty core bug where a global flag typed *before* the subcommand
+   * resolved correctly as a global value, but a same-named local field's
+   * own default would then overwrite it during the merge. That bug is
+   * fixed in politty core independently of this option — a same-named
+   * local and global field with *identical* definitions now resolves
+   * correctly regardless of position. This option still omits the local
+   * flag by default for simplicity: hosts don't need to duplicate the
+   * flag's definition on both schemas to get the expected behavior.)
    *
    * @example
    * ```ts

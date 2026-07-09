@@ -208,8 +208,20 @@ function resolveVerbose(
  * excluded too: `mergedFlag` boolean-coerces whatever value flows through,
  * and a same-named string/number field (e.g. a verbosity level or enum)
  * isn't really the same flag — coercing it (e.g. `Boolean("off")` is `true`)
- * would silently misread it, so it's not treated as a collision at all and
- * the local boolean flag stays.
+ * would silently misread it, so it's not treated as a collision here and
+ * the local boolean flag stays declared.
+ *
+ * Note: politty itself independently rejects this same situation. When
+ * `globalArgs` and a command's own schema both declare a same-named field
+ * with different definitions (as happens here — global non-boolean vs.
+ * local boolean), `runMain`/`runCommand` throws `FieldTypeConflictError` at
+ * parse time, regardless of what this function decides. So a host whose
+ * `globalArgs` defines a non-boolean `verbose`/`json` field must rename or
+ * remove it (or use {@link SkillFlagOverrides.verbose}'s `alias` option to
+ * resolve only the alias, not the name) — this function keeping the local
+ * flag "declared" doesn't make the combination usable, it just means the
+ * failure surfaces as politty's own clear error instead of a silent
+ * boolean-coercion misread.
  */
 function hasGlobalField(globalArgs: ArgsSchema | undefined, name: string): boolean {
   if (!globalArgs) return false;
