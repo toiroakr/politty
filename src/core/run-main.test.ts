@@ -201,6 +201,18 @@ describe("runCommand", () => {
       const args = runFn.mock.calls[0]?.[0];
       expect(args.$source?.("foo")).toBe("env");
     });
+
+    it("does not let a prompt resolver's explicit undefined clobber an existing CLI-provided global value", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ foo: arg(z.string().optional()) });
+      const cmd = defineCommand({ name: "test", run: runFn });
+      const prompt = vi.fn().mockResolvedValue({ foo: undefined });
+
+      await runCommand(cmd, ["--foo", "mine"], { globalArgs, prompt });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.foo).toBe("mine");
+    });
   });
 
   describe("global/local field collision on a same-named field", () => {

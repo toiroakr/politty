@@ -719,10 +719,16 @@ async function runCommandInternal<TResult = unknown>(
         }
       }
 
-      // Prompt for missing global args (if prompt resolver is provided)
+      // Prompt for missing global args (if prompt resolver is provided).
+      // A resolver may return `{ field: undefined }` for a field it chose
+      // not to prompt for; that isn't an explicit value, so don't let it
+      // clobber a real CLI/env value already in accumulatedGlobalArgs (see
+      // the identical local-args handling below for the same rationale).
       if (options.prompt) {
         const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted);
-        Object.assign(accumulatedGlobalArgs, resolved);
+        for (const [key, value] of Object.entries(resolved)) {
+          if (value !== undefined) accumulatedGlobalArgs[key] = value;
+        }
       }
 
       // Note: validation only sees recognized global flags. Misspelled globals

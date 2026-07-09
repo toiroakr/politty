@@ -73,11 +73,11 @@ export class ReservedFieldNameError extends Error {
 
 /**
  * Error thrown when a global field and a same-named local field have
- * different definitions (per `extractFields()`'s type bucket and enum
- * values). Only exactly-matching definitions are allowed to share a name
- * across global/local schemas — anything else is rejected at validation
- * time rather than risking a value from one schema silently flowing into
- * the other.
+ * different definitions (per `extractFields()`'s type bucket, whether the
+ * field is positional, and enum values). Only exactly-matching definitions
+ * are allowed to share a name across global/local schemas — anything else
+ * is rejected at validation time rather than risking a value from one
+ * schema silently flowing into the other.
  */
 export class FieldTypeConflictError extends Error {
   constructor(message: string) {
