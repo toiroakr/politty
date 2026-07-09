@@ -203,6 +203,89 @@ describe("runCommand", () => {
     });
   });
 
+  describe("global/local field collision on a same-named field", () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it("resolves the global's CLI value when typed before the subcommand and the local field is untouched", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ output: arg(z.string().default("global-default")) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ output: arg(z.string().default("local-default")) }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+
+      await runCommand(root, ["--output", "mine", "sub"], { globalArgs });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.output).toBe("mine");
+      expect(args.$source?.("output")).toBe("cli");
+    });
+
+    it("still lets the local field win when typed after the subcommand, even if the global was also CLI-explicit", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ output: arg(z.string().default("global-default")) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ output: arg(z.string().default("local-default")) }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+
+      await runCommand(root, ["--output", "glob", "sub", "--output", "mine"], { globalArgs });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.output).toBe("mine");
+      expect(args.$source?.("output")).toBe("cli");
+    });
+
+    it("still lets the local default win over a global env fallback on a flat command (no subcommand)", async () => {
+      process.env.FOO_ENV = "from-global-env";
+      const runFn = vi.fn();
+      const globalArgs = z.object({ foo: arg(z.string().optional(), { env: "FOO_ENV" }) });
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({ foo: arg(z.string().default("local-default")) }),
+        run: runFn,
+      });
+
+      await runCommand(cmd, [], { globalArgs });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.foo).toBe("local-default");
+      expect(args.$source?.("foo")).toBe("default");
+    });
+
+    it("lets the local field's own env fallback win even when the global was CLI-explicit before the subcommand", async () => {
+      process.env.LEVEL_ENV = "from-local-env";
+      const runFn = vi.fn();
+      const globalArgs = z.object({ level: arg(z.string().default("global-default")) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({
+          level: arg(z.string().default("local-default"), { env: "LEVEL_ENV" }),
+        }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+
+      await runCommand(root, ["--level", "cli-global", "sub"], { globalArgs });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.level).toBe("from-local-env");
+      expect(args.$source?.("level")).toBe("env");
+    });
+  });
+
   describe("Help handling", () => {
     it("should show help on --help flag", async () => {
       using console = spyOnConsoleLog();

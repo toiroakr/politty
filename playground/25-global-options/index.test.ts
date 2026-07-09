@@ -204,6 +204,46 @@ describe("25-global-options", () => {
       expect(result.exitCode).toBe(0);
       expect(console).toHaveBeenCalledWith("output=mine");
     });
+
+    it("resolves the global value when the same-named flag is typed before the subcommand instead", async () => {
+      using console = spyOnConsoleLog();
+      // Same schemas as above, but --output is typed before "cmd" this time.
+      const globalSchema = z.object({
+        output: arg(z.string().default("global-default"), {
+          description: "Global output",
+        }),
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          description: "Verbose",
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "cmd",
+        description: "Test command",
+        args: z.object({
+          output: arg(z.string().default("local-default"), {
+            alias: "o",
+            description: "Local output",
+          }),
+        }),
+        run: (args) => {
+          console.log(`output=${args.output}`);
+        },
+      });
+
+      const root = defineCommand({
+        name: "test-cli",
+        subCommands: { cmd },
+      });
+
+      const result = await runCommand(root, ["--output", "mine", "cmd"], {
+        globalArgs: globalSchema,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(console).toHaveBeenCalledWith("output=mine");
+    });
   });
 
   describe("global schema validation", () => {

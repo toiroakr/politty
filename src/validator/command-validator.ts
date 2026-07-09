@@ -3,6 +3,7 @@ import {
   getAllAliases,
   toCamelCase,
   type ExtractedFields,
+  type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
 import { resolveLazyCommand } from "../executor/subcommand-router.js";
 import { isLazyCommand } from "../lazy.js";
@@ -12,6 +13,7 @@ import {
   DuplicateAliasError,
   DuplicateFieldError,
   DuplicateNegationError,
+  FieldTypeConflictError,
   PositionalConfigError,
   ReservedAliasError,
   ReservedFieldNameError,
@@ -23,6 +25,7 @@ export {
   DuplicateAliasError,
   DuplicateFieldError,
   DuplicateNegationError,
+  FieldTypeConflictError,
   PositionalConfigError,
   ReservedAliasError,
   ReservedFieldNameError,
@@ -43,7 +46,8 @@ export interface CommandValidationError {
     | "reserved_alias"
     | "reserved_field_name"
     | "case_variant_collision"
-    | "duplicate_negation";
+    | "duplicate_negation"
+    | "field_type_conflict";
   /** Error message */
   message: string;
   /** Related field name (if applicable) */
@@ -531,29 +535,57 @@ export function validateCaseVariantCollisions(extracted: ExtractedFields): void 
 }
 
 /**
- * Validate that no case-variant collisions exist between two schemas
- * (e.g., global args and command args).
+ * Check whether two same-named fields from different schemas (e.g. global
+ * args and command args) have identical definitions. Only the facts
+ * `extractFields()` already exposes are compared: the coarse type bucket
+ * and, for enum-like fields, the exact set of allowed values. Anything
+ * `extractFields()` can't see (e.g. a `.refine()`) is intentionally not
+ * compared — this is a coarse, cheap equality check, not a full schema
+ * comparison.
+ */
+function fieldsAreIdentical(a: ResolvedFieldMeta, b: ResolvedFieldMeta): boolean {
+  if (a.type !== b.type) return false;
+  const aEnum = a.enumValues;
+  const bEnum = b.enumValues;
+  if (!aEnum && !bEnum) return true;
+  if (!aEnum || !bEnum) return false;
+  return aEnum.length === bEnum.length && aEnum.every((value) => bEnum.includes(value));
+}
+
+/**
+ * Validate that no cross-schema collisions exist between two schemas
+ * (e.g., global args and command args): neither a case-variant collision
+ * (same canonical name, different spelling) nor a same-named field with a
+ * different definition (same spelling, but the two schemas don't agree on
+ * what values are valid).
  *
  * @param extractedA - Extracted fields from first schema (e.g., global args)
  * @param extractedB - Extracted fields from second schema (e.g., command args)
  * @throws {CaseVariantCollisionError} If cross-schema case-variant collisions are found
+ * @throws {FieldTypeConflictError} If a same-named field has a different definition on each schema
  */
 export function validateCrossSchemaCollisions(
   extractedA: ExtractedFields,
   extractedB: ExtractedFields,
 ): void {
-  const canonicalMap = new Map<string, string>();
+  const canonicalMap = new Map<string, ResolvedFieldMeta>();
 
   for (const field of extractedA.fields) {
-    canonicalMap.set(toCamelCase(field.name), field.name);
+    canonicalMap.set(toCamelCase(field.name), field);
   }
 
   for (const field of extractedB.fields) {
     const camel = toCamelCase(field.name);
     const existing = canonicalMap.get(camel);
-    if (existing && existing !== field.name) {
+    if (!existing) continue;
+    if (existing.name !== field.name) {
       throw new CaseVariantCollisionError(
-        `Global field "${existing}" and command field "${field.name}" are case variants of each other and would collide.`,
+        `Global field "${existing.name}" and command field "${field.name}" are case variants of each other and would collide.`,
+      );
+    }
+    if (!fieldsAreIdentical(existing, field)) {
+      throw new FieldTypeConflictError(
+        `Global field "${existing.name}" and command field "${field.name}" share the same name but have different definitions.`,
       );
     }
   }

@@ -5,6 +5,7 @@ import { defineCommand } from "../core/command.js";
 import { extractFields } from "../core/schema-extractor.js";
 import {
   CaseVariantCollisionError,
+  FieldTypeConflictError,
   formatCommandValidationErrors,
   validateCaseVariantCollisions,
   validateCommand,
@@ -354,6 +355,72 @@ describe("validateCrossSchemaCollisions", () => {
     });
     const commandSchema = z.object({
       "dry-run": arg(z.boolean().optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).not.toThrow();
+  });
+
+  it("should throw FieldTypeConflictError when a same-named field has a different type bucket", () => {
+    const globalSchema = z.object({
+      verbose: arg(z.boolean().optional()),
+    });
+    const commandSchema = z.object({
+      verbose: arg(z.string().optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).toThrow(
+      FieldTypeConflictError,
+    );
+  });
+
+  it("should throw FieldTypeConflictError when only one side of a same-named field is an enum", () => {
+    const globalSchema = z.object({
+      level: arg(z.string().optional()),
+    });
+    const commandSchema = z.object({
+      level: arg(z.enum(["a", "b"]).optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).toThrow(
+      FieldTypeConflictError,
+    );
+  });
+
+  it("should throw FieldTypeConflictError when a same-named enum field has different allowed values", () => {
+    const globalSchema = z.object({
+      level: arg(z.enum(["a", "b"]).optional()),
+    });
+    const commandSchema = z.object({
+      level: arg(z.enum(["a", "c"]).optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).toThrow(
+      FieldTypeConflictError,
+    );
+  });
+
+  it("should not throw when a same-named enum field has the same allowed values", () => {
+    const globalSchema = z.object({
+      level: arg(z.enum(["a", "b"]).optional()),
+    });
+    const commandSchema = z.object({
+      level: arg(z.enum(["b", "a"]).optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).not.toThrow();
+  });
+
+  it("should not throw when a same-named field has an identical definition", () => {
+    const globalSchema = z.object({
+      verbose: arg(z.boolean().optional()),
+    });
+    const commandSchema = z.object({
+      verbose: arg(z.boolean().optional()),
     });
     const globalExtracted = extractFields(globalSchema);
     const commandExtracted = extractFields(commandSchema);

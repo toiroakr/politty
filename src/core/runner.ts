@@ -812,13 +812,26 @@ async function runCommandInternal<TResult = unknown>(
     // overrides a same-named global field's "cli"/"env" classification instead
     // of leaking it through unchanged.
     for (const field of parseResult.extractedFields?.fields ?? []) {
+      const localHasOwnValue =
+        Object.hasOwn(parseResult.rawArgs, field.name) || localEnvFallbackFields.has(field.name);
+
+      if (!localHasOwnValue && cliProvidedGlobalFields.has(field.name)) {
+        // Same-named field on both schemas (validateCrossSchemaCollisions
+        // has already guaranteed the two definitions are identical): the
+        // flag was typed before the subcommand, so the root-level scan
+        // captured it as global before the local schema was known. The
+        // local field never received anything of its own — it's sitting
+        // at its untouched schema default — so let the explicitly-typed
+        // global value flow through instead of the merge's default "local
+        // wins on collision" rule silently discarding it.
+        mergedPlainArgs[field.name] = proxiedGlobalArgs[field.name];
+        argSourceMap.set(field.name, "cli");
+        continue;
+      }
+
       argSourceMap.set(
         field.name,
-        Object.hasOwn(parseResult.rawArgs, field.name)
-          ? localEnvFallbackFields.has(field.name)
-            ? "env"
-            : "cli"
-          : "default",
+        localHasOwnValue ? (localEnvFallbackFields.has(field.name) ? "env" : "cli") : "default",
       );
     }
     attachArgSource(mergedPlainArgs, argSourceMap);
