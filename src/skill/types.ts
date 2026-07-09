@@ -227,11 +227,14 @@ export interface SkillCommandOptions {
    * (applied uniformly to all four).
    *
    * - `"strip"` (default) — matches politty's own `z.object()` default:
-   *   an unrecognized flag prints a warning and is dropped.
+   *   an unrecognized flag prints a warning and its value is dropped from
+   *   the parsed args.
    * - `"strict"` — an unrecognized flag is a hard error, matching a host
    *   CLI that uses `z.strictObject()`/`.strict()` throughout.
-   * - `"passthrough"` — same as `"strip"` (the flag's value is still
-   *   dropped, not preserved anywhere), just without the warning.
+   * - `"passthrough"` — matches `z.object().passthrough()`: no warning,
+   *   and unlike `"strip"`, the unrecognized flag's value is *kept* on the
+   *   parsed args object under its raw CLI name (e.g. `args["some-flag"]`)
+   *   rather than dropped.
    *
    * This only governs flags the parser cannot attribute to *either* this
    * subcommand's own schema or the host's `globalArgs` schema — a value

@@ -234,12 +234,13 @@ the same format politty enforces for ordinary subcommand aliases.
 ### Unknown-flag strictness
 
 By default, an unrecognized flag on any `skills` subcommand (e.g.
-`skills add --typo`) prints a warning and is dropped — matching politty's
-own `z.object()` default. If your host CLI uses `z.strictObject()`/
-`.strict()` throughout and wants the same behavior here, set
-`unknownKeys: "strict"` to make it a hard error instead. `"passthrough"` is
-also available — it behaves exactly like `"strip"` (the flag's value is
-still dropped, not preserved anywhere) but suppresses the warning:
+`skills add --typo`) prints a warning and its value is dropped from the
+parsed args — matching politty's own `z.object()` default. If your host CLI
+uses `z.strictObject()`/`.strict()` throughout and wants the same behavior
+here, set `unknownKeys: "strict"` to make it a hard error instead.
+`"passthrough"` is also available — it matches `z.object().passthrough()`:
+no warning, and (unlike `"strip"`) the flag's value is _kept_ on the parsed
+args object under its raw CLI name instead of being dropped:
 
 ```ts
 withSkillCommand(cmd, {
