@@ -302,6 +302,50 @@ describe("runCommand", () => {
       expect(args.level).toBe("from-prompt");
       expect(args.$source?.("level")).toBe("default");
     });
+
+    it("still resolves the global's CLI value when the prompt resolver explicitly returns undefined for the local field", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ level: arg(z.string().default("global-default")) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ level: arg(z.string().default("local-default")) }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+      // `prompt` is invoked once for global args and once for local args;
+      // only the local call (where "level" is absent from rawArgs, since
+      // the global scan already consumed it) should simulate a resolver
+      // that explicitly skips the field.
+      const prompt = vi
+        .fn()
+        .mockImplementation((rawArgs: Record<string, unknown>) =>
+          Object.hasOwn(rawArgs, "level") ? {} : { level: undefined },
+        );
+
+      await runCommand(root, ["--level", "cli-global", "sub"], { globalArgs, prompt });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.level).toBe("cli-global");
+      expect(args.$source?.("level")).toBe("cli");
+    });
+
+    it("resolves the global's CLI value for a required local field with no default, typed before the subcommand", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ output: arg(z.string().default("global-default")) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ output: arg(z.string()) }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+
+      const result = await runCommand(root, ["--output", "mine", "sub"], { globalArgs });
+
+      expect(result.exitCode).toBe(0);
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.output).toBe("mine");
+      expect(args.$source?.("output")).toBe("cli");
+    });
   });
 
   describe("Help handling", () => {

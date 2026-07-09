@@ -770,7 +770,36 @@ async function runCommandInternal<TResult = unknown>(
     if (options.prompt && parseResult.extractedFields) {
       const resolved = await options.prompt(argsToValidate, parseResult.extractedFields);
       argsToValidate = { ...argsToValidate, ...resolved };
-      for (const key of Object.keys(resolved)) promptResolvedFields.add(key);
+      // A resolver may return `{ field: undefined }` for a field it chose
+      // not to prompt for; that isn't an explicit value, so don't count it
+      // as one below (or it would block the global-value pre-fill for a
+      // resolver that legitimately skips a field).
+      for (const key of Object.keys(resolved)) {
+        if (resolved[key] !== undefined) promptResolvedFields.add(key);
+      }
+    }
+
+    // Same-named field on both schemas (validateCrossSchemaCollisions has
+    // already guaranteed the two definitions are identical): a flag typed
+    // before the subcommand is captured as global before the local schema
+    // is known, so the local field's own argv never receives it. Pre-fill
+    // it here, before local validation, so this also works for a required
+    // local field with no default — otherwise local validation would fail
+    // before the merge below ever got a chance to supply the value.
+    const globalPrefilledFields = new Set<string>();
+    if (parseResult.extractedFields) {
+      for (const field of parseResult.extractedFields.fields) {
+        const localHasOwnValue =
+          Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
+        if (
+          !localHasOwnValue &&
+          cliProvidedGlobalFields.has(field.name) &&
+          Object.hasOwn(validatedGlobalArgs, field.name)
+        ) {
+          argsToValidate = { ...argsToValidate, [field.name]: validatedGlobalArgs[field.name] };
+          globalPrefilledFields.add(field.name);
+        }
+      }
     }
 
     const validationResult = validateArgs(argsToValidate, command.args);
@@ -814,27 +843,16 @@ async function runCommandInternal<TResult = unknown>(
     // overrides a same-named global field's "cli"/"env" classification instead
     // of leaking it through unchanged.
     for (const field of parseResult.extractedFields?.fields ?? []) {
-      const localHasCliOrEnvValue =
-        Object.hasOwn(parseResult.rawArgs, field.name) || localEnvFallbackFields.has(field.name);
-      // A prompt resolver can also fill in a local value (see above); that
-      // counts as the local field having "its own value" for the override
-      // decision below, even though it isn't tracked as a `$source` bucket
-      // of its own and still classifies as "default" like it always has.
-      const localHasOwnValue = localHasCliOrEnvValue || promptResolvedFields.has(field.name);
-
-      if (!localHasOwnValue && cliProvidedGlobalFields.has(field.name)) {
-        // Same-named field on both schemas (validateCrossSchemaCollisions
-        // has already guaranteed the two definitions are identical): the
-        // flag was typed before the subcommand, so the root-level scan
-        // captured it as global before the local schema was known. The
-        // local field never received anything of its own — it's sitting
-        // at its untouched schema default — so let the explicitly-typed
-        // global value flow through instead of the merge's default "local
-        // wins on collision" rule silently discarding it.
-        mergedPlainArgs[field.name] = proxiedGlobalArgs[field.name];
+      if (globalPrefilledFields.has(field.name)) {
+        // Already resolved from the global CLI value by the pre-fill above;
+        // `proxiedCommandArgs` already holds it (validated through the
+        // local schema), so the merge above already picked it up correctly.
         argSourceMap.set(field.name, "cli");
         continue;
       }
+
+      const localHasCliOrEnvValue =
+        Object.hasOwn(parseResult.rawArgs, field.name) || localEnvFallbackFields.has(field.name);
 
       argSourceMap.set(
         field.name,
