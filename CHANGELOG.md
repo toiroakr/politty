@@ -1,5 +1,35 @@
 # politty
 
+## 0.11.2
+
+### Patch Changes
+
+- 21e5dce: Add `args.$source(name)` to expose whether a resolved arg value came from an explicit CLI token (`"cli"`), a `field.env` fallback (`"env"`), or neither (`"default"`). This lets a command's `run()` handler distinguish an explicitly-typed value from an environment-variable fallback without re-deriving flag spellings from the schema, and works correctly for `positional` fields even when the typed value happens to equal the env var. `$source` correctly resolves both camelCase and kebab-case field name lookups, and correctly reports `"default"` for a local field that collides with a same-named global field but is resolved via the local schema's own default.
+
+  `$source`'s parameter is typed as a plain `string` rather than a schema-derived key, since a stricter type broke type-checking for the documented discriminated-union `args` pattern.
+
+  Field names starting with `"$"` are now rejected at command-definition time (`ReservedFieldNameError`), since that prefix is reserved for framework-injected helpers like `$source` and is unusable as a real CLI flag anyway (an unquoted `$name` gets shell-expanded before the program sees it).
+
+- c199535: Fix global/local arg collisions on a shared field name. Two changes:
+
+  - Command definitions where a global field and a same-named local field have different definitions (different type bucket, positional vs. flag, or different enum values) now throw `FieldTypeConflictError` at validation time — previously this silently passed even though the two fields didn't actually agree on what values are valid.
+  - When the definitions are identical, a flag shared between `globalArgs` and a command's own schema now resolves correctly regardless of where it's typed — including when the command's own field is required and has no default. Previously, typing the flag _before_ the subcommand parsed it correctly as the global value, but the command's own same-named field — having received nothing of its own — would either fail local validation (if required) or unconditionally get overwritten by its own default during the final args merge, discarding what the user actually typed. Typing the same flag _after_ the subcommand already worked correctly and is unaffected.
+
+  Also fixes an unrelated bug found while implementing the above: a `prompt` resolver returning `{ field: undefined }` for a field it chose not to prompt for could previously clobber a real CLI/env value already provided for that field.
+
+  Two smaller follow-ups to the same-name conflict detection:
+
+  - `validateCommand()` now accepts a `globalArgs` option and checks every command and subcommand in the tree against it, so a `FieldTypeConflictError`/case-variant collision on a rarely-invoked subcommand can be caught upfront instead of only at the moment that subcommand actually gets parsed.
+  - The same-named field comparison now also considers whether the field is positional, so a global flag and a same-named local positional argument are correctly treated as conflicting rather than as identical.
+
+- 48d54d9: Improve `withSkillCommand`'s type safety and customizability for host CLIs:
+
+  - `withSkillCommand`'s return type now reflects the injected `skills` subcommand (`subCommands.skills` is typed as `AnyCommand` and no longer optional), so consumers no longer need an `as AnyCommand` cast to access it.
+  - `SkillCommandOptions.globalArgs` accepts the same schema passed to `runMain`/`runCommand`'s `globalArgs`. When it already declares a same-named _non-positional boolean_ `verbose`/`json` field, `skills add`/`skills sync`'s `--verbose` and `skills list`'s `--json` are automatically omitted from their own schema, so the host's global flag of the same name takes priority — no manual configuration needed. (A same-named non-boolean field doesn't trigger this; politty itself rejects that combination with `FieldTypeConflictError` at parse time, so such a field must be renamed on one side instead.)
+  - `SkillFlagOverrides.verbose.alias` renames or disables `skills add`/`skills sync --verbose`'s short alias — a collision independent of `globalArgs`'s field-name auto-detection (e.g. the host's `-v` belongs to an unrelated flag, not one named `verbose`).
+  - `SkillCommandOptions.commandMap` lets a host CLI rename `skills add`/`skills remove` and control their aliases: `{ add?: string[]; remove?: string[] }`, where the first array element becomes the subcommand's dispatched name and the rest become aliases. Default: `add: ["add", "install"]`, `remove: ["remove", "uninstall"]`. `withSkillCommand` throws if any resulting name or alias collides with `sync`/`list` or with each other, or isn't a safe token (empty string, leading dash, whitespace, etc.).
+  - `SkillCommandOptions.unknownKeys` (`"strict"` \| `"strip"` \| `"passthrough"`, default `"strip"`) controls unknown-flag handling for `add`/`sync`/`remove`/`list`'s own schemas uniformly — set `"strict"` to match a host CLI that uses `z.strictObject()` throughout. `"passthrough"` matches `z.object().passthrough()`: no warning, but (unlike `"strip"`) the flag's value is kept on the parsed args under its raw CLI name instead of dropped. Never affects values that legitimately arrive via `globalArgs`.
+
 ## 0.11.1
 
 ### Patch Changes
