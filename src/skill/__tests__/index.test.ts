@@ -97,6 +97,14 @@ describe("withSkillCommand", () => {
     );
   });
 
+  it("should throw when a commandMap entry is whitespace-only", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["add", "   "] } })).toThrow(
+      /commandMap entry "\s+" is invalid/,
+    );
+  });
+
   it("should throw when a commandMap entry starts with a dash", () => {
     const base = defineCommand({ name: "my-cli", description: "Test CLI" });
 

@@ -168,7 +168,7 @@ runMain(cli, { globalArgs }); // same schema passed to the real entry point
 Because `globalArgs` already declares a `verbose` field, `withSkillCommand`
 automatically omits `skills add`/`skills sync`'s own `--verbose` (same for
 `json` on `skills list`), and the host's global value takes priority for
-those subcommands too — no manual `flags.verbose.disabled` needed.
+those subcommands too — no manual configuration needed.
 
 Note that _keeping_ a local field of the same name instead does not
 reliably achieve the same thing: a global flag typed before the subcommand
