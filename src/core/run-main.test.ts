@@ -201,6 +201,201 @@ describe("runCommand", () => {
       const args = runFn.mock.calls[0]?.[0];
       expect(args.$source?.("foo")).toBe("env");
     });
+
+    it("does not let a prompt resolver's explicit undefined clobber an existing CLI-provided global value", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ foo: arg(z.string().optional()) });
+      const cmd = defineCommand({ name: "test", run: runFn });
+      const prompt = vi.fn().mockResolvedValue({ foo: undefined });
+
+      await runCommand(cmd, ["--foo", "mine"], { globalArgs, prompt });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.foo).toBe("mine");
+    });
+  });
+
+  describe("global/local field collision on a same-named field", () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
+    it("resolves the global's CLI value when typed before the subcommand and the local field is untouched", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ output: arg(z.string().default("global-default")) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ output: arg(z.string().default("local-default")) }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+
+      await runCommand(root, ["--output", "mine", "sub"], { globalArgs });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.output).toBe("mine");
+      expect(args.$source?.("output")).toBe("cli");
+    });
+
+    it("still lets the local field win when typed after the subcommand, even if the global was also CLI-explicit", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ output: arg(z.string().default("global-default")) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ output: arg(z.string().default("local-default")) }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+
+      await runCommand(root, ["--output", "glob", "sub", "--output", "mine"], { globalArgs });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.output).toBe("mine");
+      expect(args.$source?.("output")).toBe("cli");
+    });
+
+    it("still lets the local default win over a global env fallback on a flat command (no subcommand)", async () => {
+      process.env.FOO_ENV = "from-global-env";
+      const runFn = vi.fn();
+      const globalArgs = z.object({ foo: arg(z.string().optional(), { env: "FOO_ENV" }) });
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({ foo: arg(z.string().default("local-default")) }),
+        run: runFn,
+      });
+
+      await runCommand(cmd, [], { globalArgs });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.foo).toBe("local-default");
+      expect(args.$source?.("foo")).toBe("default");
+    });
+
+    it("lets the local field's own env fallback win even when the global was CLI-explicit before the subcommand", async () => {
+      process.env.LEVEL_ENV = "from-local-env";
+      const runFn = vi.fn();
+      const globalArgs = z.object({ level: arg(z.string().default("global-default")) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({
+          level: arg(z.string().default("local-default"), { env: "LEVEL_ENV" }),
+        }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+
+      await runCommand(root, ["--level", "cli-global", "sub"], { globalArgs });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.level).toBe("from-local-env");
+      expect(args.$source?.("level")).toBe("env");
+    });
+
+    it("does not discard a value a prompt resolver filled in for the local field", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ level: arg(z.string().default("global-default")) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ level: arg(z.string().default("local-default")) }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+      const prompt = vi.fn().mockResolvedValue({ level: "from-prompt" });
+
+      await runCommand(root, ["--level", "cli-global", "sub"], { globalArgs, prompt });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.level).toBe("from-prompt");
+      expect(args.$source?.("level")).toBe("default");
+    });
+
+    it("still resolves the global's CLI value when the prompt resolver explicitly returns undefined for the local field", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ level: arg(z.string().default("global-default")) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ level: arg(z.string().default("local-default")) }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+      // `prompt` is invoked once for global args and once for local args;
+      // only the local call (where "level" is absent from rawArgs, since
+      // the global scan already consumed it) should simulate a resolver
+      // that explicitly skips the field.
+      const prompt = vi
+        .fn()
+        .mockImplementation((rawArgs: Record<string, unknown>) =>
+          Object.hasOwn(rawArgs, "level") ? {} : { level: undefined },
+        );
+
+      await runCommand(root, ["--level", "cli-global", "sub"], { globalArgs, prompt });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.level).toBe("cli-global");
+      expect(args.$source?.("level")).toBe("cli");
+    });
+
+    it("resolves the global's CLI value for a required local field with no default, typed before the subcommand", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ output: arg(z.string().default("global-default")) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ output: arg(z.string()) }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+
+      const result = await runCommand(root, ["--output", "mine", "sub"], { globalArgs });
+
+      expect(result.exitCode).toBe(0);
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.output).toBe("mine");
+      expect(args.$source?.("output")).toBe("cli");
+    });
+
+    it("does not let a prompt resolver's explicit undefined for a field clobber that field's existing CLI value", async () => {
+      // Not a global/local collision -- a resolver that returns
+      // { field: undefined } for a field it chose not to prompt for must
+      // not erase a real value already present in rawArgs.
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({ name: arg(z.string()) }),
+        run: runFn,
+      });
+      const prompt = vi.fn().mockResolvedValue({ name: undefined });
+
+      await runCommand(cmd, ["--name", "Alice"], { prompt });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.name).toBe("Alice");
+    });
+
+    it("fails with exitCode 1 and reports the conflict when a same-named field has a different definition on globalArgs vs the local schema", async () => {
+      const runFn = vi.fn();
+      const globalArgs = z.object({ level: arg(z.string().optional()) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ level: arg(z.enum(["a", "b"]).optional()) }),
+        run: runFn,
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+
+      const result = await runCommand(root, ["sub", "--level", "a"], { globalArgs });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain("different definitions");
+      }
+      expect(runFn).not.toHaveBeenCalled();
+    });
   });
 
   describe("Help handling", () => {

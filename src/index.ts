@@ -108,6 +108,7 @@ export {
   DuplicateAliasError,
   DuplicateFieldError,
   DuplicateNegationError,
+  FieldTypeConflictError,
   PositionalConfigError,
   ReservedAliasError,
   ReservedFieldNameError,

@@ -5,6 +5,7 @@ import { defineCommand } from "../core/command.js";
 import { extractFields } from "../core/schema-extractor.js";
 import {
   CaseVariantCollisionError,
+  FieldTypeConflictError,
   formatCommandValidationErrors,
   validateCaseVariantCollisions,
   validateCommand,
@@ -251,6 +252,70 @@ describe("validateCommand", () => {
       }
     });
   });
+
+  describe("validation against a globalArgs schema", () => {
+    it("should return valid when no command in the tree collides with globalArgs", async () => {
+      const globalArgs = z.object({ verbose: arg(z.boolean().optional()) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ output: arg(z.string().optional()) }),
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+
+      const result = await validateCommand(root, { globalArgs });
+      expect(result.valid).toBe(true);
+    });
+
+    it("should detect a field_type_conflict against globalArgs on a nested subcommand, even though the root command itself has no conflict", async () => {
+      const globalArgs = z.object({ level: arg(z.string().optional()) });
+      const clean = defineCommand({
+        name: "clean",
+        args: z.object({ output: arg(z.string().optional()) }),
+      });
+      const conflicting = defineCommand({
+        name: "conflicting",
+        args: z.object({ level: arg(z.enum(["a", "b"]).optional()) }),
+      });
+      const root = defineCommand({ name: "cli", subCommands: { clean, conflicting } });
+
+      const result = await validateCommand(root, { globalArgs });
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0]?.type).toBe("field_type_conflict");
+        expect(result.errors[0]?.commandPath).toEqual(["cli", "conflicting"]);
+      }
+    });
+
+    it("should detect a case_variant_collision against globalArgs on a deeply nested subcommand", async () => {
+      const globalArgs = z.object({ outputDir: arg(z.string().optional()) });
+      const deep = defineCommand({
+        name: "deep",
+        args: z.object({ "output-dir": arg(z.string().optional()) }),
+      });
+      const level1 = defineCommand({ name: "level1", subCommands: { deep } });
+      const root = defineCommand({ name: "root", subCommands: { level1 } });
+
+      const result = await validateCommand(root, { globalArgs });
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors[0]?.type).toBe("case_variant_collision");
+        expect(result.errors[0]?.commandPath).toEqual(["root", "level1", "deep"]);
+      }
+    });
+
+    it("should not flag a local field with an identical definition to globalArgs", async () => {
+      const globalArgs = z.object({ verbose: arg(z.boolean().default(false)) });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ verbose: arg(z.boolean().default(false)) }),
+      });
+      const root = defineCommand({ name: "cli", subCommands: { sub } });
+
+      const result = await validateCommand(root, { globalArgs });
+      expect(result.valid).toBe(true);
+    });
+  });
 });
 
 describe("formatCommandValidationErrors", () => {
@@ -354,6 +419,101 @@ describe("validateCrossSchemaCollisions", () => {
     });
     const commandSchema = z.object({
       "dry-run": arg(z.boolean().optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).not.toThrow();
+  });
+
+  it("should throw FieldTypeConflictError when a same-named field has a different type bucket", () => {
+    const globalSchema = z.object({
+      verbose: arg(z.boolean().optional()),
+    });
+    const commandSchema = z.object({
+      verbose: arg(z.string().optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).toThrow(
+      FieldTypeConflictError,
+    );
+  });
+
+  it("should throw FieldTypeConflictError when only one side of a same-named field is an enum", () => {
+    const globalSchema = z.object({
+      level: arg(z.string().optional()),
+    });
+    const commandSchema = z.object({
+      level: arg(z.enum(["a", "b"]).optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).toThrow(
+      FieldTypeConflictError,
+    );
+  });
+
+  it("should throw FieldTypeConflictError when a same-named enum field has different allowed values", () => {
+    const globalSchema = z.object({
+      level: arg(z.enum(["a", "b"]).optional()),
+    });
+    const commandSchema = z.object({
+      level: arg(z.enum(["a", "c"]).optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).toThrow(
+      FieldTypeConflictError,
+    );
+  });
+
+  it("should not throw when a same-named enum field has the same allowed values", () => {
+    const globalSchema = z.object({
+      level: arg(z.enum(["a", "b"]).optional()),
+    });
+    const commandSchema = z.object({
+      level: arg(z.enum(["b", "a"]).optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).not.toThrow();
+  });
+
+  it("should not throw when a same-named union-of-literals field has a duplicate literal but the same allowed-value set", () => {
+    // extractEnumValues() doesn't dedupe union-of-literal options, so the
+    // extracted list can contain duplicates even when the actual set of
+    // allowed values is identical to the other side.
+    const globalSchema = z.object({
+      level: arg(z.union([z.literal("a"), z.literal("b")]).optional()),
+    });
+    const commandSchema = z.object({
+      level: arg(z.union([z.literal("a"), z.literal("a"), z.literal("b")]).optional()),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).not.toThrow();
+  });
+
+  it("should throw FieldTypeConflictError when a same-named field is positional on only one side", () => {
+    const globalSchema = z.object({
+      output: arg(z.string().optional()),
+    });
+    const commandSchema = z.object({
+      output: arg(z.string(), { positional: true }),
+    });
+    const globalExtracted = extractFields(globalSchema);
+    const commandExtracted = extractFields(commandSchema);
+    expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).toThrow(
+      FieldTypeConflictError,
+    );
+  });
+
+  it("should not throw when a same-named field has an identical definition", () => {
+    const globalSchema = z.object({
+      verbose: arg(z.boolean().optional()),
+    });
+    const commandSchema = z.object({
+      verbose: arg(z.boolean().optional()),
     });
     const globalExtracted = extractFields(globalSchema);
     const commandExtracted = extractFields(commandSchema);
