@@ -1,4 +1,6 @@
 import type { z } from "zod";
+import type { UnknownKeysMode } from "../core/schema-extractor.js";
+import type { AnyCommand, ArgsSchema } from "../types.js";
 import type { skillFrontmatterSchema } from "./frontmatter.js";
 
 /**
@@ -117,6 +119,20 @@ export interface SkillFlagOverrides {
   exclude?: {
     alias?: string | false;
   };
+  /**
+   * `--verbose` flag shared by `skills add` and `skills sync`. The default
+   * short alias is `-v`.
+   *
+   * This is independent of {@link SkillCommandOptions.globalArgs}'s
+   * field-name auto-detection (which drops the flag entirely when the
+   * host's `globalArgs` already defines a `verbose` field). `alias` instead
+   * resolves a *short-alias-only* collision — e.g. the host's `globalArgs`
+   * uses `-v` for an unrelated flag (not named `verbose`), so auto-detection
+   * doesn't apply, but the single-character alias still collides.
+   */
+  verbose?: {
+    alias?: string | false;
+  };
 }
 
 /**
@@ -177,6 +193,76 @@ export interface SkillCommandOptions {
   cwd?: string;
 
   /**
+   * The host CLI's global args schema — the same value passed to
+   * `runMain`/`runCommand`'s `globalArgs` option.
+   *
+   * When provided, `skills add`/`skills sync`'s `--verbose` and `skills
+   * list`'s `--json` are automatically omitted from their own schema if
+   * this schema already defines a same-named *non-positional boolean*
+   * field — no manual configuration needed, and the host's global flag of
+   * the same name takes over instead.
+   *
+   * A same-named field of another type (e.g. a string verbosity level)
+   * doesn't trigger this — the local boolean flag stays declared. However,
+   * politty itself independently rejects that combination: when
+   * `globalArgs` and a command's own schema declare a same-named field
+   * with different definitions, `runMain`/`runCommand` throws
+   * `FieldTypeConflictError` at parse time. {@link SkillFlagOverrides} can't
+   * help here — it only renames the short alias (`-v`/`-x`), not the long
+   * `--verbose`/`--json` field name itself, so the conflicting name stays
+   * either way. A host whose `globalArgs` uses a non-boolean `verbose`/
+   * `json` field must rename or remove that global field (or make it a
+   * plain boolean) instead.
+   *
+   * (Historical note: this omission used to also be required to work around
+   * a politty core bug where a global flag typed *before* the subcommand
+   * resolved correctly as a global value, but a same-named local field's
+   * own default would then overwrite it during the merge. That bug is
+   * fixed in politty core independently of this option — a same-named
+   * local and global field with *identical* definitions now resolves
+   * correctly regardless of position. This option still omits the local
+   * flag by default for simplicity: hosts don't need to duplicate the
+   * flag's definition on both schemas to get the expected behavior.)
+   *
+   * @example
+   * ```ts
+   * const globalArgs = z.object({
+   *   verbose: arg(z.boolean().default(false), { alias: "v" }),
+   * });
+   *
+   * const cli = withSkillCommand(baseCommand, {
+   *   sourceDir, package: "@my-agent/skills",
+   *   globalArgs, // skills add/sync automatically drop their own --verbose
+   * });
+   *
+   * runMain(cli, { globalArgs }); // same schema, passed to the real entry point
+   * ```
+   */
+  globalArgs?: ArgsSchema;
+
+  /**
+   * Unknown-keys handling for the `add`/`sync`/`remove`/`list` arg schemas
+   * (applied uniformly to all four).
+   *
+   * - `"strip"` (default) — matches politty's own `z.object()` default:
+   *   an unrecognized flag prints a warning and its value is dropped from
+   *   the parsed args.
+   * - `"strict"` — an unrecognized flag is a hard error, matching a host
+   *   CLI that uses `z.strictObject()`/`.strict()` throughout.
+   * - `"passthrough"` — matches `z.object().passthrough()`: no warning,
+   *   and unlike `"strip"`, the unrecognized flag's value is *kept* on the
+   *   parsed args object under its raw CLI name (e.g. `args["some-flag"]`)
+   *   rather than dropped.
+   *
+   * This only governs flags the parser cannot attribute to *either* this
+   * subcommand's own schema or the host's `globalArgs` schema — a value
+   * that legitimately arrives via `globalArgs` (see
+   * {@link SkillCommandOptions.globalArgs}) is validated separately against
+   * that schema and merged in afterward, so it is never rejected here.
+   */
+  unknownKeys?: UnknownKeysMode;
+
+  /**
    * Customize built-in subcommand flags. Use to resolve collisions with
    * the CLI's global flags or to opt out of short aliases.
    *
@@ -207,4 +293,42 @@ export interface SkillCommandOptions {
    * - `false` — leave the description untouched.
    */
   descriptionAppend?: string | false;
+
+  /**
+   * Override the primary (dispatched) name and aliases of `skills add` and
+   * `skills remove`. In each array, the *first* element becomes the
+   * subcommand's primary name; every element after it becomes an alias.
+   *
+   * Default: `add: ["add", "install"]`, `remove: ["remove", "uninstall"]`.
+   *
+   * Useful when a host CLI wants to rename these subcommands outright, drop
+   * the `install`/`uninstall` backward-compatibility aliases, add further
+   * aliases, or some combination of all three.
+   *
+   * @example
+   * ```ts
+   * withSkillCommand(cmd, {
+   *   sourceDir, package: "@my-agent/skills",
+   *   commandMap: {
+   *     add: ["setup", "add", "install"], // renamed to "setup"; "add"/"install" still work
+   *     remove: ["remove"], // no aliases at all
+   *   },
+   * });
+   * ```
+   */
+  commandMap?: {
+    /** Primary name + aliases for `skills add`. Default: `["add", "install"]`. */
+    add?: string[];
+    /** Primary name + aliases for `skills remove`. Default: `["remove", "uninstall"]`. */
+    remove?: string[];
+  };
 }
+
+/**
+ * Result of wrapping `T` with {@link withSkillCommand} — `T` with a
+ * `skills` entry added to (and required on) `subCommands`, so consumers can
+ * access `command.subCommands.skills` without an `as AnyCommand` cast.
+ */
+export type WithSkillCommand<T extends AnyCommand> = T & {
+  subCommands: NonNullable<T["subCommands"]> & { skills: AnyCommand };
+};

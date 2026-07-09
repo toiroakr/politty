@@ -144,6 +144,121 @@ withSkillCommand(cmd, {
 });
 ```
 
+### Resolving flag and alias collisions with a host CLI
+
+`skills add`/`skills sync` also define `--verbose`/`-v`, and `skills list`
+defines `--json`. If your host CLI already has global flags of the same
+name, pass the same `globalArgs` schema you give to `runMain`/`runCommand`
+as `globalArgs` here too, and the collision resolves itself:
+
+```ts
+const globalArgs = z.object({
+  verbose: arg(z.boolean().default(false), { alias: "v" }),
+});
+
+const cli = withSkillCommand(baseCommand, {
+  sourceDir,
+  package: "@my-agent/skills",
+  globalArgs, // skills add/sync auto-detect verbose and drop their own --verbose
+});
+
+runMain(cli, { globalArgs }); // same schema passed to the real entry point
+```
+
+Because `globalArgs` already declares a `verbose` field, `withSkillCommand`
+automatically omits `skills add`/`skills sync`'s own `--verbose` (same for
+`json` on `skills list`), and the host's global value takes priority for
+those subcommands too — no manual configuration needed.
+
+This auto-detection only kicks in when the global field is a
+_non-positional boolean_ — matching `--verbose`/`--json`'s own type. A
+same-named field of another type (e.g. a string verbosity level) doesn't
+trigger it, so the local boolean flag stays declared. That combination
+still isn't usable, though: politty itself rejects a same-named field with
+conflicting definitions between `globalArgs` and a command's own schema,
+throwing `FieldTypeConflictError` at parse time. `flags.verbose.alias`
+can't fix this — it only renames the short `-v`/`-x` alias, not the
+conflicting `--verbose`/`--json` field name. If your host CLI's global
+`verbose`/`json` field isn't a plain boolean, rename or remove that global
+field (or make it a plain boolean) instead.
+
+`--verbose`'s short alias can still collide independently of the field-name
+auto-detection above — e.g. the host's `globalArgs` uses `-v` for an
+unrelated flag (not named `verbose`), so auto-detection doesn't kick in,
+but the single-character alias still clashes. Rename it via
+`flags.verbose.alias`:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  flags: { verbose: { alias: "V" } },
+});
+```
+
+(`skills list --json` has no default alias, so there's nothing to rename
+there — `globalArgs` auto-detection is the only lever for `--json`.)
+
+The primary name and backward-compatibility aliases of `skills add`/`skills
+remove` can be customized via `commandMap`. In each array, the _first_
+element becomes the subcommand's dispatched name; the rest become aliases:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  commandMap: {
+    add: ["add", "install", "get"], // keep "add"/"install", add "get"
+    remove: ["remove"], // drop the "uninstall" alias entirely
+  },
+});
+```
+
+Renaming the primary name outright works the same way — put the new name
+first:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  commandMap: {
+    add: ["setup", "add", "install"], // dispatches as "setup"; "add"/"install" still work
+  },
+});
+```
+
+`withSkillCommand` throws if any name or alias in `commandMap` collides with
+`sync`/`list` or with each other's names/aliases — a silent collision would
+otherwise either make an alias unreachable (a subcommand's own name always
+wins over another subcommand's alias) or make two subcommands ambiguously
+share one alias (whichever is declared first wins). It also rejects entries
+that aren't safe tokens (empty strings, leading dashes, whitespace, etc.) —
+the same format politty enforces for ordinary subcommand aliases.
+
+### Unknown-flag strictness
+
+By default, an unrecognized flag on any `skills` subcommand (e.g.
+`skills add --typo`) prints a warning and its value is dropped from the
+parsed args — matching politty's own `z.object()` default. If your host CLI
+uses `z.strictObject()`/`.strict()` throughout and wants the same behavior
+here, set `unknownKeys: "strict"` to make it a hard error instead.
+`"passthrough"` is also available — it matches `z.object().passthrough()`:
+no warning, and (unlike `"strip"`) the flag's value is _kept_ on the parsed
+args object under its raw CLI name instead of being dropped:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  unknownKeys: "strict",
+});
+```
+
+This applies uniformly to `add`/`sync`/`remove`/`list` and only affects
+flags the parser can't attribute to this subcommand or to `globalArgs` — a
+value that legitimately arrives via `globalArgs` is validated separately
+and merged in afterward, so `unknownKeys: "strict"` never rejects it.
+
 ### `skills add` (alias: `install`)
 
 Install one or more named skills, or all skills when no name is given. Multiple positional names are pre-validated against the source directory before any install side effect — any unknown name aborts the run with a single error listing every typo, so the whole invocation can be fixed in one round-trip.

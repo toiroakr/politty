@@ -10,6 +10,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
+import { arg, getArgMeta } from "../../core/arg-registry.js";
+import { getUnknownKeysMode } from "../../core/schema-extractor.js";
 import {
   createSkillAddCommand,
   createSkillListCommand,
@@ -50,6 +53,142 @@ function opts(sourceDir: string) {
 function resolve(options: SkillCommandOptions = opts("/tmp")) {
   return resolveSkillOptions(options, CLI);
 }
+
+/** Read a command's arg schema shape for asserting on which flags exist. */
+function argShape(command: { args?: unknown }): Record<string, z.ZodType> {
+  return (command.args as { shape: Record<string, z.ZodType> }).shape;
+}
+
+describe("resolveSkillOptions commandMap validation", () => {
+  // `resolveSkillOptions` must validate commandMap tokens itself, not rely
+  // on `withSkillCommand`'s later duplicate check — it's called directly
+  // here (bypassing withSkillCommand entirely), the same way a caller could
+  // use it outside of withSkillCommand's wrapping.
+  it("should throw when a commandMap entry is an empty string", () => {
+    expect(() => resolve({ ...opts("/tmp"), commandMap: { add: ["add", ""] } })).toThrow(
+      /commandMap\.add contains an invalid entry ""/,
+    );
+  });
+
+  it("should throw when a commandMap entry is whitespace-only", () => {
+    expect(() => resolve({ ...opts("/tmp"), commandMap: { remove: ["remove", "  "] } })).toThrow(
+      /commandMap\.remove contains an invalid entry "\s+"/,
+    );
+  });
+
+  it("should throw when a commandMap entry starts with a dash", () => {
+    expect(() => resolve({ ...opts("/tmp"), commandMap: { add: ["-add"] } })).toThrow(
+      /commandMap\.add contains an invalid entry "-add"/,
+    );
+  });
+});
+
+describe("globalArgs auto-detection", () => {
+  it("should auto-disable --verbose when globalArgs already defines verbose", () => {
+    const globalArgs = z.object({ verbose: z.boolean().default(false) });
+    const resolved = resolve({ ...opts("/tmp"), globalArgs });
+    expect(resolved.verbose.disabled).toBe(true);
+  });
+
+  it("should auto-disable --json when globalArgs already defines json", () => {
+    const globalArgs = z.object({ json: z.boolean().default(false) });
+    const resolved = resolve({ ...opts("/tmp"), globalArgs });
+    expect(resolved.json.disabled).toBe(true);
+  });
+
+  it("should not auto-disable when globalArgs doesn't define verbose/json", () => {
+    const globalArgs = z.object({ debug: z.boolean().default(false) });
+    const resolved = resolve({ ...opts("/tmp"), globalArgs });
+    expect(resolved.verbose.disabled).toBe(false);
+    expect(resolved.json.disabled).toBe(false);
+  });
+
+  it("should not auto-disable when globalArgs is absent", () => {
+    const resolved = resolve(opts("/tmp"));
+    expect(resolved.verbose.disabled).toBe(false);
+    expect(resolved.json.disabled).toBe(false);
+  });
+
+  it("should not auto-disable when the same-named globalArgs field is positional", () => {
+    // A positional named "verbose"/"json" has no `--verbose`/`--json` flag
+    // syntax at all, so it can't actually collide with the option of the
+    // same name — only non-positional (option) fields count as a collision.
+    const globalArgs = z.object({
+      verbose: arg(z.string(), { positional: true }),
+    });
+    const resolved = resolve({ ...opts("/tmp"), globalArgs });
+    expect(resolved.verbose.disabled).toBe(false);
+  });
+
+  it("should not auto-disable when the same-named globalArgs field isn't boolean", () => {
+    // mergedFlag boolean-coerces whatever value flows through. A same-named
+    // string field (e.g. an enum-like verbosity level) isn't really the
+    // same flag: Boolean("off") is true, so treating this as a collision
+    // would silently misread it. Only a same-named boolean field counts.
+    const globalArgs = z.object({
+      verbose: z.enum(["off", "info", "debug"]).default("off"),
+    });
+    const resolved = resolve({ ...opts("/tmp"), globalArgs });
+    expect(resolved.verbose.disabled).toBe(false);
+  });
+
+  it("should apply auto-detection end-to-end to createSkillAddCommand's schema", () => {
+    const globalArgs = z.object({ verbose: z.boolean().default(false) });
+    const command = createSkillAddCommand(resolve({ ...opts("/tmp"), globalArgs }));
+    expect(argShape(command)).not.toHaveProperty("verbose");
+  });
+
+  it("should apply auto-detection end-to-end to createSkillListCommand's schema", () => {
+    const globalArgs = z.object({ json: z.boolean().default(false) });
+    const command = createSkillListCommand(resolve({ ...opts("/tmp"), globalArgs }));
+    expect(argShape(command)).not.toHaveProperty("json");
+  });
+});
+
+describe("unknownKeys option", () => {
+  it("should default to 'strip'", () => {
+    const command = createSkillAddCommand(resolve(opts("/tmp")));
+    expect(getUnknownKeysMode(command.args!)).toBe("strip");
+  });
+
+  it("should apply 'strict' to createSkillAddCommand's schema", () => {
+    const command = createSkillAddCommand(resolve({ ...opts("/tmp"), unknownKeys: "strict" }));
+    expect(getUnknownKeysMode(command.args!)).toBe("strict");
+  });
+
+  it("should apply 'strict' to createSkillSyncCommand's schema", () => {
+    const command = createSkillSyncCommand(resolve({ ...opts("/tmp"), unknownKeys: "strict" }));
+    expect(getUnknownKeysMode(command.args!)).toBe("strict");
+  });
+
+  it("should apply 'strict' to createSkillRemoveCommand's schema", () => {
+    const command = createSkillRemoveCommand(resolve({ ...opts("/tmp"), unknownKeys: "strict" }));
+    expect(getUnknownKeysMode(command.args!)).toBe("strict");
+  });
+
+  it("should apply 'strict' to createSkillListCommand's schema", () => {
+    const command = createSkillListCommand(resolve({ ...opts("/tmp"), unknownKeys: "strict" }));
+    expect(getUnknownKeysMode(command.args!)).toBe("strict");
+  });
+
+  it("should apply 'passthrough' to the generated schema", () => {
+    const command = createSkillAddCommand(resolve({ ...opts("/tmp"), unknownKeys: "passthrough" }));
+    expect(getUnknownKeysMode(command.args!)).toBe("passthrough");
+  });
+
+  it("should still apply 'strict' to the schema when verbose is auto-disabled", () => {
+    // Regression guard: the disabled/enabled branch split for verbose must
+    // not accidentally bypass applyUnknownKeys on either branch.
+    const command = createSkillAddCommand(
+      resolve({
+        ...opts("/tmp"),
+        unknownKeys: "strict",
+        globalArgs: z.object({ verbose: z.boolean().default(false) }),
+      }),
+    );
+    expect(getUnknownKeysMode(command.args!)).toBe("strict");
+  });
+});
 
 function createTempDir(): string {
   const dir = join(
@@ -92,6 +231,38 @@ describe("createSkillListCommand", () => {
 
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("should omit --json when globalArgs already defines json", () => {
+    const command = createSkillListCommand(
+      resolve({ ...opts(tempDir), globalArgs: z.object({ json: z.boolean().default(false) }) }),
+    );
+    expect(argShape(command)).not.toHaveProperty("json");
+
+    // `logger.info` also goes through `console.log`, so assert the plain-text
+    // branch ran (not the JSON branch) rather than asserting zero calls.
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      command.run!({});
+      const calls = consoleSpy.mock.calls.map((c) => c[0]);
+      expect(calls).not.toContain("[]");
+      expect(calls.some((c) => typeof c === "string" && c.includes("No skills found"))).toBe(true);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it("should defer to a same-named host global flag when json is auto-disabled", () => {
+    const command = createSkillListCommand(
+      resolve({ ...opts(tempDir), globalArgs: z.object({ json: z.boolean().default(false) }) }),
+    );
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      command.run!({ json: true } as never);
+      expect(consoleSpy).toHaveBeenCalledWith("[]");
+    } finally {
+      consoleSpy.mockRestore();
+    }
   });
 
   it("should output empty JSON array when no skills found with --json", () => {
@@ -702,6 +873,47 @@ describe("createSkillSyncCommand", () => {
     expect(() => command.run!({ exclude: ["commit"], verbose: false })).not.toThrow();
     expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
   });
+
+  it("should omit --verbose when globalArgs already defines verbose", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const command = createSkillSyncCommand(
+      resolve({
+        ...opts(tempDir),
+        globalArgs: z.object({ verbose: z.boolean().default(false) }),
+      }),
+    );
+    expect(argShape(command)).not.toHaveProperty("verbose");
+    command.run!({ exclude: [] });
+
+    expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
+  });
+
+  it("should defer to a same-named host global flag when verbose is auto-disabled", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const command = createSkillSyncCommand(
+      resolve({
+        ...opts(tempDir),
+        globalArgs: z.object({ verbose: z.boolean().default(false) }),
+      }),
+    );
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      command.run!({ exclude: [], verbose: true } as never);
+      const printedMode = consoleSpy.mock.calls.some((c) => String(c[0]).includes("mode="));
+      expect(printedMode).toBe(true);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it("should rename the --verbose alias via flags.verbose.alias", () => {
+    const command = createSkillSyncCommand(
+      resolve({ ...opts(tempDir), flags: { verbose: { alias: "V" } } }),
+    );
+    expect(getArgMeta(argShape(command).verbose!)?.alias).toBe("V");
+  });
 });
 
 describe("createSkillAddCommand", () => {
@@ -734,6 +946,79 @@ describe("createSkillAddCommand", () => {
   it("should expose 'install' as an alias", () => {
     const command = createSkillAddCommand(resolve(opts(tempDir)));
     expect(command.aliases).toEqual(["install"]);
+  });
+
+  it("should omit the 'install' alias when commandMap.add has no extra names", () => {
+    const command = createSkillAddCommand(
+      resolve({ ...opts(tempDir), commandMap: { add: ["add"] } }),
+    );
+    expect(command.aliases).toBeUndefined();
+  });
+
+  it("should add extra aliases via commandMap.add", () => {
+    const command = createSkillAddCommand(
+      resolve({ ...opts(tempDir), commandMap: { add: ["add", "install", "get"] } }),
+    );
+    expect(command.name).toBe("add");
+    expect(command.aliases).toEqual(["install", "get"]);
+  });
+
+  it("should rename the primary name via commandMap.add", () => {
+    const command = createSkillAddCommand(
+      resolve({ ...opts(tempDir), commandMap: { add: ["setup", "add", "install"] } }),
+    );
+    expect(command.name).toBe("setup");
+    expect(command.aliases).toEqual(["add", "install"]);
+  });
+
+  it("should omit --verbose when globalArgs already defines verbose", () => {
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const command = createSkillAddCommand(
+      resolve({
+        ...opts(tempDir),
+        globalArgs: z.object({ verbose: z.boolean().default(false) }),
+      }),
+    );
+    // `verbose` is no longer a recognised property of this schema.
+    expect(argShape(command)).not.toHaveProperty("verbose");
+    command.run!({ name: [] });
+
+    expect(mockedInstallSkill).toHaveBeenCalledTimes(1);
+  });
+
+  it("should defer to a same-named host global flag when verbose is auto-disabled", () => {
+    // Auto-disabling only removes the *local* --verbose flag from this
+    // subcommand's own schema. politty's runner still merges a host's
+    // `globalArgs`-parsed values into every leaf command's `args` object
+    // regardless of the leaf's own schema — so a host-defined global
+    // `--verbose` of the same name should still control this behavior
+    // instead of being silently forced off.
+    writeSkillMd(tempDir, "commit", { name: "commit", description: "Commit skill" });
+
+    const command = createSkillAddCommand(
+      resolve({
+        ...opts(tempDir),
+        globalArgs: z.object({ verbose: z.boolean().default(false) }),
+      }),
+    );
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      // Simulates the runner having merged a global `verbose: true` into
+      // this leaf's args even though the local schema doesn't declare it.
+      command.run!({ name: [], verbose: true } as never);
+      const printedMode = consoleSpy.mock.calls.some((c) => String(c[0]).includes("mode="));
+      expect(printedMode).toBe(true);
+    } finally {
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it("should rename the --verbose alias via flags.verbose.alias", () => {
+    const command = createSkillAddCommand(
+      resolve({ ...opts(tempDir), flags: { verbose: { alias: "V" } } }),
+    );
+    expect(getArgMeta(argShape(command).verbose!)?.alias).toBe("V");
   });
 
   it("should install specific skill by name", () => {
@@ -1043,6 +1328,29 @@ describe("createSkillRemoveCommand", () => {
   it("should expose 'uninstall' as an alias", () => {
     const command = createSkillRemoveCommand(resolve(opts(tempDir)));
     expect(command.aliases).toEqual(["uninstall"]);
+  });
+
+  it("should omit the 'uninstall' alias when commandMap.remove has no extra names", () => {
+    const command = createSkillRemoveCommand(
+      resolve({ ...opts(tempDir), commandMap: { remove: ["remove"] } }),
+    );
+    expect(command.aliases).toBeUndefined();
+  });
+
+  it("should add extra aliases via commandMap.remove", () => {
+    const command = createSkillRemoveCommand(
+      resolve({ ...opts(tempDir), commandMap: { remove: ["remove", "uninstall", "rm"] } }),
+    );
+    expect(command.name).toBe("remove");
+    expect(command.aliases).toEqual(["uninstall", "rm"]);
+  });
+
+  it("should rename the primary name via commandMap.remove", () => {
+    const command = createSkillRemoveCommand(
+      resolve({ ...opts(tempDir), commandMap: { remove: ["teardown", "remove", "uninstall"] } }),
+    );
+    expect(command.name).toBe("teardown");
+    expect(command.aliases).toEqual(["remove", "uninstall"]);
   });
 
   it("should remove specific skill by name", () => {

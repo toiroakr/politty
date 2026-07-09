@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { defineCommand } from "../../core/command.js";
+import type { AnyCommand } from "../../types.js";
 import { withSkillCommand } from "../index.js";
 
 const opts = { sourceDir: "/tmp/nonexistent", package: "@my-agent/skills" };
@@ -15,6 +16,109 @@ describe("withSkillCommand", () => {
 
     expect(wrapped.subCommands).toBeDefined();
     expect(wrapped.subCommands!.skills).toBeDefined();
+  });
+
+  it("should type subCommands.skills as AnyCommand without a cast", () => {
+    const base = defineCommand({
+      name: "my-cli",
+      description: "Test CLI",
+    });
+
+    const wrapped = withSkillCommand(base, opts);
+
+    // Compile-time assertion: `subCommands` is no longer optional, and
+    // `skills` is typed directly — no `subCommands?.skills as AnyCommand`
+    // cast required by consumers.
+    expectTypeOf(wrapped.subCommands).not.toBeNullable();
+    expectTypeOf(wrapped.subCommands.skills).toEqualTypeOf<AnyCommand>();
+  });
+
+  it("should disable the 'install'/'uninstall' aliases via commandMap", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    const wrapped = withSkillCommand(base, {
+      ...opts,
+      commandMap: { add: ["add"], remove: ["remove"] },
+    });
+
+    const skillsSubCommands = wrapped.subCommands.skills.subCommands!;
+    expect((skillsSubCommands.add as AnyCommand).aliases).toBeUndefined();
+    expect((skillsSubCommands.remove as AnyCommand).aliases).toBeUndefined();
+  });
+
+  it("should rename the add/remove subcommands and dispatch under the new keys via commandMap", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    const wrapped = withSkillCommand(base, {
+      ...opts,
+      commandMap: { add: ["setup", "add"], remove: ["teardown"] },
+    });
+
+    const skillsSubCommands = wrapped.subCommands.skills.subCommands!;
+    expect(Object.hasOwn(skillsSubCommands, "setup")).toBe(true);
+    expect(Object.hasOwn(skillsSubCommands, "add")).toBe(false);
+    expect(Object.hasOwn(skillsSubCommands, "teardown")).toBe(true);
+    expect((skillsSubCommands.setup as AnyCommand).name).toBe("setup");
+    expect((skillsSubCommands.setup as AnyCommand).aliases).toEqual(["add"]);
+  });
+
+  it("should throw when commandMap produces a duplicate subcommand name", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["list"] } })).toThrow(
+      /duplicate subcommand name\/alias "list"/,
+    );
+  });
+
+  it("should throw when a commandMap alias collides with another subcommand's primary name", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["add", "list"] } })).toThrow(
+      /duplicate subcommand name\/alias "list"/,
+    );
+  });
+
+  it("should throw when add and remove commandMap aliases collide with each other", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() =>
+      withSkillCommand(base, {
+        ...opts,
+        commandMap: { add: ["add", "manage"], remove: ["remove", "manage"] },
+      }),
+    ).toThrow(/duplicate subcommand name\/alias "manage"/);
+  });
+
+  it("should throw when a commandMap entry is an empty string", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["add", ""] } })).toThrow(
+      /commandMap\.add contains an invalid entry ""/,
+    );
+  });
+
+  it("should throw when a commandMap entry is whitespace-only", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["add", "   "] } })).toThrow(
+      /commandMap\.add contains an invalid entry "\s+"/,
+    );
+  });
+
+  it("should throw when a commandMap entry starts with a dash", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() =>
+      withSkillCommand(base, { ...opts, commandMap: { remove: ["remove", "-rm"] } }),
+    ).toThrow(/commandMap\.remove contains an invalid entry "-rm"/);
+  });
+
+  it("should throw when a commandMap entry contains whitespace", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    expect(() => withSkillCommand(base, { ...opts, commandMap: { add: ["add install"] } })).toThrow(
+      /commandMap\.add contains an invalid entry "add install"/,
+    );
   });
 
   it("should preserve existing subcommands", () => {

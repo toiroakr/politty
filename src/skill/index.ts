@@ -57,7 +57,7 @@ import {
   createSkillSyncCommand,
 } from "./commands.js";
 import { resolveSkillOptions } from "./options.js";
-import type { SkillCommandOptions } from "./types.js";
+import type { SkillCommandOptions, WithSkillCommand } from "./types.js";
 
 // Public API re-exports
 export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./frontmatter.js";
@@ -82,6 +82,7 @@ export type {
   SkillFlagOverrides,
   SkillFrontmatter,
   UninstallSkillOptions,
+  WithSkillCommand,
 } from "./types.js";
 
 /**
@@ -110,21 +111,50 @@ export type {
 export function withSkillCommand<T extends AnyCommand>(
   command: T,
   options: SkillCommandOptions,
-): T {
+): WithSkillCommand<T> {
   if (command.subCommands && Object.hasOwn(command.subCommands, "skills")) {
     throw new Error(
       `withSkillCommand: command "${command.name}" already defines a "skills" subcommand.`,
     );
   }
 
+  // `resolveSkillOptions` validates every commandMap name/alias against a
+  // safe-token pattern as soon as it resolves them (see
+  // `resolveCommandNaming` in options.ts) — that happens here, before the
+  // cross-subcommand duplicate check below, so a bad token is rejected
+  // regardless of whether the caller goes through `withSkillCommand` or
+  // calls `resolveSkillOptions` directly.
   const resolved = resolveSkillOptions(options, command.name);
+  const addName = resolved.commandNames.add.name;
+  const removeName = resolved.commandNames.remove.name;
+  // Check every dispatched name AND alias together — an alias colliding with
+  // another subcommand's name or alias is just as ambiguous as two primary
+  // names colliding: `resolveSubcommandWithAlias` resolves the direct key
+  // first, so an alias shadowed by another subcommand's name is silently
+  // unreachable, and `resolveSubCommandAlias` returns the first match when
+  // two subcommands share an alias, silently dropping the other.
+  const allNames = [
+    "sync",
+    "list",
+    addName,
+    ...resolved.commandNames.add.aliases,
+    removeName,
+    ...resolved.commandNames.remove.aliases,
+  ];
+  const duplicate = allNames.find((name, i) => allNames.indexOf(name) !== i);
+  if (duplicate) {
+    throw new Error(
+      `withSkillCommand: commandMap produced duplicate subcommand name/alias "${duplicate}".`,
+    );
+  }
+
   const skillsSubCommand = defineCommand({
     name: "skills",
     description: "Manage agent skills",
     subCommands: {
       sync: createSkillSyncCommand(resolved),
-      add: createSkillAddCommand(resolved),
-      remove: createSkillRemoveCommand(resolved),
+      [addName]: createSkillAddCommand(resolved),
+      [removeName]: createSkillRemoveCommand(resolved),
       list: createSkillListCommand(resolved),
     },
   });
@@ -136,7 +166,7 @@ export function withSkillCommand<T extends AnyCommand>(
       ...command.subCommands,
       skills: skillsSubCommand,
     },
-  } as T;
+  } as unknown as WithSkillCommand<T>;
 }
 
 /**
