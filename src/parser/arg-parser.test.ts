@@ -187,6 +187,19 @@ describe("ArgParser", () => {
       );
     });
 
+    it("should throw error when a field name starts with $", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          $source: arg(z.string().optional()),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Field "\$source" starts with "\$", which is reserved for framework-injected helpers/,
+      );
+    });
+
     it("should reject reserved alias inside an `as const` alias array at the type level", () => {
       const cmd = defineCommand({
         name: "test-cmd",

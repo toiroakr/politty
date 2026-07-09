@@ -66,6 +66,7 @@ export { parseArgv, type ParsedArgv, type ParserOptions } from "./parser/argv-pa
 // Type exports
 export type {
   AnyCommand,
+  ArgSource,
   ArgsSchema,
   CleanupContext,
   // Log types
@@ -107,8 +108,10 @@ export {
   DuplicateAliasError,
   DuplicateFieldError,
   DuplicateNegationError,
+  FieldTypeConflictError,
   PositionalConfigError,
   ReservedAliasError,
+  ReservedFieldNameError,
   formatCommandValidationErrors,
   validateCaseVariantCollisions,
   validateCommand,
@@ -118,6 +121,7 @@ export {
   validateDuplicateNegations,
   validatePositionalConfig,
   validateReservedAliases,
+  validateReservedFieldNames,
   type CommandValidationError,
   type CommandValidationResult,
 } from "./validator/command-validator.js";

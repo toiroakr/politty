@@ -10,6 +10,7 @@ import { parseArgs } from "../parser/arg-parser.js";
 import { findFirstPositional, findFirstPositionalIndex } from "../parser/subcommand-scanner.js";
 import type {
   AnyCommand,
+  ArgSource,
   ArgsSchema,
   CollectedLogs,
   GlobalCleanupContext,
@@ -25,6 +26,7 @@ import {
   validateDuplicateFields,
   validateDuplicateNegations,
   validateReservedAliases,
+  validateReservedFieldNames,
 } from "../validator/command-validator.js";
 import {
   findSimilar,
@@ -37,7 +39,12 @@ import {
 } from "../validator/zod-validator.js";
 import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
-import { extractFields, type ExtractedFields } from "./schema-extractor.js";
+import {
+  extractFields,
+  toCamelCase,
+  toKebabCase,
+  type ExtractedFields,
+} from "./schema-extractor.js";
 
 /**
  * Default logger using console
@@ -47,6 +54,27 @@ const defaultLogger: Logger = {
   error: (message: string) => console.error(message),
   warn: (message: string) => console.warn(message),
 };
+
+/**
+ * Attach a non-enumerable `$source` helper to the final args object so it
+ * stays invisible to `Object.keys`/`JSON.stringify`/spread (those only ever
+ * see real field values) while still being reachable via property access
+ * (including through `createDualCaseProxy`).
+ */
+function attachArgSource(target: Record<string, unknown>, sourceMap: Map<string, ArgSource>): void {
+  Object.defineProperty(target, "$source", {
+    // `sourceMap` is keyed by the field's canonical schema name, which may
+    // itself be camelCase or kebab-case. Since `createDualCaseProxy` lets
+    // callers query either case variant, try the name as-is and both
+    // normalized forms so `$source` agrees with dual-case property access.
+    value: (name: string): ArgSource =>
+      sourceMap.get(name) ??
+      sourceMap.get(toCamelCase(name)) ??
+      sourceMap.get(toKebabCase(name)) ??
+      "default",
+    enumerable: false,
+  });
+}
 
 /**
  * Internal options for runCommand (includes context tracking)
@@ -671,6 +699,10 @@ async function runCommandInternal<TResult = unknown>(
     // receive a context, even when the typed line is not yet valid.
     let validatedGlobalArgs: Record<string, unknown> = {};
     const isCompletionInvocation = command.name === "__complete";
+    // Snapshot which global fields came from the CLI (this level or an
+    // ancestor's) before env fallbacks below mutate accumulatedGlobalArgs.
+    const cliProvidedGlobalFields = new Set(Object.keys(accumulatedGlobalArgs));
+    const envFallbackGlobalFields = new Set<string>();
     if (options.globalArgs && options._globalExtracted && !isCompletionInvocation) {
       // Apply env fallbacks for global args
       for (const field of options._globalExtracted.fields) {
@@ -680,16 +712,23 @@ async function runCommandInternal<TResult = unknown>(
             const envValue = process.env[envName];
             if (envValue !== undefined) {
               accumulatedGlobalArgs[field.name] = envValue;
+              envFallbackGlobalFields.add(field.name);
               break;
             }
           }
         }
       }
 
-      // Prompt for missing global args (if prompt resolver is provided)
+      // Prompt for missing global args (if prompt resolver is provided).
+      // A resolver may return `{ field: undefined }` for a field it chose
+      // not to prompt for; that isn't an explicit value, so don't let it
+      // clobber a real CLI/env value already in accumulatedGlobalArgs (see
+      // the identical local-args handling below for the same rationale).
       if (options.prompt) {
         const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted);
-        Object.assign(accumulatedGlobalArgs, resolved);
+        for (const [key, value] of Object.entries(resolved)) {
+          if (value !== undefined) accumulatedGlobalArgs[key] = value;
+        }
       }
 
       // Note: validation only sees recognized global flags. Misspelled globals
@@ -712,6 +751,10 @@ async function runCommandInternal<TResult = unknown>(
     // Validate arguments
     if (!command.args) {
       // No schema, run with global args (or empty args)
+      const globalSourceMap = new Map<string, ArgSource>();
+      for (const name of cliProvidedGlobalFields) globalSourceMap.set(name, "cli");
+      for (const name of envFallbackGlobalFields) globalSourceMap.set(name, "env");
+      attachArgSource(validatedGlobalArgs, globalSourceMap);
       const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
       if (options._globalExtracted && !isCompletionInvocation) {
         await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
@@ -729,9 +772,46 @@ async function runCommandInternal<TResult = unknown>(
 
     // Prompt for missing command args (if prompt resolver is provided)
     let argsToValidate = parseResult.rawArgs;
+    const promptResolvedFields = new Set<string>();
     if (options.prompt && parseResult.extractedFields) {
       const resolved = await options.prompt(argsToValidate, parseResult.extractedFields);
-      argsToValidate = { ...argsToValidate, ...resolved };
+      // A resolver may return `{ field: undefined }` for a field it chose
+      // not to prompt for; that isn't an explicit value, so skip it here
+      // instead of spreading it in verbatim -- otherwise it would either
+      // clobber a real CLI/env value already in argsToValidate, or (if
+      // tracked anyway) block the global-value pre-fill below for a
+      // resolver that legitimately skips a field.
+      const nextArgsToValidate = { ...argsToValidate };
+      for (const [key, value] of Object.entries(resolved)) {
+        if (value !== undefined) {
+          nextArgsToValidate[key] = value;
+          promptResolvedFields.add(key);
+        }
+      }
+      argsToValidate = nextArgsToValidate;
+    }
+
+    // Same-named field on both schemas (validateCrossSchemaCollisions has
+    // already guaranteed the two definitions are identical): a flag typed
+    // before the subcommand is captured as global before the local schema
+    // is known, so the local field's own argv never receives it. Pre-fill
+    // it here, before local validation, so this also works for a required
+    // local field with no default — otherwise local validation would fail
+    // before the merge below ever got a chance to supply the value.
+    const globalPrefilledFields = new Set<string>();
+    if (parseResult.extractedFields) {
+      for (const field of parseResult.extractedFields.fields) {
+        const localHasOwnValue =
+          Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
+        if (
+          !localHasOwnValue &&
+          cliProvidedGlobalFields.has(field.name) &&
+          Object.hasOwn(validatedGlobalArgs, field.name)
+        ) {
+          argsToValidate = { ...argsToValidate, [field.name]: validatedGlobalArgs[field.name] };
+          globalPrefilledFields.add(field.name);
+        }
+      }
     }
 
     const validationResult = validateArgs(argsToValidate, command.args);
@@ -761,7 +841,42 @@ async function runCommandInternal<TResult = unknown>(
     }
 
     // Merge global args with command args (command args take precedence on collision)
-    const mergedArgs = createDualCaseProxy({ ...proxiedGlobalArgs, ...proxiedCommandArgs });
+    const mergedPlainArgs: Record<string, unknown> = {
+      ...proxiedGlobalArgs,
+      ...proxiedCommandArgs,
+    };
+    const argSourceMap = new Map<string, ArgSource>();
+    for (const name of cliProvidedGlobalFields) argSourceMap.set(name, "cli");
+    for (const name of envFallbackGlobalFields) argSourceMap.set(name, "env");
+    const localEnvFallbackFields = parseResult.envFallbackFields ?? new Set<string>();
+    // Local fields take precedence on collision, mirroring the value merge above:
+    // classify every declared local field explicitly (not just ones present in
+    // rawArgs) so a local field resolved via schema default/prompt correctly
+    // overrides a same-named global field's "cli"/"env" classification instead
+    // of leaking it through unchanged.
+    for (const field of parseResult.extractedFields?.fields ?? []) {
+      if (globalPrefilledFields.has(field.name)) {
+        // Already resolved from the global CLI value by the pre-fill above;
+        // `proxiedCommandArgs` already holds it (validated through the
+        // local schema), so the merge above already picked it up correctly.
+        argSourceMap.set(field.name, "cli");
+        continue;
+      }
+
+      const localHasCliOrEnvValue =
+        Object.hasOwn(parseResult.rawArgs, field.name) || localEnvFallbackFields.has(field.name);
+
+      argSourceMap.set(
+        field.name,
+        localHasCliOrEnvValue
+          ? localEnvFallbackFields.has(field.name)
+            ? "env"
+            : "cli"
+          : "default",
+      );
+    }
+    attachArgSource(mergedPlainArgs, argSourceMap);
+    const mergedArgs = createDualCaseProxy(mergedPlainArgs);
 
     // Run the command
     // Stop this collector and pass logs to executeLifecycle
@@ -803,6 +918,7 @@ function extractAndValidateGlobal(options: {
     validateDuplicateAliases(extracted);
     validateDuplicateNegations(extracted);
     validateReservedAliases(extracted, true);
+    validateReservedFieldNames(extracted);
     const positionalNames = extracted.fields.filter((f) => f.positional).map((f) => f.name);
     if (positionalNames.length > 0) {
       throw new Error(

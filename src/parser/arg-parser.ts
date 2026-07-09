@@ -14,6 +14,7 @@ import {
   validateDuplicateNegations,
   validatePositionalConfig,
   validateReservedAliases,
+  validateReservedFieldNames,
 } from "../validator/command-validator.js";
 import { buildParserOptions, mergeWithPositionals, parseArgv } from "./argv-parser.js";
 import {
@@ -51,6 +52,8 @@ export interface ParseResult {
   extractedFields?: ExtractedFields | undefined;
   /** Raw parsed global args (before validation) */
   rawGlobalArgs?: Record<string, unknown> | undefined;
+  /** Names of fields in `rawArgs` whose value came from `field.env` rather than the CLI */
+  envFallbackFields?: Set<string> | undefined;
 }
 
 /**
@@ -140,6 +143,7 @@ export function parseArgs(
       validateDuplicateNegations(extracted);
       validatePositionalConfig(extracted);
       validateReservedAliases(extracted, hasSubCommands);
+      validateReservedFieldNames(extracted);
       if (options.globalExtracted) {
         validateCrossSchemaCollisions(options.globalExtracted, extracted);
       }
@@ -234,6 +238,7 @@ export function parseArgs(
   const rawArgs = mergeWithPositionals(parsed, extracted);
 
   // Apply environment variable fallbacks
+  const envFallbackFields = new Set<string>();
   for (const field of extracted.fields) {
     if (field.env && rawArgs[field.name] === undefined) {
       // Normalize to array
@@ -244,6 +249,7 @@ export function parseArgs(
         const envValue = process.env[envName];
         if (envValue !== undefined) {
           rawArgs[field.name] = envValue;
+          envFallbackFields.add(field.name);
           break;
         }
       }
@@ -288,6 +294,7 @@ export function parseArgs(
     unknownGlobalFlags: suppressedGlobalFlags,
     extractedFields: extracted,
     rawGlobalArgs,
+    envFallbackFields,
   };
 }
 
