@@ -775,12 +775,14 @@ async function runCommandInternal<TResult = unknown>(
       // clobber a real CLI/env value already in argsToValidate, or (if
       // tracked anyway) block the global-value pre-fill below for a
       // resolver that legitimately skips a field.
+      const nextArgsToValidate = { ...argsToValidate };
       for (const [key, value] of Object.entries(resolved)) {
         if (value !== undefined) {
-          argsToValidate = { ...argsToValidate, [key]: value };
+          nextArgsToValidate[key] = value;
           promptResolvedFields.add(key);
         }
       }
+      argsToValidate = nextArgsToValidate;
     }
 
     // Same-named field on both schemas (validateCrossSchemaCollisions has
