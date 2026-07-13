@@ -322,6 +322,40 @@ export interface SkillCommandOptions {
     /** Primary name + aliases for `skills remove`. Default: `["remove", "uninstall"]`. */
     remove?: string[];
   };
+
+  /**
+   * Override the description text for the `skills` command and/or its
+   * built-in subcommands. Any key left unset keeps politty's default
+   * description for that command.
+   *
+   * Keys refer to the subcommand's *canonical role*, not its dispatched
+   * name — e.g. `descriptions.add` still applies after `commandMap.add`
+   * renames the subcommand to something else.
+   *
+   * @example
+   * ```ts
+   * withSkillCommand(cmd, {
+   *   sourceDir, package: "@my-agent/skills",
+   *   commandMap: { add: ["setup", "add", "install"] },
+   *   descriptions: {
+   *     skills: "Manage My Agent skills",
+   *     add: "Install My Agent skills", // still keyed by "add", not "setup"
+   *   },
+   * });
+   * ```
+   */
+  descriptions?: {
+    /** Description for the top-level `skills` command. Default: `"Manage agent skills"`. */
+    skills?: string;
+    /** Description for `skills sync`. Default: `"Remove and reinstall all skills from source"`. */
+    sync?: string;
+    /** Description for `skills add`. Default: `"Install skills from source"`. */
+    add?: string;
+    /** Description for `skills remove`. Default: `"Remove installed skills"`. */
+    remove?: string;
+    /** Description for `skills list`. Default: `"List available skills from source"`. */
+    list?: string;
+  };
 }
 
 /**

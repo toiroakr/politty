@@ -129,3 +129,34 @@ describe("resolveSkillOptions", () => {
     }
   });
 });
+
+describe("resolveSkillOptions descriptions", () => {
+  it("should default to politty's built-in description text for all five commands", () => {
+    const resolved = resolveSkillOptions({ sourceDir: "/x", package: PACKAGE }, CLI);
+    expect(resolved.descriptions).toEqual({
+      skills: "Manage agent skills",
+      sync: "Remove and reinstall all skills from source",
+      add: "Install skills from source",
+      remove: "Remove installed skills",
+      list: "List available skills from source",
+    });
+  });
+
+  it("should override only the keys explicitly set, keeping defaults for the rest", () => {
+    const resolved = resolveSkillOptions(
+      {
+        sourceDir: "/x",
+        package: PACKAGE,
+        descriptions: { skills: "Manage My Agent skills", add: "Install My Agent skills" },
+      },
+      CLI,
+    );
+    expect(resolved.descriptions).toEqual({
+      skills: "Manage My Agent skills",
+      sync: "Remove and reinstall all skills from source",
+      add: "Install My Agent skills",
+      remove: "Remove installed skills",
+      list: "List available skills from source",
+    });
+  });
+});

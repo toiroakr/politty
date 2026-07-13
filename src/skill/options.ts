@@ -21,6 +21,19 @@ const DEFAULT_ADD_NAMES = ["add", "install"];
 const DEFAULT_REMOVE_NAMES = ["remove", "uninstall"];
 
 /**
+ * Default description text for the `skills` command and each built-in
+ * subcommand, keyed by canonical role. Overridden per-key via
+ * `SkillCommandOptions.descriptions`.
+ */
+const DEFAULT_DESCRIPTIONS = {
+  skills: "Manage agent skills",
+  sync: "Remove and reinstall all skills from source",
+  add: "Install skills from source",
+  remove: "Remove installed skills",
+  list: "List available skills from source",
+} as const;
+
+/**
  * Same safe-token pattern politty's own command validator enforces for
  * subcommand aliases (`checkSubCommandAliasConflicts` in
  * src/validator/command-validator.ts). That check only runs when a host
@@ -85,6 +98,19 @@ export interface ResolvedSkillOptions {
    * never see `cliName` directly.
    */
   stamp: string;
+  /**
+   * Description text for the `skills` command and each built-in subcommand,
+   * keyed by canonical role (independent of any `commandMap` rename). Every
+   * key is always present — unset `SkillCommandOptions.descriptions` keys
+   * fall back to politty's default text.
+   */
+  descriptions: {
+    skills: string;
+    sync: string;
+    add: string;
+    remove: string;
+    list: string;
+  };
 }
 
 /**
@@ -106,6 +132,8 @@ export interface ResolvedSkillOptions {
  * - `unknownKeys` — `"strip"` unless overridden via `options.unknownKeys`.
  * - `descriptionAppend` — a one-line hint mentioning the skills
  *   subcommands. Pass an explicit string to override or `false` to opt out.
+ * - `descriptions` — politty's default text per canonical role, unless
+ *   overridden via `options.descriptions`.
  */
 export function resolveSkillOptions(
   options: SkillCommandOptions,
@@ -126,6 +154,20 @@ export function resolveSkillOptions(
     unknownKeys: options.unknownKeys ?? DEFAULT_UNKNOWN_KEYS,
     descriptionAppend: resolveDescriptionAppend(options.descriptionAppend, cliName),
     stamp: `${options.package}:${cliName}`,
+    descriptions: resolveDescriptions(options.descriptions),
+  };
+}
+
+/** Fill in {@link DEFAULT_DESCRIPTIONS} for any key the caller left unset. */
+function resolveDescriptions(
+  value: SkillCommandOptions["descriptions"],
+): ResolvedSkillOptions["descriptions"] {
+  return {
+    skills: value?.skills ?? DEFAULT_DESCRIPTIONS.skills,
+    sync: value?.sync ?? DEFAULT_DESCRIPTIONS.sync,
+    add: value?.add ?? DEFAULT_DESCRIPTIONS.add,
+    remove: value?.remove ?? DEFAULT_DESCRIPTIONS.remove,
+    list: value?.list ?? DEFAULT_DESCRIPTIONS.list,
   };
 }
 
