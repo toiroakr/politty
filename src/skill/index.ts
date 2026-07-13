@@ -150,7 +150,7 @@ export function withSkillCommand<T extends AnyCommand>(
 
   const skillsSubCommand = defineCommand({
     name: "skills",
-    description: "Manage agent skills",
+    description: resolved.descriptions.skills,
     subCommands: {
       sync: createSkillSyncCommand(resolved),
       [addName]: createSkillAddCommand(resolved),

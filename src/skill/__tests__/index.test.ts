@@ -216,3 +216,60 @@ describe("withSkillCommand", () => {
     expect(wrapped.description).toMatch(/Manage agent skills/);
   });
 });
+
+describe("descriptions option", () => {
+  it("should preserve today's default description text for all five commands when omitted", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    const wrapped = withSkillCommand(base, opts);
+    const skillsSubCommands = wrapped.subCommands.skills.subCommands!;
+
+    expect(wrapped.subCommands.skills.description).toBe("Manage agent skills");
+    expect((skillsSubCommands.sync as AnyCommand).description).toBe(
+      "Remove and reinstall all skills from source",
+    );
+    expect((skillsSubCommands.add as AnyCommand).description).toBe("Install skills from source");
+    expect((skillsSubCommands.remove as AnyCommand).description).toBe("Remove installed skills");
+    expect((skillsSubCommands.list as AnyCommand).description).toBe(
+      "List available skills from source",
+    );
+  });
+
+  it("should override each command's description via its canonical-role key", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    const wrapped = withSkillCommand(base, {
+      ...opts,
+      descriptions: {
+        skills: "Manage My Agent skills",
+        sync: "Sync My Agent skills",
+        add: "Install My Agent skills",
+        remove: "Remove My Agent skills",
+        list: "List My Agent skills",
+      },
+    });
+    const skillsSubCommands = wrapped.subCommands.skills.subCommands!;
+
+    expect(wrapped.subCommands.skills.description).toBe("Manage My Agent skills");
+    expect((skillsSubCommands.sync as AnyCommand).description).toBe("Sync My Agent skills");
+    expect((skillsSubCommands.add as AnyCommand).description).toBe("Install My Agent skills");
+    expect((skillsSubCommands.remove as AnyCommand).description).toBe("Remove My Agent skills");
+    expect((skillsSubCommands.list as AnyCommand).description).toBe("List My Agent skills");
+  });
+
+  it("should keep descriptions.add/.remove keyed by canonical role independent of commandMap renames", () => {
+    const base = defineCommand({ name: "my-cli", description: "Test CLI" });
+
+    const wrapped = withSkillCommand(base, {
+      ...opts,
+      commandMap: { add: ["setup"], remove: ["teardown"] },
+      descriptions: { add: "Install My Agent skills", remove: "Remove My Agent skills" },
+    });
+    const skillsSubCommands = wrapped.subCommands.skills.subCommands!;
+
+    expect(Object.hasOwn(skillsSubCommands, "setup")).toBe(true);
+    expect(Object.hasOwn(skillsSubCommands, "teardown")).toBe(true);
+    expect((skillsSubCommands.setup as AnyCommand).description).toBe("Install My Agent skills");
+    expect((skillsSubCommands.teardown as AnyCommand).description).toBe("Remove My Agent skills");
+  });
+});

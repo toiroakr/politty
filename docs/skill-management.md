@@ -235,6 +235,40 @@ share one alias (whichever is declared first wins). It also rejects entries
 that aren't safe tokens (empty strings, leading dashes, whitespace, etc.) —
 the same format politty enforces for ordinary subcommand aliases.
 
+### Overriding descriptions
+
+The description text for the `skills` command itself and each of its four
+built-in subcommands can be overridden via `descriptions`. Any key left
+unset keeps politty's default text:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  descriptions: {
+    skills: "Manage My Agent skills",
+    sync: "Sync My Agent skills",
+    add: "Install My Agent skills",
+    remove: "Remove My Agent skills",
+    list: "List My Agent skills",
+  },
+});
+```
+
+Keys refer to the subcommand's _canonical role_ (`sync`/`add`/`remove`/
+`list`), not its dispatched name — `descriptions.add` still applies after
+`commandMap.add` renames the subcommand to something else, so the two
+options can be combined freely:
+
+```ts
+withSkillCommand(cmd, {
+  sourceDir,
+  package: "@my-agent/skills",
+  commandMap: { add: ["setup", "add", "install"] },
+  descriptions: { add: "Install My Agent skills" }, // applies to "setup"
+});
+```
+
 ### Unknown-flag strictness
 
 By default, an unrecognized flag on any `skills` subcommand (e.g.

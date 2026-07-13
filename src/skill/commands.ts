@@ -282,7 +282,7 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions): AnyComma
   if (resolved.verbose.disabled) {
     return defineCommand({
       name: "sync",
-      description: "Remove and reinstall all skills from source",
+      description: resolved.descriptions.sync,
       args: applyUnknownKeys(
         z.object({
           exclude: arg(z.array(z.string()).default([]), excludeArgMeta(resolved)),
@@ -296,7 +296,7 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions): AnyComma
   }
   return defineCommand({
     name: "sync",
-    description: "Remove and reinstall all skills from source",
+    description: resolved.descriptions.sync,
     args: applyUnknownKeys(
       z.object({
         exclude: arg(z.array(z.string()).default([]), excludeArgMeta(resolved)),
@@ -381,7 +381,7 @@ export function createSkillAddCommand(resolved: ResolvedSkillOptions): AnyComman
       ...(resolved.commandNames.add.aliases.length > 0
         ? { aliases: resolved.commandNames.add.aliases }
         : {}),
-      description: "Install skills from source",
+      description: resolved.descriptions.add,
       args: applyUnknownKeys(
         z.object({
           name: arg(z.array(z.string()).default([]), nameArgMeta),
@@ -398,7 +398,7 @@ export function createSkillAddCommand(resolved: ResolvedSkillOptions): AnyComman
     ...(resolved.commandNames.add.aliases.length > 0
       ? { aliases: resolved.commandNames.add.aliases }
       : {}),
-    description: "Install skills from source",
+    description: resolved.descriptions.add,
     args: applyUnknownKeys(
       z.object({
         name: arg(z.array(z.string()).default([]), nameArgMeta),
@@ -426,7 +426,7 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions): AnyCom
     ...(resolved.commandNames.remove.aliases.length > 0
       ? { aliases: resolved.commandNames.remove.aliases }
       : {}),
-    description: "Remove installed skills",
+    description: resolved.descriptions.remove,
     args: applyUnknownKeys(
       z.object({
         name: arg(z.string().optional(), {
@@ -637,7 +637,7 @@ export function createSkillListCommand(resolved: ResolvedSkillOptions): AnyComma
   if (resolved.json.disabled) {
     return defineCommand({
       name: "list",
-      description: "List available skills from source",
+      description: resolved.descriptions.list,
       args: applyUnknownKeys(z.object({}), resolved.unknownKeys),
       run(args) {
         runList(mergedFlag(args, "json"));
@@ -646,7 +646,7 @@ export function createSkillListCommand(resolved: ResolvedSkillOptions): AnyComma
   }
   return defineCommand({
     name: "list",
-    description: "List available skills from source",
+    description: resolved.descriptions.list,
     args: applyUnknownKeys(
       z.object({
         json: arg(z.boolean().default(false), {
