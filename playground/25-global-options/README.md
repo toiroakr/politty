@@ -11,7 +11,6 @@ Application CLI with global options
 <!-- politty:command::description:start -->
 
 Application CLI with global options
-
 <!-- politty:command::description:end -->
 
 <!-- politty:command::usage:start -->
@@ -38,9 +37,10 @@ my-app <command>
 <!-- politty:global-options:start -->
 
 <a id="global-options"></a>
-| Option | Alias | Description | Required | Default |
-|--------|-------|-------------|----------|---------|
-| `--verbose` | `-v` | Enable verbose output | No | `false` |
-| `--config <CONFIG>` | `-c` | Path to configuration file | No | - |
+
+| Option              | Alias | Description                | Required | Default |
+| ------------------- | ----- | -------------------------- | -------- | ------- |
+| `--verbose`         | `-v`  | Enable verbose output      | No       | `false` |
+| `--config <CONFIG>` | `-c`  | Path to configuration file | No       | -       |
 
 <!-- politty:global-options:end -->
