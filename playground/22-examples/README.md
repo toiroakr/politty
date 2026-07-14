@@ -7,7 +7,6 @@
 <!-- politty:command::description:start -->
 
 File operations CLI with examples
-
 <!-- politty:command::description:end -->
 
 <!-- politty:command::usage:start -->
@@ -41,7 +40,6 @@ file-cli <command>
 <!-- politty:command:check:description:start -->
 
 Check if file exists
-
 <!-- politty:command:check:description:end -->
 
 <!-- politty:command:check:usage:start -->
@@ -93,7 +91,6 @@ File not found: missing.txt
 <!-- politty:command:delete:description:start -->
 
 Delete a file
-
 <!-- politty:command:delete:description:end -->
 
 <!-- politty:command:delete:usage:start -->
@@ -134,7 +131,6 @@ file-cli delete [options] <file>
 <!-- politty:command:read:description:start -->
 
 Read file contents
-
 <!-- politty:command:read:description:end -->
 
 <!-- politty:command:read:usage:start -->
@@ -198,7 +194,6 @@ Hello from data.txt
 <!-- politty:command:write:description:start -->
 
 Write content to file
-
 <!-- politty:command:write:description:end -->
 
 <!-- politty:command:write:usage:start -->
