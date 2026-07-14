@@ -89,7 +89,7 @@
     "@inquirer/prompts": "8.5.2",
     "@quansync/fs": "1.0.0",
     "@types/node": "25.9.4",
-    "@typescript/native-preview": "7.0.0-dev.20260706.1",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "@vitest/coverage-v8": "4.1.10",
     "knip": "6.24.0",
     "lefthook": "2.1.9",
