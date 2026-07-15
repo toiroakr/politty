@@ -7,6 +7,7 @@ import {
 } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
+import { getLongOptionName } from "../parser/long-option-resolver.js";
 import { findFirstPositional, findFirstPositionalIndex } from "../parser/subcommand-scanner.js";
 import type {
   AnyCommand,
@@ -593,9 +594,7 @@ async function runCommandInternal<TResult = unknown>(
             : (parseResult.unknownGlobalFlags ?? []),
         );
         const isSuppressedFlag = (token: string): boolean => {
-          if (!token.startsWith("-")) return false;
-          const name = token.replace(/^--?/, "").split("=")[0] ?? "";
-          return suppressedNames.has(name);
+          return token.startsWith("--") && suppressedNames.has(getLongOptionName(token));
         };
         const levelPrecedingArgs = argv
           .slice(0, argv.length - parseResult.remainingArgs.length - 1)

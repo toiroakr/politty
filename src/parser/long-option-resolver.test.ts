@@ -3,8 +3,22 @@ import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { extractFields } from "../core/schema-extractor.js";
 import { buildParserOptions } from "./argv-parser.js";
-import { resolveLongOption, type LongOptionLookup } from "./long-option-resolver.js";
+import {
+  getLongOptionName,
+  resolveLongOption,
+  type LongOptionLookup,
+} from "./long-option-resolver.js";
 import { buildGlobalFlagLookup, resolveGlobalLongOption } from "./subcommand-scanner.js";
+
+describe("getLongOptionName", () => {
+  it.each([
+    ["--flag", "flag"],
+    ["--flag=value", "flag"],
+    ["--flag=", "flag"],
+  ])("extracts the name from %s", (token, expected) => {
+    expect(getLongOptionName(token)).toBe(expected);
+  });
+});
 
 /**
  * Scanner / parser symmetry test.
@@ -194,10 +208,9 @@ describe("scanner / parser symmetry", () => {
       return { recognized: true, negated: true };
     }
     // Check if the resolved name matches a known field
-    const bareToken = token.includes("=") ? token.slice(2, token.indexOf("=")) : token.slice(2);
     const isKnown =
       parserOptions.definedNames!.has(resolution.resolvedName) ||
-      parserOptions.aliasMap!.has(bareToken);
+      parserOptions.aliasMap!.has(resolution.withoutDashes);
     return { recognized: isKnown, negated: false };
   }
 
