@@ -208,10 +208,8 @@ export function scanForSubcommand(
 
     // Long option: --flag or --flag=value or opt-in --no-flag
     if (arg.startsWith("--")) {
-      const { resolvedName, isNegated, isGlobal, isSuppressedNegation } = resolveGlobalLongOption(
-        arg,
-        lookup,
-      );
+      const { resolvedName, withoutDashes, isNegated, isGlobal, isSuppressedNegation } =
+        resolveGlobalLongOption(arg, lookup);
 
       if (isGlobal) {
         i += collectGlobalFlag(
@@ -231,7 +229,7 @@ export function scanForSubcommand(
       // surfaces these as unknown flags so that `unknownKeysMode` applies
       // consistently with flags placed after the subcommand.
       if (isSuppressedNegation) {
-        suppressedTokens.push(arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : arg.slice(2));
+        suppressedTokens.push(withoutDashes);
         i++;
         continue;
       }

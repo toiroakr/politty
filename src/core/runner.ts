@@ -7,6 +7,7 @@ import {
 } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
+import { getLongOptionName } from "../parser/long-option-resolver.js";
 import { findFirstPositional, findFirstPositionalIndex } from "../parser/subcommand-scanner.js";
 import type {
   AnyCommand,
@@ -88,6 +89,8 @@ interface InternalCommandOptions extends InternalRunOptions {
   _globalExtracted?: ExtractedFields | undefined;
   /** Already parsed global args (accumulated from parent levels) */
   _parsedGlobalArgs?: Record<string, unknown> | undefined;
+  /** Option tokens consumed before subcommand names at parent levels (for plugin dispatch) */
+  _precedingArgs?: readonly string[] | undefined;
   /** Global cleanup hook for signal handling */
   _globalCleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
 }
@@ -303,6 +306,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
           commandPath: [],
           name,
           args: forwardArgs,
+          precedingArgs: argv.slice(0, positionalIndex),
         });
         if (typeof exitCode === "number") {
           await flushStandardStreams();
@@ -457,6 +461,7 @@ async function runCommandInternal<TResult = unknown>(
             commandPath: nestedCommandPath,
             name,
             args: forwardArgs,
+            precedingArgs: [...(options._precedingArgs ?? []), ...argv.slice(0, positionalIndex)],
           });
           if (typeof exitCode === "number") {
             collector?.stop();
@@ -578,11 +583,28 @@ async function runCommandInternal<TResult = unknown>(
         };
         // Stop this collector and pass logs to subcommand
         collector?.stop();
+        // Tokens before the subcommand name (remainingArgs is the argv suffix
+        // after the name), accumulated for nested plugin dispatch. Suppressed
+        // global flags (recorded by name, without dashes) are dropped outside
+        // passthrough mode: the host's strip/strict policy rejected them, so
+        // they must not be forwarded.
+        const suppressedNames = new Set(
+          options._globalExtracted?.unknownKeysMode === "passthrough"
+            ? []
+            : (parseResult.unknownGlobalFlags ?? []),
+        );
+        const isSuppressedFlag = (token: string): boolean => {
+          return token.startsWith("--") && suppressedNames.has(getLongOptionName(token));
+        };
+        const levelPrecedingArgs = argv
+          .slice(0, argv.length - parseResult.remainingArgs.length - 1)
+          .filter((token) => !isSuppressedFlag(token));
         return runCommandInternal<TResult>(resolved.command, parseResult.remainingArgs, {
           ...options,
           _context: subContext,
           _existingLogs: getCurrentLogs(),
           _parsedGlobalArgs: accumulatedGlobalArgs,
+          _precedingArgs: [...(options._precedingArgs ?? []), ...levelPrecedingArgs],
         });
       }
     }

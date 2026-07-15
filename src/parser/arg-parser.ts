@@ -394,7 +394,7 @@ function separateGlobalArgs(
       }
 
       if (isSuppressedNegation && !isLocalCollision) {
-        suppressedTokens.push(arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : arg.slice(2));
+        suppressedTokens.push(withoutDashes);
         continue;
       }
     } else if (arg.startsWith("-") && arg.length > 1) {

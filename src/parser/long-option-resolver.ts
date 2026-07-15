@@ -15,8 +15,14 @@ export interface LongOptionLookup {
   defaultNegationDisabledFields: Set<string>;
 }
 
+/** Return a long option's name without leading dashes or an inline value. */
+export function getLongOptionName(arg: string): string {
+  const equalsIndex = arg.indexOf("=");
+  return equalsIndex >= 0 ? arg.slice(2, equalsIndex) : arg.slice(2);
+}
+
 export function resolveLongOption(arg: string, lookup: LongOptionLookup): LongOptionResolution {
-  const withoutDashes = arg.includes("=") ? arg.slice(2, arg.indexOf("=")) : arg.slice(2);
+  const withoutDashes = getLongOptionName(arg);
 
   // Phase 1: Custom negation (e.g. --disable-cache → cache=false)
   // Only the bare form (no `=`), since custom negation is a boolean shortcut.
