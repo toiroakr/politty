@@ -979,6 +979,7 @@ describe("runMain onUnknownSubcommand", () => {
       commandPath: [],
       name: "plugin-name",
       args: ["foo", "--bar"],
+      precedingArgs: [],
     });
     expect(exitSpy).toHaveBeenCalledWith(3);
   });
@@ -997,6 +998,28 @@ describe("runMain onUnknownSubcommand", () => {
       commandPath: [],
       name: "plugin-name",
       args: ["--help"],
+      precedingArgs: [],
+    });
+  });
+
+  it("collects global option tokens typed before the plugin name into precedingArgs", async () => {
+    using _argv = useArgv(["node", "test", "--name", "value", "plugin-name", "foo"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn().mockReturnValue(0);
+    const known = defineCommand({ name: "known", run: () => {} });
+    const cmd = defineCommand({ name: "test", subCommands: { known } });
+
+    await runMain(cmd, {
+      onUnknownSubcommand,
+      globalArgs: z.object({ name: arg(z.string().optional(), {}) }),
+    });
+
+    expect(onUnknownSubcommand).toHaveBeenCalledWith({
+      commandPath: [],
+      name: "plugin-name",
+      args: ["foo"],
+      precedingArgs: ["--name", "value"],
     });
   });
 
@@ -1194,6 +1217,7 @@ describe("runMain onUnknownSubcommand", () => {
       commandPath: [],
       name: "plugin-name",
       args: ["--flag"],
+      precedingArgs: ["--no-cache"],
     });
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
@@ -1234,8 +1258,43 @@ describe("runMain onUnknownSubcommand", () => {
       commandPath: ["parent"],
       name: "plugin-name",
       args: ["rest", "--flag"],
+      precedingArgs: [],
     });
     expect(exitSpy).toHaveBeenCalledWith(5);
+  });
+
+  it("accumulates precedingArgs across traversed levels for nested dispatch", async () => {
+    using _argv = useArgv([
+      "node",
+      "test",
+      "--name",
+      "value",
+      "parent",
+      "--flag",
+      "plugin-name",
+      "rest",
+    ]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn().mockReturnValue(0);
+    const child = defineCommand({ name: "child", run: () => {} });
+    const parent = defineCommand({ name: "parent", subCommands: { child } });
+    const cmd = defineCommand({ name: "test", subCommands: { parent } });
+
+    await runMain(cmd, {
+      onUnknownSubcommand,
+      globalArgs: z.object({
+        name: arg(z.string().optional(), {}),
+        flag: arg(z.boolean().default(false)),
+      }),
+    });
+
+    expect(onUnknownSubcommand).toHaveBeenCalledWith({
+      commandPath: ["parent"],
+      name: "plugin-name",
+      args: ["rest"],
+      precedingArgs: ["--name", "value", "--flag"],
+    });
   });
 
   it("forwards suppressed-global-shaped args after a nested plugin name", async () => {
@@ -1260,6 +1319,7 @@ describe("runMain onUnknownSubcommand", () => {
       commandPath: ["parent"],
       name: "plugin-name",
       args: ["--no-cache"],
+      precedingArgs: [],
     });
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
@@ -1308,6 +1368,7 @@ describe("runMain onUnknownSubcommand", () => {
       commandPath: ["parent"],
       name: "plugin-name",
       args: ["rest"],
+      precedingArgs: ["--no-cache"],
     });
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
@@ -1327,6 +1388,7 @@ describe("runMain onUnknownSubcommand", () => {
       commandPath: ["parent"],
       name: "plugin-name",
       args: ["--help"],
+      precedingArgs: [],
     });
   });
 

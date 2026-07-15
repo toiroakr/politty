@@ -257,6 +257,14 @@ export type UnknownSubcommandHandler = (context: {
   name: string;
   /** Args following the name, forwarded verbatim to the plugin. */
   args: readonly string[];
+  /**
+   * Option tokens the host consumed before the unknown name across every
+   * traversed level (e.g. global flags typed before the plugin command),
+   * excluding the traversed subcommand names themselves. Concatenate with
+   * `args` to reconstruct the user's full flag set when forwarding to a
+   * plugin: `[...precedingArgs, ...args]`.
+   */
+  precedingArgs: readonly string[];
 }) => number | undefined | Promise<number | undefined>;
 
 /**
