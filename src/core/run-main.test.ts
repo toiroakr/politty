@@ -1263,6 +1263,31 @@ describe("runMain onUnknownSubcommand", () => {
     expect(exitSpy).toHaveBeenCalledWith(5);
   });
 
+  it("excludes stripped suppressed tokens from precedingArgs", async () => {
+    using _argv = useArgv(["node", "test", "--no-cache", "parent", "plugin-name"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    using _errorSpy = spyOnConsoleError();
+
+    const onUnknownSubcommand = vi.fn().mockReturnValue(0);
+    const child = defineCommand({ name: "child", run: () => {} });
+    const parent = defineCommand({ name: "parent", subCommands: { child } });
+    const cmd = defineCommand({ name: "test", subCommands: { parent } });
+
+    await runMain(cmd, {
+      onUnknownSubcommand,
+      globalArgs: z.object({
+        cache: arg(z.boolean().default(true)),
+      }),
+    });
+
+    expect(onUnknownSubcommand).toHaveBeenCalledWith({
+      commandPath: ["parent"],
+      name: "plugin-name",
+      args: [],
+      precedingArgs: [],
+    });
+  });
+
   it("accumulates precedingArgs across traversed levels for nested dispatch", async () => {
     using _argv = useArgv([
       "node",

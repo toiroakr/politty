@@ -583,11 +583,23 @@ async function runCommandInternal<TResult = unknown>(
         // Stop this collector and pass logs to subcommand
         collector?.stop();
         // Tokens before the subcommand name (remainingArgs is the argv suffix
-        // after the name), accumulated for nested plugin dispatch.
-        const levelPrecedingArgs = argv.slice(
-          0,
-          argv.length - parseResult.remainingArgs.length - 1,
+        // after the name), accumulated for nested plugin dispatch. Suppressed
+        // global flags (recorded by name, without dashes) are dropped outside
+        // passthrough mode: the host's strip/strict policy rejected them, so
+        // they must not be forwarded.
+        const suppressedNames = new Set(
+          options._globalExtracted?.unknownKeysMode === "passthrough"
+            ? []
+            : (parseResult.unknownGlobalFlags ?? []),
         );
+        const isSuppressedFlag = (token: string): boolean => {
+          if (!token.startsWith("-")) return false;
+          const name = token.replace(/^--?/, "").split("=")[0] ?? "";
+          return suppressedNames.has(name);
+        };
+        const levelPrecedingArgs = argv
+          .slice(0, argv.length - parseResult.remainingArgs.length - 1)
+          .filter((token) => !isSuppressedFlag(token));
         return runCommandInternal<TResult>(resolved.command, parseResult.remainingArgs, {
           ...options,
           _context: subContext,
