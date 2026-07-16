@@ -275,14 +275,14 @@ await import("./cli.js");
 
 Generates the compile-cache bin shim described above as an executable file, so it can be produced by a `postbuild`/`prepack` script instead of living in source. Also available as the `politty generate-shim` CLI command.
 
-The generated shim is an ES module: a `.js` output requires a `"type": "module"` package; use `.mjs` otherwise. The program name defaults to the first `bin` name in the nearest `package.json`, falling back to the package name without its scope.
+All options are optional: the output path defaults to the first `bin` path in the nearest `package.json`, the entry to the first of `./cli.js`, `./cli.mjs`, `./index.js`, `./index.mjs` existing next to the shim, and the program name to the first `bin` name (falling back to the package name without its scope). Refuses to overwrite an existing file it did not generate. The generated shim is an ES module: a `.js` output requires a `"type": "module"` package; use `.mjs` otherwise.
 
 ```typescript
-function generateCompileCacheShim(options: {
-  /** Module specifier the shim imports, relative to the shim file (e.g. "./cli.js") */
-  entry: string;
-  /** Output path (e.g. "dist/bin.js") */
-  out: string;
+function generateCompileCacheShim(options?: {
+  /** Module specifier the shim imports, relative to the shim file (default: conventional built module next to the shim) */
+  entry?: string;
+  /** Output path (default: first bin path in package.json) */
+  out?: string;
   /** Program name for the cache directory (default: derived from package.json) */
   program?: string;
   /** Base directory for paths and package.json (default: process.cwd()) */
@@ -297,8 +297,9 @@ function generateCompileCacheShim(options: {
 #### Example
 
 ```bash
-# package.json: "postbuild": "politty generate-shim --entry ./cli.js --out dist/bin.js"
-politty generate-shim --entry ./cli.js --out dist/bin.js
+# package.json: "bin": { "my-cli": "./dist/bin.js" },
+#               "postbuild": "politty generate-shim"
+politty generate-shim
 # => Generated compile-cache shim: dist/bin.js (program: my-cli, entry: ./cli.js)
 ```
 

@@ -93,6 +93,77 @@ describe("generateCompileCacheShim", () => {
       /ES module/,
     );
   });
+
+  it("defaults the output path to the first bin path in package.json", () => {
+    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/bin.js" } });
+    const result = generateCompileCacheShim({ entry: "./cli.js", cwd });
+    expect(result.outputPath).toBe(join(cwd, "dist", "bin.js"));
+  });
+
+  it("supports the string form of bin for the default output path", () => {
+    writePkg({ name: "my-cli", type: "module", bin: "./dist/bin.js" });
+    const result = generateCompileCacheShim({ entry: "./cli.js", cwd });
+    expect(result.outputPath).toBe(join(cwd, "dist", "bin.js"));
+    expect(result.program).toBe("my-cli");
+  });
+
+  it("resolves the default output path against the package.json directory", () => {
+    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/bin.js" } });
+    const nested = join(cwd, "scripts");
+    mkdirSync(nested, { recursive: true });
+    const result = generateCompileCacheShim({ entry: "./cli.js", cwd: nested });
+    expect(result.outputPath).toBe(join(cwd, "dist", "bin.js"));
+  });
+
+  it("throws when out is omitted and package.json has no bin", () => {
+    writePkg({ name: "my-cli", type: "module" });
+    expect(() => generateCompileCacheShim({ entry: "./cli.js", cwd })).toThrow(/--out/);
+  });
+
+  it("defaults the entry to a conventional built module next to the shim", () => {
+    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/bin.js" } });
+    mkdirSync(join(cwd, "dist"), { recursive: true });
+    writeFileSync(join(cwd, "dist", "cli.js"), "console.log('cli');\n");
+    const result = generateCompileCacheShim({ cwd });
+    expect(result.entry).toBe("./cli.js");
+    expect(readFileSync(result.outputPath, "utf8")).toContain('await import("./cli.js");');
+  });
+
+  it("falls back through the entry candidates and skips the shim itself", () => {
+    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/cli.js" } });
+    mkdirSync(join(cwd, "dist"), { recursive: true });
+    writeFileSync(join(cwd, "dist", "index.js"), "console.log('index');\n");
+    const result = generateCompileCacheShim({ cwd });
+    expect(result.entry).toBe("./index.js");
+    expect(result.outputPath).toBe(join(cwd, "dist", "cli.js"));
+  });
+
+  it("throws when the entry cannot be derived", () => {
+    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/bin.js" } });
+    expect(() => generateCompileCacheShim({ cwd })).toThrow(/--entry/);
+  });
+
+  it("rejects a shim that would import itself", () => {
+    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/cli.js" } });
+    expect(() => generateCompileCacheShim({ entry: "./cli.js", cwd })).toThrow(/import itself/);
+  });
+
+  it("refuses to overwrite an existing file it did not generate", () => {
+    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/cli.js" } });
+    mkdirSync(join(cwd, "dist"), { recursive: true });
+    writeFileSync(join(cwd, "dist", "cli.js"), "console.log('real cli');\n");
+    expect(() => generateCompileCacheShim({ entry: "./main.js", cwd })).toThrow(
+      /Refusing to overwrite/,
+    );
+  });
+
+  it("regenerates over a previously generated shim", () => {
+    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/bin.js" } });
+    const first = generateCompileCacheShim({ entry: "./cli.js", cwd });
+    const second = generateCompileCacheShim({ entry: "./other.js", cwd });
+    expect(second.outputPath).toBe(first.outputPath);
+    expect(readFileSync(second.outputPath, "utf8")).toContain('await import("./other.js");');
+  });
 });
 
 describe("formatShimPath", () => {

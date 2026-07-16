@@ -48,12 +48,14 @@ const generateWorkerCommand = defineCommand({
 });
 
 const generateShimArgsSchema = z.object({
-  entry: arg(z.string(), {
-    description: "Module specifier the shim imports to start the CLI, relative to the shim file",
+  entry: arg(z.string().optional(), {
+    description:
+      "Module specifier the shim imports, relative to the shim file (defaults to ./cli.js, ./cli.mjs, ./index.js, or ./index.mjs next to the shim)",
     placeholder: "SPECIFIER",
   }),
-  out: arg(z.string(), {
-    description: "Output path for the generated shim (e.g. dist/bin.js)",
+  out: arg(z.string().optional(), {
+    description:
+      "Output path for the generated shim (defaults to the first bin path in package.json)",
     placeholder: "PATH",
   }),
   program: arg(z.string().optional(), {
@@ -72,8 +74,8 @@ const generateShimCommand = defineCommand({
   run(args: GenerateShimArgs) {
     const cwd = process.cwd();
     const result = generateCompileCacheShim({
-      entry: args.entry,
-      out: args.out,
+      ...(args.entry !== undefined && { entry: args.entry }),
+      ...(args.out !== undefined && { out: args.out }),
       ...(args.program !== undefined && { program: args.program }),
       cwd,
     });

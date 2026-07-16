@@ -108,15 +108,17 @@ The easiest way is to let the `politty` CLI generate the shim as part of your bu
 {
   "bin": { "my-cli": "./dist/bin.js" },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown", // builds src/cli.ts -> dist/cli.js
     // After the build so a cleaning build tool (tsdown `clean: true` etc.)
     // cannot wipe the generated file; `prepack` works too.
-    "postbuild": "politty generate-shim --entry ./cli.js --out dist/bin.js",
+    "postbuild": "politty generate-shim",
   },
 }
 ```
 
-`generate-shim` writes an executable ESM shim to `--out` that imports `--entry` (a specifier relative to the shim file). The program name for the cache directory defaults to the first `bin` name in your `package.json` (override with `--program`). The shim is an ES module: use a `.js` output only in a `"type": "module"` package, and `.mjs` otherwise.
+With no flags, `generate-shim` derives everything from `package.json`: the output path is the first `bin` path (that is where the executable must live), the entry is the first of `./cli.js`, `./cli.mjs`, `./index.js`, `./index.mjs` that exists next to the shim, and the program name for the cache directory is the first `bin` name. Each can be overridden with `--out`, `--entry` (a specifier relative to the shim file), and `--program`.
+
+Two guardrails to know about: the generator refuses to overwrite an existing file it did not generate — so if your `bin` still points at the real CLI entry, it fails loudly instead of clobbering the build output (point `bin` at a separate shim path like `dist/bin.js`) — and the shim is an ES module, so use a `.js` output only in a `"type": "module"` package, and `.mjs` otherwise.
 
 Writing the shim by hand is equally fine:
 
