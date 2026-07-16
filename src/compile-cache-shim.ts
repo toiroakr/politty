@@ -243,7 +243,9 @@ export function generateCompileCacheShim(
     }
     if (outputPath.endsWith(".js") && pkg?.type !== "module") {
       throw new Error(
-        'The generated shim is an ES module, but the package is not "type": "module". Write it to a .mjs file instead (e.g. --out dist/bin.mjs).',
+        pkg === undefined
+          ? "The generated shim is an ES module, and no package.json was found to confirm .js files are treated as ESM. Write it to a .mjs file instead (e.g. --out dist/bin.mjs)."
+          : 'The generated shim is an ES module, but the package is not "type": "module". Write it to a .mjs file instead (e.g. --out dist/bin.mjs).',
       );
     }
 

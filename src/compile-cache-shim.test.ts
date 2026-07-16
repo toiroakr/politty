@@ -89,6 +89,12 @@ describe("generateCompileCacheShim", () => {
     );
   });
 
+  it("explains the missing package.json when a .js output cannot be validated", () => {
+    expect(() =>
+      generateCompileCacheShim({ entry: "./cli.js", out: "dist/bin.js", program: "x", cwd }),
+    ).toThrow(/no package\.json was found/);
+  });
+
   it("allows a .mjs output in a package without type module", () => {
     writePkg({ name: "my-cli" });
     const result = generateOne({ entry: "./cli.js", out: "dist/bin.mjs", cwd });
