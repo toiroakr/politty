@@ -33,6 +33,22 @@ describe("compileCacheDir", () => {
     vi.stubEnv("XDG_CACHE_HOME", "");
     expect(compileCacheDir("mycli")).toBe(join(homedir(), ".cache", "mycli", "node-compile-cache"));
   });
+
+  it("collapses path separators and scope markers to a single segment", () => {
+    vi.stubEnv("XDG_CACHE_HOME", "/custom/cache");
+    expect(compileCacheDir("@scope/cli")).toBe(
+      join("/custom/cache", "scope-cli", "node-compile-cache"),
+    );
+    expect(compileCacheDir("a\\b/c")).toBe(join("/custom/cache", "a-b-c", "node-compile-cache"));
+  });
+
+  it("returns undefined for names that cannot form a safe path segment", () => {
+    vi.stubEnv("XDG_CACHE_HOME", "/custom/cache");
+    expect(compileCacheDir("..")).toBeUndefined();
+    expect(compileCacheDir(".")).toBeUndefined();
+    expect(compileCacheDir("")).toBeUndefined();
+    expect(compileCacheDir("//")).toBeUndefined();
+  });
 });
 
 describe("enableCompileCache", () => {

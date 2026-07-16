@@ -49,22 +49,41 @@ export interface CompileCacheResult {
 }
 
 /**
+ * Reduce a program name to a single safe path segment. Path separators and
+ * a leading scope marker are collapsed (`@scope/cli` → `scope-cli`) so the
+ * name cannot escape the cache root; names that reduce to nothing (or to
+ * `.`/`..`) yield `undefined`. Realistic command names pass through
+ * unchanged.
+ */
+function sanitizeProgramName(programName: string): string | undefined {
+  const safe = programName
+    .replace(/^@/, "")
+    .replace(/[/\\]+/g, "-")
+    .trim();
+  if (!safe || /^[.-]+$/.test(safe)) return undefined;
+  return safe;
+}
+
+/**
  * Compute the cache directory for a program following the same XDG
  * convention as the shell-completion dispatcher scripts
  * (`src/completion/dispatcher.ts`), so direct CLI runs and completion
  * workers share one warm cache:
  * `${XDG_CACHE_HOME:-$HOME/.cache}/<programName>/node-compile-cache`.
  *
- * Returns `undefined` when no home directory can be resolved; callers fall
- * back to Node's default location (`NODE_COMPILE_CACHE` or the OS tmpdir).
+ * Returns `undefined` when no home directory can be resolved or the program
+ * name does not reduce to a safe path segment; callers fall back to Node's
+ * default location (`NODE_COMPILE_CACHE` or the OS tmpdir).
  */
 export function compileCacheDir(programName: string): string | undefined {
+  const safeName = sanitizeProgramName(programName);
+  if (safeName === undefined) return undefined;
   const xdg = process.env.XDG_CACHE_HOME;
-  if (xdg) return join(xdg, programName, "node-compile-cache");
+  if (xdg) return join(xdg, safeName, "node-compile-cache");
   try {
     const home = homedir();
     if (!home) return undefined;
-    return join(home, ".cache", programName, "node-compile-cache");
+    return join(home, ".cache", safeName, "node-compile-cache");
   } catch {
     return undefined;
   }
