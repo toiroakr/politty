@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -45,6 +45,15 @@ describe("generateCompileCacheShim", () => {
     writePkg({ name: "@scope/pkg-name", type: "module" });
     const result = generateCompileCacheShim({ entry: "./cli.js", out: "dist/bin.js", cwd });
     expect(result.program).toBe("pkg-name");
+  });
+
+  it("finds the nearest package.json by walking up from a nested cwd", () => {
+    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/bin.js" } });
+    const nested = join(cwd, "packages", "deep");
+    mkdirSync(nested, { recursive: true });
+    const result = generateCompileCacheShim({ entry: "./cli.js", out: "bin.js", cwd: nested });
+    expect(result.program).toBe("my-tool");
+    expect(result.outputPath).toBe(join(nested, "bin.js"));
   });
 
   it("prefers an explicit program name", () => {

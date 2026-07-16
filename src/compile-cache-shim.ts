@@ -8,8 +8,8 @@
  * `politty generate-shim` so the shim never has to live in source.
  */
 
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 /**
  * Options for {@link generateCompileCacheShim}.
@@ -28,7 +28,10 @@ export interface GenerateCompileCacheShimOptions {
    * name without its scope.
    */
   program?: string;
-  /** Base directory for resolving paths and `package.json` (default: `process.cwd()`). */
+  /**
+   * Base directory for resolving paths and locating the nearest
+   * `package.json` (default: `process.cwd()`).
+   */
   cwd?: string;
 }
 
@@ -50,11 +53,20 @@ interface PackageJsonLike {
   bin?: unknown;
 }
 
-function readPackageJson(cwd: string): PackageJsonLike | undefined {
-  try {
-    return JSON.parse(readFileSync(resolve(cwd, "package.json"), "utf8")) as PackageJsonLike;
-  } catch {
-    return undefined;
+/**
+ * Read the nearest `package.json`, walking up from `startDir` to the
+ * filesystem root. A malformed file is a real error and propagates.
+ */
+function readNearestPackageJson(startDir: string): PackageJsonLike | undefined {
+  let dir = resolve(startDir);
+  for (;;) {
+    const candidate = join(dir, "package.json");
+    if (existsSync(candidate)) {
+      return JSON.parse(readFileSync(candidate, "utf8")) as PackageJsonLike;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
   }
 }
 
@@ -103,7 +115,7 @@ export function generateCompileCacheShim(
 ): GenerateCompileCacheShimResult {
   const cwd = options.cwd ?? process.cwd();
   const outputPath = isAbsolute(options.out) ? options.out : resolve(cwd, options.out);
-  const pkg = readPackageJson(cwd);
+  const pkg = readNearestPackageJson(cwd);
 
   const program = options.program ?? defaultProgramName(pkg);
   if (!program) {
