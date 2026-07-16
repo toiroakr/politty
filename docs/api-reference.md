@@ -271,6 +271,39 @@ await import("./cli.js");
 
 ---
 
+### `generateCompileCacheShim`
+
+Generates the compile-cache bin shim described above as an executable file, so it can be produced by a `postbuild`/`prepack` script instead of living in source. Also available as the `politty generate-shim` CLI command.
+
+The generated shim is an ES module: a `.js` output requires a `"type": "module"` package; use `.mjs` otherwise. The program name defaults to the first `bin` name in the nearest `package.json`, falling back to the package name without its scope.
+
+```typescript
+function generateCompileCacheShim(options: {
+  /** Module specifier the shim imports, relative to the shim file (e.g. "./cli.js") */
+  entry: string;
+  /** Output path (e.g. "dist/bin.js") */
+  out: string;
+  /** Program name for the cache directory (default: derived from package.json) */
+  program?: string;
+  /** Base directory for paths and package.json (default: process.cwd()) */
+  cwd?: string;
+}): {
+  outputPath: string;
+  program: string;
+  entry: string;
+};
+```
+
+#### Example
+
+```bash
+# package.json: "postbuild": "politty generate-shim --entry ./cli.js --out dist/bin.js"
+politty generate-shim --entry ./cli.js --out dist/bin.js
+# => Generated compile-cache shim: dist/bin.js (program: my-cli, entry: ./cli.js)
+```
+
+---
+
 ## Shell Completion
 
 ### `withCompletionCommand`

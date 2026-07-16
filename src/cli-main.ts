@@ -2,7 +2,11 @@ import { z } from "zod";
 import { arg } from "./core/arg-registry.js";
 import { defineCommand } from "./core/command.js";
 import { runMain } from "./core/runner.js";
-import { generateBundledCompletionWorker } from "./index.js";
+import {
+  formatShimPath,
+  generateBundledCompletionWorker,
+  generateCompileCacheShim,
+} from "./index.js";
 
 const generateWorkerArgsSchema = z.object({
   bin: arg(z.string(), {
@@ -43,10 +47,47 @@ const generateWorkerCommand = defineCommand({
   },
 });
 
+const generateShimArgsSchema = z.object({
+  entry: arg(z.string(), {
+    description: "Module specifier the shim imports to start the CLI, relative to the shim file",
+    placeholder: "SPECIFIER",
+  }),
+  out: arg(z.string(), {
+    description: "Output path for the generated shim (e.g. dist/bin.js)",
+    placeholder: "PATH",
+  }),
+  program: arg(z.string().optional(), {
+    description:
+      "Program name for the cache directory (defaults to the first bin name or package name in package.json)",
+    placeholder: "NAME",
+  }),
+});
+
+type GenerateShimArgs = z.infer<typeof generateShimArgsSchema>;
+
+const generateShimCommand = defineCommand({
+  name: "generate-shim",
+  description: "Generate a compile-cache bin shim that loads the real CLI via dynamic import",
+  args: generateShimArgsSchema,
+  run(args: GenerateShimArgs) {
+    const cwd = process.cwd();
+    const result = generateCompileCacheShim({
+      entry: args.entry,
+      out: args.out,
+      ...(args.program !== undefined && { program: args.program }),
+      cwd,
+    });
+    console.log(
+      `Generated compile-cache shim: ${formatShimPath(result.outputPath, cwd)} (program: ${result.program}, entry: ${result.entry})`,
+    );
+  },
+});
+
 const cli = defineCommand({
   name: "politty",
   description: "politty development utilities",
   subCommands: {
+    "generate-shim": generateShimCommand,
     "generate-worker": generateWorkerCommand,
   },
 });

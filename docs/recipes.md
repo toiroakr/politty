@@ -99,7 +99,26 @@ runMain(command, { compileCache: false });
 runMain(command, { compileCache: "/custom/cache-dir" });
 ```
 
-The automatic enablement only covers modules imported _after_ `runMain` starts — for example [`lazy()` subcommands](./advanced-features.md). ESM static imports are compiled during the link phase, before any code runs, so your entry file's import graph (politty, zod, your commands) can never hit a cache enabled that late. To cache the whole CLI, make your bin a minimal shim that enables the cache first and loads the real entry with a dynamic import:
+The automatic enablement only covers modules imported _after_ `runMain` starts — for example [`lazy()` subcommands](./advanced-features.md). ESM static imports are compiled during the link phase, before any code runs, so your entry file's import graph (politty, zod, your commands) can never hit a cache enabled that late. To cache the whole CLI, make your bin a minimal shim that enables the cache first and loads the real entry with a dynamic import.
+
+The easiest way is to let the `politty` CLI generate the shim as part of your build, so it never has to live in source:
+
+```jsonc
+// package.json
+{
+  "bin": { "my-cli": "./dist/bin.js" },
+  "scripts": {
+    "build": "tsdown",
+    // After the build so a cleaning build tool (tsdown `clean: true` etc.)
+    // cannot wipe the generated file; `prepack` works too.
+    "postbuild": "politty generate-shim --entry ./cli.js --out dist/bin.js",
+  },
+}
+```
+
+`generate-shim` writes an executable ESM shim to `--out` that imports `--entry` (a specifier relative to the shim file). The program name for the cache directory defaults to the first `bin` name in your `package.json` (override with `--program`). The shim is an ES module: use a `.js` output only in a `"type": "module"` package, and `.mjs` otherwise.
+
+Writing the shim by hand is equally fine:
 
 ```typescript
 #!/usr/bin/env node
