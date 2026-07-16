@@ -441,12 +441,12 @@ politty integrates Node.js's on-disk compile cache (V8 code cache, Node >= 22.8.
   "bin": { "my-cli": "./dist/bin.js" },
   "scripts": {
     "build": "tsdown", // builds src/cli.ts -> dist/cli.js
-    "postbuild": "politty generate-shim",
+    "postbuild": "politty generate-shim --entry ./cli.js",
   },
 }
 ```
 
-`generate-shim` writes an executable shim that enables the cache and loads your built entry with a dynamic import. With no flags it derives everything from `package.json`: the output path from the first `bin` path, the entry from a conventional built module next to it (`./cli.js`, `./index.js`, ...), and the program name from the first `bin` name. See [Faster Startup (Compile Cache)](./docs/recipes.md#faster-startup-compile-cache) for the flags, the opt-out (`compileCache: false`), and the hand-written shim variant.
+`generate-shim` writes an executable shim that enables the cache and loads `--entry` (a specifier relative to the shim) with a dynamic import. The rest is derived from `package.json`: the output path from the `bin` path and the program name from the `bin` name; packages with multiple bins pass `--entry` once per bin, and `--entry` itself can be omitted when the entry sits next to the shim under a conventional name (`./cli.js`, `./index.js`, ...). See [Faster Startup (Compile Cache)](./docs/recipes.md#faster-startup-compile-cache) for the flags, the opt-out (`compileCache: false`), and the hand-written shim variant.
 
 ## Skill Management
 

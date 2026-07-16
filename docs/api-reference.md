@@ -273,34 +273,37 @@ await import("./cli.js");
 
 ### `generateCompileCacheShim`
 
-Generates the compile-cache bin shim described above as an executable file, so it can be produced by a `postbuild`/`prepack` script instead of living in source. Also available as the `politty generate-shim` CLI command.
+Generates one compile-cache bin shim per `bin` entry (or per explicit path) as executable files, so they can be produced by a `postbuild`/`prepack` script instead of living in source. Also available as the `politty generate-shim` CLI command.
 
-All options are optional: the output path defaults to the first `bin` path in the nearest `package.json`, the entry to the first of `./cli.js`, `./cli.mjs`, `./index.js`, `./index.mjs` existing next to the shim, and the program name to the first `bin` name (falling back to the package name without its scope). Refuses to overwrite an existing file it did not generate. The generated shim is an ES module: a `.js` output requires a `"type": "module"` package; use `.mjs` otherwise.
+All options are optional: the output paths default to the `bin` paths in the nearest `package.json`, each entry to the first of `./cli.js`, `./cli.mjs`, `./index.js`, `./index.mjs` existing next to its shim, and each program name to the shim's `bin` name (falling back to the package name without its scope). Multiple `entry` values pair in order with the `bin` entries, or with `out` values of the same count. Refuses to overwrite an existing file it did not generate. The generated shims are ES modules: a `.js` output requires a `"type": "module"` package; use `.mjs` otherwise.
 
 ```typescript
 function generateCompileCacheShim(options?: {
-  /** Module specifier the shim imports, relative to the shim file (default: conventional built module next to the shim) */
-  entry?: string;
-  /** Output path (default: first bin path in package.json) */
-  out?: string;
-  /** Program name for the cache directory (default: derived from package.json) */
+  /** Specifier(s) the shim imports, relative to the shim file (default: conventional built module next to each shim) */
+  entry?: string | string[];
+  /** Output path(s); count must match entry when both are given (default: bin paths in package.json) */
+  out?: string | string[];
+  /** Program name for the cache directory, applied to all shims (default: derived per shim from package.json) */
   program?: string;
   /** Base directory for paths and package.json (default: process.cwd()) */
   cwd?: string;
-}): {
+}): Array<{
   outputPath: string;
   program: string;
   entry: string;
-};
+}>;
 ```
 
 #### Example
 
 ```bash
 # package.json: "bin": { "my-cli": "./dist/bin.js" },
-#               "postbuild": "politty generate-shim"
-politty generate-shim
+#               "postbuild": "politty generate-shim --entry ./cli.js"
+politty generate-shim --entry ./cli.js
 # => Generated compile-cache shim: dist/bin.js (program: my-cli, entry: ./cli.js)
+
+# Multiple bins: one --entry per bin, paired in declaration order
+politty generate-shim --entry ./cli-a.js --entry ./cli-b.js
 ```
 
 ---

@@ -111,12 +111,23 @@ The easiest way is to let the `politty` CLI generate the shim as part of your bu
     "build": "tsdown", // builds src/cli.ts -> dist/cli.js
     // After the build so a cleaning build tool (tsdown `clean: true` etc.)
     // cannot wipe the generated file; `prepack` works too.
-    "postbuild": "politty generate-shim",
+    "postbuild": "politty generate-shim --entry ./cli.js",
   },
 }
 ```
 
-With no flags, `generate-shim` derives everything from `package.json`: the output path is the first `bin` path (that is where the executable must live), the entry is the first of `./cli.js`, `./cli.mjs`, `./index.js`, `./index.mjs` that exists next to the shim, and the program name for the cache directory is the first `bin` name. Each can be overridden with `--out`, `--entry` (a specifier relative to the shim file), and `--program`.
+`--entry` is the specifier the shim imports, relative to the shim file. Everything else is derived from `package.json`: the output path is the `bin` path (that is where the executable must live) and the program name for the cache directory is the `bin` name. `--entry` itself can also be omitted — the generator then picks the first of `./cli.js`, `./cli.mjs`, `./index.js`, `./index.mjs` that exists next to the shim. Override the derived values with `--out` and `--program` when needed.
+
+For a package with multiple `bin` entries, pass `--entry` once per bin — they pair with the `bin` entries in declaration order (or with `--out` paths of the same count):
+
+```jsonc
+{
+  "bin": { "tool-a": "./dist/bin-a.js", "tool-b": "./dist/bin-b.js" },
+  "scripts": {
+    "postbuild": "politty generate-shim --entry ./cli-a.js --entry ./cli-b.js",
+  },
+}
+```
 
 Two guardrails to know about: the generator refuses to overwrite an existing file it did not generate — so if your `bin` still points at the real CLI entry, it fails loudly instead of clobbering the build output (point `bin` at a separate shim path like `dist/bin.js`) — and the shim is an ES module, so use a `.js` output only in a `"type": "module"` package, and `.mjs` otherwise.
 

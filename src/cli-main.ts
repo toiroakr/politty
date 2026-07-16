@@ -48,19 +48,19 @@ const generateWorkerCommand = defineCommand({
 });
 
 const generateShimArgsSchema = z.object({
-  entry: arg(z.string().optional(), {
+  entry: arg(z.array(z.string()).optional(), {
     description:
-      "Module specifier the shim imports, relative to the shim file (defaults to ./cli.js, ./cli.mjs, ./index.js, or ./index.mjs next to the shim)",
+      "Module specifier the shim imports, relative to the shim file; repeatable, one per bin/--out (defaults to ./cli.js, ./cli.mjs, ./index.js, or ./index.mjs next to each shim)",
     placeholder: "SPECIFIER",
   }),
-  out: arg(z.string().optional(), {
+  out: arg(z.array(z.string()).optional(), {
     description:
-      "Output path for the generated shim (defaults to the first bin path in package.json)",
+      "Output path for the generated shim; repeatable, one per --entry (defaults to the bin paths in package.json)",
     placeholder: "PATH",
   }),
   program: arg(z.string().optional(), {
     description:
-      "Program name for the cache directory (defaults to the first bin name or package name in package.json)",
+      "Program name for the cache directory, applied to all shims (defaults per shim to its bin name)",
     placeholder: "NAME",
   }),
 });
@@ -73,15 +73,17 @@ const generateShimCommand = defineCommand({
   args: generateShimArgsSchema,
   run(args: GenerateShimArgs) {
     const cwd = process.cwd();
-    const result = generateCompileCacheShim({
+    const results = generateCompileCacheShim({
       ...(args.entry !== undefined && { entry: args.entry }),
       ...(args.out !== undefined && { out: args.out }),
       ...(args.program !== undefined && { program: args.program }),
       cwd,
     });
-    console.log(
-      `Generated compile-cache shim: ${formatShimPath(result.outputPath, cwd)} (program: ${result.program}, entry: ${result.entry})`,
-    );
+    for (const result of results) {
+      console.log(
+        `Generated compile-cache shim: ${formatShimPath(result.outputPath, cwd)} (program: ${result.program}, entry: ${result.entry})`,
+      );
+    }
   },
 });
 
