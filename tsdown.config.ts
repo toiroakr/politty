@@ -13,7 +13,10 @@ export default defineConfig({
     "src/prompt/inquirer/index.ts",
   ],
   format: ["es"],
-  dts: true,
+  // TypeScript 7 (tsgo) has no JS compiler API, which breaks the plugin's
+  // default tsc-based DTS generation — generate declarations with the tsgo
+  // binary from `@typescript/native-preview` instead.
+  dts: { tsgo: true },
   clean: true,
   treeshake: true,
   sourcemap: false,
