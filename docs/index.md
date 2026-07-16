@@ -21,7 +21,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **[Interactive Prompts](./interactive-prompts.md)**: Prompt for missing arguments interactively
 - **[Shell Completion](./shell-completion.md)**: Completion types, shell-specific setup, and troubleshooting
 - **[Skill Management](./skill-management.md)**: Manage agent skills (SKILL.md-based)
-- **[Recipes](./recipes.md)**: Practical examples for testing, configuration, error handling
+- **[Recipes](./recipes.md)**: Practical examples for testing, configuration, error handling, faster startup (compile cache)
 - **[API Reference](./api-reference.md)**: Detailed API reference
 - **[Doc Generation](./doc-generation.md)**: Automatic documentation generation with golden tests
 

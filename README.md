@@ -16,6 +16,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **Interactive Prompts**: Prompt for missing arguments with pluggable adapters (clack, inquirer)
 - **Discriminated Union**: Support for mutually exclusive argument sets
 - **Skill Management**: Manage agent skills (SKILL.md) with file-based install/uninstall
+- **Fast Startup**: Automatic Node.js compile cache (V8 code cache) integration, with a `generate-shim` command to cache the whole CLI graph
 
 ## Requirements
 
@@ -430,6 +431,23 @@ const command = defineCommand({
 });
 ```
 
+## Faster Startup (Compile Cache)
+
+politty integrates Node.js's on-disk compile cache (V8 code cache, Node >= 22.8.0) so warm starts skip recompilation; older runtimes are a silent no-op. `runMain` enables it automatically, which covers dynamically imported modules such as `lazy()` subcommands. To cache the whole CLI graph — politty, zod, and your command definitions — generate a bin shim as part of your build:
+
+```jsonc
+// package.json
+{
+  "bin": { "my-cli": "./dist/bin.js" },
+  "scripts": {
+    "build": "tsdown", // builds src/cli.ts -> dist/cli.js
+    "postbuild": "politty generate-shim",
+  },
+}
+```
+
+`generate-shim` writes an executable shim that enables the cache and loads your built entry with a dynamic import. With no flags it derives everything from `package.json`: the output path from the first `bin` path, the entry from a conventional built module next to it (`./cli.js`, `./index.js`, ...), and the program name from the first `bin` name. See [Faster Startup (Compile Cache)](./docs/recipes.md#faster-startup-compile-cache) for the flags, the opt-out (`compileCache: false`), and the hand-written shim variant.
+
 ## Skill Management
 
 politty manages SKILL.md-based agent skills distributed via npm packages.
@@ -450,9 +468,7 @@ const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
 const cli = withSkillCommand(
   defineCommand({
     name: "my-agent",
-    subCommands: {
-      /* ... */
-    },
+    subCommands: {/* ... */},
   }),
   { sourceDir, package: "@my-agent/skills" },
 );
@@ -493,7 +509,7 @@ For detailed documentation, see the `docs/` directory:
 - [Essentials](./docs/essentials.md) - Core concepts explained
 - [Advanced Features](./docs/advanced-features.md) - Subcommands, Discriminated Union
 - [Interactive Prompts](./docs/interactive-prompts.md) - Prompt for missing arguments interactively
-- [Recipes](./docs/recipes.md) - Testing, configuration, error handling
+- [Recipes](./docs/recipes.md) - Testing, configuration, error handling, faster startup (compile cache)
 - [Skill Management](./docs/skill-management.md) - Agent skill management (SKILL.md-based)
 - [API Reference](./docs/api-reference.md) - Detailed API reference
 - [Doc Generation](./docs/doc-generation.md) - Automatic documentation generation
