@@ -19,9 +19,9 @@ describe("my-cli", () => {
     const command = defineCommand({
       name: "greet",
       args: z.object({
-        name: arg(z.string(), { positional: true })
+        name: arg(z.string(), { positional: true }),
       }),
-      run: (args) => console.log(`Hello ${args.name}`)
+      run: (args) => console.log(`Hello ${args.name}`),
     });
 
     // Pass arguments directly
@@ -44,7 +44,7 @@ it("should fail validation", async () => {
 
   const command = defineCommand({
     name: "test",
-    args: z.object({ age: arg(z.number()) })
+    args: z.object({ age: arg(z.number()) }),
   });
 
   const result = await runCommand(command, ["--age", "not-a-number"]);
@@ -85,9 +85,32 @@ Enable debug mode to display complete stack traces instead of just error message
 
 ```typescript
 runMain(command, {
-  debug: true
+  debug: true,
 });
 ```
+
+### Faster Startup (Compile Cache)
+
+Node.js (>= 22.8.0) can persist compiled V8 bytecode to disk so warm starts skip recompilation. `runMain` enables this automatically: the cache lives in `${XDG_CACHE_HOME:-$HOME/.cache}/<command name>/node-compile-cache` (shared with the shell-completion workers), the `NODE_COMPILE_CACHE` environment variable takes precedence, and older runtimes are a silent no-op.
+
+```typescript
+// Opt out, or pin a custom directory:
+runMain(command, { compileCache: false });
+runMain(command, { compileCache: "/custom/cache-dir" });
+```
+
+The automatic enablement only covers modules imported _after_ `runMain` starts — for example [`lazy()` subcommands](./advanced-features.md). ESM static imports are compiled during the link phase, before any code runs, so your entry file's import graph (politty, zod, your commands) can never hit a cache enabled that late. To cache the whole CLI, make your bin a minimal shim that enables the cache first and loads the real entry with a dynamic import:
+
+```typescript
+#!/usr/bin/env node
+// bin.ts — keep this file's static imports minimal
+import { enableCompileCache } from "politty/compile-cache";
+
+enableCompileCache("my-cli");
+await import("./cli.js"); // defineCommand + runMain live here
+```
+
+`politty/compile-cache` is dependency-free (Node builtins only), never throws, and no-ops on runtimes without compile-cache support, so the shim adds no meaningful cold-start cost.
 
 ## Error Handling
 
@@ -102,6 +125,6 @@ const command = defineCommand({
     if (error) {
       // Perform emergency cleanup or logging
     }
-  }
+  },
 });
 ```

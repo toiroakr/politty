@@ -4,6 +4,8 @@ export default defineConfig({
   entry: [
     "src/index.ts",
     "src/cli.ts",
+    "src/cli-main.ts",
+    "src/compile-cache.ts",
     "src/augment.ts",
     "src/docs/index.ts",
     "src/completion/index.ts",

@@ -1,3 +1,4 @@
+import { enableCompileCache } from "../compile-cache.js";
 import { executeLifecycle } from "../executor/command-runner.js";
 import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collector.js";
 import {
@@ -241,6 +242,19 @@ function isInternalSubcommandInvocation(
  * ```
  */
 export async function runMain(command: AnyCommand, options: MainOptions = {}): Promise<never> {
+  // Enable the on-disk V8 compile cache before anything is dynamically
+  // imported so `lazy()` subcommands and adapter modules skip recompilation
+  // on warm starts. The entry's static import graph is compiled before user
+  // code runs and is out of reach here — the `politty/compile-cache` bin-shim
+  // pattern covers that part.
+  if (options.compileCache !== false) {
+    enableCompileCache(
+      typeof options.compileCache === "string"
+        ? { cacheDir: options.compileCache }
+        : { programName: command.name },
+    );
+  }
+
   // Generic hook plug-in point. `withCompletionCommand` uses this to
   // fire a detached background refresh of the on-disk completion cache.
   // Wrapped in try/catch so a misbehaving hook can never break the CLI.

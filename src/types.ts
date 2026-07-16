@@ -242,6 +242,23 @@ export interface MainOptions {
    * behavior. Not invoked for internal `__*` subcommands.
    */
   onUnknownSubcommand?: UnknownSubcommandHandler | undefined;
+  /**
+   * Node.js on-disk compile cache (V8 code cache) control. `runMain` enables
+   * it before executing the command so dynamically imported modules (e.g.
+   * `lazy()` subcommands) skip recompilation on warm starts (Node >= 22.8.0;
+   * no-op otherwise).
+   * - omitted / `true`: derive the directory from the command name
+   *   (`${XDG_CACHE_HOME:-$HOME/.cache}/<name>/node-compile-cache`, shared
+   *   with shell-completion workers)
+   * - `string`: use this cache directory
+   * - `false`: do not enable
+   *
+   * The `NODE_COMPILE_CACHE` environment variable always takes precedence.
+   * Note: the entry module's static import graph is compiled before `runMain`
+   * runs and cannot be cached here — see `politty/compile-cache` for the
+   * bin-shim pattern that covers it.
+   */
+  compileCache?: boolean | string;
 }
 
 /**

@@ -244,6 +244,33 @@ const extracted = extractFields(schema);
 
 ---
 
+### `enableCompileCache`
+
+Enables the Node.js on-disk compile cache (V8 code cache) for the current process. Exported from the dependency-free `politty/compile-cache` subpath so a minimal bin shim can call it before the real CLI graph is imported. Never throws; no-ops on runtimes without `module.enableCompileCache` (Node.js < 22.8.0). The `NODE_COMPILE_CACHE` environment variable always takes precedence over the derived directory.
+
+`runMain` calls this automatically (see `MainOptions.compileCache`), but only modules imported after that point benefit — see [Faster Startup (Compile Cache)](./recipes.md#faster-startup-compile-cache) for the bin-shim pattern that covers the whole CLI.
+
+```typescript
+function enableCompileCache(options?: string | { programName?: string; cacheDir?: string }): {
+  enabled: boolean;
+  directory?: string;
+};
+```
+
+#### Example
+
+```typescript
+#!/usr/bin/env node
+// bin.ts — keep this file's static imports minimal
+import { enableCompileCache } from "politty/compile-cache";
+
+enableCompileCache("my-cli");
+// => cache in ${XDG_CACHE_HOME:-$HOME/.cache}/my-cli/node-compile-cache
+await import("./cli.js");
+```
+
+---
+
 ## Shell Completion
 
 ### `withCompletionCommand`
@@ -282,9 +309,7 @@ import { defineCommand, runMain, withCompletionCommand } from "politty";
 const mainCommand = withCompletionCommand(
   defineCommand({
     name: "mycli",
-    subCommands: {
-      /* ... */
-    },
+    subCommands: {/* ... */},
   }),
 );
 
@@ -804,6 +829,12 @@ interface MainOptions {
   logger?: Logger;
   /** Prompt resolver for interactive missing-arg prompts */
   prompt?: PromptResolver;
+  /**
+   * Node.js on-disk compile cache control (default: derive the cache
+   * directory from the command name). Pass a string to use a custom
+   * directory, or `false` to disable. See "Faster Startup" in recipes.md.
+   */
+  compileCache?: boolean | string;
 }
 ```
 
@@ -1102,8 +1133,7 @@ Type for validation result.
 
 ```typescript
 type ValidationResult<T> =
-  | { success: true; data: T }
-  | { success: false; errors: ValidationError[] };
+  { success: true; data: T } | { success: false; errors: ValidationError[] };
 ```
 
 ---
@@ -1177,8 +1207,7 @@ Type for command definition validation result.
 
 ```typescript
 type CommandValidationResult =
-  | { success: true }
-  | { success: false; errors: CommandValidationError[] };
+  { success: true } | { success: false; errors: CommandValidationError[] };
 ```
 
 ---
@@ -1243,9 +1272,7 @@ const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
 const cli = withSkillCommand(
   defineCommand({
     name: "my-agent",
-    subCommands: {
-      /* ... */
-    },
+    subCommands: {/* ... */},
   }),
   { sourceDir, package: "@my-agent/skills" },
 );
