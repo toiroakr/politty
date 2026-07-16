@@ -6,9 +6,11 @@ export default defineConfig({
   test: {
     // `runMain` enables the Node compile cache keyed by command name under
     // `${XDG_CACHE_HOME:-$HOME/.cache}`. Point XDG at the OS tmpdir so test
-    // runs never litter the real user cache with fixture command names.
+    // runs never litter the real user cache with fixture command names. The
+    // pid suffix isolates concurrent vitest processes (watch mode + CI etc.)
+    // from each other.
     env: {
-      XDG_CACHE_HOME: join(tmpdir(), "politty-vitest-xdg-cache"),
+      XDG_CACHE_HOME: join(tmpdir(), `politty-vitest-xdg-cache-${process.pid}`),
     },
     projects: [
       {
