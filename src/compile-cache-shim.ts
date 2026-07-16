@@ -216,7 +216,9 @@ export function generateCompileCacheShim(
   }
 
   if (new Set(outputPaths).size !== outputPaths.length) {
-    throw new Error("Duplicate output paths; each shim needs a distinct --out.");
+    throw new Error(
+      "Duplicate output paths; each shim needs a distinct output file. Check the --out values (or the bin paths in package.json when --out is omitted).",
+    );
   }
 
   const binNameByPath = new Map<string, string>();
@@ -251,7 +253,10 @@ export function generateCompileCacheShim(
         `Cannot derive an entry: none of ${DEFAULT_ENTRY_CANDIDATES.join(", ")} exist next to ${outputPath}. Pass --entry explicitly.`,
       );
     }
-    if (entry.startsWith(".") && resolve(dirname(outputPath), entry) === outputPath) {
+    // `resolve` returns absolute entries as-is and anchors relative ones at
+    // the shim's directory, so this also catches an absolute self-reference.
+    // Bare specifiers (e.g. a package name) can never resolve to outputPath.
+    if (resolve(dirname(outputPath), entry) === outputPath) {
       throw new Error(
         `The shim at ${outputPath} would import itself (entry ${entry}). Point bin at a separate shim path (e.g. dist/bin.js) or pass a different --entry.`,
       );

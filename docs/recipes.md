@@ -99,7 +99,7 @@ runMain(command, { compileCache: false });
 runMain(command, { compileCache: "/custom/cache-dir" });
 ```
 
-The automatic enablement only covers modules imported _after_ `runMain` starts — for example [`lazy()` subcommands](./advanced-features.md). ESM static imports are compiled during the link phase, before any code runs, so your entry file's import graph (politty, zod, your commands) can never hit a cache enabled that late. To cache the whole CLI, make your bin a minimal shim that enables the cache first and loads the real entry with a dynamic import.
+The automatic enablement only covers modules imported _after_ `runMain` starts — for example [`lazy()` subcommands](./advanced-features.md); your entry file's static import graph (politty, zod, your commands) is compiled before any code runs, so it never hits a cache enabled that late (the `politty/compile-cache` JSDoc explains why). To cache the whole CLI, make your bin a minimal shim that enables the cache first and loads the real entry with a dynamic import.
 
 The easiest way is to let the `politty` CLI generate the shim as part of your build, so it never has to live in source:
 

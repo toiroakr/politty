@@ -156,6 +156,12 @@ describe("generateCompileCacheShim", () => {
     expect(() => generateCompileCacheShim({ entry: "./cli.js", cwd })).toThrow(/import itself/);
   });
 
+  it("rejects an absolute entry that resolves to the shim itself", () => {
+    writePkg({ name: "my-cli", type: "module" });
+    const out = join(cwd, "dist", "bin.js");
+    expect(() => generateCompileCacheShim({ entry: out, out, cwd })).toThrow(/import itself/);
+  });
+
   it("refuses to overwrite an existing file it did not generate", () => {
     writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/cli.js" } });
     mkdirSync(join(cwd, "dist"), { recursive: true });

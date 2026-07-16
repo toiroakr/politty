@@ -7,7 +7,6 @@
 // Core exports
 // Completion exports
 export {
-  formatShimPath,
   generateCompileCacheShim,
   type GenerateCompileCacheShimOptions,
   type GenerateCompileCacheShimResult,

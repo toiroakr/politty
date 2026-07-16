@@ -1,12 +1,9 @@
 import { z } from "zod";
+import { formatShimPath } from "./compile-cache-shim.js";
 import { arg } from "./core/arg-registry.js";
 import { defineCommand } from "./core/command.js";
 import { runMain } from "./core/runner.js";
-import {
-  formatShimPath,
-  generateBundledCompletionWorker,
-  generateCompileCacheShim,
-} from "./index.js";
+import { generateBundledCompletionWorker, generateCompileCacheShim } from "./index.js";
 
 const generateWorkerArgsSchema = z.object({
   bin: arg(z.string(), {
