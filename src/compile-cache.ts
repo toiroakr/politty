@@ -69,7 +69,10 @@ function sanitizeProgramName(programName: string): string | undefined {
  * convention as the shell-completion dispatcher scripts
  * (`src/completion/dispatcher.ts`), so direct CLI runs and completion
  * workers share one warm cache:
- * `${XDG_CACHE_HOME:-$HOME/.cache}/<programName>/node-compile-cache`.
+ * `${XDG_CACHE_HOME:-$HOME/.cache}/<sanitized programName>/node-compile-cache`.
+ * The program name is first reduced to a single safe path segment by
+ * {@link sanitizeProgramName} (e.g. `@scope/cli` → `scope-cli`); realistic
+ * command names pass through unchanged.
  *
  * Returns `undefined` when no home directory can be resolved or the program
  * name does not reduce to a safe path segment; callers fall back to Node's

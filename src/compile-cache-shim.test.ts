@@ -167,10 +167,15 @@ describe("generateCompileCacheShim", () => {
     expect(() => generateCompileCacheShim({ entry: "./cli.js", cwd })).toThrow(/import itself/);
   });
 
-  it("rejects an absolute entry that resolves to the shim itself", () => {
+  it("rejects non-relative entry specifiers", () => {
     writePkg({ name: "my-cli", type: "module" });
     const out = join(cwd, "dist", "bin.js");
-    expect(() => generateCompileCacheShim({ entry: out, out, cwd })).toThrow(/import itself/);
+    expect(() => generateCompileCacheShim({ entry: out, out, cwd })).toThrow(
+      /relative to the shim file/,
+    );
+    expect(() => generateCompileCacheShim({ entry: "some-pkg/cli.js", out, cwd })).toThrow(
+      /relative to the shim file/,
+    );
   });
 
   it("refuses to overwrite an existing file it did not generate", () => {

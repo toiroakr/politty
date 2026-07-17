@@ -263,9 +263,14 @@ export function generateCompileCacheShim(
         `Cannot derive an entry: none of ${DEFAULT_ENTRY_CANDIDATES.join(", ")} exist next to ${outputPath}. Pass --entry explicitly.`,
       );
     }
-    // `resolve` returns absolute entries as-is and anchors relative ones at
-    // the shim's directory, so this also catches an absolute self-reference.
-    // Bare specifiers (e.g. a package name) can never resolve to outputPath.
+    // The shim resolves the entry against its own location at runtime, and
+    // absolute filesystem paths are not portable import specifiers (Windows
+    // paths like C:\... are not loadable by the ESM loader at all).
+    if (!entry.startsWith("./") && !entry.startsWith("../") && !entry.startsWith("file:")) {
+      throw new Error(
+        `Invalid entry ${entry}: pass a specifier relative to the shim file ("./..." or "../...") or a file: URL.`,
+      );
+    }
     if (resolve(dirname(outputPath), entry) === outputPath) {
       throw new Error(
         `The shim at ${outputPath} would import itself (entry ${entry}). Point bin at a separate shim path (e.g. dist/bin.js) or pass a different --entry.`,
