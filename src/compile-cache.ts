@@ -20,7 +20,10 @@
  * static graph — the part that can never be cached — stays tiny.
  */
 
-import nodeModule from "node:module";
+// Namespace import (not a named import) on purpose: `enableCompileCache`
+// does not exist on Node < 22.8, and a named import of a missing binding
+// would fail at link time before the runtime feature check can run.
+import * as nodeModule from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
