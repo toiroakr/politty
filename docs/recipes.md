@@ -91,7 +91,7 @@ runMain(command, {
 
 ### Faster Startup (Compile Cache)
 
-Node.js (>= 22.8.0) can persist compiled V8 bytecode to disk so warm starts skip recompilation. `runMain` enables this automatically: the cache lives in `${XDG_CACHE_HOME:-$HOME/.cache}/<command name>/node-compile-cache` (shared with the shell-completion workers), the `NODE_COMPILE_CACHE` environment variable takes precedence, and older runtimes are a silent no-op.
+Node.js (>= 22.8.0) can persist compiled V8 bytecode to disk so warm starts skip recompilation. `runMain` enables this automatically: the cache lives in `${XDG_CACHE_HOME:-$HOME/.cache}/<command name>/node-compile-cache` (shared with the shell-completion workers), the `NODE_COMPILE_CACHE` environment variable takes precedence (Node.js honors it at process startup, so it applies even with `compileCache: false`), and older runtimes are a silent no-op.
 
 ```typescript
 // Opt out, or pin a custom directory:

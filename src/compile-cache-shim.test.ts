@@ -108,6 +108,11 @@ describe("generateCompileCacheShim", () => {
     );
   });
 
+  it("rejects an extensionless output", () => {
+    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/cli" } });
+    expect(() => generateCompileCacheShim({ entry: "./cli.js", cwd })).toThrow(/extensionless/);
+  });
+
   it("defaults the output path to the bin path in package.json", () => {
     writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/bin.js" } });
     const result = generateOne({ entry: "./cli.js", cwd });

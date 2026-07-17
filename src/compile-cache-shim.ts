@@ -9,7 +9,7 @@
  */
 
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 
 /**
  * Marker identifying files this generator wrote (overwrite guard). Must be
@@ -239,6 +239,14 @@ export function generateCompileCacheShim(
     if (outputPath.endsWith(".cjs")) {
       throw new Error(
         'The generated shim is an ES module and cannot be written to a .cjs file. Use a .mjs (or .js in a "type": "module" package) output path.',
+      );
+    }
+    // Extensionless files only load as ESM on runtimes with module syntax
+    // detection (not available on Node 20, which politty still supports) —
+    // "type": "module" does not help there either (ERR_UNKNOWN_FILE_EXTENSION).
+    if (extname(outputPath) === "") {
+      throw new Error(
+        'The generated shim is an ES module and cannot be written to an extensionless file (it would not load on every supported Node.js version). Use a .mjs (or .js in a "type": "module" package) output path.',
       );
     }
     if (outputPath.endsWith(".js") && pkg?.type !== "module") {
