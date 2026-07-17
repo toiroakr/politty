@@ -10,6 +10,7 @@
 
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * Marker identifying files this generator wrote (overwrite guard). Must be
@@ -284,7 +285,20 @@ export function generateCompileCacheShim(
         `Invalid entry ${entry}: pass a specifier relative to the shim file ("./..." or "../...") or a file: URL.`,
       );
     }
-    if (resolve(dirname(outputPath), entry) === outputPath) {
+    // Normalize the entry to a filesystem path for the self-import check;
+    // `resolve` does not understand file: URLs, so convert those explicitly
+    // (an unparsable file: URL just skips the best-effort check).
+    let entryPath: string | undefined;
+    if (entry.startsWith("file:")) {
+      try {
+        entryPath = fileURLToPath(entry);
+      } catch {
+        entryPath = undefined;
+      }
+    } else {
+      entryPath = resolve(dirname(outputPath), entry);
+    }
+    if (entryPath === outputPath) {
       throw new Error(
         `The shim at ${outputPath} would import itself (entry ${entry}). Point bin at a separate shim path (e.g. dist/bin.js) or pass a different --entry.`,
       );

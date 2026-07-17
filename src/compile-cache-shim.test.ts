@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   formatShimPath,
@@ -168,6 +169,17 @@ describe("generateCompileCacheShim", () => {
   it("rejects a shim that would import itself", () => {
     writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/cli.js" } });
     expect(() => generateCompileCacheShim({ entry: "./cli.js", cwd })).toThrow(/import itself/);
+  });
+
+  it("rejects a file: URL entry that points at the shim itself", () => {
+    writePkg({ name: "my-cli", type: "module" });
+    const out = join(cwd, "dist", "bin.js");
+    expect(() => generateCompileCacheShim({ entry: pathToFileURL(out).href, out, cwd })).toThrow(
+      /import itself/,
+    );
+    // A file: URL to a different module stays allowed.
+    const other = pathToFileURL(join(cwd, "dist", "cli.js")).href;
+    expect(generateCompileCacheShim({ entry: other, out, cwd })).toHaveLength(1);
   });
 
   it("rejects non-relative entry specifiers", () => {
