@@ -30,7 +30,8 @@ import { join } from "node:path";
 export interface CompileCacheOptions {
   /**
    * Program name used to derive the default cache directory
-   * (`${XDG_CACHE_HOME:-$HOME/.cache}/<programName>/node-compile-cache`).
+   * (`${XDG_CACHE_HOME:-$HOME/.cache}/<sanitized programName>/node-compile-cache`
+   * — see {@link compileCacheDir} for how the name is sanitized).
    * Ignored when `cacheDir` is set.
    */
   programName?: string;

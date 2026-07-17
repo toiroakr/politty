@@ -248,8 +248,9 @@ export interface MainOptions {
    * `lazy()` subcommands) skip recompilation on warm starts (Node >= 22.8.0;
    * no-op otherwise).
    * - omitted / `true`: derive the directory from the command name
-   *   (`${XDG_CACHE_HOME:-$HOME/.cache}/<name>/node-compile-cache`, shared
-   *   with shell-completion workers)
+   *   (`${XDG_CACHE_HOME:-$HOME/.cache}/<sanitized name>/node-compile-cache`,
+   *   shared with shell-completion workers; the name is reduced to a single
+   *   safe path segment, e.g. `@scope/cli` → `scope-cli`)
    * - `string`: use this cache directory
    * - `false`: do not enable
    *

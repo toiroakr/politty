@@ -44,7 +44,9 @@ export interface GenerateCompileCacheShimOptions {
    * Program name used to derive the cache directory, applied to every
    * generated shim. Defaults per shim to the `bin` name whose path is the
    * shim's output, falling back to the first `bin` name and then the
-   * package name without its scope.
+   * package name without its scope. The fallback never happens silently: a
+   * warning is printed when an explicit `out` path cannot be matched to a
+   * `bin` entry.
    */
   program?: string;
   /**
@@ -227,12 +229,23 @@ export function generateCompileCacheShim(
   }
 
   // Validate every shim before writing any, so a failure cannot leave a
-  // partially generated set behind.
+  // partially generated set behind. Warnings are collected here and only
+  // emitted once validation has succeeded.
+  const warnings: string[] = [];
   const plans = outputPaths.map((outputPath, index) => {
-    const program = options.program ?? binNameByPath.get(outputPath) ?? defaultProgramName(pkg);
+    const matchedBinName = binNameByPath.get(outputPath);
+    const program = options.program ?? matchedBinName ?? defaultProgramName(pkg);
     if (!program) {
       throw new Error(
         "Cannot derive a program name: no bin or name in package.json. Pass --program explicitly.",
+      );
+    }
+    // Deriving the program from something other than the shim's own bin
+    // entry must not happen silently: with multiple explicit outputs, every
+    // unmatched shim would share one name (and one cache directory).
+    if (options.program === undefined && matchedBinName === undefined && outs.length > 0) {
+      warnings.push(
+        `Warning: ${formatShimPath(outputPath, cwd)} does not match any bin path in package.json, so its cache directory uses the program name ${JSON.stringify(program)}. Pass --program to override.`,
       );
     }
 
@@ -284,6 +297,8 @@ export function generateCompileCacheShim(
 
     return { outputPath, program, entry };
   });
+
+  for (const warning of warnings) console.warn(warning);
 
   for (const { outputPath, program, entry } of plans) {
     mkdirSync(dirname(outputPath), { recursive: true });

@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   formatShimPath,
   generateCompileCacheShim,
@@ -11,12 +11,15 @@ import {
 
 describe("generateCompileCacheShim", () => {
   let cwd: string;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     cwd = mkdtempSync(join(tmpdir(), "politty-shim-"));
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(() => {
+    warnSpy.mockRestore();
     rmSync(cwd, { recursive: true, force: true });
   });
 
@@ -256,6 +259,41 @@ describe("generateCompileCacheShim", () => {
     expect(readFileSync(join(cwd, "dist", "bin-a.js"), "utf8")).toContain(
       'await import("./a.js");',
     );
+  });
+
+  it("warns when an explicit out path does not match any bin path", () => {
+    writePkg({
+      name: "my-cli",
+      type: "module",
+      bin: { "tool-a": "./dist/bin-a.js", "tool-b": "./dist/bin-b.js" },
+    });
+    const results = generateCompileCacheShim({
+      entry: ["./a.js", "./b.js"],
+      out: ["dist/custom-a.js", "dist/custom-b.js"],
+      cwd,
+    });
+    // Generation still happens at the specified paths...
+    expect(results.map((r) => r.outputPath)).toEqual([
+      join(cwd, "dist", "custom-a.js"),
+      join(cwd, "dist", "custom-b.js"),
+    ]);
+    // ...but the shared fallback name is surfaced, once per unmatched shim.
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+    expect(String(warnSpy.mock.calls[0]?.[0])).toContain("does not match any bin path");
+    expect(String(warnSpy.mock.calls[0]?.[0])).toContain('"tool-a"');
+  });
+
+  it("does not warn when outputs are derived from bin or matched to it", () => {
+    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/bin.js" } });
+    generateCompileCacheShim({ entry: "./cli.js", cwd });
+    generateCompileCacheShim({ entry: "./cli.js", out: "dist/bin.js", cwd });
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not warn when an explicit program is given", () => {
+    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/bin.js" } });
+    generateCompileCacheShim({ entry: "./a.js", out: "dist/custom.js", program: "custom", cwd });
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 
   it("throws when entry and out counts differ", () => {
