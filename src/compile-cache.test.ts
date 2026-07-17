@@ -105,6 +105,32 @@ describe("enableCompileCache", () => {
     },
   );
 
+  it.skipIf(!supportsCompileCache)(
+    "is activated by NODE_COMPILE_CACHE alone, without any enableCompileCache call",
+    () => {
+      // Backs the docs claim that the environment variable applies even with
+      // `compileCache: false`: Node honors it at process startup, before any
+      // politty code runs, so this fixture never calls enableCompileCache.
+      const tmp = mkdtempSync(join(tmpdir(), "politty-compile-cache-env-only-"));
+      try {
+        const envDir = join(tmp, "env-cache");
+        const lazyPath = join(tmp, "lazy.mjs");
+        writeFileSync(lazyPath, "export const value = 1;\n");
+        const entryPath = join(tmp, "entry.mjs");
+        writeFileSync(
+          entryPath,
+          `await import(${JSON.stringify(pathToFileURL(lazyPath).href)});\n`,
+        );
+        const env: NodeJS.ProcessEnv = { ...process.env, NODE_COMPILE_CACHE: envDir };
+        delete env.NODE_DISABLE_COMPILE_CACHE;
+        execFileSync(process.execPath, [entryPath], { env, encoding: "utf8" });
+        expect(readdirSync(envDir).length).toBeGreaterThan(0);
+      } finally {
+        rmSync(tmp, { recursive: true, force: true });
+      }
+    },
+  );
+
   it.skipIf(!canRunFreshProcessTests)(
     "lets NODE_COMPILE_CACHE win over the derived directory in a fresh process",
     () => {
