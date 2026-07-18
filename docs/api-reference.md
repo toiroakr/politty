@@ -244,6 +244,70 @@ const extracted = extractFields(schema);
 
 ---
 
+### `enableCompileCache`
+
+Enables the Node.js on-disk compile cache (V8 code cache) for the current process. Exported from the dependency-free `politty/compile-cache` subpath so a minimal bin shim can call it before the real CLI graph is imported. Never throws; no-ops on runtimes without `module.enableCompileCache` (Node.js < 22.8.0). The `NODE_COMPILE_CACHE` environment variable always takes precedence over the derived directory.
+
+`runMain` calls this automatically (see `MainOptions.compileCache`), but only modules imported after that point benefit — see [Faster Startup (Compile Cache)](./recipes.md#faster-startup-compile-cache) for the bin-shim pattern that covers the whole CLI.
+
+```typescript
+function enableCompileCache(options?: string | { programName?: string; cacheDir?: string }): {
+  enabled: boolean;
+  directory?: string;
+};
+```
+
+#### Example
+
+```typescript
+#!/usr/bin/env node
+// bin.ts — keep this file's static imports minimal
+import { enableCompileCache } from "politty/compile-cache";
+
+enableCompileCache("my-cli");
+// => cache in ${XDG_CACHE_HOME:-$HOME/.cache}/my-cli/node-compile-cache
+await import("./cli.js");
+```
+
+---
+
+### `generateCompileCacheShim`
+
+Generates one compile-cache bin shim per `bin` entry (or per explicit path) as executable files, so they can be produced by a `postbuild`/`prepack` script instead of living in source. Also available as the `politty generate-shim` CLI command.
+
+All options are optional: the output paths default to the `bin` paths in the nearest `package.json`, each entry to the first of `./cli.js`, `./cli.mjs`, `./index.js`, `./index.mjs` existing next to its shim, and each program name to the shim's `bin` name (falling back to the package name without its scope — with a warning when an explicit `out` path cannot be matched to a `bin` entry; pass `program` to override). Multiple `entry` values pair in order with the `bin` entries, or with `out` values of the same count. Refuses to overwrite an existing file it did not generate. The generated shims are ES modules: a `.js` output requires a `"type": "module"` package; use `.mjs` otherwise.
+
+```typescript
+function generateCompileCacheShim(options?: {
+  /** Specifier(s) the shim imports, relative to the shim file (default: conventional built module next to each shim) */
+  entry?: string | string[];
+  /** Output path(s); count must match entry when both are given (default: bin paths in package.json) */
+  out?: string | string[];
+  /** Program name for the cache directory, applied to all shims (default: derived per shim from package.json) */
+  program?: string;
+  /** Base directory for paths and package.json (default: process.cwd()) */
+  cwd?: string;
+}): Array<{
+  outputPath: string;
+  program: string;
+  entry: string;
+}>;
+```
+
+#### Example
+
+```bash
+# package.json: "bin": { "my-cli": "./dist/bin.js" },
+#               "postbuild": "politty generate-shim --entry ./cli.js"
+politty generate-shim --entry ./cli.js
+# => Generated compile-cache shim: dist/bin.js (program: my-cli, entry: ./cli.js)
+
+# Multiple bins: one --entry per bin, paired in declaration order
+politty generate-shim --entry ./cli-a.js --entry ./cli-b.js
+```
+
+---
+
 ## Shell Completion
 
 ### `withCompletionCommand`
@@ -282,9 +346,7 @@ import { defineCommand, runMain, withCompletionCommand } from "politty";
 const mainCommand = withCompletionCommand(
   defineCommand({
     name: "mycli",
-    subCommands: {
-      /* ... */
-    },
+    subCommands: {/* ... */},
   }),
 );
 
@@ -804,6 +866,12 @@ interface MainOptions {
   logger?: Logger;
   /** Prompt resolver for interactive missing-arg prompts */
   prompt?: PromptResolver;
+  /**
+   * Node.js on-disk compile cache control (default: derive the cache
+   * directory from the command name). Pass a string to use a custom
+   * directory, or `false` to disable. See "Faster Startup" in recipes.md.
+   */
+  compileCache?: boolean | string;
 }
 ```
 
@@ -1102,8 +1170,7 @@ Type for validation result.
 
 ```typescript
 type ValidationResult<T> =
-  | { success: true; data: T }
-  | { success: false; errors: ValidationError[] };
+  { success: true; data: T } | { success: false; errors: ValidationError[] };
 ```
 
 ---
@@ -1177,8 +1244,7 @@ Type for command definition validation result.
 
 ```typescript
 type CommandValidationResult =
-  | { success: true }
-  | { success: false; errors: CommandValidationError[] };
+  { success: true } | { success: false; errors: CommandValidationError[] };
 ```
 
 ---
@@ -1243,9 +1309,7 @@ const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "../skills");
 const cli = withSkillCommand(
   defineCommand({
     name: "my-agent",
-    subCommands: {
-      /* ... */
-    },
+    subCommands: {/* ... */},
   }),
   { sourceDir, package: "@my-agent/skills" },
 );

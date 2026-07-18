@@ -35,6 +35,10 @@
       "types": "./dist/augment.d.ts",
       "default": "./dist/augment.js"
     },
+    "./compile-cache": {
+      "types": "./dist/compile-cache.d.ts",
+      "default": "./dist/compile-cache.js"
+    },
     "./docs": {
       "types": "./dist/docs/index.d.ts",
       "default": "./dist/docs/index.js"

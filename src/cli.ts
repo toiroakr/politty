@@ -1,59 +1,14 @@
 #!/usr/bin/env node
 
-import { z } from "zod";
-import { arg } from "./core/arg-registry.js";
-import { defineCommand } from "./core/command.js";
-import { runMain } from "./core/runner.js";
-import { generateBundledCompletionWorker } from "./index.js";
+/**
+ * Bin shim: enable the on-disk V8 compile cache before the real CLI graph
+ * is compiled, so warm starts skip recompilation (Node >= 22.8.0; no-op
+ * otherwise). The actual CLI lives in `cli-main.ts` and is loaded via
+ * dynamic import — ESM static imports are compiled during the link phase,
+ * before any code runs, so they could never hit a cache enabled here.
+ */
 
-const generateWorkerArgsSchema = z.object({
-  bin: arg(z.string(), {
-    description: "CLI binary or built JS entry file to invoke",
-    placeholder: "PATH",
-  }),
-  program: arg(z.string(), {
-    description: "Program name embedded in worker metadata",
-    placeholder: "NAME",
-  }),
-  shell: arg(z.enum(["bash", "zsh", "fish"]), {
-    description: "Shell worker to generate",
-    placeholder: "SHELL",
-  }),
-  out: arg(z.string().optional(), {
-    description: "Output worker path (defaults to dist/completion/<shell>-worker.<ext>)",
-    placeholder: "PATH",
-  }),
-  verify: arg(z.boolean().default(false), {
-    description: "Verify __completion-worker-path resolves to the generated worker",
-  }),
-});
+import { enableCompileCache } from "./compile-cache.js";
 
-type GenerateWorkerArgs = z.infer<typeof generateWorkerArgsSchema>;
-
-const generateWorkerCommand = defineCommand({
-  name: "generate-worker",
-  description: "Generate and verify a bundled shell completion worker",
-  args: generateWorkerArgsSchema,
-  async run(args: GenerateWorkerArgs) {
-    await generateBundledCompletionWorker({
-      bin: args.bin,
-      programName: args.program,
-      shell: args.shell,
-      ...(args.out !== undefined && { outputPath: args.out }),
-      verify: args.verify,
-    });
-  },
-});
-
-const cli = defineCommand({
-  name: "politty",
-  description: "politty development utilities",
-  subCommands: {
-    "generate-worker": generateWorkerCommand,
-  },
-});
-
-runMain(cli).catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+enableCompileCache("politty");
+await import("./cli-main.js");

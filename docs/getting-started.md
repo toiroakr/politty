@@ -50,13 +50,13 @@ const command = defineCommand({
     // Positional argument: greet <name>
     name: arg(z.string(), {
       positional: true,
-      description: "Name to greet"
+      description: "Name to greet",
     }),
 
     // Option flag: --loud / -l
     loud: arg(z.boolean().default(false), {
       alias: "l",
-      description: "Greet loudly"
+      description: "Greet loudly",
     }),
   }),
   run: (args) => {
@@ -82,4 +82,4 @@ Now that you understand the basics, check out these guides for more details:
 
 - **[Essentials](./essentials.md)**: Details on arguments, validation, and lifecycle hooks
 - **[Advanced Features](./advanced-features.md)**: Subcommands, nested structures, complex schemas
-- **[Recipes](./recipes.md)**: Testing techniques, error handling, configuration
+- **[Recipes](./recipes.md)**: Testing techniques, error handling, configuration, and faster startup with the compile cache (`politty generate-shim`)

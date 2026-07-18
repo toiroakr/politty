@@ -7,6 +7,11 @@
 // Core exports
 // Completion exports
 export {
+  generateCompileCacheShim,
+  type GenerateCompileCacheShimOptions,
+  type GenerateCompileCacheShimResult,
+} from "./compile-cache-shim.js";
+export {
   generateBundledCompletionWorker,
   generateCompletion,
   withCompletionCommand,
