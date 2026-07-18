@@ -129,7 +129,7 @@ For a package with multiple `bin` entries, pass `--entry` once per bin — they 
 }
 ```
 
-Two guardrails to know about: the generator refuses to overwrite an existing file it did not generate — so if your `bin` still points at the real CLI entry, it fails loudly instead of clobbering the build output (point `bin` at a separate shim path like `dist/bin.js`) — and the shim is an ES module, so use a `.js` output only in a `"type": "module"` package, and `.mjs` otherwise.
+A few behaviors to know about: the generator refuses to overwrite an existing file it did not generate — so if your `bin` still points at the real CLI entry, it fails loudly instead of clobbering the build output (point `bin` at a separate shim path like `dist/bin.js`). The shim is an ES module, so use a `.js` output only in a `"type": "module"` package, and `.mjs` otherwise. When an explicit `--out` cannot be matched to a `bin` entry, the fallback program name is used with a warning (pass `--program` to pick one explicitly). And the generated shim degrades gracefully: if `politty` is not resolvable at runtime — for example in a fully bundled CLI — it starts your entry without the cache instead of failing.
 
 Writing the shim by hand is equally fine:
 

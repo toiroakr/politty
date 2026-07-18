@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,7 +45,7 @@ describe("generateCompileCacheShim", () => {
     expect(result.program).toBe("my-cli");
     const content = readFileSync(result.outputPath, "utf8");
     expect(content.startsWith("#!/usr/bin/env node\n")).toBe(true);
-    expect(content).toContain('import { enableCompileCache } from "politty/compile-cache";');
+    expect(content).toContain('await import("politty/compile-cache");');
     expect(content).toContain('enableCompileCache("my-cli");');
     expect(content).toContain('await import("./cli.js");');
     if (process.platform !== "win32") {
@@ -169,6 +170,20 @@ describe("generateCompileCacheShim", () => {
   it("rejects a shim that would import itself", () => {
     writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/cli.js" } });
     expect(() => generateCompileCacheShim({ entry: "./cli.js", cwd })).toThrow(/import itself/);
+  });
+
+  it("starts the CLI even when politty is not resolvable at runtime", () => {
+    // A fully bundled CLI inlines politty into dist/cli.js, so the bare
+    // "politty/compile-cache" specifier has nothing to resolve to. The shim
+    // must degrade to a cache-less start instead of crashing the CLI.
+    writePkg({ name: "bundled-cli", type: "module", bin: { "bundled-cli": "./dist/bin.js" } });
+    mkdirSync(join(cwd, "dist"), { recursive: true });
+    writeFileSync(join(cwd, "dist", "cli.js"), "console.log('cli ran');\n");
+    generateCompileCacheShim({ entry: "./cli.js", cwd });
+    const out = execFileSync(process.execPath, [join(cwd, "dist", "bin.js")], {
+      encoding: "utf8",
+    });
+    expect(out).toContain("cli ran");
   });
 
   it("rejects a file: URL entry that points at the shim itself", () => {
