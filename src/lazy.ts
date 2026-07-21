@@ -5,11 +5,6 @@
 import type { AnyCommand, SubCommandValue } from "./types.js";
 
 /**
- * Marker property for LazyCommand identification
- */
-const LAZY_BRAND = "__politty_lazy__" as const;
-
-/**
  * A lazily-loaded command that carries synchronous metadata for
  * static analysis (completion, help) while deferring full module
  * loading to execution time.
@@ -24,8 +19,13 @@ export interface LazyCommand<T extends AnyCommand = AnyCommand> {
  * Type guard: check if a value is a LazyCommand
  */
 export function isLazyCommand(value: unknown): value is LazyCommand {
+  // Literal property access instead of a computed `LAZY_BRAND in value`
+  // check: AOT compilers (perry) mishandle computed keys, and the literal
+  // form is equivalent here.
   return (
-    typeof value === "object" && value !== null && LAZY_BRAND in value && value[LAZY_BRAND] === true
+    typeof value === "object" &&
+    value !== null &&
+    (value as { __politty_lazy__?: unknown }).__politty_lazy__ === true
   );
 }
 
@@ -62,7 +62,7 @@ export function lazy<T extends AnyCommand>(
   load: () => Promise<AnyCommand>,
 ): LazyCommand<T> {
   return {
-    [LAZY_BRAND]: true as const,
+    __politty_lazy__: true as const,
     meta,
     load,
   };

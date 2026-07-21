@@ -345,9 +345,12 @@ export function extractEnumValues(schema: z.ZodType): string[] | undefined {
  * @example toKebabCase("XMLParser") => "xml-parser"
  */
 export function toKebabCase(str: string): string {
+  // Callback replacers instead of "$1-$2" templates: template-form
+  // String#replace silently no-ops on cross-module strings under AOT
+  // compilers without a JS engine (perry), while the callback form works.
   return str
-    .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1-$2")
+    .replace(/([a-z])([A-Z])/g, (_, lower: string, upper: string) => `${lower}-${upper}`)
+    .replace(/([A-Z]+)([A-Z][a-z])/g, (_, caps: string, tail: string) => `${caps}-${tail}`)
     .toLowerCase();
 }
 

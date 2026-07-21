@@ -27,4 +27,11 @@ export default defineConfig({
   outDir: "dist",
   external: ["zod", "yaml", "@clack/prompts", "@inquirer/prompts"],
   fixedExtension: false,
+  // Keep human-readable names for chunk-internal exports. Single-letter
+  // minified export aliases ("arg as s", "lazy as s", …) collide across
+  // chunks and confuse AOT compilers (perry) that resolve re-export chains
+  // by name; disabling this costs a few bytes and keeps dist debuggable.
+  outputOptions: {
+    minifyInternalExports: false,
+  },
 });

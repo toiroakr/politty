@@ -181,23 +181,23 @@ export function renderOptions(
   // Add built-in options
   if (hasUserDefinedh) {
     // Don't show -h alias if user is using it
-    lines.push(formatOption(styles.option("--help"), desc.help));
+    lines.push(formatOption(styles.option("--help"), desc.help, 0, 0));
   } else {
-    lines.push(formatOption(`${styles.option("-h")}, ${styles.option("--help")}`, desc.help));
+    lines.push(formatOption(`${styles.option("-h")}, ${styles.option("--help")}`, desc.help, 0, 0));
   }
 
   if (hasUserDefinedH) {
     // Don't show -H alias if user is using it
-    lines.push(formatOption(styles.option("--help-all"), desc.helpAll));
+    lines.push(formatOption(styles.option("--help-all"), desc.helpAll, 0, 0));
   } else {
     lines.push(
-      formatOption(`${styles.option("-H")}, ${styles.option("--help-all")}`, desc.helpAll),
+      formatOption(`${styles.option("-H")}, ${styles.option("--help-all")}`, desc.helpAll, 0, 0),
     );
   }
 
   // Show --version only if version is provided in context
   if (context?.rootVersion) {
-    lines.push(formatOption(styles.option("--version"), desc.version));
+    lines.push(formatOption(styles.option("--version"), desc.version, 0, 0));
   }
 
   if (!extracted) {
@@ -241,10 +241,10 @@ export function renderOptions(
       desc += ` ${envInfo}`;
     }
 
-    lines.push(formatOption(flags, desc));
+    lines.push(formatOption(flags, desc, 0, 0));
 
     // Render the custom negation as a separate line when a description is provided
-    const negationLine = formatNegationLine(opt);
+    const negationLine = formatNegationLine(opt, 0, 0);
     if (negationLine) {
       lines.push(negationLine);
     }
@@ -260,8 +260,8 @@ export function renderOptions(
  */
 function formatNegationLine(
   opt: ResolvedFieldMeta,
-  indent = 0,
-  extraDescPadding = 0,
+  indent: number,
+  extraDescPadding: number,
 ): string | null {
   if (!opt.negationDisplay || !opt.negationDescription) return null;
   const flag = styles.option(`--${opt.negationDisplay}`);
@@ -288,7 +288,7 @@ function renderDiscriminatedUnionOptions(
     // Use discriminatedUnion's description for the discriminator field
     const description =
       extracted.description ?? discriminatorField.description ?? "Action to perform";
-    lines.push(formatOption(flags, description));
+    lines.push(formatOption(flags, description, 0, 0));
   }
 
   // Add common fields (fields that appear in all variants)
@@ -323,8 +323,8 @@ function renderDiscriminatedUnionOptions(
       if (envInfo) {
         desc += ` ${envInfo}`;
       }
-      lines.push(formatOption(flags, desc));
-      const negationLine = formatNegationLine(field);
+      lines.push(formatOption(flags, desc, 0, 0));
+      const negationLine = formatNegationLine(field, 0, 0);
       if (negationLine) lines.push(negationLine);
     }
   }
@@ -356,8 +356,8 @@ function renderDiscriminatedUnionOptions(
         if (envInfo) {
           desc += ` ${envInfo}`;
         }
-        lines.push(formatOption(flags, desc, 1));
-        const negationLine = formatNegationLine(field, 1);
+        lines.push(formatOption(flags, desc, 1, 0));
+        const negationLine = formatNegationLine(field, 1, 0);
         if (negationLine) lines.push(negationLine);
       }
     }
@@ -406,8 +406,8 @@ function renderUnionOptions(
       if (envInfo) {
         desc += ` ${envInfo}`;
       }
-      lines.push(formatOption(flags, desc));
-      const negationLine = formatNegationLine(field);
+      lines.push(formatOption(flags, desc, 0, 0));
+      const negationLine = formatNegationLine(field, 0, 0);
       if (negationLine) lines.push(negationLine);
     }
   }
@@ -438,8 +438,8 @@ function renderUnionOptions(
         if (envInfo) {
           desc += ` ${envInfo}`;
         }
-        lines.push(formatOption(flags, desc, 1));
-        const negationLine = formatNegationLine(field, 1);
+        lines.push(formatOption(flags, desc, 1, 0));
+        const negationLine = formatNegationLine(field, 1, 0);
         if (negationLine) lines.push(negationLine);
       }
     } else {
@@ -541,8 +541,8 @@ function padEndVisual(str: string, width: number): string {
 function formatOption(
   flags: string,
   description: string,
-  indent = 0,
-  extraDescPadding = 0,
+  indent: number,
+  extraDescPadding: number,
 ): string {
   const flagWidth = 32;
   const indentStr = "  ".repeat(indent);
@@ -562,7 +562,7 @@ function formatOption(
 /**
  * Format a single option field as a help line
  */
-function formatFieldLine(opt: ResolvedFieldMeta, indent = 0, extraDescPadding = 0): string {
+function formatFieldLine(opt: ResolvedFieldMeta, indent: number, extraDescPadding: number): string {
   const flags = formatFlags(opt);
   let desc = opt.description ?? "";
 
@@ -589,8 +589,8 @@ function renderGlobalOptions(globalExtracted: ExtractedFields): string {
   const lines: string[] = [];
   for (const opt of globalExtracted.fields) {
     if (opt.positional) continue;
-    lines.push(formatFieldLine(opt));
-    const negationLine = formatNegationLine(opt);
+    lines.push(formatFieldLine(opt, 0, 0));
+    const negationLine = formatNegationLine(opt, 0, 0);
     if (negationLine) lines.push(negationLine);
   }
   return lines.join("\n");
@@ -643,7 +643,7 @@ function renderSubcommandsWithOptions(
       aliases && aliases.length > 0 ? `${fullPath}, ${aliases.join(", ")}` : fullPath;
 
     // Add subcommand name with description (all subcommands at same indent level)
-    lines.push(formatOption(styles.command(displayName), desc, baseIndent));
+    lines.push(formatOption(styles.command(displayName), desc, baseIndent, 0));
 
     if (cmd) {
       // Add subcommand options (one level deeper than the subcommand itself)
@@ -757,7 +757,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
         const aliases = cmd?.aliases;
         const displayName =
           aliases && aliases.length > 0 ? `${fullName}, ${aliases.join(", ")}` : fullName;
-        subLines.push(formatOption(styles.command(displayName), desc));
+        subLines.push(formatOption(styles.command(displayName), desc, 0, 0));
       }
       sections.push(`${styles.sectionHeader("Commands:")}\n${subLines.join("\n")}`);
     }
