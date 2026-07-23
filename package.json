@@ -17,9 +17,10 @@
     "url": "https://github.com/toiroakr/politty.git"
   },
   "bin": {
-    "politty": "./dist/cli.js"
+    "politty": "./bin/cli.mjs"
   },
   "files": [
+    "bin/cli.mjs",
     "dist/**/*.js",
     "dist/**/*.d.ts"
   ],

@@ -2,7 +2,6 @@
 .claude/*
 .kiro/*
 node_modules/
-bin/
 dist/
 package-lock.json
 *.log
