@@ -21,8 +21,9 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e # v4.0.5
@@ -38,6 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           exit_code=0
+          results="[]"
           while IFS= read -r -d '' f; do
             resp=$(curl -sS -X POST \
               --data-urlencode "content@${f}" \
@@ -51,5 +53,70 @@ jobs:
               echo "::error file=${f}::karinto found ${errors} error-severity diagnostic(s)"
               exit_code=1
             fi
+            results=$(jq -n --argjson acc "${results}" --arg path "${f}" --argjson resp "${resp}" \
+              '$acc + [{path: $path, diagnostics: ($resp.result.diagnostics // [])}]')
           done < <(find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print0)
+          echo "${results}" > "${RUNNER_TEMP}/karinto-results.json"
           exit "${exit_code}"
+      - name: karinto report
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          results_file="${RUNNER_TEMP}/karinto-results.json"
+          if [ ! -f "${results_file}" ]; then
+            echo "no karinto results to report, skipping"
+            exit 0
+          fi
+
+          marker='<!-- karinto-report -->'
+          body_file="${RUNNER_TEMP}/karinto-comment.md"
+
+          {
+            echo "${marker}"
+            echo "## 🍡 karinto workflow lint"
+            echo
+            jq -r '
+              def sev_emoji: if . == "error" then "🔴" elif . == "warning" then "🟡" else "🔵" end;
+              (map(.diagnostics // []) | add // []) as $all |
+              if ($all | length) == 0 then
+                "✅ No diagnostics found."
+              else
+                ($all | group_by(.severity) | map({key: .[0].severity, count: length}) |
+                  map("\(.key | sev_emoji) \(.count) \(.key)") | join(" · ")) as $summary |
+                $summary + "\n\n" +
+                (
+                  map(select((.diagnostics // []) | length > 0) |
+                    "<details><summary><code>\(.path)</code> (\(.diagnostics | length))</summary>\n\n" +
+                    (.diagnostics | map(
+                      "- \(.severity | sev_emoji) **\(.rule)** (\(.severity))" +
+                      (if .pos then " @ L\(.pos.line):C\(.pos.col)" else "" end) +
+                      ": \(.message)"
+                    ) | join("\n")) +
+                    "\n\n</details>"
+                  ) | join("\n\n")
+                )
+              end
+            ' "${results_file}"
+          } > "${body_file}"
+
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          auth_header="Authorization: Bearer ${GITHUB_TOKEN}"
+
+          existing_id=$(curl -sS -H "${auth_header}" -H "Accept: application/vnd.github+json" \
+            "${api}/issues/${PR_NUMBER}/comments?per_page=100" \
+            | jq -r --arg marker "${marker}" '[.[] | select((.body // "") | startswith($marker))][0].id // empty')
+
+          payload=$(jq -n --rawfile body "${body_file}" '{body: $body}')
+
+          if [ -n "${existing_id}" ]; then
+            curl -sS -X PATCH -H "${auth_header}" -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" \
+              "${api}/issues/comments/${existing_id}" -d "${payload}" > /dev/null
+          else
+            curl -sS -X POST -H "${auth_header}" -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" \
+              "${api}/issues/${PR_NUMBER}/comments" -d "${payload}" > /dev/null
+          fi
