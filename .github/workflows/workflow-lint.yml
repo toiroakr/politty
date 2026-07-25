@@ -80,9 +80,10 @@ jobs:
             while IFS= read -r f; do
               [ -f "${f}" ] || continue
               # Exact-pin endpoint for the karinto engine itself. Auto-bumped
-              # by the karinto Renovate preset below (regex manager matching
-              # this literal URL) — unrelated to the "#v0.9.4" ref pinning
-              # the *preset definition's* own version in renovate.json.
+              # by the karinto Renovate preset's regex manager (matching this
+              # literal URL) configured in renovate.json — unrelated to that
+              # file's "#v0.9.4" ref, which pins the *preset definition's*
+              # own version, not this URL.
               resp=$(curl "${curl_common[@]}" -X POST \
                 --data-urlencode "content@${f}" \
                 --data-urlencode "path=${f}" \
