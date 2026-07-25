@@ -166,9 +166,9 @@ jobs:
                   map(select((.diagnostics // []) | length > 0) |
                     "<details><summary><code>\(.path | sub("^\\.github/workflows/"; ""))</code> (\(.diagnostics | length))</summary>\n\n" +
                     (.diagnostics | map(
-                      "- \(.severity | sev_emoji) **\(.rule)** (\(.severity))" +
+                      "- \(.severity | sev_emoji) **\(.rule | @html)** (\(.severity))" +
                       (if .pos then " @ L\(.pos.line):C\(.pos.col)" else "" end) +
-                      ": \(.message)"
+                      ": \(.message | @html)"
                     ) | join("\n")) +
                     "\n\n</details>"
                   ) | join("\n\n")
