@@ -34,3 +34,22 @@ jobs:
           GHALINT_LOG_COLOR: always
       - name: pinact
         run: pinact run
+      - name: karinto
+        run: |
+          set -euo pipefail
+          exit_code=0
+          while IFS= read -r -d '' f; do
+            resp=$(curl -sS -X POST \
+              --data-urlencode "content@${f}" \
+              --data-urlencode "path=${f}" \
+              https://karinto.toiroakr.workers.dev)
+            echo "::group::karinto: ${f}"
+            echo "${resp}" | jq .
+            echo "::endgroup::"
+            errors=$(echo "${resp}" | jq '[.result.diagnostics[]? | select(.severity == "error")] | length')
+            if [ "${errors}" -gt 0 ]; then
+              echo "::error file=${f}::karinto found ${errors} error-severity diagnostic(s)"
+              exit_code=1
+            fi
+          done < <(find .github/workflows -type f \( -name '*.yml' -o -name '*.yaml' \) -print0)
+          exit "${exit_code}"
