@@ -44,7 +44,7 @@ jobs:
             resp=$(curl -sS -X POST \
               --data-urlencode "content@${f}" \
               --data-urlencode "path=${f}" \
-              https://karinto.toiroakr.workers.dev)
+              https://karinto-v0-9-1.toiroakr.workers.dev)
             echo "::group::karinto: ${f}"
             echo "${resp}" | jq .
             echo "::endgroup::"
@@ -89,7 +89,7 @@ jobs:
                 $summary + "\n\n" +
                 (
                   map(select((.diagnostics // []) | length > 0) |
-                    "<details><summary><code>\(.path)</code> (\(.diagnostics | length))</summary>\n\n" +
+                    "<details><summary><code>\(.path | sub("^\\.github/workflows/"; ""))</code> (\(.diagnostics | length))</summary>\n\n" +
                     (.diagnostics | map(
                       "- \(.severity | sev_emoji) **\(.rule)** (\(.severity))" +
                       (if .pos then " @ L\(.pos.line):C\(.pos.col)" else "" end) +
