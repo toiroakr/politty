@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read # checkout the repository
+      pull-requests: read # list the PR's changed files to scope the karinto lint
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -78,6 +79,10 @@ jobs:
           if [ -n "${targets}" ]; then
             while IFS= read -r f; do
               [ -f "${f}" ] || continue
+              # Exact-pin endpoint for the karinto engine itself. Auto-bumped
+              # by the karinto Renovate preset below (regex manager matching
+              # this literal URL) — unrelated to the "#v0.9.4" ref pinning
+              # the *preset definition's* own version in renovate.json.
               resp=$(curl "${curl_common[@]}" -X POST \
                 --data-urlencode "content@${f}" \
                 --data-urlencode "path=${f}" \
@@ -116,8 +121,12 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
+      contents: read # checkout aqua.yaml so aqua-installer can install jq
       pull-requests: write # post/update the sticky karinto diagnostics comment
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e # v4.0.5
         with:
           aqua_version: v2.62.0
