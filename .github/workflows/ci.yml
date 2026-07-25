@@ -12,6 +12,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
   ci:
     name: CI (${{ matrix.os }})
@@ -22,11 +24,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     permissions:
-      contents: read
-      actions: write
-      pull-requests: write
+      contents: read # to retrieve test step time in GitHub Actions (octocov-action)
+      actions: write # to retrieve/delete the previous coverage report artifact (octocov-action)
+      pull-requests: write # to comment coverage on the PR (octocov-action)
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
@@ -69,7 +71,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     permissions:
-      contents: read
+      contents: read # checkout the repository
     strategy:
       fail-fast: false
       matrix:
@@ -91,12 +93,14 @@ jobs:
     steps:
       - name: Install shell tools
         if: matrix.install && runner.os == 'Linux'
+        env:
+          SHELL_TOOL: ${{ matrix.install }}
         run: |
-          sudo apt-get install -y --no-install-recommends ${{ matrix.install }} \
+          sudo apt-get install -y --no-install-recommends "${SHELL_TOOL}" \
             || (echo "apt-get install failed; updating package lists and retrying." \
                 && sudo apt-get update -o Acquire::http::Timeout=10 -o Acquire::Retries=3 \
-                && sudo apt-get install -o Acquire::http::Timeout=10 -o Acquire::Retries=3 -y --no-install-recommends ${{ matrix.install }})
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+                && sudo apt-get install -o Acquire::http::Timeout=10 -o Acquire::Retries=3 -y --no-install-recommends "${SHELL_TOOL}")
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
@@ -110,4 +114,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Run shell completion tests
-        run: npx vitest run --project shell-${{ matrix.shell }}
+        env:
+          SHELL_NAME: ${{ matrix.shell }}
+        run: npx vitest run --project "shell-${SHELL_NAME}"

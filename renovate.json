@@ -4,7 +4,8 @@
     "config:best-practices",
     ":automergeMinor",
     ":dependencyDashboard",
-    "github>aquaproj/aqua-renovate-config#2.13.0"
+    "github>aquaproj/aqua-renovate-config#2.13.0",
+    "github>toiroakr/karinto:pin#v0.9.4"
   ],
   "labels": ["dependencies"],
   "minimumReleaseAge": "7 days",
