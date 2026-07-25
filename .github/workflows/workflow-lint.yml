@@ -44,7 +44,7 @@ jobs:
             resp=$(curl -sS -X POST \
               --data-urlencode "content@${f}" \
               --data-urlencode "path=${f}" \
-              https://karinto-v0-9-1.toiroakr.workers.dev)
+              https://karinto-v0-9-2.toiroakr.workers.dev)
             echo "::group::karinto: ${f}"
             echo "${resp}" | jq .
             echo "::endgroup::"
