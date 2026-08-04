@@ -32,4 +32,4 @@ jobs:
       - name: Build
         run: pnpm build
       - name: Publish preview
-        run: pnpm dlx pkg-pr-new@0.0.80 publish --commentWithSha --compact
+        run: pnpm dlx pkg-pr-new@0.0.81 publish --commentWithSha --compact
