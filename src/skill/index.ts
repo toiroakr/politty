@@ -60,8 +60,11 @@ import { resolveSkillOptions } from "./options.js";
 import type { SkillCommandOptions, WithSkillCommand } from "./types.js";
 
 // Public API re-exports
-export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./frontmatter.js";
+export { parseFrontmatter, parseSkillMd } from "./frontmatter.js";
 export type { ParsedSkillMd } from "./frontmatter.js";
+// Deprecated zod-based schema, kept for backwards compatibility only —
+// politty validates frontmatter without zod (see frontmatter.ts).
+export { skillFrontmatterSchema } from "./frontmatter-schema.js";
 export {
   hasInstalledSkill,
   installSkill,

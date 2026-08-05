@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { validateArgs } from "./zod-validator.js";
+import { validateArgs } from "./args-validator.js";
 
 /**
  * Task 5.1: Zod validator tests

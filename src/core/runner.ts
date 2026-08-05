@@ -23,6 +23,10 @@ import type {
   RunResult,
 } from "../types.js";
 import {
+  formatValidationErrors as formatPlainValidationErrors,
+  validateArgs,
+} from "../validator/args-validator.js";
+import {
   validateCaseVariantCollisions,
   validateDuplicateAliases,
   validateDuplicateFields,
@@ -35,10 +39,6 @@ import {
   formatRuntimeError,
   formatUnknownFlagWarning,
 } from "../validator/error-formatter.js";
-import {
-  formatValidationErrors as formatPlainValidationErrors,
-  validateArgs,
-} from "../validator/zod-validator.js";
 import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import {

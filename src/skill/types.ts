@@ -1,16 +1,31 @@
-import type { z } from "zod";
 import type { UnknownKeysMode } from "../core/schema-extractor.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
-import type { skillFrontmatterSchema } from "./frontmatter.js";
 
 /**
  * SKILL.md frontmatter metadata, validated against the Agent Skills
- * specification (https://agentskills.io/specification).
+ * specification (https://agentskills.io/specification). Unknown fields are
+ * preserved (passthrough) so spec extensions and vendor keys round-trip
+ * intact.
  *
  * Provenance for politty-managed installs is recorded under
  * `metadata["politty-cli"]` as `"{packageName}:{cliName}"`.
  */
-export type SkillFrontmatter = z.infer<typeof skillFrontmatterSchema>;
+export interface SkillFrontmatter {
+  /** Skill identifier. Lowercase alphanumerics + hyphens, 1..64 chars. */
+  name: string;
+  /** Human-readable description (1..1024 chars). */
+  description: string;
+  /** SPDX license identifier or free-form string. */
+  license?: string;
+  /** Runtime / tool compatibility string (<=500 chars). */
+  compatibility?: string;
+  /** Metadata map (spec: string keys, string values). */
+  metadata?: Record<string, string>;
+  /** Experimental spec field. */
+  "allowed-tools"?: string;
+  /** Unknown fields are preserved verbatim. */
+  [key: string]: unknown;
+}
 
 /**
  * A skill discovered from a source directory (npm package).

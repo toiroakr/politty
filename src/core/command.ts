@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { InternalArgsSchema } from "../adapter/internal-args.js";
 import type {
   ArgSource,
   ArgsSchema,
@@ -15,10 +16,18 @@ import type { WithCaseVariants } from "./case-types.js";
 /**
  * Infer args type from schema, defaults to empty object if undefined.
  * Wraps with WithCaseVariants so both camelCase and kebab-case access is typed.
+ *
+ * politty's internal validator-free descriptors are checked before the
+ * schema-library branch: they present themselves as `ArgsSchema` at the
+ * type level (see `InternalArgsSchema`), so without the brand check they
+ * would fall into `z.infer` and lose their field types.
  */
-type InferArgs<TArgsSchema> = TArgsSchema extends z.ZodType
-  ? WithCaseVariants<z.infer<TArgsSchema>>
-  : Record<string, never>;
+type InferArgs<TArgsSchema> =
+  TArgsSchema extends InternalArgsSchema<infer TInternalOut>
+    ? WithCaseVariants<TInternalOut>
+    : TArgsSchema extends z.ZodType
+      ? WithCaseVariants<z.infer<TArgsSchema>>
+      : Record<string, never>;
 
 /**
  * Merge local args with global args.

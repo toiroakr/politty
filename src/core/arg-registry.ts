@@ -1,4 +1,4 @@
-import { z } from "zod";
+import type { z } from "zod";
 
 import type { GlobalArgs, IsEmpty } from "../types.js";
 import type { DynamicCompletionResolver } from "./dynamic-completion-types.js";
@@ -294,10 +294,12 @@ export interface BuiltinOverrideArgMeta<TValue = unknown> extends BaseArgMeta<TV
 export type ArgMeta<TValue = unknown> = RegularArgMeta<TValue> | BuiltinOverrideArgMeta<TValue>;
 
 /**
- * Custom registry for politty argument metadata
- * This avoids polluting Zod's GlobalMeta
+ * Custom registry for politty argument metadata, keyed by schema identity.
+ * This avoids polluting Zod's GlobalMeta, and — unlike `z.registry()` — is
+ * validator-neutral: any schema object (zod, valibot, internal descriptors)
+ * can carry arg metadata without politty importing the schema library.
  */
-export const argRegistry = z.registry<ArgMeta>();
+const argRegistry = new WeakMap<object, ArgMeta>();
 
 /**
  * Register metadata for a Zod schema
@@ -419,7 +421,7 @@ export function arg<T extends z.ZodType>(
   meta?: ValidateArgMeta<ArgMeta, z.output<T>>,
 ): T {
   if (meta) {
-    argRegistry.add(schema, meta as ArgMeta);
+    argRegistry.set(schema, meta as ArgMeta);
   }
   return schema;
 }
@@ -431,10 +433,5 @@ export function arg<T extends z.ZodType>(
  * @returns The metadata if registered, undefined otherwise
  */
 export function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
-  // Zod's `$replace<Meta, S>` recursively rewrites the meta type, which mangles
-  // the generic `then` signature of `PromiseLike<void>` inside `effect`'s return
-  // type under newer TypeScript builds (@typescript/native-preview ≥ 20260504).
-  // The runtime value is always the original ArgMeta we stored, so we restore
-  // the static type at the boundary.
-  return argRegistry.get(schema) as ArgMeta | undefined;
+  return argRegistry.get(schema);
 }
