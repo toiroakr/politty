@@ -8,9 +8,9 @@
  * the adapter package (e.g. `@politty/zod`).
  */
 
-import type { z } from "zod";
 import { isInternalArgsSchema, validateInternalArgs } from "../adapter/internal-args.js";
 import { getValidatorAdapter } from "../adapter/registry.js";
+import type { InferSchemaOutput } from "../adapter/standard-schema.js";
 import type { ValidationError, ValidationResult } from "../adapter/types.js";
 import type { ArgsSchema } from "../types.js";
 
@@ -26,11 +26,11 @@ export type { ValidationError, ValidationResult } from "../adapter/types.js";
 export function validateArgs<T extends ArgsSchema>(
   rawArgs: Record<string, unknown>,
   schema: T,
-): ValidationResult<z.infer<T>> {
+): ValidationResult<InferSchemaOutput<T>> {
   if (isInternalArgsSchema(schema)) {
-    return validateInternalArgs(rawArgs, schema) as ValidationResult<z.infer<T>>;
+    return validateInternalArgs(rawArgs, schema) as ValidationResult<InferSchemaOutput<T>>;
   }
-  return getValidatorAdapter().validate(rawArgs, schema) as ValidationResult<z.infer<T>>;
+  return getValidatorAdapter().validate(rawArgs, schema) as ValidationResult<InferSchemaOutput<T>>;
 }
 
 /**

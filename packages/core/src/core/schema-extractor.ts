@@ -23,19 +23,18 @@ export {
   type UnknownKeysMode,
 } from "../adapter/field-meta.js";
 
-import type { z } from "zod";
 import type { ExtractedFields, UnknownKeysMode } from "../adapter/field-meta.js";
 
 /**
  * Detect the unknown-keys handling mode of an args schema. Works for any
  * schema politty itself attaches to a command (including internal
- * descriptor-based commands), not just user-provided zod schemas.
+ * descriptor-based commands), not just user-provided library schemas.
  */
-export function getUnknownKeysMode(schema: z.ZodType): UnknownKeysMode {
+export function getUnknownKeysMode(schema: ArgsSchema): UnknownKeysMode {
   if (isInternalArgsSchema(schema)) {
     return schema.unknownKeys;
   }
-  return getValidatorAdapter().getUnknownKeysMode(schema as ArgsSchema);
+  return getValidatorAdapter().getUnknownKeysMode(schema);
 }
 
 /**

@@ -1,5 +1,4 @@
-import type { z } from "zod";
-
+import type { InferSchemaOutput, SchemaLike } from "../adapter/standard-schema.js";
 import type { GlobalArgs, IsEmpty } from "../types.js";
 import type { DynamicCompletionResolver } from "./dynamic-completion-types.js";
 import type { ExpandCompletion } from "./expand-completion-types.js";
@@ -411,14 +410,14 @@ type ValidateArgMeta<M, TValue = unknown> = M extends { overrideBuiltinAlias: tr
       ? ReservedAliasTypeError<M>
       : ValidateNegation<M, TValue>;
 
-export function arg<T extends z.ZodType>(schema: T): T;
-export function arg<T extends z.ZodType, M extends ArgMeta<z.output<T>>>(
+export function arg<T extends SchemaLike>(schema: T): T;
+export function arg<T extends SchemaLike, M extends ArgMeta<InferSchemaOutput<T>>>(
   schema: T,
-  meta: ValidateArgMeta<M, z.output<T>>,
+  meta: ValidateArgMeta<M, InferSchemaOutput<T>>,
 ): T;
-export function arg<T extends z.ZodType>(
+export function arg<T extends SchemaLike>(
   schema: T,
-  meta?: ValidateArgMeta<ArgMeta, z.output<T>>,
+  meta?: ValidateArgMeta<ArgMeta, InferSchemaOutput<T>>,
 ): T {
   if (meta) {
     argRegistry.set(schema, meta as ArgMeta);
@@ -429,9 +428,9 @@ export function arg<T extends z.ZodType>(
 /**
  * Get metadata for a schema from the registry
  *
- * @param schema - The Zod schema
+ * @param schema - The schema object used as the registry key
  * @returns The metadata if registered, undefined otherwise
  */
-export function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
+export function getArgMeta(schema: object): ArgMeta | undefined {
   return argRegistry.get(schema);
 }

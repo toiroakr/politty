@@ -11,3 +11,13 @@
 import "./register.js";
 
 export * from "@politty/core";
+
+import type { z } from "zod";
+
+/**
+ * Supported schema types for args in this package: zod schemas whose
+ * output is an object. Narrows `@politty/core`'s Standard-Schema-based
+ * `ArgsSchema` back to politty's historical zod-typed public surface.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ArgsSchema = z.ZodType<Record<string, any>>;

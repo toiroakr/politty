@@ -1518,7 +1518,9 @@ function deriveGlobalArgsShape(globalArgs: ArgsSchema | undefined): ArgsShape | 
   if (!globalArgs) return undefined;
   const optionFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
   if (optionFields.length === 0) return undefined;
-  return Object.fromEntries(optionFields.map((f) => [f.name, f.schema]));
+  // `f.schema` is carried opaquely as `unknown`; these fields came out of a
+  // real args schema, so they are the adapter's field schemas by construction.
+  return Object.fromEntries(optionFields.map((f) => [f.name, f.schema])) as ArgsShape;
 }
 
 /**
@@ -2356,9 +2358,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   if (globalArgs && rootDoc && !rootDoc.globalOptions) {
     const optionFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
     if (optionFields.length > 0) {
-      const globalShape: ArgsShape = Object.fromEntries(
+      const globalShape = Object.fromEntries(
         optionFields.map((f) => [f.name, f.schema]),
-      );
+      ) as ArgsShape;
       rootDoc = { ...rootDoc, globalOptions: globalShape };
     }
   }

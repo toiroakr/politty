@@ -1,5 +1,5 @@
-import type { z } from "zod";
 import type { InternalArgsSchema } from "../adapter/internal-args.js";
+import type { InferSchemaOutput, SchemaLike } from "../adapter/standard-schema.js";
 import type {
   ArgSource,
   ArgsSchema,
@@ -25,8 +25,8 @@ import type { WithCaseVariants } from "./case-types.js";
 type InferArgs<TArgsSchema> =
   TArgsSchema extends InternalArgsSchema<infer TInternalOut>
     ? WithCaseVariants<TInternalOut>
-    : TArgsSchema extends z.ZodType
-      ? WithCaseVariants<z.infer<TArgsSchema>>
+    : TArgsSchema extends SchemaLike
+      ? WithCaseVariants<InferSchemaOutput<TArgsSchema>>
       : Record<string, never>;
 
 /**

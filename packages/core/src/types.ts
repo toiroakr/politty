@@ -1,5 +1,4 @@
-import type { z } from "zod";
-
+import type { SchemaLike } from "./adapter/standard-schema.js";
 import type { ExtractedFields } from "./core/schema-extractor.js";
 import type { LazyCommand } from "./lazy.js";
 
@@ -56,10 +55,13 @@ export interface Logger {
 }
 
 /**
- * Supported schema types for args
+ * Supported schema types for args: any Standard Schema (zod, valibot, ...)
+ * whose output is an object. Adapter packages narrow this back to their
+ * library's own schema type in their public exports (e.g. `@politty/zod`
+ * exports `ArgsSchema = z.ZodType<Record<string, any>>`).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ArgsSchema = z.ZodType<Record<string, any>>;
+export type ArgsSchema = SchemaLike<Record<string, any>>;
 
 /**
  * Context provided to setup function

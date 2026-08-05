@@ -31,6 +31,7 @@
   "include": [
     "packages/core/src/**/*",
     "packages/zod/src/**/*",
+    "packages/valibot/src/**/*",
     "packages/*/tsdown.config.ts",
     "tests/**/*",
     "playground/**/*"

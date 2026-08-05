@@ -47,6 +47,9 @@ importers:
       typescript:
         specifier: 7.0.2
         version: 7.0.2
+      valibot:
+        specifier: 1.4.2
+        version: 1.4.2(typescript@7.0.2)
       vitest:
         specifier: 4.1.10
         version: 4.1.10(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(vite@8.1.5(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
@@ -100,6 +103,37 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+
+  packages/valibot:
+    dependencies:
+      '@clack/prompts':
+        specifier: ^0.10.0 || ^0.11.0 || ^1.0.0
+        version: 1.2.0
+      '@inquirer/prompts':
+        specifier: ^8.3.2
+        version: 8.5.2(@types/node@25.9.5)
+      yaml:
+        specifier: ^2.8.3
+        version: 2.9.0
+    devDependencies:
+      '@politty/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: 25.9.5
+        version: 25.9.5
+      '@typescript/native-preview':
+        specifier: 7.0.0-dev.20260707.2
+        version: 7.0.0-dev.20260707.2
+      tsdown:
+        specifier: 0.22.14
+        version: 0.22.14(@typescript/native-preview@7.0.0-dev.20260707.2)(oxc-resolver@11.24.2)(tsx@4.23.1)(typescript@7.0.2)
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      valibot:
+        specifier: 1.4.2
+        version: 1.4.2(typescript@7.0.2)
 
   packages/zod:
     dependencies:
@@ -2394,6 +2428,14 @@ packages:
     resolution: {integrity: sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg==}
     engines: {node: '>= 4.0.0'}
 
+  valibot@1.4.2:
+    resolution: {integrity: sha512-gjdCvJ6d3RyHAneqxMYMW9QMCwYMb3jpOO0IyHZV1bnRHFBHrX3VkIILt5XYR0WhwHiH7Mty8ovuPZ/O3gamrg==}
+    peerDependencies:
+      typescript: '>=5'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   verkit@0.3.0:
     resolution: {integrity: sha512-Njrh4U8UODGajoZ44QS2C/BsoEM9DTI/aCqY5swsizb+/ap0FamvnCMcZAxrR5+aoC0ZqkawEfpC/N2SBc+xeA==}
     engines: {node: '>=18.12.0'}
@@ -4340,6 +4382,10 @@ snapshots:
   undici-types@7.24.6: {}
 
   universalify@0.1.2: {}
+
+  valibot@1.4.2(typescript@7.0.2):
+    optionalDependencies:
+      typescript: 7.0.2
 
   verkit@0.3.0: {}
 
