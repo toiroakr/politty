@@ -7,8 +7,8 @@
  */
 
 import { z } from "zod";
-import "../../src/augment.js"; // Import augmentation
-import { defineCommand, runMain } from "../../src/index.js";
+import "../../packages/zod/src/augment.js"; // Import augmentation
+import { defineCommand, runMain } from "../../packages/zod/src/index.js";
 
 export const command = defineCommand({
   name: "greet-meta",

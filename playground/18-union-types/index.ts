@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defineCommand, runMain } from "../../src/index.js";
+import { defineCommand, runMain } from "../../packages/zod/src/index.js";
 
 const args = z.union([
   z

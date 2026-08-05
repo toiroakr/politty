@@ -19,15 +19,18 @@ function isGitIgnored(relativePath: string): boolean {
   }
 }
 
-describe("package.json bin", () => {
+// Every published package that declares a bin.
+const packagesWithBin = ["packages/zod", "packages/politty"];
+
+describe.each(packagesWithBin)("%s package.json bin", (packageDir) => {
   // pnpm only symlinks a `bin` whose target exists at install time. If the
   // target lives under a gitignored build output directory (e.g. dist/),
   // a clean checkout of a workspace consumer has no dist/ yet, so pnpm
   // silently skips the node_modules/.bin link and never retries it
   // (pnpm/pnpm#10524, #6221, #5570).
-  const pkg = JSON.parse(readFileSync(resolve(rootDir, "package.json"), "utf8"));
+  const pkg = JSON.parse(readFileSync(resolve(rootDir, packageDir, "package.json"), "utf8"));
   const binPath = pkg.bin.politty as string;
-  const relativePath = binPath.replace(/^\.\//, "");
+  const relativePath = `${packageDir}/${binPath.replace(/^\.\//, "")}`;
 
   it("does not point at a gitignored build artifact", () => {
     expect(isGitIgnored(relativePath)).toBe(false);

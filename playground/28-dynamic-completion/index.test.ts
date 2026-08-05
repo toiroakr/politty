@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { runCommand } from "../../src/index.js";
+import { runCommand } from "../../packages/zod/src/index.js";
 import { cli } from "./index.js";
 
 async function complete(argv: string[]): Promise<string[]> {

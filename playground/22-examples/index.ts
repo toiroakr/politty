@@ -12,7 +12,7 @@
 
 import * as fs from "node:fs";
 import { z } from "zod";
-import { arg, defineCommand, runMain } from "../../src/index.js";
+import { arg, defineCommand, runMain } from "../../packages/zod/src/index.js";
 
 // read subcommand
 export const readCommand = defineCommand({

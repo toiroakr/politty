@@ -24,6 +24,16 @@
     "verbatimModuleSyntax": true,
     "noEmit": true
   },
-  "include": ["src/**/*", "tests/**/*", "playground/**/*"],
-  "exclude": ["node_modules", "dist"]
+  // packages/politty/src is excluded here: its thin re-exports resolve
+  // against @politty/zod's built dist, so they are typechecked during its
+  // own tsdown build (which runs after @politty/zod's) instead of by the
+  // repo-wide, build-free `pnpm typecheck`.
+  "include": [
+    "packages/core/src/**/*",
+    "packages/zod/src/**/*",
+    "packages/*/tsdown.config.ts",
+    "tests/**/*",
+    "playground/**/*"
+  ],
+  "exclude": ["node_modules", "**/dist"]
 }

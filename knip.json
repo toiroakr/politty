@@ -1,7 +1,20 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "project": ["src/**/*.ts"],
   "ignore": ["playground/**", "tests/**"],
-  "ignoreDependencies": ["@quansync/fs", "quansync", "tsx"],
-  "ignoreExportsUsedInFile": true
+  "ignoreDependencies": ["@quansync/fs", "quansync"],
+  "ignoreExportsUsedInFile": true,
+  "workspaces": {
+    ".": {},
+    "packages/core": {
+      "project": ["src/**/*.ts"]
+    },
+    "packages/zod": {
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["yaml", "@typescript/native-preview"]
+    },
+    "packages/politty": {
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@typescript/native-preview"]
+    }
+  }
 }

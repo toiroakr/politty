@@ -11,7 +11,7 @@
  */
 
 import { z } from "zod";
-import { arg, createDefineCommand, defineCommand, runMain } from "../../src/index.js";
+import { arg, createDefineCommand, defineCommand, runMain } from "../../packages/zod/src/index.js";
 
 // ─── Pattern 1: createDefineCommand factory (recommended) ───
 

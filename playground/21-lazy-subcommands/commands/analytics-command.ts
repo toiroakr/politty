@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import { arg, defineCommand } from "../../../src/index.js";
+import { arg, defineCommand } from "../../../packages/zod/src/index.js";
 
 // Simulate loading heavy analytics dependencies
 console.log("[analytics-command] Module loaded");

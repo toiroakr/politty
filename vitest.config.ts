@@ -17,12 +17,16 @@ export default defineConfig({
         test: {
           name: "unit",
           include: [
-            "src/**/*.test.ts",
+            "packages/*/src/**/*.test.ts",
             "tests/**/*.test.ts",
             "playground/**/*.test.ts",
             "playground/**/index.test.ts",
           ],
           exclude: ["tests/shell-completion/**"],
+          // Core tests exercise zod fixture schemas without importing an
+          // `@politty/zod` entry, so the adapter registration that entry
+          // modules perform for real users happens in this setup file.
+          setupFiles: ["./tests/utils/register-zod-adapter.ts"],
         },
       },
       {
@@ -33,6 +37,7 @@ export default defineConfig({
           // beforeAll generates three full completion script sets via
           // `tsx`/Node startup; the default 10s hook budget is too tight.
           hookTimeout: 60000,
+          setupFiles: ["./tests/utils/register-zod-adapter.ts"],
         },
       },
       {
@@ -41,6 +46,7 @@ export default defineConfig({
           include: ["tests/shell-completion/zsh.test.ts"],
           testTimeout: 10000,
           hookTimeout: 60000,
+          setupFiles: ["./tests/utils/register-zod-adapter.ts"],
         },
       },
       {
@@ -49,6 +55,7 @@ export default defineConfig({
           include: ["tests/shell-completion/fish.test.ts"],
           testTimeout: 10000,
           hookTimeout: 60000,
+          setupFiles: ["./tests/utils/register-zod-adapter.ts"],
         },
       },
     ],
@@ -57,7 +64,7 @@ export default defineConfig({
       enabled: true,
       tsconfig: "./tsconfig.json",
       include: [
-        "src/**/*.test.ts",
+        "packages/*/src/**/*.test.ts",
         "tests/**/*.test.ts",
         "playground/**/*.test.ts",
         "playground/**/index.test.ts",
@@ -67,8 +74,8 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov"],
       reportsDirectory: "./coverage",
-      include: ["src/**/*.ts"],
-      exclude: ["src/**/*.test.ts", "src/**/*.d.ts"],
+      include: ["packages/*/src/**/*.ts"],
+      exclude: ["packages/*/src/**/*.test.ts", "packages/*/src/**/*.d.ts"],
     },
   },
 });

@@ -19,7 +19,7 @@ process.on("message", (msg) => {
 `;
 
 const APP_CODE = `
-import { defineCommand, runMain } from "../src/index.js";
+import { defineCommand, runMain } from "../packages/zod/src/index.js";
 
 const command = defineCommand({
   name: "signal-test",
@@ -38,7 +38,7 @@ ${SIGNAL_BRIDGE}
 `;
 
 const GLOBAL_LIFECYCLE_APP_CODE = `
-import { defineCommand, runMain } from "../src/index.js";
+import { defineCommand, runMain } from "../packages/zod/src/index.js";
 
 const command = defineCommand({
   name: "signal-test",

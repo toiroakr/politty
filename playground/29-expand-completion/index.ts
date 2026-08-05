@@ -20,7 +20,12 @@
  */
 
 import { z } from "zod";
-import { arg, defineCommand, runMain, withCompletionCommand } from "../../src/index.js";
+import {
+  arg,
+  defineCommand,
+  runMain,
+  withCompletionCommand,
+} from "../../packages/zod/src/index.js";
 
 /**
  * Static metadata: which keys each endpoint supports and which discrete

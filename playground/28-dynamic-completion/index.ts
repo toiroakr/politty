@@ -23,7 +23,12 @@
  */
 
 import { z } from "zod";
-import { arg, defineCommand, runMain, withCompletionCommand } from "../../src/index.js";
+import {
+  arg,
+  defineCommand,
+  runMain,
+  withCompletionCommand,
+} from "../../packages/zod/src/index.js";
 
 /**
  * Mock data: which fields each endpoint supports. In the real tailor-sdk

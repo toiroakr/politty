@@ -1,0 +1,9 @@
+{
+  // The repo-root tsconfig deliberately excludes packages/politty/src (its
+  // re-exports resolve against @politty/zod's built dist, which the
+  // build-free `pnpm typecheck` cannot assume). This config exists so the
+  // tsdown build — which runs after @politty/zod's — typechecks and emits
+  // declarations for those sources.
+  "extends": "../../tsconfig.json",
+  "include": ["src/**/*", "tsdown.config.ts"]
+}

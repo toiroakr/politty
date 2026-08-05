@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { assertDocMatch } from "../../src/docs/index.js";
-import { arg, defineCommand, generateCompletion, runCommand } from "../../src/index.js";
+import { assertDocMatch } from "../../packages/zod/src/docs.js";
+import {
+  arg,
+  defineCommand,
+  generateCompletion,
+  runCommand,
+} from "../../packages/zod/src/index.js";
 import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { buildCommand, cli, globalArgsSchema } from "./index.js";

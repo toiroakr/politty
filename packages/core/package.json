@@ -1,0 +1,36 @@
+{
+  "name": "@politty/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Validator-agnostic core of politty. Not published: adapter packages (@politty/zod, ...) bundle it at build time.",
+  "license": "MIT",
+  "author": "toiroakr",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/toiroakr/politty.git",
+    "directory": "packages/core"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./docs": "./src/docs/index.ts",
+    "./completion": "./src/completion/index.ts",
+    "./skill": "./src/skill/index.ts",
+    "./prompt": "./src/prompt/index.ts",
+    "./prompt/clack": "./src/prompt/clack/index.ts",
+    "./prompt/inquirer": "./src/prompt/inquirer/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "@clack/prompts": "1.2.0",
+    "@inquirer/prompts": "8.5.2",
+    "@types/node": "25.9.5",
+    "zod": "4.4.3"
+  },
+  "engines": {
+    "node": ">=20.12.0 <21.0.0 || >=21.7.0"
+  }
+}

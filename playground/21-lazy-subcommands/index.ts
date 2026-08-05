@@ -18,7 +18,7 @@
  */
 
 import { z } from "zod";
-import { arg, defineCommand, runMain } from "../../src/index.js";
+import { arg, defineCommand, runMain } from "../../packages/zod/src/index.js";
 
 // Eager loaded command (always loaded)
 export const statusCommand = defineCommand({

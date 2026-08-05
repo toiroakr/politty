@@ -7,8 +7,8 @@ import {
   parseCompletionContext,
   withCompletionCommand,
   type DynamicCompletionContext,
-} from "../src/completion/index.js";
-import { arg, defineCommand, runCommand, type AnyCommand } from "../src/index.js";
+} from "../packages/zod/src/completion.js";
+import { arg, defineCommand, runCommand, type AnyCommand } from "../packages/zod/src/index.js";
 
 /**
  * Run __complete on `cmd` with `argv` (everything after `--`) and return the

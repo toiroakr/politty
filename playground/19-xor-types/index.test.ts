@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { assertDocMatch } from "../../src/docs/index.js";
-import { runCommand } from "../../src/index.js";
+import { assertDocMatch } from "../../packages/zod/src/docs.js";
+import { runCommand } from "../../packages/zod/src/index.js";
 import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { main } from "./index.js";
