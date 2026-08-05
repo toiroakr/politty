@@ -198,11 +198,16 @@ function expectedLabel(spec: InternalFieldSpec): string {
     : spec.kind;
 }
 
+function receivedLabel(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+
 function typeError(name: string, spec: InternalFieldSpec, received: unknown): ValidationError {
-  const receivedLabel = received === undefined ? "undefined" : typeof received;
   return {
     path: [name],
-    message: `Invalid input: expected ${expectedLabel(spec)}, received ${receivedLabel}`,
+    message: `Invalid input: expected ${expectedLabel(spec)}, received ${receivedLabel(received)}`,
     code: "invalid_type",
     received,
     expected: expectedLabel(spec),

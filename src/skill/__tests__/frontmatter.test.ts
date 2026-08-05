@@ -317,3 +317,27 @@ describe.each(frontmatterValidators)("$label", ({ validate }) => {
     },
   );
 });
+
+describe("validateSkillFrontmatter message parity with the zod schema", () => {
+  // The scanner renders issue path + message into its diagnostics, so the
+  // hand-rolled validator must label received values with zod's granularity
+  // ("array"/"null", not a blanket "object").
+  it.each([
+    [{ name: ["not", "a", "string"], description: "ok" }],
+    [{ name: null, description: "ok" }],
+    [{ name: "test", description: "ok", metadata: { key: ["array"] } }],
+    [{ name: "test", description: "ok", metadata: { key: null } }],
+    [{ name: "test", description: 42 }],
+  ])("reports the same issues as the zod schema for %j", (data) => {
+    const manual = validateSkillFrontmatter(data as Record<string, unknown>);
+    const viaZod = skillFrontmatterSchema.safeParse(data);
+
+    expect(manual.success).toBe(false);
+    expect(viaZod.success).toBe(false);
+    if (!manual.success && !viaZod.success) {
+      const manualIssues = manual.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
+      const zodIssues = viaZod.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
+      expect(manualIssues).toEqual(zodIssues);
+    }
+  });
+});

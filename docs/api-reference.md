@@ -1456,25 +1456,6 @@ function parseFrontmatter(content: string): {
 
 ---
 
-### `skillFrontmatterSchema`
-
-> **Deprecated.** Kept as a public export for backwards compatibility. politty itself validates frontmatter without zod (same rules, implemented internally); importing this schema is the only thing that still loads zod from `politty/skill`.
-
-Zod schema for SKILL.md frontmatter. Enforces the Agent Skills spec and passes through unknown top-level keys via `.passthrough()`.
-
-```typescript
-const skillFrontmatterSchema: z.ZodObject<{
-  name: z.ZodString; // /^[a-z0-9]+(-[a-z0-9]+)*$/, 1..64
-  description: z.ZodString; // 1..1024
-  license: z.ZodOptional<z.ZodString>;
-  compatibility: z.ZodOptional<z.ZodString>; // <=500
-  metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
-  "allowed-tools": z.ZodOptional<z.ZodString>;
-}>;
-```
-
----
-
 ### `OWNERSHIP_METADATA_KEY`
 
 String constant `"politty-cli"`. The metadata key under which the `{package}:{cliName}` ownership stamp is declared in each source SKILL.md (politty itself never writes this field).
@@ -1670,7 +1651,6 @@ export {
   OWNERSHIP_METADATA_KEY,
 } from "./skill/installer.js";
 export { parseFrontmatter, parseSkillMd } from "./skill/frontmatter.js";
-export { skillFrontmatterSchema } from "./skill/frontmatter-schema.js"; // deprecated
 export type { ParsedSkillMd } from "./skill/frontmatter.js";
 export { scanSourceDir } from "./skill/scanner.js";
 export { SCAN_ERROR_REASONS } from "./skill/types.js";

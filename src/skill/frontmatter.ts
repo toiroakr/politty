@@ -39,6 +39,16 @@ export interface FrontmatterIssue {
  * Provenance / ownership for politty-managed installs is recorded under
  * `metadata["politty-cli"]` as `"{packageName}:{cliName}"`.
  */
+/**
+ * Human-readable type label for "received" diagnostics, matching zod's
+ * granularity (`null` and `array` instead of a blanket `object`).
+ */
+function receivedLabel(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+
 export function validateSkillFrontmatter(
   data: Record<string, unknown>,
 ): { success: true; data: SkillFrontmatter } | { success: false; issues: FrontmatterIssue[] } {
@@ -58,7 +68,7 @@ export function validateSkillFrontmatter(
     if (typeof value !== "string") {
       issues.push({
         path: [key],
-        message: `Invalid input: expected string, received ${typeof value}`,
+        message: `Invalid input: expected string, received ${receivedLabel(value)}`,
       });
       return;
     }
@@ -93,14 +103,14 @@ export function validateSkillFrontmatter(
     if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
       issues.push({
         path: ["metadata"],
-        message: `Invalid input: expected record, received ${metadata === null ? "null" : Array.isArray(metadata) ? "array" : typeof metadata}`,
+        message: `Invalid input: expected record, received ${receivedLabel(metadata)}`,
       });
     } else {
       for (const [key, value] of Object.entries(metadata)) {
         if (typeof value !== "string") {
           issues.push({
             path: ["metadata", key],
-            message: `Invalid input: expected string, received ${typeof value}`,
+            message: `Invalid input: expected string, received ${receivedLabel(value)}`,
           });
         }
       }
