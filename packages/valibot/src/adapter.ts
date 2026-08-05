@@ -117,10 +117,25 @@ function detectType(schema: ValibotNode): ResolvedFieldMeta["type"] {
         const bucket = bucketOf(item.type);
         if (bucket !== "unknown") return bucket;
       }
+      // Validation actions that only apply to numbers imply a number field
+      // even without an explicit v.number() in the pipe (e.g.
+      // v.pipe(v.unknown(), v.transform(Number), v.integer())) — matching
+      // zod's `int` handling.
+      if (item.kind === "validation" && item.type && NUMERIC_VALIDATIONS.has(item.type)) {
+        return "number";
+      }
     }
   }
   return "unknown";
 }
+
+/** Validation actions whose domain is exclusively numbers. */
+const NUMERIC_VALIDATIONS: ReadonlySet<string> = new Set([
+  "integer",
+  "safe_integer",
+  "finite",
+  "multiple_of",
+]);
 
 function bucketOf(type: string | undefined): ResolvedFieldMeta["type"] {
   switch (type) {

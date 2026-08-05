@@ -145,6 +145,14 @@ describe("valibot adapter", () => {
       expect(extracted.fields[0]?.type).toBe("number");
     });
 
+    it("should detect number type from numeric-only validation actions without v.number()", () => {
+      const schema = v.object({
+        times: v.pipe(v.unknown(), v.transform(Number), v.integer()),
+      });
+      const extracted = extractValibotFields(schema);
+      expect(extracted.fields[0]?.type).toBe("number");
+    });
+
     it("should detect the input-side type of a transforming pipe", () => {
       const schema = v.object({
         flag: v.pipe(
