@@ -28,7 +28,11 @@ beforeAll(() => {
 
 describe("@politty/valibot dist is zod-free", () => {
   it("never bundles or imports zod in any built module", () => {
-    const jsFiles = readdirSync(valibotDist).filter((f) => f.endsWith(".js"));
+    // Recursive: tsdown can emit shared chunks into subdirectories, and a
+    // chunk that imports zod would defeat this test's whole purpose.
+    const jsFiles = readdirSync(valibotDist, { recursive: true, encoding: "utf8" }).filter((f) =>
+      /\.(js|mjs|cjs)$/.test(f),
+    );
     expect(jsFiles.length).toBeGreaterThan(0);
     for (const file of jsFiles) {
       const source = readFileSync(resolve(valibotDist, file), "utf8");
