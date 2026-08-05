@@ -102,6 +102,21 @@ describe("valibot adapter", () => {
       expect(byName.get("level")?.required).toBe(false);
     });
 
+    it("should not report partial enum values for mixed-type picklists and numeric enums", () => {
+      enum Numeric {
+        One = 1,
+        Two = 2,
+      }
+      const schema = v.object({
+        mixed: v.picklist(["a", 1]),
+        numeric: v.enum(Numeric),
+      });
+      const extracted = extractValibotFields(schema);
+      const byName = new Map(extracted.fields.map((f) => [f.name, f]));
+      expect(byName.get("mixed")?.enumValues).toBeUndefined();
+      expect(byName.get("numeric")?.enumValues).toBeUndefined();
+    });
+
     it("should detect enum values from picklist and enum schemas", () => {
       enum Fruit {
         Apple = "apple",

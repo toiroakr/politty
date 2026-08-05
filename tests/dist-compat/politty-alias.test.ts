@@ -24,8 +24,9 @@ function importDist(distDir: string, file: string): Promise<Record<string, unkno
 }
 
 beforeAll(() => {
-  // Always rebuild: a stale dist would silently test old code.
-  execSync("pnpm -r build", { cwd: rootDir, stdio: "pipe" });
+  // Always rebuild: a stale dist would silently test old code. maxBuffer is
+  // raised above the 1MB default so a verbose build can't kill the capture.
+  execSync("pnpm -r build", { cwd: rootDir, stdio: "pipe", maxBuffer: 64 * 1024 * 1024 });
 }, 180_000);
 
 describe("politty alias runtime", () => {

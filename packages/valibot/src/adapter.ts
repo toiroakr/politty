@@ -146,14 +146,25 @@ function bucketOf(type: string | undefined): ResolvedFieldMeta["type"] {
 export function extractEnumValues(schema: unknown): string[] | undefined {
   const inner = unwrapSchema(asNode(schema));
 
+  // Only all-string value sets are reported (matching the zod adapter's
+  // union-of-literals rule): a partial list would misrepresent the field in
+  // help/completion, e.g. numeric enums or mixed picklists.
+  const allStrings = (values: unknown[]): values is string[] =>
+    values.length > 0 && values.every((value) => typeof value === "string");
+
   if (inner.type === "picklist" && Array.isArray(inner.options)) {
-    const values = inner.options.filter((o): o is string => typeof o === "string");
-    return values.length > 0 ? values : undefined;
+    return allStrings(inner.options) ? inner.options : undefined;
   }
 
-  if (inner.type === "enum" && inner.enum && typeof inner.enum === "object") {
-    const values = Object.values(inner.enum).filter((v): v is string => typeof v === "string");
-    return values.length > 0 ? values : undefined;
+  if (inner.type === "enum") {
+    // Prefer `options`: valibot computes it from the enum object with
+    // numeric-enum reverse mappings already excluded.
+    const values = Array.isArray(inner.options)
+      ? inner.options
+      : inner.enum && typeof inner.enum === "object"
+        ? Object.values(inner.enum)
+        : [];
+    return allStrings(values) ? values : undefined;
   }
 
   // Array types: extract enum values from the element type
