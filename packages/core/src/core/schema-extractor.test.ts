@@ -28,6 +28,15 @@ describe("schema-extractor", () => {
       const schema = z.object({ name: z.string() }).passthrough();
       expect(getUnknownKeysMode(schema)).toBe("passthrough");
     });
+
+    it("should see through wrappers and pipes to the wrapped object's mode", () => {
+      const wrapped = z.strictObject({ name: z.string() }).optional();
+      expect(getUnknownKeysMode(wrapped as unknown as z.ZodType<Record<string, unknown>>)).toBe(
+        "strict",
+      );
+      const piped = z.looseObject({ name: z.string() }).transform((x) => x);
+      expect(getUnknownKeysMode(piped)).toBe("passthrough");
+    });
   });
 
   describe("extractFields - unknownKeysMode", () => {

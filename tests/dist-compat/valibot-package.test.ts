@@ -36,8 +36,10 @@ describe("@politty/valibot dist is zod-free", () => {
     expect(jsFiles.length).toBeGreaterThan(0);
     for (const file of jsFiles) {
       const source = readFileSync(resolve(valibotDist, file), "utf8");
+      // Covers static/side-effect/dynamic imports and require, with optional
+      // whitespace and zod subpaths ("zod/v4", "zod/mini", ...).
       expect(source, `${file} must not reference zod`).not.toMatch(
-        /from\s*["']zod["']|require\(["']zod["']\)|import\(["']zod["']\)/,
+        /(\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(?\s*)["']zod(\/[^"']+)?["']/,
       );
     }
   });

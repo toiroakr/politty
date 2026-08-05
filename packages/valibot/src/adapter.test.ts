@@ -29,6 +29,18 @@ describe("valibot adapter", () => {
         "passthrough",
       );
     });
+
+    it("should see through wrappers and pipes to the wrapped object's mode", () => {
+      expect(getUnknownKeysMode(v.optional(v.strictObject({ name: v.string() })))).toBe("strict");
+      expect(
+        getUnknownKeysMode(
+          v.pipe(
+            v.looseObject({ name: v.string() }),
+            v.transform((x) => x),
+          ),
+        ),
+      ).toBe("passthrough");
+    });
   });
 
   describe("extractValibotFields - basic types", () => {

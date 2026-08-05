@@ -304,7 +304,9 @@ export function resolveValibotFieldMeta(name: string, schema: unknown): Resolved
  * - `v.looseObject()` / `v.objectWithRest()`: keeps unknown keys → "passthrough"
  */
 export function getUnknownKeysMode(schema: unknown): UnknownKeysMode {
-  switch (asNode(schema).type) {
+  // Unwrap so a wrapped object (e.g. v.optional(v.strictObject(...))) keeps
+  // the same unknown-keys handling the wrapped schema enforces at validation.
+  switch (unwrapSchema(asNode(schema)).type) {
     case "strict_object":
       return "strict";
     case "loose_object":

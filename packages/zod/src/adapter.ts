@@ -97,7 +97,10 @@ function getTypeName(schema: z.ZodType): string | undefined {
  * - passthrough: _def.catchall is ZodUnknown (type = "unknown")
  */
 export function getUnknownKeysMode(schema: z.ZodType): UnknownKeysMode {
-  const s = schema as ZodSchemaWithDef;
+  // Unwrap so a wrapped object (e.g. z.strictObject(...).optional() or a
+  // top-level .transform() pipe) keeps the same unknown-keys handling the
+  // inner object enforces at validation.
+  const s = unwrapSchema(schema) as ZodSchemaWithDef;
   const def = s.def ?? s._def;
   const catchall = def?.catchall;
 
