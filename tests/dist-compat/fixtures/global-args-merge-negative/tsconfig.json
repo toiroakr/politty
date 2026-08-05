@@ -1,0 +1,17 @@
+{
+  // Negative control for the global-args-merge fixture: tsgo must REJECT
+  // this file. If it passes, the harness isn't actually typechecking the
+  // merged GlobalArgs shape and the positive fixture proves nothing.
+  "compilerOptions": {
+    "strict": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "exactOptionalPropertyTypes": true,
+    "paths": {
+      "politty": ["../../../../packages/politty/dist/index.d.ts"]
+    }
+  },
+  "include": ["user.ts"]
+}

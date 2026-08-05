@@ -22,11 +22,21 @@ export default defineConfig({
             "playground/**/*.test.ts",
             "playground/**/index.test.ts",
           ],
-          exclude: ["tests/shell-completion/**"],
+          exclude: ["tests/shell-completion/**", "tests/dist-compat/**"],
           // Core tests exercise zod fixture schemas without importing an
           // `@politty/zod` entry, so the adapter registration that entry
           // modules perform for real users happens in this setup file.
           setupFiles: ["./tests/utils/register-zod-adapter.ts"],
+        },
+      },
+      // Compatibility checks against BUILT output (politty alias dist);
+      // builds the workspace in beforeAll, hence the generous hook budget.
+      {
+        test: {
+          name: "dist-compat",
+          include: ["tests/dist-compat/**/*.test.ts"],
+          testTimeout: 30000,
+          hookTimeout: 180000,
         },
       },
       // The shell-* projects need no adapter setup: they drive completion
