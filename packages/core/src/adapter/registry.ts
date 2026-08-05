@@ -17,6 +17,11 @@ let registered: ValidatorAdapter | undefined;
  * Register the validator adapter core should use for user schemas.
  * Idempotent: re-registering the same adapter is a no-op, and adapter
  * entry modules may all call this safely.
+ *
+ * Single-adapter assumption: the registry holds one adapter per process
+ * (last registration wins) — a CLI is built against exactly one schema
+ * library. If mixing adapters in one process ever becomes a supported
+ * scenario, this needs per-schema vendor dispatch instead.
  */
 export function registerValidatorAdapter(adapter: ValidatorAdapter): void {
   registered = adapter;

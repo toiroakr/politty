@@ -34,7 +34,8 @@ export interface FrontmatterIssue {
  * Validates the spec-defined fields strictly; unknown fields are preserved
  * (passthrough) so spec extensions and vendor keys round-trip intact.
  * Mirrors the deprecated `skillFrontmatterSchema` zod export
- * (frontmatter-schema.ts) — keep the two in sync when the spec changes.
+ * (`@politty/zod`'s skill-frontmatter-schema.ts) — keep the two in sync
+ * when the spec changes.
  *
  * Provenance / ownership for politty-managed installs is recorded under
  * `metadata["politty-cli"]` as `"{packageName}:{cliName}"`.

@@ -32,6 +32,9 @@ export type ValidationResult<T> =
  * - `extractFields`: introspect an args schema into the neutral
  *   {@link ExtractedFields} shape the parser / help / completion / docs
  *   layers consume.
+ * - `resolveFieldMeta`: introspect a single named field schema (for docs
+ *   helpers that render raw arg shapes without a full object schema).
+ * - `getUnknownKeysMode`: detect how the schema treats unknown keys.
  * - `validate`: validate raw parsed args against the schema, reporting
  *   rich {@link ValidationError}s (including `code`/`received`/`expected`)
  *   that the library's own error output provides.

@@ -1,5 +1,10 @@
 /**
- * politty - A lightweight CLI framework with zod v4 registry integration
+ * @politty/core - validator-agnostic core of the politty CLI framework
+ *
+ * Parsing, help, completion, docs, skill, and prompt layers that work off
+ * neutral field metadata. Schema-library integration is provided by an
+ * adapter package (`@politty/zod`, ...), which registers its adapter and
+ * re-exports this API — users never import this package directly.
  *
  * @packageDocumentation
  */

@@ -29,6 +29,9 @@ export default defineConfig({
           setupFiles: ["./tests/utils/register-zod-adapter.ts"],
         },
       },
+      // The shell-* projects need no adapter setup: they drive completion
+      // through `tsx` subprocesses, which import the `@politty/zod` entry
+      // and register the adapter themselves.
       {
         test: {
           name: "shell-bash",
@@ -37,7 +40,6 @@ export default defineConfig({
           // beforeAll generates three full completion script sets via
           // `tsx`/Node startup; the default 10s hook budget is too tight.
           hookTimeout: 60000,
-          setupFiles: ["./tests/utils/register-zod-adapter.ts"],
         },
       },
       {
@@ -46,7 +48,6 @@ export default defineConfig({
           include: ["tests/shell-completion/zsh.test.ts"],
           testTimeout: 10000,
           hookTimeout: 60000,
-          setupFiles: ["./tests/utils/register-zod-adapter.ts"],
         },
       },
       {
@@ -55,7 +56,6 @@ export default defineConfig({
           include: ["tests/shell-completion/fish.test.ts"],
           testTimeout: 10000,
           hookTimeout: 60000,
-          setupFiles: ["./tests/utils/register-zod-adapter.ts"],
         },
       },
     ],
