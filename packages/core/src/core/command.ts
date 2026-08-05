@@ -82,6 +82,45 @@ interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResul
 }
 
 /**
+ * The overloaded `defineCommand` signature, parameterized by the args-schema
+ * constraint. Core's `defineCommand` uses the Standard-Schema-based
+ * {@link ArgsSchema}; adapter packages re-pin the same runtime function to
+ * their library's schema type (e.g. `DefineCommandFn<z.ZodType<...>>` in
+ * `@politty/zod`) so a schema from the wrong library is rejected at the type
+ * level instead of failing at runtime in the registered adapter.
+ */
+export interface DefineCommandFn<TArgsBase extends ArgsSchema = ArgsSchema> {
+  <TArgsSchema extends TArgsBase | undefined = undefined, TResult = void, TGlobalArgs = GlobalArgs>(
+    config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
+  ): RunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>, TResult>;
+  <TArgsSchema extends TArgsBase | undefined = undefined, TGlobalArgs = GlobalArgs>(
+    config: NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+  ): NonRunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>>;
+}
+
+/**
+ * `defineCommand` with a pre-bound global args type — the shape returned by
+ * {@link createDefineCommand}. Parameterized by the args-schema constraint
+ * for the same adapter re-pinning as {@link DefineCommandFn}.
+ */
+export interface BoundDefineCommandFn<TGlobalArgs, TArgsBase extends ArgsSchema = ArgsSchema> {
+  <TArgsSchema extends TArgsBase | undefined = undefined, TResult = void>(
+    config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
+  ): RunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>, TResult>;
+  <TArgsSchema extends TArgsBase | undefined = undefined>(
+    config: NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+  ): NonRunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>>;
+}
+
+/**
+ * The `createDefineCommand` signature, parameterized by the args-schema
+ * constraint for adapter re-pinning (see {@link DefineCommandFn}).
+ */
+export interface CreateDefineCommandFn<TArgsBase extends ArgsSchema = ArgsSchema> {
+  <TGlobalArgs>(): BoundDefineCommandFn<TGlobalArgs, TArgsBase>;
+}
+
+/**
  * Config with run function (runnable command)
  */
 export interface RunnableConfig<
@@ -216,13 +255,6 @@ export function defineCommand<
  * });
  * ```
  */
-export function createDefineCommand<TGlobalArgs>(): {
-  <TArgsSchema extends ArgsSchema | undefined = undefined, TResult = void>(
-    config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
-  ): RunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>, TResult>;
-  <TArgsSchema extends ArgsSchema | undefined = undefined>(
-    config: NonRunnableConfig<TArgsSchema, TGlobalArgs>,
-  ): NonRunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>>;
-} {
-  return defineCommand as ReturnType<typeof createDefineCommand<TGlobalArgs>>;
+export function createDefineCommand<TGlobalArgs>(): BoundDefineCommandFn<TGlobalArgs> {
+  return defineCommand as BoundDefineCommandFn<TGlobalArgs>;
 }

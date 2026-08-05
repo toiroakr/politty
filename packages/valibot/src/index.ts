@@ -3,14 +3,10 @@
  *
  * The user-facing entry point for building politty CLIs with valibot:
  * installs the valibot validator adapter into `@politty/core` and
- * re-exports the core API. Core's public types are written against the
- * Standard Schema interface, which valibot schemas satisfy.
- *
- * Unlike `@politty/zod` (which re-pins `ArgsSchema` to the historical
- * zod-typed shape for backwards compatibility), this package keeps core's
- * structural `ArgsSchema` as-is: there is no pre-existing type surface to
- * preserve, and a `GenericSchema<...>`-based alias would reject valid
- * object schemas through `v.object()`'s input-side type parameter variance.
+ * re-exports the core API, with the schema-taking functions re-pinned to
+ * valibot's `GenericSchema` so a schema from another Standard Schema
+ * library is rejected at the type level instead of failing at runtime in
+ * the registered adapter.
  *
  * @packageDocumentation
  */
@@ -18,3 +14,25 @@
 import "./register.js";
 
 export * from "@politty/core";
+
+import {
+  arg as coreArg,
+  createDefineCommand as coreCreateDefineCommand,
+  defineCommand as coreDefineCommand,
+  type ArgFn,
+  type CreateDefineCommandFn,
+  type DefineCommandFn,
+} from "@politty/core";
+import type { GenericSchema } from "valibot";
+
+/**
+ * Supported schema types for args in this package: valibot schemas whose
+ * output is an object.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ArgsSchema = GenericSchema<unknown, Record<string, any>>;
+
+// Re-pin the schema-taking API to valibot types (see module doc).
+export const defineCommand: DefineCommandFn<ArgsSchema> = coreDefineCommand;
+export const createDefineCommand: CreateDefineCommandFn<ArgsSchema> = coreCreateDefineCommand;
+export const arg: ArgFn<GenericSchema<unknown, unknown>> = coreArg;

@@ -178,6 +178,24 @@ describe("valibot adapter", () => {
       expect(extracted.fields[0]?.positional).toBe(true);
     });
 
+    it("should find arg() metadata registered on the base schema of a pipe", () => {
+      const schema = v.object({
+        name: v.pipe(
+          arg(v.string(), { alias: "n", positional: true }),
+          v.transform((s) => s.trim()),
+        ),
+        wrapped: v.optional(
+          v.pipe(arg(v.string(), { alias: "w" }), v.description("wrapped desc")),
+          "x",
+        ),
+      });
+      const extracted = extractValibotFields(schema);
+      const byName = new Map(extracted.fields.map((f) => [f.name, f]));
+      expect(byName.get("name")?.alias).toEqual(["n"]);
+      expect(byName.get("name")?.positional).toBe(true);
+      expect(byName.get("wrapped")?.alias).toEqual(["w"]);
+    });
+
     it("should prioritize arg() registry metadata over pipe metadata", () => {
       const schema = v.object({
         name: arg(v.pipe(v.string(), v.description("pipe desc")), {

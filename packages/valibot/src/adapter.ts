@@ -275,12 +275,38 @@ function extractMetadataAction(schema: ValibotNode): Record<string, unknown> | u
 }
 
 /**
+ * Find arg() registry metadata for a schema. `v.pipe(...)` spreads its base
+ * schema into a NEW object, so metadata registered before composing —
+ * `v.pipe(arg(v.string(), {...}), v.transform(...))` — is keyed by the
+ * original base object, which survives only as an item of the `pipe` array.
+ * Walk pipe items and wrapper chains so composition never drops metadata.
+ */
+function lookupRegistryMeta(node: ValibotNode, seen: Set<ValibotNode>): ArgMeta | undefined {
+  if (seen.has(node)) return undefined;
+  seen.add(node);
+
+  const direct = getArgMetaFromRegistry(node);
+  if (direct) return direct;
+
+  if (Array.isArray(node.pipe)) {
+    for (const item of node.pipe) {
+      if (item && item.kind === "schema") {
+        const hit = lookupRegistryMeta(item, seen);
+        if (hit) return hit;
+      }
+    }
+  }
+
+  if (node.wrapped) return lookupRegistryMeta(node.wrapped, seen);
+  return undefined;
+}
+
+/**
  * Get ArgMeta for a field schema.
  * Priority: politty's arg() registry > `v.metadata({...})` pipe actions.
  */
 function getArgMeta(schema: ValibotNode): ArgMeta | undefined {
-  const fromRegistry =
-    getArgMetaFromRegistry(schema) ?? getArgMetaFromRegistry(unwrapSchema(schema));
+  const fromRegistry = lookupRegistryMeta(schema, new Set());
   if (fromRegistry) return fromRegistry;
 
   const fromMetadataAction = extractMetadataAction(schema);

@@ -11,6 +11,7 @@
 
 // Core exports
 // Completion exports
+export type { InferSchemaOutput, SchemaLike } from "./adapter/standard-schema.js";
 export {
   generateCompileCacheShim,
   type GenerateCompileCacheShimOptions,
@@ -28,6 +29,7 @@ export {
 } from "./completion/index.js";
 export {
   arg,
+  type ArgFn,
   type ArgMeta,
   type CompletionMeta,
   type CompletionType,
@@ -35,10 +37,18 @@ export {
   type EffectContext,
   type PromptMeta,
   type PromptType,
+  type ValidateArgMeta,
 } from "./core/arg-registry.js";
 export { createDualCaseProxy } from "./core/case-proxy.js";
 export type { CamelCase, KebabCase, WithCaseVariants } from "./core/case-types.js";
-export { createDefineCommand, defineCommand, type MergedArgs } from "./core/command.js";
+export {
+  createDefineCommand,
+  defineCommand,
+  type BoundDefineCommandFn,
+  type CreateDefineCommandFn,
+  type DefineCommandFn,
+  type MergedArgs,
+} from "./core/command.js";
 export type {
   CompletionDirectiveMask,
   DynamicCompletionCandidate,

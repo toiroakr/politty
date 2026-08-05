@@ -402,13 +402,28 @@ type ValidateNegation<M, TValue> =
  * or as part of an array, and whether it appears in `alias` or `hiddenAlias`.
  * Also rejects `negation` / `negationDescription` on non-boolean fields.
  */
-type ValidateArgMeta<M, TValue = unknown> = M extends { overrideBuiltinAlias: true }
+export type ValidateArgMeta<M, TValue = unknown> = M extends { overrideBuiltinAlias: true }
   ? ValidateNegation<M, TValue>
   : ContainsReservedAlias<AliasFieldOf<M>> extends true
     ? ReservedAliasTypeError<M>
     : ContainsReservedAlias<HiddenAliasFieldOf<M>> extends true
       ? ReservedAliasTypeError<M>
       : ValidateNegation<M, TValue>;
+
+/**
+ * The overloaded `arg()` signature, parameterized by the schema constraint.
+ * Core's `arg` accepts any Standard Schema; adapter packages re-pin the same
+ * runtime function to their library's schema type (e.g. `ArgFn<z.ZodType>`
+ * in `@politty/zod`) so a schema from the wrong library is rejected at the
+ * type level.
+ */
+export interface ArgFn<TSchemaBase extends SchemaLike = SchemaLike> {
+  <T extends TSchemaBase>(schema: T): T;
+  <T extends TSchemaBase, M extends ArgMeta<InferSchemaOutput<T>>>(
+    schema: T,
+    meta: ValidateArgMeta<M, InferSchemaOutput<T>>,
+  ): T;
+}
 
 export function arg<T extends SchemaLike>(schema: T): T;
 export function arg<T extends SchemaLike, M extends ArgMeta<InferSchemaOutput<T>>>(
