@@ -215,7 +215,13 @@ function extractDefaultValue(schema: ValibotNode): unknown {
 /**
  * Extract a description from `v.description(...)` metadata actions in the
  * schema's pipe, recursing into wrappers. The last action wins, matching
- * valibot's `v.getDescription` behavior.
+ * valibot's `v.getDescription` behavior for a single pipe.
+ *
+ * Hand-rolled rather than `v.getDescription` / `v.getDefault` because the
+ * official utilities do not look through wrapper schemas — e.g.
+ * `v.getDescription(v.optional(v.pipe(v.string(), v.description("x"))))`
+ * returns `undefined` — while zod-adapter parity requires descriptions and
+ * defaults declared on the wrapped inner schema to be found.
  */
 function extractDescription(schema: ValibotNode): string | undefined {
   if (Array.isArray(schema.pipe)) {
@@ -503,13 +509,17 @@ export function extractValibotFields(schema: ArgsSchema): ExtractedFields {
 
 /**
  * Structural view of a valibot issue (`BaseIssue`).
+ *
+ * `ValidationError.received` is filled from `issue.input` (the raw value at
+ * the issue's path), not valibot's `issue.received`: the latter is a
+ * pre-formatted display string (e.g. `'"nope"'`), while the zod adapter
+ * reports the raw value — `input` keeps the two adapters' semantics aligned.
  */
 interface ValibotIssue {
   type: string;
   message: string;
   input: unknown;
   expected: string | null;
-  received: string;
   path?: Array<{ key?: unknown }> | undefined;
 }
 
