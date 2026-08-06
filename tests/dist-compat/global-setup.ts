@@ -8,6 +8,11 @@
  * tsdown builds with `clean: true`, a concurrent build can delete the
  * output another file is importing, which showed up as intermittent
  * failures. Building here keeps it to a single, serialized build.
+ *
+ * No timeout is configured (and the project no longer needs `hookTimeout`):
+ * vitest awaits a globalSetup `setup` directly, without applying
+ * `testTimeout`/`hookTimeout` to it, so the build is bounded only by the
+ * overall run. A cold build of this workspace takes ~2s.
  */
 
 import { execSync } from "node:child_process";
