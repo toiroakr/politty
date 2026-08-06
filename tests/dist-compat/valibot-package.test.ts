@@ -6,13 +6,15 @@
  * (issue #650): a valibot-based CLI must never load zod. The built dist is
  * scanned to prove zod is neither bundled nor imported, and the runtime
  * paths (entry, subpaths, bin) are exercised end-to-end.
+ *
+ * The dist is built once for the whole project in `global-setup.ts`.
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const valibotDist = resolve(rootDir, "packages/valibot/dist");
@@ -20,21 +22,6 @@ const valibotDist = resolve(rootDir, "packages/valibot/dist");
 function importDist(file: string): Promise<Record<string, unknown>> {
   return import(pathToFileURL(resolve(valibotDist, file)).href);
 }
-
-beforeAll(() => {
-  // Always rebuild: a stale dist would silently test old code. maxBuffer is
-  // raised above the 1MB default so a verbose build can't kill the capture.
-  try {
-    execSync("pnpm -r build", { cwd: rootDir, stdio: "pipe", maxBuffer: 64 * 1024 * 1024 });
-  } catch (error) {
-    // stdio: "pipe" keeps successful builds quiet, so surface the captured
-    // output when the build fails — otherwise CI shows only "command failed".
-    const e = error as { stdout?: Buffer; stderr?: Buffer };
-    throw new Error(
-      `pnpm -r build failed:\n${e.stdout?.toString() ?? ""}\n${e.stderr?.toString() ?? ""}`,
-    );
-  }
-}, 180_000);
 
 describe("@politty/valibot dist is zod-free", () => {
   it("never bundles or imports zod in any built module", () => {

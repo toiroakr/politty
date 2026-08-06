@@ -36,7 +36,11 @@ export default defineConfig({
           name: "dist-compat",
           include: ["tests/dist-compat/**/*.test.ts"],
           testTimeout: 30000,
-          hookTimeout: 180000,
+          // The workspace is built once in globalSetup rather than per file:
+          // these files run in parallel and tsdown builds with `clean: true`,
+          // so concurrent rebuilds would delete output a sibling file is
+          // importing.
+          globalSetup: ["./tests/dist-compat/global-setup.ts"],
         },
       },
       // The shell-* projects need no adapter setup: they drive completion
