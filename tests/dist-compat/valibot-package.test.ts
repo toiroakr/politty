@@ -12,30 +12,33 @@
 
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const valibotDist = resolve(rootDir, "packages/valibot/dist");
+const valibotPkg = resolve(rootDir, "packages/valibot");
+const valibotDist = resolve(valibotPkg, "dist");
+const valibotBin = resolve(valibotPkg, "bin/cli.mjs");
 
 function importDist(file: string): Promise<Record<string, unknown>> {
   return import(pathToFileURL(resolve(valibotDist, file)).href);
 }
 
 describe("@politty/valibot dist is zod-free", () => {
-  it("never bundles or imports zod in any built module", () => {
+  it("never bundles or imports zod in any published module", () => {
     // Recursive: tsdown can emit shared chunks into subdirectories, and a
-    // chunk that imports zod would defeat this test's whole purpose.
-    const jsFiles = readdirSync(valibotDist, { recursive: true, encoding: "utf8" }).filter((f) =>
-      /\.(js|mjs|cjs)$/.test(f),
-    );
-    expect(jsFiles.length).toBeGreaterThan(0);
-    for (const file of jsFiles) {
-      const source = readFileSync(resolve(valibotDist, file), "utf8");
+    // chunk that imports zod would defeat this test's whole purpose. The bin
+    // launcher ships too (package.json `files`), so it is scanned as well.
+    const distFiles = readdirSync(valibotDist, { recursive: true, encoding: "utf8" })
+      .filter((f) => /\.(js|mjs|cjs)$/.test(f))
+      .map((f) => resolve(valibotDist, f));
+    expect(distFiles.length).toBeGreaterThan(0);
+    for (const file of [...distFiles, valibotBin]) {
+      const source = readFileSync(file, "utf8");
       // Covers static/side-effect/dynamic imports and require, with optional
       // whitespace and zod subpaths ("zod/v4", "zod/mini", ...).
-      expect(source, `${file} must not reference zod`).not.toMatch(
+      expect(source, `${relative(valibotPkg, file)} must not reference zod`).not.toMatch(
         /(\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(?\s*)["']zod(\/[^"']+)?["']/,
       );
     }

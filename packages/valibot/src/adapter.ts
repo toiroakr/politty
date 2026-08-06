@@ -53,6 +53,8 @@ interface ValibotNode {
   enum?: Record<string, unknown>;
   /** Pipe items (first item is the spread base schema) */
   pipe?: ValibotNode[];
+  /** Validation action requirement (e.g. the divisor of `v.multipleOf`) */
+  requirement?: unknown;
   /** Metadata action payloads */
   description?: string;
   metadata?: Record<string, unknown>;
@@ -121,7 +123,7 @@ function detectType(schema: ValibotNode): ResolvedFieldMeta["type"] {
       // even without an explicit v.number() in the pipe (e.g.
       // v.pipe(v.unknown(), v.transform(Number), v.integer())) — matching
       // zod's `int` handling.
-      if (item.kind === "validation" && item.type && NUMERIC_VALIDATIONS.has(item.type)) {
+      if (item.kind === "validation" && impliesNumber(item)) {
         return "number";
       }
     }
@@ -129,13 +131,22 @@ function detectType(schema: ValibotNode): ResolvedFieldMeta["type"] {
   return "unknown";
 }
 
-/** Validation actions whose domain is exclusively numbers. */
-const NUMERIC_VALIDATIONS: ReadonlySet<string> = new Set([
-  "integer",
-  "safe_integer",
-  "finite",
-  "multiple_of",
-]);
+/** Validation actions whose input type is exclusively `number`. */
+const NUMBER_ONLY_VALIDATIONS: ReadonlySet<string> = new Set(["integer", "safe_integer", "finite"]);
+
+/**
+ * Whether a validation action constrains its input to a number.
+ *
+ * `v.multipleOf` is overloaded for both `number` and `bigint` inputs under
+ * the same `multiple_of` action type, so it only implies a number field when
+ * its requirement is a number — `v.multipleOf(2n)` describes a bigint, which
+ * politty has no field type for and leaves as `unknown`.
+ */
+function impliesNumber(action: ValibotNode): boolean {
+  if (!action.type) return false;
+  if (NUMBER_ONLY_VALIDATIONS.has(action.type)) return true;
+  return action.type === "multiple_of" && typeof action.requirement === "number";
+}
 
 function bucketOf(type: string | undefined): ResolvedFieldMeta["type"] {
   switch (type) {

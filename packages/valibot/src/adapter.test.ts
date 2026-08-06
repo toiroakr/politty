@@ -148,9 +148,26 @@ describe("valibot adapter", () => {
     it("should detect number type from numeric-only validation actions without v.number()", () => {
       const schema = v.object({
         times: v.pipe(v.unknown(), v.transform(Number), v.integer()),
+        every: v.pipe(v.unknown(), v.transform(Number), v.multipleOf(2)),
       });
       const extracted = extractValibotFields(schema);
-      expect(extracted.fields[0]?.type).toBe("number");
+      const byName = new Map(extracted.fields.map((f) => [f.name, f]));
+      expect(byName.get("times")?.type).toBe("number");
+      expect(byName.get("every")?.type).toBe("number");
+    });
+
+    it("should not treat a bigint multipleOf as a number field", () => {
+      // v.multipleOf is overloaded for number and bigint under the same
+      // action type, so only its requirement distinguishes them.
+      const schema = v.object({
+        big: v.pipe(
+          v.unknown(),
+          v.transform((value) => BigInt(String(value))),
+          v.multipleOf(2n),
+        ),
+      });
+      const extracted = extractValibotFields(schema);
+      expect(extracted.fields[0]?.type).toBe("unknown");
     });
 
     it("should detect the input-side type of a transforming pipe", () => {
