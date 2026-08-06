@@ -192,9 +192,16 @@ export function extractInternalFields(schema: InternalArgsSchema): ExtractedFiel
 }
 
 function expectedLabel(spec: InternalFieldSpec): string {
-  return spec.kind === "enum"
-    ? `one of ${(spec.enumValues ?? []).map((v) => JSON.stringify(v)).join(" | ")}`
-    : spec.kind;
+  switch (spec.kind) {
+    case "enum":
+      return `one of ${(spec.enumValues ?? []).map((v) => JSON.stringify(v)).join(" | ")}`;
+    case "string-array":
+      // Label as "array" so diagnostics read like zod's, not like the
+      // internal kind tag.
+      return "array";
+    default:
+      return spec.kind;
+  }
 }
 
 function receivedLabel(value: unknown): string {
@@ -283,7 +290,14 @@ export function validateInternalArgs(
       });
     } else if (schema.unknownKeys === "passthrough") {
       for (const key of unknownKeys) {
-        data[key] = rawArgs[key];
+        // defineProperty, not assignment: a "__proto__" key must become an
+        // own property of the result instead of hitting the prototype setter.
+        Object.defineProperty(data, key, {
+          value: rawArgs[key],
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
       }
     }
     // strip: drop silently

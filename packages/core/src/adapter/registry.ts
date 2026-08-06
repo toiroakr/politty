@@ -15,8 +15,9 @@ let registered: ValidatorAdapter | undefined;
 
 /**
  * Register the validator adapter core should use for user schemas.
- * Idempotent: re-registering the same adapter is a no-op, and adapter
- * entry modules may all call this safely.
+ * Registration unconditionally replaces the current adapter, so every
+ * adapter entry module may call this safely — repeated registration of
+ * the same adapter has no observable effect.
  *
  * Single-adapter assumption: the registry holds one adapter per process
  * (last registration wins) — a CLI is built against exactly one schema

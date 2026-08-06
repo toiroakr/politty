@@ -24,7 +24,16 @@ function importDist(file: string): Promise<Record<string, unknown>> {
 beforeAll(() => {
   // Always rebuild: a stale dist would silently test old code. maxBuffer is
   // raised above the 1MB default so a verbose build can't kill the capture.
-  execSync("pnpm -r build", { cwd: rootDir, stdio: "pipe", maxBuffer: 64 * 1024 * 1024 });
+  try {
+    execSync("pnpm -r build", { cwd: rootDir, stdio: "pipe", maxBuffer: 64 * 1024 * 1024 });
+  } catch (error) {
+    // stdio: "pipe" keeps successful builds quiet, so surface the captured
+    // output when the build fails — otherwise CI shows only "command failed".
+    const e = error as { stdout?: Buffer; stderr?: Buffer };
+    throw new Error(
+      `pnpm -r build failed:\n${e.stdout?.toString() ?? ""}\n${e.stderr?.toString() ?? ""}`,
+    );
+  }
 }, 180_000);
 
 describe("@politty/valibot dist is zod-free", () => {
