@@ -230,6 +230,27 @@ describe("valibot adapter", () => {
       const extracted = extractValibotFields(schema);
       expect(extracted.fields[0]?.type).toBe("boolean");
     });
+
+    it("should detect the coercion pipe's type wherever composition puts the pipe", () => {
+      // `v.pipe` spreads its base schema, so piping a wrapper leaves the pipe
+      // on the wrapper node while the `unknown`/`any` base it wraps has none.
+      // Reading only the unwrapped inner schema's pipe reported `unknown`.
+      const schema = v.object({
+        pipedWrapper: v.pipe(v.optional(v.unknown()), v.transform(Number), v.number()),
+        wrappedPipe: v.optional(v.pipe(v.unknown(), v.transform(Number), v.number())),
+        pipedNullish: v.pipe(v.nullish(v.any()), v.transform(Number), v.integer()),
+        nestedWrappers: v.pipe(
+          v.optional(v.nullable(v.unknown())),
+          v.transform(Number),
+          v.number(),
+        ),
+      });
+      const byName = new Map(extractValibotFields(schema).fields.map((f) => [f.name, f]));
+      expect(byName.get("pipedWrapper")?.type).toBe("number");
+      expect(byName.get("wrappedPipe")?.type).toBe("number");
+      expect(byName.get("pipedNullish")?.type).toBe("number");
+      expect(byName.get("nestedWrappers")?.type).toBe("number");
+    });
   });
 
   describe("extractValibotFields - descriptions and metadata", () => {

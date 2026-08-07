@@ -113,8 +113,28 @@ function detectType(schema: ValibotNode): ResolvedFieldMeta["type"] {
   const detected = bucketOf(inner.type);
   if (detected !== "unknown") return detected;
 
-  if ((inner.type === "unknown" || inner.type === "any") && Array.isArray(inner.pipe)) {
-    for (const item of inner.pipe) {
+  if (inner.type === "unknown" || inner.type === "any") {
+    return detectTypeFromPipes(schema) ?? "unknown";
+  }
+  return "unknown";
+}
+
+/**
+ * Scan the pipe of `schema` and of every wrapper beneath it for something that
+ * names a concrete type, outermost pipe first.
+ *
+ * Both levels have to be checked because `v.pipe` spreads its base schema, so
+ * where the `pipe` array ends up depends on the composition order: piping a
+ * wrapper leaves it on the wrapper node
+ * (`v.pipe(v.optional(v.unknown()), v.transform(Number), v.number())` is an
+ * `optional` node carrying the pipe, whose `wrapped` `unknown` has none),
+ * while wrapping a pipe leaves it on the wrapped node
+ * (`v.optional(v.pipe(v.unknown(), ...))`). Unwrapping first and reading only
+ * the inner pipe would miss the former and report the field as `unknown`.
+ */
+function detectTypeFromPipes(schema: ValibotNode): ResolvedFieldMeta["type"] | undefined {
+  if (Array.isArray(schema.pipe)) {
+    for (const item of schema.pipe) {
       if (item.kind === "schema") {
         const bucket = bucketOf(item.type);
         if (bucket !== "unknown") return bucket;
@@ -128,7 +148,12 @@ function detectType(schema: ValibotNode): ResolvedFieldMeta["type"] {
       }
     }
   }
-  return "unknown";
+
+  if (schema.type && UNWRAPPABLE.has(schema.type) && schema.wrapped) {
+    return detectTypeFromPipes(schema.wrapped);
+  }
+
+  return undefined;
 }
 
 /** Validation actions whose input type is exclusively `number`. */
