@@ -13,3 +13,7 @@ coverage/
 tests/temp-*.ts
 .tmp-bin/
 .claude/tmp/
+
+# Copied from the repo root at publish time (prepublishOnly)
+packages/zod/README.md
+packages/politty/README.md

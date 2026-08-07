@@ -1,0 +1,19 @@
+{
+  // Resolves the "politty" specifier to the built compatibility alias so the
+  // `declare module "politty"` GlobalArgs pattern is checked against what we
+  // actually publish. Excluded from the repo root tsconfig — this only
+  // typechecks after `pnpm -r build` (the dist-compat vitest project builds
+  // in its beforeAll).
+  "compilerOptions": {
+    "strict": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "exactOptionalPropertyTypes": true,
+    "paths": {
+      "politty": ["../../../../packages/politty/dist/index.d.ts"]
+    }
+  },
+  "include": ["user.ts"]
+}

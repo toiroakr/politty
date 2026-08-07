@@ -5,8 +5,8 @@ import {
   generateCandidates,
   generateCompletion,
   parseCompletionContext,
-} from "../../src/completion/index.js";
-import { runCommand } from "../../src/index.js";
+} from "../../packages/zod/src/completion.js";
+import { runCommand } from "../../packages/zod/src/index.js";
 import { spyOnConsoleLog, type ConsoleSpy } from "../../tests/utils/console.js";
 import { buildCommand, cli, deployCommand, testCommand } from "./index.js";
 

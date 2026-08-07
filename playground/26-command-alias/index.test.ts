@@ -1,6 +1,10 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { assertDocMatch, initDocFile, type GenerateDocConfig } from "../../src/docs/index.js";
-import { runCommand } from "../../src/index.js";
+import {
+  assertDocMatch,
+  initDocFile,
+  type GenerateDocConfig,
+} from "../../packages/zod/src/docs.js";
+import { runCommand } from "../../packages/zod/src/index.js";
 import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { cli, installCommand, listCommand, removeCommand } from "./index.js";

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { arg, defineCommand, runCommand } from "../src/index.js";
+import { arg, defineCommand, runCommand } from "../packages/zod/src/index.js";
 import { spyOnConsoleLog } from "./utils/console.js";
 
 /**

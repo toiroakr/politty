@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { generateBashCompletion } from "../src/completion/bash.js";
+import { generateBashCompletion } from "../packages/core/src/completion/bash.js";
 import {
   collectExpandSpecs,
   collectTrackedFields,
   extractCompletionData,
-} from "../src/completion/extractor.js";
-import { generateFishCompletion } from "../src/completion/fish.js";
-import { generateZshCompletion } from "../src/completion/zsh.js";
-import { arg, defineCommand, generateCompletion } from "../src/index.js";
+} from "../packages/core/src/completion/extractor.js";
+import { generateFishCompletion } from "../packages/core/src/completion/fish.js";
+import { generateZshCompletion } from "../packages/core/src/completion/zsh.js";
+import { arg, defineCommand, generateCompletion } from "../packages/zod/src/index.js";
 
 const ENDPOINT_FIELDS: Record<string, string[]> = {
   GetApplication: ["workspaceId", "applicationName"],

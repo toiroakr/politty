@@ -12,7 +12,14 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
-import { resolveBundledWorkerPath } from "../src/completion/bundled-worker.js";
+import { resolveBundledWorkerPath } from "../packages/core/src/completion/bundled-worker.js";
+import {
+  hasManagedCache,
+  install,
+  installPath,
+  refreshIfStale,
+} from "../packages/core/src/completion/install.js";
+import { defaultCacheDir, generateLoader } from "../packages/core/src/completion/loader.js";
 import {
   CompletionDirective,
   createCompletionCommand,
@@ -28,14 +35,7 @@ import {
   parseCompletionContext,
   validateBundledWorkerFile,
   withCompletionCommand,
-} from "../src/completion/index.js";
-import {
-  hasManagedCache,
-  install,
-  installPath,
-  refreshIfStale,
-} from "../src/completion/install.js";
-import { defaultCacheDir, generateLoader } from "../src/completion/loader.js";
+} from "../packages/zod/src/completion.js";
 import {
   arg,
   defineCommand,
@@ -43,7 +43,7 @@ import {
   lazy,
   runCommand,
   type CompletionMeta,
-} from "../src/index.js";
+} from "../packages/zod/src/index.js";
 
 // Spy on `spawn` so the runMainHook tests below can assert gating without
 // actually spawning a child process. We must mock at module level — the

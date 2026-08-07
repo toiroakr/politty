@@ -9,8 +9,8 @@
 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineCommand, runMain } from "../../src/index.js";
-import { withSkillCommand } from "../../src/skill/index.js";
+import { defineCommand, runMain } from "../../packages/zod/src/index.js";
+import { withSkillCommand } from "../../packages/zod/src/skill.js";
 
 const sourceDir = resolve(dirname(fileURLToPath(import.meta.url)), "skills");
 

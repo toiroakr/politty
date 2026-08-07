@@ -6,7 +6,7 @@
  *   pnpx tsx playground/01-hello-world.ts --help
  */
 
-import { defineCommand, runMain } from "../../src/index.js";
+import { defineCommand, runMain } from "../../packages/zod/src/index.js";
 
 export const command = defineCommand({
   name: "hello",

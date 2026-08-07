@@ -21,7 +21,7 @@
  */
 
 import { z } from "zod";
-import { arg, defineCommand, runMain } from "../../src/index.js";
+import { arg, defineCommand, runMain } from "../../packages/zod/src/index.js";
 
 // config user get command
 export const configUserGetCommand = defineCommand({

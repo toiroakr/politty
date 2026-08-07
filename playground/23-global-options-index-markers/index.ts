@@ -13,7 +13,7 @@
  */
 
 import { z } from "zod";
-import { arg, defineCommand, runMain } from "../../src/index.js";
+import { arg, defineCommand, runMain } from "../../packages/zod/src/index.js";
 
 // Shared options used across multiple commands (rendered via globalOptions marker)
 export const commonOptions = {

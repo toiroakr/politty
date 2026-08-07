@@ -17,14 +17,31 @@ export default defineConfig({
         test: {
           name: "unit",
           include: [
-            "src/**/*.test.ts",
+            "packages/*/src/**/*.test.ts",
             "tests/**/*.test.ts",
             "playground/**/*.test.ts",
             "playground/**/index.test.ts",
           ],
-          exclude: ["tests/shell-completion/**"],
+          exclude: ["tests/shell-completion/**", "tests/dist-compat/**"],
+          // Core tests exercise zod fixture schemas without importing an
+          // `@politty/zod` entry, so the adapter registration that entry
+          // modules perform for real users happens in this setup file.
+          setupFiles: ["./tests/utils/register-zod-adapter.ts"],
         },
       },
+      // Compatibility checks against BUILT output (politty alias dist);
+      // builds the workspace in beforeAll, hence the generous hook budget.
+      {
+        test: {
+          name: "dist-compat",
+          include: ["tests/dist-compat/**/*.test.ts"],
+          testTimeout: 30000,
+          hookTimeout: 180000,
+        },
+      },
+      // The shell-* projects need no adapter setup: they drive completion
+      // through `tsx` subprocesses, which import the `@politty/zod` entry
+      // and register the adapter themselves.
       {
         test: {
           name: "shell-bash",
@@ -57,7 +74,7 @@ export default defineConfig({
       enabled: true,
       tsconfig: "./tsconfig.json",
       include: [
-        "src/**/*.test.ts",
+        "packages/*/src/**/*.test.ts",
         "tests/**/*.test.ts",
         "playground/**/*.test.ts",
         "playground/**/index.test.ts",
@@ -67,8 +84,8 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov"],
       reportsDirectory: "./coverage",
-      include: ["src/**/*.ts"],
-      exclude: ["src/**/*.test.ts", "src/**/*.d.ts"],
+      include: ["packages/*/src/**/*.ts"],
+      exclude: ["packages/*/src/**/*.test.ts", "packages/*/src/**/*.d.ts"],
     },
   },
 });
