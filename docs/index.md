@@ -4,9 +4,11 @@
 
 From simple scripts to complex CLI tools with subcommands, validation, and auto-generated help, you can build them all with a developer-friendly API.
 
+> **Using valibot?** Install [`@politty/valibot`](https://www.npmjs.com/package/@politty/valibot) instead of `politty`. The API is identical, so every page in these docs applies as written — read `politty` as `@politty/valibot`, and the `z.*` schemas in the examples as their `v.*` equivalents. See [Installation](./getting-started.md#installation) for the differences that do exist.
+
 ## Features
 
-- **Zod Native**: Use Zod schemas directly for argument definition and validation
+- **Schema Native**: Use Zod (or [valibot](https://valibot.dev/)) schemas directly for argument definition and validation
 - **Type Safety**: Full TypeScript support with automatic type inference for parsed arguments
 - **Flexible Argument Definition**: Support for positional arguments, flags, aliases, arrays, and environment variable fallbacks
 - **Nested Commands**: Build Git-style subcommands (with lazy loading support)

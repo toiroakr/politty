@@ -12,6 +12,21 @@ pnpm add politty zod
 yarn add politty zod
 ```
 
+### Using valibot instead of Zod
+
+politty is also published as [`@politty/valibot`](https://www.npmjs.com/package/@politty/valibot), built on [valibot](https://valibot.dev/) instead of Zod:
+
+```bash
+npm install @politty/valibot valibot
+```
+
+Everything in these docs applies unchanged — the exported API (`defineCommand`, `arg`, `runMain`, and the `docs` / `completion` / `skill` / `prompt` subpaths) and the `politty` bin are the same. Only two things differ:
+
+- Import from `@politty/valibot` and write schemas with valibot (`v.object({ ... })`, `v.optional(v.boolean(), false)`, and `v.pipe(v.unknown(), v.transform(Number), v.number())` where the Zod examples use `z.coerce.number()`).
+- Field descriptions can additionally come from valibot's own metadata actions — `v.pipe(v.string(), v.description("..."))` or `v.metadata({ description: "..." })` — in place of `.describe()`. There is no `@politty/valibot/augment` subpath, because it exists only to augment Zod's `GlobalMeta` interface; use `arg()` or `v.metadata()` instead. Extending `GlobalArgs` works the same way (`declare module "@politty/valibot"`).
+
+A runnable example lives in [`playground/31-valibot`](https://github.com/toiroakr/politty/tree/main/playground/31-valibot).
+
 ## Your First Command
 
 Here's a minimal "Hello World" example.

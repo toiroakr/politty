@@ -10,7 +10,7 @@
  * The dist is built once for the whole project in `global-setup.ts`.
  */
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -92,5 +92,28 @@ describe("@politty/valibot bin", () => {
     );
     expect(out).toContain("politty");
     expect(out).toContain("Usage:");
+  });
+});
+
+describe('declare module "@politty/valibot" GlobalArgs augmentation', () => {
+  function tsgo(fixture: string): { status: number } {
+    // execSync (shell) is deliberate: pnpm is a .cmd shim on Windows, which
+    // Node refuses to execFileSync without a shell. `fixture` is one of the
+    // hardcoded directory names below, never external input.
+    const dir = resolve(rootDir, "tests/dist-compat/fixtures", fixture);
+    try {
+      execSync(`pnpm exec tsgo -p "${dir}"`, { cwd: rootDir, stdio: "pipe" });
+      return { status: 0 };
+    } catch (error) {
+      return { status: (error as { status?: number }).status ?? 1 };
+    }
+  }
+
+  it("merges through the built d.ts", () => {
+    expect(tsgo("valibot-global-args-merge").status).toBe(0);
+  });
+
+  it("negative control: a wrong assignment against the merged type is rejected", () => {
+    expect(tsgo("valibot-global-args-merge-negative").status).not.toBe(0);
   });
 });
