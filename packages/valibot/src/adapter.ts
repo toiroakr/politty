@@ -551,16 +551,20 @@ export function extractValibotFields(schema: ArgsSchema): ExtractedFields {
       break;
     }
 
+    // These helpers receive the unwrapped node, so they record it as their
+    // `schema`. Put the original back: `ExtractedFields.schema` is the schema
+    // validation runs against, and for a wrapped composite
+    // (`v.optional(v.variant(...), {…})`) the wrapper carries the default.
     case "variant":
-      result = extractFromVariant(node);
+      result = { ...extractFromVariant(node), schema };
       break;
 
     case "union":
-      result = extractFromUnion(node);
+      result = { ...extractFromUnion(node), schema };
       break;
 
     case "intersect":
-      result = extractFromIntersect(node);
+      result = { ...extractFromIntersect(node), schema };
       break;
 
     default: {

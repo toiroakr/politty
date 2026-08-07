@@ -30,6 +30,20 @@ describe("valibot adapter", () => {
       );
     });
 
+    it("should see through wrappers and pipes to the wrapped object's mode", () => {
+      expect(getUnknownKeysMode(v.optional(v.strictObject({ name: v.string() })))).toBe("strict");
+      expect(
+        getUnknownKeysMode(
+          v.pipe(
+            v.looseObject({ name: v.string() }),
+            v.transform((x) => x),
+          ),
+        ),
+      ).toBe("passthrough");
+    });
+  });
+
+  describe("extractValibotFields - wrapper handling", () => {
     it("should extract fields through a defaulted wrapper", () => {
       // A defaulted wrapper keeps an object output type, so this type-checks
       // as an args schema. Before unwrapping, extraction fell through to the
@@ -46,16 +60,36 @@ describe("valibot adapter", () => {
       expect(extracted.schema).toBe(schema);
     });
 
-    it("should see through wrappers and pipes to the wrapped object's mode", () => {
-      expect(getUnknownKeysMode(v.optional(v.strictObject({ name: v.string() })))).toBe("strict");
-      expect(
-        getUnknownKeysMode(
-          v.pipe(
-            v.looseObject({ name: v.string() }),
-            v.transform((x) => x),
-          ),
-        ),
-      ).toBe("passthrough");
+    it("should keep the original schema for wrapped composites", () => {
+      // Extraction unwraps to find the fields, but ExtractedFields.schema is
+      // the schema validation runs against — for a wrapped composite the
+      // wrapper is what carries the default, so it must not be replaced by
+      // the unwrapped inner schema.
+      const variant = v.optional(
+        v.variant("t", [
+          v.object({ t: v.literal("a"), x: v.string() }),
+          v.object({ t: v.literal("b"), y: v.string() }),
+        ]),
+        { t: "a" as const, x: "" },
+      );
+      const union = v.optional(
+        v.union([v.object({ a: v.string() }), v.object({ b: v.string() })]),
+        { a: "" },
+      );
+      const intersect = v.optional(
+        v.intersect([v.object({ a: v.string() }), v.object({ b: v.string() })]),
+        { a: "", b: "" },
+      );
+
+      for (const [label, schema] of [
+        ["variant", variant],
+        ["union", union],
+        ["intersect", intersect],
+      ] as const) {
+        const extracted = extractValibotFields(schema);
+        expect(extracted.schema, label).toBe(schema);
+        expect(extracted.fields.length, label).toBeGreaterThan(0);
+      }
     });
   });
 
