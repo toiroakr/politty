@@ -29,6 +29,13 @@ export interface StandardSchemaProps<Output = unknown> {
 /**
  * A schema from any Standard Schema implementing library, constrained by
  * its output type.
+ *
+ * A primitive cannot satisfy this (it has no `~standard` property), which is
+ * what matters in practice: schemas are used as `WeakMap` keys by the
+ * `arg()` metadata registry. Intersecting with `object` would not add
+ * safety — TypeScript still accepts a hand-written `string & SchemaLike<…>`
+ * against an object-constrained type, and such a value throws
+ * `Invalid value used as weak map key` the moment `arg()` registers it.
  */
 export interface SchemaLike<Output = unknown> {
   readonly "~standard": StandardSchemaProps<Output>;
