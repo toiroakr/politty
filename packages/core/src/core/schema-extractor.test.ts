@@ -28,6 +28,15 @@ describe("schema-extractor", () => {
       const schema = z.object({ name: z.string() }).passthrough();
       expect(getUnknownKeysMode(schema)).toBe("passthrough");
     });
+
+    it("should see through wrappers and pipes to the wrapped object's mode", () => {
+      const wrapped = z.strictObject({ name: z.string() }).optional();
+      expect(getUnknownKeysMode(wrapped as unknown as z.ZodType<Record<string, unknown>>)).toBe(
+        "strict",
+      );
+      const piped = z.looseObject({ name: z.string() }).transform((x) => x);
+      expect(getUnknownKeysMode(piped)).toBe("passthrough");
+    });
   });
 
   describe("extractFields - unknownKeysMode", () => {
@@ -47,6 +56,29 @@ describe("schema-extractor", () => {
       const schema = z.looseObject({ name: z.string() });
       const extracted = extractFields(schema);
       expect(extracted.unknownKeysMode).toBe("passthrough");
+    });
+  });
+
+  describe("extractFields - defaulted wrapper", () => {
+    it("should extract fields through .default() on the args schema", () => {
+      // .default() keeps an object output type, so this type-checks as an
+      // args schema. Before unwrapping, extraction fell through to the
+      // fallback and returned no fields at all — positionals were rejected
+      // and help/docs/completion came out empty.
+      const schema = z
+        .object({ name: z.string(), dryRun: z.boolean() })
+        .default({ name: "x", dryRun: false });
+      const extracted = extractFields(schema);
+      expect(extracted.fields.map((f) => f.name)).toEqual(["name", "dryRun"]);
+      expect(extracted.schemaType).toBe("object");
+      // The wrapper itself is kept so validation still applies it.
+      expect(extracted.schema).toBe(schema);
+    });
+
+    it("should extract fields through .optional() on the args schema", () => {
+      const schema = z.object({ name: z.string() }).optional();
+      const extracted = extractFields(schema as unknown as Parameters<typeof extractFields>[0]);
+      expect(extracted.fields.map((f) => f.name)).toEqual(["name"]);
     });
   });
 

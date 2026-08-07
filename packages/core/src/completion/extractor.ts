@@ -221,7 +221,7 @@ function extractSubcommand(
   }
 
   const pending: PendingExpandTarget[] = [];
-  // Extract once and partition: `extractFields` walks the Zod schema (a
+  // Extract once and partition: `extractFields` walks the args schema (a
   // non-trivial reflection pass for nested unions/wraps), so the prior
   // two-call shape paid that cost twice per command frame.
   const fields = command.args ? extractFields(command.args).fields : [];

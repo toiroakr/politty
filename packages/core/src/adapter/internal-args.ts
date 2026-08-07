@@ -14,7 +14,6 @@
  * not a third supported schema flavor.
  */
 
-import type { z } from "zod";
 import type { ArgMeta, BuiltinOverrideArgMeta, RegularArgMeta } from "../core/arg-registry.js";
 import type { ArgsSchema } from "../types.js";
 import {
@@ -178,7 +177,7 @@ export function extractInternalFields(schema: InternalArgsSchema): ExtractedFiel
       defaultValue: spec.defaultValue,
       type: FIELD_TYPE[spec.kind],
       enumValues: spec.enumValues ? [...spec.enumValues] : undefined,
-      schema: spec as unknown as z.ZodType,
+      schema: spec,
     }),
   );
 

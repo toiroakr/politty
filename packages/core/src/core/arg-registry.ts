@@ -1,5 +1,4 @@
-import type { z } from "zod";
-
+import type { InferSchemaOutput, SchemaLike } from "../adapter/standard-schema.js";
 import type { GlobalArgs, IsEmpty } from "../types.js";
 import type { DynamicCompletionResolver } from "./dynamic-completion-types.js";
 import type { ExpandCompletion } from "./expand-completion-types.js";
@@ -302,9 +301,9 @@ export type ArgMeta<TValue = unknown> = RegularArgMeta<TValue> | BuiltinOverride
 const argRegistry = new WeakMap<object, ArgMeta>();
 
 /**
- * Register metadata for a Zod schema
+ * Register metadata for a schema
  *
- * @param schema - The Zod schema
+ * @param schema - The schema to attach metadata to
  * @param meta - Argument metadata
  * @returns The same schema (for chaining)
  *
@@ -403,7 +402,7 @@ type ValidateNegation<M, TValue> =
  * or as part of an array, and whether it appears in `alias` or `hiddenAlias`.
  * Also rejects `negation` / `negationDescription` on non-boolean fields.
  */
-type ValidateArgMeta<M, TValue = unknown> = M extends { overrideBuiltinAlias: true }
+export type ValidateArgMeta<M, TValue = unknown> = M extends { overrideBuiltinAlias: true }
   ? ValidateNegation<M, TValue>
   : ContainsReservedAlias<AliasFieldOf<M>> extends true
     ? ReservedAliasTypeError<M>
@@ -411,14 +410,29 @@ type ValidateArgMeta<M, TValue = unknown> = M extends { overrideBuiltinAlias: tr
       ? ReservedAliasTypeError<M>
       : ValidateNegation<M, TValue>;
 
-export function arg<T extends z.ZodType>(schema: T): T;
-export function arg<T extends z.ZodType, M extends ArgMeta<z.output<T>>>(
+/**
+ * The overloaded `arg()` signature, parameterized by the schema constraint.
+ * Core's `arg` accepts any Standard Schema; adapter packages re-pin the same
+ * runtime function to their library's schema type (e.g. `ArgFn<z.ZodType>`
+ * in `@politty/zod`) so a schema from the wrong library is rejected at the
+ * type level.
+ */
+export interface ArgFn<TSchemaBase extends SchemaLike = SchemaLike> {
+  <T extends TSchemaBase>(schema: T): T;
+  <T extends TSchemaBase, M extends ArgMeta<InferSchemaOutput<T>>>(
+    schema: T,
+    meta: ValidateArgMeta<M, InferSchemaOutput<T>>,
+  ): T;
+}
+
+export function arg<T extends SchemaLike>(schema: T): T;
+export function arg<T extends SchemaLike, M extends ArgMeta<InferSchemaOutput<T>>>(
   schema: T,
-  meta: ValidateArgMeta<M, z.output<T>>,
+  meta: ValidateArgMeta<M, InferSchemaOutput<T>>,
 ): T;
-export function arg<T extends z.ZodType>(
+export function arg<T extends SchemaLike>(
   schema: T,
-  meta?: ValidateArgMeta<ArgMeta, z.output<T>>,
+  meta?: ValidateArgMeta<ArgMeta, InferSchemaOutput<T>>,
 ): T {
   if (meta) {
     argRegistry.set(schema, meta as ArgMeta);
@@ -429,9 +443,9 @@ export function arg<T extends z.ZodType>(
 /**
  * Get metadata for a schema from the registry
  *
- * @param schema - The Zod schema
+ * @param schema - The schema object used as the registry key
  * @returns The metadata if registered, undefined otherwise
  */
-export function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
+export function getArgMeta(schema: object): ArgMeta | undefined {
   return argRegistry.get(schema);
 }

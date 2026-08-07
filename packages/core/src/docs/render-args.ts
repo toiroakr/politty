@@ -1,13 +1,14 @@
-import type { z } from "zod";
 import { getValidatorAdapter } from "../adapter/registry.js";
+import type { SchemaLike } from "../adapter/standard-schema.js";
 import type { ResolvedFieldMeta } from "../core/schema-extractor.js";
 import { type ColumnId, emitMarkdownTable, toOptionRows } from "./option-rows.js";
 
 /**
- * Args shape type (Record of string keys to Zod schemas)
- * This matches the typical structure of `commonArgs`, `workspaceArgs`, etc.
+ * Args shape type (Record of string keys to field schemas of the CLI's
+ * schema library). This matches the typical structure of `commonArgs`,
+ * `workspaceArgs`, etc.
  */
-export type ArgsShape = Record<string, z.ZodType>;
+export type ArgsShape = Record<string, SchemaLike>;
 
 /**
  * Options for rendering args table
@@ -51,7 +52,7 @@ function extractArgsFields(args: ArgsShape): ResolvedFieldMeta[] {
  * // | `--env-file <ENV_FILE>` | `-e` | Path to environment file | - |
  * // ...
  *
- * @param args - Args shape (Record of string keys to Zod schemas with arg() metadata)
+ * @param args - Args shape (record of field names to the CLI's schema-library schemas, with arg() metadata)
  * @param options - Rendering options
  * @returns Rendered markdown table string
  */

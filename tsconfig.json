@@ -10,8 +10,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
     "outDir": "./dist",
     "resolveJsonModule": true,
     "isolatedModules": true,
@@ -31,6 +29,7 @@
   "include": [
     "packages/core/src/**/*",
     "packages/zod/src/**/*",
+    "packages/valibot/src/**/*",
     "packages/*/tsdown.config.ts",
     "tests/**/*",
     "playground/**/*"

@@ -33,6 +33,35 @@ pnpm add politty zod
 yarn add politty zod
 ```
 
+### Using valibot instead of zod
+
+politty is also available as [`@politty/valibot`](https://www.npmjs.com/package/@politty/valibot), built on [valibot](https://valibot.dev/) schemas — same API (`defineCommand`, `arg`, `runMain`, and all subpath modules), and its published build never loads zod:
+
+```bash
+npm install @politty/valibot valibot
+```
+
+```typescript
+import * as v from "valibot";
+import { defineCommand, runMain, arg } from "@politty/valibot";
+
+const command = defineCommand({
+  name: "greet",
+  args: v.object({
+    name: arg(v.string(), { description: "Name to greet", positional: true }),
+    loud: arg(v.optional(v.boolean(), false), { alias: "l" }),
+  }),
+  run: (args) => {
+    const greeting = `Hello, ${args.name}!`;
+    console.log(args.loud ? greeting.toUpperCase() : greeting);
+  },
+});
+
+runMain(command);
+```
+
+Field descriptions can also come from valibot's own metadata actions. They are actions, not schemas, so they belong inside `v.pipe(...)`: `v.pipe(v.string(), v.description("..."))` or `v.pipe(v.string(), v.metadata({ description: "..." }))`. The one zod-only feature without a valibot counterpart is the `politty/augment` module (zod `GlobalMeta` interface augmentation) — use `arg()` or `v.metadata()` instead. The `politty` package itself remains the zod flavor (an alias of `@politty/zod`).
+
 ## Quick Start
 
 ```typescript

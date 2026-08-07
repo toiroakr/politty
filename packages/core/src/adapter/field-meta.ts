@@ -1,4 +1,3 @@
-import type { z } from "zod";
 import type { ArgMeta, CompletionMeta, EffectContext, PromptMeta } from "../core/arg-registry.js";
 import type { ArgsSchema } from "../types.js";
 
@@ -44,8 +43,12 @@ export interface ResolvedFieldMeta {
   defaultValue?: unknown;
   /** Detected type from schema */
   type: "string" | "number" | "boolean" | "array" | "unknown";
-  /** Original Zod schema */
-  schema: z.ZodType;
+  /**
+   * Original field schema, carried through opaquely for downstream
+   * consumers. Its concrete type belongs to the adapter's schema library
+   * (zod, valibot, or an internal descriptor); core never calls into it.
+   */
+  schema: unknown;
   /** True if this overrides built-in aliases (-h, -H) */
   overrideBuiltinAlias?: true;
   /** Enum values if detected from schema (z.enum) */
@@ -181,7 +184,7 @@ export interface FieldIntrospection {
   /** Enum values if the schema is enum-like */
   enumValues: string[] | undefined;
   /** The original schema, carried through for downstream consumers */
-  schema: z.ZodType;
+  schema: unknown;
 }
 
 /**

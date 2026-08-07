@@ -97,7 +97,10 @@ function getTypeName(schema: z.ZodType): string | undefined {
  * - passthrough: _def.catchall is ZodUnknown (type = "unknown")
  */
 export function getUnknownKeysMode(schema: z.ZodType): UnknownKeysMode {
-  const s = schema as ZodSchemaWithDef;
+  // Unwrap so a wrapped object (e.g. z.strictObject(...).optional() or a
+  // top-level .transform() pipe) keeps the same unknown-keys handling the
+  // inner object enforces at validation.
+  const s = unwrapSchema(schema) as ZodSchemaWithDef;
   const def = s.def ?? s._def;
   const catchall = def?.catchall;
 
@@ -496,19 +499,23 @@ export function extractZodFields(schema: ArgsSchema): ExtractedFields {
   const cached = extractFieldsCache.get(schema);
   if (cached) return cached;
 
+  // Core's ArgsSchema is the neutral Standard Schema shape; everything in
+  // this module introspects the concrete zod representation behind it.
+  const zodSchema = schema as unknown as z.ZodType;
+
   let result: ExtractedFields;
-  const typeName = getTypeName(schema);
-  const s = schema as ZodSchemaWithDef;
+  const typeName = getTypeName(zodSchema);
+  const s = zodSchema as ZodSchemaWithDef;
   const def = s.def ?? s._def;
 
   switch (typeName) {
     case "object": {
-      const description = extractDescription(schema);
+      const description = extractDescription(zodSchema);
       result = {
-        fields: extractFromObject(schema),
+        fields: extractFromObject(zodSchema),
         schema,
         schemaType: "object",
-        unknownKeysMode: getUnknownKeysMode(schema),
+        unknownKeysMode: getUnknownKeysMode(zodSchema),
         ...(description ? { description } : {}),
       };
       break;
@@ -517,52 +524,61 @@ export function extractZodFields(schema: ArgsSchema): ExtractedFields {
     case "union":
       // In Zod v4, discriminatedUnion has type "union" with a discriminator property
       if (def?.discriminator) {
-        result = extractFromDiscriminatedUnion(schema);
+        result = extractFromDiscriminatedUnion(zodSchema);
       } else {
-        result = extractFromUnionLike(schema, "union");
+        result = extractFromUnionLike(zodSchema, "union");
       }
       break;
 
     case "xor":
-      result = extractFromUnionLike(schema, "xor");
+      result = extractFromUnionLike(zodSchema, "xor");
       break;
 
     case "intersection":
-      result = extractFromIntersection(schema);
+      result = extractFromIntersection(zodSchema);
       break;
 
+    case "optional":
+    case "nullable":
+    case "default":
     case "pipe": {
-      // Handle transform/refine on top-level schema (e.g., z.object({...}).transform(...))
-      const pipeInner = def?.in ?? def?.schema;
-      if (pipeInner) {
-        const innerResult = extractZodFields(pipeInner as ArgsSchema);
-        const pipeDescription = extractDescription(schema);
+      // Unwrap and reuse the inner result. Besides transform/refine on a
+      // top-level schema (`z.object({...}).transform(...)`), this covers
+      // wrappers that keep an object output type — `z.object({...}).default({})`
+      // type-checks as an args schema, and without unwrapping it fell through
+      // to the fallback below and extracted zero fields, silently breaking
+      // parsing, help, docs, and completion for the command.
+      const inner = def?.innerType ?? def?.in ?? def?.schema;
+      if (inner) {
+        const innerResult = extractZodFields(inner as ArgsSchema);
+        const wrapperDescription = extractDescription(zodSchema);
         result = {
+          // `schema` stays the wrapper so validation still applies it.
           ...innerResult,
           schema,
-          ...(pipeDescription ? { description: pipeDescription } : {}),
+          ...(wrapperDescription ? { description: wrapperDescription } : {}),
         };
         break;
       }
-      const pipeDescription = extractDescription(schema);
+      const wrapperDescription = extractDescription(zodSchema);
       result = {
         fields: [],
         schema,
         schemaType: "object",
-        unknownKeysMode: getUnknownKeysMode(schema),
-        ...(pipeDescription ? { description: pipeDescription } : {}),
+        unknownKeysMode: getUnknownKeysMode(zodSchema),
+        ...(wrapperDescription ? { description: wrapperDescription } : {}),
       };
       break;
     }
 
     default: {
-      const description = extractDescription(schema);
+      const description = extractDescription(zodSchema);
       // Fallback: try to treat as object
       result = {
         fields: [],
         schema,
         schemaType: "object",
-        unknownKeysMode: getUnknownKeysMode(schema),
+        unknownKeysMode: getUnknownKeysMode(zodSchema),
         ...(description ? { description } : {}),
       };
       break;
@@ -593,7 +609,7 @@ export function validateZodArgs(
   rawArgs: Record<string, unknown>,
   schema: ArgsSchema,
 ): ValidationResult<unknown> {
-  const result = schema.safeParse(rawArgs);
+  const result = (schema as z.ZodType).safeParse(rawArgs);
 
   if (result.success) {
     return { success: true, data: result.data };
@@ -612,6 +628,6 @@ export const zodAdapter: ValidatorAdapter = {
   vendor: "zod",
   extractFields: extractZodFields,
   resolveFieldMeta: (name, fieldSchema) => resolveZodFieldMeta(name, fieldSchema as z.ZodType),
-  getUnknownKeysMode,
+  getUnknownKeysMode: (schema) => getUnknownKeysMode(schema as unknown as z.ZodType),
   validate: validateZodArgs,
 };

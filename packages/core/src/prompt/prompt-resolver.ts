@@ -8,7 +8,7 @@ import type { ResolvedPromptConfig } from "./types.js";
  * 1. Explicit type from prompt.type
  * 2. Explicit choices from prompt.choices (forces "select")
  * 3. Inherited from completion metadata (file/directory -> "text")
- * 4. Auto-detected from Zod schema type:
+ * 4. Auto-detected from the extracted field type (adapter-provided):
  *    - enum (has enumValues) -> "select"
  *    - boolean -> "confirm"
  *    - string/number/unknown -> "text"

@@ -1451,15 +1451,32 @@ function replaceMarkerSection(
 }
 
 /**
+ * Whether a value is a Standard Schema, judged by the shape of its
+ * `~standard` marker rather than the key alone.
+ *
+ * `vendor` and `validate` are what the check relies on; `version` is
+ * deliberately not required, so a future spec revision bumping it does not
+ * make politty stop recognizing schemas.
+ */
+function isStandardSchema(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const marker = (value as { "~standard"?: unknown })["~standard"];
+  if (typeof marker !== "object" || marker === null) return false;
+  const { vendor, validate } = marker as { vendor?: unknown; validate?: unknown };
+  return typeof vendor === "string" && typeof validate === "function";
+}
+
+/**
  * Check if config is the { args, options? } shape (not shorthand ArgsShape)
  *
  * Distinguishes between:
  * - { args: ArgsShape, options?: ArgsTableOptions } → returns true
- * - ArgsShape (e.g., { verbose: ZodType, args: ZodType }) → returns false
+ * - ArgsShape (e.g., { verbose: <schema>, args: <schema> }) → returns false
  *
- * The key insight is that in the { args, options? } shape, config.args is an ArgsShape
- * (Record of ZodTypes), while in shorthand, config itself is the ArgsShape and config.args
- * would be a single ZodType if user has an option named "args".
+ * The key insight is that in the { args, options? } shape, config.args is an
+ * ArgsShape (a record of the CLI's schema-library schemas), while in shorthand
+ * config itself is the ArgsShape and config.args would be a single schema if
+ * the user has an option named "args".
  */
 function isGlobalOptionsConfigWithOptions(
   config: NonNullable<RootDocConfig["globalOptions"]>,
@@ -1470,12 +1487,20 @@ function isGlobalOptionsConfigWithOptions(
   if (typeof config !== "object" || config === null || !("args" in config)) {
     return false;
   }
-  // If config.args is a ZodType, this is shorthand with an option named "args"
-  // If config.args is an object (ArgsShape), this is the { args, options? } shape.
-  // Detected structurally (schemas expose safeParse; plain shape records
-  // don't) so this module never needs zod at runtime.
-  const maybeSchema = config.args as { safeParse?: unknown } | null;
-  return typeof maybeSchema?.safeParse !== "function";
+  // If config.args is a schema, this is shorthand with an option named "args".
+  // If config.args is a plain record (ArgsShape), this is the
+  // { args, options? } shape. Detected via the Standard Schema marker every
+  // supported library exposes (`~standard`) rather than a library-specific
+  // method: zod has `safeParse` but valibot does not (its `safeParse` is a
+  // standalone function), so probing for it would classify every valibot
+  // shorthand config as the `{ args, options }` shape and then treat the
+  // schema itself as a field record.
+  //
+  // The marker's *shape* is checked, not merely its presence: `globalOptions`
+  // takes arbitrary records, so a shorthand config could legitimately hold a
+  // field literally named `~standard`, whose value is a schema rather than a
+  // spec marker.
+  return !isStandardSchema(config.args);
 }
 
 /**
@@ -1510,7 +1535,7 @@ function normalizeGlobalOptions(
 }
 
 /**
- * Derive an ArgsShape from a globalArgs Zod schema, retaining only non-positional option fields.
+ * Derive an ArgsShape from a globalArgs schema, retaining only non-positional option fields.
  * Returns undefined when globalArgs is undefined or contains no option fields.
  * Used to build globalOptionDefinitions from globalArgs when rootDoc is not available.
  */
@@ -1518,7 +1543,9 @@ function deriveGlobalArgsShape(globalArgs: ArgsSchema | undefined): ArgsShape | 
   if (!globalArgs) return undefined;
   const optionFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
   if (optionFields.length === 0) return undefined;
-  return Object.fromEntries(optionFields.map((f) => [f.name, f.schema]));
+  // `f.schema` is carried opaquely as `unknown`; these fields came out of a
+  // real args schema, so they are the adapter's field schemas by construction.
+  return Object.fromEntries(optionFields.map((f) => [f.name, f.schema])) as ArgsShape;
 }
 
 /**
@@ -2356,9 +2383,9 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   if (globalArgs && rootDoc && !rootDoc.globalOptions) {
     const optionFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
     if (optionFields.length > 0) {
-      const globalShape: ArgsShape = Object.fromEntries(
+      const globalShape = Object.fromEntries(
         optionFields.map((f) => [f.name, f.schema]),
-      );
+      ) as ArgsShape;
       rootDoc = { ...rootDoc, globalOptions: globalShape };
     }
   }

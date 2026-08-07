@@ -1,5 +1,4 @@
-import type { z } from "zod";
-
+import type { SchemaLike } from "./adapter/standard-schema.js";
 import type { ExtractedFields } from "./core/schema-extractor.js";
 import type { LazyCommand } from "./lazy.js";
 
@@ -56,10 +55,13 @@ export interface Logger {
 }
 
 /**
- * Supported schema types for args
+ * Supported schema types for args: any Standard Schema (zod, valibot, ...)
+ * whose output is an object. Adapter packages narrow this back to their
+ * library's own schema type in their public exports (e.g. `@politty/zod`
+ * exports `ArgsSchema = z.ZodType<Record<string, any>>`).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type ArgsSchema = z.ZodType<Record<string, any>>;
+export type ArgsSchema = SchemaLike<Record<string, any>>;
 
 /**
  * Context provided to setup function
@@ -95,7 +97,7 @@ export interface GlobalCleanupContext {
 
 /**
  * Base command interface (shared properties)
- * @template TArgsSchema - The Zod schema type for arguments
+ * @template TArgsSchema - The args schema type (from the CLI's schema library)
  * @template TArgs - The inferred args type from the schema
  */
 export interface CommandBase<
@@ -108,7 +110,7 @@ export interface CommandBase<
   description?: string | undefined;
   /** Alternative names for this command (used as subcommand aliases) */
   aliases?: string[] | undefined;
-  /** Argument schema (preserves the original Zod schema type) */
+  /** Argument schema (preserves the original schema type) */
   args: TArgsSchema;
   /** Subcommands */
   subCommands?: SubCommandsRecord | undefined;
@@ -131,7 +133,7 @@ export interface CommandBase<
 
 /**
  * A command with a run function
- * @template TArgsSchema - The Zod schema type for arguments
+ * @template TArgsSchema - The args schema type (from the CLI's schema library)
  * @template TArgs - The inferred args type from the schema
  * @template TResult - The return type of the run function
  */
@@ -146,7 +148,7 @@ export interface RunnableCommand<
 
 /**
  * A command without a run function (e.g., subcommand-only parent)
- * @template TArgsSchema - The Zod schema type for arguments
+ * @template TArgsSchema - The args schema type (from the CLI's schema library)
  * @template TArgs - The inferred args type from the schema
  */
 export interface NonRunnableCommand<
@@ -200,7 +202,7 @@ export type SubCommandsRecord = Record<string, SubCommandValue>;
 
 /**
  * Async callback to resolve missing argument values interactively.
- * Called after env fallback, before Zod validation.
+ * Called after env fallback, before schema validation.
  * Provided by adapter subpath modules (e.g. `politty/prompt/clack`).
  */
 export type PromptResolver = (

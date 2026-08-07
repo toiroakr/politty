@@ -72,7 +72,7 @@
   },
   "scripts": {
     "build": "tsdown",
-    "prepublishOnly": "pnpm run build && node -e \"require('node:fs').copyFileSync('../../README.md','README.md')\""
+    "prepublishOnly": "pnpm run build && node -e \"const{copyFileSync}=require('node:fs');for(const f of ['README.md','LICENSE'])copyFileSync('../../'+f,f)\""
   },
   "dependencies": {
     "yaml": "^2.8.3"

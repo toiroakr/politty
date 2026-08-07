@@ -5,15 +5,16 @@
  * Everything else in the test suite imports `packages/zod/src` directly, so
  * without this file nothing in CI executes the alias package existing
  * `politty` users install: its runtime re-exports, its subpath entries, its
- * bin, and the `declare module "politty"` GlobalArgs augmentation. The
- * beforeAll builds the workspace so the assertions always run against the
- * current sources.
+ * bin, and the `declare module "politty"` GlobalArgs augmentation.
+ *
+ * The dist is built once for the whole project in `global-setup.ts`, so the
+ * assertions always run against the current sources.
  */
 
 import { execFileSync, execSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const polittyDist = resolve(rootDir, "packages/politty/dist");
@@ -22,20 +23,6 @@ const zodDist = resolve(rootDir, "packages/zod/dist");
 function importDist(distDir: string, file: string): Promise<Record<string, unknown>> {
   return import(pathToFileURL(resolve(distDir, file)).href);
 }
-
-beforeAll(() => {
-  // Always rebuild: a stale dist would silently test old code.
-  try {
-    execSync("pnpm -r build", { cwd: rootDir, stdio: "pipe" });
-  } catch (error) {
-    // stdio: "pipe" keeps successful builds quiet, so surface the captured
-    // output when the build fails — otherwise CI shows only "command failed".
-    const e = error as { stdout?: Buffer; stderr?: Buffer };
-    throw new Error(
-      `pnpm -r build failed:\n${e.stdout?.toString() ?? ""}\n${e.stderr?.toString() ?? ""}`,
-    );
-  }
-}, 180_000);
 
 describe("politty alias runtime", () => {
   it("re-exports the same runtime objects as @politty/zod (single adapter registry)", async () => {
