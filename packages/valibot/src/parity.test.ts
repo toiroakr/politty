@@ -9,10 +9,14 @@
  * in metadata extraction would show up here rather than in parsing.
  */
 
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import * as v from "valibot";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { extractCompletionData } from "./completion.js";
+import { generateDoc } from "./docs.js";
 import { arg, defineCommand, extractFields, runCommand } from "./index.js";
 import { promptMissingArgs, resolvePromptConfig, type PromptAdapter } from "./prompt.js";
 import { withSkillCommand } from "./skill.js";
@@ -173,6 +177,53 @@ describe("@politty/valibot parity: skill generation", () => {
     // so mounting it must not break help for the nested command either.
     const skillsHelp = await runCommand(cmd, ["skills", "--help"], { captureLogs: true });
     expect(skillsHelp.exitCode).toBe(0);
+  });
+});
+
+describe("@politty/valibot parity: docs global options", () => {
+  it("treats a shorthand globalOptions config with an option named 'args' as a shape", async () => {
+    // The shorthand form is a plain record of fields, and here one of those
+    // fields is itself called `args` — the same key the `{ args, options }`
+    // form uses. politty distinguishes the two structurally, and that probe
+    // must not rely on a zod-only method (valibot has no `schema.safeParse`),
+    // or the schema below would be walked as if it were a field record.
+    vi.stubEnv("POLITTY_DOCS_UPDATE", "true");
+
+    const dir = mkdtempSync(join(tmpdir(), "politty-valibot-docs-"));
+    const rootDocPath = join(dir, "root.md");
+    writeFileSync(
+      rootDocPath,
+      [
+        "# app",
+        "",
+        "## Global Options",
+        "",
+        "<!-- politty:global-options:start -->",
+        "<!-- politty:global-options:end -->",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    try {
+      const result = await generateDoc({
+        command: defineCommand({ name: "app", description: "App", run: () => {} }),
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            args: arg(v.optional(v.string()), { description: "Extra args passed through" }),
+          },
+        },
+        files: {},
+      });
+
+      expect(result.success).toBe(true);
+      const written = readFileSync(rootDocPath, "utf-8");
+      expect(written).toContain("--args");
+      expect(written).toContain("Extra args passed through");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

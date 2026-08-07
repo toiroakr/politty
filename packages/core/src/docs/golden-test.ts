@@ -1470,12 +1470,16 @@ function isGlobalOptionsConfigWithOptions(
   if (typeof config !== "object" || config === null || !("args" in config)) {
     return false;
   }
-  // If config.args is a ZodType, this is shorthand with an option named "args"
-  // If config.args is an object (ArgsShape), this is the { args, options? } shape.
-  // Detected structurally (schemas expose safeParse; plain shape records
-  // don't) so this module never needs zod at runtime.
-  const maybeSchema = config.args as { safeParse?: unknown } | null;
-  return typeof maybeSchema?.safeParse !== "function";
+  // If config.args is a schema, this is shorthand with an option named "args".
+  // If config.args is a plain record (ArgsShape), this is the
+  // { args, options? } shape. Detected via the Standard Schema marker every
+  // supported library exposes (`~standard`) rather than a library-specific
+  // method: zod has `safeParse` but valibot does not (its `safeParse` is a
+  // standalone function), so probing for it would classify every valibot
+  // shorthand config as the `{ args, options }` shape and then treat the
+  // schema itself as a field record.
+  const maybeSchema = config.args as { "~standard"?: unknown } | null;
+  return maybeSchema?.["~standard"] == null;
 }
 
 /**
