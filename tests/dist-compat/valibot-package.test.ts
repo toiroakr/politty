@@ -26,7 +26,7 @@ function importDist(file: string): Promise<Record<string, unknown>> {
 }
 
 describe("@politty/valibot dist is zod-free", () => {
-  it("never bundles or imports zod in any published module", () => {
+  it("neither imports zod nor carries zod's implementation inlined", () => {
     // Recursive: tsdown can emit shared chunks into subdirectories, and a
     // chunk that imports zod would defeat this test's whole purpose. The bin
     // launcher ships too (package.json `files`), so it is scanned as well.
@@ -36,10 +36,22 @@ describe("@politty/valibot dist is zod-free", () => {
     expect(distFiles.length).toBeGreaterThan(0);
     for (const file of [...distFiles, valibotBin]) {
       const source = readFileSync(file, "utf8");
+      const label = relative(valibotPkg, file);
       // Covers static/side-effect/dynamic imports and require, with optional
       // whitespace and zod subpaths ("zod/v4", "zod/mini", ...).
-      expect(source, `${relative(valibotPkg, file)} must not reference zod`).not.toMatch(
+      expect(source, `${label} must not import zod`).not.toMatch(
         /(\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(?\s*)["']zod(\/[^"']+)?["']/,
+      );
+      // The specifier check above cannot see zod being *inlined*, which is the
+      // likelier regression here: core is bundled in via `noExternal` and zod
+      // is absent from this package's dependencies, so a zod import
+      // reintroduced in core gets pulled in as source with no specifier left
+      // to match. These identifiers are zod v4's own — its `$Zod*` classes and
+      // tags, and the `_zod` internals property every zod schema carries. A
+      // plain "zod" substring would not work: politty's output mentions zod
+      // dozens of times in prose (JSDoc, one error message).
+      expect(source, `${label} must not inline zod's implementation`).not.toMatch(
+        /\$Zod[A-Z]|\b_zod\b/,
       );
     }
   });
