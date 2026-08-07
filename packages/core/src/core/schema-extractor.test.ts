@@ -59,6 +59,29 @@ describe("schema-extractor", () => {
     });
   });
 
+  describe("extractFields - defaulted wrapper", () => {
+    it("should extract fields through .default() on the args schema", () => {
+      // .default() keeps an object output type, so this type-checks as an
+      // args schema. Before unwrapping, extraction fell through to the
+      // fallback and returned no fields at all — positionals were rejected
+      // and help/docs/completion came out empty.
+      const schema = z
+        .object({ name: z.string(), dryRun: z.boolean() })
+        .default({ name: "x", dryRun: false });
+      const extracted = extractFields(schema);
+      expect(extracted.fields.map((f) => f.name)).toEqual(["name", "dryRun"]);
+      expect(extracted.schemaType).toBe("object");
+      // The wrapper itself is kept so validation still applies it.
+      expect(extracted.schema).toBe(schema);
+    });
+
+    it("should extract fields through .optional() on the args schema", () => {
+      const schema = z.object({ name: z.string() }).optional();
+      const extracted = extractFields(schema as unknown as Parameters<typeof extractFields>[0]);
+      expect(extracted.fields.map((f) => f.name)).toEqual(["name"]);
+    });
+  });
+
   describe("extractFields - transform (pipe)", () => {
     it("should detect field types through field-level transforms", () => {
       const schema = z.object({

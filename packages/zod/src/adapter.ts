@@ -538,26 +538,35 @@ export function extractZodFields(schema: ArgsSchema): ExtractedFields {
       result = extractFromIntersection(zodSchema);
       break;
 
+    case "optional":
+    case "nullable":
+    case "default":
     case "pipe": {
-      // Handle transform/refine on top-level schema (e.g., z.object({...}).transform(...))
-      const pipeInner = def?.in ?? def?.schema;
-      if (pipeInner) {
-        const innerResult = extractZodFields(pipeInner as ArgsSchema);
-        const pipeDescription = extractDescription(zodSchema);
+      // Unwrap and reuse the inner result. Besides transform/refine on a
+      // top-level schema (`z.object({...}).transform(...)`), this covers
+      // wrappers that keep an object output type — `z.object({...}).default({})`
+      // type-checks as an args schema, and without unwrapping it fell through
+      // to the fallback below and extracted zero fields, silently breaking
+      // parsing, help, docs, and completion for the command.
+      const inner = def?.innerType ?? def?.in ?? def?.schema;
+      if (inner) {
+        const innerResult = extractZodFields(inner as ArgsSchema);
+        const wrapperDescription = extractDescription(zodSchema);
         result = {
+          // `schema` stays the wrapper so validation still applies it.
           ...innerResult,
           schema,
-          ...(pipeDescription ? { description: pipeDescription } : {}),
+          ...(wrapperDescription ? { description: wrapperDescription } : {}),
         };
         break;
       }
-      const pipeDescription = extractDescription(zodSchema);
+      const wrapperDescription = extractDescription(zodSchema);
       result = {
         fields: [],
         schema,
         schemaType: "object",
         unknownKeysMode: getUnknownKeysMode(zodSchema),
-        ...(pipeDescription ? { description: pipeDescription } : {}),
+        ...(wrapperDescription ? { description: wrapperDescription } : {}),
       };
       break;
     }

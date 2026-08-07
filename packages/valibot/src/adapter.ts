@@ -523,7 +523,13 @@ export function extractValibotFields(schema: ArgsSchema): ExtractedFields {
   const cached = extractFieldsCache.get(schema);
   if (cached) return cached;
 
-  const node = asNode(schema);
+  // Unwrap wrapper schemas before dispatching on the type. A defaulted
+  // wrapper keeps an object output type, so `v.optional(v.object({...}), {…})`
+  // type-checks as an args schema; without unwrapping it fell through to the
+  // fallback branch and extracted zero fields, which silently broke parsing,
+  // help, docs, and completion for the whole command. `schema` below stays
+  // the original (wrapped) value so validation still applies the wrapper.
+  const node = unwrapSchema(asNode(schema));
   let result: ExtractedFields;
 
   switch (node.type) {
@@ -531,7 +537,10 @@ export function extractValibotFields(schema: ArgsSchema): ExtractedFields {
     case "strict_object":
     case "loose_object":
     case "object_with_rest": {
-      const description = extractDescription(node);
+      // Read the description off the original schema: extractDescription
+      // recurses through wrappers, so a `v.description()` on either the
+      // wrapper or the wrapped object is picked up.
+      const description = extractDescription(asNode(schema));
       result = {
         fields: extractFromObject(node),
         schema,
@@ -555,7 +564,7 @@ export function extractValibotFields(schema: ArgsSchema): ExtractedFields {
       break;
 
     default: {
-      const description = extractDescription(node);
+      const description = extractDescription(asNode(schema));
       // Fallback: treat as an empty object schema
       result = {
         fields: [],

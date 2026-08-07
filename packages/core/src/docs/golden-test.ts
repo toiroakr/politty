@@ -1463,8 +1463,11 @@ function replaceMarkerSection(
  */
 /**
  * Whether a value is a Standard Schema, judged by the shape of its
- * `~standard` marker (spec: `version` number, `vendor` string, `validate`
- * function) rather than the key alone.
+ * `~standard` marker rather than the key alone.
+ *
+ * `vendor` and `validate` are what the check relies on; `version` is
+ * deliberately not required, so a future spec revision bumping it does not
+ * make politty stop recognizing schemas.
  */
 function isStandardSchema(value: unknown): boolean {
   if (typeof value !== "object" || value === null) return false;
