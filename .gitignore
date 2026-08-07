@@ -16,4 +16,8 @@ tests/temp-*.ts
 
 # Copied from the repo root at publish time (prepublishOnly)
 packages/zod/README.md
+packages/valibot/README.md
 packages/politty/README.md
+packages/zod/LICENSE
+packages/valibot/LICENSE
+packages/politty/LICENSE
