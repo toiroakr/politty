@@ -29,17 +29,18 @@ export default defineConfig({
           setupFiles: ["./tests/utils/register-zod-adapter.ts"],
         },
       },
-      // Compatibility checks against BUILT output (politty alias dist);
-      // builds the workspace in beforeAll, hence the generous hook budget.
+      // Compatibility checks against BUILT output (the politty alias and the
+      // @politty/valibot dist).
       {
         test: {
           name: "dist-compat",
           include: ["tests/dist-compat/**/*.test.ts"],
           testTimeout: 30000,
-          // The workspace is built once in globalSetup rather than per file:
-          // these files run in parallel and tsdown builds with `clean: true`,
-          // so concurrent rebuilds would delete output a sibling file is
-          // importing.
+          // The workspace is built once here rather than per file: these files
+          // run in parallel and tsdown builds with `clean: true`, so
+          // concurrent rebuilds would delete output a sibling file is
+          // importing. vitest applies no timeout to a globalSetup, so this
+          // project needs no hookTimeout budget.
           globalSetup: ["./tests/dist-compat/global-setup.ts"],
         },
       },
