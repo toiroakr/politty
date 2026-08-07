@@ -97,7 +97,7 @@ export interface GlobalCleanupContext {
 
 /**
  * Base command interface (shared properties)
- * @template TArgsSchema - The Zod schema type for arguments
+ * @template TArgsSchema - The args schema type (from the CLI's schema library)
  * @template TArgs - The inferred args type from the schema
  */
 export interface CommandBase<
@@ -110,7 +110,7 @@ export interface CommandBase<
   description?: string | undefined;
   /** Alternative names for this command (used as subcommand aliases) */
   aliases?: string[] | undefined;
-  /** Argument schema (preserves the original Zod schema type) */
+  /** Argument schema (preserves the original schema type) */
   args: TArgsSchema;
   /** Subcommands */
   subCommands?: SubCommandsRecord | undefined;
@@ -133,7 +133,7 @@ export interface CommandBase<
 
 /**
  * A command with a run function
- * @template TArgsSchema - The Zod schema type for arguments
+ * @template TArgsSchema - The args schema type (from the CLI's schema library)
  * @template TArgs - The inferred args type from the schema
  * @template TResult - The return type of the run function
  */
@@ -148,7 +148,7 @@ export interface RunnableCommand<
 
 /**
  * A command without a run function (e.g., subcommand-only parent)
- * @template TArgsSchema - The Zod schema type for arguments
+ * @template TArgsSchema - The args schema type (from the CLI's schema library)
  * @template TArgs - The inferred args type from the schema
  */
 export interface NonRunnableCommand<
@@ -202,7 +202,7 @@ export type SubCommandsRecord = Record<string, SubCommandValue>;
 
 /**
  * Async callback to resolve missing argument values interactively.
- * Called after env fallback, before Zod validation.
+ * Called after env fallback, before schema validation.
  * Provided by adapter subpath modules (e.g. `politty/prompt/clack`).
  */
 export type PromptResolver = (

@@ -1451,17 +1451,6 @@ function replaceMarkerSection(
 }
 
 /**
- * Check if config is the { args, options? } shape (not shorthand ArgsShape)
- *
- * Distinguishes between:
- * - { args: ArgsShape, options?: ArgsTableOptions } → returns true
- * - ArgsShape (e.g., { verbose: ZodType, args: ZodType }) → returns false
- *
- * The key insight is that in the { args, options? } shape, config.args is an ArgsShape
- * (Record of ZodTypes), while in shorthand, config itself is the ArgsShape and config.args
- * would be a single ZodType if user has an option named "args".
- */
-/**
  * Whether a value is a Standard Schema, judged by the shape of its
  * `~standard` marker rather than the key alone.
  *
@@ -1477,6 +1466,18 @@ function isStandardSchema(value: unknown): boolean {
   return typeof vendor === "string" && typeof validate === "function";
 }
 
+/**
+ * Check if config is the { args, options? } shape (not shorthand ArgsShape)
+ *
+ * Distinguishes between:
+ * - { args: ArgsShape, options?: ArgsTableOptions } → returns true
+ * - ArgsShape (e.g., { verbose: <schema>, args: <schema> }) → returns false
+ *
+ * The key insight is that in the { args, options? } shape, config.args is an
+ * ArgsShape (a record of the CLI's schema-library schemas), while in shorthand
+ * config itself is the ArgsShape and config.args would be a single schema if
+ * the user has an option named "args".
+ */
 function isGlobalOptionsConfigWithOptions(
   config: NonNullable<RootDocConfig["globalOptions"]>,
 ): config is {
@@ -1534,7 +1535,7 @@ function normalizeGlobalOptions(
 }
 
 /**
- * Derive an ArgsShape from a globalArgs Zod schema, retaining only non-positional option fields.
+ * Derive an ArgsShape from a globalArgs schema, retaining only non-positional option fields.
  * Returns undefined when globalArgs is undefined or contains no option fields.
  * Used to build globalOptionDefinitions from globalArgs when rootDoc is not available.
  */

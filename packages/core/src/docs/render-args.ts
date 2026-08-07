@@ -52,7 +52,7 @@ function extractArgsFields(args: ArgsShape): ResolvedFieldMeta[] {
  * // | `--env-file <ENV_FILE>` | `-e` | Path to environment file | - |
  * // ...
  *
- * @param args - Args shape (Record of string keys to Zod schemas with arg() metadata)
+ * @param args - Args shape (record of field names to the CLI's schema-library schemas, with arg() metadata)
  * @param options - Rendering options
  * @returns Rendered markdown table string
  */

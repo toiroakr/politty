@@ -301,9 +301,9 @@ export type ArgMeta<TValue = unknown> = RegularArgMeta<TValue> | BuiltinOverride
 const argRegistry = new WeakMap<object, ArgMeta>();
 
 /**
- * Register metadata for a Zod schema
+ * Register metadata for a schema
  *
- * @param schema - The Zod schema
+ * @param schema - The schema to attach metadata to
  * @param meta - Argument metadata
  * @returns The same schema (for chaining)
  *

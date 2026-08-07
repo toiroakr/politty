@@ -61,7 +61,7 @@ type ResolvedArgs<TArgsSchema, TGlobalArgs> = WithArgSource<
 
 /**
  * Config for defining a command
- * @template TArgsSchema - The Zod schema type for arguments
+ * @template TArgsSchema - The args schema type (from the CLI's schema library)
  * @template TResult - The return type of run function (void if no run)
  * @template TGlobalArgs - Global args type (from declaration merging or factory)
  */
