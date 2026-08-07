@@ -8,12 +8,11 @@ import {
   type Dirent,
 } from "node:fs";
 import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { z } from "zod";
-import { arg, type RegularArgMeta } from "../core/arg-registry.js";
+import { internalArgs, internalField } from "../adapter/internal-args.js";
+import type { RegularArgMeta } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
-import type { UnknownKeysMode } from "../core/schema-extractor.js";
 import { logger, symbols } from "../output/logger.js";
-import type { AnyCommand, ArgsSchema } from "../types.js";
+import type { AnyCommand } from "../types.js";
 import {
   AGENTS_SKILLS_DIR,
   hasInstalledSkill,
@@ -142,26 +141,6 @@ function mergedFlag(args: object, name: string): boolean {
 }
 
 /**
- * Apply the configured unknown-keys mode to a subcommand's args schema.
- *
- * Declared to return the general {@link ArgsSchema} type rather than the
- * precise `z.object(...)` literal, so passing its result into
- * `defineCommand({ args: ... })` gives every call site a single stable
- * type to infer `TArgsSchema` from — the same reason the `verbose`/`json`
- * disabled/enabled variants below are two full monomorphic `defineCommand`
- * calls rather than one call fed a ternary: threading a schema whose type
- * varies per branch directly into `args:` collapses `run`'s parameter type
- * into an unusable intersection for external callers (TypeScript infers a
- * type parameter used in both covariant and contravariant positions from a
- * union-typed argument as an intersection).
- */
-function applyUnknownKeys(schema: z.ZodObject<z.ZodRawShape>, mode: UnknownKeysMode): ArgsSchema {
-  if (mode === "strict") return schema.strict();
-  if (mode === "passthrough") return schema.passthrough();
-  return schema;
-}
-
-/**
  * Create the `skills sync` subcommand.
  *
  * Removes and reinstalls all skills discovered in sourceDir. Skills owned
@@ -283,11 +262,11 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions): AnyComma
     return defineCommand({
       name: "sync",
       description: resolved.descriptions.sync,
-      args: applyUnknownKeys(
-        z.object({
-          exclude: arg(z.array(z.string()).default([]), excludeArgMeta(resolved)),
-        }),
-        resolved.unknownKeys,
+      args: internalArgs(
+        {
+          exclude: internalField.stringArray(excludeArgMeta(resolved)),
+        },
+        { unknownKeys: resolved.unknownKeys },
       ),
       run(args) {
         runSync(args, mergedFlag(args, "verbose"));
@@ -297,12 +276,12 @@ export function createSkillSyncCommand(resolved: ResolvedSkillOptions): AnyComma
   return defineCommand({
     name: "sync",
     description: resolved.descriptions.sync,
-    args: applyUnknownKeys(
-      z.object({
-        exclude: arg(z.array(z.string()).default([]), excludeArgMeta(resolved)),
-        verbose: arg(z.boolean().default(false), verboseArgMeta(resolved)),
-      }),
-      resolved.unknownKeys,
+    args: internalArgs(
+      {
+        exclude: internalField.stringArray(excludeArgMeta(resolved)),
+        verbose: internalField.boolean(verboseArgMeta(resolved)),
+      },
+      { unknownKeys: resolved.unknownKeys },
     ),
     run(args) {
       runSync(args, args.verbose);
@@ -382,11 +361,11 @@ export function createSkillAddCommand(resolved: ResolvedSkillOptions): AnyComman
         ? { aliases: resolved.commandNames.add.aliases }
         : {}),
       description: resolved.descriptions.add,
-      args: applyUnknownKeys(
-        z.object({
-          name: arg(z.array(z.string()).default([]), nameArgMeta),
-        }),
-        resolved.unknownKeys,
+      args: internalArgs(
+        {
+          name: internalField.stringArray(nameArgMeta),
+        },
+        { unknownKeys: resolved.unknownKeys },
       ),
       run(args) {
         runAdd(args, mergedFlag(args, "verbose"));
@@ -399,12 +378,12 @@ export function createSkillAddCommand(resolved: ResolvedSkillOptions): AnyComman
       ? { aliases: resolved.commandNames.add.aliases }
       : {}),
     description: resolved.descriptions.add,
-    args: applyUnknownKeys(
-      z.object({
-        name: arg(z.array(z.string()).default([]), nameArgMeta),
-        verbose: arg(z.boolean().default(false), verboseArgMeta(resolved)),
-      }),
-      resolved.unknownKeys,
+    args: internalArgs(
+      {
+        name: internalField.stringArray(nameArgMeta),
+        verbose: internalField.boolean(verboseArgMeta(resolved)),
+      },
+      { unknownKeys: resolved.unknownKeys },
     ),
     run(args) {
       runAdd(args, args.verbose);
@@ -427,15 +406,15 @@ export function createSkillRemoveCommand(resolved: ResolvedSkillOptions): AnyCom
       ? { aliases: resolved.commandNames.remove.aliases }
       : {}),
     description: resolved.descriptions.remove,
-    args: applyUnknownKeys(
-      z.object({
-        name: arg(z.string().optional(), {
+    args: internalArgs(
+      {
+        name: internalField.optionalString({
           positional: true,
           description: "Skill name to remove (default: all)",
           placeholder: "NAME",
         }),
-      }),
-      resolved.unknownKeys,
+      },
+      { unknownKeys: resolved.unknownKeys },
     ),
     run(args) {
       const scanResult = loadSkills(resolved);
@@ -638,7 +617,7 @@ export function createSkillListCommand(resolved: ResolvedSkillOptions): AnyComma
     return defineCommand({
       name: "list",
       description: resolved.descriptions.list,
-      args: applyUnknownKeys(z.object({}), resolved.unknownKeys),
+      args: internalArgs({}, { unknownKeys: resolved.unknownKeys }),
       run(args) {
         runList(mergedFlag(args, "json"));
       },
@@ -647,13 +626,13 @@ export function createSkillListCommand(resolved: ResolvedSkillOptions): AnyComma
   return defineCommand({
     name: "list",
     description: resolved.descriptions.list,
-    args: applyUnknownKeys(
-      z.object({
-        json: arg(z.boolean().default(false), {
+    args: internalArgs(
+      {
+        json: internalField.boolean({
           description: "Output as JSON",
         }),
-      }),
-      resolved.unknownKeys,
+      },
+      { unknownKeys: resolved.unknownKeys },
     ),
     run(args) {
       runList(args.json);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "../frontmatter.js";
+import { skillFrontmatterSchema } from "../frontmatter-schema.js";
+import { parseFrontmatter, parseSkillMd, validateSkillFrontmatter } from "../frontmatter.js";
 
 describe("parseFrontmatter", () => {
   it("should parse basic frontmatter", () => {
@@ -159,9 +160,34 @@ metadata:
   });
 });
 
-describe("skillFrontmatterSchema", () => {
+/**
+ * The same spec runs against the production validator and the deprecated
+ * zod schema export so the two implementations cannot drift apart.
+ */
+const frontmatterValidators = [
+  {
+    label: "validateSkillFrontmatter",
+    validate: (data: Record<string, unknown>) => {
+      const result = validateSkillFrontmatter(data);
+      return result.success
+        ? { success: true as const, data: result.data as Record<string, unknown> }
+        : { success: false as const, data: undefined };
+    },
+  },
+  {
+    label: "skillFrontmatterSchema (deprecated zod export)",
+    validate: (data: Record<string, unknown>) => {
+      const result = skillFrontmatterSchema.safeParse(data);
+      return result.success
+        ? { success: true as const, data: result.data as Record<string, unknown> }
+        : { success: false as const, data: undefined };
+    },
+  },
+];
+
+describe.each(frontmatterValidators)("$label", ({ validate }) => {
   it("should validate minimal frontmatter", () => {
-    const result = skillFrontmatterSchema.safeParse({
+    const result = validate({
       name: "test",
       description: "A test",
     });
@@ -170,7 +196,7 @@ describe("skillFrontmatterSchema", () => {
   });
 
   it("should reject missing name", () => {
-    const result = skillFrontmatterSchema.safeParse({
+    const result = validate({
       description: "A test",
     });
 
@@ -178,7 +204,7 @@ describe("skillFrontmatterSchema", () => {
   });
 
   it("should reject missing description", () => {
-    const result = skillFrontmatterSchema.safeParse({
+    const result = validate({
       name: "test",
     });
 
@@ -186,7 +212,7 @@ describe("skillFrontmatterSchema", () => {
   });
 
   it("should reject description longer than 1024", () => {
-    const result = skillFrontmatterSchema.safeParse({
+    const result = validate({
       name: "test",
       description: "x".repeat(1025),
     });
@@ -195,7 +221,7 @@ describe("skillFrontmatterSchema", () => {
   });
 
   it("should reject name longer than 64", () => {
-    const result = skillFrontmatterSchema.safeParse({
+    const result = validate({
       name: "a".repeat(65),
       description: "ok",
     });
@@ -204,7 +230,7 @@ describe("skillFrontmatterSchema", () => {
   });
 
   it("should reject compatibility longer than 500", () => {
-    const result = skillFrontmatterSchema.safeParse({
+    const result = validate({
       name: "test",
       description: "ok",
       compatibility: "x".repeat(501),
@@ -214,7 +240,7 @@ describe("skillFrontmatterSchema", () => {
   });
 
   it("should reject non-string metadata values (spec: string->string)", () => {
-    const result = skillFrontmatterSchema.safeParse({
+    const result = validate({
       name: "test",
       description: "ok",
       metadata: { flag: true },
@@ -224,7 +250,7 @@ describe("skillFrontmatterSchema", () => {
   });
 
   it("should accept full spec-compliant frontmatter", () => {
-    const result = skillFrontmatterSchema.safeParse({
+    const result = validate({
       name: "commit",
       description: "Commit skill",
       license: "MIT",
@@ -241,7 +267,7 @@ describe("skillFrontmatterSchema", () => {
   });
 
   it("should pass through unknown fields without validating them", () => {
-    const result = skillFrontmatterSchema.safeParse({
+    const result = validate({
       name: "test",
       description: "ok",
       customField: { deeply: { nested: 123 } },
@@ -271,7 +297,7 @@ describe("skillFrontmatterSchema", () => {
     ["trailing-", "trailing hyphen"],
     ["double--hyphen", "double hyphen"],
   ])("should reject unsafe name %j (%s)", (name) => {
-    const result = skillFrontmatterSchema.safeParse({
+    const result = validate({
       name,
       description: "test",
     });
@@ -282,7 +308,7 @@ describe("skillFrontmatterSchema", () => {
   it.each([["commit"], ["my-skill"], ["review-pr"], ["skill1"], ["a1-b2-c3"]])(
     "should accept spec-compliant name %j",
     (name) => {
-      const result = skillFrontmatterSchema.safeParse({
+      const result = validate({
         name,
         description: "test",
       });
@@ -290,4 +316,28 @@ describe("skillFrontmatterSchema", () => {
       expect(result.success).toBe(true);
     },
   );
+});
+
+describe("validateSkillFrontmatter message parity with the zod schema", () => {
+  // The scanner renders issue path + message into its diagnostics, so the
+  // hand-rolled validator must label received values with zod's granularity
+  // ("array"/"null", not a blanket "object").
+  it.each([
+    [{ name: ["not", "a", "string"], description: "ok" }],
+    [{ name: null, description: "ok" }],
+    [{ name: "test", description: "ok", metadata: { key: ["array"] } }],
+    [{ name: "test", description: "ok", metadata: { key: null } }],
+    [{ name: "test", description: 42 }],
+  ])("reports the same issues as the zod schema for %j", (data) => {
+    const manual = validateSkillFrontmatter(data as Record<string, unknown>);
+    const viaZod = skillFrontmatterSchema.safeParse(data);
+
+    expect(manual.success).toBe(false);
+    expect(viaZod.success).toBe(false);
+    if (!manual.success && !viaZod.success) {
+      const manualIssues = manual.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
+      const zodIssues = viaZod.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
+      expect(manualIssues).toEqual(zodIssues);
+    }
+  });
 });

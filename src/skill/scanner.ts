@@ -1,6 +1,6 @@
 import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
-import { parseFrontmatter, skillFrontmatterSchema } from "./frontmatter.js";
+import { parseFrontmatter, validateSkillFrontmatter } from "./frontmatter.js";
 import type { DiscoveredSkill, ScanError, ScanResult } from "./types.js";
 
 const SKILL_MD = "SKILL.md";
@@ -174,12 +174,12 @@ function tryParseSkillDir(
       message: `Invalid SKILL.md frontmatter in ${dir}: YAML parse error: ${parseError}`,
     };
   }
-  const result = skillFrontmatterSchema.safeParse(data);
+  const result = validateSkillFrontmatter(data);
   if (!result.success) {
     return {
       path: dir,
       reason: "parse-failed",
-      message: `Invalid SKILL.md frontmatter in ${dir}: ${result.error.issues
+      message: `Invalid SKILL.md frontmatter in ${dir}: ${result.issues
         .map((issue) => `${issue.path.join(".") || "<root>"}: ${issue.message}`)
         .join("; ")}`,
     };

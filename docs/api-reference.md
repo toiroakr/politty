@@ -1444,7 +1444,7 @@ Returns `null` if the frontmatter is missing or fails validation.
 
 ### `parseFrontmatter`
 
-Parses YAML frontmatter from a markdown string. Tolerates a leading UTF-8 BOM. Returns `{ data: {}, body: content }` when no fence is found. When a fence is present but the YAML inside fails to parse, `data` falls back to `{}` and `parseError` contains the underlying YAML error message — `scanSourceDir` includes this in the `parse-failed` ScanError so users see the actual cause instead of a downstream "name: Required" Zod failure.
+Parses YAML frontmatter from a markdown string. Tolerates a leading UTF-8 BOM. Returns `{ data: {}, body: content }` when no fence is found. When a fence is present but the YAML inside fails to parse, `data` falls back to `{}` and `parseError` contains the underlying YAML error message — `scanSourceDir` includes this in the `parse-failed` ScanError so users see the actual cause instead of a downstream "name: …" validation failure.
 
 ```typescript
 function parseFrontmatter(content: string): {
@@ -1452,23 +1452,6 @@ function parseFrontmatter(content: string): {
   body: string;
   parseError?: string;
 };
-```
-
----
-
-### `skillFrontmatterSchema`
-
-Zod schema for SKILL.md frontmatter. Enforces the Agent Skills spec and passes through unknown top-level keys via `.passthrough()`.
-
-```typescript
-const skillFrontmatterSchema: z.ZodObject<{
-  name: z.ZodString; // /^[a-z0-9]+(-[a-z0-9]+)*$/, 1..64
-  description: z.ZodString; // 1..1024
-  license: z.ZodOptional<z.ZodString>;
-  compatibility: z.ZodOptional<z.ZodString>; // <=500
-  metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
-  "allowed-tools": z.ZodOptional<z.ZodString>;
-}>;
 ```
 
 ---
@@ -1647,9 +1630,9 @@ export {
   type CommandValidationResult,
 } from "./validator/command-validator.js";
 
-// Zod validation
-export { formatValidationErrors } from "./validator/zod-validator.js";
-export type { ValidationError, ValidationResult } from "./validator/zod-validator.js";
+// Validation
+export { formatValidationErrors } from "./validator/args-validator.js";
+export type { ValidationError, ValidationResult } from "./validator/args-validator.js";
 
 // Prompt (subpath exports)
 // import { prompt } from "politty/prompt/clack";
@@ -1667,7 +1650,7 @@ export {
   readInstalledOwnership,
   OWNERSHIP_METADATA_KEY,
 } from "./skill/installer.js";
-export { parseFrontmatter, parseSkillMd, skillFrontmatterSchema } from "./skill/frontmatter.js";
+export { parseFrontmatter, parseSkillMd } from "./skill/frontmatter.js";
 export type { ParsedSkillMd } from "./skill/frontmatter.js";
 export { scanSourceDir } from "./skill/scanner.js";
 export { SCAN_ERROR_REASONS } from "./skill/types.js";

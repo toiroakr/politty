@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { validateArgs } from "./zod-validator.js";
+import { internalArgs, internalField } from "../adapter/internal-args.js";
+import { validateArgs } from "./args-validator.js";
 
 /**
  * Task 5.1: Zod validator tests
@@ -9,7 +10,7 @@ import { validateArgs } from "./zod-validator.js";
  * - Execute transform/refine
  * - Collect validation errors
  */
-describe("ZodValidator", () => {
+describe("args-validator (zod schemas)", () => {
   describe("validateArgs", () => {
     it("should validate string args", () => {
       const schema = z.object({
@@ -173,5 +174,112 @@ describe("ZodValidator", () => {
         expect(resultB.data.type).toBe("b");
       }
     });
+  });
+});
+
+describe("args-validator (internal args schemas)", () => {
+  const schema = internalArgs({
+    shell: internalField.enum(["bash", "zsh", "fish"]),
+    out: internalField.optionalString(),
+    verify: internalField.boolean(),
+    exclude: internalField.stringArray(),
+  });
+
+  it("should route internal schemas past the zod adapter and apply defaults", () => {
+    const result = validateArgs({ shell: "bash" }, schema);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({ shell: "bash", verify: false, exclude: [] });
+    }
+  });
+
+  it("should report missing required fields with the neutral ValidationError shape", () => {
+    const result = validateArgs({}, schema);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors).toEqual([
+        {
+          path: ["shell"],
+          message: 'Invalid input: expected one of "bash" | "zsh" | "fish", received undefined',
+          code: "invalid_type",
+          received: undefined,
+          expected: 'one of "bash" | "zsh" | "fish"',
+        },
+      ]);
+    }
+  });
+
+  it("should reject values outside the enum", () => {
+    const result = validateArgs({ shell: "powershell" }, schema);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors[0]).toMatchObject({
+        path: ["shell"],
+        code: "invalid_value",
+        received: "powershell",
+      });
+    }
+  });
+
+  it("should label array type errors like zod", () => {
+    const result = validateArgs({ shell: "bash", exclude: "not-an-array" }, schema);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors[0]).toMatchObject({
+        path: ["exclude"],
+        message: "Invalid input: expected array, received string",
+      });
+    }
+  });
+
+  it("should strip unknown keys by default", () => {
+    const result = validateArgs({ shell: "zsh", unknown: "x" }, schema);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).not.toHaveProperty("unknown");
+    }
+  });
+
+  it("should reject unknown keys in strict mode", () => {
+    const strict = internalArgs(
+      { shell: internalField.enum(["bash", "zsh", "fish"]) },
+      { unknownKeys: "strict" },
+    );
+    const result = validateArgs({ shell: "bash", extra: 1 }, strict);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.errors[0]).toMatchObject({ code: "unrecognized_keys" });
+    }
+  });
+
+  it("should keep __proto__ as an own key in passthrough mode", () => {
+    const passthrough = internalArgs(
+      { shell: internalField.enum(["bash", "zsh", "fish"]) },
+      { unknownKeys: "passthrough" },
+    );
+    // An object literal's `__proto__:` is prototype syntax, not an own key,
+    // so build the raw args the way a hostile parser output would look.
+    const raw: Record<string, unknown> = { shell: "bash", other: "kept" };
+    Object.defineProperty(raw, "__proto__", {
+      value: "polluted",
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+    const result = validateArgs(raw, passthrough);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      const data = result.data as Record<string, unknown>;
+      expect(Object.hasOwn(data, "__proto__")).toBe(true);
+      expect(Object.getPrototypeOf(data)).toBe(Object.prototype);
+      expect(data.other).toBe("kept");
+    }
   });
 });

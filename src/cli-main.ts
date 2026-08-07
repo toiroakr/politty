@@ -1,33 +1,32 @@
-import { z } from "zod";
+import { internalArgs, internalField, type InferInternalArgs } from "./adapter/internal-args.js";
 import { formatShimPath } from "./compile-cache-shim.js";
-import { arg } from "./core/arg-registry.js";
 import { defineCommand } from "./core/command.js";
 import { runMain } from "./core/runner.js";
 import { generateBundledCompletionWorker, generateCompileCacheShim } from "./index.js";
 
-const generateWorkerArgsSchema = z.object({
-  bin: arg(z.string(), {
+const generateWorkerArgsSchema = internalArgs({
+  bin: internalField.string({
     description: "CLI binary or built JS entry file to invoke",
     placeholder: "PATH",
   }),
-  program: arg(z.string(), {
+  program: internalField.string({
     description: "Program name embedded in worker metadata",
     placeholder: "NAME",
   }),
-  shell: arg(z.enum(["bash", "zsh", "fish"]), {
+  shell: internalField.enum(["bash", "zsh", "fish"], {
     description: "Shell worker to generate",
     placeholder: "SHELL",
   }),
-  out: arg(z.string().optional(), {
+  out: internalField.optionalString({
     description: "Output worker path (defaults to dist/completion/<shell>-worker.<ext>)",
     placeholder: "PATH",
   }),
-  verify: arg(z.boolean().default(false), {
+  verify: internalField.boolean({
     description: "Verify __completion-worker-path resolves to the generated worker",
   }),
 });
 
-type GenerateWorkerArgs = z.infer<typeof generateWorkerArgsSchema>;
+type GenerateWorkerArgs = InferInternalArgs<typeof generateWorkerArgsSchema>;
 
 const generateWorkerCommand = defineCommand({
   name: "generate-worker",
@@ -44,25 +43,25 @@ const generateWorkerCommand = defineCommand({
   },
 });
 
-const generateShimArgsSchema = z.object({
-  entry: arg(z.array(z.string()).optional(), {
+const generateShimArgsSchema = internalArgs({
+  entry: internalField.optionalStringArray({
     description:
       "Module specifier the shim imports, relative to the shim file; repeatable, one per bin/--out (defaults to ./cli.js, ./cli.mjs, ./index.js, or ./index.mjs next to each shim)",
     placeholder: "SPECIFIER",
   }),
-  out: arg(z.array(z.string()).optional(), {
+  out: internalField.optionalStringArray({
     description:
       "Output path for the generated shim; repeatable, one per --entry (defaults to the bin paths in package.json)",
     placeholder: "PATH",
   }),
-  program: arg(z.string().optional(), {
+  program: internalField.optionalString({
     description:
       "Program name for the cache directory, applied to all shims (defaults per shim to its bin name)",
     placeholder: "NAME",
   }),
 });
 
-type GenerateShimArgs = z.infer<typeof generateShimArgsSchema>;
+type GenerateShimArgs = InferInternalArgs<typeof generateShimArgsSchema>;
 
 const generateShimCommand = defineCommand({
   name: "generate-shim",

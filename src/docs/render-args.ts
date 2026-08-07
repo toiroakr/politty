@@ -1,5 +1,6 @@
-import { z } from "zod";
-import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
+import type { z } from "zod";
+import type { ResolvedFieldMeta } from "../core/schema-extractor.js";
+import { resolveZodFieldMeta } from "../zod/adapter.js";
 import { type ColumnId, emitMarkdownTable, toOptionRows } from "./option-rows.js";
 
 /**
@@ -21,12 +22,11 @@ export type ArgsTableOptions = {
  *
  * This converts a raw args shape (like `commonArgs`) into the
  * ResolvedFieldMeta format used by politty's rendering functions.
+ * Fields are resolved one by one — same result as wrapping the shape in
+ * `z.object()` and extracting, without constructing a schema at runtime.
  */
 function extractArgsFields(args: ArgsShape): ResolvedFieldMeta[] {
-  // Wrap in z.object to use extractFields
-  const schema = z.object(args);
-  const extracted = extractFields(schema);
-  return extracted.fields;
+  return Object.entries(args).map(([name, fieldSchema]) => resolveZodFieldMeta(name, fieldSchema));
 }
 
 /**

@@ -11,8 +11,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { arg, getArgMeta } from "../../core/arg-registry.js";
-import { getUnknownKeysMode } from "../../core/schema-extractor.js";
+import { arg } from "../../core/arg-registry.js";
+import {
+  extractFields,
+  getUnknownKeysMode,
+  type ResolvedFieldMeta,
+} from "../../core/schema-extractor.js";
+import type { ArgsSchema } from "../../types.js";
 import {
   createSkillAddCommand,
   createSkillListCommand,
@@ -54,9 +59,10 @@ function resolve(options: SkillCommandOptions = opts("/tmp")) {
   return resolveSkillOptions(options, CLI);
 }
 
-/** Read a command's arg schema shape for asserting on which flags exist. */
-function argShape(command: { args?: unknown }): Record<string, z.ZodType> {
-  return (command.args as { shape: Record<string, z.ZodType> }).shape;
+/** Read a command's resolved arg fields for asserting on which flags exist. */
+function argShape(command: { args?: unknown }): Record<string, ResolvedFieldMeta> {
+  const extracted = extractFields(command.args as ArgsSchema);
+  return Object.fromEntries(extracted.fields.map((field) => [field.name, field]));
 }
 
 describe("resolveSkillOptions commandMap validation", () => {
@@ -912,7 +918,7 @@ describe("createSkillSyncCommand", () => {
     const command = createSkillSyncCommand(
       resolve({ ...opts(tempDir), flags: { verbose: { alias: "V" } } }),
     );
-    expect(getArgMeta(argShape(command).verbose!)?.alias).toBe("V");
+    expect(argShape(command).verbose!.alias).toEqual(["V"]);
   });
 });
 
@@ -1018,7 +1024,7 @@ describe("createSkillAddCommand", () => {
     const command = createSkillAddCommand(
       resolve({ ...opts(tempDir), flags: { verbose: { alias: "V" } } }),
     );
-    expect(getArgMeta(argShape(command).verbose!)?.alias).toBe("V");
+    expect(argShape(command).verbose!.alias).toEqual(["V"]);
   });
 
   it("should install specific skill by name", () => {

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { ValidationError } from "./args-validator.js";
 import {
   formatRuntimeError,
   formatUnknownFlag,
   formatValidationErrors,
 } from "./error-formatter.js";
-import type { ValidationError } from "./zod-validator.js";
 
 /**
  * Task 5.2: Error Formatter Tests

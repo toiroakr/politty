@@ -108,6 +108,7 @@ export type {
   UnknownSubcommandHandler,
 } from "./types.js";
 // Command definition validation
+export { formatValidationErrors } from "./validator/args-validator.js";
 export {
   CaseVariantCollisionError,
   DuplicateAliasError,
@@ -130,6 +131,5 @@ export {
   type CommandValidationError,
   type CommandValidationResult,
 } from "./validator/command-validator.js";
-export { formatValidationErrors } from "./validator/zod-validator.js";
 // Validation types
-export type { ValidationError, ValidationResult } from "./validator/zod-validator.js";
+export type { ValidationError, ValidationResult } from "./validator/args-validator.js";
