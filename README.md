@@ -60,7 +60,7 @@ const command = defineCommand({
 runMain(command);
 ```
 
-Field descriptions can also come from valibot's own metadata actions (`v.pipe(v.string(), v.description("...."))` or `v.metadata({ ... })`). The one zod-only feature without a valibot counterpart is the `politty/augment` module (zod `GlobalMeta` interface augmentation) — use `arg()` or `v.metadata()` instead. The `politty` package itself remains the zod flavor (an alias of `@politty/zod`).
+Field descriptions can also come from valibot's own metadata actions. They are actions, not schemas, so they belong inside `v.pipe(...)`: `v.pipe(v.string(), v.description("..."))` or `v.pipe(v.string(), v.metadata({ description: "..." }))`. The one zod-only feature without a valibot counterpart is the `politty/augment` module (zod `GlobalMeta` interface augmentation) — use `arg()` or `v.metadata()` instead. The `politty` package itself remains the zod flavor (an alias of `@politty/zod`).
 
 ## Quick Start
 

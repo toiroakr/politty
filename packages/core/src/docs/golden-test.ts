@@ -1461,6 +1461,19 @@ function replaceMarkerSection(
  * (Record of ZodTypes), while in shorthand, config itself is the ArgsShape and config.args
  * would be a single ZodType if user has an option named "args".
  */
+/**
+ * Whether a value is a Standard Schema, judged by the shape of its
+ * `~standard` marker (spec: `version` number, `vendor` string, `validate`
+ * function) rather than the key alone.
+ */
+function isStandardSchema(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const marker = (value as { "~standard"?: unknown })["~standard"];
+  if (typeof marker !== "object" || marker === null) return false;
+  const { vendor, validate } = marker as { vendor?: unknown; validate?: unknown };
+  return typeof vendor === "string" && typeof validate === "function";
+}
+
 function isGlobalOptionsConfigWithOptions(
   config: NonNullable<RootDocConfig["globalOptions"]>,
 ): config is {
@@ -1478,8 +1491,12 @@ function isGlobalOptionsConfigWithOptions(
   // standalone function), so probing for it would classify every valibot
   // shorthand config as the `{ args, options }` shape and then treat the
   // schema itself as a field record.
-  const maybeSchema = config.args as { "~standard"?: unknown } | null;
-  return maybeSchema?.["~standard"] == null;
+  //
+  // The marker's *shape* is checked, not merely its presence: `globalOptions`
+  // takes arbitrary records, so a shorthand config could legitimately hold a
+  // field literally named `~standard`, whose value is a schema rather than a
+  // spec marker.
+  return !isStandardSchema(config.args);
 }
 
 /**

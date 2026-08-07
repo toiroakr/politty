@@ -2188,6 +2188,38 @@ ${argsContent}
       expect(result.files[0]?.status).toBe("match");
     });
 
+    it("should keep the { args, options } form when a field is named '~standard'", async () => {
+      // globalOptions takes arbitrary records, so an ArgsShape may hold a
+      // field literally named `~standard` whose value is a schema. Probing
+      // only for the key's presence would read that schema as the Standard
+      // Schema marker and misread this as the shorthand form; the marker's
+      // shape (vendor/validate) is what actually distinguishes them.
+      vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
+
+      const rootDocPath = path.join(testDir, "tilde-standard.md");
+      fs.writeFileSync(
+        rootDocPath,
+        `# test-cli\n\nA test CLI for documentation generation\n\n## Global Options\n\n<!-- politty:global-options:start -->\n<!-- politty:global-options:end -->\n`,
+        "utf-8",
+      );
+
+      const result = await generateDoc({
+        command: testCommand,
+        rootDoc: {
+          path: rootDocPath,
+          globalOptions: {
+            args: {
+              "~standard": arg(z.boolean().default(false), { description: "Oddly named flag" }),
+            },
+          },
+        },
+        files: {},
+      });
+
+      expect(result.success).toBe(true);
+      expect(fs.readFileSync(rootDocPath, "utf-8")).toContain("Oddly named flag");
+    });
+
     it("should update globalOptions marker section when content differs", async () => {
       vi.stubEnv(UPDATE_GOLDEN_ENV, "true");
 

@@ -222,6 +222,9 @@ describe("@politty/valibot parity: docs global options", () => {
       expect(written).toContain("--args");
       expect(written).toContain("Extra args passed through");
     } finally {
+      // vitest.config.ts does not set `unstubEnvs`, so the stub would
+      // otherwise leak into later tests sharing this worker.
+      vi.unstubAllEnvs();
       rmSync(dir, { recursive: true, force: true });
     }
   });
