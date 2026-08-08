@@ -275,14 +275,17 @@ function generateShims(
   const warnings: string[] = [];
 
   const compileCacheSpecifier = options.compileCacheSpecifier ?? defaultCompileCacheSpecifier;
-  // The specifier is written into the shim twice: as a string literal (escaped)
-  // and inside a `//` comment naming what failed to resolve. A line break would
-  // close that comment early and leave the rest as code, so the shim would fail
-  // to parse — the one outcome it must never have, since its whole point is to
-  // start the CLI either way. No module specifier contains one anyway.
-  if (/[\r\n]/.test(compileCacheSpecifier)) {
+  // The specifier is written into the shim twice: as a string literal, which is
+  // escaped, and inside a `//` comment naming what failed to resolve, which
+  // cannot be. Any JS LineTerminator closes that comment early and leaves its
+  // tail as code, so the shim would fail to parse — the one outcome it must
+  // never have, since its whole point is to start the CLI either way. All four
+  // count: U+2028 and U+2029 end a comment just like CR and LF do, even though
+  // string literals have accepted them since ES2019. No module specifier
+  // contains any of them anyway.
+  if (/[\r\n\u2028\u2029]/.test(compileCacheSpecifier)) {
     throw new Error(
-      `Invalid compile-cache specifier ${JSON.stringify(compileCacheSpecifier)}: a module specifier cannot contain a line break.`,
+      `Invalid compile-cache specifier ${JSON.stringify(compileCacheSpecifier)}: a module specifier cannot contain a line terminator.`,
     );
   }
 

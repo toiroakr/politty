@@ -390,20 +390,26 @@ describe("generateCompileCacheShim", () => {
       expect(warnSpy).not.toHaveBeenCalled();
     });
 
-    it("rejects a specifier containing a line break", () => {
-      // It lands in a `//` comment as well as a string literal, so a line break
-      // would leave the tail of that comment as code and the shim would fail to
-      // parse — worse than the cache-less start the shim is designed to fall
-      // back to.
+    // Every JS LineTerminator, not just CR/LF: the specifier lands in a `//`
+    // comment as well as a string literal, and U+2028 / U+2029 close that
+    // comment too — leaving its tail as code, so the shim fails to parse rather
+    // than falling back to a cache-less start. String literals have accepted
+    // those two since ES2019, so only the comment is at risk.
+    it.each([
+      ["LF", "\n"],
+      ["CR", "\r"],
+      ["U+2028", "\u2028"],
+      ["U+2029", "\u2029"],
+    ])("rejects a specifier containing %s", (_label, terminator) => {
       writePkg({ name: "my-cli", type: "module", bin: { "my-cli": "./dist/bin.js" } });
       expect(() =>
         generateCompileCacheShim({
           entry: "./cli.js",
           out: "dist/bin.js",
-          compileCacheSpecifier: "pkg/compile-cache\nbar",
+          compileCacheSpecifier: `pkg/compile-cache${terminator}bar`,
           cwd,
         }),
-      ).toThrow(/line break/);
+      ).toThrow(/line terminator/);
     });
 
     it("names the specifier in the catch comment so the degraded path is readable", () => {
