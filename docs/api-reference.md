@@ -278,7 +278,7 @@ Generates one compile-cache bin shim per `bin` entry (or per explicit path) as e
 
 All options are optional: the output paths default to the `bin` paths in the nearest `package.json`, each entry to the first of `./cli.js`, `./cli.mjs`, `./index.js`, `./index.mjs` existing next to its shim, and each program name to the shim's `bin` name (falling back to the package name without its scope — with a warning when an explicit `out` path cannot be matched to a `bin` entry; pass `program` to override). Multiple `entry` values pair in order with the `bin` entries, or with `out` values of the same count. Refuses to overwrite an existing file it did not generate. The generated shims are ES modules: a `.js` output requires a `"type": "module"` package; use `.mjs` otherwise.
 
-The specifier the shim imports `enableCompileCache` from is derived from that same `package.json`: the first of `@politty/zod`, `@politty/valibot`, `politty` declared in `dependencies`, `peerDependencies` or `devDependencies`. The shim executes inside your package, so only a politty package your package declares is guaranteed to resolve from it. Declaring none warns and falls back to `politty/compile-cache`; pass `compileCacheSpecifier` when politty is reached some other way (a re-export from your own package, an import map, ...).
+The specifier the shim imports `enableCompileCache` from is the `compile-cache` subpath of **the politty package this function was reached through** — `@politty/zod/compile-cache` when imported from `@politty/zod`, `politty/compile-cache` when imported from `politty`, and so on. Importing it means that package is installed, so the specifier resolves from the shim it writes into your package. Pass `compileCacheSpecifier` when politty is reached some other way (a re-export from your own package, an import map, ...).
 
 ```typescript
 function generateCompileCacheShim(options?: {
@@ -290,7 +290,7 @@ function generateCompileCacheShim(options?: {
   program?: string;
   /** Base directory for paths and package.json (default: process.cwd()) */
   cwd?: string;
-  /** Specifier the shim imports enableCompileCache from (default: <pkg>/compile-cache for the politty package declared in package.json) */
+  /** Specifier the shim imports enableCompileCache from (default: the compile-cache subpath of the politty package this function came from) */
   compileCacheSpecifier?: string;
 }): Array<{
   outputPath: string;
@@ -304,8 +304,8 @@ function generateCompileCacheShim(options?: {
 
 ```bash
 # package.json: "bin": { "my-cli": "./dist/bin.js" },
-#               "dependencies": { "@politty/zod": "^0.1.0" },
 #               "postbuild": "politty generate-shim --entry ./cli.js"
+# (the politty bin here comes from @politty/zod)
 politty generate-shim --entry ./cli.js
 # => Generated compile-cache shim: dist/bin.js (program: my-cli, entry: ./cli.js, compile-cache: @politty/zod/compile-cache)
 
