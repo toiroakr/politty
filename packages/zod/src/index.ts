@@ -16,11 +16,22 @@ import {
   arg as coreArg,
   createDefineCommand as coreCreateDefineCommand,
   defineCommand as coreDefineCommand,
+  createCompileCacheShimGenerator,
   type ArgFn,
   type CreateDefineCommandFn,
   type DefineCommandFn,
 } from "@politty/core";
 import type { z } from "zod";
+
+/**
+ * Generate compile-cache bin shims that import the cache helper from
+ * `@politty/zod/compile-cache`.
+ *
+ * The specifier is this package's own name rather than something derived from
+ * the caller's `package.json`: reaching this function means `@politty/zod` is
+ * installed, so the shim it writes into your package can resolve it.
+ */
+export const generateCompileCacheShim = createCompileCacheShimGenerator("@politty/zod");
 
 /**
  * Supported schema types for args in this package: zod schemas whose

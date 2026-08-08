@@ -12,8 +12,9 @@
 // Core exports
 // Completion exports
 export type { InferSchemaOutput, SchemaLike } from "./adapter/standard-schema.js";
+export { runPolittyCli } from "./cli-main.js";
 export {
-  generateCompileCacheShim,
+  createCompileCacheShimGenerator,
   type GenerateCompileCacheShimOptions,
   type GenerateCompileCacheShimResult,
 } from "./compile-cache-shim.js";

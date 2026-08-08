@@ -245,8 +245,8 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
   // Enable the on-disk V8 compile cache before anything is dynamically
   // imported so `lazy()` subcommands and adapter modules skip recompilation
   // on warm starts. The entry's static import graph is compiled before user
-  // code runs and is out of reach here — the `politty/compile-cache` bin-shim
-  // pattern covers that part.
+  // code runs and is out of reach here — the `compile-cache` subpath's
+  // bin-shim pattern covers that part.
   if (options.compileCache !== false) {
     enableCompileCache(
       typeof options.compileCache === "string"

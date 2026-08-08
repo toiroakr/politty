@@ -246,7 +246,7 @@ const extracted = extractFields(schema);
 
 ### `enableCompileCache`
 
-Enables the Node.js on-disk compile cache (V8 code cache) for the current process. Exported from the dependency-free `politty/compile-cache` subpath so a minimal bin shim can call it before the real CLI graph is imported. Never throws; no-ops on runtimes without `module.enableCompileCache` (Node.js < 22.8.0). The `NODE_COMPILE_CACHE` environment variable always takes precedence over the derived directory.
+Enables the Node.js on-disk compile cache (V8 code cache) for the current process. Exported from the dependency-free `compile-cache` subpath of every politty package (`@politty/zod/compile-cache`, `@politty/valibot/compile-cache`, `politty/compile-cache`) so a minimal bin shim can call it before the real CLI graph is imported. Never throws; no-ops on runtimes without `module.enableCompileCache` (Node.js < 22.8.0). The `NODE_COMPILE_CACHE` environment variable always takes precedence over the derived directory.
 
 `runMain` calls this automatically (see `MainOptions.compileCache`), but only modules imported after that point benefit — see [Faster Startup (Compile Cache)](./recipes.md#faster-startup-compile-cache) for the bin-shim pattern that covers the whole CLI.
 
@@ -261,8 +261,9 @@ function enableCompileCache(options?: string | { programName?: string; cacheDir?
 
 ```typescript
 #!/usr/bin/env node
-// bin.ts — keep this file's static imports minimal
-import { enableCompileCache } from "politty/compile-cache";
+// bin.ts — keep this file's static imports minimal.
+// Import from the politty package your CLI depends on.
+import { enableCompileCache } from "@politty/zod/compile-cache";
 
 enableCompileCache("my-cli");
 // => cache in ${XDG_CACHE_HOME:-$HOME/.cache}/my-cli/node-compile-cache
@@ -277,6 +278,8 @@ Generates one compile-cache bin shim per `bin` entry (or per explicit path) as e
 
 All options are optional: the output paths default to the `bin` paths in the nearest `package.json`, each entry to the first of `./cli.js`, `./cli.mjs`, `./index.js`, `./index.mjs` existing next to its shim, and each program name to the shim's `bin` name (falling back to the package name without its scope — with a warning when an explicit `out` path cannot be matched to a `bin` entry; pass `program` to override). Multiple `entry` values pair in order with the `bin` entries, or with `out` values of the same count. Refuses to overwrite an existing file it did not generate. The generated shims are ES modules: a `.js` output requires a `"type": "module"` package; use `.mjs` otherwise.
 
+The specifier the shim imports `enableCompileCache` from is the `compile-cache` subpath of **the politty package this function was reached through** — `@politty/zod/compile-cache` when imported from `@politty/zod`, `politty/compile-cache` when imported from `politty`, and so on. Importing it means that package is installed, so the specifier resolves from the shim it writes into your package. Pass `compileCacheSpecifier` when politty is reached some other way (a re-export from your own package, an import map, ...).
+
 ```typescript
 function generateCompileCacheShim(options?: {
   /** Specifier(s) the shim imports, relative to the shim file (default: conventional built module next to each shim) */
@@ -287,10 +290,13 @@ function generateCompileCacheShim(options?: {
   program?: string;
   /** Base directory for paths and package.json (default: process.cwd()) */
   cwd?: string;
+  /** Specifier the shim imports enableCompileCache from (default: the compile-cache subpath of the politty package this function came from) */
+  compileCacheSpecifier?: string;
 }): Array<{
   outputPath: string;
   program: string;
   entry: string;
+  compileCacheSpecifier: string;
 }>;
 ```
 
@@ -299,8 +305,9 @@ function generateCompileCacheShim(options?: {
 ```bash
 # package.json: "bin": { "my-cli": "./dist/bin.js" },
 #               "postbuild": "politty generate-shim --entry ./cli.js"
+# (the politty bin here comes from @politty/zod)
 politty generate-shim --entry ./cli.js
-# => Generated compile-cache shim: dist/bin.js (program: my-cli, entry: ./cli.js)
+# => Generated compile-cache shim: dist/bin.js (program: my-cli, entry: ./cli.js, compile-cache: @politty/zod/compile-cache)
 
 # Multiple bins: one --entry per bin, paired in declaration order
 politty generate-shim --entry ./cli-a.js --entry ./cli-b.js

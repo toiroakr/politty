@@ -8,4 +8,8 @@
 
 import "./register.js";
 
-await import("@politty/core/cli-main");
+const { runPolittyCli } = await import("@politty/core/cli-main");
+
+// This package's name reaches `generate-shim` here, so a generated shim
+// imports the cache helper from the package that produced it.
+await runPolittyCli("@politty/valibot");

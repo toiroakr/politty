@@ -258,7 +258,7 @@ export interface MainOptions {
    *
    * The `NODE_COMPILE_CACHE` environment variable always takes precedence.
    * Note: the entry module's static import graph is compiled before `runMain`
-   * runs and cannot be cached here — see `politty/compile-cache` for the
+   * runs and cannot be cached here — see the `compile-cache` subpath for the
    * bin-shim pattern that covers it.
    */
   compileCache?: boolean | string;
