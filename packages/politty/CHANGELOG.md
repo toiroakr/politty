@@ -1,5 +1,44 @@
 # politty
 
+## 0.11.7
+
+### Patch Changes
+
+- 1ce9b90: Split the repository into a pnpm workspace of three packages:
+
+  - `@politty/core` (private): the validator-agnostic framework — parser, runner, help, completion, docs, skill, and prompt layers. It is never published; adapter packages bundle it at build time.
+  - `@politty/zod` (new): the user-facing package for building politty CLIs with zod v4 schemas. It registers the zod validator adapter on import, re-exports the full core API, and ships the `politty` bin.
+  - `politty`: now a compatibility alias of `@politty/zod`. Runtime modules re-export `@politty/zod` (so mixing the two packages in one process shares a single adapter registry and arg-metadata store), every existing subpath export (`politty/docs`, `politty/completion`, `politty/skill`, `politty/prompt`, `politty/prompt/clack`, `politty/prompt/inquirer`, `politty/augment`, `politty/compile-cache`) and the `politty` bin keep working, and `declare module "politty"` GlobalArgs augmentation still merges. No API changes for existing users.
+
+- ac7e85a: Add `@politty/valibot`: politty with valibot schemas. The new package exposes the same API surface as `@politty/zod` (`defineCommand`, `arg`, `runMain`, docs/completion/skill/prompt subpaths, and the `politty` bin) backed by a valibot validator adapter, and its published build never loads zod. Field metadata is read from `arg()` as well as valibot's `v.description()` / `v.metadata()` pipe actions.
+
+  Supporting this, `@politty/core`'s public types now constrain schemas through the Standard Schema interface, and each adapter package re-pins the schema-taking API (`ArgsSchema`, `defineCommand`, `createDefineCommand`, `arg`) to its own library's schema type — `@politty/zod` keeps politty's historical zod-typed surface, so existing `politty` / `@politty/zod` users are unaffected, and a schema from the wrong library is now a type error instead of a runtime failure.
+
+  Also fixes two things about wrapped args schemas, in both adapters:
+
+  - Field extraction now unwraps the wrapper. A defaulted wrapper keeps an object output type, so `z.object({...}).default({...})` (and the valibot equivalent) type-checks as an args schema, but extraction fell through to its fallback and returned zero fields — positionals were rejected as "Unexpected positional argument" and help, docs, and completion came out empty for the whole command.
+  - Unknown-keys detection unwraps too: `z.strictObject({...}).optional()` (or a top-level `.transform()` pipe) reported `strip`, so unknown CLI flags were warned-and-ignored while validation enforced the inner object's strict behavior.
+
+  In `@politty/valibot`, type detection for the `unknown`-based coercion pipe now finds the pipe wherever composition puts it. Because `v.pipe` spreads its base schema, piping a wrapper leaves the pipe on the wrapper node while the `unknown` it wraps has none, so `v.pipe(v.optional(v.unknown()), v.transform(Number), v.number())` was reported as an `unknown` field in help, prompts, and completion instead of a number.
+
+  Published packages no longer ship `.js` files pointing at source maps that were excluded from the tarball — map emit is off now, so `dist/**/*.js` has no dangling `sourceMappingURL`.
+
+  Every published tarball now carries the MIT `LICENSE` alongside the README. `prepublishOnly` copied only `README.md` from the repo root, so the license text the `"license": "MIT"` field refers to was absent from the package itself.
+
+  Docs generation now identifies a schema by its Standard Schema `~standard` marker instead of probing for zod's `safeParse` method. The old probe misread the shorthand `rootDoc.globalOptions` form when one of its options happened to be named `args`, because valibot schemas expose no `safeParse` — generating docs for such a config crashed.
+
+- 26f5cfb: Decouple the core from zod behind a validator-adapter layer (first step of #650).
+
+  - All zod-specific schema introspection and validation now live in a dedicated zod adapter implementing a neutral `ValidatorAdapter` interface; the parser, runner, help, completion, docs, and prompt layers consume only the validator-neutral `ExtractedFields` metadata.
+  - politty's built-in commands (`completion`, `skills`, `__complete`, the `politty` bin) describe their args with internal validator-free descriptors instead of zod schemas.
+  - As a result, importing `politty` (and `politty/completion`, `politty/docs`, `politty/prompt/*`, `politty/cli`) no longer loads zod at runtime — zod is only loaded when one of your own schemas flows through parsing or validation. `politty/skill` still loads zod solely for the deprecated `skillFrontmatterSchema` export.
+
+  No behavior or public API changes; all existing schemas, types, and error output work exactly as before.
+
+- Updated dependencies [1ce9b90]
+- Updated dependencies [ac7e85a]
+  - @politty/zod@0.1.0
+
 ## 0.11.6
 
 ### Patch Changes
