@@ -390,6 +390,22 @@ describe("generateCompileCacheShim", () => {
       expect(warnSpy).not.toHaveBeenCalled();
     });
 
+    it("rejects a specifier containing a line break", () => {
+      // It lands in a `//` comment as well as a string literal, so a line break
+      // would leave the tail of that comment as code and the shim would fail to
+      // parse — worse than the cache-less start the shim is designed to fall
+      // back to.
+      writePkg({ name: "my-cli", type: "module", bin: { "my-cli": "./dist/bin.js" } });
+      expect(() =>
+        generateCompileCacheShim({
+          entry: "./cli.js",
+          out: "dist/bin.js",
+          compileCacheSpecifier: "pkg/compile-cache\nbar",
+          cwd,
+        }),
+      ).toThrow(/line break/);
+    });
+
     it("names the specifier in the catch comment so the degraded path is readable", () => {
       writePkg({ name: "my-cli", type: "module" });
       const result = generateOne({ entry: "./cli.js", out: "dist/bin.js", cwd });
