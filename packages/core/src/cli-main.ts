@@ -59,6 +59,11 @@ const generateShimArgsSchema = internalArgs({
       "Program name for the cache directory, applied to all shims (defaults per shim to its bin name)",
     placeholder: "NAME",
   }),
+  compileCacheSpecifier: internalField.optionalString({
+    description:
+      "Module specifier the shim imports enableCompileCache from (defaults to <pkg>/compile-cache for the politty package declared in package.json)",
+    placeholder: "SPECIFIER",
+  }),
 });
 
 type GenerateShimArgs = InferInternalArgs<typeof generateShimArgsSchema>;
@@ -73,11 +78,14 @@ const generateShimCommand = defineCommand({
       ...(args.entry !== undefined && { entry: args.entry }),
       ...(args.out !== undefined && { out: args.out }),
       ...(args.program !== undefined && { program: args.program }),
+      ...(args.compileCacheSpecifier !== undefined && {
+        compileCacheSpecifier: args.compileCacheSpecifier,
+      }),
       cwd,
     });
     for (const result of results) {
       console.log(
-        `Generated compile-cache shim: ${formatShimPath(result.outputPath, cwd)} (program: ${result.program}, entry: ${result.entry})`,
+        `Generated compile-cache shim: ${formatShimPath(result.outputPath, cwd)} (program: ${result.program}, entry: ${result.entry}, compile-cache: ${result.compileCacheSpecifier})`,
       );
     }
   },

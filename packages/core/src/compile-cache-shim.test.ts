@@ -38,14 +38,18 @@ describe("generateCompileCacheShim", () => {
   };
 
   it("generates an executable ESM shim with program and entry baked in", () => {
-    writePkg({ name: "my-cli", type: "module" });
+    writePkg({
+      name: "my-cli",
+      type: "module",
+      dependencies: { "@politty/zod": "^0.1.0" },
+    });
     const result = generateOne({ entry: "./cli.js", out: "dist/bin.js", cwd });
 
     expect(result.outputPath).toBe(join(cwd, "dist", "bin.js"));
     expect(result.program).toBe("my-cli");
     const content = readFileSync(result.outputPath, "utf8");
     expect(content.startsWith("#!/usr/bin/env node\n")).toBe(true);
-    expect(content).toContain('await import("politty/compile-cache");');
+    expect(content).toContain('await import("@politty/zod/compile-cache");');
     expect(content).toContain('enableCompileCache("my-cli");');
     expect(content).toContain('await import("./cli.js");');
     if (process.platform !== "win32") {
@@ -293,6 +297,7 @@ describe("generateCompileCacheShim", () => {
       name: "my-cli",
       type: "module",
       bin: { "tool-a": "./dist/bin-a.js", "tool-b": "./dist/bin-b.js" },
+      dependencies: { "@politty/zod": "^0.1.0" },
     });
     const results = generateCompileCacheShim({
       entry: ["./a.js", "./b.js"],
@@ -311,16 +316,127 @@ describe("generateCompileCacheShim", () => {
   });
 
   it("does not warn when outputs are derived from bin or matched to it", () => {
-    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/bin.js" } });
+    writePkg({
+      name: "my-cli",
+      type: "module",
+      bin: { "my-tool": "./dist/bin.js" },
+      dependencies: { "@politty/zod": "^0.1.0" },
+    });
     generateCompileCacheShim({ entry: "./cli.js", cwd });
     generateCompileCacheShim({ entry: "./cli.js", out: "dist/bin.js", cwd });
     expect(warnSpy).not.toHaveBeenCalled();
   });
 
   it("does not warn when an explicit program is given", () => {
-    writePkg({ name: "my-cli", type: "module", bin: { "my-tool": "./dist/bin.js" } });
+    writePkg({
+      name: "my-cli",
+      type: "module",
+      bin: { "my-tool": "./dist/bin.js" },
+      dependencies: { "@politty/zod": "^0.1.0" },
+    });
     generateCompileCacheShim({ entry: "./a.js", out: "dist/custom.js", program: "custom", cwd });
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  // The shim runs inside the host package, so the specifier it imports has to
+  // be one the host declares. Baking in a fixed "politty/compile-cache" left
+  // packages that only depend on an adapter unable to resolve it, and the
+  // shim's catch turned that into a permanently disabled compile cache
+  // instead of an error.
+  describe("compile-cache specifier", () => {
+    it.each([
+      ["@politty/zod", "dependencies"],
+      ["@politty/valibot", "dependencies"],
+      ["politty", "dependencies"],
+      ["@politty/zod", "peerDependencies"],
+      ["@politty/valibot", "devDependencies"],
+    ] as const)("imports %s from the host's %s", (pkgName, field) => {
+      writePkg({ name: "my-cli", type: "module", [field]: { [pkgName]: "^0.1.0" } });
+      const result = generateOne({ entry: "./cli.js", out: "dist/bin.js", cwd });
+      expect(result.compileCacheSpecifier).toBe(`${pkgName}/compile-cache`);
+      expect(readFileSync(result.outputPath, "utf8")).toContain(
+        `await import("${pkgName}/compile-cache");`,
+      );
+    });
+
+    it("prefers the adapter packages over the politty alias when several are declared", () => {
+      // Any declared one resolves, so this only pins the order down.
+      writePkg({
+        name: "my-cli",
+        type: "module",
+        dependencies: { politty: "^0.11.7", "@politty/valibot": "^0.1.0" },
+      });
+      expect(
+        generateOne({ entry: "./cli.js", out: "dist/bin.js", cwd }).compileCacheSpecifier,
+      ).toBe("@politty/valibot/compile-cache");
+
+      writePkg({
+        name: "my-cli",
+        type: "module",
+        dependencies: { "@politty/valibot": "^0.1.0", "@politty/zod": "^0.1.0" },
+      });
+      expect(
+        generateOne({ entry: "./cli.js", out: "dist/bin.js", cwd }).compileCacheSpecifier,
+      ).toBe("@politty/zod/compile-cache");
+    });
+
+    it("falls back to politty with a warning when no politty package is declared", () => {
+      // bin matches the out path so the only warning in play is this one.
+      writePkg({
+        name: "my-cli",
+        type: "module",
+        bin: { "my-cli": "./dist/bin.js" },
+        dependencies: { zod: "^4.2.1" },
+      });
+      const result = generateOne({ entry: "./cli.js", out: "dist/bin.js", cwd });
+      expect(result.compileCacheSpecifier).toBe("politty/compile-cache");
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const warning = String(warnSpy.mock.calls[0]?.[0]);
+      expect(warning).toContain("no @politty/zod / @politty/valibot / politty dependency");
+      expect(warning).toContain("--compile-cache-specifier");
+    });
+
+    it("prefers an explicit specifier over the declared dependency, without warning", () => {
+      writePkg({
+        name: "my-cli",
+        type: "module",
+        bin: { "my-cli": "./dist/bin.js" },
+        dependencies: { "@politty/zod": "^0.1.0" },
+      });
+      const result = generateOne({
+        entry: "./cli.js",
+        out: "dist/bin.js",
+        compileCacheSpecifier: "my-own-reexport/compile-cache",
+        cwd,
+      });
+      expect(result.compileCacheSpecifier).toBe("my-own-reexport/compile-cache");
+      expect(readFileSync(result.outputPath, "utf8")).toContain(
+        'await import("my-own-reexport/compile-cache");',
+      );
+      expect(warnSpy).not.toHaveBeenCalled();
+    });
+
+    it("names the specifier in the catch comment so the degraded path is readable", () => {
+      writePkg({ name: "my-cli", type: "module", dependencies: { "@politty/zod": "^0.1.0" } });
+      const result = generateOne({ entry: "./cli.js", out: "dist/bin.js", cwd });
+      expect(readFileSync(result.outputPath, "utf8")).toContain(
+        "// @politty/zod/compile-cache is not resolvable from here",
+      );
+    });
+
+    it("applies one specifier to every shim of a multi-bin package", () => {
+      writePkg({
+        name: "my-cli",
+        type: "module",
+        bin: { "tool-a": "./dist/bin-a.js", "tool-b": "./dist/bin-b.js" },
+        dependencies: { "@politty/valibot": "^0.1.0" },
+      });
+      const results = generateCompileCacheShim({ entry: ["./a.js", "./b.js"], cwd });
+      expect(results.map((r) => r.compileCacheSpecifier)).toEqual([
+        "@politty/valibot/compile-cache",
+        "@politty/valibot/compile-cache",
+      ]);
+    });
   });
 
   it("throws when entry and out counts differ", () => {

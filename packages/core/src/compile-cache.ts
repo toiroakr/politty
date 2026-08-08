@@ -10,7 +10,9 @@
  *
  * ```ts
  * #!/usr/bin/env node
- * import { enableCompileCache } from "politty/compile-cache";
+ * // Import from the politty package your CLI depends on:
+ * // "@politty/zod", "@politty/valibot", or "politty".
+ * import { enableCompileCache } from "@politty/zod/compile-cache";
  *
  * enableCompileCache("my-cli");
  * await import("./cli.js");
