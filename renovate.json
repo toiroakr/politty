@@ -12,6 +12,7 @@
   "minimumReleaseAge": "7 days",
   "internalChecksFilter": "strict",
   "prConcurrentLimit": 5,
+  "rangeStrategy": "bump",
   "customManagers": [
     {
       "customType": "regex",
@@ -24,7 +25,8 @@
   "packageRules": [
     {
       "matchDepTypes": ["devDependencies"],
-      "automerge": true
+      "automerge": true,
+      "rangeStrategy": "bump"
     },
     {
       "groupName": "testing",
