@@ -2,9 +2,9 @@
 // Diffs pnpm-lock.yaml's per-importer `dependencies` blocks (never
 // `devDependencies`) between a before/after snapshot, to tell whether an
 // automated lockfile change touched any published package's runtime
-// dependencies. Used to decide whether the `skip-changeset` label applies:
-// devDependencies-only bumps and pnpm-workspace.yaml policy pruning don't
-// affect consumers and don't need a changeset.
+// dependencies. Used to decide whether a changeset needs to be created for a
+// Renovate PR: devDependencies-only bumps and pnpm-workspace.yaml policy
+// pruning don't affect consumers and don't need a changeset.
 
 import { readFileSync, appendFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
