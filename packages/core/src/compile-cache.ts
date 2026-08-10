@@ -10,7 +10,10 @@
  *
  * ```ts
  * #!/usr/bin/env node
- * import { enableCompileCache } from "politty/compile-cache";
+ * // Import from the `compile-cache` subpath of the politty package your CLI
+ * // depends on — `politty generate-shim` writes that specifier for you,
+ * // naming whichever package's bin generated the shim.
+ * import { enableCompileCache } from "<your-politty-package>/compile-cache";
  *
  * enableCompileCache("my-cli");
  * await import("./cli.js");

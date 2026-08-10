@@ -9,3 +9,16 @@
  */
 
 export * from "@politty/zod";
+
+import { createCompileCacheShimGenerator } from "@politty/zod";
+
+/**
+ * Generate compile-cache bin shims that import the cache helper from
+ * `politty/compile-cache`.
+ *
+ * Overrides `@politty/zod`'s binding of the same name — the one thing this
+ * alias cannot re-export as-is. A CLI depending on `politty` alone cannot
+ * resolve `@politty/zod` from its own package under a strict node_modules
+ * layout (pnpm), so a shim naming it would silently lose the compile cache.
+ */
+export const generateCompileCacheShim = createCompileCacheShimGenerator("politty");
