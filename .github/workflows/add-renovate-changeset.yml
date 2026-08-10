@@ -11,18 +11,22 @@ concurrency:
 permissions: {}
 
 jobs:
-  add-changeset:
-    name: Add changeset
+  detect:
+    name: Detect changeset requirement
     runs-on: ubuntu-slim
     timeout-minutes: 10
     permissions:
-      contents: read # checkout the PR head
+      contents: read # checkout the PR head; this job never has secrets
 
     # `|` rather than `>-`: actrun's YAML parser chokes on folded scalars here.
     if: |
       startsWith(github.event.pull_request.head.ref, 'renovate/') &&
       github.event.pull_request.user.login == 'renovate[bot]' &&
       github.event.pull_request.user.type == 'Bot'
+
+    outputs:
+      changed: ${{ steps.runtime.outputs.has-runtime-changes }}
+      content: ${{ steps.content.outputs.content }}
 
     steps:
       - name: Checkout PR head
@@ -53,7 +57,7 @@ jobs:
 
       - name: Install pnpm
         if: steps.existing.outputs.found == 'false'
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           standalone: true
           run_install: false
@@ -80,16 +84,21 @@ jobs:
         with:
           before-lockfile: /tmp/renovate-base-lock.yaml
 
-      - name: Create changeset file
+      - name: Build changeset content
         if: steps.existing.outputs.found == 'false' && steps.runtime.outputs.has-runtime-changes == 'true'
+        id: content
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
           NAMES: ${{ steps.runtime.outputs.changed-names }}
         run: |
           set -eo pipefail
-          FILENAME=".changeset/renovate-${PR_NUMBER}.md"
+          # Random delimiter: PR_TITLE flows into this heredoc and is
+          # renovate-generated from a dependency/package name, so a fixed
+          # delimiter string could in principle be smuggled in to terminate
+          # the heredoc early and inject extra $GITHUB_OUTPUT lines.
+          DELIM="ghadelim_${RANDOM}${RANDOM}${RANDOM}"
           {
+            echo "content<<$DELIM"
             echo "---"
             while IFS= read -r name; do
               [ -z "$name" ] && continue
@@ -98,10 +107,41 @@ jobs:
             echo "---"
             echo ""
             printf '%s\n' "${PR_TITLE}"
-          } > "$FILENAME"
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+  commit:
+    name: Commit changeset
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read # checkout only; commit-action pushes via its own app credentials
+
+    steps:
+      # This checkout only gives commit-action a git working tree to add the
+      # new changeset file to and push from. Nothing in this job executes any
+      # code from that tree — the diffing/detection that runs code from the
+      # (renovate-controlled but still PR-supplied) checkout happens entirely
+      # in the `detect` job above, which has no secrets. Keeping that split
+      # means PR-supplied content is never on disk in a job that can see
+      # APP_ID/APP_PRIVATE_KEY while anything actually executes.
+      - name: Checkout PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Write changeset file
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CONTENT: ${{ needs.detect.outputs.content }}
+        run: |
+          set -eo pipefail
+          printf '%s\n' "$CONTENT" > ".changeset/renovate-${PR_NUMBER}.md"
 
       - name: Commit changeset
-        if: steps.existing.outputs.found == 'false' && steps.runtime.outputs.has-runtime-changes == 'true'
         uses: suzuki-shunsuke/commit-action@06e3b49d4706498d325d29bd85adc82ecf2f5d8f # v1.0.0
         with:
           app_id: ${{ secrets.APP_ID }}
