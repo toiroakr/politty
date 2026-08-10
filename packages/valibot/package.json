@@ -71,7 +71,7 @@
     "prepublishOnly": "pnpm run build && node -e \"const{copyFileSync}=require('node:fs');for(const f of ['README.md','LICENSE'])copyFileSync('../../'+f,f)\""
   },
   "dependencies": {
-    "yaml": "^2.8.3"
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@politty/core": "workspace:*",
