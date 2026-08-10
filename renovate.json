@@ -8,6 +8,7 @@
     "github>toiroakr/karinto:pin#v0.9.5"
   ],
   "labels": ["dependencies"],
+  "gitIgnoredAuthors": ["271965483+toiroakr-release-bot[bot]@users.noreply.github.com"],
   "minimumReleaseAge": "7 days",
   "internalChecksFilter": "strict",
   "prConcurrentLimit": 5,
