@@ -535,8 +535,22 @@ function padEndVisual(str: string, width: number): string {
 }
 
 /**
+ * Re-indent the continuation lines of a multi-line description so they align
+ * under the description column. A `\n` in a description is treated as a hard
+ * line break; every line after the first is padded to `column` spaces.
+ */
+function indentDescription(description: string, column: number): string {
+  if (!description.includes("\n")) return description;
+  const pad = " ".repeat(column);
+  return description.split("\n").join(`\n${pad}`);
+}
+
+/**
  * Format a single option line
  * If flags exceed the column width, description is moved to the next line
+ *
+ * Descriptions may contain `\n` line breaks; continuation lines are indented to
+ * stay aligned under the description column.
  */
 function formatOption(
   flags: string,
@@ -548,15 +562,17 @@ function formatOption(
   const indentStr = "  ".repeat(indent);
   const visualFlagLength = stripAnsi(flags).length;
   const effectiveFlagWidth = flagWidth - indent * 2 + extraDescPadding;
+  const descColumn = effectiveFlagWidth + 2 + indent * 2;
+  const desc = indentDescription(description, descColumn);
 
   // If flags are too long, put description on next line
   if (visualFlagLength >= effectiveFlagWidth) {
-    const descIndent = " ".repeat(effectiveFlagWidth + 2 + indent * 2);
-    return `${indentStr}  ${flags}\n${descIndent}${description}`;
+    const descIndent = " ".repeat(descColumn);
+    return `${indentStr}  ${flags}\n${descIndent}${desc}`;
   }
 
   const paddedFlags = padEndVisual(flags, effectiveFlagWidth);
-  return `${indentStr}  ${paddedFlags}${description}`;
+  return `${indentStr}  ${paddedFlags}${desc}`;
 }
 
 /**
@@ -792,8 +808,8 @@ function renderExamplesForHelp(examples: Example[], context?: CommandContext): s
   const fullPrefix = cmdPath ? `${cmdPrefix}${cmdPath} ` : cmdPrefix;
 
   for (const example of examples) {
-    // Description
-    lines.push(`  ${styles.dim(example.desc)}`);
+    // Description (indent continuation lines of multi-line descriptions)
+    lines.push(`  ${styles.dim(example.desc).split("\n").join("\n  ")}`);
     // Command
     lines.push(`    ${styles.dim("$")} ${fullPrefix}${example.cmd}`);
     // Output (if provided)

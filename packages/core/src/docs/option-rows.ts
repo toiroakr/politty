@@ -121,10 +121,20 @@ export function toOptionRows(options: ResolvedFieldMeta[]): OptionRow[] {
 }
 
 /**
- * Escape markdown special characters in table cells.
+ * Convert hard line breaks in a description into `<br>` so they render as line
+ * breaks inside a single markdown table cell or list item, instead of breaking
+ * the surrounding table row / list structure.
+ */
+export function inlineMarkdownBreaks(str: string): string {
+  return str.replace(/\r?\n/g, "<br>");
+}
+
+/**
+ * Escape markdown special characters in table cells. Embedded line breaks are
+ * converted to `<br>` so multi-line descriptions stay within a single cell.
  */
 function escapeTableCell(str: string): string {
-  return str.replace(/\|/g, "\\|").replace(/\n/g, " ");
+  return inlineMarkdownBreaks(str.replace(/\|/g, "\\|"));
 }
 
 function backtick(value: string): string {
@@ -267,7 +277,7 @@ export function emitMarkdownList(rows: OptionRow[]): string {
       flags += ` / ${backtick(row.inlineNegation)}`;
     }
 
-    const desc = row.description ? ` - ${row.description}` : "";
+    const desc = row.description ? ` - ${inlineMarkdownBreaks(row.description)}` : "";
     const required = row.required ? " (required)" : "";
     const defaultVal = row.hasDefault ? ` (default: ${JSON.stringify(row.defaultValue)})` : "";
     const envInfo = formatEnvInfo(row.env);
@@ -275,7 +285,7 @@ export function emitMarkdownList(rows: OptionRow[]): string {
 
     if (row.negationRow) {
       lines.push(
-        `- ${backtick(row.negationRow.flag)} - ${row.negationRow.description} ${row.negationRow.relationMarker}`,
+        `- ${backtick(row.negationRow.flag)} - ${inlineMarkdownBreaks(row.negationRow.description)} ${row.negationRow.relationMarker}`,
       );
     }
   }

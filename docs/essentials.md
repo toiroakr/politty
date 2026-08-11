@@ -45,6 +45,26 @@ const command = defineCommand({
 
 The examples below primarily use `arg()`, but you can write the same with `.meta()`.
 
+#### Multi-line descriptions
+
+Descriptions may contain `\n` line breaks. They are rendered as real line breaks
+everywhere a description appears:
+
+- **Terminal help**: continuation lines are indented to stay aligned under the
+  description column.
+- **Generated Markdown** (tables and lists): line breaks are emitted as `<br>`
+  so they render inside a single table cell / list item without breaking the
+  surrounding structure.
+
+```typescript
+args: z.object({
+  strategy: arg(z.string().default("rolling"), {
+    alias: "s",
+    description: "Rollout strategy.\nrolling: gradual replacement.\nrecreate: stop then start.",
+  }),
+});
+```
+
 ```bash
 $ my-cli src.txt dest.txt
 ```

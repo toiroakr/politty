@@ -673,4 +673,63 @@ describe("default-renderers", () => {
       expect(markdown).toContain("--name");
     });
   });
+
+  describe("multi-line descriptions", () => {
+    it("should convert line breaks to <br> in option table cells", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          mode: arg(z.string(), {
+            description: "First line\nSecond line",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const table = renderOptionsTable(info);
+
+      expect(table).toContain("First line<br>Second line");
+      // The table row must stay on a single line so the table is not broken.
+      const rowLines = table.split("\n").filter((l) => l.includes("First line"));
+      expect(rowLines).toHaveLength(1);
+    });
+
+    it("should convert line breaks to <br> in argument table cells", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          file: arg(z.string(), {
+            positional: true,
+            description: "Path to file\nRelative to cwd",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const table = renderArgumentsTable(info);
+
+      expect(table).toContain("Path to file<br>Relative to cwd");
+    });
+
+    it("should convert line breaks to <br> in option list items", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          mode: arg(z.string(), {
+            description: "First line\nSecond line",
+          }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const list = defaultRenderers.listStyle(info);
+
+      expect(list).toContain("First line<br>Second line");
+      const itemLines = list.split("\n").filter((l) => l.includes("First line"));
+      expect(itemLines).toHaveLength(1);
+    });
+  });
 });
