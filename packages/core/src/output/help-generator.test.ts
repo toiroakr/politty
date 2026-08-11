@@ -571,4 +571,55 @@ describe("Help Generator", () => {
       expect(result).toContain("[env: OUTPUT_DIR]");
     });
   });
+
+  describe("multi-line descriptions", () => {
+    it("should indent continuation lines under the description column", () => {
+      const cmd = defineCommand({
+        name: "cli",
+        args: z.object({
+          mode: arg(z.string(), {
+            alias: "m",
+            description: "First line of description\nSecond line of description",
+          }),
+        }),
+      });
+
+      const result = renderOptions(cmd);
+      const lines = result.split("\n");
+
+      const firstIdx = lines.findIndex((l) => l.includes("First line of description"));
+      expect(firstIdx).toBeGreaterThanOrEqual(0);
+
+      const firstLine = lines[firstIdx]!;
+      const secondLine = lines[firstIdx + 1]!;
+
+      // The continuation line carries only the description text, no flags.
+      expect(secondLine).toContain("Second line of description");
+      expect(secondLine).not.toContain("--mode");
+
+      // Both description fragments start at the same visual column.
+      const firstCol = firstLine.indexOf("First line of description");
+      const secondCol = secondLine.indexOf("Second line of description");
+      expect(secondCol).toBe(firstCol);
+    });
+
+    it("should keep suffixes on the last description line", () => {
+      const cmd = defineCommand({
+        name: "cli",
+        args: z.object({
+          port: arg(z.number().default(8080), {
+            description: "Line one\nLine two",
+          }),
+        }),
+      });
+
+      const result = renderOptions(cmd);
+      const lines = result.split("\n");
+      const secondIdx = lines.findIndex((l) => l.includes("Line two"));
+
+      // The (default: ...) suffix is appended after the final line, not the first.
+      expect(lines[secondIdx]).toContain("default");
+      expect(lines[secondIdx - 1]).not.toContain("default");
+    });
+  });
 });

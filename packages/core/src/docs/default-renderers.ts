@@ -1,7 +1,12 @@
 import path from "node:path";
 import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
 import type { Example } from "../types.js";
-import { emitMarkdownList, emitMarkdownTable, toOptionRows } from "./option-rows.js";
+import {
+  emitMarkdownList,
+  emitMarkdownTable,
+  inlineMarkdownBreaks,
+  toOptionRows,
+} from "./option-rows.js";
 import type {
   ArgumentsRenderContext,
   CommandInfo,
@@ -21,10 +26,11 @@ import type {
 import { sectionEndMarker, sectionStartMarker } from "./types.js";
 
 /**
- * Escape markdown special characters in table cells
+ * Escape markdown special characters in table cells. Embedded line breaks are
+ * converted to `<br>` so multi-line descriptions stay within a single cell.
  */
 function escapeTableCell(str: string): string {
-  return str.replace(/\|/g, "\\|").replace(/\n/g, " ");
+  return inlineMarkdownBreaks(str.replace(/\|/g, "\\|"));
 }
 
 /**
@@ -88,7 +94,7 @@ export function renderArgumentsList(info: CommandInfo): string {
   const lines: string[] = [];
   for (const arg of info.positionalArgs) {
     const required = arg.required ? "(required)" : "(optional)";
-    const desc = arg.description ? ` - ${arg.description}` : "";
+    const desc = arg.description ? ` - ${inlineMarkdownBreaks(arg.description)}` : "";
     lines.push(`- \`${arg.name}\`${desc} ${required}`);
   }
 
@@ -338,7 +344,7 @@ export function renderArgumentsListFromArray(args: ResolvedFieldMeta[]): string 
   const lines: string[] = [];
   for (const arg of args) {
     const required = arg.required ? "(required)" : "(optional)";
-    const desc = arg.description ? ` - ${arg.description}` : "";
+    const desc = arg.description ? ` - ${inlineMarkdownBreaks(arg.description)}` : "";
     lines.push(`- \`${arg.name}\`${desc} ${required}`);
   }
 
