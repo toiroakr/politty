@@ -107,9 +107,10 @@ jobs:
         run: node .github/scripts/pin-peer-floor.mjs "${{ matrix.dep }}" "${{ matrix.version }}"
         shell: bash
       - name: Install dependencies at the pinned floor
-        # Not --frozen-lockfile: the pin above intentionally changes what the
-        # lockfile must resolve to.
-        run: pnpm install
+        # --no-frozen-lockfile: the pin above intentionally changes what the
+        # lockfile must resolve to, and pnpm otherwise defaults to frozen
+        # mode under CI=true (set by GitHub Actions runners).
+        run: pnpm install --no-frozen-lockfile
         shell: bash
       - name: Confirm the floor version actually resolved
         run: node .github/scripts/verify-peer-floor.mjs "${{ matrix.dep }}" "${{ matrix.version }}"
