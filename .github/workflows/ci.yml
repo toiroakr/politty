@@ -66,6 +66,62 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         uses: k1LoW/octocov-action@a167dc0dee441b7ffc45e1b862ab55ec0d87f278 # v1.5.2
 
+  peer-floor:
+    name: Peer Floor (${{ matrix.dep }}@${{ matrix.version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # checkout the repository
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each entry pins one peerDependencies floor (the lowest version any
+        # package declares support for) across the whole workspace via
+        # pnpm-workspace.yaml overrides, then runs the same test suite as the
+        # main `ci` job against it. Declared floors drift upward silently
+        # otherwise: Renovate's rangeStrategy bumps package.json ranges to
+        # whatever it just installed, and nothing previously re-verified that
+        # the originally-declared lower bound still actually works.
+        include:
+          - dep: zod
+            version: 4.2.1
+          - dep: valibot
+            version: 1.1.0
+          - dep: "@inquirer/prompts"
+            version: 8.3.2
+          - dep: "@clack/prompts"
+            version: 0.10.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        name: Install pnpm
+        with:
+          standalone: true
+          run_install: false
+      - name: Install Node.js
+        run: pnpm env use --global 24
+        shell: bash
+      - name: Pin ${{ matrix.dep }} to its declared peer floor
+        run: node .github/scripts/pin-peer-floor.mjs "${{ matrix.dep }}" "${{ matrix.version }}"
+        shell: bash
+      - name: Install dependencies at the pinned floor
+        # --no-frozen-lockfile: the pin above intentionally changes what the
+        # lockfile must resolve to, and pnpm otherwise defaults to frozen
+        # mode under CI=true (set by GitHub Actions runners).
+        run: pnpm install --no-frozen-lockfile
+        shell: bash
+      - name: Confirm the floor version actually resolved
+        run: node .github/scripts/verify-peer-floor.mjs "${{ matrix.dep }}" "${{ matrix.version }}"
+        shell: bash
+      - name: Typecheck against the pinned floor
+        run: pnpm typecheck
+        shell: bash
+      - name: Test against the pinned floor
+        run: npx vitest run --project unit --project dist-compat
+        shell: bash
+
   shell-completion:
     name: Shell Completion (${{ matrix.os }} / ${{ matrix.shell }})
     runs-on: ${{ matrix.os }}

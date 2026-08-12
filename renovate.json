@@ -26,7 +26,11 @@
     {
       "matchDepTypes": ["devDependencies"],
       "automerge": true,
-      "rangeStrategy": "bump"
+      "rangeStrategy": "pin"
+    },
+    {
+      "matchDepTypes": ["peerDependencies"],
+      "rangeStrategy": "widen"
     },
     {
       "groupName": "testing",
