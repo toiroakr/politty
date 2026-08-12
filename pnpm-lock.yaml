@@ -9,52 +9,52 @@ importers:
   .:
     devDependencies:
       '@changesets/cli':
-        specifier: ^2.31.1
+        specifier: 2.31.1
         version: 2.31.1(@types/node@25.9.5)
       '@quansync/fs':
-        specifier: ^1.0.0
+        specifier: 1.0.0
         version: 1.0.0
       '@types/node':
-        specifier: ^25.9.5
+        specifier: 25.9.5
         version: 25.9.5
       '@typescript/native-preview':
-        specifier: ^7.0.0-dev.20260707.2
+        specifier: 7.0.0-dev.20260707.2
         version: 7.0.0-dev.20260707.2
       '@vitest/coverage-v8':
-        specifier: ^4.1.10
+        specifier: 4.1.10
         version: 4.1.10(vitest@4.1.10)
       knip:
-        specifier: ^6.31.0
+        specifier: 6.31.0
         version: 6.31.0
       lefthook:
-        specifier: ^2.1.10
+        specifier: 2.1.10
         version: 2.1.10
       organize-imports-cli:
-        specifier: ^1.0.2
+        specifier: 1.0.2
         version: 1.0.2
       oxfmt:
-        specifier: ^0.62.0
+        specifier: 0.62.0
         version: 0.62.0
       oxlint:
-        specifier: ^1.77.0
+        specifier: 1.77.0
         version: 1.77.0
       quansync:
-        specifier: ^1.0.0
+        specifier: 1.0.0
         version: 1.0.0
       tsx:
-        specifier: ^4.23.7
+        specifier: 4.23.7
         version: 4.23.7
       typescript:
-        specifier: ^7.0.2
+        specifier: 7.0.2
         version: 7.0.2
       valibot:
-        specifier: ^1.4.2
+        specifier: 1.4.2
         version: 1.4.2(typescript@7.0.2)
       vitest:
-        specifier: ^4.1.10
+        specifier: 4.1.10
         version: 4.1.10(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(vite@8.2.0(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.7)(yaml@2.9.0))
       zod:
-        specifier: ^4.4.3
+        specifier: 4.4.3
         version: 4.4.3
 
   packages/core:
@@ -64,16 +64,16 @@ importers:
         version: 2.9.0
     devDependencies:
       '@clack/prompts':
-        specifier: ^1.2.0
+        specifier: 1.2.0
         version: 1.2.0
       '@inquirer/prompts':
-        specifier: ^8.5.2
+        specifier: 8.5.2
         version: 8.5.2(@types/node@25.9.5)
       '@types/node':
-        specifier: ^25.9.5
+        specifier: 25.9.5
         version: 25.9.5
       zod:
-        specifier: ^4.4.3
+        specifier: 4.4.3
         version: 4.4.3
 
   packages/politty:
@@ -89,19 +89,19 @@ importers:
         version: link:../zod
     devDependencies:
       '@types/node':
-        specifier: ^25.9.5
+        specifier: 25.9.5
         version: 25.9.5
       '@typescript/native-preview':
-        specifier: ^7.0.0-dev.20260707.2
+        specifier: 7.0.0-dev.20260707.2
         version: 7.0.0-dev.20260707.2
       tsdown:
-        specifier: ^0.22.14
+        specifier: 0.22.14
         version: 0.22.14(@typescript/native-preview@7.0.0-dev.20260707.2)(oxc-resolver@11.24.2)(tsx@4.23.7)(typescript@7.0.2)
       typescript:
-        specifier: ^7.0.2
+        specifier: 7.0.2
         version: 7.0.2
       zod:
-        specifier: ^4.4.3
+        specifier: 4.4.3
         version: 4.4.3
 
   packages/valibot:
@@ -120,19 +120,19 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@types/node':
-        specifier: ^25.9.5
+        specifier: 25.9.5
         version: 25.9.5
       '@typescript/native-preview':
-        specifier: ^7.0.0-dev.20260707.2
+        specifier: 7.0.0-dev.20260707.2
         version: 7.0.0-dev.20260707.2
       tsdown:
-        specifier: ^0.22.14
+        specifier: 0.22.14
         version: 0.22.14(@typescript/native-preview@7.0.0-dev.20260707.2)(oxc-resolver@11.24.2)(tsx@4.23.7)(typescript@7.0.2)
       typescript:
-        specifier: ^7.0.2
+        specifier: 7.0.2
         version: 7.0.2
       valibot:
-        specifier: ^1.4.2
+        specifier: 1.4.2
         version: 1.4.2(typescript@7.0.2)
 
   packages/zod:
@@ -151,19 +151,19 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@types/node':
-        specifier: ^25.9.5
+        specifier: 25.9.5
         version: 25.9.5
       '@typescript/native-preview':
-        specifier: ^7.0.0-dev.20260707.2
+        specifier: 7.0.0-dev.20260707.2
         version: 7.0.0-dev.20260707.2
       tsdown:
-        specifier: ^0.22.14
+        specifier: 0.22.14
         version: 0.22.14(@typescript/native-preview@7.0.0-dev.20260707.2)(oxc-resolver@11.24.2)(tsx@4.23.7)(typescript@7.0.2)
       typescript:
-        specifier: ^7.0.2
+        specifier: 7.0.2
         version: 7.0.2
       zod:
-        specifier: ^4.4.3
+        specifier: 4.4.3
         version: 4.4.3
 
 packages:
