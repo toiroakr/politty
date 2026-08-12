@@ -29,6 +29,10 @@
       "rangeStrategy": "bump"
     },
     {
+      "matchDepTypes": ["peerDependencies"],
+      "rangeStrategy": "widen"
+    },
+    {
       "groupName": "testing",
       "matchPackageNames": ["vitest", "@vitest/*"]
     },
