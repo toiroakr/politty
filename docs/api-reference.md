@@ -734,12 +734,13 @@ interface Command<TArgs, TResult> {
   description?: string;
   /** Alternative names for this command (used as subcommand aliases) */
   aliases?: string[];
-  /** Argument schema */
-  args: ArgsSchema;
-  subCommands?: Record<string, Command | (() => Promise<Command>)>;
+  /** Argument schema; `undefined` for a command with no args */
+  args: ArgsSchema | undefined;
+  /** Also accepts `lazy()`-loaded and async-function subcommands (see SubCommandsRecord) */
+  subCommands?: SubCommandsRecord;
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
   /** A function when the command is runnable; `undefined` for subcommand-only parents */
-  run?: (args: TArgs) => TResult | Promise<TResult>;
+  run?: (args: TArgs) => TResult;
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
   /** Additional notes */
   notes?: string;
