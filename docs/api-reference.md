@@ -13,6 +13,7 @@ function defineCommand<TArgsSchema, TResult>(config: {
   name: string;
   description?: string;
   args?: TArgsSchema;
+  aliases?: string[];
   subCommands?: Record<string, Command | (() => Promise<Command>)>;
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
   run?: (args: TArgs) => TResult | Promise<TResult>;
