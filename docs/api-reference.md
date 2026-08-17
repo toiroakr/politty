@@ -764,6 +764,23 @@ type ArgSource = "cli" | "env" | "default";
 
 ---
 
+### `RunInvocation`
+
+The shape of `args.$invocation` — the CLI name a command was invoked with. See [Knowing which name `run` was invoked with](./advanced-features.md#knowing-which-name-run-was-invoked-with) for usage.
+
+```typescript
+interface RunInvocation {
+  /** The name or alias actually typed on the CLI to reach this command */
+  name: string;
+  /** Canonical name `name` is an alias for; undefined when not an alias */
+  aliasFor?: string;
+}
+```
+
+`aliasFor` is set only when `name` is one of the command's `aliases`; it's `undefined` when invoked by the command's canonical name (or run directly, with no subcommand routing involved).
+
+---
+
 ### `Example`
 
 Type for defining command usage examples.
