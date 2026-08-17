@@ -772,7 +772,7 @@ function checkSubCommandKeyNameMismatch(
     {
       commandPath: [...commandPath, name],
       type: "subcommand_key_name_mismatch",
-      message: `Subcommand registered as "${name}" but its own name is "${resolvedName}". Register it under "${resolvedName}" (or rename the command to "${name}") so routing, help, completion, and $invocation agree on its canonical name.`,
+      message: `Subcommand registered as "${name}" but its own name is "${resolvedName}".`,
       field: name,
     },
   ];

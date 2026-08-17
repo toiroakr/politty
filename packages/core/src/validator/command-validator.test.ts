@@ -257,6 +257,20 @@ describe("validateCommand", () => {
       }
     });
 
+    it("should not flag a lazy-loaded subcommand registered under its own name", async () => {
+      const lazySub = lazy(defineCommand({ name: "install" }), async () =>
+        defineCommand({ name: "install" }),
+      );
+
+      const parent = defineCommand({
+        name: "cli",
+        subCommands: { install: lazySub },
+      });
+
+      const result = await validateCommand(parent);
+      expect(result.valid).toBe(true);
+    });
+
     it("should not flag a subcommand registered under its own name", async () => {
       const sub = defineCommand({ name: "install" });
 
