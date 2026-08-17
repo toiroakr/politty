@@ -8,6 +8,7 @@ import type {
   GlobalArgs,
   IsEmpty,
   NonRunnableCommand,
+  RunInvocation,
   RunnableCommand,
   SubCommandsRecord,
 } from "../types.js";
@@ -38,24 +39,30 @@ export type MergedArgs<TLocalArgs, TGlobalArgs> =
   IsEmpty<TGlobalArgs> extends true ? TLocalArgs : TLocalArgs & WithCaseVariants<TGlobalArgs>;
 
 /**
- * Add the `$source` helper, which reports whether a given field's final
- * value came from an explicit CLI token, a `field.env` fallback, or
- * neither (schema default / `prompt` resolution).
+ * Add the `$source` and `$invocation` run-time metadata helpers.
  *
- * `name` is typed as a plain `string` (not `keyof T`) since the runtime
- * helper deliberately accepts either camelCase or kebab-case field names
- * (matching `createDualCaseProxy`'s dual-case access) and returns
- * `"default"` for anything it doesn't recognize. A `keyof T`-based type
- * would also be unsound for discriminated-union `args` schemas, where
- * narrowing `args` to one branch doesn't retroactively narrow `$source`'s
- * already-fixed parameter type.
+ * `$source` reports whether a given field's final value came from an
+ * explicit CLI token, a `field.env` fallback, or neither (schema default /
+ * `prompt` resolution). Its `name` parameter is typed as a plain `string`
+ * (not `keyof T`) since the runtime helper deliberately accepts either
+ * camelCase or kebab-case field names (matching `createDualCaseProxy`'s
+ * dual-case access) and returns `"default"` for anything it doesn't
+ * recognize. A `keyof T`-based type would also be unsound for
+ * discriminated-union `args` schemas, where narrowing `args` to one branch
+ * doesn't retroactively narrow `$source`'s already-fixed parameter type.
+ *
+ * `$invocation` reports the CLI name (canonical or alias) this command was
+ * invoked with.
  */
-type WithArgSource<T> = T & { $source?: (name: string) => ArgSource };
+type WithRunMeta<T> = T & {
+  $source?: (name: string) => ArgSource;
+  $invocation?: RunInvocation;
+};
 
 /**
  * Resolve merged args from schema and global args type
  */
-type ResolvedArgs<TArgsSchema, TGlobalArgs> = WithArgSource<
+type ResolvedArgs<TArgsSchema, TGlobalArgs> = WithRunMeta<
   MergedArgs<InferArgs<TArgsSchema>, TGlobalArgs>
 >;
 

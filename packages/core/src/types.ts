@@ -30,6 +30,21 @@ export type IsEmpty<T> = keyof T extends never ? true : false;
 export type ArgSource = "cli" | "env" | "default";
 
 /**
+ * Identifies the CLI name a command was invoked with in the current run.
+ * - `name`: the literal token typed on the CLI to reach this command
+ *   (a canonical subcommand name or one of its `aliases`).
+ * - `aliasFor`: set only when `name` is an alias, to the canonical
+ *   subcommand name it resolves to; `undefined` when invoked by its
+ *   canonical name (or run directly, with no subcommand routing involved).
+ */
+export interface RunInvocation {
+  /** The name or alias actually typed on the CLI to reach this command */
+  name: string;
+  /** Canonical name `name` is an alias for; undefined when not an alias */
+  aliasFor?: string | undefined;
+}
+
+/**
  * Example definition for a command
  */
 export interface Example {

@@ -219,6 +219,76 @@ describe("runCommand", () => {
     });
   });
 
+  describe("$invocation", () => {
+    it("reports the command's own name with no aliasFor when run directly (no subcommand routing)", async () => {
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({ name: arg(z.string()) }),
+        run: runFn,
+      });
+
+      await runCommand(cmd, ["--name", "Alice"]);
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$invocation).toEqual({ name: "test" });
+    });
+
+    it("reports the command's own name with no aliasFor when a command without an args schema runs directly", async () => {
+      const runFn = vi.fn();
+      const cmd = defineCommand({ name: "test", run: runFn });
+
+      await runCommand(cmd, []);
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$invocation).toEqual({ name: "test" });
+    });
+
+    it("reports the canonical name with no aliasFor when a subcommand is invoked by its own name", async () => {
+      const runFn = vi.fn();
+      const sub = defineCommand({ name: "install", aliases: ["i"], run: runFn });
+      const root = defineCommand({ name: "cli", subCommands: { install: sub } });
+
+      await runCommand(root, ["install"]);
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$invocation).toEqual({ name: "install" });
+    });
+
+    it("reports the alias typed on the CLI plus the canonical name when a subcommand is invoked via alias", async () => {
+      const runFn = vi.fn();
+      const sub = defineCommand({ name: "install", aliases: ["i"], run: runFn });
+      const root = defineCommand({ name: "cli", subCommands: { install: sub } });
+
+      await runCommand(root, ["i"]);
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$invocation).toEqual({ name: "i", aliasFor: "install" });
+    });
+
+    it("reports no aliasFor when a subcommand with aliases is run directly (no routing involved)", async () => {
+      const runFn = vi.fn();
+      const sub = defineCommand({ name: "install", aliases: ["i"], run: runFn });
+
+      await runCommand(sub, []);
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$invocation).toEqual({ name: "install" });
+    });
+
+    it("only reports the leaf's own alias, not an ancestor's, when both levels are invoked via alias", async () => {
+      const runFn = vi.fn();
+      const add = defineCommand({ name: "add", aliases: ["a"], run: runFn });
+      const remote = defineCommand({ name: "remote", aliases: ["r"], subCommands: { add } });
+      const root = defineCommand({ name: "cli", subCommands: { remote } });
+
+      await runCommand(root, ["r", "a"]);
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$invocation).toEqual({ name: "a", aliasFor: "add" });
+    });
+  });
+
   describe("global/local field collision on a same-named field", () => {
     const originalEnv = process.env;
 

@@ -20,6 +20,7 @@ import type {
   Logger,
   MainOptions,
   RunCommandOptions,
+  RunInvocation,
   RunResult,
 } from "../types.js";
 import {
@@ -76,6 +77,34 @@ function attachArgSource(target: Record<string, unknown>, sourceMap: Map<string,
       "default",
     enumerable: false,
   });
+}
+
+/**
+ * Attach a non-enumerable `$invocation` helper to the final args object,
+ * mirroring `attachArgSource`'s visibility (invisible to `Object.keys`/
+ * `JSON.stringify`/spread, reachable via property access through
+ * `createDualCaseProxy`).
+ */
+function attachInvocation(target: Record<string, unknown>, invocation: RunInvocation): void {
+  Object.defineProperty(target, "$invocation", {
+    value: invocation,
+    enumerable: false,
+  });
+}
+
+/**
+ * Resolve the `RunInvocation` metadata for the command about to run: the
+ * literal CLI token that reached it (canonical name or alias), and the
+ * canonical name if that token was an alias.
+ *
+ * `context.commandPath`'s last entry is the raw token a parent recorded
+ * when descending into this command (see the subcommand-descent branch
+ * below); it falls back to `command.name` for the root command or a
+ * directly-invoked command (no subcommand routing took place).
+ */
+function resolveInvocation(command: AnyCommand, context: CommandContext): RunInvocation {
+  const name = context.commandPath?.at(-1) ?? command.name;
+  return context.aliasFor ? { name, aliasFor: context.aliasFor } : { name };
 }
 
 /**
@@ -791,6 +820,7 @@ async function runCommandInternal<TResult = unknown>(
       for (const name of cliProvidedGlobalFields) globalSourceMap.set(name, "cli");
       for (const name of envFallbackGlobalFields) globalSourceMap.set(name, "env");
       attachArgSource(validatedGlobalArgs, globalSourceMap);
+      attachInvocation(validatedGlobalArgs, resolveInvocation(command, context));
       const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
       if (options._globalExtracted && !isCompletionInvocation) {
         await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
@@ -912,6 +942,7 @@ async function runCommandInternal<TResult = unknown>(
       );
     }
     attachArgSource(mergedPlainArgs, argSourceMap);
+    attachInvocation(mergedPlainArgs, resolveInvocation(command, context));
     const mergedArgs = createDualCaseProxy(mergedPlainArgs);
 
     // Run the command

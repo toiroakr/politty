@@ -57,6 +57,7 @@ describe("26-command-alias", () => {
       expect(result.exitCode).toBe(0);
       expect(consoleSpy).toHaveBeenCalledWith("Installing as dependency:");
       expect(consoleSpy).toHaveBeenCalledWith("  + lodash");
+      expect(consoleSpy).toHaveBeenCalledWith('(invoked as alias "i" for "install")');
     });
 
     it("works via alias 'add'", async () => {
@@ -66,6 +67,15 @@ describe("26-command-alias", () => {
       expect(result.exitCode).toBe(0);
       expect(consoleSpy).toHaveBeenCalledWith("Installing as dependency:");
       expect(consoleSpy).toHaveBeenCalledWith("  + lodash");
+      expect(consoleSpy).toHaveBeenCalledWith('(invoked as alias "add" for "install")');
+    });
+
+    it("does not log alias info when invoked by its canonical name", async () => {
+      using consoleSpy = spyOnConsoleLog();
+      const result = await runCommand(cli, ["install", "lodash"]);
+
+      expect(result.exitCode).toBe(0);
+      expect(consoleSpy).not.toHaveBeenCalledWith(expect.stringContaining("invoked as alias"));
     });
 
     it("can run installCommand directly", async () => {
