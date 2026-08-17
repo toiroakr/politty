@@ -48,6 +48,13 @@ export const installCommand = defineCommand({
         console.log(`  + ${pkg}`);
       }
     }
+    // args.$invocation reports the name typed on the CLI (canonical or
+    // alias) and, when it was an alias, the canonical name it resolves to.
+    if (args.$invocation?.aliasFor) {
+      console.log(
+        `(invoked as alias "${args.$invocation.name}" for "${args.$invocation.aliasFor}")`,
+      );
+    }
   },
 });
 

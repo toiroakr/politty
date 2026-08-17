@@ -114,6 +114,26 @@ Alias names must start with an alphanumeric character and contain only alphanume
 
 > **Note**: Aliases require synchronous metadata, so they work with eagerly-defined commands and `lazy(meta, load)` subcommands. Legacy async subcommand functions (`async () => ...`) do not expose metadata synchronously, so aliases defined on the returned command won't be recognized for parsing, help, or completion. Use `lazy()` for alias-enabled lazy subcommands.
 
+#### Knowing which name `run` was invoked with
+
+`args.$invocation` reports the name actually typed on the CLI to reach the running command, and — only when that name was an alias — the canonical name it resolves to:
+
+```typescript
+const install = defineCommand({
+  name: "install",
+  aliases: ["i", "add"],
+  run: (args) => {
+    // $pkg install lodash  -> { name: "install" }
+    // $pkg i lodash        -> { name: "i", aliasFor: "install" }
+    if (args.$invocation?.aliasFor) {
+      console.log(`invoked via alias "${args.$invocation.name}"`);
+    }
+  },
+});
+```
+
+`args.$invocation.aliasFor` is `undefined` when the command was reached by its canonical name (or run directly, with no subcommand routing involved), so `if (args.$invocation?.aliasFor)` is the idiomatic way to check "was this an alias" without hard-coding alias strings. Branching on a _specific_ alias still requires comparing `args.$invocation.name` against one of the strings in `aliases`.
+
 See `playground/26-command-alias` for a complete example.
 
 ## Complex Schemas

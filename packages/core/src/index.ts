@@ -112,6 +112,7 @@ export type {
   NonRunnableCommand,
   PromptResolver,
   RunCommandOptions,
+  RunInvocation,
   RunResult,
   RunResultFailure,
   RunResultSuccess,
