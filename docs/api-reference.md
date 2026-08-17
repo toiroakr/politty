@@ -9,14 +9,14 @@ Detailed reference for functions and types provided by politty.
 Defines a command.
 
 ```typescript
-function defineCommand<TArgsSchema, TResult>(config: {
+function defineCommand<TArgsSchema, TArgs, TResult>(config: {
   name: string;
   description?: string;
   args?: TArgsSchema;
   aliases?: string[];
-  subCommands?: Record<string, Command | (() => Promise<Command>)>;
+  subCommands?: SubCommandsRecord;
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
-  run?: (args: TArgs) => TResult | Promise<TResult>;
+  run?: (args: TArgs) => TResult;
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
   notes?: string;
 }): Command<TArgs, TResult>;
@@ -36,9 +36,9 @@ function defineCommand<TArgsSchema, TResult>(config: {
 | `description` | `string`                                                    | Command description                       |
 | `args`        | `TArgsSchema`                                               | Argument schema (Zod schema)              |
 | `aliases`     | `string[]`                                                  | Alternative names for the command         |
-| `subCommands` | `Record<string, Command \| (() => Promise<Command>)>`       | Subcommands (supports lazy loading)       |
+| `subCommands` | `SubCommandsRecord`                                         | Subcommands (supports lazy loading)       |
 | `setup`       | `(context: SetupContext<TArgs>) => void \| Promise<void>`   | Initialization hook                       |
-| `run`         | `(args: TArgs) => TResult \| Promise<TResult>`              | Main process                              |
+| `run`         | `(args: TArgs) => TResult`                                  | Main process                              |
 | `cleanup`     | `(context: CleanupContext<TArgs>) => void \| Promise<void>` | Cleanup hook                              |
 | `notes`       | `string`                                                    | Additional notes (shown in help and docs) |
 | `examples`    | `Example[]`                                                 | Usage examples (shown in help and docs)   |
@@ -737,7 +737,7 @@ interface Command<TArgs, TResult> {
   aliases?: string[];
   /** Argument schema; `undefined` for a command with no args */
   args: ArgsSchema | undefined;
-  /** Also accepts `lazy()`-loaded and async-function subcommands (see SubCommandsRecord) */
+  /** Also accepts `lazy()`-loaded and async-function subcommands (see SubCommandsRecord below) */
   subCommands?: SubCommandsRecord;
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
   /** A function when the command is runnable; `undefined` for subcommand-only parents */
@@ -747,6 +747,24 @@ interface Command<TArgs, TResult> {
   notes?: string;
   /** Usage examples */
   examples?: Example[];
+}
+```
+
+---
+
+### `SubCommandsRecord`
+
+The type of `Command.subCommands` — maps a subcommand name to a command, an async-function loader (see [Lazy Loading](./advanced-features.md#lazy-loading)), or a `lazy()`-loaded command.
+
+```typescript
+type SubCommandsRecord = Record<string, SubCommandValue>;
+
+type SubCommandValue = Command | (() => Promise<Command>) | LazyCommand;
+
+/** Carries synchronous metadata (for help/completion) alongside a deferred loader */
+interface LazyCommand {
+  readonly meta: Command;
+  readonly load: () => Promise<Command>;
 }
 ```
 
