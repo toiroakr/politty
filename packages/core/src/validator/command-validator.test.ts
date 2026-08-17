@@ -269,10 +269,27 @@ describe("validateCommand", () => {
       expect(result.valid).toBe(true);
     });
 
-    it("should not flag a pure async subcommand function (name not known synchronously)", async () => {
+    it("should detect a key/name mismatch on a pure async subcommand function", async () => {
+      // validateCommand already awaits pure async subcommand functions to
+      // validate their nested schema, so the resolved `.name` is available
+      // here at no extra cost -- unlike alias resolution, which must stay
+      // synchronous for CLI routing.
       const parent = defineCommand({
         name: "cli",
         subCommands: { foo: async () => defineCommand({ name: "install" }) },
+      });
+
+      const result = await validateCommand(parent);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors[0]?.type).toBe("subcommand_key_name_mismatch");
+      }
+    });
+
+    it("should not flag a pure async subcommand function registered under its own name", async () => {
+      const parent = defineCommand({
+        name: "cli",
+        subCommands: { install: async () => defineCommand({ name: "install" }) },
       });
 
       const result = await validateCommand(parent);

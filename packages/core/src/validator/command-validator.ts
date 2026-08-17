@@ -741,7 +741,7 @@ function checkSubCommandAliasConflicts(
 }
 
 /**
- * Check that each subcommand's own `.name` matches the key it is registered
+ * Check that a subcommand's own `.name` matches the key it is registered
  * under in its parent's `subCommands` record.
  *
  * Routing (`resolveSubcommand`/`resolveSubcommandWithAlias`), `commandPath`,
@@ -751,31 +751,31 @@ function checkSubCommandAliasConflicts(
  * key match is indistinguishable from an alias match by name alone, so
  * `$invocation`/`aliasFor` would report the key as if it were the canonical
  * name even though the command's own `.name` says otherwise.
+ *
+ * Takes the already-resolved subcommand's name rather than resolving it
+ * itself: `validateCommand`'s recursive loop already awaits
+ * `resolveLazyCommand` for every subcommand (including pure async
+ * subcommand functions) to validate its nested schema, so by the time this
+ * runs the full `.name` is available at no extra cost -- unlike
+ * `checkSubCommandAliasConflicts`, which must stay synchronous because CLI
+ * argv routing resolves aliases before deciding whether to load a subcommand
+ * at all.
  */
 function checkSubCommandKeyNameMismatch(
-  command: AnyCommand,
+  name: string,
+  resolvedName: string,
   commandPath: string[],
 ): CommandValidationError[] {
-  const errors: CommandValidationError[] = [];
-  if (!command.subCommands) return errors;
+  if (name === resolvedName) return [];
 
-  for (const [name, subCmdValue] of Object.entries(command.subCommands)) {
-    const resolved = isLazyCommand(subCmdValue)
-      ? subCmdValue.meta
-      : typeof subCmdValue !== "function"
-        ? (subCmdValue as AnyCommand)
-        : null;
-    if (!resolved || resolved.name === name) continue;
-
-    errors.push({
+  return [
+    {
       commandPath: [...commandPath, name],
       type: "subcommand_key_name_mismatch",
-      message: `Subcommand registered as "${name}" but its own name is "${resolved.name}". Register it under "${resolved.name}" (or rename the command to "${name}") so routing, help, completion, and $invocation agree on its canonical name.`,
+      message: `Subcommand registered as "${name}" but its own name is "${resolvedName}". Register it under "${resolvedName}" (or rename the command to "${name}") so routing, help, completion, and $invocation agree on its canonical name.`,
       field: name,
-    });
-  }
-
-  return errors;
+    },
+  ];
 }
 
 /**
@@ -817,13 +817,12 @@ export async function validateCommand(
   // Validate subcommand alias conflicts
   errors.push(...checkSubCommandAliasConflicts(command, commandPath));
 
-  // Validate subcommand registration keys match their own `.name`
-  errors.push(...checkSubCommandKeyNameMismatch(command, commandPath));
-
   // Recursively validate subcommands
   if (command.subCommands) {
     for (const [name, subCmd] of Object.entries(command.subCommands)) {
       const resolvedSubCmd = await resolveLazyCommand(subCmd);
+      // Validate subcommand registration key matches its own `.name`
+      errors.push(...checkSubCommandKeyNameMismatch(name, resolvedSubCmd.name, commandPath));
       const subResult = await validateCommand(resolvedSubCmd, {
         commandPath: [...commandPath, name],
         ...(options.globalArgs ? { globalArgs: options.globalArgs } : {}),
