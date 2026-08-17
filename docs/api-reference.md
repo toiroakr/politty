@@ -759,12 +759,12 @@ The type of `Command.subCommands` — maps a subcommand name to a command, an as
 ```typescript
 type SubCommandsRecord = Record<string, SubCommandValue>;
 
-type SubCommandValue = Command | (() => Promise<Command>) | LazyCommand;
+type SubCommandValue = AnyCommand | (() => Promise<AnyCommand>) | LazyCommand;
 
 /** Carries synchronous metadata (for help/completion) alongside a deferred loader */
 interface LazyCommand {
-  readonly meta: Command;
-  readonly load: () => Promise<Command>;
+  readonly meta: AnyCommand;
+  readonly load: () => Promise<AnyCommand>;
 }
 ```
 
