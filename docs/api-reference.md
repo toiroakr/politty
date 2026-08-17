@@ -9,16 +9,20 @@ Detailed reference for functions and types provided by politty.
 Defines a command.
 
 ```typescript
+// Simplified for readability: real overloads take TArgsSchema, TResult, and
+// TGlobalArgs, and infer the resolved args passed to setup/run/cleanup from
+// them — there's no user-facing generic for it, so it's shown as `unknown`.
 function defineCommand<TArgsSchema, TResult>(config: {
   name: string;
   description?: string;
   args?: TArgsSchema;
-  subCommands?: Record<string, Command | (() => Promise<Command>)>;
-  setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
-  run?: (args: TArgs) => TResult | Promise<TResult>;
-  cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
+  aliases?: string[];
+  subCommands?: SubCommandsRecord;
+  setup?: (context: SetupContext) => void | Promise<void>;
+  run?: (args: unknown) => TResult;
+  cleanup?: (context: CleanupContext) => void | Promise<void>;
   notes?: string;
-}): Command<TArgs, TResult>;
+}): Command<TArgsSchema, unknown, TResult>;
 ```
 
 #### Parameters
@@ -29,18 +33,18 @@ function defineCommand<TArgsSchema, TResult>(config: {
 
 **config properties:**
 
-| Property      | Type                                                        | Description                               |
-| ------------- | ----------------------------------------------------------- | ----------------------------------------- |
-| `name`        | `string`                                                    | Command name (required)                   |
-| `description` | `string`                                                    | Command description                       |
-| `args`        | `TArgsSchema`                                               | Argument schema (Zod schema)              |
-| `aliases`     | `string[]`                                                  | Alternative names for the command         |
-| `subCommands` | `Record<string, Command \| (() => Promise<Command>)>`       | Subcommands (supports lazy loading)       |
-| `setup`       | `(context: SetupContext<TArgs>) => void \| Promise<void>`   | Initialization hook                       |
-| `run`         | `(args: TArgs) => TResult \| Promise<TResult>`              | Main process                              |
-| `cleanup`     | `(context: CleanupContext<TArgs>) => void \| Promise<void>` | Cleanup hook                              |
-| `notes`       | `string`                                                    | Additional notes (shown in help and docs) |
-| `examples`    | `Example[]`                                                 | Usage examples (shown in help and docs)   |
+| Property       | Type                                                 | Description                               |
+| -------------- | ---------------------------------------------------- | ----------------------------------------- |
+| `name`         | `string`                                             | Command name (required)                   |
+| `description?` | `string`                                             | Command description                       |
+| `args?`        | `TArgsSchema`                                        | Argument schema (Zod schema)              |
+| `aliases?`     | `string[]`                                           | Alternative names for the command         |
+| `subCommands?` | `SubCommandsRecord`                                  | Subcommands (supports lazy loading)       |
+| `setup?`       | `(context: SetupContext) => void \| Promise<void>`   | Initialization hook                       |
+| `run?`         | `(args: unknown) => TResult`                         | Main process                              |
+| `cleanup?`     | `(context: CleanupContext) => void \| Promise<void>` | Cleanup hook                              |
+| `notes?`       | `string`                                             | Additional notes (shown in help and docs) |
+| `examples?`    | `Example[]`                                          | Usage examples (shown in help and docs)   |
 
 #### Example
 
@@ -725,17 +729,22 @@ function formatValidationErrors(errors: ValidationError[]): string;
 
 ### `Command`
 
-Type for a defined command.
+Type for a defined command. `run` is a function when the command is runnable and `undefined` for a subcommand-only parent (`RunnableCommand`/`NonRunnableCommand` in the actual types — flattened here into one interface for readability).
 
 ```typescript
-interface Command<TArgs, TResult> {
+interface Command<TArgsSchema, TArgs, TResult> {
   /** Command name (required) */
   name: string;
   description?: string;
-  argsSchema?: ArgsSchema;
-  subCommands?: Record<string, Command | (() => Promise<Command>)>;
+  /** Alternative names for this command (used as subcommand aliases) */
+  aliases?: string[];
+  /** Argument schema; `undefined` for a command with no args */
+  args: TArgsSchema;
+  /** Also accepts `lazy()`-loaded and async-function subcommands (see SubCommandsRecord below) */
+  subCommands?: SubCommandsRecord;
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
-  run?: (args: TArgs) => TResult | Promise<TResult>;
+  /** A function when the command is runnable; `undefined` for subcommand-only parents */
+  run?: (args: TArgs) => TResult;
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
   /** Additional notes */
   notes?: string;
@@ -743,6 +752,57 @@ interface Command<TArgs, TResult> {
   examples?: Example[];
 }
 ```
+
+---
+
+### `SubCommandsRecord`
+
+The type of `Command.subCommands` — maps a subcommand name to a command, an async-function loader (see [Lazy Loading](./advanced-features.md#lazy-loading)), or a `lazy()`-loaded command.
+
+```typescript
+type SubCommandsRecord = Record<string, SubCommandValue>;
+
+type SubCommandValue = AnyCommand | (() => Promise<AnyCommand>) | LazyCommand;
+
+/** Carries synchronous metadata (for help/completion) alongside a deferred loader */
+interface LazyCommand {
+  /** Internal brand used by the `isLazyCommand` type guard; set by `lazy()` */
+  readonly __politty_lazy__: true;
+  readonly meta: AnyCommand;
+  readonly load: () => Promise<AnyCommand>;
+}
+```
+
+---
+
+### `ArgSource`
+
+The return type of `args.$source(name)` — where a resolved arg value came from. See [Defining Arguments](../README.md#defining-arguments) for usage.
+
+```typescript
+type ArgSource = "cli" | "env" | "default";
+```
+
+- `"cli"`: an explicit CLI token (flag or positional)
+- `"env"`: a `field.env` fallback (no CLI token was provided)
+- `"default"`: neither of the above (e.g. a schema default, or a value resolved by a `prompt` handler)
+
+---
+
+### `RunInvocation`
+
+The shape of `args.$invocation` — the CLI name a command was invoked with. See [Knowing which name `run` was invoked with](./advanced-features.md#knowing-which-name-run-was-invoked-with) for usage.
+
+```typescript
+interface RunInvocation {
+  /** The name or alias actually typed on the CLI to reach this command */
+  name: string;
+  /** Canonical name `name` is an alias for; undefined when not an alias */
+  aliasFor?: string;
+}
+```
+
+`aliasFor` is set only when `name` is one of the command's `aliases`; it's `undefined` when invoked by the command's canonical name (or run directly, with no subcommand routing involved).
 
 ---
 
