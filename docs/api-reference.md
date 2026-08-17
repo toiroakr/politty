@@ -725,16 +725,20 @@ function formatValidationErrors(errors: ValidationError[]): string;
 
 ### `Command`
 
-Type for a defined command.
+Type for a defined command. `run` is present when the command is runnable and absent for a subcommand-only parent (`RunnableCommand`/`NonRunnableCommand` in the actual types — flattened here into one interface for readability).
 
 ```typescript
 interface Command<TArgs, TResult> {
   /** Command name (required) */
   name: string;
   description?: string;
-  argsSchema?: ArgsSchema;
+  /** Alternative names for this command (used as subcommand aliases) */
+  aliases?: string[];
+  /** Argument schema (preserves the original schema type) */
+  args?: ArgsSchema;
   subCommands?: Record<string, Command | (() => Promise<Command>)>;
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
+  /** Present when the command is runnable; absent for subcommand-only parents */
   run?: (args: TArgs) => TResult | Promise<TResult>;
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
   /** Additional notes */
@@ -743,6 +747,20 @@ interface Command<TArgs, TResult> {
   examples?: Example[];
 }
 ```
+
+---
+
+### `ArgSource`
+
+The return type of `args.$source(name)` — where a resolved arg value came from. See [Defining Arguments](../README.md#defining-arguments) for usage.
+
+```typescript
+type ArgSource = "cli" | "env" | "default";
+```
+
+- `"cli"`: an explicit CLI token (flag or positional)
+- `"env"`: a `field.env` fallback (no CLI token was provided)
+- `"default"`: neither of the above (e.g. a schema default, or a value resolved by a `prompt` handler)
 
 ---
 
