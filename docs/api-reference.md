@@ -19,7 +19,7 @@ function defineCommand<TArgsSchema, TArgs, TResult>(config: {
   run?: (args: TArgs) => TResult;
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
   notes?: string;
-}): Command<TArgs, TResult>;
+}): Command<TArgsSchema, TArgs, TResult>;
 ```
 
 #### Parameters
@@ -729,14 +729,14 @@ function formatValidationErrors(errors: ValidationError[]): string;
 Type for a defined command. `run` is a function when the command is runnable and `undefined` for a subcommand-only parent (`RunnableCommand`/`NonRunnableCommand` in the actual types — flattened here into one interface for readability).
 
 ```typescript
-interface Command<TArgs, TResult> {
+interface Command<TArgsSchema, TArgs, TResult> {
   /** Command name (required) */
   name: string;
   description?: string;
   /** Alternative names for this command (used as subcommand aliases) */
   aliases?: string[];
   /** Argument schema; `undefined` for a command with no args */
-  args: ArgsSchema | undefined;
+  args: TArgsSchema;
   /** Also accepts `lazy()`-loaded and async-function subcommands (see SubCommandsRecord below) */
   subCommands?: SubCommandsRecord;
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
@@ -763,6 +763,8 @@ type SubCommandValue = AnyCommand | (() => Promise<AnyCommand>) | LazyCommand;
 
 /** Carries synchronous metadata (for help/completion) alongside a deferred loader */
 interface LazyCommand {
+  /** Internal brand used by the `isLazyCommand` type guard; set by `lazy()` */
+  readonly __politty_lazy__: true;
   readonly meta: AnyCommand;
   readonly load: () => Promise<AnyCommand>;
 }
