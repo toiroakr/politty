@@ -9,20 +9,20 @@ Detailed reference for functions and types provided by politty.
 Defines a command.
 
 ```typescript
-// Simplified for readability: the real overloads take TArgsSchema, TResult,
-// and TGlobalArgs, and compute the resolved args type (shown here as TArgs)
-// internally — you don't provide TArgs yourself, unlike the other two.
-function defineCommand<TArgsSchema, TArgs, TResult>(config: {
+// Simplified for readability: real overloads take TArgsSchema, TResult, and
+// TGlobalArgs, and infer the resolved args passed to setup/run/cleanup from
+// them — there's no user-facing generic for it, so it's shown as `unknown`.
+function defineCommand<TArgsSchema, TResult>(config: {
   name: string;
   description?: string;
   args?: TArgsSchema;
   aliases?: string[];
   subCommands?: SubCommandsRecord;
-  setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
-  run?: (args: TArgs) => TResult;
-  cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
+  setup?: (context: SetupContext) => void | Promise<void>;
+  run?: (args: unknown) => TResult;
+  cleanup?: (context: CleanupContext) => void | Promise<void>;
   notes?: string;
-}): Command<TArgsSchema, TArgs, TResult>;
+}): Command<TArgsSchema, unknown, TResult>;
 ```
 
 #### Parameters
@@ -33,18 +33,18 @@ function defineCommand<TArgsSchema, TArgs, TResult>(config: {
 
 **config properties:**
 
-| Property      | Type                                                        | Description                               |
-| ------------- | ----------------------------------------------------------- | ----------------------------------------- |
-| `name`        | `string`                                                    | Command name (required)                   |
-| `description` | `string`                                                    | Command description                       |
-| `args`        | `TArgsSchema`                                               | Argument schema (Zod schema)              |
-| `aliases`     | `string[]`                                                  | Alternative names for the command         |
-| `subCommands` | `SubCommandsRecord`                                         | Subcommands (supports lazy loading)       |
-| `setup`       | `(context: SetupContext<TArgs>) => void \| Promise<void>`   | Initialization hook                       |
-| `run`         | `(args: TArgs) => TResult`                                  | Main process                              |
-| `cleanup`     | `(context: CleanupContext<TArgs>) => void \| Promise<void>` | Cleanup hook                              |
-| `notes`       | `string`                                                    | Additional notes (shown in help and docs) |
-| `examples`    | `Example[]`                                                 | Usage examples (shown in help and docs)   |
+| Property       | Type                                                 | Description                               |
+| -------------- | ---------------------------------------------------- | ----------------------------------------- |
+| `name`         | `string`                                             | Command name (required)                   |
+| `description?` | `string`                                             | Command description                       |
+| `args?`        | `TArgsSchema`                                        | Argument schema (Zod schema)              |
+| `aliases?`     | `string[]`                                           | Alternative names for the command         |
+| `subCommands?` | `SubCommandsRecord`                                  | Subcommands (supports lazy loading)       |
+| `setup?`       | `(context: SetupContext) => void \| Promise<void>`   | Initialization hook                       |
+| `run?`         | `(args: unknown) => TResult`                         | Main process                              |
+| `cleanup?`     | `(context: CleanupContext) => void \| Promise<void>` | Cleanup hook                              |
+| `notes?`       | `string`                                             | Additional notes (shown in help and docs) |
+| `examples?`    | `Example[]`                                          | Usage examples (shown in help and docs)   |
 
 #### Example
 
