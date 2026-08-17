@@ -9,8 +9,9 @@ Detailed reference for functions and types provided by politty.
 Defines a command.
 
 ```typescript
-// TArgs (the resolved, validated args passed to setup/run/cleanup) is inferred
-// from `args` and any global args — it isn't a generic you provide explicitly.
+// Simplified for readability: the real overloads take TArgsSchema, TResult,
+// and TGlobalArgs, and compute the resolved args type (shown here as TArgs)
+// internally — you don't provide TArgs yourself, unlike the other two.
 function defineCommand<TArgsSchema, TArgs, TResult>(config: {
   name: string;
   description?: string;
