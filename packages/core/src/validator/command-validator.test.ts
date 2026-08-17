@@ -3,6 +3,7 @@ import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
 import { extractFields } from "../core/schema-extractor.js";
+import { lazy } from "../lazy.js";
 import {
   CaseVariantCollisionError,
   FieldTypeConflictError,
@@ -219,6 +220,63 @@ describe("validateCommand", () => {
       if (!result.valid) {
         expect(result.errors[0]?.message).toContain("duplicated within the alias list");
       }
+    });
+
+    it("should detect a subcommand registered under a key that differs from its own name", async () => {
+      const sub = defineCommand({ name: "install" });
+
+      const parent = defineCommand({
+        name: "cli",
+        subCommands: { foo: sub },
+      });
+
+      const result = await validateCommand(parent);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors[0]?.type).toBe("subcommand_key_name_mismatch");
+        expect(result.errors[0]?.commandPath).toEqual(["cli", "foo"]);
+        expect(result.errors[0]?.message).toContain('registered as "foo"');
+        expect(result.errors[0]?.message).toContain('own name is "install"');
+      }
+    });
+
+    it("should detect a key/name mismatch on a lazy-loaded subcommand", async () => {
+      const lazySub = lazy(defineCommand({ name: "install" }), async () =>
+        defineCommand({ name: "install" }),
+      );
+
+      const parent = defineCommand({
+        name: "cli",
+        subCommands: { foo: lazySub },
+      });
+
+      const result = await validateCommand(parent);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.some((e) => e.type === "subcommand_key_name_mismatch")).toBe(true);
+      }
+    });
+
+    it("should not flag a subcommand registered under its own name", async () => {
+      const sub = defineCommand({ name: "install" });
+
+      const parent = defineCommand({
+        name: "cli",
+        subCommands: { install: sub },
+      });
+
+      const result = await validateCommand(parent);
+      expect(result.valid).toBe(true);
+    });
+
+    it("should not flag a pure async subcommand function (name not known synchronously)", async () => {
+      const parent = defineCommand({
+        name: "cli",
+        subCommands: { foo: async () => defineCommand({ name: "install" }) },
+      });
+
+      const result = await validateCommand(parent);
+      expect(result.valid).toBe(true);
     });
 
     it("should validate deeply nested subcommands", async () => {

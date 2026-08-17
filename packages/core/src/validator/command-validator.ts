@@ -47,7 +47,8 @@ export interface CommandValidationError {
     | "reserved_field_name"
     | "case_variant_collision"
     | "duplicate_negation"
-    | "field_type_conflict";
+    | "field_type_conflict"
+    | "subcommand_key_name_mismatch";
   /** Error message */
   message: string;
   /** Related field name (if applicable) */
@@ -740,6 +741,44 @@ function checkSubCommandAliasConflicts(
 }
 
 /**
+ * Check that each subcommand's own `.name` matches the key it is registered
+ * under in its parent's `subCommands` record.
+ *
+ * Routing (`resolveSubcommand`/`resolveSubcommandWithAlias`), `commandPath`,
+ * the "Alias for X" help line, shell completion, and `run()`'s
+ * `args.$invocation` all key off the registration key — none of them read a
+ * subcommand's own `.name` once it is nested. If the two disagree, a direct
+ * key match is indistinguishable from an alias match by name alone, so
+ * `$invocation`/`aliasFor` would report the key as if it were the canonical
+ * name even though the command's own `.name` says otherwise.
+ */
+function checkSubCommandKeyNameMismatch(
+  command: AnyCommand,
+  commandPath: string[],
+): CommandValidationError[] {
+  const errors: CommandValidationError[] = [];
+  if (!command.subCommands) return errors;
+
+  for (const [name, subCmdValue] of Object.entries(command.subCommands)) {
+    const resolved = isLazyCommand(subCmdValue)
+      ? subCmdValue.meta
+      : typeof subCmdValue !== "function"
+        ? (subCmdValue as AnyCommand)
+        : null;
+    if (!resolved || resolved.name === name) continue;
+
+    errors.push({
+      commandPath: [...commandPath, name],
+      type: "subcommand_key_name_mismatch",
+      message: `Subcommand registered as "${name}" but its own name is "${resolved.name}". Register it under "${resolved.name}" (or rename the command to "${name}") so routing, help, completion, and $invocation agree on its canonical name.`,
+      field: name,
+    });
+  }
+
+  return errors;
+}
+
+/**
  * Validate a command and all its subcommands recursively
  *
  * This function collects all validation errors without throwing,
@@ -777,6 +816,9 @@ export async function validateCommand(
 
   // Validate subcommand alias conflicts
   errors.push(...checkSubCommandAliasConflicts(command, commandPath));
+
+  // Validate subcommand registration keys match their own `.name`
+  errors.push(...checkSubCommandKeyNameMismatch(command, commandPath));
 
   // Recursively validate subcommands
   if (command.subCommands) {
