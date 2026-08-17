@@ -47,7 +47,8 @@ export interface CommandValidationError {
     | "reserved_field_name"
     | "case_variant_collision"
     | "duplicate_negation"
-    | "field_type_conflict";
+    | "field_type_conflict"
+    | "subcommand_key_name_mismatch";
   /** Error message */
   message: string;
   /** Related field name (if applicable) */
@@ -740,6 +741,44 @@ function checkSubCommandAliasConflicts(
 }
 
 /**
+ * Check that a subcommand's own `.name` matches the key it is registered
+ * under in its parent's `subCommands` record.
+ *
+ * Routing (`resolveSubcommand`/`resolveSubcommandWithAlias`), `commandPath`,
+ * the "Alias for X" help line, shell completion, and `run()`'s
+ * `args.$invocation` all key off the registration key — none of them read a
+ * subcommand's own `.name` once it is nested. If the two disagree, a direct
+ * key match is indistinguishable from an alias match by name alone, so
+ * `$invocation`/`aliasFor` would report the key as if it were the canonical
+ * name even though the command's own `.name` says otherwise.
+ *
+ * Takes the already-resolved subcommand's name rather than resolving it
+ * itself: `validateCommand`'s recursive loop already awaits
+ * `resolveLazyCommand` for every subcommand (including pure async
+ * subcommand functions) to validate its nested schema, so by the time this
+ * runs the full `.name` is available at no extra cost -- unlike
+ * `checkSubCommandAliasConflicts`, which must stay synchronous because CLI
+ * argv routing resolves aliases before deciding whether to load a subcommand
+ * at all.
+ */
+function checkSubCommandKeyNameMismatch(
+  name: string,
+  resolvedName: string,
+  commandPath: string[],
+): CommandValidationError[] {
+  if (name === resolvedName) return [];
+
+  return [
+    {
+      commandPath: [...commandPath, name],
+      type: "subcommand_key_name_mismatch",
+      message: `Subcommand registered as "${name}" but its own name is "${resolvedName}".`,
+      field: name,
+    },
+  ];
+}
+
+/**
  * Validate a command and all its subcommands recursively
  *
  * This function collects all validation errors without throwing,
@@ -782,6 +821,8 @@ export async function validateCommand(
   if (command.subCommands) {
     for (const [name, subCmd] of Object.entries(command.subCommands)) {
       const resolvedSubCmd = await resolveLazyCommand(subCmd);
+      // Validate subcommand registration key matches its own `.name`
+      errors.push(...checkSubCommandKeyNameMismatch(name, resolvedSubCmd.name, commandPath));
       const subResult = await validateCommand(resolvedSubCmd, {
         commandPath: [...commandPath, name],
         ...(options.globalArgs ? { globalArgs: options.globalArgs } : {}),
