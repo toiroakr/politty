@@ -1,5 +1,12 @@
 # @politty/zod
 
+## 0.1.2
+
+### Patch Changes
+
+- 45e4ca2: Add `args.$invocation` to expose the CLI name (or alias) a command's `run()` was actually invoked with: `{ name }` when invoked by its canonical name (or run directly, with no subcommand routing involved), or `{ name, aliasFor }` when `name` is one of the command's `aliases` and `aliasFor` is the canonical name it resolves to. This lets `run()` tell which alias was used without hard-coding alias strings to detect the "was this an alias at all" case (`if (args.$invocation?.aliasFor)`).
+- 9ca2435: `validateCommand()` now flags a subcommand registered under a `subCommands` key that differs from its own `name` (e.g. `subCommands: { foo: installCommand }` where `installCommand.name === "install"`) as a new `subcommand_key_name_mismatch` error. Routing, help text, shell completion, and `args.$invocation` all key off the registration key rather than the subcommand's own `name`, so a mismatch silently produces a canonical name that disagrees with the command's own declared name. This check only runs when `validateCommand()` is explicitly called (it is opt-in, like the rest of `validateCommand`'s checks) — it does not change runtime behavior.
+
 ## 0.1.1
 
 ### Patch Changes
