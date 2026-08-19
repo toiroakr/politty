@@ -48,13 +48,13 @@ jobs:
       - name: Build
         run: pnpm build
       - name: Create Release PR or Publish
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        uses: changesets/action@198f833dd7d863100ea6e28967bc9a9fdefadb0a # v2.1.0
         with:
-          version: pnpm changeset version
-          publish: pnpm changeset publish
-          title: "chore: release"
-          commit: "chore: release"
-          createGithubReleases: true
+          version-script: pnpm changeset version
+          publish-script: pnpm changeset publish
+          pr-title: "chore: release"
+          commit-message: "chore: release"
+          create-github-releases: true
+          github-token: ${{ steps.app-token.outputs.token }}
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_CONFIG_PROVENANCE: "true"
