@@ -47,10 +47,11 @@ import {
 
 // Spy on `spawn` so the runMainHook tests below can assert gating without
 // actually spawning a child process. We must mock at module level — the
-// hook calls the destructured `spawn` import inside src/completion/install.ts,
-// so a `vi.spyOn` after the fact would not intercept it. Use `importOriginal`
-// to keep every other child_process export intact (e.g. `execSync` which
-// dynamic completion candidate generation depends on).
+// hook calls the destructured `spawn` import inside
+// src/completion/install-check.ts, so a `vi.spyOn` after the fact would not
+// intercept it. Use `importOriginal` to keep every other child_process
+// export intact (e.g. `execSync` which dynamic completion candidate
+// generation depends on).
 vi.mock("node:child_process", async (importOriginal) => ({
   ...(await importOriginal<typeof childProcess>()),
   spawn: vi.fn(() => ({ unref: () => {} })),
@@ -1575,8 +1576,9 @@ describe("Completion", () => {
 
       const completionCmd = wrapped.subCommands?.completion;
       expect(typeof completionCmd).toBe("object");
-      if (typeof completionCmd === "object" && !isLazyCommand(completionCmd)) {
-        expect(completionCmd.name).toBe("completion");
+      if (typeof completionCmd === "object" && completionCmd !== null) {
+        const name = isLazyCommand(completionCmd) ? completionCmd.meta.name : completionCmd.name;
+        expect(name).toBe("completion");
       }
     });
 
@@ -1609,7 +1611,7 @@ describe("Completion", () => {
       expect(wrapped.subCommands?.completion).toBeDefined();
     });
 
-    it("should generate completion from the wrapped command tree", () => {
+    it("should generate completion from the wrapped command tree", async () => {
       const cmd = defineCommand({
         name: "mycli",
         subCommands: {
@@ -1623,13 +1625,14 @@ describe("Completion", () => {
         deploy: defineCommand({ name: "deploy", run: () => {} }),
       };
 
-      const completionSubcommand = wrapped.subCommands?.completion;
+      let completionSubcommand = wrapped.subCommands?.completion;
       expect(completionSubcommand).toBeDefined();
-      if (
-        !completionSubcommand ||
-        typeof completionSubcommand === "function" ||
-        isLazyCommand(completionSubcommand)
-      ) {
+      // `completion` is lazy-loaded: resolve it to the real command before
+      // invoking `run`.
+      if (completionSubcommand && isLazyCommand(completionSubcommand)) {
+        completionSubcommand = await completionSubcommand.load();
+      }
+      if (!completionSubcommand || typeof completionSubcommand === "function") {
         throw new Error("Expected completion to be a command object");
       }
 
@@ -3140,10 +3143,13 @@ describe("Completion", () => {
       const wrapped = withCompletionCommand(defineCommand({ name: "mycli", run: () => {} }));
       const refresh = wrapped.subCommands?.["__refresh-completion"];
       expect(refresh).toBeDefined();
-      if (!refresh || typeof refresh === "function" || isLazyCommand(refresh)) {
+      // Lazy-loaded: its synchronous `meta` still carries the name for
+      // static analysis (help, completion) without loading the real command.
+      if (!refresh || typeof refresh === "function") {
         throw new Error("expected __refresh-completion to be a registered command object");
       }
-      expect(refresh.name).toBe("__refresh-completion");
+      const name = isLazyCommand(refresh) ? refresh.meta.name : refresh.name;
+      expect(name).toBe("__refresh-completion");
     });
 
     it("createCompletionCommand also auto-registers __refresh-completion on the root", () => {
@@ -3158,10 +3164,13 @@ describe("Completion", () => {
       const wrapped = withCompletionCommand(defineCommand({ name: "mycli", run: () => {} }));
       const workerPath = wrapped.subCommands?.["__completion-worker-path"];
       expect(workerPath).toBeDefined();
-      if (!workerPath || typeof workerPath === "function" || isLazyCommand(workerPath)) {
+      // Lazy-loaded: its synchronous `meta` still carries the name for
+      // static analysis (help, completion) without loading the real command.
+      if (!workerPath || typeof workerPath === "function") {
         throw new Error("expected __completion-worker-path to be a registered command object");
       }
-      expect(workerPath.name).toBe("__completion-worker-path");
+      const name = isLazyCommand(workerPath) ? workerPath.meta.name : workerPath.name;
+      expect(name).toBe("__completion-worker-path");
     });
 
     it("__completion-worker-path prints an existing bundled worker and otherwise throws", () => {

@@ -13,32 +13,12 @@
  *   fish: value\tdescription pairs, last line :directive
  */
 
-import {
-  internalArgs,
-  internalField,
-  type InferInternalArgs,
-} from "../../adapter/internal-args.js";
 import { defineCommand } from "../../core/command.js";
 import type { AnyCommand, ArgsSchema, Command } from "../../types.js";
 import { detectInlineOptionPrefix, generateCandidates } from "./candidate-generator.js";
 import { parseCompletionContext } from "./context-parser.js";
+import { completeArgsSchema, type CompleteArgs } from "./schema.js";
 import { formatForShell } from "./shell-formatter.js";
-
-/**
- * Schema for the __complete command
- */
-const completeArgsSchema = internalArgs({
-  shell: internalField.enum(["bash", "zsh", "fish"], {
-    description: "Target shell for output formatting",
-  }),
-  // The arguments to complete are passed after --
-  args: internalField.stringArray({
-    positional: true,
-    description: "Arguments to complete",
-  }),
-});
-
-type CompleteArgs = InferInternalArgs<typeof completeArgsSchema>;
 
 /**
  * Create the dynamic completion command

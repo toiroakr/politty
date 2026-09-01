@@ -22,7 +22,7 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   sourcemap: false,
-  minify: false,
+  minify: true,
   target: "node20.12",
   outDir: "dist",
   // Runtime stays a re-export of `@politty/zod` so a process mixing both

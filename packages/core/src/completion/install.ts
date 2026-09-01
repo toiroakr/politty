@@ -11,7 +11,6 @@
  * (or missing) cache is preferable to crashing the user's shell.
  */
 
-import { spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -21,12 +20,17 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import { resolveBinPath } from "./header.js";
 import { generateCompletion } from "./index.js";
-import { defaultCacheDir } from "./loader.js";
+import { installPath, readCachedSig } from "./install-check.js";
 import type { BundledWorkerOptions, CompletionMode, ShellType } from "./types.js";
+
+// Re-exported for existing importers — the definitions live in
+// `install-check.ts` so the runMain background-refresh hook can use them
+// without pulling in `generateCompletion` (and the bash/zsh/fish generators).
+export { hasManagedCache, installPath, spawnBackgroundRefresh } from "./install-check.js";
 
 export interface InstallContext {
   rootCommand: AnyCommand;
@@ -40,23 +44,6 @@ export interface InstallContext {
   completionMode?: CompletionMode | undefined;
   staticWorker?: { functionSuffix: string } | undefined;
   allowTargetCreate?: boolean | undefined;
-}
-
-/**
- * Resolve where a script for the given shell should live on disk.
- *
- * - bash/zsh: `<cacheDir>/completion.<shell>` — sourced by the rc loader.
- * - fish:    `$__fish_config_dir/completions/<program>.fish` — autoloaded
- *            by fish on TAB. We approximate `$__fish_config_dir` from
- *            `$XDG_CONFIG_HOME` / `$HOME`.
- */
-export function installPath(programName: string, shell: ShellType, cacheDir?: string): string {
-  if (shell === "fish") {
-    const cfg = process.env.XDG_CONFIG_HOME ?? `${process.env.HOME ?? ""}/.config`;
-    return join(cfg, "fish", "completions", `${programName}.fish`);
-  }
-  const dir = cacheDir ?? defaultCacheDir(programName);
-  return join(dir, `completion.${shell}`);
 }
 
 /** Atomic write: tmp file in the same dir, then rename. */
@@ -87,22 +74,6 @@ export function install(ctx: InstallContext, shell: ShellType): string {
   const target = installPath(ctx.programName, shell, ctx.cacheDir);
   writeAtomic(target, generateScript(ctx, shell));
   return target;
-}
-
-/**
- * Read the first ~5 lines of an existing cache file and return its
- * embedded bin-sig. Returns `null` when the file is missing, unreadable,
- * or doesn't have a sig header.
- */
-function readCachedSig(path: string): string | null {
-  try {
-    if (!existsSync(path)) return null;
-    const head = readFileSync(path, "utf8").split("\n", 6).join("\n");
-    const m = head.match(/^# politty-bin-sig: (\S+)/m);
-    return m ? m[1]! : null;
-  } catch {
-    return null;
-  }
 }
 
 function readCachedMode(path: string): CompletionMode | undefined {
@@ -186,45 +157,6 @@ export function refreshIfStale(ctx: InstallContext, shell: ShellType): void {
       readCachedMode(target) ??
       (existsSync(target) ? "static" : "dispatcher");
     writeAtomic(target, generateScript({ ...ctx, completionMode }, shell));
-  } catch {
-    // Best-effort.
-  }
-}
-
-/**
- * Returns true when a politty-managed cache file already exists on disk
- * for the given shell — i.e. the user has installed completion via
- * `<program> completion <shell> --install` or the rc loader has already
- * sourced one. Used by the runMain background hook to avoid spawning
- * the refresher (and thereby silently creating files) on plain CLI runs
- * the user never opted into.
- */
-export function hasManagedCache(
-  ctx: { programName: string; cacheDir?: string | undefined },
-  shell: ShellType,
-): boolean {
-  const target = installPath(ctx.programName, shell, ctx.cacheDir);
-  return readCachedSig(target) !== null;
-}
-
-/**
- * Spawn a detached child process that runs `<program> __refresh-completion <shell>`.
- * The child is fully decoupled (`stdio: "ignore"` + `unref()`), so it
- * outlives the parent without holding any handles.
- *
- * Caller is expected to gate this on the right conditions (interactive
- * shell, not running inside `__complete` itself, etc.).
- *
- * Returns `void` and never throws — even spawn failures are absorbed.
- */
-export function spawnBackgroundRefresh(programArgv0: string, shell: ShellType): void {
-  try {
-    const child = spawn(process.execPath, [programArgv0, "__refresh-completion", shell], {
-      detached: true,
-      stdio: "ignore",
-      // Inherit the env so XDG_CACHE_HOME / HOME / etc. flow through.
-    });
-    child.unref();
   } catch {
     // Best-effort.
   }

@@ -24,21 +24,24 @@
  * ```
  */
 
-import { internalArgs, internalField, type InferInternalArgs } from "../adapter/internal-args.js";
 import { defineCommand } from "../core/command.js";
 import type { AnyCommand, ArgsSchema, Command } from "../types.js";
 import { generateBashCompletion } from "./bash.js";
 import { resolveBundledWorkerPath } from "./bundled-worker.js";
+import { detectShell } from "./detect-shell.js";
 import { generateDispatcherCompletion } from "./dispatcher.js";
 import { createDynamicCompleteCommand } from "./dynamic/index.js";
 import { generateFishCompletion } from "./fish.js";
-import {
-  hasManagedCache,
-  install as installCompletion,
-  refreshIfStale,
-  spawnBackgroundRefresh,
-} from "./install.js";
+import { install as installCompletion, refreshIfStale } from "./install.js";
 import { generateLoader } from "./loader.js";
+import {
+  completionArgsSchema,
+  refreshArgsSchema,
+  workerPathArgsSchema,
+  type CompletionArgs,
+  type RefreshArgs,
+  type WorkerPathArgs,
+} from "./schemas.js";
 import { shSingleQuote } from "./shell-shared.js";
 import type {
   BundledWorkerOptions,
@@ -94,6 +97,11 @@ export type {
 } from "./types.js";
 // Re-export value completion resolver
 export { resolveValueCompletion, type ValueCompletionField } from "./value-completion-resolver.js";
+// Re-export shell detection (moved to detect-shell.ts, see import above)
+export { detectShell } from "./detect-shell.js";
+// Re-export withCompletionCommand (moved to with-completion-command.ts so the
+// package entry point can import it without pulling in this whole module)
+export { withCompletionCommand, type WithCompletionOptions } from "./with-completion-command.js";
 
 /**
  * Generate completion script for the specified shell
@@ -143,91 +151,6 @@ function printZshFpathSetup(programName: string, target: string): void {
   console.error("    fpath=(~/.zsh/completions $fpath)");
   console.error("    autoload -Uz compinit && compinit");
 }
-
-/**
- * Detect the current shell from environment
- */
-export function detectShell(): ShellType | null {
-  const shell = process.env.SHELL || "";
-  const shellName = shell.split("/").pop()?.toLowerCase() || "";
-
-  if (shellName.includes("bash")) {
-    return "bash";
-  }
-  if (shellName.includes("zsh")) {
-    return "zsh";
-  }
-  if (shellName.includes("fish")) {
-    return "fish";
-  }
-
-  return null;
-}
-
-/**
- * Schema for the completion command arguments
- */
-const completionArgsSchema = internalArgs({
-  shell: internalField.optionalEnum(["bash", "zsh", "fish"], {
-    positional: true,
-    description: "Shell type (bash, zsh, or fish)",
-    placeholder: "SHELL",
-  }),
-  instructions: internalField.boolean({
-    alias: "i",
-    description: "Show installation instructions",
-  }),
-  loader: internalField.boolean({
-    description:
-      "Print just the rc loader snippet (bash/zsh). Add it to ~/.bashrc or ~/.zshrc; it auto-regenerates the cache when the binary changes.",
-  }),
-  install: internalField.boolean({
-    description:
-      "Write the completion script to its on-disk cache (bash/zsh) or autoload location (fish) instead of printing it.",
-  }),
-  static: internalField.boolean({
-    description: "Generate the legacy static completion script with command metadata baked in.",
-  }),
-  dispatcher: internalField.boolean({
-    description: "Generate the runtime dispatcher completion script. This is the default.",
-  }),
-  worker: internalField.boolean({
-    description: "Generate an internal static worker artifact for dispatcher mode.",
-  }),
-});
-
-type CompletionArgs = InferInternalArgs<typeof completionArgsSchema>;
-
-const refreshArgsSchema = internalArgs({
-  shell: internalField.enum(["bash", "zsh", "fish"], {
-    positional: true,
-    description: "Shell to refresh",
-    placeholder: "SHELL",
-  }),
-  target: internalField.optionalString({
-    positional: true,
-    description: "Existing politty-generated completion file to refresh",
-    placeholder: "TARGET",
-  }),
-  static: internalField.boolean({
-    description: "Refresh using the legacy static completion script mode.",
-  }),
-  worker: internalField.boolean({
-    description: "Refresh an internal static worker completion script.",
-  }),
-});
-
-type RefreshArgs = InferInternalArgs<typeof refreshArgsSchema>;
-
-const workerPathArgsSchema = internalArgs({
-  shell: internalField.enum(["bash", "zsh", "fish"], {
-    positional: true,
-    description: "Shell worker to locate",
-    placeholder: "SHELL",
-  }),
-});
-
-type WorkerPathArgs = InferInternalArgs<typeof workerPathArgsSchema>;
 
 /**
  * Create a completion subcommand for your CLI
@@ -451,132 +374,4 @@ export function createCompletionWorkerPathCommand(
       console.log(path);
     },
   });
-}
-
-/**
- * Options for withCompletionCommand
- */
-export interface WithCompletionOptions {
-  /** Override the program name (defaults to command.name) */
-  programName?: string;
-  /** Global args schema for deriving global options in completion */
-  globalArgsSchema?: ArgsSchema;
-  /**
-   * Hardcode the cache directory used by the rc loader and the
-   * background refresh. When omitted, the loader derives
-   * `${XDG_CACHE_HOME:-$HOME/.cache}/<programName>` at runtime, which
-   * is the right answer for almost every CLI.
-   */
-  cacheDir?: string;
-  /** Program version embedded in the script header. */
-  programVersion?: string;
-  /** Published worker artifact lookup used by dispatcher mode. */
-  bundledWorker?: BundledWorkerOptions;
-}
-
-/**
- * Wrap a command with a completion subcommand
- *
- * This avoids circular references that occur when a command references itself
- * in its subCommands (e.g., for completion generation).
- *
- * @param command - The command to wrap
- * @param options - Options including programName
- * @returns A new command with the completion subcommand added
- *
- * @example
- * ```typescript
- * const mainCommand = withCompletionCommand(
- *   defineCommand({
- *     name: "mycli",
- *     subCommands: { ... },
- *   }),
- * );
- * ```
- */
-export function withCompletionCommand<T extends AnyCommand>(
-  command: T,
-  options?: string | WithCompletionOptions,
-): T {
-  // Support both string (programName) and options object for backwards compatibility
-  const opts: WithCompletionOptions =
-    typeof options === "string" ? { programName: options } : (options ?? {});
-
-  const { programName, globalArgsSchema, cacheDir, programVersion, bundledWorker } = opts;
-  const resolvedProgramName = programName ?? command.name;
-  const extra: {
-    cacheDir?: string;
-    programVersion?: string;
-    globalArgsSchema?: ArgsSchema;
-    bundledWorker?: BundledWorkerOptions;
-  } = {
-    ...(cacheDir !== undefined && { cacheDir }),
-    ...(programVersion !== undefined && { programVersion }),
-    ...(globalArgsSchema !== undefined && { globalArgsSchema }),
-    ...(bundledWorker !== undefined && { bundledWorker }),
-  };
-
-  const wrappedCommand = {
-    ...command,
-  } as T;
-
-  wrappedCommand.subCommands = {
-    ...command.subCommands,
-    completion: createCompletionCommand(wrappedCommand, programName, globalArgsSchema, extra),
-    __complete: createDynamicCompleteCommand(wrappedCommand, programName, globalArgsSchema),
-    "__refresh-completion": createRefreshCompletionCommand(
-      wrappedCommand,
-      resolvedProgramName,
-      extra,
-    ),
-    "__completion-worker-path": createCompletionWorkerPathCommand(resolvedProgramName, extra),
-  };
-
-  wrappedCommand.runMainHook = (argv) => {
-    maybeSpawnRefresh(argv, {
-      programName: resolvedProgramName,
-      ...(cacheDir !== undefined && { cacheDir }),
-    });
-  };
-
-  return wrappedCommand;
-}
-
-/**
- * Background-refresh trigger fired from `runMain` via `runMainHook`.
- *
- * Skipped when:
- *   - the user is invoking `__complete` / `__refresh-completion` /
- *     `completion` themselves (avoids loops and double work)
- *   - $SHELL doesn't resolve to a known shell
- *   - the user opted out via $POLITTY_NO_COMPLETION_REFRESH
- *   - process.argv[1] is missing (shouldn't happen for normal CLIs)
- *   - no politty-managed cache exists yet — i.e. the user hasn't
- *     installed completion. Without this gate the detached child would
- *     create a fish autoload (or any cache file) on every CLI run,
- *     even though the user never opted in via `--install` or the rc loader.
- */
-function maybeSpawnRefresh(
-  argv: readonly string[],
-  ctx: { programName: string; cacheDir?: string | undefined },
-): void {
-  if (process.env.POLITTY_NO_COMPLETION_REFRESH) return;
-
-  const firstPositional = argv.find((a) => !a.startsWith("-"));
-  if (
-    firstPositional === "__complete" ||
-    firstPositional === "__refresh-completion" ||
-    firstPositional === "__completion-worker-path" ||
-    firstPositional === "completion"
-  ) {
-    return;
-  }
-
-  const shell = detectShell();
-  if (!shell) return;
-  const argv0 = process.argv[1];
-  if (!argv0) return;
-  if (!hasManagedCache(ctx, shell)) return;
-
-  spawnBackgroundRefresh(argv0, shell);
 }

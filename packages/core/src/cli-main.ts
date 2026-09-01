@@ -40,7 +40,8 @@ const generateWorkerCommand = defineCommand({
   args: generateWorkerArgsSchema,
   async run(args: GenerateWorkerArgs) {
     // Loaded here rather than at module scope: see the import note at the top.
-    const { generateBundledCompletionWorker } = await import("./index.js");
+    // eslint-disable-next-line no-restricted-imports
+    const { generateBundledCompletionWorker } = await import("./completion/index.js");
     await generateBundledCompletionWorker({
       bin: args.bin,
       programName: args.program,
