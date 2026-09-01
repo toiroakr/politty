@@ -15,4 +15,4 @@ Shrink the package entry point by no longer statically bundling the shell-comple
 
 (same for `@politty/zod`/`@politty/valibot`, and for `generateBundledCompletionWorker`). `withCompletionCommand` itself is unaffected — keep importing it from the package root.
 
-Builds are also minified now, roughly halving published package size on top of the entry-point reduction above.
+Builds are also minified now, cutting total published package size by more than half on top of the entry-point reduction above (`@politty/zod`'s dist JS: 620KB → 269KB).

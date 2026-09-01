@@ -3173,6 +3173,22 @@ describe("Completion", () => {
       expect(name).toBe("__completion-worker-path");
     });
 
+    it("routes __refresh-completion through the lazy loader without throwing", async () => {
+      // Unlike the tests above (which only check the lazy `meta`), this drives
+      // the subcommand through the real router — exercising `resolveLazyCommand`
+      // and the dynamic `import("./index.js")` that loads the actual
+      // `createRefreshCompletionCommand` implementation.
+      const cacheDir = mkdtempSync(join(tmpdir(), "politty-refresh-route-"));
+      const wrapped = withCompletionCommand(defineCommand({ name: "mycli", run: () => {} }), {
+        programName: "mycli",
+        cacheDir,
+      });
+
+      const result = await runCommand(wrapped, ["__refresh-completion", "bash"]);
+
+      expect(result.exitCode).toBe(0);
+    });
+
     it("__completion-worker-path prints an existing bundled worker and otherwise throws", () => {
       const root = mkdtempSync(join(tmpdir(), "politty-worker-path-"));
       const distDir = join(root, "dist");
