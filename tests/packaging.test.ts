@@ -20,7 +20,12 @@ function isGitIgnored(relativePath: string): boolean {
 }
 
 // Every published package that declares a bin.
-const packagesWithBin = ["packages/zod", "packages/politty"];
+const packagesWithBin = [
+  "packages/zod",
+  "packages/zod-mini",
+  "packages/valibot",
+  "packages/politty",
+];
 
 describe.each(packagesWithBin)("%s package.json bin", (packageDir) => {
   // pnpm only symlinks a `bin` whose target exists at install time. If the

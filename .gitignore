@@ -18,6 +18,8 @@ tests/temp-*.ts
 packages/zod/README.md
 packages/valibot/README.md
 packages/politty/README.md
+packages/zod-mini/README.md
 packages/zod/LICENSE
 packages/valibot/LICENSE
 packages/politty/LICENSE
+packages/zod-mini/LICENSE

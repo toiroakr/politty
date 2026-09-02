@@ -1,0 +1,16 @@
+{
+  // See the positive fixture's tsconfig: same resolution, but this file is
+  // expected to fail typechecking.
+  "compilerOptions": {
+    "strict": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "exactOptionalPropertyTypes": true,
+    "paths": {
+      "@politty/zod-mini": ["../../../../packages/zod-mini/dist/index.d.ts"]
+    }
+  },
+  "include": ["user.ts"]
+}

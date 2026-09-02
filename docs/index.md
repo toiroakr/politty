@@ -5,6 +5,8 @@
 From simple scripts to complex CLI tools with subcommands, validation, and auto-generated help, you can build them all with a developer-friendly API.
 
 > **Using valibot?** Install [`@politty/valibot`](https://www.npmjs.com/package/@politty/valibot) instead of `politty`. The API is identical, so every page in these docs applies as written — read `politty` as `@politty/valibot`, and the `z.*` schemas in the examples as their `v.*` equivalents. See [Installation](./getting-started.md#installation) for the differences that do exist.
+>
+> **Using zod/mini?** Install [`@politty/zod-mini`](https://www.npmjs.com/package/@politty/zod-mini) instead of `politty`. The API is identical, so every page in these docs applies as written — read `politty` as `@politty/zod-mini`, and the chained `.optional()`/`.default(...)` calls in the examples as their function-style `z.optional(...)`/`z._default(...)` equivalents. See [Installation](./getting-started.md#installation) for the differences that do exist.
 
 ## Features
 

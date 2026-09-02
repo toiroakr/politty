@@ -62,6 +62,37 @@ runMain(command);
 
 Field descriptions can also come from valibot's own metadata actions. They are actions, not schemas, so they belong inside `v.pipe(...)`: `v.pipe(v.string(), v.description("..."))` or `v.pipe(v.string(), v.metadata({ description: "..." }))`. The one zod-only feature without a valibot counterpart is the `politty/augment` module (zod `GlobalMeta` interface augmentation) — use `arg()` or `v.metadata()` instead. The `politty` package itself remains the zod flavor (an alias of `@politty/zod`).
 
+### Using zod/mini instead of zod
+
+politty is also available as [`@politty/zod-mini`](https://www.npmjs.com/package/@politty/zod-mini), built on [`zod/mini`](https://zod.dev/) — the same `zod` package's minimal, function-style entry point instead of its chainable classic API — for a smaller bundle. Same API (`defineCommand`, `arg`, `runMain`, and all subpath modules):
+
+```bash
+npm install @politty/zod-mini zod
+```
+
+```typescript
+import * as z from "zod/mini";
+import { defineCommand, runMain, arg } from "@politty/zod-mini";
+
+const command = defineCommand({
+  name: "greet",
+  args: z.object({
+    name: arg(z.string(), { description: "Name to greet", positional: true }),
+    loud: arg(z._default(z.boolean(), false), { alias: "l" }),
+  }),
+  run: (args) => {
+    const greeting = `Hello, ${args.name}!`;
+    console.log(args.loud ? greeting.toUpperCase() : greeting);
+  },
+});
+
+runMain(command);
+```
+
+`zod/mini` drops classic zod's chainable sugar (`.optional()`, `.default()`, `.describe()`, `.meta()`), so schemas are built with functions instead (`z.optional(z.string())`, `z._default(z.string(), "x")`). Field descriptions come from `arg()` or from zod's own metadata registry: `schema.register(z.globalRegistry, { description: "..." })`. The `politty/augment` module (classic zod's `GlobalMeta` interface augmentation) has no `@politty/zod-mini` counterpart for the same reason it has none for valibot — use `arg()` or the registry instead.
+
+You can write your schemas against either `import * as z from "zod/mini"` or [`import * as z from "@zod/mini"`](https://zod.dev/packages/mini) — `@zod/mini` re-exports `zod/mini` (same classes, same `globalRegistry`), so schemas built either way are fully interchangeable. Per zod's own installation instructions, install `@zod/mini` alongside `zod` (`npm install zod @zod/mini`), not instead of it — `@zod/mini` only re-exports `zod/mini` from a peer dependency on `zod`, so `zod` still needs to be resolvable in your project either way.
+
 ## Quick Start
 
 ```typescript
