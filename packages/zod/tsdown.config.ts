@@ -21,7 +21,7 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   sourcemap: false,
-  minify: false,
+  minify: true,
   target: "node20.12",
   outDir: "dist",
   // `@politty/core` is a private workspace package: it is never published,

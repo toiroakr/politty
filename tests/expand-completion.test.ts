@@ -8,7 +8,8 @@ import {
 } from "../packages/core/src/completion/extractor.js";
 import { generateFishCompletion } from "../packages/core/src/completion/fish.js";
 import { generateZshCompletion } from "../packages/core/src/completion/zsh.js";
-import { arg, defineCommand, generateCompletion } from "../packages/zod/src/index.js";
+import { generateCompletion } from "../packages/zod/src/completion.js";
+import { arg, defineCommand } from "../packages/zod/src/index.js";
 
 const ENDPOINT_FIELDS: Record<string, string[]> = {
   GetApplication: ["workspaceId", "applicationName"],

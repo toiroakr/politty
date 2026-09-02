@@ -18,16 +18,22 @@ export {
   type GenerateCompileCacheShimOptions,
   type GenerateCompileCacheShimResult,
 } from "./compile-cache-shim.js";
-export {
-  generateBundledCompletionWorker,
-  generateCompletion,
-  withCompletionCommand,
-  type CompletionOptions,
-  type CompletionResult,
-  type GenerateBundledCompletionWorkerOptions,
-  type GenerateBundledCompletionWorkerResult,
-  type WithCompletionOptions,
+// `generateCompletion`/`generateBundledCompletionWorker` are intentionally
+// not re-exported here — importing them from "politty/completion" (as
+// documented) keeps the bash/zsh/fish generators out of every consumer's
+// import graph. `withCompletionCommand` stays available from the main
+// entry point, but comes from its own lightweight module so that this file
+// never statically imports the heavy `./completion/index.js`.
+export type {
+  CompletionOptions,
+  CompletionResult,
+  GenerateBundledCompletionWorkerOptions,
+  GenerateBundledCompletionWorkerResult,
 } from "./completion/index.js";
+export {
+  withCompletionCommand,
+  type WithCompletionOptions,
+} from "./completion/with-completion-command.js";
 export {
   arg,
   type ArgFn,

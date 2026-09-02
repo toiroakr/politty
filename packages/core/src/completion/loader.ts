@@ -138,13 +138,7 @@ export function generateLoader(opts: LoaderOptions): string {
   }
 }
 
-/**
- * Default cache file path (used by `completion <bash|zsh> --install`
- * and the `__refresh-completion` subcommand). For fish, the install
- * path is `$__fish_config_dir/completions/<program>.fish` and is
- * computed inside `installPath()` instead.
- */
-export function defaultCacheDir(programName: string): string {
-  const xdg = process.env.XDG_CACHE_HOME ?? `${process.env.HOME ?? ""}/.cache`;
-  return `${xdg}/${programName}`;
-}
+// Re-exported for existing importers — the definition lives in
+// `cache-dir.ts` so `install-check.ts` can use it without pulling in this
+// module's `extractor.ts` dependency.
+export { defaultCacheDir } from "./cache-dir.js";
