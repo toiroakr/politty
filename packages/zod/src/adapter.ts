@@ -27,10 +27,24 @@ import type { ArgsSchema } from "@politty/core/types";
 import type { z } from "zod";
 
 /**
- * Get ArgMeta from both the custom registry and Zod's _def
- * Priority: custom registry > _def.argMeta
+ * Get ArgMeta for a field schema, walking every wrapper layer (not just the
+ * schema itself and its fully-unwrapped base).
+ *
+ * `arg()` keys its registry by exact schema identity. A field built as
+ * `arg(z.string().default(...), {...}).transform(...)` registers the
+ * metadata on the intermediate `default` node — checking only the outer
+ * `pipe` and the fully-unwrapped inner schema (as a single non-recursive
+ * `unwrapSchema` call would) skips that node entirely, silently dropping
+ * aliases and other `arg()` options. Mirrors the zod/mini adapter's
+ * `getArgMeta`, which walks the same kind of wrapper chain.
+ *
+ * Priority at each node: custom registry > `.meta()` > `_def.argMeta` >
+ * `_def.meta`.
  */
-function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
+function getArgMeta(schema: z.ZodType, seen = new Set<z.ZodType>()): ArgMeta | undefined {
+  if (seen.has(schema)) return undefined;
+  seen.add(schema);
+
   // First check custom registry
   const fromRegistry = getArgMetaFromRegistry(schema);
   if (fromRegistry) return fromRegistry;
@@ -43,12 +57,26 @@ function getArgMeta(schema: z.ZodType): ArgMeta | undefined {
     }
   }
 
-  // Then check _def.argMeta (for augmented Zod types)
-  const def = (schema as any)._def;
+  // Then check def.argMeta (for augmented Zod types). Read `.def ?? ._def`,
+  // like the rest of this adapter (getTypeName, unwrapSchema, etc.) does —
+  // a schema exposing only the v4-style `.def` would otherwise be missed.
+  const s = schema as ZodSchemaWithDef;
+  const def = s.def ?? s._def;
   if (def?.argMeta) return def.argMeta;
 
-  // Also check _def.meta just in case
+  // Also check def.meta just in case
   if (def?.meta) return def.meta as ArgMeta;
+
+  const typeName = getTypeName(schema);
+
+  if (typeName === "optional" || typeName === "nullable" || typeName === "default") {
+    const innerSchema = def?.innerType;
+    if (innerSchema) return getArgMeta(innerSchema, seen);
+  }
+  if (typeName === "pipe") {
+    const innerSchema = def?.in ?? def?.schema;
+    if (innerSchema) return getArgMeta(innerSchema, seen);
+  }
 
   return undefined;
 }
@@ -75,6 +103,10 @@ interface ZodV4Def {
   /** Pipe output schema (zod v4 transform/refine) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   out?: any;
+  /** politty's arg() metadata, for augmented Zod types */
+  argMeta?: ArgMeta;
+  /** politty's arg() metadata, alternate storage location */
+  meta?: ArgMeta;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -269,9 +301,15 @@ function extractDefaultValue(schema: z.ZodType): unknown {
     return defaultValue;
   }
 
-  // Check for nested default in optional/nullable
+  // Check for nested default in optional/nullable/pipe
   if (typeName === "optional" || typeName === "nullable") {
     const innerSchema = def?.innerType;
+    if (innerSchema) {
+      return extractDefaultValue(innerSchema);
+    }
+  }
+  if (typeName === "pipe") {
+    const innerSchema = def?.in ?? def?.schema;
     if (innerSchema) {
       return extractDefaultValue(innerSchema);
     }
@@ -300,6 +338,12 @@ function extractDescription(schema: z.ZodType): string | undefined {
       return extractDescription(innerSchema);
     }
   }
+  if (typeName === "pipe") {
+    const innerSchema = def?.in ?? def?.schema;
+    if (innerSchema) {
+      return extractDescription(innerSchema);
+    }
+  }
 
   return undefined;
 }
@@ -310,7 +354,7 @@ function extractDescription(schema: z.ZodType): string | undefined {
  * `resolveFieldMeta` (adapter/field-meta.ts).
  */
 export function resolveZodFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
-  const argMeta = getArgMeta(schema) ?? getArgMeta(unwrapSchema(schema));
+  const argMeta = getArgMeta(schema);
   return assembleFieldMeta(name, {
     argMeta,
     description: extractDescription(schema),
