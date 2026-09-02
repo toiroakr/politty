@@ -25,7 +25,7 @@ export const command = defineCommand({
     config: arg(z.string().register(z.globalRegistry, { description: "Path to the config file" }), {
       positional: true,
     }),
-    port: arg(z.coerce.number().check(z.minimum(1), z.maximum(65535)), {
+    port: arg(z.coerce.number().check(z.minimum(1), z.maximum(65535), z.multipleOf(1)), {
       alias: "p",
       description: "Port number (1-65535)",
     }),

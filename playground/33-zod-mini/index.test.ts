@@ -36,6 +36,13 @@ describe("33-zod-mini", () => {
     expect(String(result.error?.message)).toContain("port");
   });
 
+  it("rejects a fractional port", async () => {
+    const result = await runCommand(command, ["config.json", "-p", "8080.5"]);
+
+    expect(result.success).toBe(false);
+    expect(String(result.error?.message)).toContain("port");
+  });
+
   it("rejects an enum value outside the allowed set", async () => {
     const result = await runCommand(command, ["config.json", "-p", "1", "--level", "trace"]);
 

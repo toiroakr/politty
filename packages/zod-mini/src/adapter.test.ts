@@ -227,6 +227,26 @@ describe("zod/mini adapter", () => {
       expect(extracted.fields[0]?.positional).toBe(true);
     });
 
+    it("should find arg() metadata on an intermediate wrapper inside a pipe", () => {
+      // arg() keys its registry by exact schema identity. Registering on a
+      // default-wrapped schema and then piping it through a transform
+      // (z.pipe(arg(z._default(...), {...}), z.transform(...))) put the
+      // metadata on the intermediate "default" node — checking only the
+      // outer pipe and the fully-unwrapped inner schema skipped it,
+      // silently dropping the alias.
+      const withDefault = arg(z._default(z.string(), "info"), { alias: "L" });
+      const schema = z.object({
+        level: z.pipe(
+          withDefault,
+          z.transform((s) => s.toUpperCase()),
+        ),
+      });
+      const extracted = extractZodMiniFields(schema);
+      const field = extracted.fields[0];
+      expect(field?.alias).toEqual(["L"]);
+      expect(field?.defaultValue).toBe("info");
+    });
+
     it("should prioritize arg() registry metadata over globalRegistry metadata", () => {
       const base = z.string();
       z.globalRegistry.add(base, { description: "registry desc" });

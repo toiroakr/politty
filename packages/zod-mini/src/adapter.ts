@@ -37,18 +37,45 @@ import type { ArgsSchema } from "@politty/core/types";
 import { globalRegistry, type z } from "zod/mini";
 
 /**
- * Get ArgMeta from both the custom registry and zod's global registry.
- * Priority: custom registry > `globalRegistry` (populated by `.register()`
- * or, on classic zod, by `.describe()`/`.meta()` — both write to the same
- * registry, so this reads correctly regardless of which flavor produced it).
+ * Get ArgMeta for a field schema, walking every wrapper layer (not just the
+ * schema itself and its fully-unwrapped base).
+ *
+ * `arg()` keys its registry by exact schema identity. A field built as
+ * `z.pipe(arg(z._default(...), {...}), z.transform(...))` registers the
+ * metadata on the intermediate `default` node — checking only the outer
+ * `pipe` and the fully-unwrapped inner schema (as a single non-recursive
+ * `unwrapSchema` call would) skips that node entirely, silently dropping
+ * aliases and other `arg()` options. Mirrors the valibot adapter's
+ * `lookupRegistryMeta`, which walks the same kind of wrapper chain.
+ *
+ * Priority at each node: custom registry > `globalRegistry` (populated by
+ * `.register()` or, on classic zod, by `.describe()`/`.meta()` — both write
+ * to the same registry, so this reads correctly regardless of which flavor
+ * produced it).
  */
-function getArgMeta(schema: z.ZodMiniType): ArgMeta | undefined {
+function getArgMeta(schema: z.ZodMiniType, seen = new Set<z.ZodMiniType>()): ArgMeta | undefined {
+  if (seen.has(schema)) return undefined;
+  seen.add(schema);
+
   const fromRegistry = getArgMetaFromRegistry(schema);
   if (fromRegistry) return fromRegistry;
 
   const registryMeta = globalRegistry.get(schema);
   if (registryMeta && typeof registryMeta === "object") {
     return registryMeta as ArgMeta;
+  }
+
+  const typeName = getTypeName(schema);
+  const s = schema as ZodSchemaWithDef;
+  const def = s.def;
+
+  if (typeName === "optional" || typeName === "nullable" || typeName === "default") {
+    const innerSchema = def?.innerType;
+    if (innerSchema) return getArgMeta(innerSchema, seen);
+  }
+  if (typeName === "pipe") {
+    const innerSchema = def?.in;
+    if (innerSchema) return getArgMeta(innerSchema, seen);
   }
 
   return undefined;
@@ -348,7 +375,7 @@ function extractDescription(schema: z.ZodMiniType): string | undefined {
  * `resolveFieldMeta` (adapter/field-meta.ts).
  */
 export function resolveZodMiniFieldMeta(name: string, schema: z.ZodMiniType): ResolvedFieldMeta {
-  const argMeta = getArgMeta(schema) ?? getArgMeta(unwrapSchema(schema));
+  const argMeta = getArgMeta(schema);
   return assembleFieldMeta(name, {
     argMeta,
     description: extractDescription(schema),
