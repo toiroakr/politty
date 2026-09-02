@@ -51,12 +51,6 @@ function getArgMeta(schema: z.ZodMiniType): ArgMeta | undefined {
     return registryMeta as ArgMeta;
   }
 
-  // Also check def.argMeta / def.meta just in case a schema was constructed
-  // with metadata attached directly to its def.
-  const def = (schema as any).def;
-  if (def?.argMeta) return def.argMeta;
-  if (def?.meta) return def.meta as ArgMeta;
-
   return undefined;
 }
 

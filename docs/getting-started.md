@@ -27,6 +27,21 @@ Everything in these docs applies unchanged — the exported API (`defineCommand`
 
 A runnable example lives in [`playground/31-valibot`](https://github.com/toiroakr/politty/tree/main/playground/31-valibot).
 
+### Using zod/mini instead of Zod
+
+politty is also published as [`@politty/zod-mini`](https://www.npmjs.com/package/@politty/zod-mini), built on [`zod/mini`](https://zod.dev/) — the same `zod` package's minimal, function-style entry point instead of its chainable classic API:
+
+```bash
+npm install @politty/zod-mini zod
+```
+
+Everything in these docs applies unchanged — the exported API (`defineCommand`, `arg`, `runMain`, and the `docs` / `completion` / `skill` / `prompt` subpaths) and the `politty` bin are the same. Only two things differ:
+
+- Import from `@politty/zod-mini` and write schemas with `zod/mini`'s function style (`z.optional(z.string())`, `z._default(z.boolean(), false)`) instead of Zod's chained methods (`.optional()`, `.default(false)`).
+- Field descriptions can additionally come from zod's own metadata registry, in place of `.describe()`: `schema.register(z.globalRegistry, { description: "..." })`. There is no `@politty/zod-mini/augment` subpath, for the same reason there is none for valibot — it exists only to augment classic Zod's `GlobalMeta` interface; use `arg()` or the registry instead. Extending `GlobalArgs` works the same way (`declare module "@politty/zod-mini"`).
+
+A runnable example lives in [`playground/33-zod-mini`](https://github.com/toiroakr/politty/tree/main/playground/33-zod-mini).
+
 ## Your First Command
 
 Here's a minimal "Hello World" example.
