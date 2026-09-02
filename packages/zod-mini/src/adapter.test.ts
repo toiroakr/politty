@@ -165,6 +165,24 @@ describe("zod/mini adapter", () => {
       const extracted = extractZodMiniFields(schema);
       expect(extracted.fields[0]?.type).toBe("number");
     });
+
+    it("should find a default through a pipe (default declared before a transform)", () => {
+      // z.pipe(z._default(...), z.transform(...)) is a "pipe" node whose
+      // def.in is the "default" node — without recursing through def.in,
+      // required correctly came out false (isRequired uses safeParse, which
+      // does apply the default) while defaultValue silently stayed
+      // undefined.
+      const schema = z.object({
+        level: z.pipe(
+          z._default(z.string(), "hello"),
+          z.transform((s) => s.toUpperCase()),
+        ),
+      });
+      const extracted = extractZodMiniFields(schema);
+      const field = extracted.fields[0];
+      expect(field?.required).toBe(false);
+      expect(field?.defaultValue).toBe("hello");
+    });
   });
 
   describe("extractZodMiniFields - descriptions and metadata", () => {
@@ -182,6 +200,22 @@ describe("zod/mini adapter", () => {
       const byName = new Map(extracted.fields.map((f) => [f.name, f]));
       expect(byName.get("direct")?.description).toBe("direct desc");
       expect(byName.get("wrapped")?.description).toBe("wrapped desc");
+    });
+
+    it("should find a description through a pipe (registered on the input schema)", () => {
+      // Mirrors the default-through-pipe case: a description registered on
+      // a pipe's input schema (z.pipe(schema, z.transform(...))) must still
+      // be found, not just descriptions on optional/nullable/default wrappers.
+      const input = z.string();
+      z.globalRegistry.add(input, { description: "piped desc" });
+      const schema = z.object({
+        name: z.pipe(
+          input,
+          z.transform((s) => s.trim()),
+        ),
+      });
+      const extracted = extractZodMiniFields(schema);
+      expect(extracted.fields[0]?.description).toBe("piped desc");
     });
 
     it("should read arg() metadata from the politty registry", () => {

@@ -262,6 +262,14 @@ function isRequired(schema: z.ZodMiniType): boolean {
 
 /**
  * Extract default value from schema if present
+ *
+ * Recurses through `pipe`'s `def.in` (not just `optional`/`nullable`) so a
+ * default declared before a `.transform()`/`.refine()` pipe — e.g.
+ * `z.pipe(z._default(z.string(), "x"), z.transform(...))` — is still found.
+ * Without this, such a field reported `required: false` (from `isRequired`'s
+ * `safeParse(undefined)` check, which does apply the default) alongside a
+ * silently missing `defaultValue`, an inconsistency that broke help text and
+ * completion for defaulted+piped fields.
  */
 function extractDefaultValue(schema: z.ZodMiniType): unknown {
   const typeName = getTypeName(schema);
@@ -277,9 +285,15 @@ function extractDefaultValue(schema: z.ZodMiniType): unknown {
     return defaultValue;
   }
 
-  // Check for nested default in optional/nullable
+  // Check for nested default in optional/nullable/pipe
   if (typeName === "optional" || typeName === "nullable") {
     const innerSchema = def?.innerType;
+    if (innerSchema) {
+      return extractDefaultValue(innerSchema);
+    }
+  }
+  if (typeName === "pipe") {
+    const innerSchema = def?.in;
     if (innerSchema) {
       return extractDefaultValue(innerSchema);
     }
@@ -294,6 +308,12 @@ function extractDefaultValue(schema: z.ZodMiniType): unknown {
  * `zod/mini` has no `.description` getter — classic's own implementation of
  * it just reads `globalRegistry.get(this)?.description` (verified against
  * zod's classic source), so read the registry directly instead.
+ *
+ * Also recurses through `pipe`'s `def.in`, matching `extractDefaultValue`:
+ * a description registered on the input schema of a `.transform()`/
+ * `.refine()` pipe — e.g.
+ * `z.pipe(schema.register(z.globalRegistry, {...}), z.transform(...))` —
+ * would otherwise be silently dropped.
  */
 function extractDescription(schema: z.ZodMiniType): string | undefined {
   const direct = globalRegistry.get(schema)?.description;
@@ -308,6 +328,12 @@ function extractDescription(schema: z.ZodMiniType): string | undefined {
 
   if (typeName === "optional" || typeName === "nullable" || typeName === "default") {
     const innerSchema = def?.innerType;
+    if (innerSchema) {
+      return extractDescription(innerSchema);
+    }
+  }
+  if (typeName === "pipe") {
+    const innerSchema = def?.in;
     if (innerSchema) {
       return extractDescription(innerSchema);
     }
