@@ -30,6 +30,7 @@
     "packages/core/src/**/*",
     "packages/zod/src/**/*",
     "packages/valibot/src/**/*",
+    "packages/zod-mini/src/**/*",
     "packages/*/tsdown.config.ts",
     "tests/**/*",
     "playground/**/*"

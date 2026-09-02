@@ -16,6 +16,10 @@
       "project": ["src/**/*.ts"],
       "ignoreDependencies": ["yaml", "@typescript/native-preview"]
     },
+    "packages/zod-mini": {
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["yaml", "@typescript/native-preview"]
+    },
     "packages/politty": {
       "project": ["src/**/*.ts"],
       "ignoreDependencies": ["@typescript/native-preview"]
