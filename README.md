@@ -91,6 +91,8 @@ runMain(command);
 
 `zod/mini` drops classic zod's chainable sugar (`.optional()`, `.default()`, `.describe()`, `.meta()`), so schemas are built with functions instead (`z.optional(z.string())`, `z._default(z.string(), "x")`). Field descriptions come from `arg()` or from zod's own metadata registry: `schema.register(z.globalRegistry, { description: "..." })`. The `politty/augment` module (classic zod's `GlobalMeta` interface augmentation) has no `@politty/zod-mini` counterpart for the same reason it has none for valibot — use `arg()` or the registry instead.
 
+You can write your schemas against either `import * as z from "zod/mini"` or [`import * as z from "@zod/mini"`](https://zod.dev/packages/mini) — `@zod/mini` re-exports `zod/mini` (same classes, same `globalRegistry`), so schemas built either way are fully interchangeable. Per zod's own installation instructions, install `@zod/mini` alongside `zod` (`npm install zod @zod/mini`), not instead of it — `@zod/mini` only re-exports `zod/mini` from a peer dependency on `zod`, so `zod` still needs to be resolvable in your project either way.
+
 ## Quick Start
 
 ```typescript
