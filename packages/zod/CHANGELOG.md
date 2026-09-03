@@ -1,5 +1,30 @@
 # @politty/zod
 
+## 0.2.0
+
+### Minor Changes
+
+- 53fdf95: Shrink the package entry point by no longer statically bundling the shell-completion generators (bash/zsh/fish, the dynamic `__complete` engine, and the on-disk install/refresh logic) into it. `withCompletionCommand` still works exactly as before, but its `completion`/`__complete`/`__refresh-completion`/`__completion-worker-path` subcommands now load lazily, only when one of them actually runs.
+
+  **Breaking:** `generateCompletion` and `generateBundledCompletionWorker` are no longer exported from the package root. Both were already documented as importing from the `/completion` subpath — update any code that imported them from the root instead:
+
+  ```diff
+  - import { generateCompletion } from "politty";
+  + import { generateCompletion } from "politty/completion";
+  ```
+
+  (same for `@politty/zod`/`@politty/valibot`, and for `generateBundledCompletionWorker`). `withCompletionCommand` itself is unaffected — keep importing it from the package root.
+
+  Builds are also minified now, cutting total published package size by more than half on top of the entry-point reduction above (`@politty/zod`'s dist JS: 620KB → 269KB).
+
+### Patch Changes
+
+- 2bd32e7: chore(deps): lock file maintenance
+- 791cfb8: Fix the zod adapter to recurse through `pipe` wrapper nodes (`.transform()`/`.refine()`), not just `optional`/`nullable`/`default`, in three places:
+
+  - `extractDefaultValue` and `extractDescription`: a default or description declared before a transform pipe (e.g. `z.string().default("hello").transform((s) => s.toUpperCase())`) was silently dropped from `ResolvedFieldMeta`, even though the default itself was applied correctly at parse time — producing an internally inconsistent `required: false` with no visible default in help text and generated docs.
+  - `getArgMeta`: `arg()` metadata (alias, description, etc.) registered on a schema that is then wrapped in `.default()`/`.optional()`/`.nullable()` and piped through a transform (e.g. `arg(z.string().default("info"), { alias: "L" }).transform(...)`) was silently dropped, since only the outer pipe and the fully-unwrapped inner schema were checked, skipping the intermediate wrapper the metadata was registered on.
+
 ## 0.1.2
 
 ### Patch Changes
