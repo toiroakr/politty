@@ -233,7 +233,7 @@ export interface MainOptions {
   version?: string;
   /** Enable debug mode (show stack traces on errors) */
   debug?: boolean;
-  /** Capture console output during execution (default: false) */
+  /** Capture console and process.stdout/stderr output during execution (default: false) */
   captureLogs?: boolean;
   /** Skip command definition validation (useful in production where tests already verified) */
   skipValidation?: boolean;
@@ -308,7 +308,7 @@ export type UnknownSubcommandHandler = (context: {
 export interface RunCommandOptions {
   /** Enable debug mode (show stack traces on errors) */
   debug?: boolean;
-  /** Capture console output during execution (default: false) */
+  /** Capture console and process.stdout/stderr output during execution (default: false) */
   captureLogs?: boolean;
   /** Skip command definition validation (useful in production where tests already verified) */
   skipValidation?: boolean;
@@ -339,7 +339,7 @@ export interface InternalRunOptions {
   handleSignals?: boolean | undefined;
   /** Enable debug mode */
   debug?: boolean | undefined;
-  /** Capture console output */
+  /** Capture console and process.stdout/stderr output */
   captureLogs?: boolean | undefined;
   /** Skip command definition validation */
   skipValidation?: boolean | undefined;

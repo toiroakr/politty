@@ -1,3 +1,4 @@
+import { StringDecoder } from "node:string_decoder";
 import type { CollectedLogs, LogEntry, LogLevel, LogStream } from "../types.js";
 
 /**
@@ -27,14 +28,14 @@ export interface LogCollectorOptions {
 }
 
 /**
- * Log collector that intercepts console methods
+ * Log collector that intercepts console methods and process stream writes
  */
 export interface LogCollector {
   /** Get collected logs */
   getLogs: () => CollectedLogs;
   /** Start collecting logs */
   start: () => void;
-  /** Stop collecting and restore original console methods */
+  /** Stop collecting and restore original console methods and stream writes */
   stop: () => void;
 }
 
@@ -60,7 +61,17 @@ export function formatArgs(args: unknown[]): string {
 }
 
 /**
- * Create a log collector that intercepts console methods
+ * Strip a single trailing newline (LF or CRLF) from a stream-write chunk,
+ * so it lines up with console entries (which never carry one).
+ */
+function stripTrailingNewline(message: string): string {
+  return message.replace(/\r?\n$/, "");
+}
+
+type StreamWrite = typeof process.stdout.write;
+
+/**
+ * Create a log collector that intercepts console methods and process stream writes
  *
  * @param options - Options for the log collector
  * @returns A log collector instance
@@ -84,6 +95,14 @@ export function formatArgs(args: unknown[]): string {
  * //   ]
  * // }
  * ```
+ *
+ * Output written directly via `process.stdout.write` / `process.stderr.write`
+ * (bypassing `console.*`) is captured too, as long as the corresponding
+ * `"log"` / `"error"` level is included in `levels`. Note that this stream
+ * patch is independent of the other console levels: e.g. with
+ * `levels: ["log"]`, `console.info` is not intercepted at the console layer,
+ * but its underlying `process.stdout.write` call still is, so it is recorded
+ * with `level: "log"`.
  */
 export function createLogCollector(options: LogCollectorOptions = {}): LogCollector {
   const entries: LogEntry[] = [];
@@ -91,19 +110,71 @@ export function createLogCollector(options: LogCollectorOptions = {}): LogCollec
   const passthrough = options.passthrough ?? true;
 
   let originals: Record<LogLevel, typeof console.log> | null = null;
+  let originalStdoutWrite: StreamWrite | null = null;
+  let originalStderrWrite: StreamWrite | null = null;
+
+  // console.* methods write to process.stdout/stderr internally; this flag
+  // stops the stream-write interceptor from double-recording that nested call.
+  let inConsoleCall = false;
+
+  const recordEntry = (level: LogLevel, stream: LogStream, message: string) => {
+    entries.push({ message, timestamp: new Date(), level, stream });
+  };
 
   const createInterceptor = (level: LogLevel, original: typeof console.log) => {
     return (...args: unknown[]) => {
-      entries.push({
-        message: formatArgs(args),
-        timestamp: new Date(),
-        level,
-        stream: LOG_STREAM_MAP[level],
-      });
-      if (passthrough) {
-        original.apply(console, args);
+      recordEntry(level, LOG_STREAM_MAP[level], formatArgs(args));
+      inConsoleCall = true;
+      try {
+        if (passthrough) {
+          original.apply(console, args);
+        }
+      } finally {
+        inConsoleCall = false;
       }
     };
+  };
+
+  const createWriteInterceptor = (
+    level: LogLevel,
+    stream: LogStream,
+    original: StreamWrite,
+  ): StreamWrite => {
+    // Buffers incomplete multi-byte sequences across calls (e.g. a UTF-8
+    // character split across two writes), so decoding stays correct.
+    const decoder = new StringDecoder("utf8");
+
+    return ((chunk: unknown, encodingOrCallback?: unknown, callback?: unknown) => {
+      if (!inConsoleCall) {
+        // Node's `encoding` argument only ever applies to string chunks (it
+        // converts the string to bytes before writing); for a Buffer/Uint8Array
+        // chunk it's ignored entirely, so decoding must be too.
+        const message =
+          typeof chunk === "string"
+            ? typeof encodingOrCallback === "string" &&
+              encodingOrCallback !== "utf8" &&
+              encodingOrCallback !== "utf-8"
+              ? Buffer.from(chunk, encodingOrCallback as BufferEncoding).toString("utf8")
+              : chunk
+            : decoder.write(chunk as Uint8Array);
+        if (message !== "") {
+          recordEntry(level, stream, stripTrailingNewline(message));
+        }
+      }
+      if (passthrough) {
+        return original.call(
+          process[stream],
+          chunk as never,
+          encodingOrCallback as never,
+          callback as never,
+        );
+      }
+      const done = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
+      if (typeof done === "function") {
+        done();
+      }
+      return true;
+    }) as StreamWrite;
   };
 
   return {
@@ -125,6 +196,14 @@ export function createLogCollector(options: LogCollectorOptions = {}): LogCollec
       for (const level of levels) {
         console[level] = createInterceptor(level, originals[level]);
       }
+      if (levels.includes("log")) {
+        originalStdoutWrite = process.stdout.write;
+        process.stdout.write = createWriteInterceptor("log", "stdout", originalStdoutWrite);
+      }
+      if (levels.includes("error")) {
+        originalStderrWrite = process.stderr.write;
+        process.stderr.write = createWriteInterceptor("error", "stderr", originalStderrWrite);
+      }
     },
     stop() {
       if (originals === null) {
@@ -134,6 +213,14 @@ export function createLogCollector(options: LogCollectorOptions = {}): LogCollec
         console[level] = originals[level];
       }
       originals = null;
+      if (originalStdoutWrite !== null) {
+        process.stdout.write = originalStdoutWrite;
+        originalStdoutWrite = null;
+      }
+      if (originalStderrWrite !== null) {
+        process.stderr.write = originalStderrWrite;
+        originalStderrWrite = null;
+      }
     },
   };
 }
