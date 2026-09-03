@@ -301,6 +301,36 @@ describe("createLogCollector", () => {
     expect(logs.entries[0]!.stream).toBe("stderr");
   });
 
+  it("should ignore the encoding argument for a Buffer chunk (Node treats Buffer chunks as raw bytes)", () => {
+    process.stdout.write = vi.fn().mockReturnValue(true);
+    const collector = createLogCollector({ passthrough: false });
+    collector.start();
+
+    // Node ignores the encoding argument entirely for non-string chunks.
+    process.stdout.write(Buffer.from("hi"), "hex");
+
+    collector.stop();
+    const logs = collector.getLogs();
+
+    expect(logs.entries).toHaveLength(1);
+    expect(logs.entries[0]!.message).toBe("hi");
+  });
+
+  it("should decode a string chunk written with a non-utf8 encoding to what Node actually emits", () => {
+    process.stdout.write = vi.fn().mockReturnValue(true);
+    const collector = createLogCollector({ passthrough: false });
+    collector.start();
+
+    // Node converts the string via the given encoding before writing the bytes.
+    process.stdout.write("68656c6c6f", "hex");
+
+    collector.stop();
+    const logs = collector.getLogs();
+
+    expect(logs.entries).toHaveLength(1);
+    expect(logs.entries[0]!.message).toBe("hello");
+  });
+
   it("should correctly decode a multi-byte character split across two process.stdout.write calls", () => {
     process.stdout.write = vi.fn().mockReturnValue(true);
     const collector = createLogCollector({ passthrough: false });

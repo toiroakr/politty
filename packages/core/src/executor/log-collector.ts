@@ -146,14 +146,17 @@ export function createLogCollector(options: LogCollectorOptions = {}): LogCollec
 
     return ((chunk: unknown, encodingOrCallback?: unknown, callback?: unknown) => {
       if (!inConsoleCall) {
-        const encoding =
-          typeof encodingOrCallback === "string" ? (encodingOrCallback as BufferEncoding) : null;
+        // Node's `encoding` argument only ever applies to string chunks (it
+        // converts the string to bytes before writing); for a Buffer/Uint8Array
+        // chunk it's ignored entirely, so decoding must be too.
         const message =
           typeof chunk === "string"
-            ? chunk
-            : encoding && encoding !== "utf8" && encoding !== "utf-8"
-              ? Buffer.from(chunk as Uint8Array).toString(encoding)
-              : decoder.write(chunk as Uint8Array);
+            ? typeof encodingOrCallback === "string" &&
+              encodingOrCallback !== "utf8" &&
+              encodingOrCallback !== "utf-8"
+              ? Buffer.from(chunk, encodingOrCallback as BufferEncoding).toString("utf8")
+              : chunk
+            : decoder.write(chunk as Uint8Array);
         if (message !== "") {
           recordEntry(level, stream, stripTrailingNewline(message));
         }
