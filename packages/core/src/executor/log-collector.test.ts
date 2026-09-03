@@ -26,6 +26,8 @@ describe("createLogCollector", () => {
   let originalDebug: typeof console.debug;
   let originalWarn: typeof console.warn;
   let originalError: typeof console.error;
+  let originalStdoutWrite: typeof process.stdout.write;
+  let originalStderrWrite: typeof process.stderr.write;
 
   beforeEach(() => {
     originalLog = console.log;
@@ -33,6 +35,8 @@ describe("createLogCollector", () => {
     originalDebug = console.debug;
     originalWarn = console.warn;
     originalError = console.error;
+    originalStdoutWrite = process.stdout.write;
+    originalStderrWrite = process.stderr.write;
   });
 
   afterEach(() => {
@@ -41,6 +45,8 @@ describe("createLogCollector", () => {
     console.debug = originalDebug;
     console.warn = originalWarn;
     console.error = originalError;
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
   });
 
   it("should collect console.log calls", () => {
@@ -264,6 +270,72 @@ describe("createLogCollector", () => {
 
     collector.stop();
   });
+
+  it("should collect process.stdout.write calls", () => {
+    process.stdout.write = vi.fn().mockReturnValue(true);
+    const collector = createLogCollector({ passthrough: false });
+    collector.start();
+
+    process.stdout.write("hello\n");
+
+    collector.stop();
+    const logs = collector.getLogs();
+
+    expect(logs.entries).toHaveLength(1);
+    expect(logs.entries[0]!.message).toBe("hello");
+    expect(logs.entries[0]!.stream).toBe("stdout");
+  });
+
+  it("should collect process.stderr.write calls", () => {
+    process.stderr.write = vi.fn().mockReturnValue(true);
+    const collector = createLogCollector({ passthrough: false });
+    collector.start();
+
+    process.stderr.write("oops\n");
+
+    collector.stop();
+    const logs = collector.getLogs();
+
+    expect(logs.entries).toHaveLength(1);
+    expect(logs.entries[0]!.message).toBe("oops");
+    expect(logs.entries[0]!.stream).toBe("stderr");
+  });
+
+  it("should correctly decode a multi-byte character split across two process.stdout.write calls", () => {
+    process.stdout.write = vi.fn().mockReturnValue(true);
+    const collector = createLogCollector({ passthrough: false });
+    collector.start();
+
+    // "日\n" in UTF-8 is [0xE6, 0x97, 0xA5, 0x0A]; split mid-character.
+    const bytes = Buffer.from("日\n", "utf8");
+    process.stdout.write(bytes.subarray(0, 2));
+    process.stdout.write(bytes.subarray(2));
+
+    collector.stop();
+    const logs = collector.getLogs();
+
+    expect(logs.entries).toHaveLength(1);
+    expect(logs.entries[0]!.message).toBe("日");
+  });
+
+  it("should not double-count console.log output that internally writes to process.stdout.write", () => {
+    const stdoutWriteSpy = vi.fn().mockReturnValue(true);
+    process.stdout.write = stdoutWriteSpy;
+    console.log = (...args: unknown[]) => {
+      process.stdout.write(`${args.join(" ")}\n`);
+    };
+
+    const collector = createLogCollector();
+    collector.start();
+
+    console.log("hello");
+
+    collector.stop();
+    const logs = collector.getLogs();
+
+    expect(logs.entries).toHaveLength(1);
+    expect(logs.entries[0]!.message).toBe("hello");
+  });
 });
 
 describe("emptyLogs", () => {
@@ -453,5 +525,30 @@ describe("runCommand with log collection", () => {
     const stdoutLogs = result.logs.entries.filter((e) => e.stream === "stdout");
     expect(stdoutLogs).toHaveLength(1);
     expect(stdoutLogs[0]!.message).toBe("This is now collected");
+  });
+
+  it("should capture output written via process.stdout.write", async () => {
+    using _consoleMocks = useMockedConsole();
+    const originalStdoutWrite = process.stdout.write;
+    process.stdout.write = vi.fn().mockReturnValue(true);
+
+    const command = defineCommand({
+      name: "probe",
+      run: () => {
+        console.log("console.log: hello world");
+        process.stdout.write("process.stdout.write: hello world\n");
+      },
+    });
+
+    const result = await runCommand(command, [], { captureLogs: true });
+    process.stdout.write = originalStdoutWrite;
+
+    const stdoutMessages = result.logs.entries
+      .filter((e) => e.stream === "stdout")
+      .map((e) => e.message);
+    expect(stdoutMessages).toEqual([
+      "console.log: hello world",
+      "process.stdout.write: hello world",
+    ]);
   });
 });

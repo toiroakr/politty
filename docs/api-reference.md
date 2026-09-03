@@ -925,7 +925,7 @@ interface MainOptions {
   version?: string;
   /** Enable debug mode (show stack traces on errors) */
   debug?: boolean;
-  /** Capture console output during execution (default: false) */
+  /** Capture console and process.stdout/stderr output during execution (default: false) */
   captureLogs?: boolean;
   /** Skip command definition validation (useful in production when already tested) */
   skipValidation?: boolean;
@@ -952,7 +952,7 @@ Type for options passed to `runCommand`.
 interface RunCommandOptions {
   /** Enable debug mode (show stack traces on errors) */
   debug?: boolean;
-  /** Capture console output during execution (default: false) */
+  /** Capture console and process.stdout/stderr output during execution (default: false) */
   captureLogs?: boolean;
   /** Skip command definition validation (useful in production when already tested) */
   skipValidation?: boolean;
