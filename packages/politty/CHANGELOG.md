@@ -1,5 +1,13 @@
 # politty
 
+## 0.12.1
+
+### Patch Changes
+
+- f01148c: Fix `createLogCollector` (used by `executeExamples`/`assertDocMatch`) to also capture output written directly via `process.stdout.write` / `process.stderr.write`, not just `console.*` calls. Previously, a command that printed its primary output with `process.stdout.write` instead of `console.log` was invisible to `examples` verification — that output passed straight through to the real stdout and never showed up in the captured logs.
+- Updated dependencies [f01148c]
+  - @politty/zod@0.2.1
+
 ## 0.12.0
 
 ### Minor Changes
