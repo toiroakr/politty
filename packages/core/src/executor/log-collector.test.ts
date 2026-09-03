@@ -540,8 +540,12 @@ describe("runCommand with log collection", () => {
       },
     });
 
-    const result = await runCommand(command, [], { captureLogs: true });
-    process.stdout.write = originalStdoutWrite;
+    let result: Awaited<ReturnType<typeof runCommand>>;
+    try {
+      result = await runCommand(command, [], { captureLogs: true });
+    } finally {
+      process.stdout.write = originalStdoutWrite;
+    }
 
     const stdoutMessages = result.logs.entries
       .filter((e) => e.stream === "stdout")
