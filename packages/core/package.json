@@ -28,7 +28,7 @@
     "@clack/prompts": "1.2.0",
     "@inquirer/prompts": "8.7.0",
     "@types/node": "25.9.5",
-    "zod": "4.5.1"
+    "zod": "4.5.2"
   },
   "engines": {
     "node": ">=20.12.0 <21.0.0 || >=21.7.0"
