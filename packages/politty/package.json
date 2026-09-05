@@ -78,7 +78,7 @@
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "tsdown": "0.22.14",
     "typescript": "7.0.2",
-    "zod": "4.5.2"
+    "zod": "4.5.4"
   },
   "peerDependencies": {
     "@clack/prompts": "^0.10.0 || ^0.11.0 || ^1.0.0",
