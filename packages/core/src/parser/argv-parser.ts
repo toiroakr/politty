@@ -1,4 +1,5 @@
 import { getAllAliases, toCamelCase, type ExtractedFields } from "../core/schema-extractor.js";
+import { coerceBoolean } from "./coerce-boolean.js";
 import { resolveLongOption, type LongOptionLookup } from "./long-option-resolver.js";
 
 /**
@@ -42,18 +43,6 @@ export interface ParserOptions {
    * `booleanFlags` has default negation suppressed.
    */
   defaultNegationDisabledFields?: Set<string>;
-}
-
-/**
- * Coerce a `--flag=value` string to a boolean for boolean-typed flags.
- * Values other than "true"/"false" are passed through unchanged so
- * downstream validation reports the invalid input instead of silently
- * guessing.
- */
-function coerceBoolean(value: string): unknown {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  return value;
 }
 
 /**

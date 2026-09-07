@@ -17,6 +17,7 @@ import {
   validateReservedFieldNames,
 } from "../validator/command-validator.js";
 import { buildParserOptions, mergeWithPositionals, parseArgv } from "./argv-parser.js";
+import { coerceEnvValue } from "./coerce-boolean.js";
 import {
   buildGlobalFlagLookup,
   collectGlobalFlag,
@@ -248,7 +249,7 @@ export function parseArgs(
       for (const envName of envNames) {
         const envValue = process.env[envName];
         if (envValue !== undefined) {
-          rawArgs[field.name] = envValue;
+          rawArgs[field.name] = coerceEnvValue(envValue, field.type);
           envFallbackFields.add(field.name);
           break;
         }
