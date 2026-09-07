@@ -73,7 +73,7 @@ function runSignalApp(
     const stdio: ("ignore" | "pipe" | "ipc")[] = isWindows
       ? ["ignore", "pipe", "pipe", "ipc"]
       : ["ignore", "pipe", "pipe"];
-    const child = spawn("node", ["--import", "tsx/esm", tempPath], {
+    const child = spawn(process.execPath, ["--import", "tsx/esm", tempPath], {
       stdio,
       cwd: join(__dirname, ".."),
       detached: !isWindows,
