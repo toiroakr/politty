@@ -19,8 +19,17 @@ function parseArgs(argv) {
   return args;
 }
 
-function parseImporters(text) {
+// pnpm >=11.1 prepends an "env document" (packageManagerDependencies) before the
+// real lockfile; only the document after the second `---` holds project importers.
+function mainDocumentLines(text) {
   const lines = text.split("\n");
+  if (lines[0] !== "---") return lines;
+  const second = lines.indexOf("---", 1);
+  return second === -1 ? lines : lines.slice(second + 1);
+}
+
+function parseImporters(text) {
+  const lines = mainDocumentLines(text);
   const importersIdx = lines.findIndex((l) => /^importers:\s*$/.test(l));
   if (importersIdx === -1) return {};
 
