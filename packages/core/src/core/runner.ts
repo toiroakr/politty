@@ -8,6 +8,7 @@ import {
 } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
+import { coerceEnvValue } from "../parser/coerce-boolean.js";
 import { getLongOptionName } from "../parser/long-option-resolver.js";
 import { findFirstPositional, findFirstPositionalIndex } from "../parser/subcommand-scanner.js";
 import type {
@@ -776,7 +777,7 @@ async function runCommandInternal<TResult = unknown>(
           for (const envName of envNames) {
             const envValue = process.env[envName];
             if (envValue !== undefined) {
-              accumulatedGlobalArgs[field.name] = envValue;
+              accumulatedGlobalArgs[field.name] = coerceEnvValue(envValue, field.type);
               envFallbackGlobalFields.add(field.name);
               break;
             }

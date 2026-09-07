@@ -106,6 +106,25 @@ describe("ArgParser", () => {
       expect(falseResult.options.verbose).toBe(false);
     });
 
+    it("should coerce Go strconv.ParseBool literals for --flag=value on boolean flags", () => {
+      const trueLiterals = ["1", "t", "T", "TRUE", "True"];
+      const falseLiterals = ["0", "f", "F", "FALSE", "False"];
+
+      for (const literal of trueLiterals) {
+        const result = parseArgv([`--verbose=${literal}`], {
+          booleanFlags: new Set(["verbose"]),
+        });
+        expect(result.options.verbose).toBe(true);
+      }
+
+      for (const literal of falseLiterals) {
+        const result = parseArgv([`--verbose=${literal}`], {
+          booleanFlags: new Set(["verbose"]),
+        });
+        expect(result.options.verbose).toBe(false);
+      }
+    });
+
     it("should detect help flag (--help)", () => {
       const cmd = defineCommand({
         name: "test-cmd",
@@ -1293,6 +1312,73 @@ describe("ArgParser", () => {
       const result = parseArgs([], cmd);
 
       expect(result.rawArgs.port).toBeUndefined();
+    });
+
+    it("should coerce boolean env var values using Go's strconv.ParseBool literals", () => {
+      process.env.RUNNER_DEBUG = "1";
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          debug: arg(z.boolean(), { env: "RUNNER_DEBUG" }),
+        }),
+      });
+
+      const result = parseArgs([], cmd);
+
+      expect(result.rawArgs.debug).toBe(true);
+    });
+
+    it("should coerce every Go strconv.ParseBool literal for boolean env vars", () => {
+      const trueLiterals = ["1", "t", "T", "TRUE", "true", "True"];
+      const falseLiterals = ["0", "f", "F", "FALSE", "false", "False"];
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          debug: arg(z.boolean(), { env: "DEBUG_FLAG" }),
+        }),
+      });
+
+      for (const literal of trueLiterals) {
+        process.env.DEBUG_FLAG = literal;
+        expect(parseArgs([], cmd).rawArgs.debug).toBe(true);
+      }
+
+      for (const literal of falseLiterals) {
+        process.env.DEBUG_FLAG = literal;
+        expect(parseArgs([], cmd).rawArgs.debug).toBe(false);
+      }
+    });
+
+    it("should leave unrecognized boolean env var values unchanged for downstream validation", () => {
+      process.env.DEBUG_FLAG = "yes";
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          debug: arg(z.boolean(), { env: "DEBUG_FLAG" }),
+        }),
+      });
+
+      const result = parseArgs([], cmd);
+
+      expect(result.rawArgs.debug).toBe("yes");
+    });
+
+    it("should not coerce env var values for non-boolean fields", () => {
+      process.env.MY_PORT = "1";
+
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          port: arg(z.string(), { env: "MY_PORT" }),
+        }),
+      });
+
+      const result = parseArgs([], cmd);
+
+      expect(result.rawArgs.port).toBe("1");
     });
 
     it("should work with kebab-case options and env vars", () => {

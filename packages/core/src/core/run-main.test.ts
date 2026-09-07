@@ -206,6 +206,21 @@ describe("runCommand", () => {
       expect(args.$source?.("foo")).toBe("env");
     });
 
+    it("coerces a boolean global field resolved via env fallback using Go's strconv.ParseBool literals", async () => {
+      process.env.RUNNER_DEBUG = "1";
+      const runFn = vi.fn();
+      const globalArgs = z.object({
+        debug: arg(z.boolean().default(false), { env: "RUNNER_DEBUG" }),
+      });
+      const cmd = defineCommand({ name: "test", run: runFn });
+
+      await runCommand(cmd, [], { globalArgs });
+
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.debug).toBe(true);
+      expect(args.$source?.("debug")).toBe("env");
+    });
+
     it("does not let a prompt resolver's explicit undefined clobber an existing CLI-provided global value", async () => {
       const runFn = vi.fn();
       const globalArgs = z.object({ foo: arg(z.string().optional()) });
