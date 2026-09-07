@@ -1,5 +1,13 @@
 # politty
 
+## 0.12.3
+
+### Patch Changes
+
+- 60f0d00: chore(deps): update pnpm to v12
+- Updated dependencies [60f0d00]
+  - @politty/zod@0.2.3
+
 ## 0.12.2
 
 ### Patch Changes

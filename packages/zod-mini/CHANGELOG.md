@@ -1,5 +1,11 @@
 # @politty/zod-mini
 
+## 0.1.3
+
+### Patch Changes
+
+- 60f0d00: chore(deps): update pnpm to v12
+
 ## 0.1.2
 
 ### Patch Changes
