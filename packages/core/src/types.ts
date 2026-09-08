@@ -159,6 +159,8 @@ export interface RunnableCommand<
 > extends CommandBase<TArgsSchema, TArgs> {
   /** Main run function */
   run: (args: TArgs) => TResult;
+  /** Not settable alongside `run` (see `NonRunnableCommand.defaultSubCommand`) */
+  defaultSubCommand?: undefined;
 }
 
 /**
@@ -172,6 +174,23 @@ export interface NonRunnableCommand<
 > extends CommandBase<TArgsSchema, TArgs> {
   /** No run function */
   run?: undefined;
+  /**
+   * Name of a `subCommands` entry to run when this command is invoked with
+   * no subcommand specified, instead of showing help. Used for CLI plugin
+   * dispatch (`onUnknownSubcommand`) to reach a command group whose "no
+   * subcommand" case still routes somewhere runnable (e.g. `cli workspace`
+   * falling back to `cli workspace list`), without the group itself
+   * defining `run` (which would exempt it from plugin dispatch — see
+   * `MainOptions.onUnknownSubcommand`).
+   *
+   * Only fires when this level has zero unconsumed tokens (the same
+   * condition that would otherwise show help), so it only covers a bare
+   * invocation — a local flag meant for the default subcommand still needs
+   * the subcommand named explicitly (`cli workspace list --limit 10`, not
+   * `cli workspace --limit 10`), since this command's own (typically
+   * schema-less) parse level has no way to know `--limit` belongs to `list`.
+   */
+  defaultSubCommand?: string | undefined;
 }
 
 /**

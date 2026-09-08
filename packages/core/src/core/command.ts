@@ -67,17 +67,33 @@ type ResolvedArgs<TArgsSchema, TGlobalArgs> = WithRunMeta<
 >;
 
 /**
+ * Resolve the set of subcommand keys usable by `defaultSubCommand`, given the
+ * `subCommands` type inferred from a `defineCommand` call's config literal.
+ * `never` when no `subCommands` were provided, so `defaultSubCommand` cannot
+ * be set on a command without any subcommands.
+ */
+type DefaultSubCommandKey<TSubCommands> = TSubCommands extends SubCommandsRecord
+  ? keyof TSubCommands & string
+  : never;
+
+/**
  * Config for defining a command
  * @template TArgsSchema - The args schema type (from the CLI's schema library)
  * @template TResult - The return type of run function (void if no run)
  * @template TGlobalArgs - Global args type (from declaration merging or factory)
+ * @template TSubCommands - The `subCommands` record type (inferred from the config literal)
  */
-interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResult, TGlobalArgs> {
+interface DefineCommandConfig<
+  TArgsSchema extends ArgsSchema | undefined,
+  TResult,
+  TGlobalArgs,
+  TSubCommands extends SubCommandsRecord | undefined = undefined,
+> {
   name: string;
   description?: string;
   aliases?: string[];
   args?: TArgsSchema;
-  subCommands?: SubCommandsRecord;
+  subCommands?: TSubCommands;
   setup?: (context: { args: ResolvedArgs<TArgsSchema, TGlobalArgs> }) => void | Promise<void>;
   run?: (args: ResolvedArgs<TArgsSchema, TGlobalArgs>) => TResult;
   cleanup?: (context: {
@@ -97,11 +113,20 @@ interface DefineCommandConfig<TArgsSchema extends ArgsSchema | undefined, TResul
  * level instead of failing at runtime in the registered adapter.
  */
 export interface DefineCommandFn<TArgsBase extends ArgsSchema = ArgsSchema> {
-  <TArgsSchema extends TArgsBase | undefined = undefined, TResult = void, TGlobalArgs = GlobalArgs>(
-    config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
+  <
+    TArgsSchema extends TArgsBase | undefined = undefined,
+    TResult = void,
+    TGlobalArgs = GlobalArgs,
+    TSubCommands extends SubCommandsRecord | undefined = undefined,
+  >(
+    config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs, TSubCommands>,
   ): RunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>, TResult>;
-  <TArgsSchema extends TArgsBase | undefined = undefined, TGlobalArgs = GlobalArgs>(
-    config: NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+  <
+    TArgsSchema extends TArgsBase | undefined = undefined,
+    TGlobalArgs = GlobalArgs,
+    TSubCommands extends SubCommandsRecord | undefined = undefined,
+  >(
+    config: NonRunnableConfig<TArgsSchema, TGlobalArgs, TSubCommands>,
   ): NonRunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>>;
 }
 
@@ -111,11 +136,18 @@ export interface DefineCommandFn<TArgsBase extends ArgsSchema = ArgsSchema> {
  * for the same adapter re-pinning as {@link DefineCommandFn}.
  */
 export interface BoundDefineCommandFn<TGlobalArgs, TArgsBase extends ArgsSchema = ArgsSchema> {
-  <TArgsSchema extends TArgsBase | undefined = undefined, TResult = void>(
-    config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
+  <
+    TArgsSchema extends TArgsBase | undefined = undefined,
+    TResult = void,
+    TSubCommands extends SubCommandsRecord | undefined = undefined,
+  >(
+    config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs, TSubCommands>,
   ): RunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>, TResult>;
-  <TArgsSchema extends TArgsBase | undefined = undefined>(
-    config: NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+  <
+    TArgsSchema extends TArgsBase | undefined = undefined,
+    TSubCommands extends SubCommandsRecord | undefined = undefined,
+  >(
+    config: NonRunnableConfig<TArgsSchema, TGlobalArgs, TSubCommands>,
   ): NonRunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>>;
 }
 
@@ -134,8 +166,11 @@ export interface RunnableConfig<
   TArgsSchema extends ArgsSchema | undefined,
   TResult,
   TGlobalArgs,
-> extends DefineCommandConfig<TArgsSchema, TResult, TGlobalArgs> {
+  TSubCommands extends SubCommandsRecord | undefined = undefined,
+> extends DefineCommandConfig<TArgsSchema, TResult, TGlobalArgs, TSubCommands> {
   run: (args: ResolvedArgs<TArgsSchema, TGlobalArgs>) => TResult;
+  /** Not settable alongside `run` (see `NonRunnableConfig.defaultSubCommand`) */
+  defaultSubCommand?: undefined;
 }
 
 /**
@@ -144,8 +179,16 @@ export interface RunnableConfig<
 export interface NonRunnableConfig<
   TArgsSchema extends ArgsSchema | undefined,
   TGlobalArgs,
-> extends Omit<DefineCommandConfig<TArgsSchema, void, TGlobalArgs>, "run"> {
+  TSubCommands extends SubCommandsRecord | undefined = undefined,
+> extends Omit<DefineCommandConfig<TArgsSchema, void, TGlobalArgs, TSubCommands>, "run"> {
   run?: undefined;
+  /**
+   * Name of a `subCommands` entry to run when this command is invoked with
+   * no subcommand specified, instead of showing help. Must be a key of
+   * `subCommands` (checked at compile time). See
+   * `NonRunnableCommand.defaultSubCommand`.
+   */
+  defaultSubCommand?: DefaultSubCommandKey<TSubCommands> | undefined;
 }
 
 /**
@@ -205,16 +248,18 @@ export function defineCommand<
   TArgsSchema extends ArgsSchema | undefined = undefined,
   TResult = void,
   TGlobalArgs = GlobalArgs,
+  TSubCommands extends SubCommandsRecord | undefined = undefined,
 >(
-  config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs>,
+  config: RunnableConfig<TArgsSchema, TResult, TGlobalArgs, TSubCommands>,
 ): RunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>, TResult>;
 
 // Overload 2: without run function - returns NonRunnableCommand with preserved schema type
 export function defineCommand<
   TArgsSchema extends ArgsSchema | undefined = undefined,
   TGlobalArgs = GlobalArgs,
+  TSubCommands extends SubCommandsRecord | undefined = undefined,
 >(
-  config: NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+  config: NonRunnableConfig<TArgsSchema, TGlobalArgs, TSubCommands>,
 ): NonRunnableCommand<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>>;
 
 // Implementation
@@ -222,10 +267,11 @@ export function defineCommand<
   TArgsSchema extends ArgsSchema | undefined = undefined,
   TResult = void,
   TGlobalArgs = GlobalArgs,
+  TSubCommands extends SubCommandsRecord | undefined = undefined,
 >(
   config:
-    | RunnableConfig<TArgsSchema, TResult, TGlobalArgs>
-    | NonRunnableConfig<TArgsSchema, TGlobalArgs>,
+    | RunnableConfig<TArgsSchema, TResult, TGlobalArgs, TSubCommands>
+    | NonRunnableConfig<TArgsSchema, TGlobalArgs, TSubCommands>,
 ): Command<TArgsSchema, ResolvedArgs<TArgsSchema, TGlobalArgs>, TResult> {
   return {
     name: config.name,
@@ -233,6 +279,7 @@ export function defineCommand<
     aliases: config.aliases,
     args: config.args as TArgsSchema,
     subCommands: config.subCommands,
+    defaultSubCommand: config.defaultSubCommand,
     setup: config.setup,
     run: config.run,
     cleanup: config.cleanup,

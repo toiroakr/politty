@@ -4,6 +4,7 @@ import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collec
 import {
   listSubCommandNamesWithAliases,
   listSubCommands,
+  resolveLazyCommand,
   resolveSubcommandWithAlias,
 } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
@@ -30,6 +31,7 @@ import {
 } from "../validator/args-validator.js";
 import {
   validateCaseVariantCollisions,
+  validateDefaultSubCommand,
   validateDuplicateAliases,
   validateDuplicateFields,
   validateDuplicateNegations,
@@ -470,6 +472,10 @@ async function runCommandInternal<TResult = unknown>(
   };
 
   try {
+    if (!options.skipValidation) {
+      validateDefaultSubCommand(command);
+    }
+
     // Parse arguments
     const parseResult = parseArgs(argv, command, {
       skipValidation: options.skipValidation,
@@ -668,7 +674,8 @@ async function runCommandInternal<TResult = unknown>(
       ? []
       : parseResult.positionals.slice(positionalFields.length);
 
-    // If command has subcommands but none specified, show help.
+    // If command has subcommands but none specified, either route to
+    // `defaultSubCommand` (if set) or show help.
     // If there are any unconsumed positionals (including tokens after --), fall
     // through so the unexpected-positionals check below surfaces them.
     const subCmds = listSubCommands(command);
@@ -678,6 +685,32 @@ async function runCommandInternal<TResult = unknown>(
       !command.run &&
       extraPositionals.length === 0
     ) {
+      if (command.defaultSubCommand) {
+        const resolvedDefault = await resolveLazyCommand(
+          command.subCommands![command.defaultSubCommand]!,
+        );
+        const subContext: CommandContext = {
+          commandPath: [...(context.commandPath ?? []), command.defaultSubCommand],
+          rootName: context.rootName,
+          rootVersion: context.rootVersion,
+          globalExtracted: context.globalExtracted,
+        };
+        collector?.stop();
+        // Nothing was typed for the subcommand name itself, so forward no
+        // argv (mirroring `tokensAfterSubcommand` for an explicitly-typed
+        // name at the very end of argv); every token the user did type at
+        // this level was already folded into `accumulatedGlobalArgs` above
+        // and is inherited via `_parsedGlobalArgs`, unlike a hand-rolled
+        // `runCommand(defaultCmd, [])` call which would discard it.
+        return runCommandInternal<TResult>(resolvedDefault, [], {
+          ...options,
+          _context: subContext,
+          _existingLogs: getCurrentLogs(),
+          _parsedGlobalArgs: accumulatedGlobalArgs,
+          _precedingArgs: [...(options._precedingArgs ?? []), ...argv],
+        });
+      }
+
       const help = generateHelp(command, {
         showSubcommands: options.showSubcommands ?? true,
         context,

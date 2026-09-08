@@ -10,6 +10,7 @@ import { isLazyCommand } from "../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import {
   CaseVariantCollisionError,
+  DefaultSubCommandError,
   DuplicateAliasError,
   DuplicateFieldError,
   DuplicateNegationError,
@@ -22,6 +23,7 @@ import {
 // Re-export error classes for convenience
 export {
   CaseVariantCollisionError,
+  DefaultSubCommandError,
   DuplicateAliasError,
   DuplicateFieldError,
   DuplicateNegationError,
@@ -48,7 +50,9 @@ export interface CommandValidationError {
     | "case_variant_collision"
     | "duplicate_negation"
     | "field_type_conflict"
-    | "subcommand_key_name_mismatch";
+    | "subcommand_key_name_mismatch"
+    | "default_subcommand_conflict"
+    | "default_subcommand_not_found";
   /** Error message */
   message: string;
   /** Related field name (if applicable) */
@@ -663,6 +667,60 @@ function collectSchemaErrors(
 }
 
 /**
+ * Check that `defaultSubCommand` (if set) is not combined with `run` and
+ * points at a name actually registered in `subCommands`.
+ */
+function checkDefaultSubCommand(
+  command: AnyCommand,
+  commandPath: string[],
+): CommandValidationError[] {
+  // Widen away from the `Command` union: type-level, `run` and
+  // `defaultSubCommand` already can't both be set (see `RunnableCommand`/
+  // `NonRunnableCommand` in types.ts), which narrows `command` to `never`
+  // inside a `command.run` check once `defaultSubCommand` is known to be
+  // set. This check exists precisely to catch that "impossible" state at
+  // runtime for JS callers and hand-built command objects that bypass
+  // `defineCommand`'s type checking.
+  const loose = command as { name: string; run?: unknown; defaultSubCommand?: string };
+  const errors: CommandValidationError[] = [];
+  if (loose.defaultSubCommand === undefined) return errors;
+
+  if (loose.run) {
+    errors.push({
+      commandPath,
+      type: "default_subcommand_conflict",
+      message: `Command "${loose.name}" defines both "run" and "defaultSubCommand". Define only one.`,
+    });
+  }
+
+  const subCommandNames = command.subCommands ? Object.keys(command.subCommands) : [];
+  if (!subCommandNames.includes(loose.defaultSubCommand)) {
+    errors.push({
+      commandPath,
+      type: "default_subcommand_not_found",
+      message: `defaultSubCommand "${loose.defaultSubCommand}" does not match any subCommands key of "${loose.name}". Registered: ${subCommandNames.length > 0 ? subCommandNames.join(", ") : "(none)"}.`,
+      field: loose.defaultSubCommand,
+    });
+  }
+
+  return errors;
+}
+
+/**
+ * Validate that a command's `defaultSubCommand` (if set) is not combined
+ * with `run` and points at a registered `subCommands` key.
+ *
+ * @param command - The command to validate
+ * @throws {DefaultSubCommandError} If the configuration is invalid
+ */
+export function validateDefaultSubCommand(command: AnyCommand): void {
+  const errors = checkDefaultSubCommand(command, []);
+  if (errors.length > 0) {
+    throw new DefaultSubCommandError(errors[0]!.message);
+  }
+}
+
+/**
  * Check for alias conflicts within subcommands
  * - Aliases must not conflict with subcommand names
  * - Aliases must not conflict with other aliases
@@ -816,6 +874,9 @@ export async function validateCommand(
 
   // Validate subcommand alias conflicts
   errors.push(...checkSubCommandAliasConflicts(command, commandPath));
+
+  // Validate defaultSubCommand configuration
+  errors.push(...checkDefaultSubCommand(command, commandPath));
 
   // Recursively validate subcommands
   if (command.subCommands) {

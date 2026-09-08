@@ -134,6 +134,7 @@ export type {
 export { formatValidationErrors } from "./validator/args-validator.js";
 export {
   CaseVariantCollisionError,
+  DefaultSubCommandError,
   DuplicateAliasError,
   DuplicateFieldError,
   DuplicateNegationError,
@@ -145,6 +146,7 @@ export {
   validateCaseVariantCollisions,
   validateCommand,
   validateCrossSchemaCollisions,
+  validateDefaultSubCommand,
   validateDuplicateAliases,
   validateDuplicateFields,
   validateDuplicateNegations,

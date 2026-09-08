@@ -72,6 +72,18 @@ export class ReservedFieldNameError extends Error {
 }
 
 /**
+ * Error thrown when a command's `defaultSubCommand` is misconfigured: set
+ * together with `run`, or pointing at a name that isn't a registered
+ * `subCommands` key.
+ */
+export class DefaultSubCommandError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DefaultSubCommandError";
+  }
+}
+
+/**
  * Error thrown when a global field and a same-named local field have
  * different definitions (per `extractFields()`'s type bucket, whether the
  * field is positional, and enum values). Only exactly-matching definitions
