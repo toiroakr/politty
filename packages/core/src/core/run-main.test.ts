@@ -716,32 +716,32 @@ describe("runCommand", () => {
 
     describe("defaultSubCommand", () => {
       it("routes to the default subcommand when none is specified", async () => {
-        const listFn = vi.fn();
+        const subFn = vi.fn();
 
         const cmd = defineCommand({
-          name: "workspace",
+          name: "group",
           subCommands: {
-            list: defineCommand({ name: "list", run: listFn }),
+            sub: defineCommand({ name: "sub", run: subFn }),
           },
-          defaultSubCommand: "list",
+          defaultSubCommand: "sub",
         });
 
         const result = await runCommand(cmd, []);
 
-        expect(listFn).toHaveBeenCalled();
+        expect(subFn).toHaveBeenCalled();
         expect(result.success).toBe(true);
       });
 
       it("does not show help when a defaultSubCommand is set", async () => {
         using console = spyOnConsoleLog();
-        const listFn = vi.fn();
+        const subFn = vi.fn();
 
         const cmd = defineCommand({
-          name: "workspace",
+          name: "group",
           subCommands: {
-            list: defineCommand({ name: "list", run: listFn }),
+            sub: defineCommand({ name: "sub", run: subFn }),
           },
-          defaultSubCommand: "list",
+          defaultSubCommand: "sub",
         });
 
         await runCommand(cmd, []);
@@ -750,117 +750,117 @@ describe("runCommand", () => {
       });
 
       it("still routes explicitly-named subcommands normally", async () => {
-        const listFn = vi.fn();
-        const pruneFn = vi.fn();
+        const subFn = vi.fn();
+        const otherFn = vi.fn();
 
         const cmd = defineCommand({
-          name: "workspace",
+          name: "group",
           subCommands: {
-            list: defineCommand({ name: "list", run: listFn }),
-            prune: defineCommand({ name: "prune", run: pruneFn }),
+            sub: defineCommand({ name: "sub", run: subFn }),
+            other: defineCommand({ name: "other", run: otherFn }),
           },
-          defaultSubCommand: "list",
+          defaultSubCommand: "sub",
         });
 
-        await runCommand(cmd, ["prune"]);
+        await runCommand(cmd, ["other"]);
 
-        expect(pruneFn).toHaveBeenCalled();
-        expect(listFn).not.toHaveBeenCalled();
+        expect(otherFn).toHaveBeenCalled();
+        expect(subFn).not.toHaveBeenCalled();
       });
 
       it("reports the default subcommand's own name via $invocation, with commandPath extended", async () => {
-        const listFn = vi.fn();
-        const list = defineCommand({ name: "list", run: listFn });
+        const subFn = vi.fn();
+        const sub = defineCommand({ name: "sub", run: subFn });
         const root = defineCommand({
-          name: "workspace",
-          subCommands: { list },
-          defaultSubCommand: "list",
+          name: "group",
+          subCommands: { sub },
+          defaultSubCommand: "sub",
         });
 
         await runCommand(root, []);
 
-        const args = listFn.mock.calls[0]?.[0];
-        expect(args.$invocation).toEqual({ name: "list" });
+        const args = subFn.mock.calls[0]?.[0];
+        expect(args.$invocation).toEqual({ name: "sub" });
       });
 
       it("inherits the parent's globalArgs value into the default subcommand", async () => {
-        const listFn = vi.fn();
-        const list = defineCommand({
-          name: "list",
-          run: listFn,
+        const subFn = vi.fn();
+        const sub = defineCommand({
+          name: "sub",
+          run: subFn,
         });
         const root = defineCommand({
-          name: "workspace",
-          subCommands: { list },
-          defaultSubCommand: "list",
+          name: "group",
+          subCommands: { sub },
+          defaultSubCommand: "sub",
         });
 
         await runCommand(root, ["--verbose"], {
           globalArgs: z.object({ verbose: arg(z.boolean().default(false)) }),
         });
 
-        const args = listFn.mock.calls[0]?.[0];
+        const args = subFn.mock.calls[0]?.[0];
         expect(args.verbose).toBe(true);
       });
 
       it("shows the group's own help instead of routing to defaultSubCommand when --help is passed", async () => {
         using console = spyOnConsoleLog();
-        const listFn = vi.fn();
-        const list = defineCommand({ name: "list", run: listFn });
+        const subFn = vi.fn();
+        const sub = defineCommand({ name: "sub", run: subFn });
         const root = defineCommand({
-          name: "workspace",
-          subCommands: { list },
-          defaultSubCommand: "list",
+          name: "group",
+          subCommands: { sub },
+          defaultSubCommand: "sub",
         });
 
         await runCommand(root, ["--help"]);
 
         expect(console).toHaveBeenCalled();
-        expect(listFn).not.toHaveBeenCalled();
+        expect(subFn).not.toHaveBeenCalled();
       });
 
       it("does not route to defaultSubCommand when the group's own strict schema has an unknown flag", async () => {
         using console = spyOnConsoleLog();
-        const listFn = vi.fn();
-        const list = defineCommand({ name: "list", run: listFn });
+        const subFn = vi.fn();
+        const sub = defineCommand({ name: "sub", run: subFn });
         const root = defineCommand({
-          name: "workspace",
+          name: "group",
           args: z.strictObject({}),
-          subCommands: { list },
-          defaultSubCommand: "list",
+          subCommands: { sub },
+          defaultSubCommand: "sub",
         });
 
         await runCommand(root, ["--typo"]);
 
         // A typo/unknown flag must not be silently discarded by running the
         // default subcommand's action instead of surfacing the mistake.
-        expect(listFn).not.toHaveBeenCalled();
+        expect(subFn).not.toHaveBeenCalled();
         expect(console).toHaveBeenCalled();
       });
 
       it("resolves a lazy-loaded defaultSubCommand", async () => {
-        const listFn = vi.fn();
-        const listMeta = defineCommand({ name: "list" });
-        const lazyList = lazy(listMeta, async () => defineCommand({ name: "list", run: listFn }));
+        const subFn = vi.fn();
+        const subMeta = defineCommand({ name: "sub" });
+        const lazySub = lazy(subMeta, async () => defineCommand({ name: "sub", run: subFn }));
         const root = defineCommand({
-          name: "workspace",
-          subCommands: { list: lazyList },
-          defaultSubCommand: "list",
+          name: "group",
+          subCommands: { sub: lazySub },
+          defaultSubCommand: "sub",
         });
 
         await runCommand(root, []);
 
-        expect(listFn).toHaveBeenCalled();
+        expect(subFn).toHaveBeenCalled();
       });
 
       it("surfaces a run+defaultSubCommand conflict as a runtime validation failure", async () => {
         using _consoleSpy = spyOnConsoleError();
-        const list = defineCommand({ name: "list", run: () => {} });
+        const sub = defineCommand({ name: "sub", run: () => {} });
         const broken = {
-          name: "workspace",
-          subCommands: { list },
+          name: "group",
+          subCommands: { sub },
           run: () => {},
-          defaultSubCommand: "list",
+          defaultSubCommand: "sub",
         } as unknown as AnyCommand;
 
         const result = await runCommand(broken, []);
@@ -873,11 +873,11 @@ describe("runCommand", () => {
 
       it("falls back to help instead of crashing when defaultSubCommand names an unregistered key under skipValidation", async () => {
         using console = spyOnConsoleLog();
-        const list = defineCommand({ name: "list", run: () => {} });
+        const sub = defineCommand({ name: "sub", run: () => {} });
         const broken = {
-          name: "workspace",
-          subCommands: { list },
-          defaultSubCommand: "prune",
+          name: "group",
+          subCommands: { sub },
+          defaultSubCommand: "other",
         } as unknown as AnyCommand;
 
         const result = await runCommand(broken, [], { skipValidation: true });
@@ -1724,14 +1724,14 @@ describe("runMain defaultSubCommand and onUnknownSubcommand", () => {
     using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
     const onUnknownSubcommand = vi.fn();
-    const listFn = vi.fn();
-    const list = defineCommand({ name: "list", run: listFn });
-    const cmd = defineCommand({ name: "test", subCommands: { list }, defaultSubCommand: "list" });
+    const subFn = vi.fn();
+    const sub = defineCommand({ name: "sub", run: subFn });
+    const cmd = defineCommand({ name: "test", subCommands: { sub }, defaultSubCommand: "sub" });
 
     await runMain(cmd, { onUnknownSubcommand });
 
     expect(onUnknownSubcommand).not.toHaveBeenCalled();
-    expect(listFn).toHaveBeenCalled();
+    expect(subFn).toHaveBeenCalled();
   });
 
   it("still dispatches an explicit unknown root subcommand even when defaultSubCommand is set", async () => {
@@ -1739,13 +1739,13 @@ describe("runMain defaultSubCommand and onUnknownSubcommand", () => {
     using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
     const onUnknownSubcommand = vi.fn().mockReturnValue(2);
-    const listFn = vi.fn();
-    const list = defineCommand({ name: "list", run: listFn });
-    const cmd = defineCommand({ name: "test", subCommands: { list }, defaultSubCommand: "list" });
+    const subFn = vi.fn();
+    const sub = defineCommand({ name: "sub", run: subFn });
+    const cmd = defineCommand({ name: "test", subCommands: { sub }, defaultSubCommand: "sub" });
 
     await runMain(cmd, { onUnknownSubcommand });
 
-    expect(listFn).not.toHaveBeenCalled();
+    expect(subFn).not.toHaveBeenCalled();
     expect(onUnknownSubcommand).toHaveBeenCalledWith({
       commandPath: [],
       name: "plugin-name",
@@ -1756,18 +1756,18 @@ describe("runMain defaultSubCommand and onUnknownSubcommand", () => {
   });
 
   it("still routes an explicitly-named, non-default subcommand normally", async () => {
-    using _argv = useArgv(["node", "test", "list"]);
+    using _argv = useArgv(["node", "test", "sub"]);
     using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
     const onUnknownSubcommand = vi.fn();
-    const listFn = vi.fn();
-    const list = defineCommand({ name: "list", run: listFn });
-    const cmd = defineCommand({ name: "test", subCommands: { list }, defaultSubCommand: "list" });
+    const subFn = vi.fn();
+    const sub = defineCommand({ name: "sub", run: subFn });
+    const cmd = defineCommand({ name: "test", subCommands: { sub }, defaultSubCommand: "sub" });
 
     await runMain(cmd, { onUnknownSubcommand });
 
     expect(onUnknownSubcommand).not.toHaveBeenCalled();
-    expect(listFn).toHaveBeenCalled();
+    expect(subFn).toHaveBeenCalled();
   });
 
   it("validates the root command's defaultSubCommand before plugin dispatch can bypass it", async () => {
@@ -1778,65 +1778,65 @@ describe("runMain defaultSubCommand and onUnknownSubcommand", () => {
     using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
     const onUnknownSubcommand = vi.fn().mockReturnValue(0);
-    const list = defineCommand({ name: "list", run: () => {} });
+    const sub = defineCommand({ name: "sub", run: () => {} });
     const broken = {
       name: "test",
-      subCommands: { list },
-      defaultSubCommand: "prune",
+      subCommands: { sub },
+      defaultSubCommand: "other",
     } as unknown as AnyCommand;
 
     await expect(runMain(broken, { onUnknownSubcommand })).rejects.toThrow(
-      /defaultSubCommand "prune"/,
+      /defaultSubCommand "other"/,
     );
     expect(onUnknownSubcommand).not.toHaveBeenCalled();
   });
 
   // Mirrors the real-world motivating case (tailor-inc/platform-planning#1817):
-  // `tailor workspace` (falls back to `workspace list`) and `tailor workspace
-  // <cli-plugin>` (dispatches to a `tailor-workspace-<plugin>` binary), where
-  // `workspace` is nested one level under the CLI root.
+  // a bare invocation of a nested command group falls back to a runnable
+  // subcommand, while an unrecognized name under that same group still
+  // reaches CLI plugin dispatch instead of being shadowed by the fallback.
   it("routes a bare nested invocation to defaultSubCommand instead of nested plugin dispatch", async () => {
-    using _argv = useArgv(["node", "cli", "workspace"]);
+    using _argv = useArgv(["node", "cli", "group"]);
     using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
     const onUnknownSubcommand = vi.fn();
-    const listFn = vi.fn();
-    const list = defineCommand({ name: "list", run: listFn });
-    const workspace = defineCommand({
-      name: "workspace",
-      subCommands: { list },
-      defaultSubCommand: "list",
+    const subFn = vi.fn();
+    const sub = defineCommand({ name: "sub", run: subFn });
+    const group = defineCommand({
+      name: "group",
+      subCommands: { sub },
+      defaultSubCommand: "sub",
     });
-    const cmd = defineCommand({ name: "cli", subCommands: { workspace } });
+    const cmd = defineCommand({ name: "cli", subCommands: { group } });
 
     await runMain(cmd, { onUnknownSubcommand });
 
     expect(onUnknownSubcommand).not.toHaveBeenCalled();
-    expect(listFn).toHaveBeenCalled();
-    const args = listFn.mock.calls[0]?.[0];
-    expect(args.$invocation).toEqual({ name: "list" });
+    expect(subFn).toHaveBeenCalled();
+    const args = subFn.mock.calls[0]?.[0];
+    expect(args.$invocation).toEqual({ name: "sub" });
   });
 
   it("still dispatches an explicit unknown name nested under a defaultSubCommand group", async () => {
-    using _argv = useArgv(["node", "cli", "workspace", "prune"]);
+    using _argv = useArgv(["node", "cli", "group", "plugin-name"]);
     using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
     const onUnknownSubcommand = vi.fn().mockReturnValue(0);
-    const listFn = vi.fn();
-    const list = defineCommand({ name: "list", run: listFn });
-    const workspace = defineCommand({
-      name: "workspace",
-      subCommands: { list },
-      defaultSubCommand: "list",
+    const subFn = vi.fn();
+    const sub = defineCommand({ name: "sub", run: subFn });
+    const group = defineCommand({
+      name: "group",
+      subCommands: { sub },
+      defaultSubCommand: "sub",
     });
-    const cmd = defineCommand({ name: "cli", subCommands: { workspace } });
+    const cmd = defineCommand({ name: "cli", subCommands: { group } });
 
     await runMain(cmd, { onUnknownSubcommand });
 
-    expect(listFn).not.toHaveBeenCalled();
+    expect(subFn).not.toHaveBeenCalled();
     expect(onUnknownSubcommand).toHaveBeenCalledWith({
-      commandPath: ["workspace"],
-      name: "prune",
+      commandPath: ["group"],
+      name: "plugin-name",
       args: [],
       precedingArgs: [],
     });

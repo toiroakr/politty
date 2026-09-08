@@ -34,20 +34,20 @@ describe("@politty/zod type pins", () => {
   });
 
   it("infers defaultSubCommand's key constraint through the adapter's re-pinned defineCommand", () => {
-    const list = defineCommand({ name: "list", run: () => {} });
+    const sub = defineCommand({ name: "sub", run: () => {} });
 
     const cmd = defineCommand({
-      name: "workspace",
-      subCommands: { list },
-      defaultSubCommand: "list",
+      name: "group",
+      subCommands: { sub },
+      defaultSubCommand: "sub",
     });
-    expect(cmd.defaultSubCommand).toBe("list");
+    expect(cmd.defaultSubCommand).toBe("sub");
 
     defineCommand({
-      name: "workspace",
-      subCommands: { list },
-      // @ts-expect-error "prune" is not a key of subCommands
-      defaultSubCommand: "prune",
+      name: "group",
+      subCommands: { sub },
+      // @ts-expect-error "other" is not a key of subCommands
+      defaultSubCommand: "other",
     });
   });
 });

@@ -417,12 +417,12 @@ describe("defaultSubCommand validation", () => {
     // deliberately-invalid state can only be constructed by bypassing
     // `defineCommand`'s overloads -- exactly the runtime defense this check
     // exists for (JS callers, hand-built command objects, etc.).
-    const list = defineCommand({ name: "list", run: () => {} });
+    const sub = defineCommand({ name: "sub", run: () => {} });
     const parent = {
-      name: "workspace",
-      subCommands: { list },
+      name: "group",
+      subCommands: { sub },
       run: () => {},
-      defaultSubCommand: "list",
+      defaultSubCommand: "sub",
     } as unknown as AnyCommand;
 
     const result = await validateCommand(parent);
@@ -434,29 +434,29 @@ describe("defaultSubCommand validation", () => {
   });
 
   it("should detect a defaultSubCommand that is not a registered subCommands key", async () => {
-    const list = defineCommand({ name: "list", run: () => {} });
+    const sub = defineCommand({ name: "sub", run: () => {} });
     const parent = defineCommand({
-      name: "workspace",
-      subCommands: { list },
-      // @ts-expect-error - "prune" is not a key of subCommands
-      defaultSubCommand: "prune",
+      name: "group",
+      subCommands: { sub },
+      // @ts-expect-error - "other" is not a key of subCommands
+      defaultSubCommand: "other",
     });
 
     const result = await validateCommand(parent);
     expect(result.valid).toBe(false);
     if (!result.valid) {
       expect(result.errors.some((e) => e.type === "default_subcommand_not_found")).toBe(true);
-      expect(result.errors[0]?.message).toContain('defaultSubCommand "prune"');
-      expect(result.errors[0]?.message).toContain("list");
+      expect(result.errors[0]?.message).toContain('defaultSubCommand "other"');
+      expect(result.errors[0]?.message).toContain("sub");
     }
   });
 
   it("should accept a defaultSubCommand that matches a registered subCommands key", async () => {
-    const list = defineCommand({ name: "list", run: () => {} });
+    const sub = defineCommand({ name: "sub", run: () => {} });
     const parent = defineCommand({
-      name: "workspace",
-      subCommands: { list },
-      defaultSubCommand: "list",
+      name: "group",
+      subCommands: { sub },
+      defaultSubCommand: "sub",
     });
 
     const result = await validateCommand(parent);
@@ -464,24 +464,24 @@ describe("defaultSubCommand validation", () => {
   });
 
   it("should throw DefaultSubCommandError from the throwing validator for the conflict case", () => {
-    const list = defineCommand({ name: "list", run: () => {} });
+    const sub = defineCommand({ name: "sub", run: () => {} });
     const parent = {
-      name: "workspace",
-      subCommands: { list },
+      name: "group",
+      subCommands: { sub },
       run: () => {},
-      defaultSubCommand: "list",
+      defaultSubCommand: "sub",
     } as unknown as AnyCommand;
 
     expect(() => validateDefaultSubCommand(parent)).toThrow(DefaultSubCommandError);
   });
 
   it("should throw DefaultSubCommandError from the throwing validator for the not-found case", () => {
-    const list = defineCommand({ name: "list", run: () => {} });
+    const sub = defineCommand({ name: "sub", run: () => {} });
     const parent = defineCommand({
-      name: "workspace",
-      subCommands: { list },
-      // @ts-expect-error - "prune" is not a key of subCommands
-      defaultSubCommand: "prune",
+      name: "group",
+      subCommands: { sub },
+      // @ts-expect-error - "other" is not a key of subCommands
+      defaultSubCommand: "other",
     });
 
     expect(() => validateDefaultSubCommand(parent)).toThrow(DefaultSubCommandError);

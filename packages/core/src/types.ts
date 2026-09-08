@@ -178,17 +178,17 @@ export interface NonRunnableCommand<
    * Name of a `subCommands` entry to run when this command is invoked with
    * no subcommand specified, instead of showing help. Used for CLI plugin
    * dispatch (`onUnknownSubcommand`) to reach a command group whose "no
-   * subcommand" case still routes somewhere runnable (e.g. `cli workspace`
-   * falling back to `cli workspace list`), without the group itself
-   * defining `run` (which would exempt it from plugin dispatch — see
+   * subcommand" case still routes somewhere runnable (e.g. `cli group`
+   * falling back to `cli group sub`), without the group itself defining
+   * `run` (which would exempt it from plugin dispatch — see
    * `MainOptions.onUnknownSubcommand`).
    *
    * Only fires when this level has zero unconsumed tokens (the same
    * condition that would otherwise show help), so it only covers a bare
    * invocation — a local flag meant for the default subcommand still needs
-   * the subcommand named explicitly (`cli workspace list --limit 10`, not
-   * `cli workspace --limit 10`), since this command's own (typically
-   * schema-less) parse level has no way to know `--limit` belongs to `list`.
+   * the subcommand named explicitly (`cli group sub --limit 10`, not
+   * `cli group --limit 10`), since this command's own (typically
+   * schema-less) parse level has no way to know `--limit` belongs to `sub`.
    */
   defaultSubCommand?: string | undefined;
 }
