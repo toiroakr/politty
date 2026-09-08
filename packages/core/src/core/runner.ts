@@ -328,6 +328,15 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
 
   const globalExtracted = extractAndValidateGlobal(effectiveOptions);
 
+  // Validate the root command's own `defaultSubCommand` before plugin dispatch
+  // below: that dispatch can `process.exit` before ever reaching
+  // `runCommandInternal` (where this same check also runs for every other
+  // command in the tree), so a misconfigured root would otherwise only
+  // surface when a positional happened not to trigger plugin dispatch.
+  if (!effectiveOptions.skipValidation) {
+    validateDefaultSubCommand(command);
+  }
+
   // Plugin dispatch: when the first positional is not a known subcommand and a
   // handler is registered, delegate to it (e.g. exec an external `<cli>-<name>`
   // binary). Runs before global setup/cleanup so plugins are independent of the
@@ -690,29 +699,35 @@ async function runCommandInternal<TResult = unknown>(
       // routing to defaultSubCommand here would silently discard them and
       // run the default subcommand's action instead of surfacing the typo.
       if (command.defaultSubCommand && parseResult.unknownFlags.length === 0) {
-        const resolvedDefault = await resolveLazyCommand(
-          command.subCommands![command.defaultSubCommand]!,
-        );
-        const subContext: CommandContext = {
-          commandPath: [...(context.commandPath ?? []), command.defaultSubCommand],
-          rootName: context.rootName,
-          rootVersion: context.rootVersion,
-          globalExtracted: context.globalExtracted,
-        };
-        collector?.stop();
-        // Nothing was typed for the subcommand name itself, so forward no
-        // argv (mirroring `tokensAfterSubcommand` for an explicitly-typed
-        // name at the very end of argv); every token the user did type at
-        // this level was already folded into `accumulatedGlobalArgs` above
-        // and is inherited via `_parsedGlobalArgs`, unlike a hand-rolled
-        // `runCommand(defaultCmd, [])` call which would discard it.
-        return runCommandInternal<TResult>(resolvedDefault, [], {
-          ...options,
-          _context: subContext,
-          _existingLogs: getCurrentLogs(),
-          _parsedGlobalArgs: accumulatedGlobalArgs,
-          _precedingArgs: [...(options._precedingArgs ?? []), ...argv],
-        });
+        // Only absent when `defaultSubCommand` names a key that isn't
+        // actually in `subCommands` — normally caught above by
+        // `validateDefaultSubCommand`, but reachable with
+        // `skipValidation: true` on a misconfigured command. Fall through
+        // to help instead of crashing on a bad lookup in that case.
+        const defaultSubCommandTarget = command.subCommands?.[command.defaultSubCommand];
+        if (defaultSubCommandTarget) {
+          const resolvedDefault = await resolveLazyCommand(defaultSubCommandTarget);
+          const subContext: CommandContext = {
+            commandPath: [...(context.commandPath ?? []), command.defaultSubCommand],
+            rootName: context.rootName,
+            rootVersion: context.rootVersion,
+            globalExtracted: context.globalExtracted,
+          };
+          collector?.stop();
+          // Nothing was typed for the subcommand name itself, so forward no
+          // argv (mirroring `tokensAfterSubcommand` for an explicitly-typed
+          // name at the very end of argv); every token the user did type at
+          // this level was already folded into `accumulatedGlobalArgs` above
+          // and is inherited via `_parsedGlobalArgs`, unlike a hand-rolled
+          // `runCommand(defaultCmd, [])` call which would discard it.
+          return runCommandInternal<TResult>(resolvedDefault, [], {
+            ...options,
+            _context: subContext,
+            _existingLogs: getCurrentLogs(),
+            _parsedGlobalArgs: accumulatedGlobalArgs,
+            _precedingArgs: [...(options._precedingArgs ?? []), ...argv],
+          });
+        }
       }
 
       const help = generateHelp(command, {

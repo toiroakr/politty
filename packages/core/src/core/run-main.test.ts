@@ -870,6 +870,21 @@ describe("runCommand", () => {
           expect(result.error.name).toBe("DefaultSubCommandError");
         }
       });
+
+      it("falls back to help instead of crashing when defaultSubCommand names an unregistered key under skipValidation", async () => {
+        using console = spyOnConsoleLog();
+        const list = defineCommand({ name: "list", run: () => {} });
+        const broken = {
+          name: "workspace",
+          subCommands: { list },
+          defaultSubCommand: "prune",
+        } as unknown as AnyCommand;
+
+        const result = await runCommand(broken, [], { skipValidation: true });
+
+        expect(result.success).toBe(true);
+        expect(console).toHaveBeenCalled();
+      });
     });
   });
 
@@ -1753,6 +1768,27 @@ describe("runMain defaultSubCommand and onUnknownSubcommand", () => {
 
     expect(onUnknownSubcommand).not.toHaveBeenCalled();
     expect(listFn).toHaveBeenCalled();
+  });
+
+  it("validates the root command's defaultSubCommand before plugin dispatch can bypass it", async () => {
+    // Plugin dispatch below can `process.exit` before `runCommandInternal`
+    // (and its own `validateDefaultSubCommand` call) ever runs for the root,
+    // so a broken root config must be caught here instead.
+    using _argv = useArgv(["node", "test", "plugin-name"]);
+    using _exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const onUnknownSubcommand = vi.fn().mockReturnValue(0);
+    const list = defineCommand({ name: "list", run: () => {} });
+    const broken = {
+      name: "test",
+      subCommands: { list },
+      defaultSubCommand: "prune",
+    } as unknown as AnyCommand;
+
+    await expect(runMain(broken, { onUnknownSubcommand })).rejects.toThrow(
+      /defaultSubCommand "prune"/,
+    );
+    expect(onUnknownSubcommand).not.toHaveBeenCalled();
   });
 
   // Mirrors the real-world motivating case (tailor-inc/platform-planning#1817):
