@@ -32,4 +32,22 @@ describe("@politty/zod type pins", () => {
     // @ts-expect-error non-zod standard schemas must not type-check here
     arg(foreignSchema, { positional: true });
   });
+
+  it("infers defaultSubCommand's key constraint through the adapter's re-pinned defineCommand", () => {
+    const sub = defineCommand({ name: "sub", run: () => {} });
+
+    const cmd = defineCommand({
+      name: "group",
+      subCommands: { sub },
+      defaultSubCommand: "sub",
+    });
+    expect(cmd.defaultSubCommand).toBe("sub");
+
+    defineCommand({
+      name: "group",
+      subCommands: { sub },
+      // @ts-expect-error "other" is not a key of subCommands
+      defaultSubCommand: "other",
+    });
+  });
 });

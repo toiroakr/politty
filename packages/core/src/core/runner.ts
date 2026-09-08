@@ -4,6 +4,7 @@ import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collec
 import {
   listSubCommandNamesWithAliases,
   listSubCommands,
+  resolveLazyCommand,
   resolveSubcommandWithAlias,
 } from "../executor/subcommand-router.js";
 import { generateHelp, type CommandContext } from "../output/help-generator.js";
@@ -30,6 +31,7 @@ import {
 } from "../validator/args-validator.js";
 import {
   validateCaseVariantCollisions,
+  validateDefaultSubCommand,
   validateDuplicateAliases,
   validateDuplicateFields,
   validateDuplicateNegations,
@@ -326,6 +328,15 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
 
   const globalExtracted = extractAndValidateGlobal(effectiveOptions);
 
+  // Validate the root command's own `defaultSubCommand` before plugin dispatch
+  // below: that dispatch can `process.exit` before ever reaching
+  // `runCommandInternal` (where this same check also runs for every other
+  // command in the tree), so a misconfigured root would otherwise only
+  // surface when a positional happened not to trigger plugin dispatch.
+  if (!effectiveOptions.skipValidation) {
+    validateDefaultSubCommand(command);
+  }
+
   // Plugin dispatch: when the first positional is not a known subcommand and a
   // handler is registered, delegate to it (e.g. exec an external `<cli>-<name>`
   // binary). Runs before global setup/cleanup so plugins are independent of the
@@ -470,6 +481,10 @@ async function runCommandInternal<TResult = unknown>(
   };
 
   try {
+    if (!options.skipValidation) {
+      validateDefaultSubCommand(command);
+    }
+
     // Parse arguments
     const parseResult = parseArgs(argv, command, {
       skipValidation: options.skipValidation,
@@ -668,7 +683,8 @@ async function runCommandInternal<TResult = unknown>(
       ? []
       : parseResult.positionals.slice(positionalFields.length);
 
-    // If command has subcommands but none specified, show help.
+    // If command has subcommands but none specified, either route to
+    // `defaultSubCommand` (if set) or show help.
     // If there are any unconsumed positionals (including tokens after --), fall
     // through so the unexpected-positionals check below surfaces them.
     const subCmds = listSubCommands(command);
@@ -678,6 +694,54 @@ async function runCommandInternal<TResult = unknown>(
       !command.run &&
       extraPositionals.length === 0
     ) {
+      // Unknown flags at this level (e.g. a typo) still need the normal
+      // unknownKeysMode handling below (strict error / strip warning) —
+      // routing to defaultSubCommand here would silently discard them and
+      // run the default subcommand's action instead of surfacing the typo.
+      if (command.defaultSubCommand && parseResult.unknownFlags.length === 0) {
+        // Only absent when `defaultSubCommand` names a key that isn't
+        // actually in `subCommands` — normally caught above by
+        // `validateDefaultSubCommand`, but reachable with
+        // `skipValidation: true` on a misconfigured command. Fall through
+        // to help instead of crashing on a bad lookup in that case.
+        const defaultSubCommandTarget = command.subCommands?.[command.defaultSubCommand];
+        if (defaultSubCommandTarget) {
+          const resolvedDefault = await resolveLazyCommand(defaultSubCommandTarget);
+          const subContext: CommandContext = {
+            commandPath: [...(context.commandPath ?? []), command.defaultSubCommand],
+            rootName: context.rootName,
+            rootVersion: context.rootVersion,
+            globalExtracted: context.globalExtracted,
+          };
+          collector?.stop();
+          // Nothing was typed for the subcommand name itself, so forward no
+          // argv (mirroring `tokensAfterSubcommand` for an explicitly-typed
+          // name at the very end of argv); every token the user did type at
+          // this level was already folded into `accumulatedGlobalArgs` above
+          // and is inherited via `_parsedGlobalArgs`, unlike a hand-rolled
+          // `runCommand(defaultCmd, [])` call which would discard it.
+          // Suppressed global negations (recorded by name, without dashes)
+          // are dropped outside passthrough mode, mirroring the explicit
+          // subcommand-descent branch above: the host's strip/strict policy
+          // already rejected them, so they must not be forwarded.
+          const suppressedNames = new Set(
+            options._globalExtracted?.unknownKeysMode === "passthrough"
+              ? []
+              : (parseResult.unknownGlobalFlags ?? []),
+          );
+          const isSuppressedFlag = (token: string): boolean =>
+            token.startsWith("--") && suppressedNames.has(getLongOptionName(token));
+          const levelPrecedingArgs = argv.filter((token) => !isSuppressedFlag(token));
+          return runCommandInternal<TResult>(resolvedDefault, [], {
+            ...options,
+            _context: subContext,
+            _existingLogs: getCurrentLogs(),
+            _parsedGlobalArgs: accumulatedGlobalArgs,
+            _precedingArgs: [...(options._precedingArgs ?? []), ...levelPrecedingArgs],
+          });
+        }
+      }
+
       const help = generateHelp(command, {
         showSubcommands: options.showSubcommands ?? true,
         context,

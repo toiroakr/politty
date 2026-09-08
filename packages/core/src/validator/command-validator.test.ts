@@ -4,13 +4,16 @@ import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
 import { extractFields } from "../core/schema-extractor.js";
 import { lazy } from "../lazy.js";
+import type { AnyCommand } from "../types.js";
 import {
   CaseVariantCollisionError,
+  DefaultSubCommandError,
   FieldTypeConflictError,
   formatCommandValidationErrors,
   validateCaseVariantCollisions,
   validateCommand,
   validateCrossSchemaCollisions,
+  validateDefaultSubCommand,
 } from "./command-validator.js";
 
 describe("validateCommand", () => {
@@ -404,6 +407,84 @@ describe("validateCommand", () => {
       const result = await validateCommand(root, { globalArgs });
       expect(result.valid).toBe(true);
     });
+  });
+});
+
+describe("defaultSubCommand validation", () => {
+  it("should detect run and defaultSubCommand defined together", async () => {
+    // `run` and `defaultSubCommand` are mutually exclusive at the type level
+    // (see RunnableConfig/NonRunnableConfig in command.ts), so this
+    // deliberately-invalid state can only be constructed by bypassing
+    // `defineCommand`'s overloads -- exactly the runtime defense this check
+    // exists for (JS callers, hand-built command objects, etc.).
+    const sub = defineCommand({ name: "sub", run: () => {} });
+    const parent = {
+      name: "group",
+      subCommands: { sub },
+      run: () => {},
+      defaultSubCommand: "sub",
+    } as unknown as AnyCommand;
+
+    const result = await validateCommand(parent);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.type === "default_subcommand_conflict")).toBe(true);
+      expect(result.errors[0]?.message).toContain('defines both "run" and "defaultSubCommand"');
+    }
+  });
+
+  it("should detect a defaultSubCommand that is not a registered subCommands key", async () => {
+    const sub = defineCommand({ name: "sub", run: () => {} });
+    const parent = defineCommand({
+      name: "group",
+      subCommands: { sub },
+      // @ts-expect-error - "other" is not a key of subCommands
+      defaultSubCommand: "other",
+    });
+
+    const result = await validateCommand(parent);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.type === "default_subcommand_not_found")).toBe(true);
+      expect(result.errors[0]?.message).toContain('defaultSubCommand "other"');
+      expect(result.errors[0]?.message).toContain("sub");
+    }
+  });
+
+  it("should accept a defaultSubCommand that matches a registered subCommands key", async () => {
+    const sub = defineCommand({ name: "sub", run: () => {} });
+    const parent = defineCommand({
+      name: "group",
+      subCommands: { sub },
+      defaultSubCommand: "sub",
+    });
+
+    const result = await validateCommand(parent);
+    expect(result.valid).toBe(true);
+  });
+
+  it("should throw DefaultSubCommandError from the throwing validator for the conflict case", () => {
+    const sub = defineCommand({ name: "sub", run: () => {} });
+    const parent = {
+      name: "group",
+      subCommands: { sub },
+      run: () => {},
+      defaultSubCommand: "sub",
+    } as unknown as AnyCommand;
+
+    expect(() => validateDefaultSubCommand(parent)).toThrow(DefaultSubCommandError);
+  });
+
+  it("should throw DefaultSubCommandError from the throwing validator for the not-found case", () => {
+    const sub = defineCommand({ name: "sub", run: () => {} });
+    const parent = defineCommand({
+      name: "group",
+      subCommands: { sub },
+      // @ts-expect-error - "other" is not a key of subCommands
+      defaultSubCommand: "other",
+    });
+
+    expect(() => validateDefaultSubCommand(parent)).toThrow(DefaultSubCommandError);
   });
 });
 
