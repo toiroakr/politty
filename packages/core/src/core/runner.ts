@@ -685,7 +685,11 @@ async function runCommandInternal<TResult = unknown>(
       !command.run &&
       extraPositionals.length === 0
     ) {
-      if (command.defaultSubCommand) {
+      // Unknown flags at this level (e.g. a typo) still need the normal
+      // unknownKeysMode handling below (strict error / strip warning) —
+      // routing to defaultSubCommand here would silently discard them and
+      // run the default subcommand's action instead of surfacing the typo.
+      if (command.defaultSubCommand && parseResult.unknownFlags.length === 0) {
         const resolvedDefault = await resolveLazyCommand(
           command.subCommands![command.defaultSubCommand]!,
         );

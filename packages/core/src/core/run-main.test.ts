@@ -819,6 +819,25 @@ describe("runCommand", () => {
         expect(listFn).not.toHaveBeenCalled();
       });
 
+      it("does not route to defaultSubCommand when the group's own strict schema has an unknown flag", async () => {
+        using console = spyOnConsoleLog();
+        const listFn = vi.fn();
+        const list = defineCommand({ name: "list", run: listFn });
+        const root = defineCommand({
+          name: "workspace",
+          args: z.strictObject({}),
+          subCommands: { list },
+          defaultSubCommand: "list",
+        });
+
+        await runCommand(root, ["--typo"]);
+
+        // A typo/unknown flag must not be silently discarded by running the
+        // default subcommand's action instead of surfacing the mistake.
+        expect(listFn).not.toHaveBeenCalled();
+        expect(console).toHaveBeenCalled();
+      });
+
       it("resolves a lazy-loaded defaultSubCommand", async () => {
         const listFn = vi.fn();
         const listMeta = defineCommand({ name: "list" });
