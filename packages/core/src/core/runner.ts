@@ -720,12 +720,24 @@ async function runCommandInternal<TResult = unknown>(
           // this level was already folded into `accumulatedGlobalArgs` above
           // and is inherited via `_parsedGlobalArgs`, unlike a hand-rolled
           // `runCommand(defaultCmd, [])` call which would discard it.
+          // Suppressed global negations (recorded by name, without dashes)
+          // are dropped outside passthrough mode, mirroring the explicit
+          // subcommand-descent branch above: the host's strip/strict policy
+          // already rejected them, so they must not be forwarded.
+          const suppressedNames = new Set(
+            options._globalExtracted?.unknownKeysMode === "passthrough"
+              ? []
+              : (parseResult.unknownGlobalFlags ?? []),
+          );
+          const isSuppressedFlag = (token: string): boolean =>
+            token.startsWith("--") && suppressedNames.has(getLongOptionName(token));
+          const levelPrecedingArgs = argv.filter((token) => !isSuppressedFlag(token));
           return runCommandInternal<TResult>(resolvedDefault, [], {
             ...options,
             _context: subContext,
             _existingLogs: getCurrentLogs(),
             _parsedGlobalArgs: accumulatedGlobalArgs,
-            _precedingArgs: [...(options._precedingArgs ?? []), ...argv],
+            _precedingArgs: [...(options._precedingArgs ?? []), ...levelPrecedingArgs],
           });
         }
       }
