@@ -1,6 +1,6 @@
 {
   "name": "@politty/zod-mini",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "A lightweight CLI framework inspired by citty with zod/mini registry integration for type-safe metadata management",
   "keywords": [
     "argument-parser",
