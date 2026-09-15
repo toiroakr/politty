@@ -176,8 +176,10 @@ export interface HelpData {
   commandPath: string[];
   /**
    * Root command name. Always set when produced through `runMain`/`runCommand`
-   * (equal to `name` itself at the root); `undefined` only when
-   * `generateHelpData` is called directly without a `context`.
+   * (equal to `name` itself at the root); `undefined` whenever
+   * `context.rootName` is not supplied to `generateHelpData` -- whether
+   * because no `context` was given at all, or because the given `context`
+   * simply omits `rootName`.
    */
   rootName?: string | undefined;
   /** Root command version, when provided to runMain/runCommand */

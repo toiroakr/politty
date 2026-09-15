@@ -566,7 +566,8 @@ interface CompletionContext {
   options: CompletableOption[]; // Available options
   subcommands: string[]; // Available subcommands
   positionals: CompletablePositional[];
-  usedOptions: Set<string>; // Already used options
+  usedOptions: Set<string>; // Already used options in the current frame (cleared on subcommand descent)
+  hasAnyOptionBeenUsed?: boolean; // Any option used anywhere in the invocation (never cleared)
   parsedArgs: Record<string, unknown>; // Other arg values (for dynamic resolvers)
   previousValues: string[]; // Prior values for the option/positional being completed
 }
@@ -1188,7 +1189,7 @@ interface HelpData {
   name: string;
   /** Full path from the root command. Empty at the true root; also empty when called directly on a non-root command without a context.commandPath */
   commandPath: string[];
-  /** Root command name; undefined only when generateHelpData is called directly without a context */
+  /** Root command name; undefined whenever context.rootName is not supplied (no context at all, or a context that omits rootName) */
   rootName?: string;
   /** Root command version, when provided to runMain/runCommand */
   version?: string;

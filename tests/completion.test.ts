@@ -1829,6 +1829,21 @@ describe("Completion", () => {
         expect(values).not.toContain("--help-json");
       });
 
+      it("should stop suggesting help flags after an unrecognized option-shaped token", async () => {
+        // `--unknown` never resolves via `findOption`, so `markUsed` never
+        // fires for it -- this exercises the option-shape check that sets
+        // `hasAnyOptionBeenUsed` independently of a successful lookup,
+        // matching the static bash/zsh/fish generators (which key off the
+        // same `-*` shape rather than a schema match).
+        const ctx = parseCompletionContext(["--unknown", "--"], testCmd);
+        const result = await gen(ctx);
+
+        const values = result.candidates.map((c) => c.value);
+        expect(values).not.toContain("--help");
+        expect(values).not.toContain("--help-all");
+        expect(values).not.toContain("--help-json");
+      });
+
       it("should still suppress help flags after descending into a subcommand, when an option was typed before the descent", async () => {
         // `usedOptions` is cleared on subcommand descent (it's scoped to the
         // current frame's own options), so this exercises the separate

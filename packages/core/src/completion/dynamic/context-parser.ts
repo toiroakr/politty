@@ -673,6 +673,10 @@ export function parseCompletionContext(
       word.length > 2 &&
       !word.includes("=")
     ) {
+      // This whole word is option-shaped even if some/all of its combined
+      // chars fail to resolve below; see the note on the single-option
+      // branch further down for why unresolved tokens still count.
+      hasAnyOptionBeenUsed = true;
       const chars: string[] = Array.from(word.slice(1));
       // Runtime's global separation (`scanForSubcommand` /
       // `separateGlobalArgs`) does NOT decompose combined short flags
@@ -696,6 +700,13 @@ export function parseCompletionContext(
 
     // Skip options and their values (before "--")
     if (!afterDoubleDash && isOption(word)) {
+      // Any option-shaped token counts as "an option was used" for the
+      // help-flag suppression check, even one that doesn't resolve to a
+      // schema field (an unknown flag, or one of the built-in help flags
+      // themselves, neither of which `findOption` below will ever match).
+      // Mirrors the static bash/zsh/fish generators, which key off the
+      // same `-*` shape rather than a successful lookup.
+      hasAnyOptionBeenUsed = true;
       const parsed = parseOption(word);
       const opt = findOption(options, parsed);
 
