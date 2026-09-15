@@ -923,9 +923,10 @@ schema, the collision is instead caught by:
 validate `globalArgs` up front, before the try/catch that produces
 `{ success: false, error }` (or, for `runMain()`, before the
 report-and-`process.exit()` path) is even entered, so a reserved-name
-collision there throws synchronously out of `runCommand()`/`runMain()`
-itself (an uncaught exception / rejected promise), not a returned failure
-result.
+collision there becomes a rejected promise from `runCommand()`/`runMain()`
+itself instead — both are `async`, so the throw surfaces as a promise
+rejection, not a synchronous throw at the call site — rather than a returned
+failure result.
 
 Unlike the short aliases `-h`/`-H` (see `BuiltinOverrideArgMeta` above), this
 collision **has no override**: since `--help`/`--help-all`/`--version` are
