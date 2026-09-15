@@ -909,8 +909,12 @@ permanently unreachable. `defineCommand` itself only builds the command
 object and does not validate. The collision is instead caught by:
 
 - `parseArgs()` — throws `ReservedAliasError` synchronously.
-- `runCommand()`/`runMain()` — catch that throw internally and return it as
+- `runCommand()` — catches that throw internally and returns it as
   `{ success: false, error }` rather than throwing to the caller.
+- `runMain()` — never returns a result at all (its signature is
+  `Promise<never>`); it catches the same failure internally, reports the
+  error, and calls `process.exit()` with the corresponding non-zero exit
+  code.
 - the explicit `validateCommand()` — never throws; collects it (with every
   other schema error) into the returned `{ valid: false, errors }`.
 
