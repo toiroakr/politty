@@ -1809,6 +1809,26 @@ describe("Completion", () => {
         expect(result.directive & CompletionDirective.NoFileCompletion).toBeTruthy();
       });
 
+      it("should suggest all three help flags when nothing else has been typed yet", async () => {
+        const ctx = parseCompletionContext(["--"], testCmd);
+        const result = await gen(ctx);
+
+        const values = result.candidates.map((c) => c.value);
+        expect(values).toContain("--help");
+        expect(values).toContain("--help-all");
+        expect(values).toContain("--help-json");
+      });
+
+      it("should stop suggesting help flags once another option has been typed", async () => {
+        const ctx = parseCompletionContext(["--verbose", "--"], testCmd);
+        const result = await gen(ctx);
+
+        const values = result.candidates.map((c) => c.value);
+        expect(values).not.toContain("--help");
+        expect(values).not.toContain("--help-all");
+        expect(values).not.toContain("--help-json");
+      });
+
       it("should generate enum value candidates for option-value", async () => {
         const ctx = parseCompletionContext(["--format", ""], testCmd);
         const result = await gen(ctx);

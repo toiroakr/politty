@@ -499,27 +499,28 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
     }
   }
 
-  // Add help options if not already used
-  if (!context.usedOptions.has("help")) {
-    candidates.push({
-      value: "--help",
-      description: "Show help information",
-      type: "option",
-    });
-  }
-  if (!context.usedOptions.has("help-all")) {
-    candidates.push({
-      value: "--help-all",
-      description: "Show help with all subcommand options",
-      type: "option",
-    });
-  }
-  if (!context.usedOptions.has("help-json")) {
-    candidates.push({
-      value: "--help-json",
-      description: "Show help as JSON",
-      type: "option",
-    });
+  // Once any other option has been typed, the user is composing a real
+  // invocation rather than asking for help — drop all three help flags
+  // instead of tracking each one individually (none of them are schema
+  // options, so `usedOptions` has no entry for a help flag itself).
+  if (context.usedOptions.size === 0) {
+    candidates.push(
+      {
+        value: "--help",
+        description: "Show help information",
+        type: "option",
+      },
+      {
+        value: "--help-all",
+        description: "Show help with all subcommand options",
+        type: "option",
+      },
+      {
+        value: "--help-json",
+        description: "Show help as JSON",
+        type: "option",
+      },
+    );
   }
 
   // Option-name completion never completes filenames; opt out of the shells'
