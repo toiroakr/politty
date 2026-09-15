@@ -70,8 +70,13 @@ export interface CompletionContext {
    * Whether any option has been typed anywhere in this invocation so far,
    * including before a subcommand descent that reset `usedOptions`. Unlike
    * `usedOptions`, this is never cleared.
+   *
+   * Optional (not just because it defaults to `false`): `CompletionContext`
+   * is public API, constructible by hand for `generateCandidates` without
+   * going through `parseCompletionContext`, so a new required member would
+   * break existing callers. Treat an omitted value the same as `false`.
    */
-  hasAnyOptionBeenUsed: boolean;
+  hasAnyOptionBeenUsed?: boolean;
   /** Number of positional arguments already provided */
   providedPositionalCount: number;
   /**

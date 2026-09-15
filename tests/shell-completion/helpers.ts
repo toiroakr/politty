@@ -468,6 +468,16 @@ export function defineCommonTests(
     expect(values).toContain("--help-json");
   });
 
+  it("stops suggesting help options after a root option is typed, even past a subcommand descent", () => {
+    // The root's own `--verbose` is typed before descending into `build`.
+    // The per-frame used-options tracker is reset on descent, so this
+    // exercises the separate invocation-wide tracker instead.
+    const values = complete(["--verbose", "build", "--"]);
+    expect(values).not.toContain("--help");
+    expect(values).not.toContain("--help-all");
+    expect(values).not.toContain("--help-json");
+  });
+
   it("completes enum values", () => {
     const values = complete(["build", "--format", ""]);
     expect(values).toContain("json");
@@ -693,7 +703,10 @@ export function defineCommonTests(
 
   it("completes options after boolean flag in variadic command", () => {
     const values = complete(["tag", "--force", "--"]);
-    expect(values).toContain("--help");
+    // `--force` is already used and `tag` has no other options, so the help
+    // flags (suppressed once any option has been typed) are the only thing
+    // that would otherwise show up here.
+    expect(values).not.toContain("--help");
     expect(values).not.toContain("stable");
     expect(values).not.toContain("beta");
   });
