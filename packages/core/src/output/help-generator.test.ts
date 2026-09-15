@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { arg } from "../core/arg-registry.js";
 import { defineCommand } from "../core/command.js";
-import { generateHelp, renderOptions, renderUsageLine } from "./help-generator.js";
+import { extractFields } from "../core/schema-extractor.js";
+import { lazy } from "../lazy.js";
+import {
+  generateHelp,
+  generateHelpData,
+  renderOptions,
+  renderUsageLine,
+} from "./help-generator.js";
 
 /**
  * Task 6.1 & 6.2: Help generation system tests
@@ -172,6 +179,7 @@ describe("Help Generator", () => {
         {
           help: "Display help",
           helpAll: "Display help including all subcommand options",
+          helpJson: "Display help as JSON",
           version: "Display version",
         },
         { rootVersion: "1.0.0" },
@@ -179,6 +187,7 @@ describe("Help Generator", () => {
 
       expect(result).toContain("Display help");
       expect(result).toContain("Display help including all subcommand options");
+      expect(result).toContain("Display help as JSON");
       expect(result).toContain("Display version");
     });
 
@@ -190,6 +199,7 @@ describe("Help Generator", () => {
       const result = renderOptions(cmd, {}, { rootVersion: "1.0.0" });
 
       expect(result).toContain("Show help");
+      expect(result).toContain("Show help as JSON");
       expect(result).toContain("Show version");
     });
 
@@ -325,6 +335,16 @@ describe("Help Generator", () => {
 
       expect(result).toContain("--help");
       expect(result).toContain("-h");
+    });
+
+    it("should always include --help-json option", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("--help-json");
     });
 
     it("should show subcommand options when showSubcommandOptions is true", () => {
@@ -620,6 +640,284 @@ describe("Help Generator", () => {
       // The (default: ...) suffix is appended after the final line, not the first.
       expect(lines[secondIdx]).toContain("default");
       expect(lines[secondIdx - 1]).not.toContain("default");
+    });
+  });
+
+  describe("generateHelpData", () => {
+    it("should serialize name, description, positionals, and options", () => {
+      const cmd = defineCommand({
+        name: "greet",
+        description: "A CLI tool that displays greetings",
+        args: z.object({
+          name: arg(z.string(), { positional: true, description: "Name of the person" }),
+          loud: arg(z.boolean().default(false), { alias: "l", description: "Output in uppercase" }),
+        }),
+      });
+
+      const data = generateHelpData(cmd);
+
+      expect(data.name).toBe("greet");
+      expect(data.description).toBe("A CLI tool that displays greetings");
+      expect(data.positionals).toEqual([
+        {
+          name: "name",
+          cliName: "name",
+          positional: true,
+          required: true,
+          type: "string",
+          description: "Name of the person",
+        },
+      ]);
+      expect(data.options).toEqual([
+        {
+          name: "loud",
+          cliName: "loud",
+          positional: false,
+          required: false,
+          type: "boolean",
+          alias: ["l"],
+          description: "Output in uppercase",
+          defaultValue: false,
+        },
+      ]);
+    });
+
+    it("should keep defaultValue as its raw type, not a JSON string", () => {
+      const cmd = defineCommand({
+        name: "cli",
+        args: z.object({
+          port: arg(z.number().default(8080)),
+        }),
+      });
+
+      const data = generateHelpData(cmd);
+
+      expect(data.options[0]?.defaultValue).toBe(8080);
+    });
+
+    it("should never contain ANSI escape codes and should JSON.stringify cleanly", () => {
+      const cmd = defineCommand({
+        name: "cli",
+        description: "desc",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v", description: "Verbose" }),
+        }),
+      });
+
+      const data = generateHelpData(cmd);
+      const json = JSON.stringify(data);
+
+      // eslint-disable-next-line no-control-regex
+      expect(json).not.toMatch(/\x1B\[[0-9;]*m/);
+      expect(JSON.parse(json)).toEqual(data);
+    });
+
+    it("should include the raw help/help-all/help-json descriptions", () => {
+      const cmd = defineCommand({ name: "cli" });
+
+      const data = generateHelpData(cmd);
+
+      expect(data.builtinOptions.help).toBe("Show help");
+      expect(data.builtinOptions.helpAll).toBe("Show help with all subcommand options");
+      expect(data.builtinOptions.helpJson).toBeTruthy();
+      expect(data.builtinOptions.version).toBeUndefined();
+    });
+
+    it("should include version only when rootVersion is in context", () => {
+      const cmd = defineCommand({ name: "cli" });
+
+      const data = generateHelpData(cmd, { context: { rootVersion: "1.2.3" } });
+
+      expect(data.builtinOptions.version).toBe("Show version");
+      expect(data.version).toBe("1.2.3");
+    });
+
+    it("should split discriminated union fields into discriminator/common/variants", () => {
+      const cmd = defineCommand({
+        name: "resource",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: z.literal("create"),
+            name: arg(z.string(), { description: "Resource name" }),
+          }),
+          z.object({
+            action: z.literal("delete"),
+            id: arg(z.coerce.number(), { description: "Resource ID" }),
+          }),
+        ]),
+      });
+
+      const data = generateHelpData(cmd);
+
+      expect(data.schemaType).toBe("discriminatedUnion");
+      expect(data.discriminator).toBe("action");
+      expect(data.options.map((o) => o.name)).toEqual(["action"]);
+      expect(data.variants).toEqual([
+        {
+          discriminatorValue: "create",
+          fields: [
+            {
+              name: "name",
+              cliName: "name",
+              positional: false,
+              required: true,
+              type: "string",
+              description: "Resource name",
+            },
+          ],
+        },
+        {
+          discriminatorValue: "delete",
+          fields: [
+            {
+              name: "id",
+              cliName: "id",
+              positional: false,
+              required: true,
+              type: "number",
+              description: "Resource ID",
+            },
+          ],
+        },
+      ]);
+    });
+
+    it("should split union fields into common/unionOptions", () => {
+      const cmd = defineCommand({
+        name: "union-cmd",
+        args: z.union([
+          z
+            .object({
+              mode: z.literal("file"),
+              path: arg(z.string(), { description: "Path to file" }),
+            })
+            .describe("File Mode"),
+          z.object({
+            mode: z.literal("url"),
+            url: arg(z.string(), { description: "URL to fetch" }),
+          }),
+        ]),
+      });
+
+      const data = generateHelpData(cmd);
+
+      expect(data.schemaType).toBe("union");
+      expect(data.options.map((o) => o.name)).toEqual(["mode"]);
+      expect(data.unionOptions).toHaveLength(2);
+      expect(data.unionOptions?.[0]?.description).toBe("File Mode");
+      expect(data.unionOptions?.[0]?.fields.map((f) => f.name)).toEqual(["path"]);
+      expect(data.unionOptions?.[1]?.fields.map((f) => f.name)).toEqual(["url"]);
+    });
+
+    it("should recursively resolve the full subcommand tree regardless of depth", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        subCommands: {
+          config: defineCommand({
+            name: "config",
+            description: "Manage configuration",
+            aliases: ["c"],
+            subCommands: {
+              get: defineCommand({
+                name: "get",
+                description: "Get config value",
+                args: z.object({ key: arg(z.string(), { positional: true }) }),
+              }),
+            },
+          }),
+        },
+      });
+
+      const data = generateHelpData(cmd);
+
+      expect(data.subcommands).toHaveLength(1);
+      const config = data.subcommands?.[0];
+      expect(config?.name).toBe("config");
+      expect(config?.aliases).toEqual(["c"]);
+      expect(config?.data?.description).toBe("Manage configuration");
+      expect(config?.data?.commandPath).toEqual(["config"]);
+
+      const get = config?.data?.subcommands?.[0];
+      expect(get?.name).toBe("get");
+      expect(get?.data?.description).toBe("Get config value");
+      expect(get?.data?.commandPath).toEqual(["config", "get"]);
+      expect(get?.data?.positionals[0]?.name).toBe("key");
+    });
+
+    it("should resolve lazy() subcommands without loading them", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        subCommands: {
+          deploy: lazy(
+            defineCommand({
+              name: "deploy",
+              description: "Deploy the application",
+              args: z.object({ env: arg(z.string(), { description: "Target env" }) }),
+            }),
+            () => {
+              throw new Error("load() should not be called for --help-json");
+            },
+          ),
+        },
+      });
+
+      const data = generateHelpData(cmd);
+
+      const deploy = data.subcommands?.[0];
+      expect(deploy?.unresolved).toBeUndefined();
+      expect(deploy?.data?.description).toBe("Deploy the application");
+      expect(deploy?.data?.options.map((o) => o.name)).toEqual(["env"]);
+    });
+
+    it("should mark legacy async-factory subcommands as unresolved", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        subCommands: {
+          // Legacy form: no synchronous metadata available.
+          legacy: () => Promise.resolve(defineCommand({ name: "legacy" })),
+        },
+      });
+
+      const data = generateHelpData(cmd);
+
+      expect(data.subcommands).toEqual([{ name: "legacy", unresolved: true }]);
+    });
+
+    it("should include global options from context", () => {
+      const cmd = defineCommand({ name: "cli" });
+      const globalExtracted = extractFields(
+        z.object({ verbose: arg(z.boolean().default(false), { alias: "v" }) }),
+      );
+
+      const data = generateHelpData(cmd, { context: { globalExtracted } });
+
+      expect(data.globalOptions?.map((o) => o.name)).toEqual(["verbose"]);
+    });
+
+    it("should carry notes as raw markdown, not rendered", () => {
+      const cmd = defineCommand({
+        name: "cli",
+        notes: "See **bold** text",
+      });
+
+      const data = generateHelpData(cmd);
+
+      expect(data.notes).toBe("See **bold** text");
+    });
+
+    it("should reflect subcommand-required vs subcommand-optional in usage", () => {
+      const parentOnly = defineCommand({
+        name: "cli",
+        subCommands: { build: defineCommand({ name: "build" }) },
+      });
+      const runnableParent = defineCommand({
+        name: "cli",
+        subCommands: { build: defineCommand({ name: "build" }) },
+        run: () => {},
+      });
+
+      expect(generateHelpData(parentOnly).usage.subcommand).toBe("required");
+      expect(generateHelpData(runnableParent).usage.subcommand).toBe("optional");
     });
   });
 });

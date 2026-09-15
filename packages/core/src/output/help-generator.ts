@@ -17,6 +17,8 @@ export interface BuiltinOptionDescriptions {
   help?: string;
   /** Description for --help-all option */
   helpAll?: string;
+  /** Description for --help-json option */
+  helpJson?: string;
   /** Description for --version option */
   version?: string;
 }
@@ -27,6 +29,7 @@ export interface BuiltinOptionDescriptions {
 const defaultBuiltinDescriptions: Required<BuiltinOptionDescriptions> = {
   help: "Show help",
   helpAll: "Show help with all subcommand options",
+  helpJson: "Show help as JSON",
   version: "Show version",
 };
 
@@ -58,6 +61,157 @@ export interface HelpOptions {
   descriptions?: BuiltinOptionDescriptions | undefined;
   /** Command hierarchy context */
   context?: CommandContext | undefined;
+}
+
+/**
+ * Serializable representation of a single argument (positional or option),
+ * whitelisted from {@link ResolvedFieldMeta} down to JSON-safe fields.
+ * `schema`, `completion`, `prompt`, and `effect` are intentionally omitted:
+ * they carry library-specific schema objects and callbacks that cannot
+ * round-trip through JSON, and text help never surfaces them either.
+ */
+export interface HelpFieldData {
+  /** Field name (camelCase, as defined in the schema) */
+  name: string;
+  /** CLI option name (kebab-case) */
+  cliName: string;
+  /** Whether this is a positional argument */
+  positional: boolean;
+  /** Whether this argument is required */
+  required: boolean;
+  /** Detected type from schema */
+  type: "string" | "number" | "boolean" | "array" | "unknown";
+  /** Aliases for this option (short: 1 char, long: multi-char) */
+  alias?: string[] | undefined;
+  /** Argument description */
+  description?: string | undefined;
+  /** Placeholder shown in help */
+  placeholder?: string | undefined;
+  /** Environment variable name(s) to read value from */
+  env?: string | string[] | undefined;
+  /** Default value, if any */
+  defaultValue?: unknown;
+  /** Enum values, if detected from schema */
+  enumValues?: string[] | undefined;
+  /** Negation configuration (see {@link ResolvedFieldMeta.negation}) */
+  negation?: string | boolean | undefined;
+  /** Derived negation flag name (no `--` prefix), or undefined when hidden */
+  negationDisplay?: string | undefined;
+  /** Description shown for the negation option */
+  negationDescription?: string | undefined;
+}
+
+/**
+ * A named group of fields sharing a discriminated-union variant or a plain
+ * union option (see {@link ExtractedFields.variants} / `.unionOptions`).
+ */
+export interface HelpVariantData {
+  /** Discriminator value this variant matches (discriminated unions only) */
+  discriminatorValue?: string | undefined;
+  /** Variant/option description */
+  description?: string | undefined;
+  /** Fields unique to this variant/option (common fields are not repeated here) */
+  fields: HelpFieldData[];
+}
+
+/**
+ * Structured usage information, equivalent in content to {@link renderUsageLine}
+ * but free of ANSI styling and rendering order decisions, so JSON consumers
+ * can format it however they like.
+ */
+export interface HelpUsageData {
+  /** Command name as shown in usage (includes root name for subcommands) */
+  commandName: string;
+  /** Whether global options are defined */
+  hasGlobalOptions: boolean;
+  /** Whether this command defines any (non-positional) options */
+  hasOptions: boolean;
+  /**
+   * Whether a subcommand token is expected: "required" when the command has
+   * no `run` of its own, "optional" when it does. Undefined when the
+   * command has no (visible) subcommands.
+   */
+  subcommand?: "required" | "optional" | undefined;
+  /** Positional arguments in order */
+  positionals: Array<{ name: string; required: boolean }>;
+}
+
+/**
+ * A subcommand entry in {@link HelpData.subcommands}.
+ */
+export interface HelpSubcommandData {
+  /** Subcommand name (key under `subCommands`) */
+  name: string;
+  /** Subcommand aliases */
+  aliases?: string[] | undefined;
+  /**
+   * Set when this subcommand is a legacy async factory (`() => Promise<Command>`)
+   * registered without {@link lazy}, so no synchronous metadata is available
+   * and `data` cannot be produced. `lazy()` subcommands are always resolved
+   * (their `meta` is synchronous) and never hit this case.
+   */
+  unresolved?: true | undefined;
+  /** Full structured help for this subcommand, recursively. Absent when `unresolved` is true. */
+  data?: HelpData | undefined;
+}
+
+/**
+ * Structured, JSON-serializable representation of a command's help.
+ * Produced by {@link generateHelpData}; the machine-readable counterpart of
+ * {@link generateHelp}'s formatted text.
+ */
+export interface HelpData {
+  /** Command name (command.name) */
+  name: string;
+  /** Full path from the root command (empty at the root) */
+  commandPath: string[];
+  /**
+   * Root command name. Always set when produced through `runMain`/`runCommand`
+   * (equal to `name` itself at the root); `undefined` only when
+   * `generateHelpData` is called directly without a `context`.
+   */
+  rootName?: string | undefined;
+  /** Root command version, when provided to runMain/runCommand */
+  version?: string | undefined;
+  /** Canonical subcommand name, set only when this command was reached via an alias */
+  aliasFor?: string | undefined;
+  /** Command description */
+  description?: string | undefined;
+  /** Command aliases (as a subcommand) */
+  aliases?: string[] | undefined;
+  /** Structured usage line */
+  usage: HelpUsageData;
+  /** Descriptions of the built-in --help/--help-all/--help-json/--version options */
+  builtinOptions: {
+    help: string;
+    helpAll: string;
+    helpJson: string;
+    version?: string | undefined;
+  };
+  /** Args schema shape: a plain object, or a union/discriminated-union of variants */
+  schemaType?: "object" | "discriminatedUnion" | "union" | "xor" | "intersection" | undefined;
+  /** Positional arguments */
+  positionals: HelpFieldData[];
+  /**
+   * Non-positional options. For `discriminatedUnion`/`union`/`xor` schemas,
+   * this holds only the fields common to every variant/option; the rest are
+   * under `variants`/`unionOptions`.
+   */
+  options: HelpFieldData[];
+  /** Discriminator field name (discriminatedUnion schemas only) */
+  discriminator?: string | undefined;
+  /** Per-variant fields (discriminatedUnion schemas only) */
+  variants?: HelpVariantData[] | undefined;
+  /** Per-option fields (union/xor schemas only) */
+  unionOptions?: HelpVariantData[] | undefined;
+  /** Global options shared across all commands, when a global args schema is defined */
+  globalOptions?: HelpFieldData[] | undefined;
+  /** Subcommands, recursively resolved */
+  subcommands?: HelpSubcommandData[] | undefined;
+  /** Example usages */
+  examples?: Example[] | undefined;
+  /** Additional notes (raw Markdown, unrendered) */
+  notes?: string | undefined;
 }
 
 /**
@@ -162,6 +316,7 @@ export function renderOptions(
   const desc: Required<BuiltinOptionDescriptions> = {
     help: descriptions.help ?? defaultBuiltinDescriptions.help,
     helpAll: descriptions.helpAll ?? defaultBuiltinDescriptions.helpAll,
+    helpJson: descriptions.helpJson ?? defaultBuiltinDescriptions.helpJson,
     version: descriptions.version ?? defaultBuiltinDescriptions.version,
   };
 
@@ -194,6 +349,8 @@ export function renderOptions(
       formatOption(`${styles.option("-H")}, ${styles.option("--help-all")}`, desc.helpAll),
     );
   }
+
+  lines.push(formatOption(styles.option("--help-json"), desc.helpJson));
 
   // Show --version only if version is provided in context
   if (context?.rootVersion) {
@@ -796,6 +953,225 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   }
 
   return `\n${sections.join("\n\n")}\n`;
+}
+
+/**
+ * Options for {@link generateHelpData}
+ */
+export interface HelpDataOptions {
+  /** Custom descriptions for the --help/--help-all built-in options */
+  descriptions?: BuiltinOptionDescriptions | undefined;
+  /** Command hierarchy context */
+  context?: CommandContext | undefined;
+}
+
+/**
+ * Convert a {@link ResolvedFieldMeta} to its JSON-safe {@link HelpFieldData}
+ * counterpart, dropping the schema/completion/prompt/effect internals.
+ */
+function toHelpFieldData(field: ResolvedFieldMeta): HelpFieldData {
+  const data: HelpFieldData = {
+    name: field.name,
+    cliName: field.cliName,
+    positional: field.positional,
+    required: field.required,
+    type: field.type,
+  };
+  if (field.alias) data.alias = field.alias;
+  if (field.description !== undefined) data.description = field.description;
+  if (field.placeholder !== undefined) data.placeholder = field.placeholder;
+  if (field.env !== undefined) data.env = field.env;
+  if (field.defaultValue !== undefined) data.defaultValue = field.defaultValue;
+  if (field.enumValues !== undefined) data.enumValues = field.enumValues;
+  if (field.negation !== undefined) data.negation = field.negation;
+  if (field.negationDisplay !== undefined) data.negationDisplay = field.negationDisplay;
+  if (field.negationDescription !== undefined) data.negationDescription = field.negationDescription;
+  return data;
+}
+
+/**
+ * Field names shared by every group (discriminated-union variants, or union
+ * options). Mirrors the common-field detection in {@link renderDiscriminatedUnionOptions}
+ * / {@link renderUnionOptions}; `exclude` drops the discriminator field, which
+ * is reported separately regardless of whether every variant declares it.
+ */
+function computeCommonFieldNames(
+  groups: Array<{ fields: ResolvedFieldMeta[] }>,
+  exclude?: string,
+): Set<string> {
+  const allNames = new Set<string>();
+  for (const group of groups) {
+    for (const field of group.fields) {
+      if (field.name !== exclude) allNames.add(field.name);
+    }
+  }
+  const common = new Set<string>();
+  for (const name of allNames) {
+    if (groups.every((group) => group.fields.some((f) => f.name === name))) {
+      common.add(name);
+    }
+  }
+  return common;
+}
+
+/**
+ * Build the structured usage info for {@link HelpData.usage}. Content-equivalent
+ * to {@link renderUsageLine}, without ANSI styling or a fixed rendering order.
+ */
+function buildUsageData(command: AnyCommand, context?: CommandContext): HelpUsageData {
+  const commandName = buildUsageCommandName(command, context);
+  const hasGlobalOptions = !!context?.globalExtracted?.fields.length;
+
+  const hasSubcommands = !!(
+    command.subCommands && getVisibleSubcommandEntries(command.subCommands).length > 0
+  );
+  const subcommand: HelpUsageData["subcommand"] = hasSubcommands
+    ? command.run
+      ? "optional"
+      : "required"
+    : undefined;
+
+  const extracted = getExtractedFields(command);
+  const hasOptions = extracted ? extracted.fields.some((f) => !f.positional) : false;
+  const positionals = extracted
+    ? extracted.fields
+        .filter((f) => f.positional)
+        .map((f) => ({ name: f.name, required: f.required }))
+    : [];
+
+  return { commandName, hasGlobalOptions, hasOptions, subcommand, positionals };
+}
+
+/**
+ * Generate a structured, JSON-serializable representation of a command's help.
+ *
+ * The machine-readable counterpart of {@link generateHelp}: same underlying
+ * field metadata, but as plain data (no ANSI styling, no fixed layout) and
+ * always including the full recursive subcommand tree (there is no
+ * `--help`/`--help-all` depth distinction here).
+ *
+ * @param command - The command to generate help data for
+ * @param options - Help data generation options
+ * @returns Structured help data
+ */
+export function generateHelpData(command: AnyCommand, options: HelpDataOptions = {}): HelpData {
+  const context = options.context;
+  const currentPath = context?.commandPath ?? [];
+
+  const builtinOptions: HelpData["builtinOptions"] = {
+    help: options.descriptions?.help ?? defaultBuiltinDescriptions.help,
+    helpAll: options.descriptions?.helpAll ?? defaultBuiltinDescriptions.helpAll,
+    helpJson: options.descriptions?.helpJson ?? defaultBuiltinDescriptions.helpJson,
+    ...(context?.rootVersion
+      ? { version: options.descriptions?.version ?? defaultBuiltinDescriptions.version }
+      : {}),
+  };
+
+  const extracted = getExtractedFields(command);
+  let schemaType: HelpData["schemaType"];
+  let positionals: HelpFieldData[] = [];
+  let optionFields: HelpFieldData[] = [];
+  let discriminator: string | undefined;
+  let variants: HelpVariantData[] | undefined;
+  let unionOptions: HelpVariantData[] | undefined;
+
+  if (extracted) {
+    schemaType = extracted.schemaType;
+    positionals = extracted.fields.filter((f) => f.positional).map(toHelpFieldData);
+
+    if (
+      extracted.schemaType === "discriminatedUnion" &&
+      extracted.discriminator &&
+      extracted.variants
+    ) {
+      const disc = extracted.discriminator;
+      discriminator = disc;
+      const groups = extracted.variants;
+      const commonNames = computeCommonFieldNames(groups, disc);
+      const discriminatorField = extracted.fields.find((f) => f.name === disc && !f.positional);
+      const commonFields = extracted.fields.filter((f) => !f.positional && commonNames.has(f.name));
+      optionFields = [
+        ...(discriminatorField ? [toHelpFieldData(discriminatorField)] : []),
+        ...commonFields.map(toHelpFieldData),
+      ];
+      variants = groups.map((variant) => ({
+        discriminatorValue: variant.discriminatorValue,
+        description: variant.description,
+        fields: variant.fields
+          .filter((f) => f.name !== disc && !commonNames.has(f.name) && !f.positional)
+          .map(toHelpFieldData),
+      }));
+    } else if (
+      (extracted.schemaType === "union" || extracted.schemaType === "xor") &&
+      extracted.unionOptions
+    ) {
+      const groups = extracted.unionOptions;
+      const commonNames = computeCommonFieldNames(groups);
+      const commonFields = extracted.fields.filter((f) => !f.positional && commonNames.has(f.name));
+      optionFields = commonFields.map(toHelpFieldData);
+      unionOptions = groups.map((option) => ({
+        description: option.description,
+        fields: option.fields
+          .filter((f) => !commonNames.has(f.name) && !f.positional)
+          .map(toHelpFieldData),
+      }));
+    } else {
+      optionFields = extracted.fields.filter((f) => !f.positional).map(toHelpFieldData);
+    }
+  }
+
+  const globalOptions = context?.globalExtracted?.fields.length
+    ? context.globalExtracted.fields.filter((f) => !f.positional).map(toHelpFieldData)
+    : undefined;
+
+  let subcommands: HelpSubcommandData[] | undefined;
+  if (command.subCommands) {
+    const visibleSubCommands = getVisibleSubcommandEntries(command.subCommands);
+    if (visibleSubCommands.length > 0) {
+      subcommands = visibleSubCommands.map(([name, subCmd]) => {
+        const resolved = resolveSubCommandMeta(subCmd);
+        if (!resolved) {
+          return { name, unresolved: true };
+        }
+        const subContext: CommandContext = {
+          commandPath: [...currentPath, name],
+          rootName: context?.rootName,
+          rootVersion: context?.rootVersion,
+          globalExtracted: context?.globalExtracted,
+        };
+        return {
+          name,
+          aliases: resolved.aliases,
+          data: generateHelpData(resolved, {
+            descriptions: options.descriptions,
+            context: subContext,
+          }),
+        };
+      });
+    }
+  }
+
+  return {
+    name: command.name ?? "command",
+    commandPath: currentPath,
+    rootName: context?.rootName,
+    version: context?.rootVersion,
+    aliasFor: context?.aliasFor,
+    description: command.description,
+    aliases: command.aliases,
+    usage: buildUsageData(command, context),
+    builtinOptions,
+    schemaType,
+    positionals,
+    options: optionFields,
+    discriminator,
+    variants,
+    unionOptions,
+    globalOptions,
+    subcommands,
+    examples: command.examples,
+    notes: command.notes,
+  };
 }
 
 /**

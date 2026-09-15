@@ -82,9 +82,16 @@ export { isLazyCommand, lazy, type LazyCommand } from "./lazy.js";
 // Utility exports
 export {
   generateHelp,
+  generateHelpData,
   type BuiltinOptionDescriptions,
   type CommandContext,
+  type HelpData,
+  type HelpDataOptions,
+  type HelpFieldData,
   type HelpOptions,
+  type HelpSubcommandData,
+  type HelpUsageData,
+  type HelpVariantData,
 } from "./output/help-generator.js";
 export { isColorEnabled, logger, setColorEnabled, styles, symbols } from "./output/logger.js";
 export { renderInline, renderMarkdown } from "./output/markdown-renderer.js";

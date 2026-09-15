@@ -33,6 +33,8 @@ export interface ParseResult {
   helpRequested: boolean;
   /** Detailed help flag was requested (--help-all) */
   helpAllRequested: boolean;
+  /** Structured (JSON) help flag was requested (--help-json) */
+  helpJsonRequested: boolean;
   /** Version flag was requested (--version) */
   versionRequested: boolean;
   /** Detected subcommand name */
@@ -101,6 +103,7 @@ export function parseArgs(
         return {
           helpRequested: false,
           helpAllRequested: false,
+          helpJsonRequested: false,
           versionRequested: false,
           subCommand: argv[scanResult.subCommandIndex],
           remainingArgs: scanResult.tokensAfterSubcommand,
@@ -119,6 +122,7 @@ export function parseArgs(
         return {
           helpRequested: false,
           helpAllRequested: false,
+          helpJsonRequested: false,
           versionRequested: false,
           subCommand: firstArg,
           remainingArgs: argv.slice(1),
@@ -187,15 +191,19 @@ export function parseArgs(
     ) ?? false;
   const helpAllRequested =
     flagScanArgv.includes("--help-all") || (!hasUserDefinedH && flagScanArgv.includes("-H"));
+  // --help-json has no short alias, so it needs no overrideBuiltinAlias check.
+  const helpJsonRequested = flagScanArgv.includes("--help-json");
   const helpRequested =
     !helpAllRequested &&
+    !helpJsonRequested &&
     (flagScanArgv.includes("--help") || (!hasUserDefinedh && flagScanArgv.includes("-h")));
   const versionRequested = flagScanArgv.includes("--version");
 
-  if (helpRequested || helpAllRequested || versionRequested) {
+  if (helpRequested || helpAllRequested || helpJsonRequested || versionRequested) {
     return {
       helpRequested,
       helpAllRequested,
+      helpJsonRequested,
       versionRequested,
       subCommand: undefined,
       remainingArgs: [],
@@ -217,6 +225,7 @@ export function parseArgs(
     return {
       helpRequested: false,
       helpAllRequested: false,
+      helpJsonRequested: false,
       versionRequested: false,
       subCommand: undefined,
       remainingArgs: [],
@@ -285,6 +294,7 @@ export function parseArgs(
   return {
     helpRequested: false,
     helpAllRequested: false,
+    helpJsonRequested: false,
     versionRequested: false,
     subCommand: undefined,
     remainingArgs: [],

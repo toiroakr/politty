@@ -223,6 +223,34 @@ Formatted help text
 
 ---
 
+### `generateHelpData`
+
+Generates a structured, JSON-serializable representation of a command's help — the machine-readable counterpart of `generateHelp`. Contains the same field metadata (name, description, positionals, options, discriminated-union/union variants, global options, examples, notes) as plain data with no ANSI styling, plus the full recursive subcommand tree (there is no `--help`/`--help-all` depth distinction for structured help). This is what backs the `--help-json` flag that `runMain`/`runCommand` handle automatically; call it directly only when building your own help/docs tooling.
+
+```typescript
+function generateHelpData(command: Command, options?: HelpDataOptions): HelpData;
+```
+
+#### Parameters
+
+| Name      | Type              | Description                       |
+| --------- | ----------------- | --------------------------------- |
+| `command` | `Command`         | Command to generate help data for |
+| `options` | `HelpDataOptions` | `{ descriptions?, context? }`     |
+
+#### Return Value
+
+A `HelpData` object. `lazy()` subcommands are resolved from their synchronous `meta` without loading them; a legacy `() => Promise<Command>` subcommand (registered without `lazy()`) appears as `{ name, unresolved: true }` since no synchronous metadata exists for it.
+
+#### Example
+
+```bash
+$ my-cli --help-json
+{"name":"my-cli","commandPath":[],"description":"...","usage":{...},"options":[...],"subcommands":[...]}
+```
+
+---
+
 ### `extractFields`
 
 Extracts field information from a schema.
@@ -1126,6 +1154,8 @@ interface BuiltinOptionDescriptions {
   help?: string;
   /** Description for --help-all option */
   helpAll?: string;
+  /** Description for --help-json option */
+  helpJson?: string;
   /** Description for --version option */
   version?: string;
 }

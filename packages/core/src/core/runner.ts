@@ -7,7 +7,7 @@ import {
   resolveLazyCommand,
   resolveSubcommandWithAlias,
 } from "../executor/subcommand-router.js";
-import { generateHelp, type CommandContext } from "../output/help-generator.js";
+import { generateHelp, generateHelpData, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
 import { coerceEnvValue } from "../parser/coerce-boolean.js";
 import { getLongOptionName } from "../parser/long-option-resolver.js";
@@ -556,8 +556,12 @@ async function runCommandInternal<TResult = unknown>(
       }
     }
 
-    // Handle --help or --help-all
-    if (parseResult.helpRequested || parseResult.helpAllRequested) {
+    // Handle --help, --help-all, or --help-json
+    if (
+      parseResult.helpRequested ||
+      parseResult.helpAllRequested ||
+      parseResult.helpJsonRequested
+    ) {
       // Check if there's an unknown subcommand specified
       let hasUnknownSubcommand = false;
       const subCmdNames = listSubCommands(command);
@@ -570,12 +574,17 @@ async function runCommandInternal<TResult = unknown>(
         }
       }
 
-      const help = generateHelp(command, {
-        showSubcommands: options.showSubcommands ?? true,
-        showSubcommandOptions: parseResult.helpAllRequested || options.showSubcommandOptions,
-        context,
-      });
-      logger.log(help);
+      if (parseResult.helpJsonRequested) {
+        const helpData = generateHelpData(command, { context });
+        logger.log(JSON.stringify(helpData));
+      } else {
+        const help = generateHelp(command, {
+          showSubcommands: options.showSubcommands ?? true,
+          showSubcommandOptions: parseResult.helpAllRequested || options.showSubcommandOptions,
+          context,
+        });
+        logger.log(help);
+      }
       collector?.stop();
       if (hasUnknownSubcommand) {
         const unknownCmd = findFirstPositional(argv, context.globalExtracted) ?? "";

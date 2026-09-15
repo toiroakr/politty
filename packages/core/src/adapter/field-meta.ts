@@ -5,7 +5,12 @@ import type { ArgsSchema } from "../types.js";
  * Long flag names reserved for built-in handling (parseArgs / scanForSubcommand
  * intercept these before option parsing), so custom negation names must avoid them.
  */
-const RESERVED_NEGATION_NAMES: ReadonlySet<string> = new Set(["help", "help-all", "version"]);
+const RESERVED_NEGATION_NAMES: ReadonlySet<string> = new Set([
+  "help",
+  "help-all",
+  "help-json",
+  "version",
+]);
 
 /**
  * Resolved metadata for an argument field

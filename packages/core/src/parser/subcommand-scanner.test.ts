@@ -113,6 +113,16 @@ describe("scanForSubcommand", () => {
     expect(result.subCommandIndex).toBe(-1);
   });
 
+  it("stops on --help-json", () => {
+    const result = scanForSubcommand(
+      ["--verbose", "--help-json"],
+      subCommandNames,
+      globalExtracted,
+    );
+
+    expect(result.subCommandIndex).toBe(-1);
+  });
+
   it("stops on --version", () => {
     const result = scanForSubcommand(["--version"], subCommandNames, globalExtracted);
 
@@ -270,6 +280,10 @@ describe("findFirstPositionalIndex", () => {
 
   it("stops at builtin --version", () => {
     expect(findFirstPositionalIndex(["--version", "plugin"], globalExtracted)).toBe(-1);
+  });
+
+  it("stops at builtin --help-json", () => {
+    expect(findFirstPositionalIndex(["--help-json", "plugin"], globalExtracted)).toBe(-1);
   });
 
   it("stops at an unknown long flag", () => {
