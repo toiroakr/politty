@@ -885,27 +885,15 @@ interface RegularArgMeta extends BaseArgMeta {
 
 ### `BuiltinOverrideArgMeta`
 
-Metadata for overriding a built-in name: the short aliases (`-h`, `-H`) or a
-`cliName`/long alias equal to a reserved long name (`--help`, `--help-all`,
-`--version`). Without `overrideBuiltinAlias: true`, any of these collisions
-is rejected at command-definition time — see
-[Reserved names](#reserved-built-in-names) below. `alias` is optional here
-because the collision being overridden may be the field's own `cliName`
-(no `alias` needed at all).
+Metadata for overriding built-in aliases (-h, -H).
 
 ```typescript
 interface BuiltinOverrideArgMeta extends BaseArgMeta {
-  /** Built-in name to override, optionally combined with extra aliases */
-  alias?:
-    | "h"
-    | "H"
-    | "help"
-    | "help-all"
-    | "version"
-    | Array<"h" | "H" | "help" | "help-all" | "version" | string>;
+  /** Built-in alias to override ('h' or 'H'); may be combined with extra aliases */
+  alias: "h" | "H" | Array<"h" | "H" | string>;
   /** Hidden aliases (accepted but not surfaced in help/docs/completion) */
   hiddenAlias?: string | string[];
-  /** Must be true to override the built-in name */
+  /** Must be true to override built-in alias */
   overrideBuiltinAlias: true;
 }
 ```
@@ -917,33 +905,17 @@ of its long aliases (`alias`/`hiddenAlias` entries longer than one
 character) cannot be `help`, `help-all`, or `version` — those long flags are
 always intercepted by `parseArgs` before schema parsing, regardless of which
 field produced the name, so an unguarded collision would make that field
-permanently unreachable. The short aliases `-h`/`-H` are reserved the same
-way. `defineCommand` throws a `ReservedAliasError` at definition time for any
-of these collisions unless the field sets `overrideBuiltinAlias: true`, which
-also makes `parseArgs` stop treating that name as the built-in and hand the
-value to the field instead:
-
-```typescript
-import { z } from "zod";
-import { arg, defineCommand } from "politty";
-
-const command = defineCommand({
-  name: "my-cli",
-  args: z.object({
-    // Without `overrideBuiltinAlias: true`, this throws ReservedAliasError
-    // because "version" collides with the built-in --version.
-    appVersion: arg(z.string(), {
-      alias: "version",
-      overrideBuiltinAlias: true,
-    }),
-    // A cliName-only collision needs no `alias` at all: this field is
-    // named `helpAll`, which kebab-cases to the reserved `--help-all`.
-    helpAll: arg(z.string(), {
-      overrideBuiltinAlias: true,
-    }),
-  }),
-});
-```
+permanently unreachable. `parseArgs`/`runCommand` (and the explicit
+`validateCommand()`) throw a `ReservedAliasError` for any such collision.
+`defineCommand` itself only builds the command object and does not
+validate — the error surfaces the first time the command is parsed or
+explicitly validated. Unlike the short aliases `-h`/`-H` (see
+`BuiltinOverrideArgMeta` above), this collision **has no override**: since
+`--help`/`--help-all`/`--version` are always resolved as the built-in before
+any field is consulted, `overrideBuiltinAlias: true` would not actually make
+the field reachable — it would just suppress the error while leaving the
+field permanently shadowed. Rename the field or its alias instead (e.g.
+`appVersion`/`targetVersion` instead of `version`).
 
 ---
 
@@ -1256,7 +1228,7 @@ interface ResolvedFieldMeta {
   type: "string" | "number" | "boolean" | "array" | "unknown";
   /** Original Zod schema */
   schema: z.ZodType;
-  /** True if overriding a built-in name (-h, -H, or a long name: help, help-all, version) */
+  /** True if overriding built-in alias (-h, -H) */
   overrideBuiltinAlias?: true;
 }
 ```

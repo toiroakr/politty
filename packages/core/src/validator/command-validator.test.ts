@@ -92,7 +92,6 @@ describe("validateCommand", () => {
       const cmd = defineCommand({
         name: "test",
         args: z.object({
-          // @ts-expect-error - testing error case for missing overrideBuiltinAlias
           appVersion: arg(z.string(), { alias: "version", description: "Not --version" }),
         }),
       });
@@ -104,7 +103,11 @@ describe("validateCommand", () => {
       }
     });
 
-    it("should allow a reserved-long-flag field name via overrideBuiltinAlias", async () => {
+    it("should still detect a reserved-long-flag field name collision even with overrideBuiltinAlias (no escape hatch for long names)", async () => {
+      // `overrideBuiltinAlias: true` alone (regardless of `alias`) skips the
+      // *type-level* reserved-alias check (see `ValidateArgMeta`, which only
+      // ever fires that check for the -h/-H short-alias escape hatch), so
+      // this is a runtime-only rejection with no `@ts-expect-error` above it.
       const cmd = defineCommand({
         name: "test",
         args: z.object({
@@ -116,10 +119,13 @@ describe("validateCommand", () => {
       });
 
       const result = await validateCommand(cmd);
-      expect(result.valid).toBe(true);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.some((e) => e.type === "reserved_alias")).toBe(true);
+      }
     });
 
-    it("should allow a reserved-long-flag alias via overrideBuiltinAlias", async () => {
+    it("should still detect a reserved-long-flag alias collision even with overrideBuiltinAlias (no escape hatch for long names)", async () => {
       const cmd = defineCommand({
         name: "test",
         args: z.object({
@@ -132,7 +138,10 @@ describe("validateCommand", () => {
       });
 
       const result = await validateCommand(cmd);
-      expect(result.valid).toBe(true);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.some((e) => e.type === "reserved_alias")).toBe(true);
+      }
     });
 
     it("should detect field names starting with $", async () => {

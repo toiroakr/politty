@@ -55,11 +55,7 @@ export interface ResolvedFieldMeta {
    * (zod, valibot, or an internal descriptor); core never calls into it.
    */
   schema: unknown;
-  /**
-   * True if this overrides a built-in name: the short aliases (-h, -H) or a
-   * `cliName`/long alias equal to a reserved long name (--help, --help-all,
-   * --version).
-   */
+  /** True if this overrides built-in aliases (-h, -H) */
   overrideBuiltinAlias?: true;
   /** Enum values if detected from schema (z.enum) */
   enumValues?: string[] | undefined;

@@ -192,35 +192,7 @@ describe("ArgParser", () => {
       expect(result.rawArgs.host).toBe("localhost");
     });
 
-    it("should allow a field aliased to the long name --version and override --version", () => {
-      const cmd = defineCommand({
-        name: "cli",
-        args: z.object({
-          appVersion: arg(z.string(), { alias: "version", overrideBuiltinAlias: true }),
-        }),
-      });
-
-      const result = parseArgs(["--version", "1.2.3"], cmd);
-
-      expect(result.versionRequested).toBe(false);
-      expect(result.rawArgs.appVersion).toBe("1.2.3");
-    });
-
-    it("should allow a field named help-all (via cliName) and override --help-all", () => {
-      const cmd = defineCommand({
-        name: "cli",
-        args: z.object({
-          helpAll: arg(z.string(), { overrideBuiltinAlias: true }),
-        }),
-      });
-
-      const result = parseArgs(["--help-all", "everything"], cmd);
-
-      expect(result.helpAllRequested).toBe(false);
-      expect(result.rawArgs.helpAll).toBe("everything");
-    });
-
-    it("should throw error when a field's cliName collides with a reserved long name without override", () => {
+    it("should throw error when a field's cliName collides with a reserved long name", () => {
       // No `alias` is set, so the type-level check (which only inspects
       // alias/hiddenAlias, not cliName) can't catch this; it's a
       // runtime-only rejection.
@@ -228,6 +200,23 @@ describe("ArgParser", () => {
         name: "cli",
         args: z.object({
           helpAll: arg(z.string()),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Field "helpAll" collides with the built-in --help-all option/,
+      );
+    });
+
+    it("should throw error for a reserved long-name collision even with overrideBuiltinAlias: true (no escape hatch for long names)", () => {
+      const cmd = defineCommand({
+        name: "cli",
+        args: z.object({
+          // @ts-expect-error - BuiltinOverrideArgMeta still requires `alias`
+          // to be "h" | "H"; this has no bearing on the (runtime-only)
+          // long-name collision check below, which doesn't consult `alias`'s
+          // type at all.
+          helpAll: arg(z.string(), { overrideBuiltinAlias: true }),
         }),
       });
 
