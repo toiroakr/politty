@@ -919,14 +919,18 @@ schema, the collision is instead caught by:
 - the explicit `validateCommand()` — never throws; collects it (with every
   other schema error) into the returned `{ valid: false, errors }`.
 
-**This does not apply to a `globalArgs` schema.** `runCommand()`/`runMain()`
-validate `globalArgs` up front, before the try/catch that produces
-`{ success: false, error }` (or, for `runMain()`, before the
-report-and-`process.exit()` path) is even entered, so a reserved-name
-collision there becomes a rejected promise from `runCommand()`/`runMain()`
-itself instead — both are `async`, so the throw surfaces as a promise
-rejection, not a synchronous throw at the call site — rather than a returned
-failure result.
+**This does not apply to a `globalArgs` schema, for a foreground
+invocation.** `runCommand()`/`runMain()` validate `globalArgs` up front,
+before the try/catch that produces `{ success: false, error }` (or, for
+`runMain()`, before the report-and-`process.exit()` path) is even entered,
+so a reserved-name collision there becomes a rejected promise from
+`runCommand()`/`runMain()` itself instead — both are `async`, so the throw
+surfaces as a promise rejection, not a synchronous throw at the call site —
+rather than a returned failure result. `runMain()` skips this validation
+entirely, however, when it detects an internal (`__*`) subcommand
+invocation (e.g. shell completion's dispatcher): it deliberately runs
+without the caller's `globalArgs`/`setup`/`cleanup`/`prompt` on that path,
+so a `globalArgs` collision is not rejected there.
 
 Unlike the short aliases `-h`/`-H` (see `BuiltinOverrideArgMeta` above), this
 collision **has no override**: since `--help`/`--help-all`/`--version` are

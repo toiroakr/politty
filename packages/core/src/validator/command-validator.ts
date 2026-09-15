@@ -509,7 +509,9 @@ export function validatePositionalConfig(extracted: ExtractedFields): void {
  *
  * @param extracted - Extracted fields from schema
  * @param _hasSubCommands - Whether the command has subcommands (reserved for future use)
- * @throws {ReservedAliasError} If a reserved name is used without override flag
+ * @throws {ReservedAliasError} If `h`/`H` is used without `overrideBuiltinAlias: true`,
+ *   or if a field's `cliName`/long alias collides with `help`/`help-all`/`version`
+ *   (this second case is never suppressed by `overrideBuiltinAlias`)
  */
 export function validateReservedAliases(
   extracted: ExtractedFields,
