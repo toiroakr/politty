@@ -373,6 +373,10 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
     }
   }
   lines.push(`        __${fn}_not_used "--help"; and echo "--help\tShow help"`);
+  lines.push(
+    `        __${fn}_not_used "--help-all"; and echo "--help-all\tShow help with all subcommand options"`,
+  );
+  lines.push(`        __${fn}_not_used "--help-json"; and echo "--help-json\tShow help as JSON"`);
   return lines;
 }
 

@@ -782,6 +782,28 @@ describe("Help Generator", () => {
       ]);
     });
 
+    it("should describe the discriminator field the same way the text renderer does", () => {
+      const withSchemaDescription = defineCommand({
+        name: "resource",
+        args: z
+          .discriminatedUnion("action", [
+            z.object({ action: z.literal("create") }),
+            z.object({ action: z.literal("delete") }),
+          ])
+          .describe("Action to run"),
+      });
+      const withNoDescription = defineCommand({
+        name: "resource",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("create") }),
+          z.object({ action: z.literal("delete") }),
+        ]),
+      });
+
+      expect(generateHelpData(withSchemaDescription).options[0]?.description).toBe("Action to run");
+      expect(generateHelpData(withNoDescription).options[0]?.description).toBe("Action to perform");
+    });
+
     it("should attribute a variant-specific positional to its own variant", () => {
       const cmd = defineCommand({
         name: "resource",

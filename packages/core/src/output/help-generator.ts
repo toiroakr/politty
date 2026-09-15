@@ -1096,7 +1096,19 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
       const discriminatorField = extracted.fields.find((f) => f.name === disc && !f.positional);
       const commonFields = extracted.fields.filter((f) => !f.positional && commonNames.has(f.name));
       optionFields = [
-        ...(discriminatorField ? [toHelpFieldData(discriminatorField)] : []),
+        // Same description fallback as renderDiscriminatedUnionOptions's text
+        // rendering, so the JSON output stays content-equivalent: the
+        // discriminated union's own description (if any) wins, then the
+        // discriminator field's own description, then a generic default.
+        ...(discriminatorField
+          ? [
+              {
+                ...toHelpFieldData(discriminatorField),
+                description:
+                  extracted.description ?? discriminatorField.description ?? "Action to perform",
+              },
+            ]
+          : []),
         ...commonFields.map(toHelpFieldData),
       ];
       variants = groups.map((variant) => ({

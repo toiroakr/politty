@@ -499,11 +499,25 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
     }
   }
 
-  // Add help option if not already used
+  // Add help options if not already used
   if (!context.usedOptions.has("help")) {
     candidates.push({
       value: "--help",
       description: "Show help information",
+      type: "option",
+    });
+  }
+  if (!context.usedOptions.has("help-all")) {
+    candidates.push({
+      value: "--help-all",
+      description: "Show help with all subcommand options",
+      type: "option",
+    });
+  }
+  if (!context.usedOptions.has("help-json")) {
+    candidates.push({
+      value: "--help-json",
+      description: "Show help as JSON",
       type: "option",
     });
   }

@@ -461,6 +461,13 @@ export function defineCommonTests(
     expect(values).toContain("--minify");
   });
 
+  it("completes the built-in help options", () => {
+    const values = complete(["build", "--"]);
+    expect(values).toContain("--help");
+    expect(values).toContain("--help-all");
+    expect(values).toContain("--help-json");
+  });
+
   it("completes enum values", () => {
     const values = complete(["build", "--format", ""]);
     expect(values).toContain("json");

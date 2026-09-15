@@ -400,6 +400,10 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
     }
   }
   lines.push(`        __${fn}_not_used "--help" && _opts+=("--help:Show help")`);
+  lines.push(
+    `        __${fn}_not_used "--help-all" && _opts+=("--help-all:Show help with all subcommand options")`,
+  );
+  lines.push(`        __${fn}_not_used "--help-json" && _opts+=("--help-json:Show help as JSON")`);
   return lines;
 }
 

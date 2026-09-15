@@ -407,6 +407,8 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
     }
   }
   lines.push(`        __${fn}_not_used "--help" && _avail+=(--help)`);
+  lines.push(`        __${fn}_not_used "--help-all" && _avail+=(--help-all)`);
+  lines.push(`        __${fn}_not_used "--help-json" && _avail+=(--help-json)`);
   return lines;
 }
 
