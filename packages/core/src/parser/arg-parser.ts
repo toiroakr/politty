@@ -169,28 +169,34 @@ export function parseArgs(
   }
 
   // Check for help/version flags only when no subcommand is detected.
-  // -h/-H are treated as --help/--help-all unless explicitly overridden by user.
-  // Note: only the current command's overrideBuiltinAlias is checked here.
-  // Global options with alias 'h'/'H' do not participate in this override check.
+  // -h/-H and the long names help/help-all/version are all treated as their
+  // matching built-in unless the current command explicitly overrides them
+  // via overrideBuiltinAlias (see validateReservedAliases). Only the current
+  // command's overrideBuiltinAlias is checked here; global options do not
+  // participate in this override check (same pre-existing carve-out as -h/-H).
   // Tokens after `--` are pure positionals, so help/version flags appearing
   // there (e.g. `mycli __complete --shell bash -- foo --help`) must not
   // trigger the help/version branch.
   const ddIdx = argv.indexOf("--");
   const flagScanArgv = ddIdx >= 0 ? argv.slice(0, ddIdx) : argv;
-  const hasUserDefinedH =
+  const overridesBuiltinName = (name: string): boolean =>
     extracted?.fields.some(
-      (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("H"),
+      (f) =>
+        f.overrideBuiltinAlias === true && (f.cliName === name || getAllAliases(f).includes(name)),
     ) ?? false;
-  const hasUserDefinedh =
-    extracted?.fields.some(
-      (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("h"),
-    ) ?? false;
+  const hasUserDefinedH = overridesBuiltinName("H");
+  const hasUserDefinedh = overridesBuiltinName("h");
+  const hasUserDefinedHelpAll = overridesBuiltinName("help-all");
+  const hasUserDefinedHelp = overridesBuiltinName("help");
+  const hasUserDefinedVersion = overridesBuiltinName("version");
   const helpAllRequested =
-    flagScanArgv.includes("--help-all") || (!hasUserDefinedH && flagScanArgv.includes("-H"));
+    (!hasUserDefinedHelpAll && flagScanArgv.includes("--help-all")) ||
+    (!hasUserDefinedH && flagScanArgv.includes("-H"));
   const helpRequested =
     !helpAllRequested &&
-    (flagScanArgv.includes("--help") || (!hasUserDefinedh && flagScanArgv.includes("-h")));
-  const versionRequested = flagScanArgv.includes("--version");
+    ((!hasUserDefinedHelp && flagScanArgv.includes("--help")) ||
+      (!hasUserDefinedh && flagScanArgv.includes("-h")));
+  const versionRequested = !hasUserDefinedVersion && flagScanArgv.includes("--version");
 
   if (helpRequested || helpAllRequested || versionRequested) {
     return {

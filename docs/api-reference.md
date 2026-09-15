@@ -889,12 +889,14 @@ Metadata for overriding a built-in name: the short aliases (`-h`, `-H`) or a
 `cliName`/long alias equal to a reserved long name (`--help`, `--help-all`,
 `--version`). Without `overrideBuiltinAlias: true`, any of these collisions
 is rejected at command-definition time — see
-[Reserved names](#reserved-built-in-names) below.
+[Reserved names](#reserved-built-in-names) below. `alias` is optional here
+because the collision being overridden may be the field's own `cliName`
+(no `alias` needed at all).
 
 ```typescript
 interface BuiltinOverrideArgMeta extends BaseArgMeta {
-  /** Built-in name to override; may be combined with extra aliases */
-  alias:
+  /** Built-in name to override, optionally combined with extra aliases */
+  alias?:
     | "h"
     | "H"
     | "help"
@@ -913,12 +915,13 @@ interface BuiltinOverrideArgMeta extends BaseArgMeta {
 A field's `cliName` (its kebab-case name, derived from the field key) or any
 of its long aliases (`alias`/`hiddenAlias` entries longer than one
 character) cannot be `help`, `help-all`, or `version` — those long flags are
-always intercepted by `parseArgs`/`scanForSubcommand` before schema parsing,
-regardless of which field produced the name, so an unguarded collision would
-make that field permanently unreachable. The short aliases `-h`/`-H` are
-reserved the same way. `defineCommand` throws a `ReservedAliasError` at
-definition time for any of these collisions unless the field sets
-`overrideBuiltinAlias: true`:
+always intercepted by `parseArgs` before schema parsing, regardless of which
+field produced the name, so an unguarded collision would make that field
+permanently unreachable. The short aliases `-h`/`-H` are reserved the same
+way. `defineCommand` throws a `ReservedAliasError` at definition time for any
+of these collisions unless the field sets `overrideBuiltinAlias: true`, which
+also makes `parseArgs` stop treating that name as the built-in and hand the
+value to the field instead:
 
 ```typescript
 import { z } from "zod";
@@ -931,6 +934,11 @@ const command = defineCommand({
     // because "version" collides with the built-in --version.
     appVersion: arg(z.string(), {
       alias: "version",
+      overrideBuiltinAlias: true,
+    }),
+    // A cliName-only collision needs no `alias` at all: this field is
+    // named `helpAll`, which kebab-cases to the reserved `--help-all`.
+    helpAll: arg(z.string(), {
       overrideBuiltinAlias: true,
     }),
   }),

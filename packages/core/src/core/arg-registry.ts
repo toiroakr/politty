@@ -282,11 +282,13 @@ export interface RegularArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
 /**
  * Metadata for overriding a built-in name: the short aliases (-h, -H) or a
  * `cliName`/long alias equal to a reserved long name (--help, --help-all,
- * --version).
+ * --version). `alias` is optional here because the collision being
+ * overridden may be the field's own `cliName` (derived from its schema key,
+ * e.g. a field named `helpAll`), which needs no `alias` at all.
  */
 export interface BuiltinOverrideArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
   /** Built-in name to override, optionally combined with extra aliases */
-  alias:
+  alias?:
     | ReservedAliasLiteral
     | Array<ReservedAliasLiteral | string>
     | ReadonlyArray<ReservedAliasLiteral | string>;
