@@ -17,7 +17,7 @@ export default defineConfig({
   // TypeScript 7 (tsgo) has no JS compiler API, which breaks the plugin's
   // default tsc-based DTS generation — generate declarations with the tsgo
   // binary from `@typescript/native-preview` instead.
-  dts: { tsgo: true },
+  dts: { tsgo: {} },
   clean: true,
   treeshake: true,
   sourcemap: false,
