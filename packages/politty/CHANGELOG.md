@@ -1,5 +1,12 @@
 # politty
 
+## 0.12.5
+
+### Patch Changes
+
+- debe564: Fix `args.$source(name)` being unavailable inside a global arg's `effect` when the invoked command declares args of its own. Previously `$source` was attached to the global args only on the branch for commands without their own schema, so the same global effect saw `$source` as `undefined` or `"cli"` depending purely on the shape of the command it ran under. This made `$source` unusable for global flags that need to tell an explicit CLI token apart from a schema default — notably boolean flags, whose parsed value cannot answer that on its own. `EffectContext["args"]` is typed accordingly, so `effect` callbacks can call `$source` without a cast.
+- 5338d36: Fix the build and typecheck failing against `rolldown-plugin-dts` 0.28.5, which repurposed the DTS plugin's `tsgo` option from a boolean switch into a `TsgoOptions` object. Every package's `tsdown.config.ts` still passed `dts: { tsgo: true }` and now selects the tsgo generator through `dts: { generator: "tsgo" }` instead.
+
 ## 0.12.4
 
 ### Patch Changes
