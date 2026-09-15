@@ -949,6 +949,16 @@ fields in that call. `validateCommand()` is unaffected — it walks and
 validates every command's schema regardless of subcommand routing — so it
 still catches such a collision (e.g. in a test or a CI validation step).
 
+**Another known gap, also pre-existing and not specific to this
+reservation:** for a `union`/`discriminatedUnion` args schema, every check
+in this file (including this one) only inspects the schema's flattened,
+first-occurrence-wins `fields` list, not each variant's own field metadata.
+If the same field name appears in multiple variants with different aliases
+(e.g. plain in one variant, aliased to `version` in another), a later
+variant's collision can be missed here even though the help renderer — which
+iterates each variant's own fields directly — would still advertise the
+unreachable alias.
+
 ---
 
 ### `Logger`
