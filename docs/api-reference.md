@@ -906,7 +906,8 @@ character) cannot be `help`, `help-all`, or `version` — those long flags are
 always intercepted by `parseArgs` before schema parsing, regardless of which
 field produced the name, so an unguarded collision would make that field
 permanently unreachable. `defineCommand` itself only builds the command
-object and does not validate. The collision is instead caught by:
+object and does not validate. For a collision in the command's own `args`
+schema, the collision is instead caught by:
 
 - `parseArgs()` — throws `ReservedAliasError` synchronously.
 - `runCommand()` — catches that throw internally and returns it as
@@ -917,6 +918,14 @@ object and does not validate. The collision is instead caught by:
   code.
 - the explicit `validateCommand()` — never throws; collects it (with every
   other schema error) into the returned `{ valid: false, errors }`.
+
+**This does not apply to a `globalArgs` schema.** `runCommand()`/`runMain()`
+validate `globalArgs` up front, before the try/catch that produces
+`{ success: false, error }` (or, for `runMain()`, before the
+report-and-`process.exit()` path) is even entered, so a reserved-name
+collision there throws synchronously out of `runCommand()`/`runMain()`
+itself (an uncaught exception / rejected promise), not a returned failure
+result.
 
 Unlike the short aliases `-h`/`-H` (see `BuiltinOverrideArgMeta` above), this
 collision **has no override**: since `--help`/`--help-all`/`--version` are
