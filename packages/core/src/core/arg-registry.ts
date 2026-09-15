@@ -1,5 +1,5 @@
 import type { InferSchemaOutput, SchemaLike } from "../adapter/standard-schema.js";
-import type { GlobalArgs, IsEmpty } from "../types.js";
+import type { ArgSource, GlobalArgs, IsEmpty } from "../types.js";
 import type { DynamicCompletionResolver } from "./dynamic-completion-types.js";
 import type { ExpandCompletion } from "./expand-completion-types.js";
 
@@ -136,8 +136,12 @@ export interface PromptMeta {
 export type EffectContext = {
   /** Field name (camelCase) */
   name: string;
-  /** Validated args for this schema (global args for global effects, command args for command effects) */
-  args: Readonly<Record<string, unknown>>;
+  /**
+   * Validated args for this schema (global args for global effects, command
+   * args for command effects), carrying the same `$source` helper the run
+   * function receives.
+   */
+  args: Readonly<Record<string, unknown>> & { $source?: (name: string) => ArgSource };
 } & (IsEmpty<GlobalArgs> extends true
   ? { globalArgs?: Readonly<Record<string, unknown>> }
   : { globalArgs?: Readonly<GlobalArgs> });

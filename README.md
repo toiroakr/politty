@@ -208,6 +208,16 @@ run: (args) => {
 },
 ```
 
+It is also available on an `effect`'s context args, which is how a flag whose parsed value cannot reveal its own origin — a boolean, say — tells an explicitly typed `--flag=false` apart from the schema default:
+
+```typescript
+json: arg(z.boolean().default(false), {
+  effect: (value, { args }) => {
+    if (args.$source?.("json") !== "cli") applyDefaultFromEnvironment();
+  },
+}),
+```
+
 ### Subcommands
 
 Define Git-style subcommands:

@@ -271,6 +271,36 @@ describe("arg effect", () => {
       });
     });
 
+    it.each([
+      {
+        label: "command defines its own args",
+        args: z.object({ name: arg(z.string().optional()) }),
+      },
+      { label: "command defines no args", args: undefined },
+    ])("should expose the arg source to global effects when the $label", async ({ args }) => {
+      const seen: (string | undefined)[] = [];
+
+      const globalSchema = z.object({
+        verbose: arg(z.boolean().default(false), {
+          alias: "v",
+          effect: (_value, { args: effectArgs }) => {
+            seen.push(effectArgs.$source?.("verbose"));
+          },
+        }),
+      });
+
+      const cmd = defineCommand({
+        name: "test",
+        ...(args ? { args } : {}),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["--verbose=false"], { globalArgs: globalSchema });
+
+      expect(result.success).toBe(true);
+      expect(seen).toEqual(["cli"]);
+    });
+
     it("should not execute global effects when command validation fails", async () => {
       const globalEffect = vi.fn();
 
