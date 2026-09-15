@@ -905,17 +905,31 @@ of its long aliases (`alias`/`hiddenAlias` entries longer than one
 character) cannot be `help`, `help-all`, or `version` — those long flags are
 always intercepted by `parseArgs` before schema parsing, regardless of which
 field produced the name, so an unguarded collision would make that field
-permanently unreachable. `parseArgs`/`runCommand` (and the explicit
-`validateCommand()`) throw a `ReservedAliasError` for any such collision.
-`defineCommand` itself only builds the command object and does not
-validate — the error surfaces the first time the command is parsed or
-explicitly validated. Unlike the short aliases `-h`/`-H` (see
-`BuiltinOverrideArgMeta` above), this collision **has no override**: since
-`--help`/`--help-all`/`--version` are always resolved as the built-in before
-any field is consulted, `overrideBuiltinAlias: true` would not actually make
-the field reachable — it would just suppress the error while leaving the
-field permanently shadowed. Rename the field or its alias instead (e.g.
+permanently unreachable. `defineCommand` itself only builds the command
+object and does not validate. The collision is instead caught by:
+
+- `parseArgs()` — throws `ReservedAliasError` synchronously.
+- `runCommand()`/`runMain()` — catch that throw internally and return it as
+  `{ success: false, error }` rather than throwing to the caller.
+- the explicit `validateCommand()` — never throws; collects it (with every
+  other schema error) into the returned `{ valid: false, errors }`.
+
+Unlike the short aliases `-h`/`-H` (see `BuiltinOverrideArgMeta` above), this
+collision **has no override**: since `--help`/`--help-all`/`--version` are
+always resolved as the built-in before any field is consulted,
+`overrideBuiltinAlias: true` would not actually make the field reachable —
+it would just suppress the error while leaving the field permanently
+shadowed. Rename the field or its alias instead (e.g.
 `appVersion`/`targetVersion` instead of `version`).
+
+**Known gap, shared with the pre-existing `-h`/`-H` reservation:** when a
+command has subcommands, `parseArgs()` matches and dispatches to a
+subcommand _before_ extracting or validating the current command's own
+schema, so invoking a parent command in a way that routes straight to a
+subcommand (e.g. `cli sub ...`) skips this check for the parent's own
+fields in that call. `validateCommand()` is unaffected — it walks and
+validates every command's schema regardless of subcommand routing — so it
+still catches such a collision (e.g. in a test or a CI validation step).
 
 ---
 
