@@ -1163,6 +1163,166 @@ interface BuiltinOptionDescriptions {
 
 ---
 
+### `HelpDataOptions`
+
+Type for options passed to `generateHelpData`.
+
+```typescript
+interface HelpDataOptions {
+  /** Custom descriptions for the --help/--help-all/--help-json/--version built-in options */
+  descriptions?: BuiltinOptionDescriptions;
+  /** Command hierarchy context */
+  context?: CommandContext;
+}
+```
+
+---
+
+### `HelpData`
+
+Structured, JSON-serializable representation of a command's help, returned by `generateHelpData`.
+
+```typescript
+interface HelpData {
+  /** Command name (command.name) */
+  name: string;
+  /** Full path from the root command (empty at the root) */
+  commandPath: string[];
+  /** Root command name; undefined only when generateHelpData is called directly without a context */
+  rootName?: string;
+  /** Root command version, when provided to runMain/runCommand */
+  version?: string;
+  /** Canonical subcommand name, set only when this command was reached via an alias */
+  aliasFor?: string;
+  /** Command description */
+  description?: string;
+  /** Command aliases (as a subcommand) */
+  aliases?: string[];
+  /** Structured usage line */
+  usage: HelpUsageData;
+  /** Descriptions of the built-in --help/--help-all/--help-json/--version options */
+  builtinOptions: { help: string; helpAll: string; helpJson: string; version?: string };
+  /** Args schema shape: a plain object, or a union/discriminated-union of variants */
+  schemaType?: "object" | "discriminatedUnion" | "union" | "xor" | "intersection";
+  /** Positional arguments */
+  positionals: HelpFieldData[];
+  /** Non-positional options; for discriminatedUnion/union/xor, only fields common to every variant/option */
+  options: HelpFieldData[];
+  /** Discriminator field name (discriminatedUnion schemas only) */
+  discriminator?: string;
+  /** Per-variant fields (discriminatedUnion schemas only) */
+  variants?: HelpVariantData[];
+  /** Per-option fields (union/xor schemas only) */
+  unionOptions?: HelpVariantData[];
+  /** Global options shared across all commands, when a global args schema is defined */
+  globalOptions?: HelpFieldData[];
+  /** Subcommands, recursively resolved */
+  subcommands?: HelpSubcommandData[];
+  /** Example usages */
+  examples?: Example[];
+  /** Additional notes (raw Markdown, unrendered) */
+  notes?: string;
+}
+```
+
+---
+
+### `HelpFieldData`
+
+Type for a single positional or option field within `HelpData`.
+
+```typescript
+interface HelpFieldData {
+  /** Field name (camelCase, as defined in the schema) */
+  name: string;
+  /** CLI option name (kebab-case) */
+  cliName: string;
+  /** Whether this is a positional argument */
+  positional: boolean;
+  /** Whether this argument is required */
+  required: boolean;
+  /** Detected type from schema */
+  type: "string" | "number" | "boolean" | "array" | "unknown";
+  /** Aliases for this option (short: 1 char, long: multi-char) */
+  alias?: string[];
+  /** Argument description */
+  description?: string;
+  /** Placeholder shown in help */
+  placeholder?: string;
+  /** Environment variable name(s) to read value from */
+  env?: string | string[];
+  /** Default value, if any */
+  defaultValue?: unknown;
+  /** Enum values, if detected from schema */
+  enumValues?: string[];
+  /** Negation configuration */
+  negation?: string | boolean;
+  /** Derived negation flag name (no -- prefix), or undefined when hidden */
+  negationDisplay?: string;
+  /** Description shown for the negation option */
+  negationDescription?: string;
+}
+```
+
+---
+
+### `HelpVariantData`
+
+A named group of fields sharing a discriminated-union variant or a plain union option.
+
+```typescript
+interface HelpVariantData {
+  /** Discriminator value this variant matches (discriminated unions only) */
+  discriminatorValue?: string;
+  /** Variant/option description */
+  description?: string;
+  /** Fields unique to this variant/option, including its own positional fields (duplicated from the top-level positionals) */
+  fields: HelpFieldData[];
+}
+```
+
+---
+
+### `HelpUsageData`
+
+Structured usage information, content-equivalent to the text `Usage:` line.
+
+```typescript
+interface HelpUsageData {
+  /** Command name as shown in usage (includes root name for subcommands) */
+  commandName: string;
+  /** Whether global options are defined */
+  hasGlobalOptions: boolean;
+  /** Whether this command defines any (non-positional) options */
+  hasOptions: boolean;
+  /** Whether a subcommand token is expected, and whether it's optional */
+  subcommand?: "required" | "optional";
+  /** Positional arguments in order */
+  positionals: Array<{ name: string; required: boolean }>;
+}
+```
+
+---
+
+### `HelpSubcommandData`
+
+A subcommand entry in `HelpData.subcommands`.
+
+```typescript
+interface HelpSubcommandData {
+  /** Subcommand name (key under subCommands) */
+  name: string;
+  /** Subcommand aliases */
+  aliases?: string[];
+  /** Set when this subcommand is a legacy async factory registered without lazy(), so no data is available */
+  unresolved?: true;
+  /** Full structured help for this subcommand, recursively. Absent when unresolved is true. */
+  data?: HelpData;
+}
+```
+
+---
+
 ### `CommandContext`
 
 Context for command hierarchy.
