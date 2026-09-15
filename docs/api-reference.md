@@ -1186,7 +1186,7 @@ Structured, JSON-serializable representation of a command's help, returned by `g
 interface HelpData {
   /** Command name (command.name) */
   name: string;
-  /** Full path from the root command (empty at the root) */
+  /** Full path from the root command. Empty at the true root; also empty when called directly on a non-root command without a context.commandPath */
   commandPath: string[];
   /** Root command name; undefined only when generateHelpData is called directly without a context */
   rootName?: string;

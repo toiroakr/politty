@@ -168,7 +168,11 @@ export interface HelpSubcommandData {
 export interface HelpData {
   /** Command name (command.name) */
   name: string;
-  /** Full path from the root command (empty at the root) */
+  /**
+   * Full path from the root command. Empty at the true root; also empty
+   * when generateHelpData is called directly on a non-root command without
+   * a context.commandPath (there is no root to compute the path from).
+   */
   commandPath: string[];
   /**
    * Root command name. Always set when produced through `runMain`/`runCommand`
