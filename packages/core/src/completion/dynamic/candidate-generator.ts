@@ -499,11 +499,13 @@ function generateOptionNameCandidates(context: CompletionContext): CandidateResu
     }
   }
 
-  // Once any other option has been typed, the user is composing a real
-  // invocation rather than asking for help — drop all three help flags
-  // instead of tracking each one individually (none of them are schema
-  // options, so `usedOptions` has no entry for a help flag itself).
-  if (context.usedOptions.size === 0) {
+  // Once any other option has been typed anywhere in this invocation
+  // (including a global option supplied before a subcommand descent, which
+  // clears `usedOptions`), the user is composing a real invocation rather
+  // than asking for help — drop all three help flags instead of tracking
+  // each one individually (none of them are schema options, so
+  // `usedOptions` has no entry for a help flag itself).
+  if (!context.hasAnyOptionBeenUsed) {
     candidates.push(
       {
         value: "--help",

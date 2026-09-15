@@ -1829,6 +1829,19 @@ describe("Completion", () => {
         expect(values).not.toContain("--help-json");
       });
 
+      it("should still suppress help flags after descending into a subcommand, when an option was typed before the descent", async () => {
+        // `usedOptions` is cleared on subcommand descent (it's scoped to the
+        // current frame's own options), so this exercises the separate
+        // invocation-wide `hasAnyOptionBeenUsed` tracking instead.
+        const ctx = parseCompletionContext(["--verbose", "build", "--"], testCmd);
+        const result = await gen(ctx);
+
+        const values = result.candidates.map((c) => c.value);
+        expect(values).not.toContain("--help");
+        expect(values).not.toContain("--help-all");
+        expect(values).not.toContain("--help-json");
+      });
+
       it("should generate enum value candidates for option-value", async () => {
         const ctx = parseCompletionContext(["--format", ""], testCmd);
         const result = await gen(ctx);

@@ -66,6 +66,12 @@ export interface CompletionContext {
   positionals: CompletablePositional[];
   /** Options already used (to avoid duplicates) */
   usedOptions: Set<string>;
+  /**
+   * Whether any option has been typed anywhere in this invocation so far,
+   * including before a subcommand descent that reset `usedOptions`. Unlike
+   * `usedOptions`, this is never cleared.
+   */
+  hasAnyOptionBeenUsed: boolean;
   /** Number of positional arguments already provided */
   providedPositionalCount: number;
   /**
@@ -565,6 +571,13 @@ export function parseCompletionContext(
 
   // Track used options and positional count
   const usedOptions = new Set<string>();
+  // Unlike `usedOptions` (cleared on every subcommand descent, since it's
+  // scoped to the current command frame's own option suggestions), this
+  // survives descent: it answers "has the user typed any option anywhere
+  // in this invocation so far", which candidate-generator uses to decide
+  // whether the built-in help flags (not schema options, so never in
+  // `usedOptions`) are still worth suggesting.
+  let hasAnyOptionBeenUsed = false;
   let positionalCount = 0;
 
   // Best-effort parsed values for the CURRENT command. Reset when traversing
@@ -606,6 +619,7 @@ export function parseCompletionContext(
     usedOptions.add(opt.cliName);
     for (const a of opt.alias ?? []) usedOptions.add(a);
     if (opt.negation) usedOptions.add(opt.negation);
+    hasAnyOptionBeenUsed = true;
   };
 
   const recordOptionValue = (opt: CompletableOption, value: string): void => {
@@ -888,6 +902,7 @@ export function parseCompletionContext(
     subcommands,
     positionals,
     usedOptions,
+    hasAnyOptionBeenUsed,
     providedPositionalCount: positionalCount,
     parsedArgs: mergedParsedArgs,
     previousValues,
