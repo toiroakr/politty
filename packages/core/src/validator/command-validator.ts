@@ -1,3 +1,4 @@
+import { RESERVED_BUILTIN_LONG_NAMES } from "../adapter/field-meta.js";
 import {
   extractFields,
   getAllAliases,
@@ -352,7 +353,15 @@ function checkPositionalConfig(
 }
 
 /**
- * Check for reserved aliases used without override flag
+ * Check for reserved aliases used without override flag.
+ *
+ * Two independent collisions are checked, both bypassed by
+ * `overrideBuiltinAlias: true`:
+ * - the short aliases `-h` / `-H`, reserved for `--help` / `--help-all`
+ * - a field's `cliName` or any of its long aliases matching a name in
+ *   {@link RESERVED_BUILTIN_LONG_NAMES} (`--help`, `--help-all`, `--version`),
+ *   which `parseArgs`/`scanForSubcommand` intercept before schema parsing
+ *   regardless of which field produced that name
  */
 function checkReservedAliases(
   extracted: ExtractedFields,
@@ -362,15 +371,34 @@ function checkReservedAliases(
 
   for (const field of extracted.fields) {
     if (field.overrideBuiltinAlias === true) continue;
+
     for (const alias of getAllAliases(field)) {
       if (alias === "h" || alias === "H") {
         errors.push({
           commandPath,
           type: "reserved_alias",
-          message: `Alias "${alias}" is reserved for --${alias === "h" ? "help" : "help-all"}.`,
+          message:
+            `Alias "${alias}" is reserved for --${alias === "h" ? "help" : "help-all"}. ` +
+            `To override this, set { overrideBuiltinAlias: true } for "${field.name}" ` +
+            `and keep the alias where it is currently defined (in alias or hiddenAlias).`,
           field: field.name,
         });
       }
+    }
+
+    const longNames = new Set([field.cliName, ...getAllAliases(field)]);
+    for (const longName of longNames) {
+      if (!RESERVED_BUILTIN_LONG_NAMES.has(longName)) continue;
+      const isCliName = longName === field.cliName;
+      errors.push({
+        commandPath,
+        type: "reserved_alias",
+        message:
+          `${isCliName ? `Field "${field.name}"` : `Alias "${longName}" for field "${field.name}"`} ` +
+          `collides with the built-in --${longName} option, which always takes precedence. ` +
+          `To override this, set { overrideBuiltinAlias: true } for "${field.name}".`,
+        field: field.name,
+      });
     }
   }
   return errors;
@@ -465,17 +493,19 @@ export function validatePositionalConfig(extracted: ExtractedFields): void {
 }
 
 /**
- * Validate that no reserved aliases are used without explicit override
+ * Validate that no reserved names are used without explicit override
  *
- * Reserved aliases:
- * - 'h' is reserved for --help
- * - 'H' is reserved for --help-all
+ * Reserved names:
+ * - 'h' is reserved for --help, 'H' for --help-all (short aliases)
+ * - a field's `cliName` or any long alias matching `help`, `help-all`, or
+ *   `version` collides with the matching built-in long flag
  *
- * Users can override these by setting overrideBuiltinAlias: true
+ * Users can override either kind of collision by setting
+ * overrideBuiltinAlias: true on the field.
  *
  * @param extracted - Extracted fields from schema
  * @param _hasSubCommands - Whether the command has subcommands (reserved for future use)
- * @throws {ReservedAliasError} If a reserved alias is used without override flag
+ * @throws {ReservedAliasError} If a reserved name is used without override flag
  */
 export function validateReservedAliases(
   extracted: ExtractedFields,
@@ -483,16 +513,7 @@ export function validateReservedAliases(
 ): void {
   const errors = checkReservedAliases(extracted, []);
   if (errors.length > 0) {
-    const err = errors[0]!;
-    const field = err.field ?? "unknown";
-    const found = extracted.fields.find((f) => f.name === field);
-    const aliasList = found ? getAllAliases(found) : [];
-    const alias = aliasList.find((a) => a === "h" || a === "H") ?? "h";
-    throw new ReservedAliasError(
-      `Alias "${alias}" is reserved for --${alias === "h" ? "help" : "help-all"}. ` +
-        `To override this, set { overrideBuiltinAlias: true } for "${field}" ` +
-        `and keep the alias where it is currently defined (in alias or hiddenAlias).`,
-    );
+    throw new ReservedAliasError(errors[0]!.message);
   }
 }
 

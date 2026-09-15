@@ -73,6 +73,68 @@ describe("validateCommand", () => {
       }
     });
 
+    it("should detect a field name colliding with a reserved built-in long flag", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          helpAll: arg(z.string(), { description: "Not the built-in --help-all" }),
+        }),
+      });
+
+      const result = await validateCommand(cmd);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.some((e) => e.type === "reserved_alias")).toBe(true);
+      }
+    });
+
+    it("should detect a long alias colliding with a reserved built-in long flag", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          // @ts-expect-error - testing error case for missing overrideBuiltinAlias
+          appVersion: arg(z.string(), { alias: "version", description: "Not --version" }),
+        }),
+      });
+
+      const result = await validateCommand(cmd);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.some((e) => e.type === "reserved_alias")).toBe(true);
+      }
+    });
+
+    it("should allow a reserved-long-flag field name via overrideBuiltinAlias", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          helpAll: arg(z.string(), {
+            overrideBuiltinAlias: true,
+            description: "Not the built-in --help-all",
+          }),
+        }),
+      });
+
+      const result = await validateCommand(cmd);
+      expect(result.valid).toBe(true);
+    });
+
+    it("should allow a reserved-long-flag alias via overrideBuiltinAlias", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          appVersion: arg(z.string(), {
+            alias: "version",
+            overrideBuiltinAlias: true,
+            description: "Not --version",
+          }),
+        }),
+      });
+
+      const result = await validateCommand(cmd);
+      expect(result.valid).toBe(true);
+    });
+
     it("should detect field names starting with $", async () => {
       const cmd = defineCommand({
         name: "test",

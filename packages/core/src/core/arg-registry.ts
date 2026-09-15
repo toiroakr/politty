@@ -280,14 +280,19 @@ export interface RegularArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
 }
 
 /**
- * Metadata for overriding built-in aliases (-h, -H)
+ * Metadata for overriding a built-in name: the short aliases (-h, -H) or a
+ * `cliName`/long alias equal to a reserved long name (--help, --help-all,
+ * --version).
  */
 export interface BuiltinOverrideArgMeta<TValue = unknown> extends BaseArgMeta<TValue> {
-  /** Built-in alias to override ('h' or 'H'), optionally combined with extra aliases */
-  alias: "h" | "H" | Array<"h" | "H" | string> | ReadonlyArray<"h" | "H" | string>;
+  /** Built-in name to override, optionally combined with extra aliases */
+  alias:
+    | ReservedAliasLiteral
+    | Array<ReservedAliasLiteral | string>
+    | ReadonlyArray<ReservedAliasLiteral | string>;
   /** Hidden aliases (accepted but not surfaced in help/docs/completion) */
   hiddenAlias?: string | string[] | readonly string[];
-  /** Must be true to override built-in aliases */
+  /** Must be true to override the built-in name */
   overrideBuiltinAlias: true;
 }
 
@@ -328,16 +333,26 @@ const argRegistry = new WeakMap<object, ArgMeta>();
  * ```
  */
 /**
- * Detect whether `A` contains a reserved alias ("h" or "H"), for either a
- * plain string or a tuple/array of strings. Uses `[A] extends [never]` to
- * prevent distribution returning `never` for missing fields.
+ * Reserved short aliases ('h'/'H') plus the reserved long names a field's
+ * `alias`/`hiddenAlias` entry can also collide with. Must stay in sync with
+ * the runtime `RESERVED_BUILTIN_LONG_NAMES` in `adapter/field-meta.ts` (kept
+ * as a separate literal here, matching how the short aliases were already
+ * hardcoded rather than shared with the runtime check, to avoid a type-only
+ * import cycle between this file and field-meta.ts).
+ */
+type ReservedAliasLiteral = "h" | "H" | "help" | "help-all" | "version";
+
+/**
+ * Detect whether `A` contains a reserved alias, for either a plain string or
+ * a tuple/array of strings. Uses `[A] extends [never]` to prevent
+ * distribution returning `never` for missing fields.
  */
 type ContainsReservedAlias<A> = [A] extends [never]
   ? false
-  : A extends "h" | "H"
+  : A extends ReservedAliasLiteral
     ? true
     : A extends readonly (infer E)[]
-      ? [Extract<E, "h" | "H">] extends [never]
+      ? [Extract<E, ReservedAliasLiteral>] extends [never]
         ? false
         : true
       : false;
@@ -345,7 +360,7 @@ type ContainsReservedAlias<A> = [A] extends [never]
 type ReservedAliasTypeError<M> = {
   [K in keyof M]: M[K];
 } & {
-  __typeError: "Alias 'h' or 'H' requires overrideBuiltinAlias: true";
+  __typeError: "Alias 'h', 'H', 'help', 'help-all', or 'version' requires overrideBuiltinAlias: true";
 };
 
 type NegationTypeError<M> = {
