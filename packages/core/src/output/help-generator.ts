@@ -121,7 +121,7 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
 
     // Add <command> or [command] if there are subcommands
     if (command.subCommands && getVisibleSubcommandEntries(command.subCommands).length > 0) {
-      if (command.run) {
+      if (command.run || command.defaultSubCommand) {
         parts.push(styles.placeholder("[command]"));
       } else {
         parts.push(styles.option("<command>"));
@@ -139,7 +139,7 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
   } else {
     // Add <command> or [command] if there are subcommands
     if (command.subCommands && getVisibleSubcommandEntries(command.subCommands).length > 0) {
-      if (command.run) {
+      if (command.run || command.defaultSubCommand) {
         parts.push(styles.placeholder("[command]"));
       } else {
         parts.push(styles.option("<command>"));

@@ -44,7 +44,7 @@ export function renderUsage(info: CommandInfo): string {
   }
 
   if (info.subCommands.length > 0) {
-    if (info.command.run) {
+    if (info.command.run || info.command.defaultSubCommand) {
       parts.push("[command]");
     } else {
       parts.push("<command>");

@@ -83,6 +83,32 @@ describe("default-renderers", () => {
       expect(usage).toBe("cli [options] [command]");
     });
 
+    it("should render [command] when parent has defaultSubCommand instead of run", async () => {
+      const subCmd = defineCommand({
+        name: "sub",
+        description: "Sub command",
+        run: () => {},
+      });
+
+      const cmd = defineCommand({
+        name: "cli",
+        description: "CLI",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            alias: "v",
+            description: "Verbose",
+          }),
+        }),
+        subCommands: { sub: subCmd },
+        defaultSubCommand: "sub",
+      });
+
+      const info = await buildCommandInfo(cmd, "cli");
+      const usage = renderUsage(info);
+
+      expect(usage).toBe("cli [options] [command]");
+    });
+
     it("should render optional positional argument", async () => {
       const cmd = defineCommand({
         name: "test",
