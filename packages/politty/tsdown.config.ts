@@ -18,7 +18,7 @@ export default defineConfig({
   // through `export * from "@politty/zod"` re-exports — TypeScript resolves
   // the augmented interface to the same exported symbol — so the d.ts can
   // stay thin re-exports like the runtime.
-  dts: { tsgo: {} },
+  dts: { generator: "tsgo" },
   clean: true,
   treeshake: true,
   sourcemap: false,
