@@ -940,14 +940,23 @@ it would just suppress the error while leaving the field permanently
 shadowed. Rename the field or its alias instead (e.g.
 `appVersion`/`targetVersion` instead of `version`).
 
-**Known gap, shared with the pre-existing `-h`/`-H` reservation:** when a
-command has subcommands, `parseArgs()` matches and dispatches to a
-subcommand _before_ extracting or validating the current command's own
-schema, so invoking a parent command in a way that routes straight to a
-subcommand (e.g. `cli sub ...`) skips this check for the parent's own
-fields in that call. `validateCommand()` is unaffected — it walks and
-validates every command's schema regardless of subcommand routing — so it
-still catches such a collision (e.g. in a test or a CI validation step).
+**Known gap, shared with the pre-existing `-h`/`-H` reservation:** several
+early-exit paths run before a command's own schema is ever extracted or
+validated, so this check doesn't apply to them for that command:
+
+- `parseArgs()` matches and dispatches to a subcommand _before_ extracting
+  or validating the current command's own schema, so invoking a parent
+  command in a way that routes straight to a subcommand (e.g. `cli sub ...`)
+  skips this check for the parent's own fields in that call.
+- `runMain()`'s plugin dispatch (the `onUnknownSubcommand` option) runs
+  before `parseArgs()`/`runCommandInternal()` for a root command without its
+  own `run`, so a root field collision is not rejected on that path either
+  if the first positional isn't a known subcommand name.
+
+`validateCommand()` is unaffected by either gap — it walks and validates
+every command's schema regardless of subcommand routing or plugin
+dispatch — so it still catches such a collision (e.g. in a test or a CI
+validation step).
 
 **Another known gap, also pre-existing and not specific to this
 reservation:** for a `union`/`discriminatedUnion` args schema, every check
