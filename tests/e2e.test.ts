@@ -1303,7 +1303,7 @@ describe("E2E Tests", () => {
       }
     });
 
-    it.each(["help", "help-all", "version"])(
+    it.each(["help", "help-all", "help-json", "version"])(
       "rejects reserved built-in flag %s as a custom negation name",
       async (reserved) => {
         const cmd = defineCommand({

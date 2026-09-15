@@ -66,6 +66,17 @@ export interface CompletionContext {
   positionals: CompletablePositional[];
   /** Options already used (to avoid duplicates) */
   usedOptions: Set<string>;
+  /**
+   * Whether any option has been typed anywhere in this invocation so far,
+   * including before a subcommand descent that reset `usedOptions`. Unlike
+   * `usedOptions`, this is never cleared.
+   *
+   * Optional (not just because it defaults to `false`): `CompletionContext`
+   * is public API, constructible by hand for `generateCandidates` without
+   * going through `parseCompletionContext`, so a new required member would
+   * break existing callers. Treat an omitted value the same as `false`.
+   */
+  hasAnyOptionBeenUsed?: boolean;
   /** Number of positional arguments already provided */
   providedPositionalCount: number;
   /**
@@ -565,6 +576,13 @@ export function parseCompletionContext(
 
   // Track used options and positional count
   const usedOptions = new Set<string>();
+  // Unlike `usedOptions` (cleared on every subcommand descent, since it's
+  // scoped to the current command frame's own option suggestions), this
+  // survives descent: it answers "has the user typed any option anywhere
+  // in this invocation so far", which candidate-generator uses to decide
+  // whether the built-in help flags (not schema options, so never in
+  // `usedOptions`) are still worth suggesting.
+  let hasAnyOptionBeenUsed = false;
   let positionalCount = 0;
 
   // Best-effort parsed values for the CURRENT command. Reset when traversing
@@ -606,6 +624,7 @@ export function parseCompletionContext(
     usedOptions.add(opt.cliName);
     for (const a of opt.alias ?? []) usedOptions.add(a);
     if (opt.negation) usedOptions.add(opt.negation);
+    hasAnyOptionBeenUsed = true;
   };
 
   const recordOptionValue = (opt: CompletableOption, value: string): void => {
@@ -654,6 +673,10 @@ export function parseCompletionContext(
       word.length > 2 &&
       !word.includes("=")
     ) {
+      // This whole word is option-shaped even if some/all of its combined
+      // chars fail to resolve below; see the note on the single-option
+      // branch further down for why unresolved tokens still count.
+      hasAnyOptionBeenUsed = true;
       const chars: string[] = Array.from(word.slice(1));
       // Runtime's global separation (`scanForSubcommand` /
       // `separateGlobalArgs`) does NOT decompose combined short flags
@@ -677,6 +700,13 @@ export function parseCompletionContext(
 
     // Skip options and their values (before "--")
     if (!afterDoubleDash && isOption(word)) {
+      // Any option-shaped token counts as "an option was used" for the
+      // help-flag suppression check, even one that doesn't resolve to a
+      // schema field (an unknown flag, or one of the built-in help flags
+      // themselves, neither of which `findOption` below will ever match).
+      // Mirrors the static bash/zsh/fish generators, which key off the
+      // same `-*` shape rather than a successful lookup.
+      hasAnyOptionBeenUsed = true;
       const parsed = parseOption(word);
       const opt = findOption(options, parsed);
 
@@ -888,6 +918,7 @@ export function parseCompletionContext(
     subcommands,
     positionals,
     usedOptions,
+    hasAnyOptionBeenUsed,
     providedPositionalCount: positionalCount,
     parsedArgs: mergedParsedArgs,
     previousValues,

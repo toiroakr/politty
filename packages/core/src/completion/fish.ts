@@ -372,7 +372,11 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
       lines.push(`        ${guard}; and echo "--${e.name}\t${e.desc}"`);
     }
   }
-  lines.push(`        __${fn}_not_used "--help"; and echo "--help\tShow help"`);
+  lines.push(`        if test $_any_opt_used -eq 0`);
+  lines.push(`            echo "--help\tShow help"`);
+  lines.push(`            echo "--help-all\tShow help with all subcommand options"`);
+  lines.push(`            echo "--help-json\tShow help as JSON"`);
+  lines.push(`        end`);
   return lines;
 }
 
@@ -776,6 +780,13 @@ export function generateFishCompletion(
     `    set -l _subcmd "" ; set -l _after_dd 0 ; set -l _pos_count 0 ; set -l _skip_next 0`,
   );
   lines.push(`    set -l _used_opts`);
+  // Unlike _used_opts (reset on every subcommand descent below, since it
+  // gates frame-local option suggestions), this survives descent: it
+  // answers "has any option been typed anywhere in this invocation",
+  // which the help-flag guards below need (--help/--help-all/--help-json
+  // aren't in _used_opts at all, so per-flag "not used" checks never see
+  // them as used either way).
+  lines.push(`    set -l _any_opt_used 0`);
   lines.push(``);
   if (hasExpand) {
     // Clear any sibling values left over from previous completions so a
@@ -815,6 +826,7 @@ export function generateFishCompletion(
   lines.push(`        if string match -q -- '-*=*' "$_w"`);
   lines.push(`            set -l _opt (string replace -r '=.*' '' -- "$_w")`);
   lines.push(`            set -a _used_opts "$_opt"`);
+  lines.push(`            set _any_opt_used 1`);
   if (hasExpand) {
     lines.push(`            set -l _val (string replace -r '^[^=]*=' '' -- "$_w")`);
     lines.push(`            __${fn}_track_opt "$_subcmd" "$_opt" "$_val"`);
@@ -826,6 +838,7 @@ export function generateFishCompletion(
   lines.push(`        end`);
   lines.push(`        if string match -q -- '-*' "$_w"`);
   lines.push(`            set -a _used_opts "$_w"`);
+  lines.push(`            set _any_opt_used 1`);
   lines.push(`            if __${fn}_opt_takes_value "$_subcmd" "$_w"`);
   lines.push(`                set -l _next ""`);
   lines.push(`                set -l _next_idx (math $_j + 1)`);

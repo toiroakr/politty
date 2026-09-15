@@ -399,7 +399,11 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
       lines.push(`        ${guard} && _opts+=("--${e.name}${e.desc}")`);
     }
   }
-  lines.push(`        __${fn}_not_used "--help" && _opts+=("--help:Show help")`);
+  lines.push(`        if (( ! _any_opt_used )); then`);
+  lines.push(`            _opts+=("--help:Show help")`);
+  lines.push(`            _opts+=("--help-all:Show help with all subcommand options")`);
+  lines.push(`            _opts+=("--help-json:Show help as JSON")`);
+  lines.push(`        fi`);
   return lines;
 }
 
@@ -740,6 +744,13 @@ export function generateZshCompletion(
   lines.push(``);
   lines.push(`    local _subcmd="" _after_dd=0 _pos_count=0 _skip_next=0`);
   lines.push(`    local -a _used_opts=()`);
+  // Unlike _used_opts (reset on every subcommand descent below, since it
+  // gates frame-local option suggestions), this survives descent: it
+  // answers "has any option been typed anywhere in this invocation",
+  // which the help-flag guards below need (--help/--help-all/--help-json
+  // aren't in _used_opts at all, so per-flag "not used" checks never see
+  // them as used either way).
+  lines.push(`    local _any_opt_used=0`);
   if (hasExpand) {
     lines.push(`    local -A _arg_values=()`);
     // Globals survive subcommand descent so values supplied before the
@@ -768,6 +779,7 @@ export function generateZshCompletion(
   // the dep value, otherwise `-e=prod` slips past the tracker.
   lines.push(`        if [[ "$_w" == -*=* ]]; then`);
   lines.push(`            _used_opts+=("\${_w%%=*}")`);
+  lines.push(`            _any_opt_used=1`);
   if (hasExpand) {
     lines.push(`            __${fn}_track_opt "$_subcmd" "\${_w%%=*}" "\${_w#*=}"`);
     if (hasArrayExpand) {
@@ -778,6 +790,7 @@ export function generateZshCompletion(
   lines.push(`        fi`);
   lines.push(`        if [[ "$_w" == -* ]]; then`);
   lines.push(`            _used_opts+=("$_w")`);
+  lines.push(`            _any_opt_used=1`);
   // Mirror the runtime parser: a token starting with `-` is the next
   // option, not this option's value. Skip/track only when the next
   // token looks like a value.

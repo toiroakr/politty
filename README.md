@@ -12,7 +12,7 @@ From simple scripts to complex CLI tools with subcommands, validation, and auto-
 - **Subcommands**: Build Git-style nested subcommands (with lazy loading and alias support)
 - **Lifecycle Management**: Guaranteed `setup` → `run` → `cleanup` execution order
 - **Signal Handling**: Proper SIGINT/SIGTERM handling with guaranteed cleanup execution
-- **Auto Help Generation**: Automatically generate help text from definitions
+- **Auto Help Generation**: Automatically generate help text from definitions, plus a `--help-json` flag for structured (JSON) help
 - **Interactive Prompts**: Prompt for missing arguments with pluggable adapters (clack, inquirer)
 - **Discriminated Union**: Support for mutually exclusive argument sets
 - **Skill Management**: Manage agent skills (SKILL.md) with file-based install/uninstall
@@ -149,7 +149,18 @@ Options:
   -g, --greeting <value>  Greeting phrase (default: "Hello")
   -l, --loud              Output in uppercase
   -h, --help              Show help
+  -H, --help-all          Show help with all subcommand options
+  --help-json             Show help as JSON
 ```
+
+Every command also accepts `--help-json`, which prints the same information as a single JSON object instead of formatted text — useful for tools that consume a CLI's help programmatically (e.g. generating docs or another UI) rather than parsing `--help`'s output:
+
+```bash
+$ my-cli --help-json
+{"name":"greet","commandPath":[],"rootName":"greet","description":"A CLI tool that displays greetings","usage":{"commandName":"greet","hasGlobalOptions":false,"hasOptions":true,"positionals":[{"name":"name","required":true}]},"builtinOptions":{"help":"Show help","helpAll":"Show help with all subcommand options","helpJson":"Show help as JSON"},"schemaType":"object","positionals":[{"name":"name","cliName":"name","positional":true,"required":true,"type":"string","description":"Name of the person to greet"}],"options":[{"name":"greeting","cliName":"greeting","positional":false,"required":false,"type":"string","alias":["g"],"description":"Greeting phrase","defaultValue":"Hello"},{"name":"loud","cliName":"loud","positional":false,"required":false,"type":"boolean","alias":["l"],"description":"Output in uppercase","defaultValue":false}]}
+```
+
+Unlike `--help-all` (which only expands subcommand options when asked), `--help-json` always includes the full recursive subcommand tree — except for legacy subcommands registered without `lazy()`, which have no synchronous metadata available and appear only as `{ name, unresolved: true }`. Call `generateHelpData(command, options?)` directly to get the same `HelpData` object without going through argv parsing — see [API Reference](./docs/api-reference.md#generatehelpdata).
 
 ## Basic Usage
 
