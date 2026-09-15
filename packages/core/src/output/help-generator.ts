@@ -110,7 +110,12 @@ export interface HelpVariantData {
   discriminatorValue?: string | undefined;
   /** Variant/option description */
   description?: string | undefined;
-  /** Fields unique to this variant/option (common fields are not repeated here) */
+  /**
+   * Fields unique to this variant/option (common fields are not repeated
+   * here). Positional fields unique to this variant/option are included too,
+   * duplicated from the flat top-level {@link HelpData.positionals}, so JSON
+   * consumers can attribute a positional to the variant/option it belongs to.
+   */
   fields: HelpFieldData[];
 }
 
@@ -959,7 +964,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
  * Options for {@link generateHelpData}
  */
 export interface HelpDataOptions {
-  /** Custom descriptions for the --help/--help-all built-in options */
+  /** Custom descriptions for the --help/--help-all/--help-json/--version built-in options */
   descriptions?: BuiltinOptionDescriptions | undefined;
   /** Command hierarchy context */
   context?: CommandContext | undefined;
@@ -1097,8 +1102,11 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
       variants = groups.map((variant) => ({
         discriminatorValue: variant.discriminatorValue,
         description: variant.description,
+        // Positional fields specific to this variant are included here too
+        // (duplicated from the flat top-level `positionals`) so JSON
+        // consumers can tell which variant a given positional belongs to.
         fields: variant.fields
-          .filter((f) => f.name !== disc && !commonNames.has(f.name) && !f.positional)
+          .filter((f) => f.name !== disc && !commonNames.has(f.name))
           .map(toHelpFieldData),
       }));
     } else if (
@@ -1111,9 +1119,10 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
       optionFields = commonFields.map(toHelpFieldData);
       unionOptions = groups.map((option) => ({
         description: option.description,
-        fields: option.fields
-          .filter((f) => !commonNames.has(f.name) && !f.positional)
-          .map(toHelpFieldData),
+        // Positional fields specific to this option are included here too
+        // (duplicated from the flat top-level `positionals`) so JSON
+        // consumers can tell which option a given positional belongs to.
+        fields: option.fields.filter((f) => !commonNames.has(f.name)).map(toHelpFieldData),
       }));
     } else {
       optionFields = extracted.fields.filter((f) => !f.positional).map(toHelpFieldData);
@@ -1135,7 +1144,10 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
         }
         const subContext: CommandContext = {
           commandPath: [...currentPath, name],
-          rootName: context?.rootName,
+          // Fall back to this command's own name so recursive subcommand
+          // usage stays root-prefixed even when generateHelpData is called
+          // directly on the root command without a context.
+          rootName: context?.rootName ?? command.name,
           rootVersion: context?.rootVersion,
           globalExtracted: context?.globalExtracted,
         };

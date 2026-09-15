@@ -782,6 +782,29 @@ describe("Help Generator", () => {
       ]);
     });
 
+    it("should attribute a variant-specific positional to its own variant", () => {
+      const cmd = defineCommand({
+        name: "resource",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: z.literal("create"),
+            name: arg(z.string(), { positional: true, description: "Resource name" }),
+          }),
+          z.object({
+            action: z.literal("delete"),
+            id: arg(z.coerce.number(), { description: "Resource ID" }),
+          }),
+        ]),
+      });
+
+      const data = generateHelpData(cmd);
+
+      expect(data.positionals.map((f) => f.name)).toEqual(["name"]);
+      expect(data.variants?.[0]?.fields.map((f) => f.name)).toEqual(["name"]);
+      expect(data.variants?.[0]?.fields[0]?.positional).toBe(true);
+      expect(data.variants?.[1]?.fields.map((f) => f.name)).toEqual(["id"]);
+    });
+
     it("should split union fields into common/unionOptions", () => {
       const cmd = defineCommand({
         name: "union-cmd",
@@ -806,6 +829,29 @@ describe("Help Generator", () => {
       expect(data.unionOptions).toHaveLength(2);
       expect(data.unionOptions?.[0]?.description).toBe("File Mode");
       expect(data.unionOptions?.[0]?.fields.map((f) => f.name)).toEqual(["path"]);
+      expect(data.unionOptions?.[1]?.fields.map((f) => f.name)).toEqual(["url"]);
+    });
+
+    it("should attribute an option-specific positional to its own union option", () => {
+      const cmd = defineCommand({
+        name: "union-cmd",
+        args: z.union([
+          z.object({
+            mode: z.literal("file"),
+            path: arg(z.string(), { positional: true, description: "Path to file" }),
+          }),
+          z.object({
+            mode: z.literal("url"),
+            url: arg(z.string(), { description: "URL to fetch" }),
+          }),
+        ]),
+      });
+
+      const data = generateHelpData(cmd);
+
+      expect(data.positionals.map((f) => f.name)).toEqual(["path"]);
+      expect(data.unionOptions?.[0]?.fields.map((f) => f.name)).toEqual(["path"]);
+      expect(data.unionOptions?.[0]?.fields[0]?.positional).toBe(true);
       expect(data.unionOptions?.[1]?.fields.map((f) => f.name)).toEqual(["url"]);
     });
 
@@ -842,6 +888,29 @@ describe("Help Generator", () => {
       expect(get?.data?.description).toBe("Get config value");
       expect(get?.data?.commandPath).toEqual(["config", "get"]);
       expect(get?.data?.positionals[0]?.name).toBe("key");
+    });
+
+    it("should root-prefix recursive subcommand usage even without a context", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        subCommands: {
+          config: defineCommand({
+            name: "config",
+            subCommands: {
+              get: defineCommand({ name: "get" }),
+            },
+          }),
+        },
+      });
+
+      // No `context` passed: exercises direct-API usage, as opposed to the
+      // context runMain/runCommand always supply.
+      const data = generateHelpData(cmd);
+
+      const config = data.subcommands?.[0];
+      expect(config?.data?.usage.commandName).toBe("my-cli config");
+      const get = config?.data?.subcommands?.[0];
+      expect(get?.data?.usage.commandName).toBe("my-cli config get");
     });
 
     it("should resolve lazy() subcommands without loading them", () => {

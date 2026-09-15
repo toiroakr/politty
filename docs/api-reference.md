@@ -1679,9 +1679,16 @@ export {
 // Utilities
 export {
   generateHelp,
+  generateHelpData,
   type BuiltinOptionDescriptions,
   type CommandContext,
+  type HelpData,
+  type HelpDataOptions,
+  type HelpFieldData,
   type HelpOptions,
+  type HelpSubcommandData,
+  type HelpUsageData,
+  type HelpVariantData,
 } from "./output/help-generator.js";
 export { isColorEnabled, logger, setColorEnabled, styles, symbols } from "./output/logger.js";
 
