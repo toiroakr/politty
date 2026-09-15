@@ -160,7 +160,7 @@ $ my-cli --help-json
 {"name":"greet","commandPath":[],"rootName":"greet","description":"A CLI tool that displays greetings","usage":{"commandName":"greet","hasGlobalOptions":false,"hasOptions":true,"positionals":[{"name":"name","required":true}]},"builtinOptions":{"help":"Show help","helpAll":"Show help with all subcommand options","helpJson":"Show help as JSON"},"schemaType":"object","positionals":[{"name":"name","cliName":"name","positional":true,"required":true,"type":"string","description":"Name of the person to greet"}],"options":[{"name":"greeting","cliName":"greeting","positional":false,"required":false,"type":"string","alias":["g"],"description":"Greeting phrase","defaultValue":"Hello"},{"name":"loud","cliName":"loud","positional":false,"required":false,"type":"boolean","alias":["l"],"description":"Output in uppercase","defaultValue":false}]}
 ```
 
-Unlike `--help-all` (which only expands subcommand options when asked), `--help-json` always includes the full recursive subcommand tree. Call `generateHelpData(command, options?)` directly to get the same `HelpData` object without going through argv parsing — see [API Reference](./docs/api-reference.md#generatehelpdata).
+Unlike `--help-all` (which only expands subcommand options when asked), `--help-json` always includes the full recursive subcommand tree — except for legacy subcommands registered without `lazy()`, which have no synchronous metadata available and appear only as `{ name, unresolved: true }`. Call `generateHelpData(command, options?)` directly to get the same `HelpData` object without going through argv parsing — see [API Reference](./docs/api-reference.md#generatehelpdata).
 
 ## Basic Usage
 
