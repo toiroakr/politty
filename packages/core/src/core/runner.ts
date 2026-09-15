@@ -961,6 +961,14 @@ async function runCommandInternal<TResult = unknown>(
     const proxiedCommandArgs = createDualCaseProxy(
       validationResult.data as Record<string, unknown>,
     );
+    // Global effects run before the merged args exist, so attach the global
+    // run metadata here: a global effect must see the same `$source` whether
+    // or not the invoked command declares args of its own.
+    const globalSourceMap = new Map<string, ArgSource>();
+    for (const name of cliProvidedGlobalFields) globalSourceMap.set(name, "cli");
+    for (const name of envFallbackGlobalFields) globalSourceMap.set(name, "env");
+    attachArgSource(validatedGlobalArgs, globalSourceMap);
+    attachInvocation(validatedGlobalArgs, resolveInvocation(command, context));
     const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
 
     // Run effects after all validations succeed (global effects first, then command effects)
@@ -976,9 +984,7 @@ async function runCommandInternal<TResult = unknown>(
       ...proxiedGlobalArgs,
       ...proxiedCommandArgs,
     };
-    const argSourceMap = new Map<string, ArgSource>();
-    for (const name of cliProvidedGlobalFields) argSourceMap.set(name, "cli");
-    for (const name of envFallbackGlobalFields) argSourceMap.set(name, "env");
+    const argSourceMap = new Map<string, ArgSource>(globalSourceMap);
     const localEnvFallbackFields = parseResult.envFallbackFields ?? new Set<string>();
     // Local fields take precedence on collision, mirroring the value merge above:
     // classify every declared local field explicitly (not just ones present in
