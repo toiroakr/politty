@@ -73,6 +73,92 @@ describe("validateCommand", () => {
       }
     });
 
+    it("should detect a field name colliding with a reserved built-in long flag", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          helpAll: arg(z.string(), { description: "Not the built-in --help-all" }),
+        }),
+      });
+
+      const result = await validateCommand(cmd);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.some((e) => e.type === "reserved_alias")).toBe(true);
+      }
+    });
+
+    it("should detect a long alias colliding with a reserved built-in long flag", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          appVersion: arg(z.string(), { alias: "version", description: "Not --version" }),
+        }),
+      });
+
+      const result = await validateCommand(cmd);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.some((e) => e.type === "reserved_alias")).toBe(true);
+      }
+    });
+
+    it("should detect a field name colliding with the built-in --help-json flag", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          helpJson: arg(z.string(), { description: "Not the built-in --help-json" }),
+        }),
+      });
+
+      const result = await validateCommand(cmd);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.some((e) => e.type === "reserved_alias")).toBe(true);
+      }
+    });
+
+    it("should still detect a reserved-long-flag field name collision even with overrideBuiltinAlias (no escape hatch for long names)", async () => {
+      // `overrideBuiltinAlias: true` alone (regardless of `alias`) skips the
+      // *type-level* reserved-alias check (see `ValidateArgMeta`, which only
+      // ever fires that check for the -h/-H short-alias escape hatch), so
+      // this is a runtime-only rejection with no `@ts-expect-error` above it.
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          helpAll: arg(z.string(), {
+            overrideBuiltinAlias: true,
+            description: "Not the built-in --help-all",
+          }),
+        }),
+      });
+
+      const result = await validateCommand(cmd);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.some((e) => e.type === "reserved_alias")).toBe(true);
+      }
+    });
+
+    it("should still detect a reserved-long-flag alias collision even with overrideBuiltinAlias (no escape hatch for long names)", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          appVersion: arg(z.string(), {
+            alias: "version",
+            overrideBuiltinAlias: true,
+            description: "Not --version",
+          }),
+        }),
+      });
+
+      const result = await validateCommand(cmd);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.some((e) => e.type === "reserved_alias")).toBe(true);
+      }
+    });
+
     it("should detect field names starting with $", async () => {
       const cmd = defineCommand({
         name: "test",

@@ -927,6 +927,76 @@ interface BuiltinOverrideArgMeta extends BaseArgMeta {
 }
 ```
 
+#### Reserved built-in names
+
+A field's `cliName` (its kebab-case name, derived from the field key) or any
+of its long aliases (`alias`/`hiddenAlias` entries longer than one
+character) cannot be `help`, `help-all`, `help-json`, or `version` — those
+long flags are always intercepted by `parseArgs` before schema parsing,
+regardless of which field produced the name, so an unguarded collision
+would make that field permanently unreachable. `defineCommand` itself only
+builds the command object and does not validate. For a collision in the
+command's own `args` schema, the collision is instead caught by:
+
+- `parseArgs()` — throws `ReservedAliasError` synchronously.
+- `runCommand()` — catches that throw internally and returns it as
+  `{ success: false, error }` rather than throwing to the caller.
+- `runMain()` — never returns a result at all (its signature is
+  `Promise<never>`); it catches the same failure internally, reports the
+  error, and calls `process.exit()` with the corresponding non-zero exit
+  code.
+- the explicit `validateCommand()` — never throws; collects it (with every
+  other schema error) into the returned `{ valid: false, errors }`.
+
+**This does not apply to a `globalArgs` schema, for a foreground
+invocation.** `runCommand()`/`runMain()` validate `globalArgs` up front,
+before the try/catch that produces `{ success: false, error }` (or, for
+`runMain()`, before the report-and-`process.exit()` path) is even entered,
+so a reserved-name collision there becomes a rejected promise from
+`runCommand()`/`runMain()` itself instead — both are `async`, so the throw
+surfaces as a promise rejection, not a synchronous throw at the call site —
+rather than a returned failure result. `runMain()` skips this validation
+entirely, however, when it detects an internal (`__*`) subcommand
+invocation (e.g. shell completion's dispatcher): it deliberately runs
+without the caller's `globalArgs`/`setup`/`cleanup`/`prompt` on that path,
+so a `globalArgs` collision is not rejected there.
+
+Unlike the short aliases `-h`/`-H` (see `BuiltinOverrideArgMeta` above), this
+collision **has no override**: since `--help`/`--help-all`/`--help-json`/
+`--version` are always resolved as the built-in before any field is consulted,
+`overrideBuiltinAlias: true` would not actually make the field reachable —
+it would just suppress the error while leaving the field permanently
+shadowed. Rename the field or its alias instead (e.g.
+`appVersion`/`targetVersion` instead of `version`).
+
+**Known gap, shared with the pre-existing `-h`/`-H` reservation:** several
+early-exit paths run before a command's own schema is ever extracted or
+validated, so this check doesn't apply to them for that command:
+
+- `parseArgs()` matches and dispatches to a subcommand _before_ extracting
+  or validating the current command's own schema, so invoking a parent
+  command in a way that routes straight to a subcommand (e.g. `cli sub ...`)
+  skips this check for the parent's own fields in that call.
+- `runMain()`'s plugin dispatch (the `onUnknownSubcommand` option) runs
+  before `parseArgs()`/`runCommandInternal()` for a root command without its
+  own `run`, so a root field collision is not rejected on that path either
+  if the first positional isn't a known subcommand name.
+
+`validateCommand()` is unaffected by either gap — it walks and validates
+every command's schema regardless of subcommand routing or plugin
+dispatch — so it still catches such a collision (e.g. in a test or a CI
+validation step).
+
+**Another known gap, also pre-existing and not specific to this
+reservation:** for a `union`/`discriminatedUnion` args schema, every check
+in this file (including this one) only inspects the schema's flattened,
+first-occurrence-wins `fields` list, not each variant's own field metadata.
+If the same field name appears in multiple variants with different aliases
+(e.g. plain in one variant, aliased to `version` in another), a later
+variant's collision can be missed here even though the help renderer — which
+iterates each variant's own fields directly — would still advertise the
+unreachable alias.
+
 ---
 
 ### `Logger`

@@ -218,6 +218,39 @@ describe("ArgParser", () => {
       expect(result.rawArgs.host).toBe("localhost");
     });
 
+    it("should throw error when a field's cliName collides with a reserved long name", () => {
+      // No `alias` is set, so the type-level check (which only inspects
+      // alias/hiddenAlias, not cliName) can't catch this; it's a
+      // runtime-only rejection.
+      const cmd = defineCommand({
+        name: "cli",
+        args: z.object({
+          helpAll: arg(z.string()),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Field "helpAll" collides with the built-in --help-all option/,
+      );
+    });
+
+    it("should throw error for a reserved long-name collision even with overrideBuiltinAlias: true (no escape hatch for long names)", () => {
+      const cmd = defineCommand({
+        name: "cli",
+        args: z.object({
+          // @ts-expect-error - BuiltinOverrideArgMeta still requires `alias`
+          // to be "h" | "H"; this has no bearing on the (runtime-only)
+          // long-name collision check below, which doesn't consult `alias`'s
+          // type at all.
+          helpAll: arg(z.string(), { overrideBuiltinAlias: true }),
+        }),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(
+        /Field "helpAll" collides with the built-in --help-all option/,
+      );
+    });
+
     it("should throw error when -h alias is used without override flag", () => {
       const cmd = defineCommand({
         name: "test-cmd",

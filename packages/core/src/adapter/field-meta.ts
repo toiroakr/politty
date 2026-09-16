@@ -3,9 +3,11 @@ import type { ArgsSchema } from "../types.js";
 
 /**
  * Long flag names reserved for built-in handling (parseArgs / scanForSubcommand
- * intercept these before option parsing), so custom negation names must avoid them.
+ * intercept these before option parsing). A field's `cliName` or any of its
+ * long aliases must avoid them (checked in command-validator.ts), and so must
+ * custom negation names (checked below in this file).
  */
-const RESERVED_NEGATION_NAMES: ReadonlySet<string> = new Set([
+export const RESERVED_BUILTIN_LONG_NAMES: ReadonlySet<string> = new Set([
   "help",
   "help-all",
   "help-json",
@@ -272,10 +274,10 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
           `Invalid negation "${rawNegation}" for field "${name}": negation names must match ${aliasPattern}.`,
         );
       }
-      if (RESERVED_NEGATION_NAMES.has(candidate)) {
+      if (RESERVED_BUILTIN_LONG_NAMES.has(candidate)) {
         throw new Error(
           `Invalid negation "${rawNegation}" for field "${name}": negation cannot use reserved built-in flag names (${[
-            ...RESERVED_NEGATION_NAMES,
+            ...RESERVED_BUILTIN_LONG_NAMES,
           ]
             .map((n) => `--${n}`)
             .join(", ")}).`,
