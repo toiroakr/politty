@@ -1,5 +1,18 @@
 # politty
 
+## 0.13.0
+
+### Minor Changes
+
+- 33f8783: **Breaking change:** A field's `cliName` (its kebab-case name) or any long alias (`alias`/`hiddenAlias` entries longer than one character) can no longer be `help`, `help-all`, `help-json`, or `version`. These long flags are always intercepted by `parseArgs`/`scanForSubcommand` before schema parsing, regardless of which field produced the name, so an unguarded collision silently made that field unreachable. For a command's own `args` schema: `parseArgs()` now throws a `ReservedAliasError` for this collision; `runCommand()` catches it into `{ success: false, error }` instead of throwing; `runMain()` reports it and exits with a non-zero code instead of returning at all; and the explicit `validateCommand()` collects it into `{ valid: false, errors }` without throwing. For a `globalArgs` schema, `runCommand()`/`runMain()` validate it before entering the try/catch (or exit path) that produces those results, so a collision there becomes a rejected promise from `runCommand()`/`runMain()` itself instead (both are `async`, so the throw surfaces as promise rejection, not a synchronous throw at the call site). Unlike the existing reservation of the short aliases `-h`/`-H`, this has no `overrideBuiltinAlias: true` opt-in: the long flag is always resolved as the built-in before any field is consulted, so an override would only suppress the error without making the field reachable. Rename the colliding field or alias instead.
+
+### Patch Changes
+
+- ae9179c: Added a `--help-json` flag and a `generateHelpData(command, options?)` function that produce a structured, JSON-serializable representation of a command's help (name, description, positionals, options, discriminated-union/union variants, global options, examples, notes, and the full recursive subcommand tree — except legacy subcommands registered without `lazy()`, which appear only as `{ name, unresolved: true }` since no synchronous metadata is available for them), for tools that want to consume a CLI's help programmatically instead of parsing the formatted `--help` text. `extractFields`/`generateDoc` already exposed command metadata, but neither produced a JSON-safe DTO (both carry schema objects and callbacks that don't survive `JSON.stringify`) nor resolved the whole subcommand tree in one call.
+- Updated dependencies [ae9179c]
+- Updated dependencies [33f8783]
+  - @politty/zod@0.3.0
+
 ## 0.12.6
 
 ### Patch Changes
