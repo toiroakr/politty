@@ -359,8 +359,8 @@ function checkPositionalConfig(
  * - the short aliases `-h` / `-H`, reserved for `--help` / `--help-all`,
  *   bypassed by `overrideBuiltinAlias: true`
  * - a field's `cliName` or any of its long aliases matching a name in
- *   {@link RESERVED_BUILTIN_LONG_NAMES} (`--help`, `--help-all`, `--version`),
- *   which `parseArgs`/`scanForSubcommand` intercept before schema parsing
+ *   {@link RESERVED_BUILTIN_LONG_NAMES} (`--help`, `--help-all`, `--help-json`,
+ *   `--version`), which `parseArgs`/`scanForSubcommand` intercept before schema parsing
  *   regardless of which field produced that name. Unlike the short-alias
  *   check, this one has no escape hatch: `overrideBuiltinAlias: true` does
  *   not suppress it, since the long name is always resolved as the built-in
@@ -502,15 +502,15 @@ export function validatePositionalConfig(extracted: ExtractedFields): void {
  * Reserved names:
  * - 'h' is reserved for --help, 'H' for --help-all (short aliases). Users
  *   can override this by setting overrideBuiltinAlias: true on the field.
- * - a field's `cliName` or any long alias matching `help`, `help-all`, or
- *   `version` collides with the matching built-in long flag. This has no
- *   override: `overrideBuiltinAlias: true` does not suppress it (see
- *   {@link checkReservedAliases}).
+ * - a field's `cliName` or any long alias matching `help`, `help-all`,
+ *   `help-json`, or `version` collides with the matching built-in long
+ *   flag. This has no override: `overrideBuiltinAlias: true` does not
+ *   suppress it (see {@link checkReservedAliases}).
  *
  * @param extracted - Extracted fields from schema
  * @param _hasSubCommands - Whether the command has subcommands (reserved for future use)
  * @throws {ReservedAliasError} If `h`/`H` is used without `overrideBuiltinAlias: true`,
- *   or if a field's `cliName`/long alias collides with `help`/`help-all`/`version`
+ *   or if a field's `cliName`/long alias collides with `help`/`help-all`/`help-json`/`version`
  *   (this second case is never suppressed by `overrideBuiltinAlias`)
  */
 export function validateReservedAliases(

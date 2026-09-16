@@ -10,6 +10,7 @@ import type { ArgsSchema } from "../types.js";
 export const RESERVED_BUILTIN_LONG_NAMES: ReadonlySet<string> = new Set([
   "help",
   "help-all",
+  "help-json",
   "version",
 ]);
 

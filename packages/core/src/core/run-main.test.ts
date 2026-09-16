@@ -588,6 +588,110 @@ describe("runCommand", () => {
       expect(output).toContain("Build the project");
       expect(output).toContain("--output");
     });
+
+    it("should print structured JSON help on --help-json", async () => {
+      using console = spyOnConsoleLog();
+
+      const cmd = defineCommand({
+        name: "my-cli",
+        description: "Test CLI",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {
+            alias: "v",
+            description: "Enable verbose mode",
+          }),
+        }),
+      });
+
+      const result = await runCommand(cmd, ["--help-json"]);
+
+      const output = console.getLogs()[0] ?? "";
+      const data = JSON.parse(output);
+      expect(data.name).toBe("my-cli");
+      expect(data.description).toBe("Test CLI");
+      expect(data.options).toEqual([
+        expect.objectContaining({ name: "verbose", alias: ["v"], defaultValue: false }),
+      ]);
+      expect(result.exitCode).toBe(0);
+    });
+
+    it("should include the full recursive subcommand tree on the root --help-json", async () => {
+      using console = spyOnConsoleLog();
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          config: defineCommand({
+            name: "config",
+            subCommands: {
+              get: defineCommand({
+                name: "get",
+                description: "Get config value",
+              }),
+            },
+          }),
+        },
+      });
+
+      await runCommand(cmd, ["--help-json"]);
+
+      const data = JSON.parse(console.getLogs()[0] ?? "");
+      expect(data.subcommands[0].name).toBe("config");
+      expect(data.subcommands[0].data.subcommands[0].data.description).toBe("Get config value");
+    });
+
+    it("should prefer --help-json over --help-all when both flags are given", async () => {
+      using console = spyOnConsoleLog();
+
+      const cmd = defineCommand({ name: "cli" });
+
+      await runCommand(cmd, ["--help-all", "--help-json"]);
+
+      const output = console.getLogs()[0] ?? "";
+      expect(() => JSON.parse(output)).not.toThrow();
+    });
+
+    it("should show subcommand JSON help with the right commandPath/rootName on subcmd --help-json", async () => {
+      using console = spyOnConsoleLog();
+
+      const cmd = defineCommand({
+        name: "cli",
+        subCommands: {
+          build: defineCommand({
+            name: "build",
+            description: "Build the project",
+            args: z.object({
+              output: arg(z.string().default("dist"), { alias: "o" }),
+            }),
+          }),
+        },
+      });
+
+      await runCommand(cmd, ["build", "--help-json"]);
+
+      const data = JSON.parse(console.getLogs()[0] ?? "");
+      expect(data.commandPath).toEqual(["build"]);
+      expect(data.rootName).toBe("cli");
+      expect(data.usage.commandName).toBe("cli build");
+      expect(data.description).toBe("Build the project");
+    });
+
+    it("should include global options in --help-json when globalArgs is configured", async () => {
+      using console = spyOnConsoleLog();
+
+      const cmd = defineCommand({ name: "cli" });
+
+      await runCommand(cmd, ["--help-json"], {
+        globalArgs: z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v", description: "Verbose output" }),
+        }),
+      });
+
+      const data = JSON.parse(console.getLogs()[0] ?? "");
+      expect(data.globalOptions).toEqual([
+        expect.objectContaining({ name: "verbose", description: "Verbose output" }),
+      ]);
+    });
   });
 
   describe("Validation errors", () => {

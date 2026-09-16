@@ -103,6 +103,21 @@ describe("validateCommand", () => {
       }
     });
 
+    it("should detect a field name colliding with the built-in --help-json flag", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          helpJson: arg(z.string(), { description: "Not the built-in --help-json" }),
+        }),
+      });
+
+      const result = await validateCommand(cmd);
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.some((e) => e.type === "reserved_alias")).toBe(true);
+      }
+    });
+
     it("should still detect a reserved-long-flag field name collision even with overrideBuiltinAlias (no escape hatch for long names)", async () => {
       // `overrideBuiltinAlias: true` alone (regardless of `alias`) skips the
       // *type-level* reserved-alias check (see `ValidateArgMeta`, which only

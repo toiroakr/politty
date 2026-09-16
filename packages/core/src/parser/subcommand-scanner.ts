@@ -276,7 +276,7 @@ export function scanForSubcommand(
   };
 }
 
-const BUILTIN_FLAGS = new Set(["--help", "-h", "--help-all", "-H", "--version"]);
+const BUILTIN_FLAGS = new Set(["--help", "-h", "--help-all", "-H", "--help-json", "--version"]);
 
 /**
  * Find the index of the first positional argument in argv, properly skipping

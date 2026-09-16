@@ -165,6 +165,32 @@ describe("ArgParser", () => {
       expect(result.helpRequested).toBe(false);
     });
 
+    it("should detect --help-json flag", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          name: z.string(),
+        }),
+      });
+
+      const result = parseArgs(["--help-json"], cmd);
+
+      expect(result.helpJsonRequested).toBe(true);
+      expect(result.helpRequested).toBe(false);
+      expect(result.helpAllRequested).toBe(false);
+    });
+
+    it("should prioritize --help-json over --help when both are present", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+      });
+
+      const result = parseArgs(["--help", "--help-json"], cmd);
+
+      expect(result.helpJsonRequested).toBe(true);
+      expect(result.helpRequested).toBe(false);
+    });
+
     it("should detect -H flag as help-all when command has subcommands", () => {
       const subCmd = defineCommand({ name: "build" });
       const cmd = defineCommand({
