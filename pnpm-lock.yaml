@@ -212,8 +212,8 @@ importers:
         specifier: 5.0.0
         version: 5.0.0(@types/node@25.9.6)(@vitest/coverage-v8@5.0.0)(vite@8.2.2(@types/node@25.9.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.13)(yaml@2.9.0))
       zod:
-        specifier: 4.5.4
-        version: 4.5.4
+        specifier: 4.6.1
+        version: 4.6.1
 
   packages/core:
     dependencies:
@@ -231,8 +231,8 @@ importers:
         specifier: 25.9.6
         version: 25.9.6
       zod:
-        specifier: 4.5.4
-        version: 4.5.4
+        specifier: 4.6.1
+        version: 4.6.1
 
   packages/politty:
     dependencies:
@@ -259,8 +259,8 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
       zod:
-        specifier: 4.5.4
-        version: 4.5.4
+        specifier: 4.6.1
+        version: 4.6.1
 
   packages/valibot:
     dependencies:
@@ -321,8 +321,8 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
       zod:
-        specifier: 4.5.4
-        version: 4.5.4
+        specifier: 4.6.1
+        version: 4.6.1
 
   packages/zod-mini:
     dependencies:
@@ -352,8 +352,8 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
       zod:
-        specifier: 4.5.4
-        version: 4.5.4
+        specifier: 4.6.1
+        version: 4.6.1
 
 packages:
 
@@ -2356,8 +2356,8 @@ packages:
   yuku-parser@0.9.5:
     resolution: {integrity: sha512-IBnAdNVMswWbJcM7woPluOudectJzFjJ1N8jVRxP9Uq4CIv5hZdBIcdmtRbFDYF/Ph2j2gVup4YJ4N9mh0jYFA==}
 
-  zod@4.5.4:
-    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
+  zod@4.6.1:
+    resolution: {integrity: sha512-341aRWQsve0rvronKNTqZpjmzdbUDlFuzHaI/XLg/Ej82qffDJRRfBTCuv7+9q/rMjB6LSLyEBnW4InJeMtt/Q==}
 
 snapshots:
 
@@ -3407,7 +3407,7 @@ snapshots:
       tinyglobby: 0.2.17
       unbash: 4.0.11
       yaml: 2.9.0
-      zod: 4.5.4
+      zod: 4.6.1
 
   launch-editor@2.14.1:
     dependencies:
@@ -3874,4 +3874,4 @@ snapshots:
       '@yuku-parser/binding-win32-arm64': 0.9.5
       '@yuku-parser/binding-win32-x64': 0.9.5
 
-  zod@4.5.4: {}
+  zod@4.6.1: {}
