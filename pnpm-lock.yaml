@@ -218,8 +218,8 @@ importers:
   packages/core:
     dependencies:
       yaml:
-        specifier: ^2.9.0
-        version: 2.9.0
+        specifier: ^2.9.1
+        version: 2.9.1
     devDependencies:
       '@clack/prompts':
         specifier: 1.2.0
@@ -271,8 +271,8 @@ importers:
         specifier: ^8.3.2
         version: 8.7.2(@types/node@25.9.6)
       yaml:
-        specifier: ^2.9.0
-        version: 2.9.0
+        specifier: ^2.9.1
+        version: 2.9.1
     devDependencies:
       '@politty/core':
         specifier: workspace:*
@@ -302,8 +302,8 @@ importers:
         specifier: ^8.3.2
         version: 8.7.2(@types/node@25.9.6)
       yaml:
-        specifier: ^2.9.0
-        version: 2.9.0
+        specifier: ^2.9.1
+        version: 2.9.1
     devDependencies:
       '@politty/core':
         specifier: workspace:*
@@ -333,8 +333,8 @@ importers:
         specifier: ^8.3.2
         version: 8.7.2(@types/node@25.9.6)
       yaml:
-        specifier: ^2.9.0
-        version: 2.9.0
+        specifier: ^2.9.1
+        version: 2.9.1
     devDependencies:
       '@politty/core':
         specifier: workspace:*
@@ -2347,6 +2347,11 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
+  yaml@2.9.1:
+    resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
   yuku-ast@0.9.5:
     resolution: {integrity: sha512-Q8qW8WwQnN5Cm0ZZivdRIfv0sRLTjUq0YumXJkw8CYN1aCdICH9rk4C47/4n6kA5EqDtlj+F608twoTSV2MwdQ==}
 
@@ -3834,6 +3839,8 @@ snapshots:
       stackback: 0.0.2
 
   yaml@2.9.0: {}
+
+  yaml@2.9.1: {}
 
   yuku-ast@0.9.5:
     dependencies:
