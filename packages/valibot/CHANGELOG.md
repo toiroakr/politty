@@ -1,5 +1,11 @@
 # @politty/valibot
 
+## 0.3.1
+
+### Patch Changes
+
+- 32163de: fix(deps): update dependency yaml to ^2.9.1
+
 ## 0.3.0
 
 ### Minor Changes
