@@ -27,7 +27,7 @@
   "devDependencies": {
     "@clack/prompts": "1.2.0",
     "@inquirer/prompts": "8.7.2",
-    "@types/node": "25.9.6",
+    "@types/node": "25.9.7",
     "zod": "4.6.5"
   },
   "engines": {
