@@ -442,5 +442,79 @@ describe("valibot adapter", () => {
       const bad = validateValibotArgs({ action: "delete", id: "x" }, schema);
       expect(bad.success).toBe(false);
     });
+
+    describe("missing required fields", () => {
+      it("should report a missing field with the field schema's own type error instead of the object's Invalid key error", () => {
+        const schema = v.object({ file: v.string() });
+        const result = validateValibotArgs({}, schema);
+        expect(result).toEqual({
+          success: false,
+          errors: [
+            {
+              path: ["file"],
+              message: "Invalid type: Expected string but received undefined",
+              code: "string",
+              received: undefined,
+              expected: "string",
+            },
+          ],
+        });
+      });
+
+      it("should report a missing field with the custom message given to the field schema", () => {
+        const schema = v.object({
+          file: v.string("file is required"),
+          outDir: v.pipe(v.string(() => "out dir is required")),
+        });
+        const result = validateValibotArgs({}, schema);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.errors.map((e) => [e.path.join("."), e.message])).toEqual([
+          ["file", "file is required"],
+          ["outDir", "out dir is required"],
+        ]);
+      });
+
+      it("should report a missing field in strict, loose, rest, and piped object schemas the same way", () => {
+        const entries = { file: v.string("file is required") };
+        for (const schema of [
+          v.strictObject(entries),
+          v.looseObject(entries),
+          v.objectWithRest(entries, v.string()),
+          v.pipe(
+            v.object(entries),
+            v.check(() => true),
+          ),
+        ]) {
+          const result = validateValibotArgs({}, schema);
+          expect(result.success).toBe(false);
+          if (result.success) return;
+          expect(result.errors.map((e) => e.message)).toEqual(["file is required"]);
+        }
+      });
+
+      it("should report a missing field with the message of the variant option selected by the discriminator", () => {
+        const schema = v.variant("action", [
+          v.object({ action: v.literal("create"), target: v.string("name to create is required") }),
+          v.object({ action: v.literal("delete"), target: v.string("id to delete is required") }),
+        ]);
+        const result = validateValibotArgs({ action: "delete" }, schema);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.errors.map((e) => [e.path.join("."), e.message])).toEqual([
+          ["target", "id to delete is required"],
+        ]);
+      });
+
+      it("should keep the Invalid key error when the field schema itself accepts undefined", () => {
+        const schema = v.object({ payload: v.unknown() });
+        const result = validateValibotArgs({}, schema);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.errors.map((e) => e.message)).toEqual([
+          'Invalid key: Expected "payload" but received undefined',
+        ]);
+      });
+    });
   });
 });

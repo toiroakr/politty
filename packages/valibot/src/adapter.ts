@@ -619,26 +619,77 @@ export function extractValibotFields(schema: ArgsSchema): ExtractedFields {
  * reports the raw value — `input` keeps the two adapters' semantics aligned.
  */
 interface ValibotIssue {
+  kind: string;
   type: string;
   message: string;
   input: unknown;
   expected: string | null;
-  path?: Array<{ key?: unknown }> | undefined;
+  path?: Array<{ key?: unknown; origin?: string }> | undefined;
+}
+
+function toValidationError(issue: ValibotIssue, path: string[]): ValidationError {
+  return {
+    path,
+    message: issue.message,
+    code: issue.type,
+    received: issue.input,
+    expected: issue.expected ?? undefined,
+  };
+}
+
+/**
+ * The key of a top-level arg that is absent from the input, when `issue` is
+ * the object schema's "Invalid key" issue for it.
+ */
+function getMissingArgKey(issue: ValibotIssue): string | undefined {
+  if (issue.kind !== "schema" || issue.path?.length !== 1) return undefined;
+  const [item] = issue.path;
+  return item?.origin === "key" ? String(item.key) : undefined;
+}
+
+function findFieldSchema(
+  schema: ArgsSchema,
+  rawArgs: Record<string, unknown>,
+  key: string,
+): unknown {
+  const extracted = extractValibotFields(schema);
+  const discriminator = extracted.discriminator;
+  const fields =
+    discriminator === undefined
+      ? extracted.fields
+      : (extracted.variants?.find((v) => v.discriminatorValue === String(rawArgs[discriminator]))
+          ?.fields ?? extracted.fields);
+  return fields.find((field) => field.name === key)?.schema;
 }
 
 /**
  * Convert valibot issues to ValidationError array
+ *
+ * valibot reports an absent key with the object's own "Invalid key" issue
+ * and never runs the field schema, so the field's message (including a
+ * custom one) would be lost. Re-running the field schema against
+ * `undefined` recovers it, matching what zod reports for the same input.
  */
-function formatValibotIssues(issues: readonly unknown[]): ValidationError[] {
+function formatValibotIssues(
+  issues: readonly unknown[],
+  schema: ArgsSchema,
+  rawArgs: Record<string, unknown>,
+): ValidationError[] {
   return issues.map((raw) => {
     const issue = raw as ValibotIssue;
-    return {
-      path: issue.path?.map((item) => String(item.key)) ?? [],
-      message: issue.message,
-      code: issue.type,
-      received: issue.input,
-      expected: issue.expected ?? undefined,
-    };
+    const path = issue.path?.map((item) => String(item.key)) ?? [];
+    const missingKey = getMissingArgKey(issue);
+    if (missingKey !== undefined) {
+      const fieldSchema = findFieldSchema(schema, rawArgs, missingKey);
+      if (fieldSchema !== undefined) {
+        const fieldResult = safeParse(fieldSchema as GenericSchema, undefined);
+        const [fieldIssue] = fieldResult.issues ?? [];
+        if (fieldIssue) {
+          return toValidationError(fieldIssue as ValibotIssue, path);
+        }
+      }
+    }
+    return toValidationError(issue, path);
   });
 }
 
@@ -657,7 +708,7 @@ export function validateValibotArgs(
 
   return {
     success: false,
-    errors: formatValibotIssues(result.issues),
+    errors: formatValibotIssues(result.issues, schema, rawArgs),
   };
 }
 
