@@ -373,8 +373,7 @@ function renderArguments(command: AnyCommand): string {
     }));
   }
 
-  const common =
-    groups.length > 0 ? computeCommonFieldNames(groups, extracted.discriminator) : undefined;
+  const common = groups.length > 0 ? computeCommonFieldNames(groups) : undefined;
   const lines = extracted.fields
     .filter((f) => f.positional && (common === undefined || common.has(f.name)))
     .map((f) => formatArgumentLine(f));

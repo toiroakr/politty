@@ -383,6 +383,28 @@ describe("Help Generator", () => {
       );
     });
 
+    it("should list a positional discriminator once as a common argument", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: arg(z.literal("create"), { positional: true, description: "Action" }),
+            name: arg(z.string(), { positional: true, description: "Name" }),
+          }),
+          z.object({
+            action: arg(z.literal("delete"), { positional: true, description: "Action" }),
+            id: arg(z.string(), { positional: true, description: "Id" }),
+          }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(
+        /Arguments:\n {2}<action> +Action\n\nWhen action=create:\n {4}<name> +Name\n\nWhen action=delete:\n {4}<id> +Id\n\nOptions:/,
+      );
+    });
+
     it("should group option-specific positional arguments under their union option label like options", () => {
       const cmd = defineCommand({
         name: "my-cli",
