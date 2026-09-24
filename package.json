@@ -35,7 +35,7 @@
     "@types/node": "25.9.7",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "@vitest/coverage-v8": "5.0.1",
-    "knip": "6.35.1",
+    "knip": "6.36.0",
     "lefthook": "2.1.14",
     "organize-imports-cli": "1.0.2",
     "oxfmt": "0.68.0",
