@@ -405,6 +405,20 @@ describe("Help Generator", () => {
       );
     });
 
+    it("should not list a positional discriminator as an option", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: arg(z.literal("create"), { positional: true }) }),
+          z.object({ action: arg(z.literal("delete"), { positional: true }) }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).not.toContain("--action");
+    });
+
     it("should group option-specific positional arguments under their union option label like options", () => {
       const cmd = defineCommand({
         name: "my-cli",

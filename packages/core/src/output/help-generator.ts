@@ -520,7 +520,7 @@ function renderDiscriminatedUnionOptions(
 
   // Add discriminator field
   const discriminatorField = extracted.fields.find((f) => f.name === discriminator);
-  if (discriminatorField) {
+  if (discriminatorField && !discriminatorField.positional) {
     const variantValues = variants.map((v) => v.discriminatorValue).join("|");
     const flags = `${styles.option(`--${discriminator}`)} ${styles.placeholder(`<${variantValues}>`)}`;
     // Use discriminatedUnion's description for the discriminator field
