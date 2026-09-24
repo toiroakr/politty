@@ -506,6 +506,36 @@ describe("valibot adapter", () => {
         ]);
       });
 
+      it("should select the variant whose discriminator schema accepts the value even when it accepts several values", () => {
+        const schema = v.variant("action", [
+          v.object({ action: v.literal("create"), target: v.string("name to create is required") }),
+          v.object({
+            action: v.picklist(["delete", "remove"]),
+            target: v.string("id to delete is required"),
+          }),
+        ]);
+        const result = validateValibotArgs({ action: "remove" }, schema);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.errors.map((e) => [e.path.join("."), e.message])).toEqual([
+          ["target", "id to delete is required"],
+        ]);
+      });
+
+      it("should keep the nested path of the field schema's issue", () => {
+        const schema = v.object({
+          config: v.pipe(
+            v.unknown(),
+            v.transform(() => ({})),
+            v.object({ host: v.string("host is required") }),
+          ),
+        });
+        const result = validateValibotArgs({}, schema);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.errors.map((e) => e.path.join("."))).toEqual(["config.host"]);
+      });
+
       it("should keep the Invalid key error when the field schema itself accepts undefined", () => {
         const schema = v.object({ payload: v.unknown() });
         const result = validateValibotArgs({}, schema);

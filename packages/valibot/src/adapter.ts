@@ -657,8 +657,13 @@ function findFieldSchema(
   const fields =
     discriminator === undefined
       ? extracted.fields
-      : (extracted.variants?.find((v) => v.discriminatorValue === String(rawArgs[discriminator]))
-          ?.fields ?? extracted.fields);
+      : (extracted.variants?.find((variant) => {
+          const discriminatorSchema = variant.fields.find((f) => f.name === discriminator)?.schema;
+          return (
+            discriminatorSchema !== undefined &&
+            safeParse(discriminatorSchema as GenericSchema, rawArgs[discriminator]).success
+          );
+        })?.fields ?? extracted.fields);
   return fields.find((field) => field.name === key)?.schema;
 }
 
@@ -685,7 +690,9 @@ function formatValibotIssues(
         const fieldResult = safeParse(fieldSchema as GenericSchema, undefined);
         const [fieldIssue] = fieldResult.issues ?? [];
         if (fieldIssue) {
-          return toValidationError(fieldIssue as ValibotIssue, path);
+          const nestedPath =
+            (fieldIssue as ValibotIssue).path?.map((item) => String(item.key)) ?? [];
+          return toValidationError(fieldIssue as ValibotIssue, [...path, ...nestedPath]);
         }
       }
     }
