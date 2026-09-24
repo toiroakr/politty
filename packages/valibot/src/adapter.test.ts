@@ -444,39 +444,61 @@ describe("valibot adapter", () => {
     });
 
     describe("missing required fields", () => {
-      it("should report a missing field with the field schema's own type error instead of the object's Invalid key error", () => {
-        const schema = v.object({ file: v.string() });
+      it("should report a missing option with the option's CLI flag instead of valibot's Invalid key message", () => {
+        const schema = v.object({ outDir: v.string() });
         const result = validateValibotArgs({}, schema);
         expect(result).toEqual({
           success: false,
           errors: [
             {
-              path: ["file"],
-              message: "Invalid type: Expected string but received undefined",
-              code: "string",
+              path: ["outDir"],
+              message: "Missing required option --out-dir",
+              code: "object",
               received: undefined,
-              expected: "string",
+              expected: '"outDir"',
             },
           ],
         });
       });
 
-      it("should report a missing field with the custom message given to the field schema", () => {
-        const schema = v.object({
-          file: v.string("file is required"),
-          outDir: v.pipe(v.string(() => "out dir is required")),
-        });
+      it("should report a missing positional argument with its placeholder", () => {
+        const schema = v.object({ file: arg(v.string(), { positional: true }) });
         const result = validateValibotArgs({}, schema);
         expect(result.success).toBe(false);
         if (result.success) return;
         expect(result.errors.map((e) => [e.path.join("."), e.message])).toEqual([
-          ["file", "file is required"],
-          ["outDir", "out dir is required"],
+          ["file", "Missing required argument <file>"],
         ]);
       });
 
+      it("should keep a custom message given to the object schema", () => {
+        const schema = v.object({ file: v.string() }, "file is required");
+        const result = validateValibotArgs({}, schema);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.errors.map((e) => e.message)).toEqual(["file is required"]);
+      });
+
+      it("should not run the missing field's schema", () => {
+        let calls = 0;
+        const schema = v.object({
+          file: v.pipe(
+            v.unknown(),
+            v.transform(() => {
+              calls++;
+              throw new Error("transform ran");
+            }),
+          ),
+        });
+        const result = validateValibotArgs({}, schema);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.errors.map((e) => e.message)).toEqual(["Missing required option --file"]);
+        expect(calls).toBe(0);
+      });
+
       it("should report a missing field in strict, loose, rest, and piped object schemas the same way", () => {
-        const entries = { file: v.string("file is required") };
+        const entries = { file: v.string() };
         for (const schema of [
           v.strictObject(entries),
           v.looseObject(entries),
@@ -489,60 +511,20 @@ describe("valibot adapter", () => {
           const result = validateValibotArgs({}, schema);
           expect(result.success).toBe(false);
           if (result.success) return;
-          expect(result.errors.map((e) => e.message)).toEqual(["file is required"]);
+          expect(result.errors.map((e) => e.message)).toEqual(["Missing required option --file"]);
         }
       });
 
-      it("should report a missing field with the message of the variant option selected by the discriminator", () => {
+      it("should report a field missing from the selected variant the same way", () => {
         const schema = v.variant("action", [
-          v.object({ action: v.literal("create"), target: v.string("name to create is required") }),
-          v.object({ action: v.literal("delete"), target: v.string("id to delete is required") }),
+          v.object({ action: v.literal("create"), name: v.string() }),
+          v.object({ action: v.literal("delete"), id: v.string() }),
         ]);
         const result = validateValibotArgs({ action: "delete" }, schema);
         expect(result.success).toBe(false);
         if (result.success) return;
         expect(result.errors.map((e) => [e.path.join("."), e.message])).toEqual([
-          ["target", "id to delete is required"],
-        ]);
-      });
-
-      it("should select the variant whose discriminator schema accepts the value even when it accepts several values", () => {
-        const schema = v.variant("action", [
-          v.object({ action: v.literal("create"), target: v.string("name to create is required") }),
-          v.object({
-            action: v.picklist(["delete", "remove"]),
-            target: v.string("id to delete is required"),
-          }),
-        ]);
-        const result = validateValibotArgs({ action: "remove" }, schema);
-        expect(result.success).toBe(false);
-        if (result.success) return;
-        expect(result.errors.map((e) => [e.path.join("."), e.message])).toEqual([
-          ["target", "id to delete is required"],
-        ]);
-      });
-
-      it("should keep the nested path of the field schema's issue", () => {
-        const schema = v.object({
-          config: v.pipe(
-            v.unknown(),
-            v.transform(() => ({})),
-            v.object({ host: v.string("host is required") }),
-          ),
-        });
-        const result = validateValibotArgs({}, schema);
-        expect(result.success).toBe(false);
-        if (result.success) return;
-        expect(result.errors.map((e) => e.path.join("."))).toEqual(["config.host"]);
-      });
-
-      it("should keep the Invalid key error when the field schema itself accepts undefined", () => {
-        const schema = v.object({ payload: v.unknown() });
-        const result = validateValibotArgs({}, schema);
-        expect(result.success).toBe(false);
-        if (result.success) return;
-        expect(result.errors.map((e) => e.message)).toEqual([
-          'Invalid key: Expected "payload" but received undefined',
+          ["id", "Missing required option --id"],
         ]);
       });
     });

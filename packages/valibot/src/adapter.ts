@@ -647,54 +647,36 @@ function getMissingArgKey(issue: ValibotIssue): string | undefined {
   return item?.origin === "key" ? String(item.key) : undefined;
 }
 
-function findFieldSchema(
-  schema: ArgsSchema,
-  rawArgs: Record<string, unknown>,
-  key: string,
-): unknown {
-  const extracted = extractValibotFields(schema);
-  const discriminator = extracted.discriminator;
-  const fields =
-    discriminator === undefined
-      ? extracted.fields
-      : (extracted.variants?.find((variant) => {
-          const discriminatorSchema = variant.fields.find((f) => f.name === discriminator)?.schema;
-          return (
-            discriminatorSchema !== undefined &&
-            safeParse(discriminatorSchema as GenericSchema, rawArgs[discriminator]).success
-          );
-        })?.fields ?? extracted.fields);
-  return fields.find((field) => field.name === key)?.schema;
+/**
+ * CLI-facing replacement for valibot's default missing-key message, naming
+ * the argument the way the user types it (`<file>` / `--out-dir`).
+ */
+function describeMissingArg(schema: ArgsSchema, key: string): string {
+  const field = extractValibotFields(schema).fields.find((f) => f.name === key);
+  return field?.positional
+    ? `Missing required argument <${key}>`
+    : `Missing required option --${field?.cliName ?? key}`;
 }
 
 /**
  * Convert valibot issues to ValidationError array
  *
- * valibot reports an absent key with the object's own "Invalid key" issue
- * and never runs the field schema, so the field's message (including a
- * custom one) would be lost. Re-running the field schema against
- * `undefined` recovers it, matching what zod reports for the same input.
+ * Only valibot's untouched default text for a missing key is replaced, so a
+ * message customized through the object schema or valibot's global message
+ * config is kept. The missing field's schema is never run to find a message:
+ * valibot deliberately reports a missing key as an object issue, and running
+ * the field pipeline on `undefined` would execute its transforms.
  */
-function formatValibotIssues(
-  issues: readonly unknown[],
-  schema: ArgsSchema,
-  rawArgs: Record<string, unknown>,
-): ValidationError[] {
+function formatValibotIssues(issues: readonly unknown[], schema: ArgsSchema): ValidationError[] {
   return issues.map((raw) => {
     const issue = raw as ValibotIssue;
     const path = issue.path?.map((item) => String(item.key)) ?? [];
     const missingKey = getMissingArgKey(issue);
-    if (missingKey !== undefined) {
-      const fieldSchema = findFieldSchema(schema, rawArgs, missingKey);
-      if (fieldSchema !== undefined) {
-        const fieldResult = safeParse(fieldSchema as GenericSchema, undefined);
-        const [fieldIssue] = fieldResult.issues ?? [];
-        if (fieldIssue) {
-          const nestedPath =
-            (fieldIssue as ValibotIssue).path?.map((item) => String(item.key)) ?? [];
-          return toValidationError(fieldIssue as ValibotIssue, [...path, ...nestedPath]);
-        }
-      }
+    if (
+      missingKey !== undefined &&
+      issue.message === `Invalid key: Expected "${missingKey}" but received undefined`
+    ) {
+      return toValidationError({ ...issue, message: describeMissingArg(schema, missingKey) }, path);
     }
     return toValidationError(issue, path);
   });
@@ -715,7 +697,7 @@ export function validateValibotArgs(
 
   return {
     success: false,
-    errors: formatValibotIssues(result.issues, schema, rawArgs),
+    errors: formatValibotIssues(result.issues, schema),
   };
 }
 
