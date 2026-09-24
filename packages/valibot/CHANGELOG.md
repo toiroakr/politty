@@ -1,5 +1,14 @@
 # @politty/valibot
 
+## 0.3.1
+
+### Patch Changes
+
+- 70e40ab: Show positional arguments and their descriptions in an `Arguments:` section of the text `--help` output, grouping union-variant-specific positionals under the same labels as options
+- 32163de: fix(deps): update dependency yaml to ^2.9.1
+- 3a2542c: chore(deps): update dependency @types/node to v25.9.7
+- c35bada: Report a missing required argument as `Missing required argument <file>` or `Missing required option --out-dir` instead of valibot's default `Invalid key: Expected "<key>" but received undefined`. A message customized through the object schema or valibot's global message config is kept as is.
+
 ## 0.3.0
 
 ### Minor Changes

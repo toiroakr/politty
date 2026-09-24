@@ -1,5 +1,16 @@
 # politty
 
+## 0.13.1
+
+### Patch Changes
+
+- 70e40ab: Show positional arguments and their descriptions in an `Arguments:` section of the text `--help` output, grouping union-variant-specific positionals under the same labels as options
+- 3a2542c: chore(deps): update dependency @types/node to v25.9.7
+- Updated dependencies [70e40ab]
+- Updated dependencies [32163de]
+- Updated dependencies [3a2542c]
+  - @politty/zod@0.3.1
+
 ## 0.13.0
 
 ### Minor Changes
