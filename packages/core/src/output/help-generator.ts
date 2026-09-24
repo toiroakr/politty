@@ -316,6 +316,76 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
 }
 
 /**
+ * Format the heading of a discriminated-union variant group, e.g.
+ * "When action=create: description" (description omitted when absent)
+ */
+function formatVariantLabel(
+  discriminator: string,
+  variant: { discriminatorValue: string; description?: string },
+): string {
+  const label = `${styles.dim("When")} ${styles.option(discriminator)}=${styles.bold(variant.discriminatorValue)}:`;
+  return variant.description ? `${label} ${variant.description}` : label;
+}
+
+/**
+ * Format the heading of a plain union option group
+ */
+function formatUnionOptionLabel(option: ExtractedFields, index: number): string {
+  return `  ${styles.bold(`${option.description ?? `Variant ${index + 1}`}:`)}`;
+}
+
+function formatArgumentLine(arg: ResolvedFieldMeta, indent = 0): string {
+  const name = arg.required ? styles.option(`<${arg.name}>`) : styles.placeholder(`[${arg.name}]`);
+  const desc = [
+    arg.description,
+    arg.defaultValue !== undefined
+      ? styles.defaultValue(`(default: ${JSON.stringify(arg.defaultValue)})`)
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return desc ? formatOption(name, desc, indent) : `${"  ".repeat(indent)}  ${name}`;
+}
+
+/**
+ * Render the arguments section (positional arguments with descriptions).
+ * Variant/option-specific positionals are grouped under the same labels the
+ * options section uses, so a union's alternatives are not read as one list.
+ */
+function renderArguments(command: AnyCommand): string {
+  const extracted = getExtractedFields(command);
+  if (!extracted) return "";
+
+  let groups: Array<{ label: string; fields: ResolvedFieldMeta[] }> = [];
+  if (extracted.schemaType === "discriminatedUnion" && extracted.discriminator) {
+    const discriminator = extracted.discriminator;
+    groups = (extracted.variants ?? []).map((variant) => ({
+      label: formatVariantLabel(discriminator, variant),
+      fields: variant.fields,
+    }));
+  } else if (
+    (extracted.schemaType === "union" || extracted.schemaType === "xor") &&
+    extracted.unionOptions
+  ) {
+    groups = extracted.unionOptions.map((option, i) => ({
+      label: formatUnionOptionLabel(option, i),
+      fields: option.fields,
+    }));
+  }
+
+  const common = groups.length > 0 ? computeCommonFieldNames(groups) : undefined;
+  const lines = extracted.fields
+    .filter((f) => f.positional && (common === undefined || common.has(f.name)))
+    .map((f) => formatArgumentLine(f));
+  for (const group of groups) {
+    const own = group.fields.filter((f) => f.positional && !common?.has(f.name));
+    if (own.length === 0) continue;
+    lines.push("", group.label, ...own.map((f) => formatArgumentLine(f, 1)));
+  }
+  return lines.join("\n");
+}
+
+/**
  * Render the options section
  */
 export function renderOptions(
@@ -450,7 +520,7 @@ function renderDiscriminatedUnionOptions(
 
   // Add discriminator field
   const discriminatorField = extracted.fields.find((f) => f.name === discriminator);
-  if (discriminatorField) {
+  if (discriminatorField && !discriminatorField.positional) {
     const variantValues = variants.map((v) => v.discriminatorValue).join("|");
     const flags = `${styles.option(`--${discriminator}`)} ${styles.placeholder(`<${variantValues}>`)}`;
     // Use discriminatedUnion's description for the discriminator field
@@ -505,11 +575,7 @@ function renderDiscriminatedUnionOptions(
 
     if (variantFields.length > 0) {
       lines.push("");
-      // Format: "When action=create: description" if description exists, otherwise "When action=create:"
-      const variantLabel = variant.description
-        ? `${styles.dim("When")} ${styles.option(discriminator)}=${styles.bold(variant.discriminatorValue)}: ${variant.description}`
-        : `${styles.dim("When")} ${styles.option(discriminator)}=${styles.bold(variant.discriminatorValue)}:`;
-      lines.push(variantLabel);
+      lines.push(formatVariantLabel(discriminator, variant));
 
       for (const field of variantFields) {
         const flags = formatFlags(field);
@@ -587,11 +653,11 @@ function renderUnionOptions(
 
     const uniqueFields = option.fields.filter((f) => !commonFields.has(f.name) && !f.positional);
 
-    const label = option.description ?? `Variant ${i + 1}`;
+    const label = formatUnionOptionLabel(option, i);
 
     if (uniqueFields.length > 0) {
       lines.push("");
-      lines.push(`  ${styles.bold(`${label}:`)}`);
+      lines.push(label);
 
       for (const field of uniqueFields) {
         const flags = formatFlags(field);
@@ -612,7 +678,7 @@ function renderUnionOptions(
       }
     } else {
       lines.push("");
-      lines.push(`  ${styles.bold(`${label}:`)}`);
+      lines.push(label);
       lines.push(`    ${styles.dim(styles.italic("no options"))}`);
     }
   }
@@ -901,6 +967,12 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
 
   // Usage
   sections.push(`${styles.sectionHeader("Usage:")} ${renderUsageLine(command, context)}`);
+
+  // Arguments
+  const argumentsText = renderArguments(command);
+  if (argumentsText) {
+    sections.push(`${styles.sectionHeader("Arguments:")}\n${argumentsText}`);
+  }
 
   // Options
   const optionsText = renderOptions(command, options.descriptions, context);

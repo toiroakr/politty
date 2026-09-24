@@ -311,6 +311,146 @@ describe("Help Generator", () => {
       expect(result).toContain("my-cli");
     });
 
+    it("should list positional arguments with their descriptions in an Arguments section between Usage and Options", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.object({
+          input: arg(z.string(), { positional: true, description: "Input file" }),
+          output: arg(z.string().optional(), { positional: true, description: "Output file" }),
+          verbose: arg(z.boolean().default(false), {}),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(/Arguments:\n {2}<input> +Input file\n {2}\[output\] +Output file\n/);
+      expect(result.indexOf("Usage:")).toBeLessThan(result.indexOf("Arguments:"));
+      expect(result.indexOf("Arguments:")).toBeLessThan(result.indexOf("Options:"));
+    });
+
+    it("should list a positional argument without a description by name only", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.object({
+          file: arg(z.string(), { positional: true }),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(/Arguments:\n {2}<file>\n/);
+    });
+
+    it("should show the default value of a positional argument like an option's", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.object({
+          target: arg(z.string().default("dist"), { positional: true, description: "Target" }),
+          mode: arg(z.string().default("fast"), { positional: true }),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(
+        /Arguments:\n {2}\[target\] +Target \(default: "dist"\)\n {2}\[mode\] +\(default: "fast"\)\n/,
+      );
+    });
+
+    it("should group variant-specific positional arguments under their discriminator value like options", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.discriminatedUnion("action", [
+          z
+            .object({
+              action: z.literal("create"),
+              target: arg(z.string(), { positional: true, description: "Target" }),
+              name: arg(z.string(), { positional: true, description: "Name to create" }),
+            })
+            .describe("Create"),
+          z.object({
+            action: z.literal("delete"),
+            target: arg(z.string(), { positional: true, description: "Target" }),
+            id: arg(z.string().optional(), { positional: true, description: "Id to delete" }),
+          }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(
+        /Arguments:\n {2}<target> +Target\n\nWhen action=create: Create\n {4}<name> +Name to create\n\nWhen action=delete:\n {4}\[id\] +Id to delete\n\nOptions:/,
+      );
+    });
+
+    it("should list a positional discriminator once as a common argument", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: arg(z.literal("create"), { positional: true, description: "Action" }),
+            name: arg(z.string(), { positional: true, description: "Name" }),
+          }),
+          z.object({
+            action: arg(z.literal("delete"), { positional: true, description: "Action" }),
+            id: arg(z.string(), { positional: true, description: "Id" }),
+          }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(
+        /Arguments:\n {2}<action> +Action\n\nWhen action=create:\n {4}<name> +Name\n\nWhen action=delete:\n {4}<id> +Id\n\nOptions:/,
+      );
+    });
+
+    it("should not list a positional discriminator as an option", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: arg(z.literal("create"), { positional: true }) }),
+          z.object({ action: arg(z.literal("delete"), { positional: true }) }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).not.toContain("--action");
+    });
+
+    it("should group option-specific positional arguments under their union option label like options", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.union([
+          z
+            .object({ path: arg(z.string(), { positional: true, description: "Input file" }) })
+            .describe("File Mode"),
+          z.object({ verbose: arg(z.boolean().default(false), {}) }),
+          z.object({ url: arg(z.string(), { positional: true, description: "Input URL" }) }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(
+        /Arguments:\n\n {2}File Mode:\n {4}<path> +Input file\n\n {2}Variant 3:\n {4}<url> +Input URL\n\nOptions:/,
+      );
+    });
+
+    it("should omit the Arguments section when the command has no positional arguments", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {}),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).not.toContain("Arguments:");
+    });
+
     it("should include options section", () => {
       const cmd = defineCommand({
         name: "my-cli",

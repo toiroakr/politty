@@ -619,26 +619,66 @@ export function extractValibotFields(schema: ArgsSchema): ExtractedFields {
  * reports the raw value — `input` keeps the two adapters' semantics aligned.
  */
 interface ValibotIssue {
+  kind: string;
   type: string;
   message: string;
   input: unknown;
   expected: string | null;
-  path?: Array<{ key?: unknown }> | undefined;
+  path?: Array<{ key?: unknown; origin?: string }> | undefined;
+}
+
+function toValidationError(issue: ValibotIssue, path: string[]): ValidationError {
+  return {
+    path,
+    message: issue.message,
+    code: issue.type,
+    received: issue.input,
+    expected: issue.expected ?? undefined,
+  };
+}
+
+/**
+ * The key of a top-level arg that is absent from the input, when `issue` is
+ * the object schema's "Invalid key" issue for it.
+ */
+function getMissingArgKey(issue: ValibotIssue): string | undefined {
+  if (issue.kind !== "schema" || issue.path?.length !== 1) return undefined;
+  const [item] = issue.path;
+  return item?.origin === "key" ? String(item.key) : undefined;
+}
+
+/**
+ * CLI-facing replacement for valibot's default missing-key message, naming
+ * the argument the way the user types it (`<file>` / `--out-dir`).
+ */
+function describeMissingArg(schema: ArgsSchema, key: string): string {
+  const field = extractValibotFields(schema).fields.find((f) => f.name === key);
+  return field?.positional
+    ? `Missing required argument <${key}>`
+    : `Missing required option --${field?.cliName ?? key}`;
 }
 
 /**
  * Convert valibot issues to ValidationError array
+ *
+ * Only valibot's untouched default text for a missing key is replaced, so a
+ * message customized through the object schema or valibot's global message
+ * config is kept. The missing field's schema is never run to find a message:
+ * valibot deliberately reports a missing key as an object issue, and running
+ * the field pipeline on `undefined` would execute its transforms.
  */
-function formatValibotIssues(issues: readonly unknown[]): ValidationError[] {
+function formatValibotIssues(issues: readonly unknown[], schema: ArgsSchema): ValidationError[] {
   return issues.map((raw) => {
     const issue = raw as ValibotIssue;
-    return {
-      path: issue.path?.map((item) => String(item.key)) ?? [],
-      message: issue.message,
-      code: issue.type,
-      received: issue.input,
-      expected: issue.expected ?? undefined,
-    };
+    const path = issue.path?.map((item) => String(item.key)) ?? [];
+    const missingKey = getMissingArgKey(issue);
+    if (
+      missingKey !== undefined &&
+      issue.message === `Invalid key: Expected "${missingKey}" but received undefined`
+    ) {
+      return toValidationError({ ...issue, message: describeMissingArg(schema, missingKey) }, path);
+    }
+    return toValidationError(issue, path);
   });
 }
 
@@ -657,7 +697,7 @@ export function validateValibotArgs(
 
   return {
     success: false,
-    errors: formatValibotIssues(result.issues),
+    errors: formatValibotIssues(result.issues, schema),
   };
 }
 

@@ -442,5 +442,91 @@ describe("valibot adapter", () => {
       const bad = validateValibotArgs({ action: "delete", id: "x" }, schema);
       expect(bad.success).toBe(false);
     });
+
+    describe("missing required fields", () => {
+      it("should report a missing option with the option's CLI flag instead of valibot's Invalid key message", () => {
+        const schema = v.object({ outDir: v.string() });
+        const result = validateValibotArgs({}, schema);
+        expect(result).toEqual({
+          success: false,
+          errors: [
+            {
+              path: ["outDir"],
+              message: "Missing required option --out-dir",
+              code: "object",
+              received: undefined,
+              expected: '"outDir"',
+            },
+          ],
+        });
+      });
+
+      it("should report a missing positional argument with its placeholder", () => {
+        const schema = v.object({ file: arg(v.string(), { positional: true }) });
+        const result = validateValibotArgs({}, schema);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.errors.map((e) => [e.path.join("."), e.message])).toEqual([
+          ["file", "Missing required argument <file>"],
+        ]);
+      });
+
+      it("should keep a custom message given to the object schema", () => {
+        const schema = v.object({ file: v.string() }, "file is required");
+        const result = validateValibotArgs({}, schema);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.errors.map((e) => e.message)).toEqual(["file is required"]);
+      });
+
+      it("should not run the missing field's schema", () => {
+        let calls = 0;
+        const schema = v.object({
+          file: v.pipe(
+            v.unknown(),
+            v.transform(() => {
+              calls++;
+              throw new Error("transform ran");
+            }),
+          ),
+        });
+        const result = validateValibotArgs({}, schema);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.errors.map((e) => e.message)).toEqual(["Missing required option --file"]);
+        expect(calls).toBe(0);
+      });
+
+      it("should report a missing field in strict, loose, rest, and piped object schemas the same way", () => {
+        const entries = { file: v.string() };
+        for (const schema of [
+          v.strictObject(entries),
+          v.looseObject(entries),
+          v.objectWithRest(entries, v.string()),
+          v.pipe(
+            v.object(entries),
+            v.check(() => true),
+          ),
+        ]) {
+          const result = validateValibotArgs({}, schema);
+          expect(result.success).toBe(false);
+          if (result.success) return;
+          expect(result.errors.map((e) => e.message)).toEqual(["Missing required option --file"]);
+        }
+      });
+
+      it("should report a field missing from the selected variant the same way", () => {
+        const schema = v.variant("action", [
+          v.object({ action: v.literal("create"), name: v.string() }),
+          v.object({ action: v.literal("delete"), id: v.string() }),
+        ]);
+        const result = validateValibotArgs({ action: "delete" }, schema);
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        expect(result.errors.map((e) => [e.path.join("."), e.message])).toEqual([
+          ["id", "Missing required option --id"],
+        ]);
+      });
+    });
   });
 });
