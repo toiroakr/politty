@@ -316,6 +316,29 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
 }
 
 /**
+ * Render the arguments section (positional arguments with descriptions)
+ */
+function renderArguments(command: AnyCommand): string {
+  const positionals = getExtractedFields(command)?.fields.filter((f) => f.positional) ?? [];
+  return positionals
+    .map((arg) => {
+      const name = arg.required
+        ? styles.option(`<${arg.name}>`)
+        : styles.placeholder(`[${arg.name}]`);
+      const desc = [
+        arg.description,
+        arg.defaultValue !== undefined
+          ? styles.defaultValue(`(default: ${JSON.stringify(arg.defaultValue)})`)
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      return desc ? formatOption(name, desc) : `  ${name}`;
+    })
+    .join("\n");
+}
+
+/**
  * Render the options section
  */
 export function renderOptions(
@@ -901,6 +924,12 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
 
   // Usage
   sections.push(`${styles.sectionHeader("Usage:")} ${renderUsageLine(command, context)}`);
+
+  // Arguments
+  const argumentsText = renderArguments(command);
+  if (argumentsText) {
+    sections.push(`${styles.sectionHeader("Arguments:")}\n${argumentsText}`);
+  }
 
   // Options
   const optionsText = renderOptions(command, options.descriptions, context);

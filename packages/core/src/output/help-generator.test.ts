@@ -311,6 +311,65 @@ describe("Help Generator", () => {
       expect(result).toContain("my-cli");
     });
 
+    it("should list positional arguments with their descriptions in an Arguments section between Usage and Options", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.object({
+          input: arg(z.string(), { positional: true, description: "Input file" }),
+          output: arg(z.string().optional(), { positional: true, description: "Output file" }),
+          verbose: arg(z.boolean().default(false), {}),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(/Arguments:\n {2}<input> +Input file\n {2}\[output\] +Output file\n/);
+      expect(result.indexOf("Usage:")).toBeLessThan(result.indexOf("Arguments:"));
+      expect(result.indexOf("Arguments:")).toBeLessThan(result.indexOf("Options:"));
+    });
+
+    it("should list a positional argument without a description by name only", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.object({
+          file: arg(z.string(), { positional: true }),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(/Arguments:\n {2}<file>\n/);
+    });
+
+    it("should show the default value of a positional argument like an option's", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.object({
+          target: arg(z.string().default("dist"), { positional: true, description: "Target" }),
+          mode: arg(z.string().default("fast"), { positional: true }),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(
+        /Arguments:\n {2}\[target\] +Target \(default: "dist"\)\n {2}\[mode\] +\(default: "fast"\)\n/,
+      );
+    });
+
+    it("should omit the Arguments section when the command has no positional arguments", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), {}),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).not.toContain("Arguments:");
+    });
+
     it("should include options section", () => {
       const cmd = defineCommand({
         name: "my-cli",
