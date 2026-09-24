@@ -315,27 +315,59 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
   return parts.join(" ");
 }
 
+function formatArgumentLine(arg: ResolvedFieldMeta, indent = 0): string {
+  const name = arg.required ? styles.option(`<${arg.name}>`) : styles.placeholder(`[${arg.name}]`);
+  const desc = [
+    arg.description,
+    arg.defaultValue !== undefined
+      ? styles.defaultValue(`(default: ${JSON.stringify(arg.defaultValue)})`)
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return desc ? formatOption(name, desc, indent) : `${"  ".repeat(indent)}  ${name}`;
+}
+
 /**
- * Render the arguments section (positional arguments with descriptions)
+ * Render the arguments section (positional arguments with descriptions).
+ * Variant/option-specific positionals are grouped under the same labels the
+ * options section uses, so a union's alternatives are not read as one list.
  */
 function renderArguments(command: AnyCommand): string {
-  const positionals = getExtractedFields(command)?.fields.filter((f) => f.positional) ?? [];
-  return positionals
-    .map((arg) => {
-      const name = arg.required
-        ? styles.option(`<${arg.name}>`)
-        : styles.placeholder(`[${arg.name}]`);
-      const desc = [
-        arg.description,
-        arg.defaultValue !== undefined
-          ? styles.defaultValue(`(default: ${JSON.stringify(arg.defaultValue)})`)
-          : undefined,
-      ]
-        .filter(Boolean)
-        .join(" ");
-      return desc ? formatOption(name, desc) : `  ${name}`;
-    })
-    .join("\n");
+  const extracted = getExtractedFields(command);
+  if (!extracted) return "";
+
+  let groups: Array<{ label: string; fields: ResolvedFieldMeta[] }> = [];
+  if (extracted.schemaType === "discriminatedUnion" && extracted.discriminator) {
+    const discriminator = extracted.discriminator;
+    groups = (extracted.variants ?? []).map((variant) => {
+      const label = `${styles.dim("When")} ${styles.option(discriminator)}=${styles.bold(variant.discriminatorValue)}:`;
+      return {
+        label: variant.description ? `${label} ${variant.description}` : label,
+        fields: variant.fields,
+      };
+    });
+  } else if (
+    (extracted.schemaType === "union" || extracted.schemaType === "xor") &&
+    extracted.unionOptions
+  ) {
+    groups = extracted.unionOptions.map((option, i) => ({
+      label: `  ${styles.bold(`${option.description ?? `Variant ${i + 1}`}:`)}`,
+      fields: option.fields,
+    }));
+  }
+
+  const common =
+    groups.length > 0 ? computeCommonFieldNames(groups, extracted.discriminator) : undefined;
+  const lines = extracted.fields
+    .filter((f) => f.positional && (common === undefined || common.has(f.name)))
+    .map((f) => formatArgumentLine(f));
+  for (const group of groups) {
+    const own = group.fields.filter((f) => f.positional && !common?.has(f.name));
+    if (own.length === 0) continue;
+    lines.push("", group.label, ...own.map((f) => formatArgumentLine(f, 1)));
+  }
+  return lines.join("\n");
 }
 
 /**

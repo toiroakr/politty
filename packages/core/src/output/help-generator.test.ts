@@ -357,6 +357,51 @@ describe("Help Generator", () => {
       );
     });
 
+    it("should group variant-specific positional arguments under their discriminator value like options", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.discriminatedUnion("action", [
+          z
+            .object({
+              action: z.literal("create"),
+              target: arg(z.string(), { positional: true, description: "Target" }),
+              name: arg(z.string(), { positional: true, description: "Name to create" }),
+            })
+            .describe("Create"),
+          z.object({
+            action: z.literal("delete"),
+            target: arg(z.string(), { positional: true, description: "Target" }),
+            id: arg(z.string().optional(), { positional: true, description: "Id to delete" }),
+          }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(
+        /Arguments:\n {2}<target> +Target\n\nWhen action=create: Create\n {4}<name> +Name to create\n\nWhen action=delete:\n {4}\[id\] +Id to delete\n\nOptions:/,
+      );
+    });
+
+    it("should group option-specific positional arguments under their union option label like options", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.union([
+          z
+            .object({ path: arg(z.string(), { positional: true, description: "Input file" }) })
+            .describe("File Mode"),
+          z.object({ verbose: arg(z.boolean().default(false), {}) }),
+          z.object({ url: arg(z.string(), { positional: true, description: "Input URL" }) }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(
+        /Arguments:\n\n {2}File Mode:\n {4}<path> +Input file\n\n {2}Variant 3:\n {4}<url> +Input URL\n\nOptions:/,
+      );
+    });
+
     it("should omit the Arguments section when the command has no positional arguments", () => {
       const cmd = defineCommand({
         name: "my-cli",
