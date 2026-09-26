@@ -277,6 +277,21 @@ describe("Completion", () => {
       expect(data.command.options.map((option) => option.name)).toEqual(["action", "target"]);
     });
 
+    it("should include a positional that only a later discriminated-union variant defines", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("rollback"), target: arg(z.string()) }),
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+        ]),
+        run: () => {},
+      });
+
+      const data = extractCompletionData(cmd, "release");
+
+      expect(data.command.positionals.map((p) => p.name)).toEqual(["target"]);
+    });
+
     it("should offer every alias the discriminated-union variants give an option", () => {
       const cmd = defineCommand({
         name: "release",

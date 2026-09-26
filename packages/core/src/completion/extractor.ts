@@ -5,6 +5,7 @@
 import {
   extractFields,
   namedFieldsInAnyVariant,
+  positionalFieldsInAnyVariant,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../lazy.js";
@@ -235,7 +236,10 @@ function extractSubcommand(
     aliases: command.aliases,
     subcommands,
     options: fieldsToOptions(extracted ? namedFieldsInAnyVariant(extracted) : [], pending),
-    positionals: fieldsToPositionals(extracted?.fields ?? [], pending),
+    positionals: fieldsToPositionals(
+      extracted ? positionalFieldsInAnyVariant(extracted) : [],
+      pending,
+    ),
   };
   // Resolve every `pending-expand` collected above against this
   // subcommand's siblings (and the global schema, which runtime
