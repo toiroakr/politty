@@ -170,7 +170,7 @@ describe("default-renderers", () => {
   });
 
   describe("renderOptionsTable", () => {
-    it("should list a named positional as an option", async () => {
+    it("should list a named positional as an argument with its long option, not as an option", async () => {
       const cmd = defineCommand({
         name: "test",
         args: z.object({
@@ -180,9 +180,11 @@ describe("default-renderers", () => {
       });
 
       const info = await buildCommandInfo(cmd, "test");
-      const table = renderOptionsTable(info);
 
-      expect(table).toContain("| `--name <NAME>` | - | Profile name | Yes | - |");
+      expect(renderArgumentsTable(info)).toContain(
+        "| `name`, `--name <NAME>` | Profile name | Yes |",
+      );
+      expect(renderOptionsTable(info)).toBe("");
     });
 
     it("should render options table", async () => {

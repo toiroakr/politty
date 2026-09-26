@@ -14,7 +14,7 @@ export async function buildCommandInfo(
   const extracted = getExtractedFields(command);
 
   const positionalArgs = extracted?.fields.filter((f) => f.positional) ?? [];
-  const options = extracted?.fields.filter((f) => f.named) ?? [];
+  const options = extracted?.fields.filter((f) => !f.positional) ?? [];
 
   const subCommands: SubCommandInfo[] = [];
   if (command.subCommands) {

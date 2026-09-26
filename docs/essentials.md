@@ -79,7 +79,7 @@ $ my-cli src.txt dest.txt
 
 #### Accepting a Positional as a Named Option
 
-A positional argument is not accepted as `--<name>` by default. Pass `{ positional: { named: true } }` to accept both forms, for example so a value that starts with `-` can be passed as `--name=-dev`. The argument is then listed under both arguments and options in help, generated docs, and shell completion.
+A positional argument is not accepted as `--<name>` by default. Pass `{ positional: { named: true } }` to accept both forms, for example so a value that starts with `-` can be passed as `--name=-dev`. Help and generated docs list it once under arguments as `<name>, --name <NAME>`, and shell completion offers `--name` as well.
 
 ```typescript
 args: z.object({

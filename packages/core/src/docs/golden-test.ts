@@ -1512,7 +1512,7 @@ function collectRenderableGlobalOptionFields(argsShape: ArgsShape): ResolvedFiel
   const fields = Object.entries(argsShape).map(([name, fieldSchema]) =>
     adapter.resolveFieldMeta(name, fieldSchema),
   );
-  return fields.filter((field) => field.named);
+  return fields.filter((field) => !field.positional);
 }
 
 /**
@@ -1535,13 +1535,13 @@ function normalizeGlobalOptions(
 }
 
 /**
- * Derive an ArgsShape from a globalArgs schema, retaining only fields accepted as `--name`.
+ * Derive an ArgsShape from a globalArgs schema, retaining only non-positional option fields.
  * Returns undefined when globalArgs is undefined or contains no option fields.
  * Used to build globalOptionDefinitions from globalArgs when rootDoc is not available.
  */
 function deriveGlobalArgsShape(globalArgs: ArgsSchema | undefined): ArgsShape | undefined {
   if (!globalArgs) return undefined;
-  const optionFields = extractFields(globalArgs).fields.filter((f) => f.named);
+  const optionFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
   if (optionFields.length === 0) return undefined;
   // `f.schema` is carried opaquely as `unknown`; these fields came out of a
   // real args schema, so they are the adapter's field schemas by construction.
@@ -2381,7 +2381,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
 
   // Auto-derive rootDoc.globalOptions from globalArgs schema if provided
   if (globalArgs && rootDoc && !rootDoc.globalOptions) {
-    const optionFields = extractFields(globalArgs).fields.filter((f) => f.named);
+    const optionFields = extractFields(globalArgs).fields.filter((f) => !f.positional);
     if (optionFields.length > 0) {
       const globalShape = Object.fromEntries(
         optionFields.map((f) => [f.name, f.schema]),

@@ -71,11 +71,21 @@ function resolvePlaceholder(opt: ResolvedFieldMeta): string {
 }
 
 /**
+ * Format the canonical long flag of a field, with a placeholder for non-boolean fields.
+ * @param opt - Field metadata
+ * @returns The flag, e.g. `--output <OUTPUT>`
+ */
+export function formatLongFlag(opt: ResolvedFieldMeta): string {
+  return opt.type === "boolean"
+    ? `--${opt.cliName}`
+    : `--${opt.cliName} <${resolvePlaceholder(opt)}>`;
+}
+
+/**
  * Normalize a single {@link ResolvedFieldMeta} into an {@link OptionRow}.
  */
 function toOptionRow(opt: ResolvedFieldMeta): OptionRow {
-  const longFlag =
-    opt.type === "boolean" ? `--${opt.cliName}` : `--${opt.cliName} <${resolvePlaceholder(opt)}>`;
+  const longFlag = formatLongFlag(opt);
 
   const aliases: string[] = [];
   if (opt.alias) {

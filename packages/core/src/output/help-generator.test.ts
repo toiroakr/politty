@@ -328,7 +328,7 @@ describe("Help Generator", () => {
       expect(result.indexOf("Arguments:")).toBeLessThan(result.indexOf("Options:"));
     });
 
-    it("should list a named positional both as an argument and as a long option", () => {
+    it("should list a named positional once under Arguments together with its long option", () => {
       const cmd = defineCommand({
         name: "my-cli",
         args: z.object({
@@ -338,8 +338,8 @@ describe("Help Generator", () => {
 
       const result = generateHelp(cmd, {});
 
-      expect(result).toMatch(/Arguments:\n {2}<name> +Profile name\n/);
-      expect(result).toMatch(/Options:\n(?: .*\n)* {2}--name <NAME> +Profile name/);
+      expect(result).toMatch(/Arguments:\n {2}<name>, --name <NAME> +Profile name\n/);
+      expect(result.slice(result.indexOf("Options:"))).not.toContain("--name");
     });
 
     it("should list a positional argument without a description by name only", () => {

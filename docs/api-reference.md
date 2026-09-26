@@ -1277,7 +1277,7 @@ interface HelpData {
   schemaType?: "object" | "discriminatedUnion" | "union" | "xor" | "intersection";
   /** Positional arguments */
   positionals: HelpFieldData[];
-  /** Arguments accepted as `--name` (options and named positionals); for discriminatedUnion/union/xor, only fields common to every variant/option */
+  /** Non-positional options; for discriminatedUnion/union/xor, only fields common to every variant/option */
   options: HelpFieldData[];
   /** Discriminator field name (discriminatedUnion schemas only) */
   discriminator?: string;
@@ -1366,7 +1366,7 @@ interface HelpUsageData {
   commandName: string;
   /** Whether global options are defined */
   hasGlobalOptions: boolean;
-  /** Whether this command defines any argument accepted as `--name` (options and named positionals) */
+  /** Whether this command defines any (non-positional) options */
   hasOptions: boolean;
   /** Whether a subcommand token is expected, and whether it's optional */
   subcommand?: "required" | "optional";
