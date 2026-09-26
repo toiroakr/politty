@@ -851,6 +851,7 @@ describe("Help Generator", () => {
           name: "name",
           cliName: "name",
           positional: true,
+          named: false,
           required: true,
           type: "string",
           description: "Name of the person",
@@ -861,12 +862,30 @@ describe("Help Generator", () => {
           name: "loud",
           cliName: "loud",
           positional: false,
+          named: true,
           required: false,
           type: "boolean",
           alias: ["l"],
           description: "Output in uppercase",
           defaultValue: false,
         },
+      ]);
+    });
+
+    it("should mark a named positional so consumers can tell it also takes a long option", () => {
+      const cmd = defineCommand({
+        name: "cli",
+        args: z.object({
+          name: arg(z.string(), { positional: { named: true } }),
+          target: arg(z.string(), { positional: true }),
+        }),
+      });
+
+      const data = generateHelpData(cmd);
+
+      expect(data.positionals.map((f) => [f.name, f.named])).toEqual([
+        ["name", true],
+        ["target", false],
       ]);
     });
 
@@ -948,6 +967,7 @@ describe("Help Generator", () => {
               name: "name",
               cliName: "name",
               positional: false,
+              named: true,
               required: true,
               type: "string",
               description: "Resource name",
@@ -961,6 +981,7 @@ describe("Help Generator", () => {
               name: "id",
               cliName: "id",
               positional: false,
+              named: true,
               required: true,
               type: "number",
               description: "Resource ID",

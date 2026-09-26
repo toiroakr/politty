@@ -1310,6 +1310,8 @@ interface HelpFieldData {
   cliName: string;
   /** Whether this is a positional argument */
   positional: boolean;
+  /** Whether this is accepted as a long option (`--cli-name`), including a named positional */
+  named: boolean;
   /** Whether this argument is required */
   required: boolean;
   /** Detected type from schema */
