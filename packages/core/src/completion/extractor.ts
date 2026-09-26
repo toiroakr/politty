@@ -257,6 +257,32 @@ function expandChildPathStrs(pathStrs: readonly string[], child: CompletableSubc
   return pathStrs.flatMap((p) => childNames.map((n) => joinPrefix(p, n, ":")));
 }
 
+/** A command frame with a named positional, keyed by every `_subcmd` spelling that reaches it. */
+export interface NamedPositionalFrame {
+  readonly pathStrs: readonly string[];
+  readonly positionals: readonly CompletablePositional[];
+  readonly options: readonly CompletableOption[];
+}
+
+/**
+ * Collect the frames whose positionals include a named one, so the static
+ * scripts can map positional tokens to slots the way the runtime parser does.
+ */
+export function collectNamedPositionalFrames(root: CompletableSubcommand): NamedPositionalFrame[] {
+  const out: NamedPositionalFrame[] = [];
+  const visit = (node: CompletableSubcommand, pathStrs: readonly string[]): void => {
+    const localNames = new Set(node.options.filter((o) => o.isGlobal !== true).map((o) => o.name));
+    if (node.positionals.some((p) => localNames.has(p.name))) {
+      out.push({ pathStrs, positionals: node.positionals, options: node.options });
+    }
+    for (const child of getVisibleSubs(node.subcommands)) {
+      visit(child, expandChildPathStrs(pathStrs, child));
+    }
+  };
+  visit(root, [""]);
+  return out;
+}
+
 /**
  * A single (parentPath, tokens) row for a value-taking option, emitted by
  * {@link walkOptTakesValueRows} as the shell-agnostic intermediate form.
@@ -833,7 +859,6 @@ export function collectTrackedFields(
           },
           spec.pathStrs,
         );
-        continue;
       }
       const opt = node.options.find((o) => o.name === dep);
       if (!opt) continue;

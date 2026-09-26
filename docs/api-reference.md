@@ -870,8 +870,8 @@ Base metadata common to all argument types.
 interface BaseArgMeta {
   /** Argument description */
   description?: string;
-  /** Treat as positional argument */
-  positional?: boolean;
+  /** Treat as positional argument; `{ named: true }` also accepts it as `--<name>` */
+  positional?: boolean | { named?: boolean };
   /** Placeholder for help display */
   placeholder?: string;
   /**
@@ -1458,6 +1458,8 @@ interface ResolvedFieldMeta {
   description?: string;
   /** Whether positional argument */
   positional: boolean;
+  /** Whether accepted as a long option (`--cli-name`); true for options and `{ positional: { named: true } }` */
+  named: boolean;
   /** Placeholder */
   placeholder?: string;
   /** Environment variable name (single or array) */

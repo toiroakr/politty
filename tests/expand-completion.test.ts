@@ -710,23 +710,31 @@ describe("expand completion", () => {
         shell: "bash",
         programName: "mycli",
       });
-      expect(bash).toContain(`__mycli_track_pos "$_subcmd" "$_pos_count" "$_w"`);
-      // The scanner's `if (( _after_dd ))` branch should call __track_pos
-      // before incrementing the count, otherwise `cli -- GetApplication
-      // <TAB>` yields no expand candidates.
-      expect(bash).toMatch(/if \(\( _after_dd \)\); then __mycli_track_pos[^\n]*_pos_count\+\+/);
+      // The scanner's `if (( _after_dd ))` branch should collect the token
+      // for `__track_positionals` to replay into `__track_pos`, otherwise
+      // `cli -- GetApplication <TAB>` yields no expand candidates.
+      expect(bash).toMatch(
+        /if \(\( _after_dd \)\); then _pos_words\+=\("\$_w"\);[^\n]*_pos_count\+\+/,
+      );
+      expect(bash).toContain(`__mycli_track_pos "$_subcmd" "$_slot" "$_w"`);
 
       const { script: zsh } = generateZshCompletion(cmd, {
         shell: "zsh",
         programName: "mycli",
       });
-      expect(zsh).toMatch(/if \(\( _after_dd \)\); then __mycli_track_pos[^\n]*_pos_count\+\+/);
+      expect(zsh).toMatch(
+        /if \(\( _after_dd \)\); then _pos_words\+=\("\$_w"\);[^\n]*_pos_count\+\+/,
+      );
+      expect(zsh).toContain(`__mycli_track_pos "$_subcmd" "$_slot" "$_w"`);
 
       const { script: fish } = generateFishCompletion(cmd, {
         shell: "fish",
         programName: "mycli",
       });
-      expect(fish).toMatch(/if test \$_after_dd -eq 1; __mycli_track_pos[^\n]*math \$_pos_count/);
+      expect(fish).toMatch(
+        /if test \$_after_dd -eq 1; set -a _pos_words "\$_w";[^\n]*math \$_pos_count/,
+      );
+      expect(fish).toContain(`__mycli_track_pos "$_subcmd" "$_slot" "$_w"`);
     });
 
     it("bash suppresses file fallback for expand specs with no candidates", () => {

@@ -123,11 +123,44 @@ export const apiCommand = defineCommand({
   },
 });
 
+export const callCommand = defineCommand({
+  name: "call",
+  description:
+    "Call a mock API as a profile. `<profile>` and `<endpoint>` also accept `--profile` / `--endpoint`.",
+  args: z.object({
+    profile: arg(z.string(), {
+      positional: { named: true },
+      description: "Profile to call as.",
+    }),
+    endpoint: arg(z.string(), {
+      positional: { named: true },
+      description: "API endpoint to call.",
+      completion: { custom: { choices: ENDPOINTS } },
+    }),
+    field: arg(z.array(z.string()).default([]), {
+      alias: "f",
+      description: "Set a request field as `key=value` (repeatable).",
+      completion: {
+        custom: {
+          expand: {
+            dependsOn: ["endpoint"],
+            enumerate: (deps) =>
+              (ENDPOINT_FIELDS[deps.endpoint ?? ""] ?? []).map((f) => ({ value: `${f.key}=` })),
+          },
+        },
+      },
+    }),
+  }),
+  run: (args) => {
+    console.log(JSON.stringify({ profile: args.profile, endpoint: args.endpoint }));
+  },
+});
+
 export const cli = withCompletionCommand(
   defineCommand({
     name: "tailor-expand",
     description: "Mock CLI demonstrating pre-enumerated value completion.",
-    subCommands: { api: apiCommand },
+    subCommands: { api: apiCommand, call: callCommand },
   }),
 );
 

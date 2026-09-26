@@ -733,3 +733,24 @@ export function defineCommonTests(
     expect(values).toContain("--minify");
   });
 }
+
+/**
+ * Expand dependencies on named positionals, shared by all shells.
+ * Must be called inside a describe() block.
+ */
+export function defineNamedPositionalExpandTests(complete: (args: string[]) => string[]): void {
+  it("reads a positional dependency placed after a named positional given as a long option", () => {
+    const values = complete(["call", "--profile", "dev", "GetApplication", "-f", ""]);
+    expect(values).toContain("applicationName=");
+  });
+
+  it("reads a positional dependency when the named positional's option comes after it", () => {
+    const values = complete(["call", "GetApplication", "--profile", "dev", "-f", ""]);
+    expect(values).toContain("applicationName=");
+  });
+
+  it("reads a named positional dependency given as a long option", () => {
+    const values = complete(["call", "dev", "--endpoint", "GetApplication", "-f", ""]);
+    expect(values).toContain("applicationName=");
+  });
+}

@@ -2,6 +2,7 @@ import { execSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   defineCommonTests,
+  defineNamedPositionalExpandTests,
   defineNestedTests,
   fishCompleteExpand,
   fishCompleteNested,
@@ -250,6 +251,8 @@ describe.skipIf(!hasFish)("fish expand array dedup", () => {
       ...opts,
       scriptPath: expandCtx.completionScripts.fish,
     });
+
+  defineNamedPositionalExpandTests((args) => completeE(args));
 
   it("falls through to positional completion when subcommands do not match the prefix", () => {
     const values = completeE(["api", "Get"]);
