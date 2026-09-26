@@ -107,6 +107,27 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.endpoint).toBe("GetApplication");
     });
 
+    describe("discriminated-union variants that define an argument differently", () => {
+      const releaseCmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+          z.object({ action: z.literal("rollback"), target: arg(z.string()) }),
+        ]),
+        run: () => {},
+      });
+
+      it("completes the value of a long option the selected variant accepts", () => {
+        const ctx = parseCompletionContext(["--action", "rollback", "--target", ""], releaseCmd);
+        expect([ctx.completionType, ctx.targetOption?.cliName]).toEqual(["option-value", "target"]);
+      });
+
+      it("does not complete a positional the selected variant defines as an option", () => {
+        const ctx = parseCompletionContext(["--action", "rollback", ""], releaseCmd);
+        expect(ctx.positionals.map((p) => p.name)).toEqual([]);
+      });
+    });
+
     describe("named positional given as a long option", () => {
       const namedCmd = defineCommand({
         name: "mycli",

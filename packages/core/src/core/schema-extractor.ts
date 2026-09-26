@@ -23,7 +23,7 @@ export {
   type UnknownKeysMode,
 } from "../adapter/field-meta.js";
 
-import type { ExtractedFields, UnknownKeysMode } from "../adapter/field-meta.js";
+import type { ExtractedFields, ResolvedFieldMeta, UnknownKeysMode } from "../adapter/field-meta.js";
 
 /**
  * Detect the unknown-keys handling mode of an args schema. Works for any
@@ -63,4 +63,70 @@ export function getExtractedFields(command: AnyCommand): ExtractedFields | null 
     return null;
   }
   return extractFields(command.args);
+}
+
+/**
+ * Names of the fields every group (discriminated-union variants, or union
+ * options) declares with the same role, so they can be shown once for all
+ * groups. A field that is positional in one group and an option in another
+ * is left to each group's own section.
+ *
+ * @param groups - Variants or union options
+ * @param exclude - Field reported separately, such as the discriminator
+ * @returns Names of the fields shared by every group
+ */
+export function computeCommonFieldNames(
+  groups: ReadonlyArray<{ fields: readonly ResolvedFieldMeta[] }>,
+  exclude?: string,
+): Set<string> {
+  const [first, ...rest] = groups;
+  const common = new Set<string>();
+  for (const field of first?.fields ?? []) {
+    if (field.name === exclude) continue;
+    const sameRole = rest.every((group) =>
+      group.fields.some(
+        (f) =>
+          f.name === field.name && f.positional === field.positional && f.named === field.named,
+      ),
+    );
+    if (sameRole) common.add(field.name);
+  }
+  return common;
+}
+
+/**
+ * Fields accepted as a long option by at least one variant of a
+ * discriminated union or union, keeping the first definition that accepts
+ * it; for any other schema, the fields accepted as a long option.
+ *
+ * @param extracted - Extracted fields
+ * @returns Fields some variant accepts as `--name`
+ */
+export function namedFieldsInAnyVariant(extracted: ExtractedFields): ResolvedFieldMeta[] {
+  const byName = new Map<string, ResolvedFieldMeta>();
+  const groups = extracted.variants ?? extracted.unionOptions ?? [];
+  for (const field of [extracted.fields, ...groups.map((g) => g.fields)].flat()) {
+    if (field.named && !byName.has(field.name)) byName.set(field.name, field);
+  }
+  return [...byName.values()];
+}
+
+/**
+ * The fields of the discriminated-union variant these values select, or all
+ * extracted fields when the schema has no discriminator or no variant
+ * matches.
+ *
+ * @param extracted - Extracted fields
+ * @param values - Argument values read so far, keyed by field name
+ * @returns Extracted fields narrowed to the selected variant
+ */
+export function selectDiscriminatedVariant(
+  extracted: ExtractedFields,
+  values: Record<string, unknown>,
+): ExtractedFields {
+  const { discriminator, variants } = extracted;
+  const variant = discriminator
+    ? variants?.find((v) => v.discriminatorValue === values[discriminator])
+    : undefined;
+  return variant ? { ...extracted, fields: variant.fields } : extracted;
 }

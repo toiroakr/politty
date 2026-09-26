@@ -1,6 +1,7 @@
 import {
   extractFields,
   getAllAliases,
+  selectDiscriminatedVariant,
   toCamelCase,
   type ExtractedFields,
   type ResolvedFieldMeta,
@@ -331,8 +332,7 @@ function selectArgvFields(extracted: ExtractedFields, argv: string[]): Extracted
   const { discriminator, variants, unionOptions } = extracted;
   if (discriminator && variants) {
     const probe = mergeWithPositionals(parseArgv(argv, buildParserOptions(extracted)), extracted);
-    const variant = variants.find((v) => v.discriminatorValue === probe[discriminator]);
-    return variant ? { ...extracted, fields: variant.fields } : extracted;
+    return selectDiscriminatedVariant(extracted, probe);
   }
   if (unionOptions) {
     const option = unionOptions.find((o) => fitsArgv(o, argv));

@@ -1,4 +1,5 @@
 import {
+  computeCommonFieldNames,
   getAllAliases,
   getExtractedFields,
   type ExtractedFields,
@@ -532,23 +533,7 @@ function renderDiscriminatedUnionOptions(
   }
 
   // Add common fields (fields that appear in all variants)
-  const commonFields = new Set<string>();
-  const allFieldNames = new Set<string>();
-
-  for (const variant of variants) {
-    for (const field of variant.fields) {
-      allFieldNames.add(field.name);
-    }
-  }
-
-  for (const fieldName of allFieldNames) {
-    if (fieldName === discriminator) continue;
-
-    const inAllVariants = variants.every((v) => v.fields.some((f) => f.name === fieldName));
-    if (inAllVariants) {
-      commonFields.add(fieldName);
-    }
-  }
+  const commonFields = computeCommonFieldNames(variants, discriminator);
 
   // Render common fields
   for (const fieldName of commonFields) {
@@ -613,21 +598,7 @@ function renderUnionOptions(
   const unionOptions = extracted.unionOptions ?? [];
 
   // Add common fields (fields that appear in all options)
-  const commonFields = new Set<string>();
-  const allFieldNames = new Set<string>();
-
-  for (const option of unionOptions) {
-    for (const field of option.fields) {
-      allFieldNames.add(field.name);
-    }
-  }
-
-  for (const fieldName of allFieldNames) {
-    const inAllOptions = unionOptions.every((o) => o.fields.some((f) => f.name === fieldName));
-    if (inAllOptions) {
-      commonFields.add(fieldName);
-    }
-  }
+  const commonFields = computeCommonFieldNames(unionOptions);
 
   // Render common fields
   for (const fieldName of commonFields) {
@@ -1073,31 +1044,6 @@ function toHelpFieldData(field: ResolvedFieldMeta): HelpFieldData {
   if (field.negationDisplay !== undefined) data.negationDisplay = field.negationDisplay;
   if (field.negationDescription !== undefined) data.negationDescription = field.negationDescription;
   return data;
-}
-
-/**
- * Field names shared by every group (discriminated-union variants, or union
- * options). Mirrors the common-field detection in {@link renderDiscriminatedUnionOptions}
- * / {@link renderUnionOptions}; `exclude` drops the discriminator field, which
- * is reported separately regardless of whether every variant declares it.
- */
-function computeCommonFieldNames(
-  groups: Array<{ fields: ResolvedFieldMeta[] }>,
-  exclude?: string,
-): Set<string> {
-  const allNames = new Set<string>();
-  for (const group of groups) {
-    for (const field of group.fields) {
-      if (field.name !== exclude) allNames.add(field.name);
-    }
-  }
-  const common = new Set<string>();
-  for (const name of allNames) {
-    if (groups.every((group) => group.fields.some((f) => f.name === name))) {
-      common.add(name);
-    }
-  }
-  return common;
 }
 
 /**

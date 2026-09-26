@@ -1,5 +1,9 @@
 import path from "node:path";
-import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
+import {
+  computeCommonFieldNames,
+  type ExtractedFields,
+  type ResolvedFieldMeta,
+} from "../core/schema-extractor.js";
 import type { Example } from "../types.js";
 import {
   emitMarkdownList,
@@ -178,18 +182,7 @@ export function renderUnionOptionsMarkdown(
   const sections: string[] = [];
 
   // Compute common fields (present in all variants)
-  const allFieldNames = new Set<string>();
-  for (const option of unionOptions) {
-    for (const field of option.fields) {
-      allFieldNames.add(field.name);
-    }
-  }
-  const commonFieldNames = new Set<string>();
-  for (const fieldName of allFieldNames) {
-    if (unionOptions.every((o) => o.fields.some((f) => f.name === fieldName))) {
-      commonFieldNames.add(fieldName);
-    }
-  }
+  const commonFieldNames = computeCommonFieldNames(unionOptions);
 
   // Render common fields first
   const commonFields = extracted.fields.filter((f) => commonFieldNames.has(f.name) && f.named);
@@ -241,19 +234,7 @@ export function renderDiscriminatedUnionOptionsMarkdown(
   const sections: string[] = [];
 
   // Compute common fields (in all variants, excluding discriminator)
-  const allFieldNames = new Set<string>();
-  for (const variant of variants) {
-    for (const field of variant.fields) {
-      allFieldNames.add(field.name);
-    }
-  }
-  const commonFieldNames = new Set<string>();
-  for (const fieldName of allFieldNames) {
-    if (fieldName === discriminator) continue;
-    if (variants.every((v) => v.fields.some((f) => f.name === fieldName))) {
-      commonFieldNames.add(fieldName);
-    }
-  }
+  const commonFieldNames = computeCommonFieldNames(variants, discriminator);
 
   // Build discriminator field with aggregated values
   const discriminatorField = extracted.fields.find((f) => f.name === discriminator);

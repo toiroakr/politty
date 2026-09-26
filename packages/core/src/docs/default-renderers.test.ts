@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { extractFields } from "../core/schema-extractor.js";
 import { arg, defineCommand } from "../index.js";
 import {
   createCommandRenderer,
   defaultRenderers,
   renderArgumentsTable,
+  renderDiscriminatedUnionOptionsMarkdown,
   renderOptionsTable,
   renderSubcommandsTable,
+  renderUnionOptionsMarkdown,
   renderUsage,
 } from "./default-renderers.js";
 import { buildCommandInfo } from "./doc-generator.js";
@@ -771,6 +774,34 @@ describe("default-renderers", () => {
       expect(list).toContain("First line<br>Second line");
       const itemLines = list.split("\n").filter((l) => l.includes("First line"));
       expect(itemLines).toHaveLength(1);
+    });
+  });
+
+  describe("union variants that define an argument differently", () => {
+    it("should list the argument as an option in the discriminated-union variant that defines it as one", () => {
+      const extracted = extractFields(
+        z.discriminatedUnion("action", [
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+          z.object({ action: z.literal("rollback"), target: arg(z.string()) }),
+        ]),
+      );
+
+      const markdown = renderDiscriminatedUnionOptionsMarkdown(extracted);
+
+      expect(markdown).toContain("`--target <TARGET>`");
+    });
+
+    it("should list the argument as an option in the union option that defines it as one", () => {
+      const extracted = extractFields(
+        z.union([
+          z.object({ source: arg(z.string(), { positional: true }), force: arg(z.boolean()) }),
+          z.object({ source: arg(z.string()), dryRun: arg(z.boolean()) }),
+        ]),
+      );
+
+      const markdown = renderUnionOptionsMarkdown(extracted);
+
+      expect(markdown).toContain("`--source <SOURCE>`");
     });
   });
 });

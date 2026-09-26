@@ -2,7 +2,13 @@
  * Parse completion context from partial command line
  */
 
-import { extractFields, getAllAliases, toCamelCase } from "../../core/schema-extractor.js";
+import {
+  extractFields,
+  getAllAliases,
+  namedFieldsInAnyVariant,
+  selectDiscriminatedVariant,
+  toCamelCase,
+} from "../../core/schema-extractor.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import { positionalSlotFields } from "../../parser/argv-parser.js";
@@ -107,31 +113,29 @@ function extractOptions(command: AnyCommand): CompletableOption[] {
 
 function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
   const extracted = extractFields(schema);
-  return extracted.fields
-    .filter((field) => field.named)
-    .map((field) => {
-      // Merge hiddenAlias into the matcher-visible alias list. The runtime
-      // parser accepts hidden aliases via `getAllAliases`, so the dynamic
-      // completion parser must too — otherwise typing an accepted hidden
-      // alias (`--legacy value`) leaves the sibling value unparsed and
-      // unrecognised as the target being completed.
-      const aliases = getAllAliases(field);
-      return {
-        name: field.name,
-        cliName: field.cliName,
-        alias: aliases.length > 0 ? aliases : undefined,
-        negation: field.negationDisplay,
-        negationDescription: field.negationDescription,
-        description: field.description,
-        takesValue: field.type !== "boolean",
-        valueType: field.type,
-        required: field.required,
-        // Mirror runtime: default `--no-<cliName>` is accepted only when the
-        // user opts in via `negation: true`.
-        defaultNegationAccepted: field.type === "boolean" && field.negation === true,
-        valueCompletion: resolveRuntimeCompletion(resolveValueCompletion(field)),
-      };
-    });
+  return namedFieldsInAnyVariant(extracted).map((field) => {
+    // Merge hiddenAlias into the matcher-visible alias list. The runtime
+    // parser accepts hidden aliases via `getAllAliases`, so the dynamic
+    // completion parser must too — otherwise typing an accepted hidden
+    // alias (`--legacy value`) leaves the sibling value unparsed and
+    // unrecognised as the target being completed.
+    const aliases = getAllAliases(field);
+    return {
+      name: field.name,
+      cliName: field.cliName,
+      alias: aliases.length > 0 ? aliases : undefined,
+      negation: field.negationDisplay,
+      negationDescription: field.negationDescription,
+      description: field.description,
+      takesValue: field.type !== "boolean",
+      valueType: field.type,
+      required: field.required,
+      // Mirror runtime: default `--no-<cliName>` is accepted only when the
+      // user opts in via `negation: true`.
+      defaultNegationAccepted: field.type === "boolean" && field.negation === true,
+      valueCompletion: resolveRuntimeCompletion(resolveValueCompletion(field)),
+    };
+  });
 }
 
 /**
@@ -308,7 +312,7 @@ function extractPositionalsForContext(
     return [];
   }
 
-  const extracted = extractFields(command.args);
+  const extracted = selectDiscriminatedVariant(extractFields(command.args), optionValues);
   return positionalSlotFields(extracted, optionValues).map((field, index) => ({
     name: field.name,
     cliName: field.cliName,
