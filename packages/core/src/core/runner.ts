@@ -763,7 +763,8 @@ async function runCommandInternal<TResult = unknown>(
     // Handle unknown flags based on schema's unknownKeysMode
     if (parseResult.unknownFlags.length > 0) {
       const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
-      const knownFlags = parseResult.extractedFields?.fields.map((f) => f.name) ?? [];
+      const knownFlags =
+        parseResult.extractedFields?.fields.filter((f) => f.named).map((f) => f.name) ?? [];
 
       if (unknownKeysMode === "strict") {
         // strict mode: treat unknown flags as errors

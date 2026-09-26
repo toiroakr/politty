@@ -2147,6 +2147,24 @@ describe("Redundant positionals", () => {
       }
     });
 
+    it("should not suggest a positional's name when it is passed as an unknown long option", async () => {
+      using consoleSpy = spyOnConsoleError();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({
+          name: arg(z.string().optional(), { positional: true }),
+        }),
+        run: () => {},
+      });
+
+      await runCommand(cmd, ["--name=dev"]);
+
+      const output = consoleSpy.mock.calls.map((call: unknown[]) => String(call[0])).join("\n");
+      expect(output).toContain("Unknown option");
+      expect(output).not.toContain("--name");
+    });
+
     it("should error on a positional token left over after a named positional is given as a long option", async () => {
       const runFn = vi.fn();
 
