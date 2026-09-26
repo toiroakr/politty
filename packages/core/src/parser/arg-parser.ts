@@ -174,12 +174,14 @@ export function parseArgs(
   let rawGlobalArgs: Record<string, unknown> | undefined;
   let suppressedGlobalFlags: string[] = [];
   if (options.globalExtracted) {
+    const namedFields = extracted ? namedFieldsInAnyVariant(extracted) : [];
+    const namedNames = new Set(namedFields.map((f) => f.name));
     const { separated, globalParsed, suppressedTokens } = separateGlobalArgs(
       argv,
       options.globalExtracted,
       extracted && {
         ...extracted,
-        fields: [...extracted.fields, ...namedFieldsInAnyVariant(extracted)],
+        fields: [...namedFields, ...extracted.fields.filter((f) => !namedNames.has(f.name))],
       },
     );
     commandArgv = separated;
