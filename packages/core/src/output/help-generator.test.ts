@@ -852,6 +852,26 @@ describe("Help Generator", () => {
       expect(result).toMatch(/--target <TARGET> +Rollback target/);
     });
 
+    it("should list the discriminator option when only a later variant accepts it as one", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: arg(z.literal("rollback"), { positional: true }),
+            target: arg(z.string()),
+          }),
+          z.object({
+            action: z.literal("deploy"),
+            target: arg(z.string(), { positional: true }),
+          }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("--action <rollback|deploy>");
+    });
+
     it("should serialize the argument with each variant's own role in --help-json", () => {
       const data = generateHelpData(releaseCommand);
 

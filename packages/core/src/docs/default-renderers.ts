@@ -1,6 +1,7 @@
 import path from "node:path";
 import {
   computeCommonFieldNames,
+  namedFieldsInAnyVariant,
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
@@ -237,7 +238,9 @@ export function renderDiscriminatedUnionOptionsMarkdown(
   const commonFieldNames = computeCommonFieldNames(variants, discriminator);
 
   // Build discriminator field with aggregated values
-  const discriminatorField = extracted.fields.find((f) => f.name === discriminator);
+  const discriminatorField = namedFieldsInAnyVariant(extracted).find(
+    (f) => f.name === discriminator,
+  );
   const variantValues = variants.map((v) => v.discriminatorValue).join("\\|");
 
   // Top-level table: discriminator + common fields

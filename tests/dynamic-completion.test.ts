@@ -122,6 +122,26 @@ describe("Dynamic completion (in-process resolver)", () => {
         expect([ctx.completionType, ctx.targetOption?.cliName]).toEqual(["option-value", "target"]);
       });
 
+      it("selects the variant from a positional discriminator already typed", () => {
+        const positionalDiscriminatorCmd = defineCommand({
+          name: "release",
+          args: z.discriminatedUnion("action", [
+            z.object({
+              action: arg(z.literal("deploy"), { positional: true }),
+              target: arg(z.string(), { positional: true }),
+            }),
+            z.object({
+              action: arg(z.literal("rollback"), { positional: true }),
+              target: arg(z.string()),
+            }),
+          ]),
+          run: () => {},
+        });
+
+        const ctx = parseCompletionContext(["rollback", ""], positionalDiscriminatorCmd);
+        expect(ctx.positionals.map((p) => p.name)).toEqual(["action"]);
+      });
+
       it("does not complete a positional the selected variant defines as an option", () => {
         const ctx = parseCompletionContext(["--action", "rollback", ""], releaseCmd);
         expect(ctx.positionals.map((p) => p.name)).toEqual([]);

@@ -2,6 +2,7 @@ import {
   computeCommonFieldNames,
   getAllAliases,
   getExtractedFields,
+  namedFieldsInAnyVariant,
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
@@ -522,8 +523,10 @@ function renderDiscriminatedUnionOptions(
   const variants = extracted.variants ?? [];
 
   // Add discriminator field
-  const discriminatorField = extracted.fields.find((f) => f.name === discriminator);
-  if (discriminatorField && discriminatorField.named) {
+  const discriminatorField = namedFieldsInAnyVariant(extracted).find(
+    (f) => f.name === discriminator,
+  );
+  if (discriminatorField) {
     const variantValues = variants.map((v) => v.discriminatorValue).join("|");
     const flags = `${styles.option(`--${discriminator}`)} ${styles.placeholder(`<${variantValues}>`)}`;
     // Use discriminatedUnion's description for the discriminator field
@@ -1120,7 +1123,7 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
       discriminator = disc;
       const groups = extracted.variants;
       const commonNames = computeCommonFieldNames(groups, disc);
-      const discriminatorField = extracted.fields.find((f) => f.name === disc && f.named);
+      const discriminatorField = namedFieldsInAnyVariant(extracted).find((f) => f.name === disc);
       const commonFields = extracted.fields.filter((f) => f.named && commonNames.has(f.name));
       optionFields = [
         // Same description fallback as renderDiscriminatedUnionOptions's text

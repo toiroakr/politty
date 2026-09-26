@@ -112,21 +112,26 @@ export function namedFieldsInAnyVariant(extracted: ExtractedFields): ResolvedFie
 }
 
 /**
- * The fields of the discriminated-union variant these values select, or all
- * extracted fields when the schema has no discriminator or no variant
- * matches.
+ * The fields of the discriminated-union variant whose own definitions read
+ * its discriminator value, or all extracted fields when the schema has no
+ * discriminator or no variant matches. Variants may define the discriminator
+ * itself differently, so each one reads it with its own fields.
  *
  * @param extracted - Extracted fields
- * @param values - Argument values read so far, keyed by field name
+ * @param readValues - Reads argument values with the given fields
  * @returns Extracted fields narrowed to the selected variant
  */
 export function selectDiscriminatedVariant(
   extracted: ExtractedFields,
-  values: Record<string, unknown>,
+  readValues: (fields: ExtractedFields) => Record<string, unknown>,
 ): ExtractedFields {
   const { discriminator, variants } = extracted;
-  const variant = discriminator
-    ? variants?.find((v) => v.discriminatorValue === values[discriminator])
-    : undefined;
-  return variant ? { ...extracted, fields: variant.fields } : extracted;
+  if (!discriminator || !variants) return extracted;
+  for (const variant of variants) {
+    const variantFields = { ...extracted, fields: variant.fields };
+    if (readValues(variantFields)[discriminator] === variant.discriminatorValue) {
+      return variantFields;
+    }
+  }
+  return extracted;
 }

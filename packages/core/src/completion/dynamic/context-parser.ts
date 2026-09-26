@@ -307,12 +307,19 @@ export function clampToVariadic(
 function extractPositionalsForContext(
   command: AnyCommand,
   optionValues: Record<string, unknown>,
+  positionalValues: readonly string[],
 ): CompletablePositional[] {
   if (!command.args) {
     return [];
   }
 
-  const extracted = selectDiscriminatedVariant(extractFields(command.args), optionValues);
+  const extracted = selectDiscriminatedVariant(extractFields(command.args), (fields) => {
+    const values = { ...optionValues };
+    positionalSlotFields(fields, optionValues).forEach((field, i) => {
+      if (i < positionalValues.length) values[field.name] = positionalValues[i];
+    });
+    return values;
+  });
   return positionalSlotFields(extracted, optionValues).map((field, index) => ({
     name: field.name,
     cliName: field.cliName,
@@ -817,7 +824,7 @@ export function parseCompletionContext(
   const previousWord: string = argv[argv.length - 2] ?? "";
 
   // Extract data for current command
-  const positionals = extractPositionalsForContext(currentCommand, parsedArgs);
+  const positionals = extractPositionalsForContext(currentCommand, parsedArgs, positionalValues);
   const subcommands = getSubcommandNames(currentCommand);
 
   // Map collected positional values to their field names so resolvers can
