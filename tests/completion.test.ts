@@ -27,6 +27,7 @@ import {
   createDynamicCompleteCommand,
   defaultBundledWorkerOutputPath,
   extractCompletionData,
+  extractPositionals,
   formatForShell,
   generateBundledCompletionWorker,
   generateCandidates,
@@ -290,6 +291,19 @@ describe("Completion", () => {
       const data = extractCompletionData(cmd, "release");
 
       expect(data.command.positionals.map((p) => p.name)).toEqual(["target"]);
+    });
+
+    it("should return a positional that only a later discriminated-union variant defines from extractPositionals", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("rollback"), target: arg(z.string()) }),
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+        ]),
+        run: () => {},
+      });
+
+      expect(extractPositionals(cmd).map((field) => field.name)).toEqual(["target"]);
     });
 
     it("should offer every alias the discriminated-union variants give an option", () => {

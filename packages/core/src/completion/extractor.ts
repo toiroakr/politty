@@ -160,8 +160,7 @@ export function extractPositionals(command: AnyCommand): ResolvedFieldMeta[] {
     return [];
   }
 
-  const extracted = extractFields(command.args);
-  return extracted.fields.filter((field) => field.positional);
+  return positionalFieldsInAnyVariant(extractFields(command.args));
 }
 
 /** Convert pre-extracted fields to options. */
