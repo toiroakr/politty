@@ -2179,14 +2179,29 @@ describe("Redundant positionals", () => {
         run: runFn,
       });
 
+      const labelCmd = defineCommand({
+        name: "sync",
+        args: z.union([
+          z.object({
+            source: arg(z.string(), { positional: true }),
+            force: arg(z.boolean()),
+            label: arg(z.string().optional()),
+          }),
+          z.object({ source: arg(z.string()), dryRun: arg(z.boolean()) }),
+        ]),
+        run: runFn,
+      });
+
       const results = [
         await runCommand(cmd, ["s3://bucket", "--dry-run"]),
         await runCommand(cmd, ["--force"]),
         await runCommand(cmd, ["--source", "--dry-run"]),
+        await runCommand(labelCmd, ["s3://bucket", "--force", "--label"]),
       ];
 
       expect(runFn).not.toHaveBeenCalled();
       expect(results.map((r) => (r.success ? "ok" : r.error.message))).toEqual([
+        "Arguments match none of the accepted forms. See --help for the accepted forms.",
         "Arguments match none of the accepted forms. See --help for the accepted forms.",
         "Arguments match none of the accepted forms. See --help for the accepted forms.",
         "Arguments match none of the accepted forms. See --help for the accepted forms.",

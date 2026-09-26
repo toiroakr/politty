@@ -1,6 +1,7 @@
 import {
   extractFields,
   getAllAliases,
+  namedFieldsInAnyVariant,
   selectDiscriminatedVariant,
   toCamelCase,
   type ExtractedFields,
@@ -176,7 +177,10 @@ export function parseArgs(
     const { separated, globalParsed, suppressedTokens } = separateGlobalArgs(
       argv,
       options.globalExtracted,
-      extracted,
+      extracted && {
+        ...extracted,
+        fields: [...extracted.fields, ...namedFieldsInAnyVariant(extracted)],
+      },
     );
     commandArgv = separated;
     rawGlobalArgs = globalParsed;
@@ -391,11 +395,11 @@ function fitsArgv(extracted: ExtractedFields, argv: string[]): boolean {
   if (!slots.some((f) => f.type === "array") && tokenCount > slots.length) return false;
 
   const rawArgs = mergeWithPositionals(parsed, extracted);
+  const valueless = (f: ResolvedFieldMeta) =>
+    f.type !== "boolean" && [rawArgs[f.name]].flat().includes(true);
+  if (extracted.fields.some(valueless)) return false;
   applyEnvFallbacks(rawArgs, extracted);
-  return extracted.fields.every((f) => {
-    const value = rawArgs[f.name];
-    return !f.required || (value !== undefined && (f.type === "boolean" || value !== true));
-  });
+  return extracted.fields.every((f) => !f.required || rawArgs[f.name] !== undefined);
 }
 
 /**
