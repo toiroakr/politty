@@ -3,6 +3,8 @@ import {
   getAllAliases,
   getExtractedFields,
   optionFieldInAnyVariant,
+  optionFieldsInAnyVariant,
+  positionalFieldsInAnyVariant,
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
@@ -280,8 +282,8 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
 
   const extracted = getExtractedFields(command);
   if (extracted) {
-    const positionals = extracted.fields.filter((a) => a.positional);
-    const options = extracted.fields.filter((a) => !a.positional);
+    const positionals = positionalFieldsInAnyVariant(extracted);
+    const options = optionFieldsInAnyVariant(extracted);
 
     // Add [options] if there are options
     if (options.length > 0) {

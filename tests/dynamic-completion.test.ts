@@ -122,6 +122,16 @@ describe("Dynamic completion (in-process resolver)", () => {
         expect([ctx.completionType, ctx.targetOption?.cliName]).toEqual(["option-value", "target"]);
       });
 
+      it("does not complete the value of a long option only another variant accepts", () => {
+        const ctx = parseCompletionContext(["--action", "deploy", "--target", ""], releaseCmd);
+        expect(ctx.completionType).not.toBe("option-value");
+      });
+
+      it("offers only the long options the selected variant accepts", () => {
+        const ctx = parseCompletionContext(["--action", "deploy", "--"], releaseCmd);
+        expect(ctx.options.map((o) => o.name)).toEqual(["action"]);
+      });
+
       it("selects the variant from a positional discriminator already typed", () => {
         const positionalDiscriminatorCmd = defineCommand({
           name: "release",

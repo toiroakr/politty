@@ -872,6 +872,26 @@ describe("Help Generator", () => {
       expect(result).toContain("--action <rollback|deploy>");
     });
 
+    it("should show [options] in the usage line when only a later variant defines an option", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: arg(z.literal("deploy"), { positional: true }),
+            target: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            action: z.literal("rollback"),
+            target: arg(z.string(), { positional: true }),
+          }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("release [options] <action> <target>");
+    });
+
     it("should serialize the argument with each variant's own role in --help-json", () => {
       const data = generateHelpData(releaseCommand);
 
