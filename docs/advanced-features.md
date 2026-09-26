@@ -213,7 +213,7 @@ $ my-cli --action rollback --target v1 # target = "v1"
 $ my-cli --action deploy --target prod # rejected: deploy does not accept --target
 ```
 
-Help and generated docs list such an argument under each variant with that variant's role. For a `z.union` without a discriminator, the command line is read with the first option whose definitions fit the given tokens.
+Help and generated docs list such an argument under each variant with that variant's role. For a `z.union` without a discriminator, the command line is read with the first option whose definitions fit the given tokens: every option is one it accepts, no positional token is left over, and its required arguments are present. When no option fits, the command fails with `Arguments match none of the accepted forms. See --help for the accepted forms.`
 
 ### Intersection (Schema Composition)
 

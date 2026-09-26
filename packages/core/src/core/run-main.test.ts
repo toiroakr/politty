@@ -2165,6 +2165,32 @@ describe("Redundant positionals", () => {
       expect(output).not.toContain("--name");
     });
 
+    it("should report that a union's arguments match none of its options", async () => {
+      using _warn = spyOnConsoleWarn();
+      using _error = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "sync",
+        args: z.union([
+          z.object({ source: arg(z.string(), { positional: true }), force: arg(z.boolean()) }),
+          z.object({ source: arg(z.string()), dryRun: arg(z.boolean()) }),
+        ]),
+        run: runFn,
+      });
+
+      const results = [
+        await runCommand(cmd, ["s3://bucket", "--dry-run"]),
+        await runCommand(cmd, ["--force"]),
+      ];
+
+      expect(runFn).not.toHaveBeenCalled();
+      expect(results.map((r) => (r.success ? "ok" : r.error.message))).toEqual([
+        "Arguments match none of the accepted forms. See --help for the accepted forms.",
+        "Arguments match none of the accepted forms. See --help for the accepted forms.",
+      ]);
+    });
+
     it("should error on a positional token for an argument the selected variant defines as an option", async () => {
       using _warn = spyOnConsoleWarn();
       using _error = spyOnConsoleError();

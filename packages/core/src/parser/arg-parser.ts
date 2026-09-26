@@ -60,6 +60,8 @@ export interface ParseResult {
   unknownGlobalFlags?: string[] | undefined;
   /** Extracted fields from schema (for internal use) */
   extractedFields?: ExtractedFields | undefined;
+  /** True when the args schema is a union and argv fits none of its options */
+  matchesNoUnionOption?: boolean | undefined;
   /** Positional fields that took positional tokens (named positionals given as a long option excluded) */
   positionalSlotFields?: ResolvedFieldMeta[] | undefined;
   /** Raw parsed global args (before validation) */
@@ -248,6 +250,24 @@ export function parseArgs(
   }
 
   const argvFields = selectArgvFields(extracted, commandArgv);
+  if (!argvFields) {
+    return {
+      helpRequested: false,
+      helpAllRequested: false,
+      helpJsonRequested: false,
+      versionRequested: false,
+      subCommand: undefined,
+      remainingArgs: [],
+      rawArgs: {},
+      positionals: [],
+      rest: [],
+      unknownFlags: [],
+      unknownGlobalFlags: suppressedGlobalFlags,
+      extractedFields: extracted,
+      matchesNoUnionOption: true,
+      rawGlobalArgs,
+    };
+  }
 
   // Build parser options from extracted fields
   const parserOptions = buildParserOptions(argvFields);
@@ -326,10 +346,10 @@ export function parseArgs(
  * Fields that decide how argv is read. Variants may define the same argument
  * (the discriminator included) differently, so a discriminated union reads
  * argv with the variant whose own definitions read its discriminator value,
- * and a union with the first option whose definitions fit the tokens;
- * otherwise it is every extracted field.
+ * and a union with the first option whose definitions fit the tokens
+ * (`undefined` when none fits); otherwise it is every extracted field.
  */
-function selectArgvFields(extracted: ExtractedFields, argv: string[]): ExtractedFields {
+function selectArgvFields(extracted: ExtractedFields, argv: string[]): ExtractedFields | undefined {
   const { discriminator, variants, unionOptions } = extracted;
   if (discriminator && variants) {
     return selectDiscriminatedVariant(extracted, (fields) =>
@@ -338,7 +358,7 @@ function selectArgvFields(extracted: ExtractedFields, argv: string[]): Extracted
   }
   if (unionOptions) {
     const option = unionOptions.find((o) => fitsArgv(o, argv));
-    return option ? { ...extracted, fields: option.fields } : extracted;
+    return option && { ...extracted, fields: option.fields };
   }
   return extracted;
 }

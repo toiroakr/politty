@@ -760,6 +760,18 @@ async function runCommandInternal<TResult = unknown>(
       return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
     }
 
+    if (parseResult.matchesNoUnionOption) {
+      collector?.stop();
+      return {
+        success: false,
+        error: new Error(
+          "Arguments match none of the accepted forms. See --help for the accepted forms.",
+        ),
+        exitCode: 1,
+        logs: getCurrentLogs(),
+      };
+    }
+
     // Handle unknown flags based on schema's unknownKeysMode
     if (parseResult.unknownFlags.length > 0) {
       const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
