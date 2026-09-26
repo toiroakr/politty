@@ -859,6 +859,63 @@ describe("default-renderers", () => {
       );
     });
 
+    it("should render only the arguments a custom renderer passes to render", async () => {
+      const cmd = defineCommand({
+        name: "ship",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: z.literal("deploy"),
+            env: arg(z.string(), { positional: true }),
+            target: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            action: z.literal("rollback"),
+            env: arg(z.string(), { positional: true }),
+            target: arg(z.string()),
+          }),
+        ]),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "ship");
+      const markdown = createCommandRenderer({
+        markerless: true,
+        renderArguments: (ctx) =>
+          ctx.render(
+            ctx.args.filter((a) => a.name === "target"),
+            { withHeading: false },
+          ),
+      })(info);
+
+      expect(markdown).toContain(
+        "**When `action` = `deploy`:**\n\n| Argument | Description | Required |\n|----------|-------------|----------|\n| `target` |  | Yes |",
+      );
+      expect(markdown).not.toContain("| `env` |");
+    });
+
+    it("should render the Options section when only a later variant defines an option", async () => {
+      const cmd = defineCommand({
+        name: "ship",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: arg(z.literal("deploy"), { positional: true }),
+            target: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            action: z.literal("rollback"),
+            target: arg(z.string(), { positional: true }),
+          }),
+        ]),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "ship");
+      const markdown = createCommandRenderer({ markerless: true })(info);
+
+      expect(markdown).toContain("**Options**");
+      expect(markdown).toContain("`--action <deploy\\|rollback>`");
+    });
+
     it("should render the Arguments section when only a later variant defines a positional", async () => {
       const cmd = defineCommand({
         name: "ship",

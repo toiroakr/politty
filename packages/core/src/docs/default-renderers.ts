@@ -96,14 +96,18 @@ export function renderArgumentsList(info: CommandInfo): string {
 function renderArgumentsMarkdown(
   info: CommandInfo,
   render: (args: ResolvedFieldMeta[]) => string,
+  args: ResolvedFieldMeta[] = info.positionalArgs,
 ): string {
   const groups = variantGroups(info.extracted);
   const common = groups.length > 0 ? computeCommonFieldNames(groups) : undefined;
+  const requested = new Set(args.map((f) => f.name));
   const sections: string[] = [];
-  const shared = info.positionalArgs.filter((f) => common === undefined || common.has(f.name));
+  const shared = args.filter((f) => common === undefined || common.has(f.name));
   if (shared.length > 0) sections.push(render(shared));
   for (const group of groups) {
-    const own = group.fields.filter((f) => f.positional && !common?.has(f.name));
+    const own = group.fields.filter(
+      (f) => f.positional && !common?.has(f.name) && requested.has(f.name),
+    );
     if (own.length > 0) sections.push(`${group.label}\n\n${render(own)}`);
   }
   return sections.join("\n\n");
@@ -619,7 +623,7 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
           style === "table" ? renderArgumentsTableFromArray : renderArgumentsListFromArray;
         const content =
           variantGroups(info.extracted).length > 0
-            ? renderArgumentsMarkdown(info, renderArray)
+            ? renderArgumentsMarkdown(info, renderArray, args)
             : renderArray(args);
         return withHeading ? `**Arguments**\n\n${content}` : content;
       };

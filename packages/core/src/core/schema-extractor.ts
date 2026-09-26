@@ -97,13 +97,24 @@ export function computeCommonFieldNames(
 /**
  * Fields accepted as a long option by at least one variant of a
  * discriminated union or union, keeping the first definition that accepts
- * it; for any other schema, the fields accepted as a long option.
+ * it with the aliases every accepting variant gives it; for any other
+ * schema, the fields accepted as a long option.
  *
  * @param extracted - Extracted fields
  * @returns Fields some variant accepts as `--name`
  */
 export function namedFieldsInAnyVariant(extracted: ExtractedFields): ResolvedFieldMeta[] {
-  return firstFieldsInAnyVariant(extracted, (field) => field.named);
+  const definitions = definitionsInAnyVariant(extracted).filter((field) => field.named);
+  return firstFieldsInAnyVariant(extracted, (field) => field.named).map((field) => {
+    const same = definitions.filter((f) => f.name === field.name);
+    const alias = [...new Set(same.flatMap((f) => f.alias ?? []))];
+    const hiddenAlias = [...new Set(same.flatMap((f) => f.hiddenAlias ?? []))];
+    return {
+      ...field,
+      alias: alias.length > 0 ? alias : field.alias,
+      hiddenAlias: hiddenAlias.length > 0 ? hiddenAlias : field.hiddenAlias,
+    };
+  });
 }
 
 /**
@@ -118,13 +129,29 @@ export function positionalFieldsInAnyVariant(extracted: ExtractedFields): Resolv
   return firstFieldsInAnyVariant(extracted, (field) => field.positional);
 }
 
+/**
+ * Fields taken as an option rather than a positional by at least one variant
+ * of a discriminated union or union, keeping the first such definition; for
+ * any other schema, the non-positional fields.
+ *
+ * @param extracted - Extracted fields
+ * @returns Fields some variant takes as an option
+ */
+export function optionFieldsInAnyVariant(extracted: ExtractedFields): ResolvedFieldMeta[] {
+  return firstFieldsInAnyVariant(extracted, (field) => !field.positional);
+}
+
+function definitionsInAnyVariant(extracted: ExtractedFields): ResolvedFieldMeta[] {
+  const groups = extracted.variants ?? extracted.unionOptions ?? [];
+  return [extracted.fields, ...groups.map((g) => g.fields)].flat();
+}
+
 function firstFieldsInAnyVariant(
   extracted: ExtractedFields,
   predicate: (field: ResolvedFieldMeta) => boolean,
 ): ResolvedFieldMeta[] {
   const byName = new Map<string, ResolvedFieldMeta>();
-  const groups = extracted.variants ?? extracted.unionOptions ?? [];
-  for (const field of [extracted.fields, ...groups.map((g) => g.fields)].flat()) {
+  for (const field of definitionsInAnyVariant(extracted)) {
     if (predicate(field) && !byName.has(field.name)) byName.set(field.name, field);
   }
   return [...byName.values()];
@@ -168,8 +195,5 @@ export function optionFieldInAnyVariant(
   extracted: ExtractedFields,
   name: string,
 ): ResolvedFieldMeta | undefined {
-  const groups = extracted.variants ?? extracted.unionOptions ?? [];
-  return [extracted.fields, ...groups.map((g) => g.fields)]
-    .flat()
-    .find((field) => field.name === name && !field.positional);
+  return optionFieldsInAnyVariant(extracted).find((field) => field.name === name);
 }

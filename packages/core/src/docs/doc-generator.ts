@@ -1,4 +1,8 @@
-import { getExtractedFields, positionalFieldsInAnyVariant } from "../core/schema-extractor.js";
+import {
+  getExtractedFields,
+  optionFieldsInAnyVariant,
+  positionalFieldsInAnyVariant,
+} from "../core/schema-extractor.js";
 import { resolveLazyCommand } from "../executor/subcommand-router.js";
 import type { AnyCommand } from "../types.js";
 import type { CommandInfo, SubCommandInfo } from "./types.js";
@@ -14,7 +18,7 @@ export async function buildCommandInfo(
   const extracted = getExtractedFields(command);
 
   const positionalArgs = extracted ? positionalFieldsInAnyVariant(extracted) : [];
-  const options = extracted?.fields.filter((f) => !f.positional) ?? [];
+  const options = extracted ? optionFieldsInAnyVariant(extracted) : [];
 
   const subCommands: SubCommandInfo[] = [];
   if (command.subCommands) {

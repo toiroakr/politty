@@ -1654,6 +1654,27 @@ describe("ArgParser", () => {
       expect(result.rawGlobalArgs?.tag).toBeUndefined();
     });
 
+    it("keeps a later variant's own alias local when an earlier variant gives the option another alias", () => {
+      const globalWithT = extractFields(
+        z.object({ tag: arg(z.string().optional(), { alias: "t" }) }),
+      );
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { alias: "x" }) }),
+          z.object({ action: z.literal("rollback"), target: arg(z.string(), { alias: "t" }) }),
+        ]),
+        run: () => {},
+      });
+
+      const result = parseArgs(["--action", "rollback", "-t", "v1"], cmd, {
+        globalExtracted: globalWithT,
+      });
+
+      expect(result.rawArgs.target).toBe("v1");
+      expect(result.rawGlobalArgs?.tag).toBeUndefined();
+    });
+
     it("local flag takes precedence over global on collision", () => {
       const collisionGlobal = z.object({
         output: arg(z.string().default("global-default"), { description: "Global output" }),
