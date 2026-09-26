@@ -267,10 +267,11 @@ export function parseArgs(
   }
 
   // Detect unknown flags
-  const knownFlags = new Set(extracted.fields.map((f) => f.name));
-  const knownCliNames = new Set(extracted.fields.map((f) => f.cliName));
+  const optionFields = extracted.fields.filter((f) => !f.positional);
+  const knownFlags = new Set(optionFields.map((f) => f.name));
+  const knownCliNames = new Set(optionFields.map((f) => f.cliName));
   const knownAliases = new Set<string>();
-  for (const f of extracted.fields) {
+  for (const f of optionFields) {
     for (const alias of getAllAliases(f)) knownAliases.add(alias);
   }
 

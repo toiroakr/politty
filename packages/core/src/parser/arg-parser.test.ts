@@ -734,6 +734,45 @@ describe("ArgParser", () => {
       expect(result.rawArgs.target).toBe("app");
       expect(result.rawArgs.files).toEqual(["a.ts", "b.ts"]);
     });
+
+    it("should report a positional's name passed as a long option as an unknown flag", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          name: arg(z.string(), { positional: true }),
+        }),
+      });
+
+      const result = parseArgs(["--name=dev"], cmd);
+
+      expect(result.unknownFlags).toEqual(["name"]);
+    });
+
+    it("should report a camelCase positional passed as a kebab-case long option under the typed name", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          outputFile: arg(z.string().optional(), { positional: true }),
+        }),
+      });
+
+      const result = parseArgs(["--output-file=out.txt"], cmd);
+
+      expect(result.unknownFlags).toEqual(["output-file"]);
+    });
+
+    it("should not fill a positional from a long option with its name", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          name: arg(z.string().optional(), { positional: true }),
+        }),
+      });
+
+      const result = parseArgs(["--name", "dev"], cmd);
+
+      expect(result.rawArgs.name).toBeUndefined();
+    });
   });
 
   describe("Array arguments", () => {

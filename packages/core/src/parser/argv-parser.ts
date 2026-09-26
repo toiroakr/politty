@@ -270,6 +270,8 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
   }
 
   for (const field of extracted.fields) {
+    if (field.positional) continue;
+
     // Map kebab-case CLI name to camelCase field name
     // e.g., "dry-run" → "dryRun"
     if (field.cliName !== field.name) {
@@ -353,6 +355,10 @@ export function mergeWithPositionals(
   // Combine positionals with rest args (after --) for assignment
   const allPositionals =
     parsed.rest.length > 0 ? [...parsed.positionals, ...parsed.rest] : parsed.positionals;
+
+  for (const field of positionalFields) {
+    delete result[field.name];
+  }
 
   let positionalIndex = 0;
   for (const field of positionalFields) {
