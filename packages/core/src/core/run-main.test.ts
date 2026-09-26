@@ -2182,10 +2182,12 @@ describe("Redundant positionals", () => {
       const results = [
         await runCommand(cmd, ["s3://bucket", "--dry-run"]),
         await runCommand(cmd, ["--force"]),
+        await runCommand(cmd, ["--source", "--dry-run"]),
       ];
 
       expect(runFn).not.toHaveBeenCalled();
       expect(results.map((r) => (r.success ? "ok" : r.error.message))).toEqual([
+        "Arguments match none of the accepted forms. See --help for the accepted forms.",
         "Arguments match none of the accepted forms. See --help for the accepted forms.",
         "Arguments match none of the accepted forms. See --help for the accepted forms.",
       ]);

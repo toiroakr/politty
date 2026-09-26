@@ -278,24 +278,7 @@ export function parseArgs(
   // Merge with positionals
   const rawArgs = mergeWithPositionals(parsed, argvFields);
 
-  // Apply environment variable fallbacks
-  const envFallbackFields = new Set<string>();
-  for (const field of argvFields.fields) {
-    if (field.env && rawArgs[field.name] === undefined) {
-      // Normalize to array
-      const envNames = Array.isArray(field.env) ? field.env : [field.env];
-
-      // First defined env var wins
-      for (const envName of envNames) {
-        const envValue = process.env[envName];
-        if (envValue !== undefined) {
-          rawArgs[field.name] = coerceEnvValue(envValue, field.type);
-          envFallbackFields.add(field.name);
-          break;
-        }
-      }
-    }
-  }
+  const envFallbackFields = applyEnvFallbacks(rawArgs, argvFields);
 
   // Detect unknown flags
   const optionFields = argvFields.fields.filter((f) => f.named);
@@ -352,9 +335,11 @@ export function parseArgs(
 function selectArgvFields(extracted: ExtractedFields, argv: string[]): ExtractedFields | undefined {
   const { discriminator, variants, unionOptions } = extracted;
   if (discriminator && variants) {
-    return selectDiscriminatedVariant(extracted, (fields) =>
-      mergeWithPositionals(parseArgv(argv, buildParserOptions(fields)), fields),
-    );
+    return selectDiscriminatedVariant(extracted, (fields) => {
+      const values = mergeWithPositionals(parseArgv(argv, buildParserOptions(fields)), fields);
+      applyEnvFallbacks(values, fields);
+      return values;
+    });
   }
   if (unionOptions) {
     const option = unionOptions.find((o) => fitsArgv(o, argv));
@@ -364,9 +349,36 @@ function selectArgvFields(extracted: ExtractedFields, argv: string[]): Extracted
 }
 
 /**
+ * Fill arguments missing from argv with their environment variables; the
+ * first defined variable of a field wins.
+ *
+ * @returns Names of the fields filled from an environment variable
+ */
+function applyEnvFallbacks(
+  rawArgs: Record<string, unknown>,
+  extracted: ExtractedFields,
+): Set<string> {
+  const filled = new Set<string>();
+  for (const field of extracted.fields) {
+    if (!field.env || rawArgs[field.name] !== undefined) continue;
+    for (const envName of [field.env].flat()) {
+      const envValue = process.env[envName];
+      if (envValue !== undefined) {
+        rawArgs[field.name] = coerceEnvValue(envValue, field.type);
+        filled.add(field.name);
+        break;
+      }
+    }
+  }
+  return filled;
+}
+
+/**
  * Whether argv reads cleanly with these fields alone: every long or short
  * option is one they accept, no positional token is left over, and every
- * required argument gets a value from argv or its environment variable.
+ * required argument gets a value from argv or its environment variable. A
+ * long option given without a value is not a value for a non-boolean
+ * argument.
  */
 function fitsArgv(extracted: ExtractedFields, argv: string[]): boolean {
   const parsed = parseArgv(argv, buildParserOptions(extracted));
@@ -379,12 +391,11 @@ function fitsArgv(extracted: ExtractedFields, argv: string[]): boolean {
   if (!slots.some((f) => f.type === "array") && tokenCount > slots.length) return false;
 
   const rawArgs = mergeWithPositionals(parsed, extracted);
-  return extracted.fields.every(
-    (f) =>
-      !f.required ||
-      rawArgs[f.name] !== undefined ||
-      [f.env ?? []].flat().some((name) => process.env[name] !== undefined),
-  );
+  applyEnvFallbacks(rawArgs, extracted);
+  return extracted.fields.every((f) => {
+    const value = rawArgs[f.name];
+    return !f.required || (value !== undefined && (f.type === "boolean" || value !== true));
+  });
 }
 
 /**

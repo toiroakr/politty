@@ -1375,6 +1375,27 @@ describe("ArgParser", () => {
       process.env = originalEnv;
     });
 
+    it("should select a discriminated-union variant from a discriminator given by environment variable", () => {
+      process.env.RELEASE_ACTION = "rollback";
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: arg(z.literal("deploy"), { env: "RELEASE_ACTION" }),
+            target: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            action: arg(z.literal("rollback"), { env: "RELEASE_ACTION" }),
+            target: arg(z.string()),
+          }),
+        ]),
+      });
+
+      const result = parseArgs(["--target", "v1"], cmd);
+
+      expect(result.rawArgs).toMatchObject({ action: "rollback", target: "v1" });
+    });
+
     it("should use environment variable when CLI arg not provided", () => {
       process.env.MY_PORT = "8080";
 
