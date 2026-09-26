@@ -1,7 +1,6 @@
 import {
   extractFields,
   getAllAliases,
-  selectDiscriminatedVariant,
   toCamelCase,
   type ExtractedFields,
   type ResolvedFieldMeta,
@@ -324,15 +323,23 @@ export function parseArgs(
 
 /**
  * Fields that decide how argv is read. Variants may define the same argument
- * differently, so a discriminated union reads argv with the variant its
- * discriminator selects, and a union with the first option whose definitions
- * fit the tokens; otherwise it is every extracted field.
+ * (the discriminator included) differently, so a discriminated union reads
+ * argv with the variant whose own definitions read its discriminator value,
+ * and a union with the first option whose definitions fit the tokens;
+ * otherwise it is every extracted field.
  */
 function selectArgvFields(extracted: ExtractedFields, argv: string[]): ExtractedFields {
   const { discriminator, variants, unionOptions } = extracted;
   if (discriminator && variants) {
-    const probe = mergeWithPositionals(parseArgv(argv, buildParserOptions(extracted)), extracted);
-    return selectDiscriminatedVariant(extracted, probe);
+    const variant = variants.find((v) => {
+      const variantFields = { ...extracted, fields: v.fields };
+      const values = mergeWithPositionals(
+        parseArgv(argv, buildParserOptions(variantFields)),
+        variantFields,
+      );
+      return values[discriminator] === v.discriminatorValue;
+    });
+    return variant ? { ...extracted, fields: variant.fields } : extracted;
   }
   if (unionOptions) {
     const option = unionOptions.find((o) => fitsArgv(o, argv));

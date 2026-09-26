@@ -1968,6 +1968,26 @@ describe("ArgParser", () => {
       expect(result.unknownFlags).toEqual(["target"]);
     });
 
+    it("should select a variant whose discriminator has a different role than in the first variant", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: z.literal("deploy"),
+            target: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            action: arg(z.literal("rollback"), { positional: true }),
+            target: arg(z.string()),
+          }),
+        ]),
+      });
+
+      const result = parseArgs(["rollback", "--target", "v1"], cmd);
+
+      expect(result.rawArgs).toMatchObject({ action: "rollback", target: "v1" });
+    });
+
     it("should select the variant from a discriminator given as a positional", () => {
       const cmd = defineCommand({
         name: "release",
