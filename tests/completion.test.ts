@@ -291,6 +291,25 @@ describe("Completion", () => {
       expect(data.command.options.map((option) => option.name)).toEqual(["file"]);
     });
 
+    it.each(["bash", "zsh", "fish"] as const)(
+      "should treat a named positional's negation as filling its slot in %s",
+      (shell) => {
+        const cmd = defineCommand({
+          name: "mycli",
+          args: z.object({
+            force: arg(z.boolean(), { positional: { named: true }, negation: true }),
+            target: arg(z.string(), { positional: true }),
+          }),
+          run: () => {},
+        });
+
+        const { script } = generateCompletion(cmd, { shell, programName: "mycli" });
+        const slotGuard = script.split("\n").find((line) => line.includes('not_used "--force"'));
+
+        expect(slotGuard).toContain('"--no-force"');
+      },
+    );
+
     it("should extract enum values from z.enum schema", () => {
       const cmd = defineCommand({
         name: "test",

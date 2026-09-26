@@ -319,7 +319,8 @@ export function namedPositionalGuards(
   return positionals.map((pos) => {
     const opt = options.find((o) => o.isGlobal !== true && o.name === pos.name);
     return (
-      opt && quotedAvailabilityTokens(opt.cliName, opt.alias, undefined, { frameOptions: options })
+      opt &&
+      quotedAvailabilityTokens(opt.cliName, opt.alias, opt.negation, { frameOptions: options })
     );
   });
 }
