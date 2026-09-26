@@ -2228,6 +2228,52 @@ describe("Redundant positionals", () => {
       expect(result.success).toBe(false);
     });
 
+    it("should report that the arguments match no variant when the discriminator is given in another variant's role", async () => {
+      using _warn = spyOnConsoleWarn();
+      using _error = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+          z.object({
+            action: arg(z.literal("rollback"), { positional: true }),
+            target: arg(z.string()),
+          }),
+        ]),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--action", "rollback", "v1"]);
+
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success ? "ok" : result.error.message).toBe(
+        "Arguments match none of the accepted forms. See --help for the accepted forms.",
+      );
+    });
+
+    it("should keep the validator's error for a discriminator value no variant declares", async () => {
+      using _warn = spyOnConsoleWarn();
+      using _error = spyOnConsoleError();
+
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+          z.object({
+            action: arg(z.literal("rollback"), { positional: true }),
+            target: arg(z.string()),
+          }),
+        ]),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["--action", "typo", "v1"]);
+
+      expect(result.success ? "ok" : result.error.message).not.toContain("match none");
+    });
+
     it("should error on a positional token left over after a named positional is given as a long option", async () => {
       const runFn = vi.fn();
 

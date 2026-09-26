@@ -332,18 +332,26 @@ export function parseArgs(
 /**
  * Fields that decide how argv is read. Variants may define the same argument
  * (the discriminator included) differently, so a discriminated union reads
- * argv with the variant whose own definitions read its discriminator value,
- * and a union with the first option whose definitions fit the tokens
- * (`undefined` when none fits); otherwise it is every extracted field.
+ * argv with the variant whose own definitions read its discriminator value
+ * (`undefined` when a variant reads another variant's value instead), and a
+ * union with the first option whose definitions fit the tokens (`undefined`
+ * when none fits); otherwise it is every extracted field.
  */
 function selectArgvFields(extracted: ExtractedFields, argv: string[]): ExtractedFields | undefined {
   const { discriminator, variants, unionOptions } = extracted;
   if (discriminator && variants) {
-    return selectDiscriminatedVariant(extracted, (fields) => {
+    const readValues = (fields: ExtractedFields): Record<string, unknown> => {
       const values = mergeWithPositionals(parseArgv(argv, buildParserOptions(fields)), fields);
       applyEnvFallbacks(values, fields);
       return values;
-    });
+    };
+    const selected = selectDiscriminatedVariant(extracted, readValues);
+    if (selected !== extracted) return selected;
+    const declared = new Set(variants.map((v) => v.discriminatorValue));
+    const readsAnotherVariant = variants.some((v) =>
+      declared.has(readValues({ ...extracted, fields: v.fields })[discriminator] as string),
+    );
+    return readsAnotherVariant ? undefined : extracted;
   }
   if (unionOptions) {
     const option = unionOptions.find((o) => fitsArgv(o, argv));

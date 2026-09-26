@@ -892,6 +892,41 @@ describe("Help Generator", () => {
       expect(result).toContain("release [options] <action> <target>");
     });
 
+    it("should report options in --help-json usage when only a later variant defines one", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: arg(z.literal("deploy"), { positional: true }),
+            target: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            action: z.literal("rollback"),
+            target: arg(z.string(), { positional: true }),
+          }),
+        ]),
+      });
+
+      expect(generateHelpData(cmd).usage.hasOptions).toBe(true);
+    });
+
+    it("should report a positional in --help-json when only a later variant defines it as one", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("rollback"), target: arg(z.string()) }),
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+        ]),
+      });
+
+      const data = generateHelpData(cmd);
+
+      expect([data.usage.positionals, data.positionals.map((p) => p.name)]).toEqual([
+        [{ name: "target", required: true }],
+        ["target"],
+      ]);
+    });
+
     it("should serialize the argument with each variant's own role in --help-json", () => {
       const data = generateHelpData(releaseCommand);
 

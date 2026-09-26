@@ -1070,11 +1070,9 @@ function buildUsageData(command: AnyCommand, context?: CommandContext): HelpUsag
     : undefined;
 
   const extracted = getExtractedFields(command);
-  const hasOptions = extracted ? extracted.fields.some((f) => !f.positional) : false;
+  const hasOptions = extracted ? optionFieldsInAnyVariant(extracted).length > 0 : false;
   const positionals = extracted
-    ? extracted.fields
-        .filter((f) => f.positional)
-        .map((f) => ({ name: f.name, required: f.required }))
+    ? positionalFieldsInAnyVariant(extracted).map((f) => ({ name: f.name, required: f.required }))
     : [];
 
   return { commandName, hasGlobalOptions, hasOptions, subcommand, positionals };
@@ -1115,7 +1113,7 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
 
   if (extracted) {
     schemaType = extracted.schemaType;
-    positionals = extracted.fields.filter((f) => f.positional).map(toHelpFieldData);
+    positionals = positionalFieldsInAnyVariant(extracted).map(toHelpFieldData);
 
     if (
       extracted.schemaType === "discriminatedUnion" &&
