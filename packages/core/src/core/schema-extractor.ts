@@ -135,3 +135,22 @@ export function selectDiscriminatedVariant(
   }
   return extracted;
 }
+
+/**
+ * The first definition of a field that some variant of a discriminated union
+ * or union takes as an option rather than a positional, or `undefined` when
+ * every definition is positional.
+ *
+ * @param extracted - Extracted fields
+ * @param name - Field name
+ * @returns The option definition of the field
+ */
+export function optionFieldInAnyVariant(
+  extracted: ExtractedFields,
+  name: string,
+): ResolvedFieldMeta | undefined {
+  const groups = extracted.variants ?? extracted.unionOptions ?? [];
+  return [extracted.fields, ...groups.map((g) => g.fields)]
+    .flat()
+    .find((field) => field.name === name && !field.positional);
+}

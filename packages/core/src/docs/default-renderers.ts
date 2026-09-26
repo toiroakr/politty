@@ -1,7 +1,7 @@
 import path from "node:path";
 import {
   computeCommonFieldNames,
-  namedFieldsInAnyVariant,
+  optionFieldInAnyVariant,
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
@@ -9,6 +9,7 @@ import type { Example } from "../types.js";
 import {
   emitMarkdownList,
   emitMarkdownTable,
+  formatLongFlag,
   inlineMarkdownBreaks,
   toOptionRows,
 } from "./option-rows.js";
@@ -82,10 +83,17 @@ export function renderArgumentsTable(info: CommandInfo): string {
   for (const arg of info.positionalArgs) {
     const desc = escapeTableCell(arg.description ?? "");
     const required = arg.required ? "Yes" : "No";
-    lines.push(`| \`${arg.name}\` | ${desc} | ${required} |`);
+    lines.push(`| ${formatArgumentName(arg)} | ${desc} | ${required} |`);
   }
 
   return lines.join("\n");
+}
+
+/**
+ * Format a positional argument's name cell, adding its long flag when it is also accepted as one
+ */
+function formatArgumentName(arg: ResolvedFieldMeta): string {
+  return arg.named ? `\`${arg.name}\`, \`${formatLongFlag(arg)}\`` : `\`${arg.name}\``;
 }
 
 /**
@@ -100,7 +108,7 @@ export function renderArgumentsList(info: CommandInfo): string {
   for (const arg of info.positionalArgs) {
     const required = arg.required ? "(required)" : "(optional)";
     const desc = arg.description ? ` - ${inlineMarkdownBreaks(arg.description)}` : "";
-    lines.push(`- \`${arg.name}\`${desc} ${required}`);
+    lines.push(`- ${formatArgumentName(arg)}${desc} ${required}`);
   }
 
   return lines.join("\n");
@@ -186,7 +194,9 @@ export function renderUnionOptionsMarkdown(
   const commonFieldNames = computeCommonFieldNames(unionOptions);
 
   // Render common fields first
-  const commonFields = extracted.fields.filter((f) => commonFieldNames.has(f.name) && f.named);
+  const commonFields = extracted.fields.filter(
+    (f) => commonFieldNames.has(f.name) && !f.positional,
+  );
   if (commonFields.length > 0) {
     sections.push(
       style === "table"
@@ -203,7 +213,9 @@ export function renderUnionOptionsMarkdown(
     const option = unionOptions[i];
     if (!option) continue;
 
-    const uniqueFields = option.fields.filter((f) => !commonFieldNames.has(f.name) && f.named);
+    const uniqueFields = option.fields.filter(
+      (f) => !commonFieldNames.has(f.name) && !f.positional,
+    );
 
     const label = option.description ?? `Variant ${i + 1}`;
     if (uniqueFields.length === 0) {
@@ -238,9 +250,7 @@ export function renderDiscriminatedUnionOptionsMarkdown(
   const commonFieldNames = computeCommonFieldNames(variants, discriminator);
 
   // Build discriminator field with aggregated values
-  const discriminatorField = namedFieldsInAnyVariant(extracted).find(
-    (f) => f.name === discriminator,
-  );
+  const discriminatorField = optionFieldInAnyVariant(extracted, discriminator);
   const variantValues = variants.map((v) => v.discriminatorValue).join("\\|");
 
   // Top-level table: discriminator + common fields
@@ -253,7 +263,7 @@ export function renderDiscriminatedUnionOptionsMarkdown(
   }
   for (const fieldName of commonFieldNames) {
     const field = extracted.fields.find((f) => f.name === fieldName);
-    if (field && field.named) {
+    if (field && !field.positional) {
       topFields.push(field);
     }
   }
@@ -269,7 +279,7 @@ export function renderDiscriminatedUnionOptionsMarkdown(
   // Render each variant's unique fields
   for (const variant of variants) {
     const uniqueFields = variant.fields.filter(
-      (f) => f.name !== discriminator && !commonFieldNames.has(f.name) && f.named,
+      (f) => f.name !== discriminator && !commonFieldNames.has(f.name) && !f.positional,
     );
     if (uniqueFields.length === 0) continue;
 
@@ -307,7 +317,7 @@ export function renderArgumentsTableFromArray(args: ResolvedFieldMeta[]): string
   for (const arg of args) {
     const desc = escapeTableCell(arg.description ?? "");
     const required = arg.required ? "Yes" : "No";
-    lines.push(`| \`${arg.name}\` | ${desc} | ${required} |`);
+    lines.push(`| ${formatArgumentName(arg)} | ${desc} | ${required} |`);
   }
 
   return lines.join("\n");
@@ -325,7 +335,7 @@ export function renderArgumentsListFromArray(args: ResolvedFieldMeta[]): string 
   for (const arg of args) {
     const required = arg.required ? "(required)" : "(optional)";
     const desc = arg.description ? ` - ${inlineMarkdownBreaks(arg.description)}` : "";
-    lines.push(`- \`${arg.name}\`${desc} ${required}`);
+    lines.push(`- ${formatArgumentName(arg)}${desc} ${required}`);
   }
 
   return lines.join("\n");
