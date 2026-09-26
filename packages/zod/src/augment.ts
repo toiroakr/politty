@@ -21,7 +21,7 @@ declare module "zod" {
 
   interface GlobalMeta {
     description?: string;
-    positional?: boolean;
+    positional?: boolean | { named?: boolean };
     placeholder?: string;
     alias?: string | string[] | readonly string[];
     hiddenAlias?: string | string[] | readonly string[];
@@ -32,4 +32,3 @@ declare module "zod" {
 }
 
 // This file has no runtime code, it only provides type augmentation
-export {};

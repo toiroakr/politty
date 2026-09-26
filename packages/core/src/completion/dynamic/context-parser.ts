@@ -2,9 +2,18 @@
  * Parse completion context from partial command line
  */
 
-import { extractFields, getAllAliases, toCamelCase } from "../../core/schema-extractor.js";
+import {
+  extractFields,
+  getAllAliases,
+  namedFieldsInAnyVariant,
+  selectDiscriminatedVariant,
+  toCamelCase,
+  type ExtractedFields,
+  type ResolvedFieldMeta,
+} from "../../core/schema-extractor.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
+import { positionalSlotFields } from "../../parser/argv-parser.js";
 import type { AnyCommand, ArgsSchema } from "../../types.js";
 import { collectOptionTokens } from "../shell-shared.js";
 import type { CompletableOption, CompletablePositional, ValueCompletion } from "../types.js";
@@ -105,32 +114,31 @@ function extractOptions(command: AnyCommand): CompletableOption[] {
 }
 
 function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
-  const extracted = extractFields(schema);
-  return extracted.fields
-    .filter((field) => !field.positional)
-    .map((field) => {
-      // Merge hiddenAlias into the matcher-visible alias list. The runtime
-      // parser accepts hidden aliases via `getAllAliases`, so the dynamic
-      // completion parser must too — otherwise typing an accepted hidden
-      // alias (`--legacy value`) leaves the sibling value unparsed and
-      // unrecognised as the target being completed.
-      const aliases = getAllAliases(field);
-      return {
-        name: field.name,
-        cliName: field.cliName,
-        alias: aliases.length > 0 ? aliases : undefined,
-        negation: field.negationDisplay,
-        negationDescription: field.negationDescription,
-        description: field.description,
-        takesValue: field.type !== "boolean",
-        valueType: field.type,
-        required: field.required,
-        // Mirror runtime: default `--no-<cliName>` is accepted only when the
-        // user opts in via `negation: true`.
-        defaultNegationAccepted: field.type === "boolean" && field.negation === true,
-        valueCompletion: resolveRuntimeCompletion(resolveValueCompletion(field)),
-      };
-    });
+  return namedFieldsInAnyVariant(extractFields(schema)).map(toCompletableOption);
+}
+
+function toCompletableOption(field: ResolvedFieldMeta): CompletableOption {
+  // Merge hiddenAlias into the matcher-visible alias list. The runtime
+  // parser accepts hidden aliases via `getAllAliases`, so the dynamic
+  // completion parser must too — otherwise typing an accepted hidden
+  // alias (`--legacy value`) leaves the sibling value unparsed and
+  // unrecognised as the target being completed.
+  const aliases = getAllAliases(field);
+  return {
+    name: field.name,
+    cliName: field.cliName,
+    alias: aliases.length > 0 ? aliases : undefined,
+    negation: field.negationDisplay,
+    negationDescription: field.negationDescription,
+    description: field.description,
+    takesValue: field.type !== "boolean",
+    valueType: field.type,
+    required: field.required,
+    // Mirror runtime: default `--no-<cliName>` is accepted only when the
+    // user opts in via `negation: true`.
+    defaultNegationAccepted: field.type === "boolean" && field.negation === true,
+    valueCompletion: resolveRuntimeCompletion(resolveValueCompletion(field)),
+  };
 }
 
 /**
@@ -297,25 +305,66 @@ export function clampToVariadic(
 }
 
 /**
+ * Read argument values with a variant's own fields: the options already
+ * parsed, plus the positional values assigned to that variant's slots
+ */
+function readVariantValues(
+  optionValues: Record<string, unknown>,
+  positionalValues: readonly string[],
+): (fields: ExtractedFields) => Record<string, unknown> {
+  return (fields) => {
+    const values = { ...optionValues };
+    positionalSlotFields(fields, optionValues).forEach((field, i) => {
+      if (i < positionalValues.length) values[field.name] = positionalValues[i];
+    });
+    return values;
+  };
+}
+
+/**
+ * The options of the discriminated-union variant the typed arguments
+ * select, or `undefined` when no variant is selected yet
+ */
+function selectedVariantOptions(
+  command: AnyCommand,
+  optionValues: Record<string, unknown>,
+  positionalValues: readonly string[],
+): CompletableOption[] | undefined {
+  if (!command.args) return undefined;
+  const extracted = extractFields(command.args);
+  const selected = selectDiscriminatedVariant(
+    extracted,
+    readVariantValues(optionValues, positionalValues),
+  );
+  if (selected === extracted) return undefined;
+  return selected.fields.filter((field) => field.named).map(toCompletableOption);
+}
+
+/**
  * Extract positionals from a command
  */
-function extractPositionalsForContext(command: AnyCommand): CompletablePositional[] {
+function extractPositionalsForContext(
+  command: AnyCommand,
+  optionValues: Record<string, unknown>,
+  positionalValues: readonly string[],
+): CompletablePositional[] {
   if (!command.args) {
     return [];
   }
 
-  const extracted = extractFields(command.args);
-  return extracted.fields
-    .filter((field) => field.positional)
-    .map((field, index) => ({
-      name: field.name,
-      cliName: field.cliName,
-      position: index,
-      description: field.description,
-      required: field.required,
-      variadic: field.type === "array",
-      valueCompletion: resolveRuntimeCompletion(resolveValueCompletion(field)),
-    }));
+  const extracted = selectDiscriminatedVariant(
+    extractFields(command.args),
+    readVariantValues(optionValues, positionalValues),
+  );
+  return positionalSlotFields(extracted, optionValues).map((field, index) => ({
+    name: field.name,
+    cliName: field.cliName,
+    position: index,
+    description: field.description,
+    required: field.required,
+    variadic: field.type === "array",
+    valueCompletion: resolveRuntimeCompletion(resolveValueCompletion(field)),
+  }));
 }
 
 /**
@@ -562,6 +611,25 @@ export function parseCompletionContext(
   rootCommand: AnyCommand,
   globalArgsSchema?: ArgsSchema,
 ): CompletionContext {
+  // Which variant applies is known only once its discriminator is read, so
+  // the first pass reads with every variant's options and a second pass
+  // re-reads with only the selected variant's.
+  const first = scanCompletionContext(argv, rootCommand, globalArgsSchema);
+  if (!first.variantOptions) return first.context;
+  return scanCompletionContext(argv, rootCommand, globalArgsSchema, {
+    command: first.context.currentCommand,
+    options: first.variantOptions,
+  }).context;
+}
+
+function scanCompletionContext(
+  argv: string[],
+  rootCommand: AnyCommand,
+  globalArgsSchema: ArgsSchema | undefined,
+  narrowed?: { command: AnyCommand; options: CompletableOption[] },
+): { context: CompletionContext; variantOptions: CompletableOption[] | undefined } {
+  const frameOptions = (command: AnyCommand): CompletableOption[] =>
+    command === narrowed?.command ? narrowed.options : extractOptions(command);
   // Initialize with root command
   let currentCommand = rootCommand;
   const subcommandPath: string[] = [];
@@ -646,7 +714,7 @@ export function parseCompletionContext(
 
   // Process arguments to resolve subcommands and track state
   let i = 0;
-  let options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
+  let options = mergeGlobalOptions(frameOptions(currentCommand), globalOptions);
   let afterDoubleDash = false;
 
   // Traverse subcommands
@@ -745,7 +813,7 @@ export function parseCompletionContext(
       // the migration loop below can resolve token collisions against
       // them; once `currentCommand` flips to the child we lose access
       // to the parent's schema.
-      const parentLocalOptions = extractOptions(currentCommand);
+      const parentLocalOptions = frameOptions(currentCommand);
       // Pre-scan this frame's pre-sub slice with the global schema.
       // Runtime's `scanForSubcommand` runs at every frame in the
       // recursive `parseArgs` descent, routing pre-sub tokens to
@@ -755,7 +823,7 @@ export function parseCompletionContext(
         globalsCapturedByPreSubScan.add(name);
       }
       currentCommand = subcommand;
-      options = mergeGlobalOptions(extractOptions(currentCommand), globalOptions);
+      options = mergeGlobalOptions(frameOptions(currentCommand), globalOptions);
       // Migrate values the parent frame recorded locally that the
       // runtime would have routed to a global instead. Runtime's
       // `scanForSubcommand` only knows the global schema and harvests
@@ -811,7 +879,8 @@ export function parseCompletionContext(
   const previousWord: string = argv[argv.length - 2] ?? "";
 
   // Extract data for current command
-  const positionals = extractPositionalsForContext(currentCommand);
+  const variantOptions = selectedVariantOptions(currentCommand, parsedArgs, positionalValues);
+  const positionals = extractPositionalsForContext(currentCommand, parsedArgs, positionalValues);
   const subcommands = getSubcommandNames(currentCommand);
 
   // Map collected positional values to their field names so resolvers can
@@ -906,7 +975,7 @@ export function parseCompletionContext(
   // Expose globals alongside locals; local args win on name collision.
   const mergedParsedArgs: Record<string, unknown> = { ...globalParsedArgs, ...parsedArgs };
 
-  return {
+  const context: CompletionContext = {
     subcommandPath,
     currentCommand,
     currentWord,
@@ -923,6 +992,7 @@ export function parseCompletionContext(
     parsedArgs: mergedParsedArgs,
     previousValues,
   };
+  return { context, variantOptions };
 }
 
 /**

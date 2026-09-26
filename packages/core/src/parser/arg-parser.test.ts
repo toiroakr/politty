@@ -734,6 +734,86 @@ describe("ArgParser", () => {
       expect(result.rawArgs.target).toBe("app");
       expect(result.rawArgs.files).toEqual(["a.ts", "b.ts"]);
     });
+
+    it("should report a positional's name passed as a long option as an unknown flag", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          name: arg(z.string(), { positional: true }),
+        }),
+      });
+
+      const result = parseArgs(["--name=dev"], cmd);
+
+      expect(result.unknownFlags).toEqual(["name"]);
+    });
+
+    it("should report a camelCase positional passed as a kebab-case long option under the typed name", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          outputFile: arg(z.string().optional(), { positional: true }),
+        }),
+      });
+
+      const result = parseArgs(["--output-file=out.txt"], cmd);
+
+      expect(result.unknownFlags).toEqual(["output-file"]);
+    });
+
+    it("should fill a positional declared with named from a long option", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          name: arg(z.string(), { positional: { named: true } }),
+        }),
+      });
+
+      const result = parseArgs(["--name=-dev"], cmd);
+
+      expect(result.rawArgs.name).toBe("-dev");
+      expect(result.unknownFlags).toEqual([]);
+    });
+
+    it("should pass the next positional token on when a named positional is given as a long option", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          src: arg(z.string(), { positional: { named: true } }),
+          dest: arg(z.string(), { positional: true }),
+        }),
+      });
+
+      const result = parseArgs(["--src", "a.txt", "b.txt"], cmd);
+
+      expect(result.rawArgs).toMatchObject({ src: "a.txt", dest: "b.txt" });
+    });
+
+    it("should fill a positional without named from its token even when its name is also given as a long option", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          name: arg(z.string(), { positional: true }),
+        }),
+      });
+
+      const result = parseArgs(["--name", "x", "dev"], cmd);
+
+      expect(result.rawArgs.name).toBe("dev");
+    });
+
+    it("should not fill a positional from a long option with its name", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          name: arg(z.string().optional(), { positional: true }),
+        }),
+      });
+
+      const result = parseArgs(["--name", "dev"], cmd);
+
+      expect(result.rawArgs.name).toBeUndefined();
+    });
   });
 
   describe("Array arguments", () => {
@@ -1295,6 +1375,27 @@ describe("ArgParser", () => {
       process.env = originalEnv;
     });
 
+    it("should select a discriminated-union variant from a discriminator given by environment variable", () => {
+      process.env.RELEASE_ACTION = "rollback";
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: arg(z.literal("deploy"), { env: "RELEASE_ACTION" }),
+            target: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            action: arg(z.literal("rollback"), { env: "RELEASE_ACTION" }),
+            target: arg(z.string()),
+          }),
+        ]),
+      });
+
+      const result = parseArgs(["--target", "v1"], cmd);
+
+      expect(result.rawArgs).toMatchObject({ action: "rollback", target: "v1" });
+    });
+
     it("should use environment variable when CLI arg not provided", () => {
       process.env.MY_PORT = "8080";
 
@@ -1530,6 +1631,48 @@ describe("ArgParser", () => {
 
       expect(result.rawArgs.output).toBe("out");
       expect(result.rawGlobalArgs).toEqual({ verbose: true });
+    });
+
+    it("keeps an option alias that only a later union variant declares local when a global shares it", () => {
+      const globalWithT = extractFields(
+        z.object({ tag: arg(z.string().optional(), { alias: "t" }) }),
+      );
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+          z.object({ action: z.literal("rollback"), target: arg(z.string(), { alias: "t" }) }),
+        ]),
+        run: () => {},
+      });
+
+      const result = parseArgs(["--action", "rollback", "-t", "v1"], cmd, {
+        globalExtracted: globalWithT,
+      });
+
+      expect(result.rawArgs.target).toBe("v1");
+      expect(result.rawGlobalArgs?.tag).toBeUndefined();
+    });
+
+    it("keeps a later variant's own alias local when an earlier variant gives the option another alias", () => {
+      const globalWithT = extractFields(
+        z.object({ tag: arg(z.string().optional(), { alias: "t" }) }),
+      );
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { alias: "x" }) }),
+          z.object({ action: z.literal("rollback"), target: arg(z.string(), { alias: "t" }) }),
+        ]),
+        run: () => {},
+      });
+
+      const result = parseArgs(["--action", "rollback", "-t", "v1"], cmd, {
+        globalExtracted: globalWithT,
+      });
+
+      expect(result.rawArgs.target).toBe("v1");
+      expect(result.rawGlobalArgs?.tag).toBeUndefined();
     });
 
     it("local flag takes precedence over global on collision", () => {
@@ -1819,6 +1962,143 @@ describe("ArgParser", () => {
         const result = parseArgs(["--logLevel", "5"], cmd, { skipValidation: true });
         expect(result.rawArgs.logLevel).toBe("5");
       });
+    });
+  });
+
+  describe("Discriminated union variants that define an argument differently", () => {
+    const releaseCommand = (variants: [z.ZodObject<z.ZodRawShape>, z.ZodObject<z.ZodRawShape>]) =>
+      defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", variants),
+      });
+    const deployWithPositionalTarget = z.object({
+      action: z.literal("deploy"),
+      target: arg(z.string(), { positional: true }),
+    });
+    const rollbackWithOptionTarget = z.object({
+      action: z.literal("rollback"),
+      target: arg(z.string()),
+    });
+
+    it("should accept a long option that only the selected later variant defines", () => {
+      const cmd = releaseCommand([deployWithPositionalTarget, rollbackWithOptionTarget]);
+
+      const result = parseArgs(["--action", "rollback", "--target", "v1"], cmd);
+
+      expect(result.rawArgs.target).toBe("v1");
+      expect(result.unknownFlags).toEqual([]);
+    });
+
+    it("should reject a long option for an argument the selected variant defines as positional only", () => {
+      const cmd = releaseCommand([deployWithPositionalTarget, rollbackWithOptionTarget]);
+
+      const result = parseArgs(["--action", "deploy", "--target", "prod"], cmd);
+
+      expect(result.unknownFlags).toEqual(["target"]);
+      expect(result.rawArgs.target).toBeUndefined();
+    });
+
+    it("should not fill an argument from a positional token when the selected variant defines it as an option", () => {
+      const cmd = releaseCommand([deployWithPositionalTarget, rollbackWithOptionTarget]);
+
+      const result = parseArgs(["--action", "rollback", "v1"], cmd);
+
+      expect(result.rawArgs.target).toBeUndefined();
+      expect(result.positionalSlotFields).toEqual([]);
+    });
+
+    it("should accept a long option for a positional that only the selected later variant marks named", () => {
+      const rollbackWithNamedTarget = z.object({
+        action: z.literal("rollback"),
+        target: arg(z.string(), { positional: { named: true } }),
+      });
+      const cmd = releaseCommand([deployWithPositionalTarget, rollbackWithNamedTarget]);
+
+      const result = parseArgs(["--action", "rollback", "--target=-v1"], cmd);
+
+      expect(result.rawArgs.target).toBe("-v1");
+    });
+
+    it("should not let an earlier variant's named positional accept a long option in another variant", () => {
+      const rollbackWithNamedTarget = z.object({
+        action: z.literal("rollback"),
+        target: arg(z.string(), { positional: { named: true } }),
+      });
+      const cmd = releaseCommand([rollbackWithNamedTarget, deployWithPositionalTarget]);
+
+      const result = parseArgs(["--action", "deploy", "--target=prod"], cmd);
+
+      expect(result.unknownFlags).toEqual(["target"]);
+    });
+
+    it("should select a variant whose discriminator has a different role than in the first variant", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: z.literal("deploy"),
+            target: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            action: arg(z.literal("rollback"), { positional: true }),
+            target: arg(z.string()),
+          }),
+        ]),
+      });
+
+      const result = parseArgs(["rollback", "--target", "v1"], cmd);
+
+      expect(result.rawArgs).toMatchObject({ action: "rollback", target: "v1" });
+    });
+
+    it("should select the variant from a discriminator given as a positional", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: arg(z.literal("deploy"), { positional: true }),
+            target: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            action: arg(z.literal("rollback"), { positional: true }),
+            target: arg(z.string()),
+          }),
+        ]),
+      });
+
+      const result = parseArgs(["rollback", "--target", "v1"], cmd);
+
+      expect(result.rawArgs).toMatchObject({ action: "rollback", target: "v1" });
+    });
+  });
+
+  describe("Union options that define an argument differently", () => {
+    const syncCommand = defineCommand({
+      name: "sync",
+      args: z.union([
+        z.object({
+          source: arg(z.string(), { positional: true }),
+          force: arg(z.boolean()),
+        }),
+        z.object({
+          source: arg(z.string()),
+          dryRun: arg(z.boolean()),
+        }),
+      ]),
+    });
+
+    it("should read argv with the first option whose definitions fit the tokens", () => {
+      const result = parseArgs(["--source", "s3://bucket", "--dry-run"], syncCommand);
+
+      expect(result.rawArgs).toMatchObject({ source: "s3://bucket", dryRun: true });
+      expect(result.unknownFlags).toEqual([]);
+    });
+
+    it("should keep reading a positional with the first option when its definitions fit", () => {
+      const result = parseArgs(["s3://bucket", "--force"], syncCommand);
+
+      expect(result.rawArgs).toMatchObject({ source: "s3://bucket", force: true });
+      expect(result.unknownFlags).toEqual([]);
     });
   });
 });

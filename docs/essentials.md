@@ -77,6 +77,23 @@ $ my-cli src.txt dest.txt
 2.  **Arrays must be last**: Array positional arguments (e.g., `z.array(z.string())`) can be defined but **must be last**. They receive all remaining arguments.
 3.  **No arrays with optional**: When using array positional arguments, you cannot combine them with other optional positional arguments (to avoid ambiguity).
 
+#### Accepting a Positional as a Named Option
+
+A positional argument is not accepted as `--<name>` by default. Pass `{ positional: { named: true } }` to accept both forms, for example so a value that starts with `-` can be passed as `--name=-dev`. Help and generated docs list it once under arguments as `<name>, --name <NAME>`, and shell completion offers `--name` as well.
+
+```typescript
+args: z.object({
+  name: arg(z.string(), { positional: { named: true }, description: "Profile name" }),
+});
+```
+
+```bash
+$ my-cli dev
+$ my-cli --name=-dev
+```
+
+When the value is given as `--name`, the next positional token fills the next positional argument instead.
+
 ### Named Options (Flags)
 
 Arguments without `{ positional: true }` are treated as named options (flags).

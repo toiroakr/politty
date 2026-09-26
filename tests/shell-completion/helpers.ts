@@ -625,6 +625,12 @@ export function defineCommonTests(
     expect(values).not.toContain("production");
   });
 
+  it("completes the next positional after a named positional given as a long option", () => {
+    const values = complete(["migrate", "--source", "local", ""]);
+    expect(values).toContain("dev");
+    expect(values).not.toContain("local");
+  });
+
   it("completes options after all positionals provided", () => {
     const values = complete(["migrate", "local", "dev", "--"]);
     expect(values).toContain("--dry-run");
@@ -725,5 +731,26 @@ export function defineCommonTests(
     expect(values).not.toContain("--format");
     expect(values).toContain("--output");
     expect(values).toContain("--minify");
+  });
+}
+
+/**
+ * Expand dependencies on named positionals, shared by all shells.
+ * Must be called inside a describe() block.
+ */
+export function defineNamedPositionalExpandTests(complete: (args: string[]) => string[]): void {
+  it("reads a positional dependency placed after a named positional given as a long option", () => {
+    const values = complete(["call", "--profile", "dev", "GetApplication", "-f", ""]);
+    expect(values).toContain("applicationName=");
+  });
+
+  it("reads a positional dependency when the named positional's option comes after it", () => {
+    const values = complete(["call", "GetApplication", "--profile", "dev", "-f", ""]);
+    expect(values).toContain("applicationName=");
+  });
+
+  it("reads a named positional dependency given as a long option", () => {
+    const values = complete(["call", "dev", "--endpoint", "GetApplication", "-f", ""]);
+    expect(values).toContain("applicationName=");
   });
 }

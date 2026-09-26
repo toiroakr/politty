@@ -7,6 +7,7 @@ import {
   bashCompleteNested,
   bashComplete as bashCompleteRaw,
   defineCommonTests,
+  defineNamedPositionalExpandTests,
   defineNestedTests,
   hasBash,
   hasExpect,
@@ -167,6 +168,8 @@ describe.skipIf(!hasBash)("bash expand array dedup", () => {
       ...opts,
       scriptPath: expandCtx.completionScripts.bash,
     });
+
+  defineNamedPositionalExpandTests((args) => completeE(args));
 
   it("falls through to positional completion when subcommands do not match the prefix", () => {
     const values = completeE(["api", "Get"]);

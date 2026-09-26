@@ -37,6 +37,8 @@ export interface ResolvedFieldMeta {
   description?: string | undefined;
   /** Whether this is a positional argument */
   positional: boolean;
+  /** Whether this is accepted as a long option (`--cli-name`) */
+  named: boolean;
   /** Placeholder for help display */
   placeholder?: string | undefined;
   /**
@@ -328,13 +330,15 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
   const negationDisplay: string | undefined =
     typeof negation === "string" ? negation : negation === true ? `no-${cliName}` : undefined;
 
+  const positional = argMeta?.positional;
   const meta: ResolvedFieldMeta = {
     name,
     cliName,
     alias,
     hiddenAlias: hiddenAliasFinal,
     description,
-    positional: argMeta?.positional ?? false,
+    positional: positional !== undefined && positional !== false,
+    named: typeof positional === "object" ? positional.named === true : positional !== true,
     placeholder: argMeta?.placeholder,
     env: argMeta?.env,
     required: intro.required,
