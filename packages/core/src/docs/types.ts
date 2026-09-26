@@ -33,7 +33,7 @@ export interface CommandInfo {
   depth: number;
   /** Positional arguments */
   positionalArgs: ResolvedFieldMeta[];
-  /** Options (non-positional arguments) */
+  /** Options (arguments accepted as `--<name>`, including named positionals) */
   options: ResolvedFieldMeta[];
   /** Subcommand information */
   subCommands: SubCommandInfo[];

@@ -22,6 +22,7 @@ import {
 } from "./extractor.js";
 import { buildHeaderLines, computeBinSig, resolveBinPath } from "./header.js";
 import {
+  namedPositionalGuards,
   optionExpandLocation,
   positionalExpandLocation,
   quotedAvailabilityTokens,
@@ -297,7 +298,20 @@ function positionalBlock(
   options: readonly CompletableOption[] = [],
 ): string[] {
   if (positionals.length === 0) return [];
+  const guards = namedPositionalGuards(positionals, options);
+  const hasNamed = guards.some((tokens) => tokens !== undefined);
   const lines: string[] = [];
+  if (hasNamed) {
+    lines.push(`    set -l _slot -1; set -l _left $_pos_count`);
+    positionals.forEach((pos, i) => {
+      const tokens = guards[i];
+      const guard = tokens ? `; and __${fn}_not_used ${tokens.join(" ")}` : "";
+      const take = pos.variadic
+        ? `set _slot ${pos.position}`
+        : `if test $_left -eq 0; set _slot ${pos.position}; else; set _left (math $_left - 1); end`;
+      lines.push(`    if test $_slot -lt 0${guard}; ${take}; end`);
+    });
+  }
   for (const pos of positionals) {
     const valLines = fishValueLines(
       pos.valueCompletion,
@@ -306,7 +320,9 @@ function positionalBlock(
     );
     if (valLines.length === 0) continue;
 
-    if (pos.variadic) {
+    if (hasNamed) {
+      lines.push(`    if test $_slot -eq ${pos.position}`);
+    } else if (pos.variadic) {
       lines.push(`    if test $_pos_count -ge ${pos.position}`);
     } else {
       lines.push(`    if test $_pos_count -eq ${pos.position}`);

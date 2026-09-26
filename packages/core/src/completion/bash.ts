@@ -32,6 +32,7 @@ import {
   ansiC,
   optionExpandLocation,
   positionalExpandLocation,
+  posixPositionalSlotLines,
   quotedAvailabilityTokens,
   type FuncSuffixedExpandLocation,
 } from "./shell-shared.js";
@@ -297,11 +298,12 @@ function positionalBlock(
   options: readonly CompletableOption[] = [],
 ): string[] {
   if (positionals.length === 0) return [];
-  const lines: string[] = [];
-  lines.push(`    case "$_pos_count" in`);
+  const slotLines = posixPositionalSlotLines(positionals, options, fn);
+  const lines: string[] = [...(slotLines ?? [])];
+  lines.push(`    case "${slotLines ? "$_slot" : "$_pos_count"}" in`);
 
   for (const pos of positionals) {
-    if (pos.variadic) {
+    if (pos.variadic && !slotLines) {
       // Variadic: use * to match any position from this index onward
       lines.push(`        ${pos.position}|*)`);
     } else {

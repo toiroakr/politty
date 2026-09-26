@@ -5,6 +5,7 @@
 import { extractFields, getAllAliases, toCamelCase } from "../../core/schema-extractor.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
+import { positionalSlotFields } from "../../parser/argv-parser.js";
 import type { AnyCommand, ArgsSchema } from "../../types.js";
 import { collectOptionTokens } from "../shell-shared.js";
 import type { CompletableOption, CompletablePositional, ValueCompletion } from "../types.js";
@@ -299,23 +300,24 @@ export function clampToVariadic(
 /**
  * Extract positionals from a command
  */
-function extractPositionalsForContext(command: AnyCommand): CompletablePositional[] {
+function extractPositionalsForContext(
+  command: AnyCommand,
+  optionValues: Record<string, unknown>,
+): CompletablePositional[] {
   if (!command.args) {
     return [];
   }
 
   const extracted = extractFields(command.args);
-  return extracted.fields
-    .filter((field) => field.positional)
-    .map((field, index) => ({
-      name: field.name,
-      cliName: field.cliName,
-      position: index,
-      description: field.description,
-      required: field.required,
-      variadic: field.type === "array",
-      valueCompletion: resolveRuntimeCompletion(resolveValueCompletion(field)),
-    }));
+  return positionalSlotFields(extracted, optionValues).map((field, index) => ({
+    name: field.name,
+    cliName: field.cliName,
+    position: index,
+    description: field.description,
+    required: field.required,
+    variadic: field.type === "array",
+    valueCompletion: resolveRuntimeCompletion(resolveValueCompletion(field)),
+  }));
 }
 
 /**
@@ -811,7 +813,7 @@ export function parseCompletionContext(
   const previousWord: string = argv[argv.length - 2] ?? "";
 
   // Extract data for current command
-  const positionals = extractPositionalsForContext(currentCommand);
+  const positionals = extractPositionalsForContext(currentCommand, parsedArgs);
   const subcommands = getSubcommandNames(currentCommand);
 
   // Map collected positional values to their field names so resolvers can

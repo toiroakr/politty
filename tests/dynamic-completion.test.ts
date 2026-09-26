@@ -107,6 +107,27 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.endpoint).toBe("GetApplication");
     });
 
+    describe("named positional given as a long option", () => {
+      const namedCmd = defineCommand({
+        name: "mycli",
+        args: z.object({
+          src: arg(z.string(), { positional: { named: true } }),
+          dest: arg(z.string(), { positional: true }),
+        }),
+        run: () => {},
+      });
+
+      it("completes the next positional", () => {
+        const ctx = parseCompletionContext(["--src", "a", ""], namedCmd);
+        expect(ctx.positionals[ctx.positionalIndex ?? -1]?.name).toBe("dest");
+      });
+
+      it("keeps the option value and maps the next token to the next positional", () => {
+        const ctx = parseCompletionContext(["--src", "a", "b", ""], namedCmd);
+        expect(ctx.parsedArgs).toMatchObject({ src: "a", dest: "b" });
+      });
+    });
+
     it("captures scalar option values as parsedArgs", () => {
       const ctx = parseCompletionContext(["foo", "--config", "tailor.yml", "--field", ""], cmd);
       expect(ctx.parsedArgs.config).toBe("tailor.yml");

@@ -352,16 +352,16 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
  * Positional fields that take a positional token, in definition order.
  * A named positional given as a long option leaves its token to the next one.
  *
- * @param parsed - Parsed argv
  * @param extracted - Extracted fields
+ * @param options - Option values parsed so far, keyed by field name
  * @returns Positional fields that consume positional tokens
  */
 export function positionalSlotFields(
-  parsed: ParsedArgv,
   extracted: ExtractedFields,
+  options: Record<string, unknown>,
 ): ResolvedFieldMeta[] {
   return extracted.fields.filter(
-    (f) => f.positional && !(f.named && Object.hasOwn(parsed.options, f.name)),
+    (f) => f.positional && !(f.named && Object.hasOwn(options, f.name)),
   );
 }
 
@@ -383,7 +383,7 @@ export function mergeWithPositionals(
   }
 
   let positionalIndex = 0;
-  for (const field of positionalSlotFields(parsed, extracted)) {
+  for (const field of positionalSlotFields(extracted, parsed.options)) {
     if (positionalIndex >= allPositionals.length) {
       break;
     }

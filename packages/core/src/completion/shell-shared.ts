@@ -306,6 +306,49 @@ export function quotedAvailabilityTokens(
 }
 
 /**
+ * `__<fn>_not_used` tokens per positional showing that a named positional
+ * was given as a long option, or `undefined` for a positional that only
+ * takes a token. The static scripts skip such a positional's slot, as the
+ * runtime parser does.
+ */
+export function namedPositionalGuards(
+  positionals: readonly CompletablePositional[],
+  options: readonly CompletableOption[],
+): (string[] | undefined)[] {
+  return positionals.map((pos) => {
+    const opt = options.find((o) => o.isGlobal !== true && o.name === pos.name);
+    return (
+      opt && quotedAvailabilityTokens(opt.cliName, opt.alias, undefined, { frameOptions: options })
+    );
+  });
+}
+
+/**
+ * bash/zsh lines that set `_slot` to the `position` of the positional the
+ * cursor fills, skipping named positionals already given as a long option.
+ * Returns `undefined` when no positional is named, so callers keep matching
+ * on `_pos_count` directly.
+ */
+export function posixPositionalSlotLines(
+  positionals: readonly CompletablePositional[],
+  options: readonly CompletableOption[],
+  fn: string,
+): string[] | undefined {
+  const guards = namedPositionalGuards(positionals, options);
+  if (guards.every((tokens) => tokens === undefined)) return undefined;
+  const lines = [`    local _slot=-1 _left=$_pos_count`];
+  positionals.forEach((pos, i) => {
+    const tokens = guards[i];
+    const guard = tokens ? ` && __${fn}_not_used ${tokens.join(" ")}` : "";
+    const take = pos.variadic
+      ? `_slot=${pos.position}`
+      : `if (( _left == 0 )); then _slot=${pos.position}; else (( _left-- )); fi`;
+    lines.push(`    if (( _slot < 0 ))${guard}; then ${take}; fi`);
+  });
+  return lines;
+}
+
+/**
  * Tokens the runtime's `separateGlobalArgs` would consider locally
  * owned at the leaf: long-form cliName plus every EXPLICIT alias
  * spelling (in all forms the aliasMap accepts — `-a`/`--a` for short,

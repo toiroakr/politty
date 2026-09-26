@@ -625,6 +625,12 @@ export function defineCommonTests(
     expect(values).not.toContain("production");
   });
 
+  it("completes the next positional after a named positional given as a long option", () => {
+    const values = complete(["migrate", "--source", "local", ""]);
+    expect(values).toContain("dev");
+    expect(values).not.toContain("local");
+  });
+
   it("completes options after all positionals provided", () => {
     const values = complete(["migrate", "local", "dev", "--"]);
     expect(values).toContain("--dry-run");

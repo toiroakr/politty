@@ -313,7 +313,7 @@ export function parseArgs(
     unknownFlags,
     unknownGlobalFlags: suppressedGlobalFlags,
     extractedFields: extracted,
-    positionalSlotFields: positionalSlotFields(parsed, extracted),
+    positionalSlotFields: positionalSlotFields(extracted, parsed.options),
     rawGlobalArgs,
     envFallbackFields,
   };
