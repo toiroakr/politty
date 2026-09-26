@@ -131,7 +131,7 @@ export interface HelpUsageData {
   commandName: string;
   /** Whether global options are defined */
   hasGlobalOptions: boolean;
-  /** Whether this command defines any (non-positional) options */
+  /** Whether this command defines any argument accepted as `--name` (options and named positionals) */
   hasOptions: boolean;
   /**
    * Whether a subcommand token is expected: "required" when the command has
@@ -206,7 +206,7 @@ export interface HelpData {
   /** Positional arguments */
   positionals: HelpFieldData[];
   /**
-   * Non-positional options. For `discriminatedUnion`/`union`/`xor` schemas,
+   * Arguments accepted as `--name` (options and named positionals). For `discriminatedUnion`/`union`/`xor` schemas,
    * this holds only the fields common to every variant/option; the rest are
    * under `variants`/`unionOptions`.
    */

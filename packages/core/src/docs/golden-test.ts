@@ -1535,7 +1535,7 @@ function normalizeGlobalOptions(
 }
 
 /**
- * Derive an ArgsShape from a globalArgs schema, retaining only non-positional option fields.
+ * Derive an ArgsShape from a globalArgs schema, retaining only fields accepted as `--name`.
  * Returns undefined when globalArgs is undefined or contains no option fields.
  * Used to build globalOptionDefinitions from globalArgs when rootDoc is not available.
  */

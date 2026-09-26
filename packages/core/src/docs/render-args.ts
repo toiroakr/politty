@@ -59,7 +59,6 @@ function extractArgsFields(args: ArgsShape): ResolvedFieldMeta[] {
 export function renderArgsTable(args: ArgsShape, options?: ArgsTableOptions): string {
   const fields = extractArgsFields(args);
 
-  // Filter to non-positional args only (options)
   const optionFields = fields.filter((f) => f.named);
 
   if (optionFields.length === 0) {

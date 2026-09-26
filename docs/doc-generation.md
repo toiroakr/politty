@@ -632,7 +632,7 @@ Command information passed to render functions:
 | `commandPath`     | `string`                              | Command path (e.g., `"config get"`, `""` for root) |
 | `depth`           | `number`                              | Command depth (root=1, subcommand=2, etc.)         |
 | `positionalArgs`  | `ResolvedFieldMeta[]`                 | Array of positional arguments                      |
-| `options`         | `ResolvedFieldMeta[]`                 | Array of options (non-positional arguments)        |
+| `options`         | `ResolvedFieldMeta[]`                 | Array of options (arguments accepted as `--name`)  |
 | `subCommands`     | `SubCommandInfo[]`                    | Array of subcommand info                           |
 | `extracted`       | `ExtractedFields \| null`             | Field info extracted from schema                   |
 | `command`         | `AnyCommand`                          | Original command object                            |
