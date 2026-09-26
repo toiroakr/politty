@@ -103,10 +103,29 @@ export function computeCommonFieldNames(
  * @returns Fields some variant accepts as `--name`
  */
 export function namedFieldsInAnyVariant(extracted: ExtractedFields): ResolvedFieldMeta[] {
+  return firstFieldsInAnyVariant(extracted, (field) => field.named);
+}
+
+/**
+ * Fields taken as a positional argument by at least one variant of a
+ * discriminated union or union, keeping the first positional definition; for
+ * any other schema, the positional fields.
+ *
+ * @param extracted - Extracted fields
+ * @returns Fields some variant takes as a positional argument
+ */
+export function positionalFieldsInAnyVariant(extracted: ExtractedFields): ResolvedFieldMeta[] {
+  return firstFieldsInAnyVariant(extracted, (field) => field.positional);
+}
+
+function firstFieldsInAnyVariant(
+  extracted: ExtractedFields,
+  predicate: (field: ResolvedFieldMeta) => boolean,
+): ResolvedFieldMeta[] {
   const byName = new Map<string, ResolvedFieldMeta>();
   const groups = extracted.variants ?? extracted.unionOptions ?? [];
   for (const field of [extracted.fields, ...groups.map((g) => g.fields)].flat()) {
-    if (field.named && !byName.has(field.name)) byName.set(field.name, field);
+    if (predicate(field) && !byName.has(field.name)) byName.set(field.name, field);
   }
   return [...byName.values()];
 }

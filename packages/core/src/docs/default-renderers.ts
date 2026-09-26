@@ -72,21 +72,7 @@ export function renderUsage(info: CommandInfo): string {
  * Render arguments as table
  */
 export function renderArgumentsTable(info: CommandInfo): string {
-  if (info.positionalArgs.length === 0) {
-    return "";
-  }
-
-  const lines: string[] = [];
-  lines.push("| Argument | Description | Required |");
-  lines.push("|----------|-------------|----------|");
-
-  for (const arg of info.positionalArgs) {
-    const desc = escapeTableCell(arg.description ?? "");
-    const required = arg.required ? "Yes" : "No";
-    lines.push(`| ${formatArgumentName(arg)} | ${desc} | ${required} |`);
-  }
-
-  return lines.join("\n");
+  return renderArgumentsMarkdown(info, renderArgumentsTableFromArray);
 }
 
 /**
@@ -100,18 +86,65 @@ function formatArgumentName(arg: ResolvedFieldMeta): string {
  * Render arguments as list
  */
 export function renderArgumentsList(info: CommandInfo): string {
-  if (info.positionalArgs.length === 0) {
-    return "";
-  }
+  return renderArgumentsMarkdown(info, renderArgumentsListFromArray);
+}
 
-  const lines: string[] = [];
-  for (const arg of info.positionalArgs) {
-    const required = arg.required ? "(required)" : "(optional)";
-    const desc = arg.description ? ` - ${inlineMarkdownBreaks(arg.description)}` : "";
-    lines.push(`- ${formatArgumentName(arg)}${desc} ${required}`);
+/**
+ * Render the positional arguments every variant shares, then each variant's
+ * own positionals under the heading its options section uses
+ */
+function renderArgumentsMarkdown(
+  info: CommandInfo,
+  render: (args: ResolvedFieldMeta[]) => string,
+): string {
+  const groups = variantGroups(info.extracted);
+  const common = groups.length > 0 ? computeCommonFieldNames(groups) : undefined;
+  const sections: string[] = [];
+  const shared = info.positionalArgs.filter((f) => common === undefined || common.has(f.name));
+  if (shared.length > 0) sections.push(render(shared));
+  for (const group of groups) {
+    const own = group.fields.filter((f) => f.positional && !common?.has(f.name));
+    if (own.length > 0) sections.push(`${group.label}\n\n${render(own)}`);
   }
+  return sections.join("\n\n");
+}
 
-  return lines.join("\n");
+/**
+ * The variants of a discriminated union, or the options of a union, with
+ * their markdown headings; empty for any other schema
+ */
+function variantGroups(
+  extracted: ExtractedFields | null,
+): Array<{ label: string; fields: ResolvedFieldMeta[] }> {
+  if (extracted?.schemaType === "discriminatedUnion" && extracted.discriminator) {
+    const discriminator = extracted.discriminator;
+    return (extracted.variants ?? []).map((variant) => ({
+      label: formatVariantHeading(discriminator, variant),
+      fields: variant.fields,
+    }));
+  }
+  if (
+    (extracted?.schemaType === "union" || extracted?.schemaType === "xor") &&
+    extracted.unionOptions
+  ) {
+    return extracted.unionOptions.map((option, i) => ({
+      label: formatUnionOptionHeading(option, i),
+      fields: option.fields,
+    }));
+  }
+  return [];
+}
+
+function formatVariantHeading(
+  discriminator: string,
+  variant: { discriminatorValue: string; description?: string },
+): string {
+  const descSuffix = variant.description ? ` ${variant.description}` : "";
+  return `**When \`${discriminator}\` = \`${variant.discriminatorValue}\`:**${descSuffix}`;
+}
+
+function formatUnionOptionHeading(option: ExtractedFields, index: number): string {
+  return `**${option.description ?? `Variant ${index + 1}`}:**`;
 }
 
 /**
@@ -217,9 +250,9 @@ export function renderUnionOptionsMarkdown(
       (f) => !commonFieldNames.has(f.name) && !f.positional,
     );
 
-    const label = option.description ?? `Variant ${i + 1}`;
+    const label = formatUnionOptionHeading(option, i);
     if (uniqueFields.length === 0) {
-      sections.push(`**${label}:**\n\n_no options_`);
+      sections.push(`${label}\n\n_no options_`);
       continue;
     }
 
@@ -227,7 +260,7 @@ export function renderUnionOptionsMarkdown(
       style === "table"
         ? renderOptionsTableFromArray(uniqueFields)
         : renderOptionsListFromArray(uniqueFields);
-    sections.push(`**${label}:**\n\n${rendered}`);
+    sections.push(`${label}\n\n${rendered}`);
   }
 
   return sections.join("\n\n");
@@ -283,8 +316,7 @@ export function renderDiscriminatedUnionOptionsMarkdown(
     );
     if (uniqueFields.length === 0) continue;
 
-    const descSuffix = variant.description ? ` ${variant.description}` : "";
-    const label = `**When \`${discriminator}\` = \`${variant.discriminatorValue}\`:**${descSuffix}`;
+    const label = formatVariantHeading(discriminator, variant);
     const rendered =
       style === "table"
         ? renderOptionsTableFromArray(uniqueFields)
@@ -583,10 +615,12 @@ export function createCommandRenderer(options: DefaultRendererOptions = {}): Ren
       const renderArgs = (args: ResolvedFieldMeta[], opts?: RenderContentOptions): string => {
         const style = opts?.style ?? optionStyle;
         const withHeading = opts?.withHeading ?? true;
+        const renderArray =
+          style === "table" ? renderArgumentsTableFromArray : renderArgumentsListFromArray;
         const content =
-          style === "table"
-            ? renderArgumentsTableFromArray(args)
-            : renderArgumentsListFromArray(args);
+          variantGroups(info.extracted).length > 0
+            ? renderArgumentsMarkdown(info, renderArray)
+            : renderArray(args);
         return withHeading ? `**Arguments**\n\n${content}` : content;
       };
 

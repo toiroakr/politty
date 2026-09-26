@@ -5,6 +5,7 @@ import { arg, defineCommand } from "../index.js";
 import {
   createCommandRenderer,
   defaultRenderers,
+  renderArgumentsList,
   renderArgumentsTable,
   renderDiscriminatedUnionOptionsMarkdown,
   renderOptionsTable,
@@ -804,6 +805,76 @@ describe("default-renderers", () => {
       const markdown = renderUnionOptionsMarkdown(extracted);
 
       expect(markdown).toContain("`--source <SOURCE>`");
+    });
+
+    it("should list an argument under the discriminated-union variant that defines it as positional", async () => {
+      const cmd = defineCommand({
+        name: "ship",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: z.literal("deploy"),
+            env: arg(z.string(), { positional: true }),
+            target: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            action: z.literal("rollback"),
+            env: arg(z.string(), { positional: true }),
+            target: arg(z.string()),
+          }),
+        ]),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "ship");
+
+      expect(renderArgumentsTable(info)).toBe(
+        [
+          "| Argument | Description | Required |",
+          "|----------|-------------|----------|",
+          "| `env` |  | Yes |",
+          "",
+          "**When `action` = `deploy`:**",
+          "",
+          "| Argument | Description | Required |",
+          "|----------|-------------|----------|",
+          "| `target` |  | Yes |",
+        ].join("\n"),
+      );
+    });
+
+    it("should list an argument under the union option that defines it as positional", async () => {
+      const cmd = defineCommand({
+        name: "sync",
+        args: z.union([
+          z.object({ source: arg(z.string(), { positional: true }), force: arg(z.boolean()) }),
+          z.object({ source: arg(z.string()), dryRun: arg(z.boolean()) }),
+        ]),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "sync");
+
+      expect(renderArgumentsList(info)).toBe(
+        ["**Variant 1:**", "", "- `source` (required)"].join("\n"),
+      );
+    });
+
+    it("should render the Arguments section when only a later variant defines a positional", async () => {
+      const cmd = defineCommand({
+        name: "ship",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("rollback"), target: arg(z.string()) }),
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+        ]),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "ship");
+      const markdown = createCommandRenderer({ markerless: true })(info);
+
+      expect(markdown).toContain(
+        "**Arguments**\n\n**When `action` = `deploy`:**\n\n| Argument | Description | Required |",
+      );
     });
   });
 });
