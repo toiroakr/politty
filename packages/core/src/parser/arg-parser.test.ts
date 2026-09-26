@@ -761,6 +761,47 @@ describe("ArgParser", () => {
       expect(result.unknownFlags).toEqual(["output-file"]);
     });
 
+    it("should fill a positional declared with named from a long option", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          name: arg(z.string(), { positional: { named: true } }),
+        }),
+      });
+
+      const result = parseArgs(["--name=-dev"], cmd);
+
+      expect(result.rawArgs.name).toBe("-dev");
+      expect(result.unknownFlags).toEqual([]);
+    });
+
+    it("should pass the next positional token on when a named positional is given as a long option", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          src: arg(z.string(), { positional: { named: true } }),
+          dest: arg(z.string(), { positional: true }),
+        }),
+      });
+
+      const result = parseArgs(["--src", "a.txt", "b.txt"], cmd);
+
+      expect(result.rawArgs).toMatchObject({ src: "a.txt", dest: "b.txt" });
+    });
+
+    it("should fill a positional without named from its token even when its name is also given as a long option", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.object({
+          name: arg(z.string(), { positional: true }),
+        }),
+      });
+
+      const result = parseArgs(["--name", "x", "dev"], cmd);
+
+      expect(result.rawArgs.name).toBe("dev");
+    });
+
     it("should not fill a positional from a long option with its name", () => {
       const cmd = defineCommand({
         name: "test-cmd",

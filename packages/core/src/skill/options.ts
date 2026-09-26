@@ -269,7 +269,7 @@ function resolveVerbose(
 function hasGlobalField(globalArgs: ArgsSchema | undefined, name: string): boolean {
   if (!globalArgs) return false;
   return extractFields(globalArgs).fields.some(
-    (field) => field.name === name && !field.positional && field.type === "boolean",
+    (field) => field.name === name && field.named && field.type === "boolean",
   );
 }
 

@@ -3,6 +3,7 @@ import {
   getAllAliases,
   toCamelCase,
   type ExtractedFields,
+  type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
 import { listSubCommandNamesWithAliases } from "../executor/subcommand-router.js";
 import type { AnyCommand } from "../types.js";
@@ -16,7 +17,12 @@ import {
   validateReservedAliases,
   validateReservedFieldNames,
 } from "../validator/command-validator.js";
-import { buildParserOptions, mergeWithPositionals, parseArgv } from "./argv-parser.js";
+import {
+  buildParserOptions,
+  mergeWithPositionals,
+  parseArgv,
+  positionalSlotFields,
+} from "./argv-parser.js";
 import { coerceEnvValue } from "./coerce-boolean.js";
 import {
   buildGlobalFlagLookup,
@@ -53,6 +59,8 @@ export interface ParseResult {
   unknownGlobalFlags?: string[] | undefined;
   /** Extracted fields from schema (for internal use) */
   extractedFields?: ExtractedFields | undefined;
+  /** Positional fields that took positional tokens (named positionals given as a long option excluded) */
+  positionalSlotFields?: ResolvedFieldMeta[] | undefined;
   /** Raw parsed global args (before validation) */
   rawGlobalArgs?: Record<string, unknown> | undefined;
   /** Names of fields in `rawArgs` whose value came from `field.env` rather than the CLI */
@@ -267,7 +275,7 @@ export function parseArgs(
   }
 
   // Detect unknown flags
-  const optionFields = extracted.fields.filter((f) => !f.positional);
+  const optionFields = extracted.fields.filter((f) => f.named);
   const knownFlags = new Set(optionFields.map((f) => f.name));
   const knownCliNames = new Set(optionFields.map((f) => f.cliName));
   const knownAliases = new Set<string>();
@@ -305,6 +313,7 @@ export function parseArgs(
     unknownFlags,
     unknownGlobalFlags: suppressedGlobalFlags,
     extractedFields: extracted,
+    positionalSlotFields: positionalSlotFields(parsed, extracted),
     rawGlobalArgs,
     envFallbackFields,
   };

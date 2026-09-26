@@ -2147,6 +2147,28 @@ describe("Redundant positionals", () => {
       }
     });
 
+    it("should error on a positional token left over after a named positional is given as a long option", async () => {
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z
+          .object({
+            name: arg(z.string(), { positional: { named: true } }),
+          })
+          .strict(),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--name", "dev", "stray-token"]);
+
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain("stray-token");
+      }
+    });
+
     it("should silently ignore unexpected positional with z.looseObject (passthrough mode)", async () => {
       using consoleSpy = spyOnConsoleError();
       const runFn = vi.fn();

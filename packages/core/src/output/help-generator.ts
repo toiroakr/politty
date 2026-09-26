@@ -277,7 +277,7 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
   const extracted = getExtractedFields(command);
   if (extracted) {
     const positionals = extracted.fields.filter((a) => a.positional);
-    const options = extracted.fields.filter((a) => !a.positional);
+    const options = extracted.fields.filter((a) => a.named);
 
     // Add [options] if there are options
     if (options.length > 0) {
@@ -458,7 +458,7 @@ export function renderOptions(
   }
 
   // Regular options
-  const options = extracted.fields.filter((a) => !a.positional);
+  const options = extracted.fields.filter((a) => a.named);
   for (const opt of options) {
     const flags = formatFlags(opt);
     let desc = opt.description ?? "";
@@ -520,7 +520,7 @@ function renderDiscriminatedUnionOptions(
 
   // Add discriminator field
   const discriminatorField = extracted.fields.find((f) => f.name === discriminator);
-  if (discriminatorField && !discriminatorField.positional) {
+  if (discriminatorField && discriminatorField.named) {
     const variantValues = variants.map((v) => v.discriminatorValue).join("|");
     const flags = `${styles.option(`--${discriminator}`)} ${styles.placeholder(`<${variantValues}>`)}`;
     // Use discriminatedUnion's description for the discriminator field
@@ -551,7 +551,7 @@ function renderDiscriminatedUnionOptions(
   // Render common fields
   for (const fieldName of commonFields) {
     const field = extracted.fields.find((f) => f.name === fieldName);
-    if (field && !field.positional) {
+    if (field && field.named) {
       const flags = formatFlags(field);
       let desc = field.description ?? "";
       if (field.defaultValue !== undefined) {
@@ -570,7 +570,7 @@ function renderDiscriminatedUnionOptions(
   // Render variant-specific fields
   for (const variant of variants) {
     const variantFields = variant.fields.filter(
-      (f) => f.name !== discriminator && !commonFields.has(f.name) && !f.positional,
+      (f) => f.name !== discriminator && !commonFields.has(f.name) && f.named,
     );
 
     if (variantFields.length > 0) {
@@ -630,7 +630,7 @@ function renderUnionOptions(
   // Render common fields
   for (const fieldName of commonFields) {
     const field = extracted.fields.find((f) => f.name === fieldName);
-    if (field && !field.positional) {
+    if (field && field.named) {
       const flags = formatFlags(field);
       let desc = field.description ?? "";
       if (field.defaultValue !== undefined) {
@@ -651,7 +651,7 @@ function renderUnionOptions(
     const option = unionOptions[i];
     if (!option) continue;
 
-    const uniqueFields = option.fields.filter((f) => !commonFields.has(f.name) && !f.positional);
+    const uniqueFields = option.fields.filter((f) => !commonFields.has(f.name) && f.named);
 
     const label = formatUnionOptionLabel(option, i);
 
@@ -838,7 +838,7 @@ function formatFieldLine(opt: ResolvedFieldMeta, indent = 0, extraDescPadding = 
 function renderGlobalOptions(globalExtracted: ExtractedFields): string {
   const lines: string[] = [];
   for (const opt of globalExtracted.fields) {
-    if (opt.positional) continue;
+    if (!opt.named) continue;
     lines.push(formatFieldLine(opt));
     const negationLine = formatNegationLine(opt);
     if (negationLine) lines.push(negationLine);
@@ -854,7 +854,7 @@ function renderSubcommandOptionsCompact(command: AnyCommand, indent: number): st
   const extracted = getExtractedFields(command);
 
   if (extracted) {
-    const options = extracted.fields.filter((a) => !a.positional);
+    const options = extracted.fields.filter((a) => a.named);
     for (const opt of options) {
       const flags = formatFlags(opt);
       let desc = opt.description ?? "";
@@ -1115,7 +1115,7 @@ function buildUsageData(command: AnyCommand, context?: CommandContext): HelpUsag
     : undefined;
 
   const extracted = getExtractedFields(command);
-  const hasOptions = extracted ? extracted.fields.some((f) => !f.positional) : false;
+  const hasOptions = extracted ? extracted.fields.some((f) => f.named) : false;
   const positionals = extracted
     ? extracted.fields
         .filter((f) => f.positional)
@@ -1171,8 +1171,8 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
       discriminator = disc;
       const groups = extracted.variants;
       const commonNames = computeCommonFieldNames(groups, disc);
-      const discriminatorField = extracted.fields.find((f) => f.name === disc && !f.positional);
-      const commonFields = extracted.fields.filter((f) => !f.positional && commonNames.has(f.name));
+      const discriminatorField = extracted.fields.find((f) => f.name === disc && f.named);
+      const commonFields = extracted.fields.filter((f) => f.named && commonNames.has(f.name));
       optionFields = [
         // Same description fallback as renderDiscriminatedUnionOptions's text
         // rendering, so the JSON output stays content-equivalent: the
@@ -1205,7 +1205,7 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
     ) {
       const groups = extracted.unionOptions;
       const commonNames = computeCommonFieldNames(groups);
-      const commonFields = extracted.fields.filter((f) => !f.positional && commonNames.has(f.name));
+      const commonFields = extracted.fields.filter((f) => f.named && commonNames.has(f.name));
       optionFields = commonFields.map(toHelpFieldData);
       unionOptions = groups.map((option) => ({
         description: option.description,
@@ -1215,12 +1215,12 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
         fields: option.fields.filter((f) => !commonNames.has(f.name)).map(toHelpFieldData),
       }));
     } else {
-      optionFields = extracted.fields.filter((f) => !f.positional).map(toHelpFieldData);
+      optionFields = extracted.fields.filter((f) => f.named).map(toHelpFieldData);
     }
   }
 
   const globalOptions = context?.globalExtracted?.fields.length
-    ? context.globalExtracted.fields.filter((f) => !f.positional).map(toHelpFieldData)
+    ? context.globalExtracted.fields.filter((f) => f.named).map(toHelpFieldData)
     : undefined;
 
   let subcommands: HelpSubcommandData[] | undefined;

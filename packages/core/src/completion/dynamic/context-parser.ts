@@ -107,7 +107,7 @@ function extractOptions(command: AnyCommand): CompletableOption[] {
 function extractOptionsFromSchema(schema: ArgsSchema): CompletableOption[] {
   const extracted = extractFields(schema);
   return extracted.fields
-    .filter((field) => !field.positional)
+    .filter((field) => field.named)
     .map((field) => {
       // Merge hiddenAlias into the matcher-visible alias list. The runtime
       // parser accepts hidden aliases via `getAllAliases`, so the dynamic

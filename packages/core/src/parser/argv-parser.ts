@@ -1,4 +1,9 @@
-import { getAllAliases, toCamelCase, type ExtractedFields } from "../core/schema-extractor.js";
+import {
+  getAllAliases,
+  toCamelCase,
+  type ExtractedFields,
+  type ResolvedFieldMeta,
+} from "../core/schema-extractor.js";
 import { coerceBoolean } from "./coerce-boolean.js";
 import { resolveLongOption, type LongOptionLookup } from "./long-option-resolver.js";
 
@@ -270,7 +275,7 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
   }
 
   for (const field of extracted.fields) {
-    if (field.positional) continue;
+    if (!field.named) continue;
 
     // Map kebab-case CLI name to camelCase field name
     // e.g., "dry-run" → "dryRun"
@@ -343,6 +348,23 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
 /**
  * Merge parsed argv with positional fields to create a flat record
  */
+/**
+ * Positional fields that take a positional token, in definition order.
+ * A named positional given as a long option leaves its token to the next one.
+ *
+ * @param parsed - Parsed argv
+ * @param extracted - Extracted fields
+ * @returns Positional fields that consume positional tokens
+ */
+export function positionalSlotFields(
+  parsed: ParsedArgv,
+  extracted: ExtractedFields,
+): ResolvedFieldMeta[] {
+  return extracted.fields.filter(
+    (f) => f.positional && !(f.named && Object.hasOwn(parsed.options, f.name)),
+  );
+}
+
 export function mergeWithPositionals(
   parsed: ParsedArgv,
   extracted: ExtractedFields,
@@ -357,11 +379,11 @@ export function mergeWithPositionals(
     parsed.rest.length > 0 ? [...parsed.positionals, ...parsed.rest] : parsed.positionals;
 
   for (const field of positionalFields) {
-    delete result[field.name];
+    if (!field.named) delete result[field.name];
   }
 
   let positionalIndex = 0;
-  for (const field of positionalFields) {
+  for (const field of positionalSlotFields(parsed, extracted)) {
     if (positionalIndex >= allPositionals.length) {
       break;
     }

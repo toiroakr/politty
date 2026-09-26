@@ -170,6 +170,21 @@ describe("default-renderers", () => {
   });
 
   describe("renderOptionsTable", () => {
+    it("should list a named positional as an option", async () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          name: arg(z.string(), { positional: { named: true }, description: "Profile name" }),
+        }),
+        run: () => {},
+      });
+
+      const info = await buildCommandInfo(cmd, "test");
+      const table = renderOptionsTable(info);
+
+      expect(table).toContain("| `--name <NAME>` | - | Profile name | Yes | - |");
+    });
+
     it("should render options table", async () => {
       const cmd = defineCommand({
         name: "test",

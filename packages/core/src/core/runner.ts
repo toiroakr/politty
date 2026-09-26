@@ -679,7 +679,7 @@ async function runCommandInternal<TResult = unknown>(
 
     // Pre-compute positional field metadata shared between the help-fallback
     // guard and the unexpected-positionals check below.
-    const positionalFields = parseResult.extractedFields?.fields.filter((f) => f.positional) ?? [];
+    const positionalFields = parseResult.positionalSlotFields ?? [];
     const hasArrayPositional = positionalFields.some((f) => f.type === "array");
     const allPositionals = [...parseResult.positionals, ...parseResult.rest];
     const extraPositionals = hasArrayPositional

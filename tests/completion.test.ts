@@ -262,6 +262,20 @@ describe("Completion", () => {
       expect(data.command.options[0]?.name).toBe("verbose");
     });
 
+    it("should include a named positional as an option", () => {
+      const cmd = defineCommand({
+        name: "test",
+        args: z.object({
+          file: arg(z.string(), { positional: { named: true }, description: "File path" }),
+        }),
+        run: () => {},
+      });
+
+      const data = extractCompletionData(cmd, "test");
+
+      expect(data.command.options.map((option) => option.name)).toEqual(["file"]);
+    });
+
     it("should extract enum values from z.enum schema", () => {
       const cmd = defineCommand({
         name: "test",

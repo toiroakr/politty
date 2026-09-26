@@ -164,7 +164,7 @@ function fieldsToOptions(
   fields: readonly ResolvedFieldMeta[],
   pending: PendingExpandTarget[],
 ): CompletableOption[] {
-  return fields.filter((field) => !field.positional).map((field) => fieldToOption(field, pending));
+  return fields.filter((field) => field.named).map((field) => fieldToOption(field, pending));
 }
 
 /** Convert pre-extracted fields to positionals. */

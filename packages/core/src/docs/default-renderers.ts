@@ -192,9 +192,7 @@ export function renderUnionOptionsMarkdown(
   }
 
   // Render common fields first
-  const commonFields = extracted.fields.filter(
-    (f) => commonFieldNames.has(f.name) && !f.positional,
-  );
+  const commonFields = extracted.fields.filter((f) => commonFieldNames.has(f.name) && f.named);
   if (commonFields.length > 0) {
     sections.push(
       style === "table"
@@ -211,9 +209,7 @@ export function renderUnionOptionsMarkdown(
     const option = unionOptions[i];
     if (!option) continue;
 
-    const uniqueFields = option.fields.filter(
-      (f) => !commonFieldNames.has(f.name) && !f.positional,
-    );
+    const uniqueFields = option.fields.filter((f) => !commonFieldNames.has(f.name) && f.named);
 
     const label = option.description ?? `Variant ${i + 1}`;
     if (uniqueFields.length === 0) {
@@ -273,7 +269,7 @@ export function renderDiscriminatedUnionOptionsMarkdown(
   }
   for (const fieldName of commonFieldNames) {
     const field = extracted.fields.find((f) => f.name === fieldName);
-    if (field && !field.positional) {
+    if (field && field.named) {
       topFields.push(field);
     }
   }
@@ -289,7 +285,7 @@ export function renderDiscriminatedUnionOptionsMarkdown(
   // Render each variant's unique fields
   for (const variant of variants) {
     const uniqueFields = variant.fields.filter(
-      (f) => f.name !== discriminator && !commonFieldNames.has(f.name) && !f.positional,
+      (f) => f.name !== discriminator && !commonFieldNames.has(f.name) && f.named,
     );
     if (uniqueFields.length === 0) continue;
 

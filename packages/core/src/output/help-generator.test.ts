@@ -328,6 +328,20 @@ describe("Help Generator", () => {
       expect(result.indexOf("Arguments:")).toBeLessThan(result.indexOf("Options:"));
     });
 
+    it("should list a named positional both as an argument and as a long option", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.object({
+          name: arg(z.string(), { positional: { named: true }, description: "Profile name" }),
+        }),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(/Arguments:\n {2}<name> +Profile name\n/);
+      expect(result).toMatch(/Options:\n(?: .*\n)* {2}--name <NAME> +Profile name/);
+    });
+
     it("should list a positional argument without a description by name only", () => {
       const cmd = defineCommand({
         name: "my-cli",
