@@ -2165,6 +2165,26 @@ describe("Redundant positionals", () => {
       expect(output).not.toContain("--name");
     });
 
+    it("should error on a positional token for an argument the selected variant defines as an option", async () => {
+      using _warn = spyOnConsoleWarn();
+      using _error = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+          z.object({ action: z.literal("rollback"), target: arg(z.string()) }),
+        ]),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--action", "rollback", "v1"]);
+
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+    });
+
     it("should error on a positional token left over after a named positional is given as a long option", async () => {
       const runFn = vi.fn();
 

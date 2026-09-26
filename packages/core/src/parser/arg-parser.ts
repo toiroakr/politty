@@ -246,18 +246,20 @@ export function parseArgs(
     };
   }
 
+  const argvFields = selectArgvFields(extracted, commandArgv);
+
   // Build parser options from extracted fields
-  const parserOptions = buildParserOptions(extracted);
+  const parserOptions = buildParserOptions(argvFields);
 
   // Parse argv
   const parsed = parseArgv(commandArgv, parserOptions);
 
   // Merge with positionals
-  const rawArgs = mergeWithPositionals(parsed, extracted);
+  const rawArgs = mergeWithPositionals(parsed, argvFields);
 
   // Apply environment variable fallbacks
   const envFallbackFields = new Set<string>();
-  for (const field of extracted.fields) {
+  for (const field of argvFields.fields) {
     if (field.env && rawArgs[field.name] === undefined) {
       // Normalize to array
       const envNames = Array.isArray(field.env) ? field.env : [field.env];
@@ -275,7 +277,7 @@ export function parseArgs(
   }
 
   // Detect unknown flags
-  const optionFields = extracted.fields.filter((f) => f.named);
+  const optionFields = argvFields.fields.filter((f) => f.named);
   const knownFlags = new Set(optionFields.map((f) => f.name));
   const knownCliNames = new Set(optionFields.map((f) => f.cliName));
   const knownAliases = new Set<string>();
@@ -313,10 +315,54 @@ export function parseArgs(
     unknownFlags,
     unknownGlobalFlags: suppressedGlobalFlags,
     extractedFields: extracted,
-    positionalSlotFields: positionalSlotFields(extracted, parsed.options),
+    positionalSlotFields: positionalSlotFields(argvFields, parsed.options),
     rawGlobalArgs,
     envFallbackFields,
   };
+}
+
+/**
+ * Fields that decide how argv is read. Variants may define the same argument
+ * differently, so a discriminated union reads argv with the variant its
+ * discriminator selects, and a union with the first option whose definitions
+ * fit the tokens; otherwise it is every extracted field.
+ */
+function selectArgvFields(extracted: ExtractedFields, argv: string[]): ExtractedFields {
+  const { discriminator, variants, unionOptions } = extracted;
+  if (discriminator && variants) {
+    const probe = mergeWithPositionals(parseArgv(argv, buildParserOptions(extracted)), extracted);
+    const variant = variants.find((v) => v.discriminatorValue === probe[discriminator]);
+    return variant ? { ...extracted, fields: variant.fields } : extracted;
+  }
+  if (unionOptions) {
+    const option = unionOptions.find((o) => fitsArgv(o, argv));
+    return option ? { ...extracted, fields: option.fields } : extracted;
+  }
+  return extracted;
+}
+
+/**
+ * Whether argv reads cleanly with these fields alone: every long or short
+ * option is one they accept, no positional token is left over, and every
+ * required argument gets a value from argv or its environment variable.
+ */
+function fitsArgv(extracted: ExtractedFields, argv: string[]): boolean {
+  const parsed = parseArgv(argv, buildParserOptions(extracted));
+  const optionFields = extracted.fields.filter((f) => f.named);
+  const accepted = new Set(optionFields.flatMap((f) => [f.name, f.cliName, ...getAllAliases(f)]));
+  if (Object.keys(parsed.options).some((key) => !accepted.has(key))) return false;
+
+  const slots = positionalSlotFields(extracted, parsed.options);
+  const tokenCount = parsed.positionals.length + parsed.rest.length;
+  if (!slots.some((f) => f.type === "array") && tokenCount > slots.length) return false;
+
+  const rawArgs = mergeWithPositionals(parsed, extracted);
+  return extracted.fields.every(
+    (f) =>
+      !f.required ||
+      rawArgs[f.name] !== undefined ||
+      [f.env ?? []].flat().some((name) => process.env[name] !== undefined),
+  );
 }
 
 /**
