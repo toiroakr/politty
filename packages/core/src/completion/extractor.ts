@@ -2,7 +2,12 @@
  * Extract completion data from commands
  */
 
-import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
+import {
+  extractFields,
+  namedFieldsInAnyVariant,
+  positionalFieldsInAnyVariant,
+  type ResolvedFieldMeta,
+} from "../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import { resolveExpandTargets, type PendingExpandTarget } from "./expand-resolver.js";
@@ -155,8 +160,7 @@ export function extractPositionals(command: AnyCommand): ResolvedFieldMeta[] {
     return [];
   }
 
-  const extracted = extractFields(command.args);
-  return extracted.fields.filter((field) => field.positional);
+  return positionalFieldsInAnyVariant(extractFields(command.args));
 }
 
 /** Convert pre-extracted fields to options. */
@@ -224,14 +228,17 @@ function extractSubcommand(
   // Extract once and partition: `extractFields` walks the args schema (a
   // non-trivial reflection pass for nested unions/wraps), so the prior
   // two-call shape paid that cost twice per command frame.
-  const fields = command.args ? extractFields(command.args).fields : [];
+  const extracted = command.args ? extractFields(command.args) : undefined;
   const node: CompletableSubcommand = {
     name,
     description: command.description,
     aliases: command.aliases,
     subcommands,
-    options: fieldsToOptions(fields, pending),
-    positionals: fieldsToPositionals(fields, pending),
+    options: fieldsToOptions(extracted ? namedFieldsInAnyVariant(extracted) : [], pending),
+    positionals: fieldsToPositionals(
+      extracted ? positionalFieldsInAnyVariant(extracted) : [],
+      pending,
+    ),
   };
   // Resolve every `pending-expand` collected above against this
   // subcommand's siblings (and the global schema, which runtime

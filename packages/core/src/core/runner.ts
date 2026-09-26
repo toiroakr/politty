@@ -692,6 +692,18 @@ async function runCommandInternal<TResult = unknown>(
       ? []
       : parseResult.positionals.slice(positionalFields.length);
 
+    if (parseResult.matchesNoUnionOption) {
+      collector?.stop();
+      return {
+        success: false,
+        error: new Error(
+          "Arguments match none of the accepted forms. See --help for the accepted forms.",
+        ),
+        exitCode: 1,
+        logs: getCurrentLogs(),
+      };
+    }
+
     // If command has subcommands but none specified, either route to
     // `defaultSubCommand` (if set) or show help.
     // If there are any unconsumed positionals (including tokens after --), fall

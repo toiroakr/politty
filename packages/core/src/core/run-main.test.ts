@@ -2165,6 +2165,138 @@ describe("Redundant positionals", () => {
       expect(output).not.toContain("--name");
     });
 
+    it("should report that a union's arguments match none of its options", async () => {
+      using _warn = spyOnConsoleWarn();
+      using _error = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "sync",
+        args: z.union([
+          z.object({ source: arg(z.string(), { positional: true }), force: arg(z.boolean()) }),
+          z.object({ source: arg(z.string()), dryRun: arg(z.boolean()) }),
+        ]),
+        run: runFn,
+      });
+
+      const labelCmd = defineCommand({
+        name: "sync",
+        args: z.union([
+          z.object({
+            source: arg(z.string(), { positional: true }),
+            force: arg(z.boolean()),
+            label: arg(z.string().optional()),
+          }),
+          z.object({ source: arg(z.string()), dryRun: arg(z.boolean()) }),
+        ]),
+        run: runFn,
+      });
+
+      const results = [
+        await runCommand(cmd, ["s3://bucket", "--dry-run"]),
+        await runCommand(cmd, ["--force"]),
+        await runCommand(cmd, ["--source", "--dry-run"]),
+        await runCommand(labelCmd, ["s3://bucket", "--force", "--label"]),
+      ];
+
+      expect(runFn).not.toHaveBeenCalled();
+      expect(results.map((r) => (r.success ? "ok" : r.error.message))).toEqual([
+        "Arguments match none of the accepted forms. See --help for the accepted forms.",
+        "Arguments match none of the accepted forms. See --help for the accepted forms.",
+        "Arguments match none of the accepted forms. See --help for the accepted forms.",
+        "Arguments match none of the accepted forms. See --help for the accepted forms.",
+      ]);
+    });
+
+    it("should error on a positional token for an argument the selected variant defines as an option", async () => {
+      using _warn = spyOnConsoleWarn();
+      using _error = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+          z.object({ action: z.literal("rollback"), target: arg(z.string()) }),
+        ]),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--action", "rollback", "v1"]);
+
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+    });
+
+    it("should report that a union's arguments match none of its options instead of running the default subcommand", async () => {
+      using _warn = spyOnConsoleWarn();
+      using _error = spyOnConsoleError();
+      const childRun = vi.fn();
+
+      const cmd = defineCommand({
+        name: "sync",
+        args: z.union([
+          z.object({ source: arg(z.string().optional()), force: arg(z.boolean().optional()) }),
+          z.object({ source: arg(z.string().optional()), dryRun: arg(z.boolean().optional()) }),
+        ]),
+        subCommands: { status: defineCommand({ name: "status", run: childRun }) },
+        defaultSubCommand: "status",
+      });
+
+      const result = await runCommand(cmd, ["--source"]);
+
+      expect(childRun).not.toHaveBeenCalled();
+      expect(result.success ? "ok" : result.error.message).toBe(
+        "Arguments match none of the accepted forms. See --help for the accepted forms.",
+      );
+    });
+
+    it("should report that the arguments match no variant when the discriminator is given in another variant's role", async () => {
+      using _warn = spyOnConsoleWarn();
+      using _error = spyOnConsoleError();
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+          z.object({
+            action: arg(z.literal("rollback"), { positional: true }),
+            target: arg(z.string()),
+          }),
+        ]),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--action", "rollback", "v1"]);
+
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success ? "ok" : result.error.message).toBe(
+        "Arguments match none of the accepted forms. See --help for the accepted forms.",
+      );
+    });
+
+    it("should keep the validator's error for a discriminator value no variant declares", async () => {
+      using _warn = spyOnConsoleWarn();
+      using _error = spyOnConsoleError();
+
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+          z.object({
+            action: arg(z.literal("rollback"), { positional: true }),
+            target: arg(z.string()),
+          }),
+        ]),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["--action", "typo", "v1"]);
+
+      expect(result.success ? "ok" : result.error.message).not.toContain("match none");
+    });
+
     it("should error on a positional token left over after a named positional is given as a long option", async () => {
       const runFn = vi.fn();
 

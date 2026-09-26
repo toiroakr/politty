@@ -831,6 +831,127 @@ describe("Help Generator", () => {
     });
   });
 
+  describe("union variants that define an argument differently", () => {
+    const releaseCommand = defineCommand({
+      name: "release",
+      args: z.discriminatedUnion("action", [
+        z.object({
+          action: z.literal("deploy"),
+          target: arg(z.string(), { positional: true, description: "Deploy target" }),
+        }),
+        z.object({
+          action: z.literal("rollback"),
+          target: arg(z.string(), { description: "Rollback target" }),
+        }),
+      ]),
+    });
+
+    it("should list the argument as an option under the variant that defines it as one", () => {
+      const result = generateHelp(releaseCommand, {});
+
+      expect(result).toMatch(/--target <TARGET> +Rollback target/);
+    });
+
+    it("should list the discriminator option when only a later variant accepts it as one", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: arg(z.literal("rollback"), { positional: true }),
+            target: arg(z.string()),
+          }),
+          z.object({
+            action: z.literal("deploy"),
+            target: arg(z.string(), { positional: true }),
+          }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("--action <rollback|deploy>");
+    });
+
+    it("should show [options] in the usage line when only a later variant defines an option", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: arg(z.literal("deploy"), { positional: true }),
+            target: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            action: z.literal("rollback"),
+            target: arg(z.string(), { positional: true }),
+          }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toContain("release [options] <action> <target>");
+    });
+
+    it("should report options in --help-json usage when only a later variant defines one", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: arg(z.literal("deploy"), { positional: true }),
+            target: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            action: z.literal("rollback"),
+            target: arg(z.string(), { positional: true }),
+          }),
+        ]),
+      });
+
+      expect(generateHelpData(cmd).usage.hasOptions).toBe(true);
+    });
+
+    it("should report a positional in --help-json when only a later variant defines it as one", () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("rollback"), target: arg(z.string()) }),
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+        ]),
+      });
+
+      const data = generateHelpData(cmd);
+
+      expect([data.usage.positionals, data.positionals.map((p) => p.name)]).toEqual([
+        [{ name: "target", required: true }],
+        ["target"],
+      ]);
+    });
+
+    it("should serialize the argument with each variant's own role in --help-json", () => {
+      const data = generateHelpData(releaseCommand);
+
+      expect(
+        data.variants?.map((v) =>
+          v.fields.map((f) => [v.discriminatorValue, f.name, f.positional, f.named]),
+        ),
+      ).toEqual([[["deploy", "target", true, false]], [["rollback", "target", false, true]]]);
+    });
+
+    it("should list a union option's argument under the option that defines it as a long option", () => {
+      const syncCommand = defineCommand({
+        name: "sync",
+        args: z.union([
+          z.object({ source: arg(z.string(), { positional: true }), force: arg(z.boolean()) }),
+          z.object({ source: arg(z.string()), dryRun: arg(z.boolean()) }),
+        ]),
+      });
+
+      const result = generateHelp(syncCommand, {});
+
+      expect(result).toMatch(/Variant 2:\n +--source <SOURCE>/);
+    });
+  });
+
   describe("generateHelpData", () => {
     it("should serialize name, description, positionals, and options", () => {
       const cmd = defineCommand({

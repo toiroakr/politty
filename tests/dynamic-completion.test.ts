@@ -107,6 +107,57 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.endpoint).toBe("GetApplication");
     });
 
+    describe("discriminated-union variants that define an argument differently", () => {
+      const releaseCmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({ action: z.literal("deploy"), target: arg(z.string(), { positional: true }) }),
+          z.object({ action: z.literal("rollback"), target: arg(z.string()) }),
+        ]),
+        run: () => {},
+      });
+
+      it("completes the value of a long option the selected variant accepts", () => {
+        const ctx = parseCompletionContext(["--action", "rollback", "--target", ""], releaseCmd);
+        expect([ctx.completionType, ctx.targetOption?.cliName]).toEqual(["option-value", "target"]);
+      });
+
+      it("does not complete the value of a long option only another variant accepts", () => {
+        const ctx = parseCompletionContext(["--action", "deploy", "--target", ""], releaseCmd);
+        expect(ctx.completionType).not.toBe("option-value");
+      });
+
+      it("offers only the long options the selected variant accepts", () => {
+        const ctx = parseCompletionContext(["--action", "deploy", "--"], releaseCmd);
+        expect(ctx.options.map((o) => o.name)).toEqual(["action"]);
+      });
+
+      it("selects the variant from a positional discriminator already typed", () => {
+        const positionalDiscriminatorCmd = defineCommand({
+          name: "release",
+          args: z.discriminatedUnion("action", [
+            z.object({
+              action: arg(z.literal("deploy"), { positional: true }),
+              target: arg(z.string(), { positional: true }),
+            }),
+            z.object({
+              action: arg(z.literal("rollback"), { positional: true }),
+              target: arg(z.string()),
+            }),
+          ]),
+          run: () => {},
+        });
+
+        const ctx = parseCompletionContext(["rollback", ""], positionalDiscriminatorCmd);
+        expect(ctx.positionals.map((p) => p.name)).toEqual(["action"]);
+      });
+
+      it("does not complete a positional the selected variant defines as an option", () => {
+        const ctx = parseCompletionContext(["--action", "rollback", ""], releaseCmd);
+        expect(ctx.positionals.map((p) => p.name)).toEqual([]);
+      });
+    });
+
     describe("named positional given as a long option", () => {
       const namedCmd = defineCommand({
         name: "mycli",

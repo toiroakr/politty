@@ -1,6 +1,10 @@
 import {
+  computeCommonFieldNames,
   getAllAliases,
   getExtractedFields,
+  optionFieldInAnyVariant,
+  optionFieldsInAnyVariant,
+  positionalFieldsInAnyVariant,
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
@@ -278,8 +282,8 @@ export function renderUsageLine(command: AnyCommand, context?: CommandContext): 
 
   const extracted = getExtractedFields(command);
   if (extracted) {
-    const positionals = extracted.fields.filter((a) => a.positional);
-    const options = extracted.fields.filter((a) => !a.positional);
+    const positionals = positionalFieldsInAnyVariant(extracted);
+    const options = optionFieldsInAnyVariant(extracted);
 
     // Add [options] if there are options
     if (options.length > 0) {
@@ -524,8 +528,8 @@ function renderDiscriminatedUnionOptions(
   const variants = extracted.variants ?? [];
 
   // Add discriminator field
-  const discriminatorField = extracted.fields.find((f) => f.name === discriminator);
-  if (discriminatorField && !discriminatorField.positional) {
+  const discriminatorField = optionFieldInAnyVariant(extracted, discriminator);
+  if (discriminatorField) {
     const variantValues = variants.map((v) => v.discriminatorValue).join("|");
     const flags = `${styles.option(`--${discriminator}`)} ${styles.placeholder(`<${variantValues}>`)}`;
     // Use discriminatedUnion's description for the discriminator field
@@ -535,23 +539,7 @@ function renderDiscriminatedUnionOptions(
   }
 
   // Add common fields (fields that appear in all variants)
-  const commonFields = new Set<string>();
-  const allFieldNames = new Set<string>();
-
-  for (const variant of variants) {
-    for (const field of variant.fields) {
-      allFieldNames.add(field.name);
-    }
-  }
-
-  for (const fieldName of allFieldNames) {
-    if (fieldName === discriminator) continue;
-
-    const inAllVariants = variants.every((v) => v.fields.some((f) => f.name === fieldName));
-    if (inAllVariants) {
-      commonFields.add(fieldName);
-    }
-  }
+  const commonFields = computeCommonFieldNames(variants, discriminator);
 
   // Render common fields
   for (const fieldName of commonFields) {
@@ -616,21 +604,7 @@ function renderUnionOptions(
   const unionOptions = extracted.unionOptions ?? [];
 
   // Add common fields (fields that appear in all options)
-  const commonFields = new Set<string>();
-  const allFieldNames = new Set<string>();
-
-  for (const option of unionOptions) {
-    for (const field of option.fields) {
-      allFieldNames.add(field.name);
-    }
-  }
-
-  for (const fieldName of allFieldNames) {
-    const inAllOptions = unionOptions.every((o) => o.fields.some((f) => f.name === fieldName));
-    if (inAllOptions) {
-      commonFields.add(fieldName);
-    }
-  }
+  const commonFields = computeCommonFieldNames(unionOptions);
 
   // Render common fields
   for (const fieldName of commonFields) {
@@ -1079,31 +1053,6 @@ function toHelpFieldData(field: ResolvedFieldMeta): HelpFieldData {
 }
 
 /**
- * Field names shared by every group (discriminated-union variants, or union
- * options). Mirrors the common-field detection in {@link renderDiscriminatedUnionOptions}
- * / {@link renderUnionOptions}; `exclude` drops the discriminator field, which
- * is reported separately regardless of whether every variant declares it.
- */
-function computeCommonFieldNames(
-  groups: Array<{ fields: ResolvedFieldMeta[] }>,
-  exclude?: string,
-): Set<string> {
-  const allNames = new Set<string>();
-  for (const group of groups) {
-    for (const field of group.fields) {
-      if (field.name !== exclude) allNames.add(field.name);
-    }
-  }
-  const common = new Set<string>();
-  for (const name of allNames) {
-    if (groups.every((group) => group.fields.some((f) => f.name === name))) {
-      common.add(name);
-    }
-  }
-  return common;
-}
-
-/**
  * Build the structured usage info for {@link HelpData.usage}. Content-equivalent
  * to {@link renderUsageLine}, without ANSI styling or a fixed rendering order.
  */
@@ -1121,11 +1070,9 @@ function buildUsageData(command: AnyCommand, context?: CommandContext): HelpUsag
     : undefined;
 
   const extracted = getExtractedFields(command);
-  const hasOptions = extracted ? extracted.fields.some((f) => !f.positional) : false;
+  const hasOptions = extracted ? optionFieldsInAnyVariant(extracted).length > 0 : false;
   const positionals = extracted
-    ? extracted.fields
-        .filter((f) => f.positional)
-        .map((f) => ({ name: f.name, required: f.required }))
+    ? positionalFieldsInAnyVariant(extracted).map((f) => ({ name: f.name, required: f.required }))
     : [];
 
   return { commandName, hasGlobalOptions, hasOptions, subcommand, positionals };
@@ -1166,7 +1113,7 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
 
   if (extracted) {
     schemaType = extracted.schemaType;
-    positionals = extracted.fields.filter((f) => f.positional).map(toHelpFieldData);
+    positionals = positionalFieldsInAnyVariant(extracted).map(toHelpFieldData);
 
     if (
       extracted.schemaType === "discriminatedUnion" &&
@@ -1177,7 +1124,7 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
       discriminator = disc;
       const groups = extracted.variants;
       const commonNames = computeCommonFieldNames(groups, disc);
-      const discriminatorField = extracted.fields.find((f) => f.name === disc && !f.positional);
+      const discriminatorField = optionFieldInAnyVariant(extracted, disc);
       const commonFields = extracted.fields.filter((f) => !f.positional && commonNames.has(f.name));
       optionFields = [
         // Same description fallback as renderDiscriminatedUnionOptions's text
