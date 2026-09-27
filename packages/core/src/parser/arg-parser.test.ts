@@ -717,6 +717,24 @@ describe("ArgParser", () => {
       expect(() => parseArgs([], cmd)).toThrow(/files.*cannot be used with.*mode/);
     });
 
+    it("should reject a union option whose own positionals put another positional after an array", () => {
+      const cmd = defineCommand({
+        name: "test-cmd",
+        args: z.union([
+          z.object({
+            src: arg(z.string(), { positional: true }),
+            dest: arg(z.string(), { positional: true }),
+          }),
+          z.object({
+            src: arg(z.array(z.string()), { positional: true }),
+            dest: arg(z.string(), { positional: true }),
+          }),
+        ]),
+      });
+
+      expect(() => parseArgs([], cmd)).toThrow(PositionalConfigError);
+    });
+
     it("should allow required positionals before array positional", () => {
       const cmd = defineCommand({
         name: "test-cmd",

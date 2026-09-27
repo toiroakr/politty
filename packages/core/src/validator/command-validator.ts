@@ -299,14 +299,26 @@ function checkDuplicateNegations(
 }
 
 /**
- * Check positional argument configuration
+ * Check positional argument configuration, for the flattened fields and for
+ * each union variant or option, since argv is read with the one that applies
  */
 function checkPositionalConfig(
   extracted: ExtractedFields,
   commandPath: string[],
 ): CommandValidationError[] {
+  const groups = [extracted, ...(extracted.variants ?? []), ...(extracted.unionOptions ?? [])];
+  const seen = new Set<string>();
+  return groups
+    .flatMap((group) => checkPositionalFields(group.fields, commandPath))
+    .filter((error) => !seen.has(error.message) && seen.add(error.message));
+}
+
+function checkPositionalFields(
+  fields: readonly ResolvedFieldMeta[],
+  commandPath: string[],
+): CommandValidationError[] {
   const errors: CommandValidationError[] = [];
-  const positionalFields = extracted.fields.filter((f) => f.positional);
+  const positionalFields = fields.filter((f) => f.positional);
 
   let foundArrayPositional: string | null = null;
   let foundOptionalPositional: string | null = null;
