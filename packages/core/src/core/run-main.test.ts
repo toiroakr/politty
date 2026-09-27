@@ -2322,6 +2322,42 @@ describe("Redundant positionals", () => {
       expect(output).not.toContain("--target");
     });
 
+    it("should let a prompt resolver fill a required field of the only union option the argv fits", async () => {
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.union([
+          z.object({ name: arg(z.string()), token: arg(z.string()) }),
+          z.object({ file: arg(z.string(), { positional: true }) }),
+        ]),
+        run: runFn,
+      });
+      const prompt = vi.fn().mockResolvedValue({ token: "t" });
+
+      const result = await runCommand(cmd, ["--name", "x"], { prompt });
+
+      expect(result.success).toBe(true);
+      expect(runFn.mock.calls[0]?.[0]).toMatchObject({ name: "x", token: "t" });
+    });
+
+    it("should reject argv that fits several union options once required fields are left to the prompt resolver", async () => {
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.union([z.object({ alpha: arg(z.string()) }), z.object({ beta: arg(z.string()) })]),
+        run: runFn,
+      });
+      const prompt = vi.fn().mockResolvedValue({ alpha: "a" });
+
+      const result = await runCommand(cmd, [], { prompt });
+
+      expect(runFn).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain("match none of the accepted forms");
+      }
+    });
+
     it("should error on a positional token left over after a named positional is given as a long option", async () => {
       const runFn = vi.fn();
 

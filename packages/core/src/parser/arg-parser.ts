@@ -81,6 +81,8 @@ export interface ParseArgsOptions {
   skipValidation?: boolean | undefined;
   /** Extracted fields from global args schema */
   globalExtracted?: ExtractedFields | undefined;
+  /** Whether a prompt resolver may still fill required arguments missing from argv */
+  promptAvailable?: boolean | undefined;
 }
 
 /**
@@ -257,7 +259,7 @@ export function parseArgs(
     };
   }
 
-  const argvFields = selectArgvFields(extracted, commandArgv);
+  const argvFields = selectArgvFields(extracted, commandArgv, options.promptAvailable === true);
   if (!argvFields) {
     return {
       helpRequested: false,
@@ -340,9 +342,15 @@ export function parseArgs(
  * argv with the variant whose own definitions read its discriminator value
  * (`undefined` when a variant reads another variant's value instead), and a
  * union with the first option whose definitions fit the tokens (`undefined`
- * when none fits); otherwise it is every extracted field.
+ * when none fits); otherwise it is every extracted field. When a prompt
+ * resolver may fill missing required arguments, a union falls back to the
+ * only option the tokens fit apart from those arguments.
  */
-function selectArgvFields(extracted: ExtractedFields, argv: string[]): ExtractedFields | undefined {
+function selectArgvFields(
+  extracted: ExtractedFields,
+  argv: string[],
+  promptAvailable: boolean,
+): ExtractedFields | undefined {
   const { discriminator, variants, unionOptions } = extracted;
   if (discriminator && variants) {
     const readValues = (fields: ExtractedFields): Record<string, unknown> => {
@@ -359,7 +367,10 @@ function selectArgvFields(extracted: ExtractedFields, argv: string[]): Extracted
     return readsAnotherVariant ? undefined : extracted;
   }
   if (unionOptions) {
-    const option = unionOptions.find((o) => fitsArgv(o, argv));
+    const promptable = promptAvailable ? unionOptions.filter((o) => fitsArgv(o, argv, false)) : [];
+    const option =
+      unionOptions.find((o) => fitsArgv(o, argv, true)) ??
+      (promptable.length === 1 ? promptable[0] : undefined);
     return option && { ...extracted, fields: option.fields };
   }
   return extracted;
@@ -392,12 +403,12 @@ function applyEnvFallbacks(
 
 /**
  * Whether argv reads cleanly with these fields alone: every long or short
- * option is one they accept, no positional token is left over, and every
- * required argument gets a value from argv or its environment variable. A
- * long option given without a value is not a value for a non-boolean
- * argument.
+ * option is one they accept, no positional token is left over, and (with
+ * `requireAll`) every required argument gets a value from argv or its
+ * environment variable. A long option given without a value is not a value
+ * for a non-boolean argument.
  */
-function fitsArgv(extracted: ExtractedFields, argv: string[]): boolean {
+function fitsArgv(extracted: ExtractedFields, argv: string[], requireAll: boolean): boolean {
   const parsed = parseArgv(argv, buildParserOptions(extracted));
   const optionFields = extracted.fields.filter((f) => f.named);
   const accepted = new Set(optionFields.flatMap((f) => [f.name, f.cliName, ...getAllAliases(f)]));
@@ -411,6 +422,7 @@ function fitsArgv(extracted: ExtractedFields, argv: string[]): boolean {
   const valueless = (f: ResolvedFieldMeta) =>
     f.type !== "boolean" && [rawArgs[f.name]].flat().includes(true);
   if (extracted.fields.some(valueless)) return false;
+  if (!requireAll) return true;
   applyEnvFallbacks(rawArgs, extracted);
   return extracted.fields.every((f) => !f.required || rawArgs[f.name] !== undefined);
 }

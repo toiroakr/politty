@@ -489,6 +489,7 @@ async function runCommandInternal<TResult = unknown>(
     const parseResult = parseArgs(argv, command, {
       skipValidation: options.skipValidation,
       globalExtracted: options._globalExtracted,
+      promptAvailable: options.prompt !== undefined,
     });
 
     // Accumulate global args from this parse level.
