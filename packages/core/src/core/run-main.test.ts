@@ -2297,6 +2297,31 @@ describe("Redundant positionals", () => {
       expect(result.success ? "ok" : result.error.message).not.toContain("match none");
     });
 
+    it("should not suggest a long option that the selected union variant rejects", async () => {
+      using consoleSpy = spyOnConsoleError();
+
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: z.literal("rollback"),
+            target: arg(z.string(), { positional: { named: true } }),
+          }),
+          z.object({
+            action: z.literal("deploy"),
+            target: arg(z.string(), { positional: true }),
+          }),
+        ]),
+        run: () => {},
+      });
+
+      await runCommand(cmd, ["--action", "deploy", "--target=prod"]);
+
+      const output = consoleSpy.mock.calls.map((call: unknown[]) => String(call[0])).join("\n");
+      expect(output).toContain("Unknown option");
+      expect(output).not.toContain("--target");
+    });
+
     it("should error on a positional token left over after a named positional is given as a long option", async () => {
       const runFn = vi.fn();
 

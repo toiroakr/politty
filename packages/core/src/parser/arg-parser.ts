@@ -63,6 +63,8 @@ export interface ParseResult {
   extractedFields?: ExtractedFields | undefined;
   /** True when the args schema is a union and argv fits none of its options */
   matchesNoUnionOption?: boolean | undefined;
+  /** Fields accepted as long options by the definitions that read argv (the selected union variant, if any) */
+  optionFields?: ResolvedFieldMeta[] | undefined;
   /** Positional fields that took positional tokens (named positionals given as a long option excluded) */
   positionalSlotFields?: ResolvedFieldMeta[] | undefined;
   /** Raw parsed global args (before validation) */
@@ -325,6 +327,7 @@ export function parseArgs(
     unknownFlags,
     unknownGlobalFlags: suppressedGlobalFlags,
     extractedFields: extracted,
+    optionFields,
     positionalSlotFields: positionalSlotFields(argvFields, parsed.options),
     rawGlobalArgs,
     envFallbackFields,
