@@ -489,6 +489,8 @@ async function runCommandInternal<TResult = unknown>(
     const parseResult = parseArgs(argv, command, {
       skipValidation: options.skipValidation,
       globalExtracted: options._globalExtracted,
+      promptAvailable: options.prompt !== undefined,
+      inheritedNames: new Set(Object.keys(options._parsedGlobalArgs ?? {})),
     });
 
     // Accumulate global args from this parse level.
@@ -679,7 +681,7 @@ async function runCommandInternal<TResult = unknown>(
 
     // Pre-compute positional field metadata shared between the help-fallback
     // guard and the unexpected-positionals check below.
-    const positionalFields = parseResult.extractedFields?.fields.filter((f) => f.positional) ?? [];
+    const positionalFields = parseResult.positionalSlotFields ?? [];
     const hasArrayPositional = positionalFields.some((f) => f.type === "array");
     const allPositionals = [...parseResult.positionals, ...parseResult.rest];
     const extraPositionals = hasArrayPositional
@@ -691,6 +693,18 @@ async function runCommandInternal<TResult = unknown>(
     const unconsumedRegulars = hasArrayPositional
       ? []
       : parseResult.positionals.slice(positionalFields.length);
+
+    if (parseResult.matchesNoUnionOption) {
+      collector?.stop();
+      return {
+        success: false,
+        error: new Error(
+          "Arguments match none of the accepted forms. See --help for the accepted forms.",
+        ),
+        exitCode: 1,
+        logs: getCurrentLogs(),
+      };
+    }
 
     // If command has subcommands but none specified, either route to
     // `defaultSubCommand` (if set) or show help.
@@ -763,7 +777,7 @@ async function runCommandInternal<TResult = unknown>(
     // Handle unknown flags based on schema's unknownKeysMode
     if (parseResult.unknownFlags.length > 0) {
       const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
-      const knownFlags = parseResult.extractedFields?.fields.map((f) => f.name) ?? [];
+      const knownFlags = parseResult.optionFields?.map((f) => f.name) ?? [];
 
       if (unknownKeysMode === "strict") {
         // strict mode: treat unknown flags as errors

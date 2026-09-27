@@ -2,7 +2,12 @@
  * Extract completion data from commands
  */
 
-import { extractFields, type ResolvedFieldMeta } from "../core/schema-extractor.js";
+import {
+  extractFields,
+  namedFieldsInAnyVariant,
+  positionalFieldsInAnyVariant,
+  type ResolvedFieldMeta,
+} from "../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../lazy.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import { resolveExpandTargets, type PendingExpandTarget } from "./expand-resolver.js";
@@ -155,8 +160,7 @@ export function extractPositionals(command: AnyCommand): ResolvedFieldMeta[] {
     return [];
   }
 
-  const extracted = extractFields(command.args);
-  return extracted.fields.filter((field) => field.positional);
+  return positionalFieldsInAnyVariant(extractFields(command.args));
 }
 
 /** Convert pre-extracted fields to options. */
@@ -164,7 +168,7 @@ function fieldsToOptions(
   fields: readonly ResolvedFieldMeta[],
   pending: PendingExpandTarget[],
 ): CompletableOption[] {
-  return fields.filter((field) => !field.positional).map((field) => fieldToOption(field, pending));
+  return fields.filter((field) => field.named).map((field) => fieldToOption(field, pending));
 }
 
 /** Convert pre-extracted fields to positionals. */
@@ -224,14 +228,17 @@ function extractSubcommand(
   // Extract once and partition: `extractFields` walks the args schema (a
   // non-trivial reflection pass for nested unions/wraps), so the prior
   // two-call shape paid that cost twice per command frame.
-  const fields = command.args ? extractFields(command.args).fields : [];
+  const extracted = command.args ? extractFields(command.args) : undefined;
   const node: CompletableSubcommand = {
     name,
     description: command.description,
     aliases: command.aliases,
     subcommands,
-    options: fieldsToOptions(fields, pending),
-    positionals: fieldsToPositionals(fields, pending),
+    options: fieldsToOptions(extracted ? namedFieldsInAnyVariant(extracted) : [], pending),
+    positionals: fieldsToPositionals(
+      extracted ? positionalFieldsInAnyVariant(extracted) : [],
+      pending,
+    ),
   };
   // Resolve every `pending-expand` collected above against this
   // subcommand's siblings (and the global schema, which runtime
@@ -255,6 +262,32 @@ function joinPrefix(parent: string, child: string, sep: string): string {
 function expandChildPathStrs(pathStrs: readonly string[], child: CompletableSubcommand): string[] {
   const childNames = [child.name, ...(child.aliases ?? [])];
   return pathStrs.flatMap((p) => childNames.map((n) => joinPrefix(p, n, ":")));
+}
+
+/** A command frame with a named positional, keyed by every `_subcmd` spelling that reaches it. */
+export interface NamedPositionalFrame {
+  readonly pathStrs: readonly string[];
+  readonly positionals: readonly CompletablePositional[];
+  readonly options: readonly CompletableOption[];
+}
+
+/**
+ * Collect the frames whose positionals include a named one, so the static
+ * scripts can map positional tokens to slots the way the runtime parser does.
+ */
+export function collectNamedPositionalFrames(root: CompletableSubcommand): NamedPositionalFrame[] {
+  const out: NamedPositionalFrame[] = [];
+  const visit = (node: CompletableSubcommand, pathStrs: readonly string[]): void => {
+    const localNames = new Set(node.options.filter((o) => o.isGlobal !== true).map((o) => o.name));
+    if (node.positionals.some((p) => localNames.has(p.name))) {
+      out.push({ pathStrs, positionals: node.positionals, options: node.options });
+    }
+    for (const child of getVisibleSubs(node.subcommands)) {
+      visit(child, expandChildPathStrs(pathStrs, child));
+    }
+  };
+  visit(root, [""]);
+  return out;
 }
 
 /**
@@ -833,7 +866,6 @@ export function collectTrackedFields(
           },
           spec.pathStrs,
         );
-        continue;
       }
       const opt = node.options.find((o) => o.name === dep);
       if (!opt) continue;

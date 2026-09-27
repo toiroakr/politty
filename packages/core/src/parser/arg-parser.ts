@@ -1,8 +1,11 @@
 import {
   extractFields,
   getAllAliases,
+  namedFieldsInAnyVariant,
+  selectDiscriminatedVariant,
   toCamelCase,
   type ExtractedFields,
+  type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
 import { listSubCommandNamesWithAliases } from "../executor/subcommand-router.js";
 import type { AnyCommand } from "../types.js";
@@ -16,7 +19,12 @@ import {
   validateReservedAliases,
   validateReservedFieldNames,
 } from "../validator/command-validator.js";
-import { buildParserOptions, mergeWithPositionals, parseArgv } from "./argv-parser.js";
+import {
+  buildParserOptions,
+  mergeWithPositionals,
+  parseArgv,
+  positionalSlotFields,
+} from "./argv-parser.js";
 import { coerceEnvValue } from "./coerce-boolean.js";
 import {
   buildGlobalFlagLookup,
@@ -53,6 +61,12 @@ export interface ParseResult {
   unknownGlobalFlags?: string[] | undefined;
   /** Extracted fields from schema (for internal use) */
   extractedFields?: ExtractedFields | undefined;
+  /** True when the args schema is a union and argv fits none of its options */
+  matchesNoUnionOption?: boolean | undefined;
+  /** Fields accepted as long options by the definitions that read argv (the selected union variant, if any) */
+  optionFields?: ResolvedFieldMeta[] | undefined;
+  /** Positional fields that took positional tokens (named positionals given as a long option excluded) */
+  positionalSlotFields?: ResolvedFieldMeta[] | undefined;
   /** Raw parsed global args (before validation) */
   rawGlobalArgs?: Record<string, unknown> | undefined;
   /** Names of fields in `rawArgs` whose value came from `field.env` rather than the CLI */
@@ -67,6 +81,10 @@ export interface ParseArgsOptions {
   skipValidation?: boolean | undefined;
   /** Extracted fields from global args schema */
   globalExtracted?: ExtractedFields | undefined;
+  /** Whether a prompt resolver may still fill required arguments missing from argv */
+  promptAvailable?: boolean | undefined;
+  /** Names of arguments already given as global flags before this command */
+  inheritedNames?: ReadonlySet<string> | undefined;
 }
 
 /**
@@ -162,10 +180,15 @@ export function parseArgs(
   let rawGlobalArgs: Record<string, unknown> | undefined;
   let suppressedGlobalFlags: string[] = [];
   if (options.globalExtracted) {
+    const namedFields = extracted ? namedFieldsInAnyVariant(extracted) : [];
+    const namedNames = new Set(namedFields.map((f) => f.name));
     const { separated, globalParsed, suppressedTokens } = separateGlobalArgs(
       argv,
       options.globalExtracted,
-      extracted,
+      extracted && {
+        ...extracted,
+        fields: [...namedFields, ...extracted.fields.filter((f) => !namedNames.has(f.name))],
+      },
     );
     commandArgv = separated;
     rawGlobalArgs = globalParsed;
@@ -238,39 +261,46 @@ export function parseArgs(
     };
   }
 
+  const argvFields = selectArgvFields(extracted, commandArgv, {
+    promptAvailable: options.promptAvailable === true,
+    inheritedNames: options.inheritedNames ?? new Set(),
+  });
+  if (!argvFields) {
+    return {
+      helpRequested: false,
+      helpAllRequested: false,
+      helpJsonRequested: false,
+      versionRequested: false,
+      subCommand: undefined,
+      remainingArgs: [],
+      rawArgs: {},
+      positionals: [],
+      rest: [],
+      unknownFlags: [],
+      unknownGlobalFlags: suppressedGlobalFlags,
+      extractedFields: extracted,
+      matchesNoUnionOption: true,
+      rawGlobalArgs,
+    };
+  }
+
   // Build parser options from extracted fields
-  const parserOptions = buildParserOptions(extracted);
+  const parserOptions = buildParserOptions(argvFields);
 
   // Parse argv
   const parsed = parseArgv(commandArgv, parserOptions);
 
   // Merge with positionals
-  const rawArgs = mergeWithPositionals(parsed, extracted);
+  const rawArgs = mergeWithPositionals(parsed, argvFields);
 
-  // Apply environment variable fallbacks
-  const envFallbackFields = new Set<string>();
-  for (const field of extracted.fields) {
-    if (field.env && rawArgs[field.name] === undefined) {
-      // Normalize to array
-      const envNames = Array.isArray(field.env) ? field.env : [field.env];
-
-      // First defined env var wins
-      for (const envName of envNames) {
-        const envValue = process.env[envName];
-        if (envValue !== undefined) {
-          rawArgs[field.name] = coerceEnvValue(envValue, field.type);
-          envFallbackFields.add(field.name);
-          break;
-        }
-      }
-    }
-  }
+  const envFallbackFields = applyEnvFallbacks(rawArgs, argvFields);
 
   // Detect unknown flags
-  const knownFlags = new Set(extracted.fields.map((f) => f.name));
-  const knownCliNames = new Set(extracted.fields.map((f) => f.cliName));
+  const optionFields = argvFields.fields.filter((f) => f.named);
+  const knownFlags = new Set(optionFields.map((f) => f.name));
+  const knownCliNames = new Set(optionFields.map((f) => f.cliName));
   const knownAliases = new Set<string>();
-  for (const f of extracted.fields) {
+  for (const f of optionFields) {
     for (const alias of getAllAliases(f)) knownAliases.add(alias);
   }
 
@@ -304,9 +334,111 @@ export function parseArgs(
     unknownFlags,
     unknownGlobalFlags: suppressedGlobalFlags,
     extractedFields: extracted,
+    optionFields,
+    positionalSlotFields: positionalSlotFields(argvFields, parsed.options),
     rawGlobalArgs,
     envFallbackFields,
   };
+}
+
+/**
+ * Fields that decide how argv is read. Variants may define the same argument
+ * (the discriminator included) differently, so a discriminated union reads
+ * argv with the variant whose own definitions read its discriminator value
+ * (`undefined` when a variant reads another variant's value instead), and a
+ * union with the first option whose definitions fit the tokens (`undefined`
+ * when none fits); otherwise it is every extracted field. A required argument
+ * already given as a global flag before this command counts as present, and
+ * when a prompt resolver may fill missing required arguments, a union falls
+ * back to the only option the tokens fit apart from those arguments.
+ */
+function selectArgvFields(
+  extracted: ExtractedFields,
+  argv: string[],
+  context: { promptAvailable: boolean; inheritedNames: ReadonlySet<string> },
+): ExtractedFields | undefined {
+  const { discriminator, variants, unionOptions } = extracted;
+  if (discriminator && variants) {
+    const readValues = (fields: ExtractedFields): Record<string, unknown> => {
+      const values = mergeWithPositionals(parseArgv(argv, buildParserOptions(fields)), fields);
+      applyEnvFallbacks(values, fields);
+      return values;
+    };
+    const selected = selectDiscriminatedVariant(extracted, readValues);
+    if (selected !== extracted) return selected;
+    const declared = new Set(variants.map((v) => v.discriminatorValue));
+    const readsAnotherVariant = variants.some((v) =>
+      declared.has(readValues({ ...extracted, fields: v.fields })[discriminator] as string),
+    );
+    return readsAnotherVariant ? undefined : extracted;
+  }
+  if (unionOptions) {
+    const promptable = context.promptAvailable
+      ? unionOptions.filter((o) => fitsArgv(o, argv, undefined))
+      : [];
+    const option =
+      unionOptions.find((o) => fitsArgv(o, argv, context.inheritedNames)) ??
+      (promptable.length === 1 ? promptable[0] : undefined);
+    return option && { ...extracted, fields: option.fields };
+  }
+  return extracted;
+}
+
+/**
+ * Fill arguments missing from argv with their environment variables; the
+ * first defined variable of a field wins.
+ *
+ * @returns Names of the fields filled from an environment variable
+ */
+function applyEnvFallbacks(
+  rawArgs: Record<string, unknown>,
+  extracted: ExtractedFields,
+): Set<string> {
+  const filled = new Set<string>();
+  for (const field of extracted.fields) {
+    if (!field.env || rawArgs[field.name] !== undefined) continue;
+    for (const envName of [field.env].flat()) {
+      const envValue = process.env[envName];
+      if (envValue !== undefined) {
+        rawArgs[field.name] = coerceEnvValue(envValue, field.type);
+        filled.add(field.name);
+        break;
+      }
+    }
+  }
+  return filled;
+}
+
+/**
+ * Whether argv reads cleanly with these fields alone: every long or short
+ * option is one they accept, no positional token is left over, and (unless
+ * `presentNames` is `undefined`) every required argument gets a value from
+ * argv, its environment variable, or `presentNames`. A long option given
+ * without a value is not a value for a non-boolean argument.
+ */
+function fitsArgv(
+  extracted: ExtractedFields,
+  argv: string[],
+  presentNames: ReadonlySet<string> | undefined,
+): boolean {
+  const parsed = parseArgv(argv, buildParserOptions(extracted));
+  const optionFields = extracted.fields.filter((f) => f.named);
+  const accepted = new Set(optionFields.flatMap((f) => [f.name, f.cliName, ...getAllAliases(f)]));
+  if (Object.keys(parsed.options).some((key) => !accepted.has(key))) return false;
+
+  const slots = positionalSlotFields(extracted, parsed.options);
+  const tokenCount = parsed.positionals.length + parsed.rest.length;
+  if (!slots.some((f) => f.type === "array") && tokenCount > slots.length) return false;
+
+  const rawArgs = mergeWithPositionals(parsed, extracted);
+  const valueless = (f: ResolvedFieldMeta) =>
+    f.type !== "boolean" && [rawArgs[f.name]].flat().includes(true);
+  if (extracted.fields.some(valueless)) return false;
+  if (presentNames === undefined) return true;
+  applyEnvFallbacks(rawArgs, extracted);
+  return extracted.fields.every(
+    (f) => !f.required || rawArgs[f.name] !== undefined || presentNames.has(f.name),
+  );
 }
 
 /**

@@ -10,6 +10,7 @@ import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
   binEnvVarName,
   collectExpandSpecs,
+  collectNamedPositionalFrames,
   collectRouteEntries,
   collectTrackedFields,
   effectiveOptionTokens,
@@ -22,6 +23,7 @@ import {
 } from "./extractor.js";
 import { buildHeaderLines, computeBinSig, resolveBinPath } from "./header.js";
 import {
+  namedPositionalGuards,
   optionExpandLocation,
   positionalExpandLocation,
   quotedAvailabilityTokens,
@@ -290,6 +292,32 @@ function optionValueCases(
   return lines;
 }
 
+/**
+ * fish lines that set `_slot` to the `position` of the positional the token at
+ * `tokenIndex` fills, skipping named positionals already given as a long
+ * option. Returns `undefined` when no positional is named. Callers declare
+ * `_slot` and `_left` so the values outlive a `switch` case block.
+ */
+function fishPositionalSlotLines(
+  positionals: readonly CompletablePositional[],
+  options: readonly CompletableOption[],
+  fn: string,
+  tokenIndex = "$_pos_count",
+): string[] | undefined {
+  const guards = namedPositionalGuards(positionals, options);
+  if (guards.every((tokens) => tokens === undefined)) return undefined;
+  const lines = [`    set _slot -1; set _left ${tokenIndex}`];
+  positionals.forEach((pos, i) => {
+    const tokens = guards[i];
+    const guard = tokens ? `; and __${fn}_not_used ${tokens.join(" ")}` : "";
+    const take = pos.variadic
+      ? `set _slot ${pos.position}`
+      : `if test $_left -eq 0; set _slot ${pos.position}; else; set _left (math $_left - 1); end`;
+    lines.push(`    if test $_slot -lt 0${guard}; ${take}; end`);
+  });
+  return lines;
+}
+
 /** Generate positional completion block for fish */
 function positionalBlock(
   positionals: CompletablePositional[],
@@ -297,7 +325,9 @@ function positionalBlock(
   options: readonly CompletableOption[] = [],
 ): string[] {
   if (positionals.length === 0) return [];
-  const lines: string[] = [];
+  const slotLines = fishPositionalSlotLines(positionals, options, fn);
+  const hasNamed = slotLines !== undefined;
+  const lines: string[] = hasNamed ? [`    set -l _slot; set -l _left`, ...slotLines] : [];
   for (const pos of positionals) {
     const valLines = fishValueLines(
       pos.valueCompletion,
@@ -306,7 +336,9 @@ function positionalBlock(
     );
     if (valLines.length === 0) continue;
 
-    if (pos.variadic) {
+    if (hasNamed) {
+      lines.push(`    if test $_slot -eq ${pos.position}`);
+    } else if (pos.variadic) {
       lines.push(`    if test $_pos_count -ge ${pos.position}`);
     } else {
       lines.push(`    if test $_pos_count -eq ${pos.position}`);
@@ -655,6 +687,23 @@ export function generateFishCompletion(
     lines.push(`    end`);
     lines.push(`end`);
     lines.push(``);
+    lines.push(`function __${fn}_track_positionals --no-scope-shadowing`);
+    lines.push(`    set -l _k 0`);
+    lines.push(`    for _w in $_pos_words`);
+    lines.push(`        set -l _slot $_k; set -l _left`);
+    lines.push(`        switch "$_subcmd"`);
+    for (const frame of collectNamedPositionalFrames(root)) {
+      lines.push(`            case ${frame.pathStrs.map((p) => `"${p}"`).join(" ")}`);
+      for (const l of fishPositionalSlotLines(frame.positionals, frame.options, fn, "$_k") ?? []) {
+        lines.push(`            ${l}`);
+      }
+    }
+    lines.push(`        end`);
+    lines.push(`        __${fn}_track_pos "$_subcmd" "$_slot" "$_w"`);
+    lines.push(`        set _k (math $_k + 1)`);
+    lines.push(`    end`);
+    lines.push(`end`);
+    lines.push(``);
   }
 
   if (hasArrayExpand) {
@@ -780,6 +829,7 @@ export function generateFishCompletion(
     `    set -l _subcmd "" ; set -l _after_dd 0 ; set -l _pos_count 0 ; set -l _skip_next 0`,
   );
   lines.push(`    set -l _used_opts`);
+  if (hasExpand) lines.push(`    set -l _pos_words`);
   // Unlike _used_opts (reset on every subcommand descent below, since it
   // gates frame-local option suggestions), this survives descent: it
   // answers "has any option been typed anywhere in this invocation",
@@ -816,7 +866,7 @@ export function generateFishCompletion(
   lines.push(`        if test "$_w" = "--"; set _after_dd 1; set _j (math $_j + 1); continue; end`);
   // After `--`, all remaining words are positionals. Track them so an
   // expand spec that depends on a positional still sees the value.
-  const afterDdTrack = hasExpand ? `__${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; ` : "";
+  const afterDdTrack = hasExpand ? `set -a _pos_words "$_w"; ` : "";
   lines.push(
     `        if test $_after_dd -eq 1; ${afterDdTrack}set _pos_count (math $_pos_count + 1); set _j (math $_j + 1); continue; end`,
   );
@@ -869,6 +919,7 @@ export function generateFishCompletion(
     );
     lines.push(`            set _used_opts; set _pos_count 0`);
     if (hasExpand) {
+      lines.push(`            set _pos_words`);
       // Clear sibling-tracker state when descending into a subcommand:
       // `dependsOn` is scoped to siblings on the same command frame, so
       // letting a parent's `--env` bleed into a child with its own `--env`
@@ -888,18 +939,19 @@ export function generateFishCompletion(
     }
     lines.push(`        else`);
     if (hasExpand) {
-      lines.push(`            __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
+      lines.push(`            set -a _pos_words "$_w"`);
     }
     lines.push(`            set _pos_count (math $_pos_count + 1)`);
     lines.push(`        end`);
   } else {
     if (hasExpand) {
-      lines.push(`        __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
+      lines.push(`        set -a _pos_words "$_w"`);
     }
     lines.push(`        set _pos_count (math $_pos_count + 1)`);
   }
   lines.push(`        set _j (math $_j + 1)`);
   lines.push(`    end`);
+  if (hasExpand) lines.push(`    __${fn}_track_positionals`);
   lines.push(``);
 
   // Route to subcommand handler (all nested paths)

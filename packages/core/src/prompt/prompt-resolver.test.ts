@@ -7,6 +7,7 @@ function makeField(overrides: Partial<ResolvedFieldMeta> = {}): ResolvedFieldMet
     name: "testField",
     cliName: "test-field",
     positional: false,
+    named: true,
     required: true,
     type: "string",
     schema: {} as ResolvedFieldMeta["schema"],

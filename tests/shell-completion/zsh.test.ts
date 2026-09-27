@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   defineCommonTests,
+  defineNamedPositionalExpandTests,
   defineNestedTests,
   hasZsh,
   isCI,
@@ -407,6 +408,8 @@ describe.skipIf(!hasZsh)("zsh expand array dedup", () => {
       ...opts,
       scriptPath: expandCtx.completionScripts.zsh,
     });
+
+  defineNamedPositionalExpandTests((args) => completeE(args));
 
   it("falls through to positional completion when subcommands do not match the prefix", () => {
     const values = completeE(["api", "Get"]);

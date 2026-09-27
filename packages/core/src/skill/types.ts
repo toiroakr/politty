@@ -213,8 +213,8 @@ export interface SkillCommandOptions {
    *
    * When provided, `skills add`/`skills sync`'s `--verbose` and `skills
    * list`'s `--json` are automatically omitted from their own schema if
-   * this schema already defines a same-named *non-positional boolean*
-   * field — no manual configuration needed, and the host's global flag of
+   * this schema already defines a same-named *boolean* field accepted as
+   * `--<name>` — no manual configuration needed, and the host's global flag of
    * the same name takes over instead.
    *
    * A same-named field of another type (e.g. a string verbosity level)

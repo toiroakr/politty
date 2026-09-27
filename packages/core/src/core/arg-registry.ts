@@ -152,8 +152,11 @@ export type EffectContext = {
 export interface BaseArgMeta<TValue = unknown> {
   /** Argument description */
   description?: string;
-  /** Treat as positional argument */
-  positional?: boolean;
+  /**
+   * Treat as positional argument. Pass `{ named: true }` to also accept it as
+   * a long option (`--name <value>`), e.g. for values that may start with `-`.
+   */
+  positional?: boolean | { named?: boolean };
   /** Placeholder for help display */
   placeholder?: string;
   /**

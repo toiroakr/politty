@@ -119,7 +119,7 @@ export const migrateCommand = defineCommand({
   description: "Migrate data between environments",
   args: z.object({
     source: arg(z.enum(["local", "staging", "production"]), {
-      positional: true,
+      positional: { named: true },
       description: "Source environment",
     }),
     target: arg(z.enum(["dev", "qa", "prod"]), {

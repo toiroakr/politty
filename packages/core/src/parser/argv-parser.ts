@@ -1,4 +1,9 @@
-import { getAllAliases, toCamelCase, type ExtractedFields } from "../core/schema-extractor.js";
+import {
+  getAllAliases,
+  toCamelCase,
+  type ExtractedFields,
+  type ResolvedFieldMeta,
+} from "../core/schema-extractor.js";
 import { coerceBoolean } from "./coerce-boolean.js";
 import { resolveLongOption, type LongOptionLookup } from "./long-option-resolver.js";
 
@@ -270,6 +275,8 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
   }
 
   for (const field of extracted.fields) {
+    if (!field.named) continue;
+
     // Map kebab-case CLI name to camelCase field name
     // e.g., "dry-run" → "dryRun"
     if (field.cliName !== field.name) {
@@ -341,6 +348,23 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
 /**
  * Merge parsed argv with positional fields to create a flat record
  */
+/**
+ * Positional fields that take a positional token, in definition order.
+ * A named positional given as a long option leaves its token to the next one.
+ *
+ * @param extracted - Extracted fields
+ * @param options - Option values parsed so far, keyed by field name
+ * @returns Positional fields that consume positional tokens
+ */
+export function positionalSlotFields(
+  extracted: ExtractedFields,
+  options: Record<string, unknown>,
+): ResolvedFieldMeta[] {
+  return extracted.fields.filter(
+    (f) => f.positional && !(f.named && Object.hasOwn(options, f.name)),
+  );
+}
+
 export function mergeWithPositionals(
   parsed: ParsedArgv,
   extracted: ExtractedFields,
@@ -354,8 +378,12 @@ export function mergeWithPositionals(
   const allPositionals =
     parsed.rest.length > 0 ? [...parsed.positionals, ...parsed.rest] : parsed.positionals;
 
-  let positionalIndex = 0;
   for (const field of positionalFields) {
+    if (!field.named) delete result[field.name];
+  }
+
+  let positionalIndex = 0;
+  for (const field of positionalSlotFields(extracted, parsed.options)) {
     if (positionalIndex >= allPositionals.length) {
       break;
     }

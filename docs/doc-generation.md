@@ -663,6 +663,7 @@ Argument/option metadata:
 | `required`     | `boolean`             | Whether required                     |
 | `defaultValue` | `unknown`             | Default value                        |
 | `positional`   | `boolean`             | Whether positional argument          |
+| `named`        | `boolean`             | Whether accepted as `--<name>`       |
 | `placeholder`  | `string \| undefined` | Placeholder (e.g., `"FILE"`)         |
 
 ## Generated Markdown Format

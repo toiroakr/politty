@@ -9,6 +9,7 @@ import type { AnyCommand } from "../types.js";
 import { CompletionDirective } from "./dynamic/candidate-generator.js";
 import {
   collectExpandSpecs,
+  collectNamedPositionalFrames,
   collectRouteEntries,
   collectTrackedFields,
   dynamicInvokeCompleteLines,
@@ -32,6 +33,8 @@ import {
   ansiC,
   optionExpandLocation,
   positionalExpandLocation,
+  posixPositionalSlotLines,
+  posixTrackPositionalsLines,
   quotedAvailabilityTokens,
   type FuncSuffixedExpandLocation,
 } from "./shell-shared.js";
@@ -297,11 +300,12 @@ function positionalBlock(
   options: readonly CompletableOption[] = [],
 ): string[] {
   if (positionals.length === 0) return [];
-  const lines: string[] = [];
-  lines.push(`    case "$_pos_count" in`);
+  const slotLines = posixPositionalSlotLines(positionals, options, fn);
+  const lines: string[] = [...(slotLines ?? [])];
+  lines.push(`    case "${slotLines ? "$_slot" : "$_pos_count"}" in`);
 
   for (const pos of positionals) {
-    if (pos.variadic) {
+    if (pos.variadic && !slotLines) {
       // Variadic: use * to match any position from this index onward
       lines.push(`        ${pos.position}|*)`);
     } else {
@@ -678,6 +682,7 @@ export function generateBashCompletion(
     lines.push(`    esac`);
     lines.push(`}`);
     lines.push(``);
+    lines.push(...posixTrackPositionalsLines(fn, collectNamedPositionalFrames(root)));
   }
 
   if (hasArrayExpand) {
@@ -792,6 +797,7 @@ export function generateBashCompletion(
   lines.push(``);
   lines.push(`    local _subcmd="" _after_dd=0 _pos_count=0 _skip_next=0`);
   lines.push(`    local -a _used_opts=()`);
+  if (hasExpand) lines.push(`    local -a _pos_words=()`);
   // Unlike _used_opts (reset on every subcommand descent below, since it
   // gates frame-local option suggestions), this survives descent: it
   // answers "has any option been typed anywhere in this invocation",
@@ -825,7 +831,7 @@ export function generateBashCompletion(
   lines.push(`        if [[ "$_w" == "--" ]]; then _after_dd=1; (( _j++ )); continue; fi`);
   // After `--`, all remaining words are positionals. Track them so an
   // expand spec that depends on a positional still sees the value.
-  const afterDdTrack = hasExpand ? `__${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; ` : "";
+  const afterDdTrack = hasExpand ? `_pos_words+=("$_w"); ` : "";
   lines.push(
     `        if (( _after_dd )); then ${afterDdTrack}(( _pos_count++ )); (( _j++ )); continue; fi`,
   );
@@ -882,19 +888,20 @@ export function generateBashCompletion(
     : hasExpand
       ? `; ${unsetPrefixed("_arg_values_")}`
       : "";
-  const posTrack = hasExpand ? `__${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"; ` : "";
+  const posTrack = hasExpand ? `_pos_words+=("$_w"); ` : "";
   if (routeEntries.length > 0) {
     lines.push(
-      `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0${clearState}; else ${posTrack}(( _pos_count++ )); fi`,
+      `        if __${fn}_is_subcmd "$_subcmd" "$_w"; then _subcmd="\${_subcmd:+\${_subcmd}:}$_w"; _used_opts=(); _pos_count=0${hasExpand ? "; _pos_words=()" : ""}${clearState}; else ${posTrack}(( _pos_count++ )); fi`,
     );
   } else {
     if (hasExpand) {
-      lines.push(`        __${fn}_track_pos "$_subcmd" "$_pos_count" "$_w"`);
+      lines.push(`        _pos_words+=("$_w")`);
     }
     lines.push(`        (( _pos_count++ ))`);
   }
   lines.push(`        (( _j++ ))`);
   lines.push(`    done`);
+  if (hasExpand) lines.push(`    __${fn}_track_positionals`);
   lines.push(``);
   // Strip `--opt=value` / `-o=value` inline prefixes from the cursor
   // ONLY when the cursor is not a positional after `--`. Doing this

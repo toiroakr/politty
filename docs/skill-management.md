@@ -81,9 +81,7 @@ const cli = withSkillCommand(
   defineCommand({
     name: "my-agent",
     description: "My coding agent CLI",
-    subCommands: {
-      /* ... */
-    },
+    subCommands: {/* ... */},
   }),
   {
     sourceDir,
