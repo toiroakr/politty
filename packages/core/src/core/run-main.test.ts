@@ -2340,6 +2340,31 @@ describe("Redundant positionals", () => {
       expect(runFn.mock.calls[0]?.[0]).toMatchObject({ name: "x", token: "t" });
     });
 
+    it("should select a union option whose required field is given as a global flag before the subcommand", async () => {
+      const runFn = vi.fn();
+      const root = defineCommand({
+        name: "cli",
+        subCommands: {
+          sub: defineCommand({
+            name: "sub",
+            args: z.union([
+              z.object({ token: arg(z.string()), name: arg(z.string()) }),
+              z.object({ file: arg(z.string(), { positional: true }) }),
+            ]),
+            run: runFn,
+          }),
+        },
+      });
+      const globalArgs = z.object({ token: arg(z.string().optional()) });
+
+      const result = await runCommand(root, ["--token", "t", "sub", "--name", "x"], {
+        globalArgs,
+      });
+
+      expect(result.success).toBe(true);
+      expect(runFn.mock.calls[0]?.[0]).toMatchObject({ token: "t", name: "x" });
+    });
+
     it("should reject argv that fits several union options once required fields are left to the prompt resolver", async () => {
       const runFn = vi.fn();
       const cmd = defineCommand({

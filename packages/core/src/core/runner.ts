@@ -490,6 +490,7 @@ async function runCommandInternal<TResult = unknown>(
       skipValidation: options.skipValidation,
       globalExtracted: options._globalExtracted,
       promptAvailable: options.prompt !== undefined,
+      inheritedNames: new Set(Object.keys(options._parsedGlobalArgs ?? {})),
     });
 
     // Accumulate global args from this parse level.
