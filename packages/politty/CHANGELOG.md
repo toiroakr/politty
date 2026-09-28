@@ -1,5 +1,13 @@
 # politty
 
+## 0.14.1
+
+### Patch Changes
+
+- 1b39c2c: List the built-in `--help` / `--help-all` / `--help-json` / `--version` options after the command's own options in the text `--help` output
+- Updated dependencies [1b39c2c]
+  - @politty/zod@0.4.1
+
 ## 0.14.0
 
 ### Minor Changes

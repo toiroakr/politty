@@ -1,5 +1,11 @@
 # @politty/valibot
 
+## 0.4.1
+
+### Patch Changes
+
+- 1b39c2c: List the built-in `--help` / `--help-all` / `--help-json` / `--version` options after the command's own options in the text `--help` output
+
 ## 0.4.0
 
 ### Minor Changes
