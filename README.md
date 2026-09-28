@@ -148,11 +148,11 @@ Arguments:
   <name>                          Name of the person to greet
 
 Options:
+  -g, --greeting <GREETING>       Greeting phrase (default: "Hello")
+  -l, --loud                      Output in uppercase (default: false)
   -h, --help                      Show help
   -H, --help-all                  Show help with all subcommand options
   --help-json                     Show help as JSON
-  -g, --greeting <GREETING>       Greeting phrase (default: "Hello")
-  -l, --loud                      Output in uppercase (default: false)
 ```
 
 Every command also accepts `--help-json`, which prints the same information as a single JSON object instead of formatted text — useful for tools that consume a CLI's help programmatically (e.g. generating docs or another UI) rather than parsing `--help`'s output:

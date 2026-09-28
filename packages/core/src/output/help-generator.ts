@@ -402,7 +402,7 @@ export function renderOptions(
   descriptions: BuiltinOptionDescriptions = {},
   context?: CommandContext,
 ): string {
-  const lines: string[] = [];
+  const builtinLines: string[] = [];
   const desc: Required<BuiltinOptionDescriptions> = {
     help: descriptions.help ?? defaultBuiltinDescriptions.help,
     helpAll: descriptions.helpAll ?? defaultBuiltinDescriptions.helpAll,
@@ -426,47 +426,50 @@ export function renderOptions(
   // Add built-in options
   if (hasUserDefinedh) {
     // Don't show -h alias if user is using it
-    lines.push(formatOption(styles.option("--help"), desc.help));
+    builtinLines.push(formatOption(styles.option("--help"), desc.help));
   } else {
-    lines.push(formatOption(`${styles.option("-h")}, ${styles.option("--help")}`, desc.help));
+    builtinLines.push(
+      formatOption(`${styles.option("-h")}, ${styles.option("--help")}`, desc.help),
+    );
   }
 
   if (hasUserDefinedH) {
     // Don't show -H alias if user is using it
-    lines.push(formatOption(styles.option("--help-all"), desc.helpAll));
+    builtinLines.push(formatOption(styles.option("--help-all"), desc.helpAll));
   } else {
-    lines.push(
+    builtinLines.push(
       formatOption(`${styles.option("-H")}, ${styles.option("--help-all")}`, desc.helpAll),
     );
   }
 
-  lines.push(formatOption(styles.option("--help-json"), desc.helpJson));
+  builtinLines.push(formatOption(styles.option("--help-json"), desc.helpJson));
 
   // Show --version only if version is provided in context
   if (context?.rootVersion) {
-    lines.push(formatOption(styles.option("--version"), desc.version));
+    builtinLines.push(formatOption(styles.option("--version"), desc.version));
   }
 
   if (!extracted) {
-    return lines.join("\n");
+    return builtinLines.join("\n");
   }
 
   // Handle discriminated union specially
   if (extracted.schemaType === "discriminatedUnion" && extracted.discriminator) {
-    return renderDiscriminatedUnionOptions(extracted, command, lines);
+    return renderDiscriminatedUnionOptions(extracted, command, builtinLines);
   }
 
   // Handle union specially
   if (extracted.schemaType === "union" && extracted.unionOptions) {
-    return renderUnionOptions(extracted, command, lines);
+    return renderUnionOptions(extracted, command, builtinLines);
   }
 
   // Handle xor (exclusive union) the same as union
   if (extracted.schemaType === "xor" && extracted.unionOptions) {
-    return renderUnionOptions(extracted, command, lines);
+    return renderUnionOptions(extracted, command, builtinLines);
   }
 
   // Regular options
+  const lines: string[] = [];
   const options = extracted.fields.filter((a) => !a.positional);
   for (const opt of options) {
     const flags = formatFlags(opt);
@@ -497,6 +500,7 @@ export function renderOptions(
     }
   }
 
+  lines.push(...builtinLines);
   return lines.join("\n");
 }
 
@@ -522,8 +526,9 @@ function formatNegationLine(
 function renderDiscriminatedUnionOptions(
   extracted: ExtractedFields,
   _command: AnyCommand,
-  lines: string[],
+  builtinLines: string[],
 ): string {
+  const lines: string[] = [];
   const discriminator = extracted.discriminator!;
   const variants = extracted.variants ?? [];
 
@@ -559,6 +564,8 @@ function renderDiscriminatedUnionOptions(
       if (negationLine) lines.push(negationLine);
     }
   }
+
+  lines.push(...builtinLines);
 
   // Render variant-specific fields
   for (const variant of variants) {
@@ -599,8 +606,9 @@ function renderDiscriminatedUnionOptions(
 function renderUnionOptions(
   extracted: ExtractedFields,
   _command: AnyCommand,
-  lines: string[],
+  builtinLines: string[],
 ): string {
+  const lines: string[] = [];
   const unionOptions = extracted.unionOptions ?? [];
 
   // Add common fields (fields that appear in all options)
@@ -624,6 +632,8 @@ function renderUnionOptions(
       if (negationLine) lines.push(negationLine);
     }
   }
+
+  lines.push(...builtinLines);
 
   // Render option-specific fields
   for (let i = 0; i < unionOptions.length; i++) {

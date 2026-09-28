@@ -479,6 +479,59 @@ describe("Help Generator", () => {
       expect(result).toContain("--verbose");
     });
 
+    it("should list built-in options after the command's own options", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+        }),
+      });
+
+      const result = generateHelp(cmd, { context: { rootVersion: "1.0.0" } });
+
+      expect(result).toMatch(
+        /Options:\n {2}-v, --verbose .*\n {2}-h, --help .*\n {2}-H, --help-all .*\n {2}--help-json .*\n {2}--version .*/,
+      );
+    });
+
+    it("should list built-in options after the common options and before variant-specific options of a discriminated union", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.discriminatedUnion("action", [
+          z.object({
+            action: z.literal("create"),
+            name: arg(z.string(), { description: "Name" }),
+          }),
+          z.object({
+            action: z.literal("delete"),
+            id: arg(z.string(), { description: "Id" }),
+          }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(
+        /Options:\n {2}--action <create\|delete> .*\n {2}-h, --help .*\n {2}-H, --help-all .*\n {2}--help-json .*\n\nWhen action=create:/,
+      );
+    });
+
+    it("should list built-in options after the common options and before option-specific options of a union", () => {
+      const cmd = defineCommand({
+        name: "my-cli",
+        args: z.union([
+          z.object({ verbose: arg(z.boolean().default(false), {}), path: arg(z.string(), {}) }),
+          z.object({ verbose: arg(z.boolean().default(false), {}), url: arg(z.string(), {}) }),
+        ]),
+      });
+
+      const result = generateHelp(cmd, {});
+
+      expect(result).toMatch(
+        /Options:\n {2}--verbose .*\n {2}-h, --help .*\n {2}-H, --help-all .*\n {2}--help-json .*\n\n {2}Variant 1:/,
+      );
+    });
+
     it("should include subcommands when showSubcommands is true", () => {
       const cmd = defineCommand({
         name: "my-cli",
