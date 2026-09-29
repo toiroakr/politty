@@ -5,6 +5,7 @@ export default defineConfig({
     "src/index.ts",
     "src/cli.ts",
     "src/compile-cache.ts",
+    "src/agent.ts",
     "src/docs.ts",
     "src/completion.ts",
     "src/skill.ts",

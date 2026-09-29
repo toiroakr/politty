@@ -33,6 +33,16 @@ describe("my-cli", () => {
 });
 ```
 
+### Testing Inside a Coding Agent
+
+When tests run inside an AI coding agent (Claude Code, Codex, ...), `runCommand` detects it from the inherited environment, so `args.$agent`, the global `setup`/`cleanup` `agent` and `agentHelp` output differ from a CI run. Set `POLITTY_NO_AGENT=1` in the test environment (e.g. vitest's `test.env`) to keep results stable, and re-enable detection only in tests of agent behavior:
+
+```typescript
+vi.stubEnv("POLITTY_NO_AGENT", "");
+// A known name keeps id stable even if the runner's own agent env leaks in
+vi.stubEnv("AI_AGENT", "codex_cli"); // args.$agent => { id: "codex_cli", rawId: "codex_cli" }
+```
+
 ### Testing Validation Errors
 
 You can verify that the expected exit code (usually 1) is returned when invalid arguments are passed.

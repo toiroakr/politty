@@ -136,6 +136,59 @@ const install = defineCommand({
 
 See `playground/26-command-alias` for a complete example.
 
+## AI Coding Agents
+
+Coding agents (Claude Code, Codex, Cursor, Gemini CLI, ...) run CLIs as often as humans do, but want different things from them. politty detects them from the environment so a CLI can tell agents things humans don't need, and switch defaults for them.
+
+### Agent-only help
+
+`agentHelp` is prepended to `--help` / `--help-all` output (and to the help shown for a missing or unknown subcommand) only when an agent is detected. It is Markdown, rendered the same way as `notes`:
+
+```typescript
+runMain(cli, {
+  agentHelp: [
+    "**AGENTS:** Pass `--json` and parse stdout instead of the table output.",
+    "Use `--help-json` for machine-readable help of a single command.",
+  ].join("\n"),
+});
+```
+
+Pass a function to vary it per agent or command; return `undefined` to show nothing:
+
+```typescript
+runMain(cli, {
+  agentHelp: ({ agent, commandPath }) =>
+    commandPath.length === 0
+      ? `Detected ${agent.id}. Run \`my-cli search <task>\` first.`
+      : undefined,
+});
+```
+
+`--help-json` carries the same text (raw Markdown) as its `agentHelp` field.
+
+### Knowing whether an agent is running the command
+
+The detected agent is available as `args.$agent` in `run`, `setup` and `cleanup` (non-enumerable, like `$source`/`$invocation`), and as `agent` in the global `setup`/`cleanup` contexts. Both are `undefined` when no agent is detected:
+
+```typescript
+const list = defineCommand({
+  name: "list",
+  args: z.object({ json: arg(z.boolean().optional()) }),
+  run: (args) => {
+    const json = args.json ?? args.$agent !== undefined;
+    // ...
+  },
+});
+
+runMain(cli, {
+  setup: ({ agent }) => {
+    telemetry.setAttribute("cli.agent", agent?.id ?? "none");
+  },
+});
+```
+
+Outside a command, call `detectAgent()` from the `agent` subpath (e.g. `politty/agent`) directly. See [`detectAgent`](./api-reference.md#detectagent) for how agents are detected.
+
 ## Complex Schemas
 
 ### Discriminated Union (Mutually Exclusive Options)

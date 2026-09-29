@@ -64,7 +64,14 @@ describe("politty alias runtime", () => {
   it("exposes every documented subpath entry from dist", async () => {
     // prompt/clack and prompt/inquirer are omitted: their optional peer
     // deps are intentionally not installed at the workspace root.
-    const entries = ["docs.js", "completion.js", "skill.js", "prompt.js", "compile-cache.js"];
+    const entries = [
+      "docs.js",
+      "completion.js",
+      "skill.js",
+      "prompt.js",
+      "compile-cache.js",
+      "agent.js",
+    ];
     for (const entry of entries) {
       const mod = await importDist(polittyDist, entry);
       expect(Object.keys(mod).length, `${entry} should re-export something`).toBeGreaterThan(0);
