@@ -233,10 +233,10 @@ function generateHelpData(command: Command, options?: HelpDataOptions): HelpData
 
 #### Parameters
 
-| Name      | Type              | Description                       |
-| --------- | ----------------- | --------------------------------- |
-| `command` | `Command`         | Command to generate help data for |
-| `options` | `HelpDataOptions` | `{ descriptions?, context? }`     |
+| Name      | Type              | Description                               |
+| --------- | ----------------- | ----------------------------------------- |
+| `command` | `Command`         | Command to generate help data for         |
+| `options` | `HelpDataOptions` | `{ descriptions?, context?, agentHelp? }` |
 
 #### Return Value
 
