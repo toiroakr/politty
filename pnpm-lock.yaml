@@ -230,6 +230,9 @@ importers:
       '@types/node':
         specifier: 25.9.8
         version: 25.9.8
+      detect-agent:
+        specifier: 1.2.0
+        version: 1.2.0
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -1750,6 +1753,10 @@ packages:
 
   defu@6.1.7:
     resolution: {integrity: sha512-7z22QmUWiQ/2d0KkdYmANbRUVABpZ9SNYyH5vx6PZ+nE5bcC0l7uFvEfHlyld/HcGBFTL536ClDt3DEcSlEJAQ==}
+
+  detect-agent@1.2.0:
+    resolution: {integrity: sha512-fW/515FHIogLopGDTSMc4XXkJV6mkVC10gVPoenb7cgY7PZAF/jakLDdDUBQ9QpJEA9AYgEg3/B9WqLTUtz3Ag==}
+    engines: {node: '>=20'}
 
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
@@ -3283,6 +3290,8 @@ snapshots:
   commander@14.0.3: {}
 
   defu@6.1.7: {}
+
+  detect-agent@1.2.0: {}
 
   detect-libc@2.1.2: {}
 

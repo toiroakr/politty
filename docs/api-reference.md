@@ -233,10 +233,10 @@ function generateHelpData(command: Command, options?: HelpDataOptions): HelpData
 
 #### Parameters
 
-| Name      | Type              | Description                       |
-| --------- | ----------------- | --------------------------------- |
-| `command` | `Command`         | Command to generate help data for |
-| `options` | `HelpDataOptions` | `{ descriptions?, context? }`     |
+| Name      | Type              | Description                               |
+| --------- | ----------------- | ----------------------------------------- |
+| `command` | `Command`         | Command to generate help data for         |
+| `options` | `HelpDataOptions` | `{ descriptions?, context?, agentHelp? }` |
 
 #### Return Value
 
@@ -344,6 +344,43 @@ politty generate-shim --entry ./cli.js
 # Multiple bins: one --entry per bin, paired in declaration order
 politty generate-shim --entry ./cli-a.js --entry ./cli-b.js
 ```
+
+---
+
+### `detectAgent`
+
+Detects whether the process runs under an AI coding agent. Exported from the `agent` subpath of every politty package (e.g. `politty/agent`, `@politty/valibot/agent`). `runMain`/`runCommand` call it once per run to drive `agentHelp`, `args.$agent` and the global `setup`/`cleanup` `agent`.
+
+```typescript
+function detectAgent(
+  env?: Record<string, string | undefined>, // default: process.env
+  options?: {
+    isTTY?: boolean; // default: process.stdout.isTTY
+    fileExists?: (path: string) => boolean; // default: fs.existsSync
+  },
+): AgentInfo | undefined;
+```
+
+Detection follows the language-agnostic spec of [vercel/detect-agent](https://github.com/vercel/detect-agent) (vendored `agents.json`, Apache-2.0):
+
+1. `POLITTY_NO_AGENT` set to any non-empty value → `undefined`. Use it when a human types into an agent's terminal and wants the normal help.
+2. `AI_AGENT` non-empty after trimming → an agent, with the trimmed value as `rawId`.
+3. The spec's agents are checked in order and the first match wins (e.g. `CLAUDECODE=1` → `claude_code`, `CODEX_THREAD_ID` → `codex_cli`, `CURSOR_AGENT` → `cursor-cli`).
+
+`id` is normalized to the spec's name even when `AI_AGENT` carries a custom value: `AI_AGENT` itself when it is a known name, otherwise the first spec agent whose markers match, falling back to the custom `AI_AGENT` value when none does. `rawId` is what the detect-agent spec itself reports. Claude Code, for example, sets `AI_AGENT=claude-code_<version>_agent` alongside `CLAUDECODE=1`, so `id` is `"claude_code"` while `rawId` is the versioned value.
+
+It is synchronous and never throws.
+
+```typescript
+import { detectAgent } from "politty/agent";
+
+detectAgent({ CLAUDECODE: "1" }); // { id: "claude_code", rawId: "claude_code" }
+detectAgent({ AI_AGENT: "claude-code_2-1-284_agent", CLAUDECODE: "1" });
+// => { id: "claude_code", rawId: "claude-code_2-1-284_agent" }
+detectAgent({ AI_AGENT: "my-agent" }); // { id: "my-agent", rawId: "my-agent" }
+```
+
+Branch on a specific agent with `id` (`agent?.id === "claude_code"`). Spec names may change when upstream renames them.
 
 ---
 
@@ -835,6 +872,23 @@ interface RunInvocation {
 
 ---
 
+### `AgentInfo`
+
+The shape of `args.$agent`, the global `setup`/`cleanup` `agent`, and `detectAgent()`'s result. See [AI Coding Agents](./advanced-features.md#ai-coding-agents) for usage.
+
+```typescript
+type KnownAgentId = "claude_code" | "codex_cli" | "cursor" | ...; // the spec's agent names
+
+interface AgentInfo {
+  /** The spec's name for the agent; the custom AI_AGENT value when no spec agent matches */
+  id: KnownAgentId | (string & {});
+  /** The trimmed AI_AGENT value when non-empty, otherwise the same as id */
+  rawId: string;
+}
+```
+
+---
+
 ### `Example`
 
 Type for defining command usage examples.
@@ -1033,6 +1087,13 @@ interface MainOptions {
   /** Prompt resolver for interactive missing-arg prompts */
   prompt?: PromptResolver;
   /**
+   * Guidance shown above help output only when an AI coding agent is
+   * detected (Markdown). See "AI Coding Agents" in advanced-features.md.
+   */
+  agentHelp?:
+    | string
+    | ((context: { agent: AgentInfo; commandPath: readonly string[] }) => string | undefined);
+  /**
    * Node.js on-disk compile cache control (default: derive the cache
    * directory from the command name). Pass a string to use a custom
    * directory, or `false` to disable. See "Faster Startup" in recipes.md.
@@ -1057,6 +1118,8 @@ interface RunCommandOptions {
   skipValidation?: boolean;
   /** Custom logger (default: console) */
   logger?: Logger;
+  /** Same as `MainOptions.agentHelp` */
+  agentHelp?: MainOptions["agentHelp"];
 }
 ```
 

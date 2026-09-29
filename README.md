@@ -531,6 +531,21 @@ politty integrates Node.js's on-disk compile cache (V8 code cache, Node >= 22.8.
 
 `generate-shim` writes an executable shim that enables the cache and loads `--entry` (a specifier relative to the shim) with a dynamic import. The output path and program name come from `package.json` (the `bin` path and the `bin` name), and the shim imports the cache helper from the politty package whose `politty` bin you ran — the one you installed, so it resolves from your package. Packages with multiple bins pass `--entry` once per bin, and `--entry` itself can be omitted when the entry sits next to the shim under a conventional name (`./cli.js`, `./index.js`, ...). See [Faster Startup (Compile Cache)](./docs/recipes.md#faster-startup-compile-cache) for the flags, the opt-out (`compileCache: false`), and the hand-written shim variant.
 
+## AI Coding Agents
+
+politty detects AI coding agents (Claude Code, Codex, Cursor, Gemini CLI, ...) from the environment, following [vercel/detect-agent](https://github.com/vercel/detect-agent)'s spec. Give agents guidance humans never see, and branch on the detected agent at run time:
+
+```typescript
+runMain(cli, {
+  agentHelp: "**AGENTS:** Pass `--json` and parse stdout instead of the table output.",
+});
+
+// In run/setup/cleanup: args.$agent  // e.g. { id: "claude_code", rawId: "claude_code" }, or undefined
+// Anywhere: import { detectAgent } from "politty/agent";
+```
+
+Set `POLITTY_NO_AGENT=1` to opt out. See [AI Coding Agents](./docs/advanced-features.md#ai-coding-agents).
+
 ## Skill Management
 
 politty manages SKILL.md-based agent skills distributed via npm packages.

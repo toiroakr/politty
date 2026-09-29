@@ -38,6 +38,10 @@
       "types": "./dist/compile-cache.d.ts",
       "default": "./dist/compile-cache.js"
     },
+    "./agent": {
+      "types": "./dist/agent.d.ts",
+      "default": "./dist/agent.js"
+    },
     "./docs": {
       "types": "./dist/docs.d.ts",
       "default": "./dist/docs.js"

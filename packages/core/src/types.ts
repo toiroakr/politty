@@ -1,4 +1,5 @@
 import type { SchemaLike } from "./adapter/standard-schema.js";
+import type { AgentInfo } from "./agent/detect-agent.js";
 import type { ExtractedFields } from "./core/schema-extractor.js";
 import type { LazyCommand } from "./lazy.js";
 
@@ -99,16 +100,37 @@ export interface CleanupContext<TArgs = unknown> {
 /**
  * Context provided to global setup function (runMain/runCommand level)
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- intentionally empty for future extension
-export interface GlobalSetupContext {}
+export interface GlobalSetupContext {
+  /** AI coding agent running the CLI (see `detectAgent`); undefined when none is detected */
+  agent?: AgentInfo | undefined;
+}
 
 /**
  * Context provided to global cleanup function (runMain/runCommand level)
  */
 export interface GlobalCleanupContext {
+  /** AI coding agent running the CLI (see `detectAgent`); undefined when none is detected */
+  agent?: AgentInfo | undefined;
   /** Error if command execution failed */
   error?: Error | undefined;
 }
+
+/**
+ * Context passed to a function-form {@link AgentHelp}
+ */
+export interface AgentHelpContext {
+  /** The detected agent */
+  agent: AgentInfo;
+  /** Subcommand names from the root to the command whose help is shown (empty at the root) */
+  commandPath: readonly string[];
+}
+
+/**
+ * Agent-only guidance prepended to help output (Markdown, rendered like
+ * `notes`). A function form can vary it per agent or command, and returns
+ * `undefined` to show nothing.
+ */
+export type AgentHelp = string | ((context: AgentHelpContext) => string | undefined);
 
 /**
  * Base command interface (shared properties)
@@ -269,6 +291,13 @@ export interface MainOptions {
   /** Prompt resolver for interactive missing-arg prompts (e.g. from `politty/prompt/clack`). */
   prompt?: PromptResolver | undefined;
   /**
+   * Guidance for AI coding agents, shown above `--help`/`--help-all` output
+   * (and the help shown for a missing or unknown subcommand) only when
+   * `detectAgent()` detects one; humans never see it. `--help-json` carries
+   * it as the `agentHelp` field.
+   */
+  agentHelp?: AgentHelp | undefined;
+  /**
    * Fallback hook for CLI plugin dispatch, invoked when a positional is not a
    * known subcommand at any level whose command exposes subcommands (e.g. exec
    * an external `<cli>-<path...>-<name>` binary).
@@ -341,6 +370,13 @@ export interface RunCommandOptions {
   cleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
   /** Prompt resolver for interactive missing-arg prompts (e.g. from `politty/prompt/clack`). */
   prompt?: PromptResolver | undefined;
+  /**
+   * Guidance for AI coding agents, shown above `--help`/`--help-all` output
+   * (and the help shown for a missing or unknown subcommand) only when
+   * `detectAgent()` detects one; humans never see it. `--help-json` carries
+   * it as the `agentHelp` field.
+   */
+  agentHelp?: AgentHelp | undefined;
 }
 
 /**
@@ -370,6 +406,8 @@ export interface InternalRunOptions {
   prompt?: PromptResolver | undefined;
   /** @internal Fallback handler for unknown subcommands (CLI plugin dispatch). */
   onUnknownSubcommand?: UnknownSubcommandHandler | undefined;
+  /** @internal Agent-only help preamble */
+  agentHelp?: AgentHelp | undefined;
 }
 
 /**
