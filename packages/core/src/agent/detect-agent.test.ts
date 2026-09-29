@@ -38,15 +38,23 @@ function collectConditionTypes(condition: SpecCondition): string[] {
   return [condition.type, ...(condition.conditions ?? []).flatMap(collectConditionTypes)];
 }
 
-function readUpstreamAgentsJson(): unknown {
-  const require = createRequire(import.meta.url);
-  const upstreamDir = dirname(require.resolve("detect-agent"));
-  return JSON.parse(readFileSync(join(upstreamDir, "..", "agents.json"), "utf8"));
+function readJson(path: string): unknown {
+  return JSON.parse(readFileSync(path, "utf8"));
 }
+
+const require = createRequire(import.meta.url);
+const upstreamDir = join(dirname(require.resolve("detect-agent")), "..");
 
 describe("vendored detect-agent spec", () => {
   it("is identical to the agents.json of the installed detect-agent devDependency", () => {
-    expect(agentsSpec).toEqual(readUpstreamAgentsJson());
+    expect(agentsSpec).toEqual(readJson(join(upstreamDir, "agents.json")));
+  });
+
+  it("vendors the agents.schema.json that agents.json references", () => {
+    expect(agentsSpec.$schema).toBe("./agents.schema.json");
+    expect(readJson(join(import.meta.dirname, "spec/agents.schema.json"))).toEqual(
+      readJson(join(upstreamDir, "agents.schema.json")),
+    );
   });
 
   it("is spec version 1", () => {
@@ -129,6 +137,19 @@ describe("detectAgent", () => {
       id: "my-agent",
       rawId: "my-agent",
     });
+  });
+
+  it("keeps a custom AI_AGENT when the file check throws", () => {
+    expect(
+      detectAgent(
+        { AI_AGENT: "my-agent" },
+        {
+          fileExists: () => {
+            throw new Error("boom");
+          },
+        },
+      ),
+    ).toStrictEqual({ id: "my-agent", rawId: "my-agent" });
   });
 
   it("returns undefined instead of throwing when the file check throws", () => {

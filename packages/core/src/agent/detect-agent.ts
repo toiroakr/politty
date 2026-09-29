@@ -83,7 +83,11 @@ function evaluate(condition: Condition, env: Env, probes: Probes): boolean {
     case "no_tty":
       return !probes.isTTY;
     case "file_exists":
-      return probes.fileExists(condition.path);
+      try {
+        return probes.fileExists(condition.path);
+      } catch {
+        return false;
+      }
     case "anyOf":
       return condition.conditions.some((sub) => evaluate(sub, env, probes));
     case "allOf":

@@ -1,4 +1,4 @@
-agents.json and testcases.json in this directory are copied from
+agents.json, agents.schema.json and testcases.json in this directory are copied from
 vercel/detect-agent (https://github.com/vercel/detect-agent),
 Copyright Vercel, Inc., licensed under the Apache License, Version 2.0.
 

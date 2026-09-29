@@ -11,6 +11,7 @@ const upstreamDir = join(coreDir, "node_modules/detect-agent");
 
 const { version } = JSON.parse(readFileSync(join(upstreamDir, "package.json"), "utf8"));
 const agents = JSON.parse(readFileSync(join(upstreamDir, "agents.json"), "utf8"));
+const schema = JSON.parse(readFileSync(join(upstreamDir, "agents.schema.json"), "utf8"));
 
 // The npm tarball does not ship testcases.json, so it comes from the git tag
 // matching the installed package version.
@@ -22,10 +23,12 @@ if (!response.ok) {
 const testcases = await response.json();
 
 const agentsPath = join(specDir, "agents.json");
+const schemaPath = join(specDir, "agents.schema.json");
 const testcasesPath = join(specDir, "testcases.json");
 const idsPath = join(coreDir, "src/agent/known-agent-ids.ts");
 
 writeFileSync(agentsPath, `${JSON.stringify(agents, null, 2)}\n`);
+writeFileSync(schemaPath, `${JSON.stringify(schema, null, 2)}\n`);
 writeFileSync(testcasesPath, `${JSON.stringify(testcases, null, 2)}\n`);
 writeFileSync(
   idsPath,
@@ -36,7 +39,7 @@ writeFileSync(
   ].join("\n"),
 );
 
-execFileSync("pnpm", ["exec", "oxfmt", agentsPath, testcasesPath, idsPath], {
+execFileSync("pnpm", ["exec", "oxfmt", agentsPath, schemaPath, testcasesPath, idsPath], {
   cwd: coreDir,
   stdio: "inherit",
 });
