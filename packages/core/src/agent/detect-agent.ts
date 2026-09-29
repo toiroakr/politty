@@ -20,8 +20,9 @@ export interface AgentInfo {
    */
   id: KnownAgentId | (string & {});
   /**
-   * The id as the detect-agent spec reports it: the `AI_AGENT` value verbatim
-   * when set (e.g. `"claude-code_2-1-284_agent"`), otherwise the same as `id`.
+   * The id as the detect-agent spec reports it: the trimmed `AI_AGENT` value
+   * when non-empty (e.g. `"claude-code_2-1-284_agent"`), otherwise the same as
+   * `id`.
    */
   rawId: string;
 }
@@ -100,7 +101,7 @@ function evaluate(condition: Condition, env: Env, probes: Probes): boolean {
 /**
  * Detect whether the process runs under an AI coding agent, following the
  * [detect-agent](https://github.com/vercel/detect-agent) spec: a non-empty
- * `AI_AGENT` wins verbatim as `rawId`, then the spec's agents are checked in
+ * `AI_AGENT` (trimmed) wins as `rawId`, then the spec's agents are checked in
  * order. `id` normalizes the result to a spec name when possible.
  * `POLITTY_NO_AGENT` (any non-empty value) disables detection. Never throws.
  *

@@ -364,7 +364,7 @@ function detectAgent(
 Detection follows the language-agnostic spec of [vercel/detect-agent](https://github.com/vercel/detect-agent) (vendored `agents.json`, Apache-2.0):
 
 1. `POLITTY_NO_AGENT` set to any non-empty value → `undefined`. Use it when a human types into an agent's terminal and wants the normal help.
-2. `AI_AGENT` set to a non-empty value → an agent, with that value (trimmed) as `rawId`, verbatim.
+2. `AI_AGENT` non-empty after trimming → an agent, with the trimmed value as `rawId`.
 3. The spec's agents are checked in order and the first match wins (e.g. `CLAUDECODE=1` → `claude_code`, `CODEX_THREAD_ID` → `codex_cli`, `CURSOR_AGENT` → `cursor-cli`).
 
 `id` is normalized to the spec's name even when `AI_AGENT` carries a custom value: `AI_AGENT` itself when it is a known name, otherwise the first spec agent whose markers match, falling back to the custom `AI_AGENT` value when none does. `rawId` is what the detect-agent spec itself reports. Claude Code, for example, sets `AI_AGENT=claude-code_<version>_agent` alongside `CLAUDECODE=1`, so `id` is `"claude_code"` while `rawId` is the versioned value.
@@ -882,7 +882,7 @@ type KnownAgentId = "claude_code" | "codex_cli" | "cursor" | ...; // the spec's 
 interface AgentInfo {
   /** The spec's name for the agent; the custom AI_AGENT value when no spec agent matches */
   id: KnownAgentId | (string & {});
-  /** The AI_AGENT value verbatim when set, otherwise the same as id */
+  /** The trimmed AI_AGENT value when non-empty, otherwise the same as id */
   rawId: string;
 }
 ```
