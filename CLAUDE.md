@@ -36,3 +36,12 @@ hand, and only then can CI take over:
 Skipping step 1 makes the first `changeset publish` after the merge fail on the
 new name while the already-registered packages publish, leaving a half-released
 set.
+
+## Vendored detect-agent spec
+
+`packages/core/src/agent/spec/` vendors `agents.json` and `testcases.json`
+from [vercel/detect-agent](https://github.com/vercel/detect-agent). When the
+`detect-agent` devDependency of `@politty/core` is bumped (e.g. by Renovate),
+`packages/core/src/agent/detect-agent.test.ts` fails until the vendored files
+are refreshed with `pnpm --filter @politty/core sync:agent-spec`, which also
+regenerates `known-agent-ids.ts`.

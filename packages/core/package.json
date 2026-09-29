@@ -19,7 +19,11 @@
     "./prompt": "./src/prompt/index.ts",
     "./prompt/clack": "./src/prompt/clack/index.ts",
     "./prompt/inquirer": "./src/prompt/inquirer/index.ts",
+    "./agent": "./src/agent/index.ts",
     "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "sync:agent-spec": "node scripts/sync-agent-spec.mjs"
   },
   "dependencies": {
     "yaml": "^2.9.1"
@@ -28,6 +32,7 @@
     "@clack/prompts": "1.2.0",
     "@inquirer/prompts": "8.7.2",
     "@types/node": "25.9.8",
+    "detect-agent": "1.2.0",
     "zod": "4.6.5"
   },
   "engines": {
