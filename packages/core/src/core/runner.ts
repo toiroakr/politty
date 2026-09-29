@@ -1,3 +1,4 @@
+import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
 import { enableCompileCache } from "../compile-cache.js";
 import { executeLifecycle } from "../executor/command-runner.js";
 import { createLogCollector, emptyLogs, mergeLogs } from "../executor/log-collector.js";
@@ -96,6 +97,42 @@ function attachInvocation(target: Record<string, unknown>, invocation: RunInvoca
 }
 
 /**
+ * Attach a non-enumerable `$agent` value to the final args object, mirroring
+ * `attachInvocation`'s visibility.
+ */
+function attachAgent(target: Record<string, unknown>, agent: AgentInfo | undefined): void {
+  Object.defineProperty(target, "$agent", {
+    value: agent,
+    enumerable: false,
+  });
+}
+
+/**
+ * Pass the detected agent to a global cleanup hook, so every internal caller
+ * (normal exit, setup failure, signal, plugin dispatch) only supplies `error`.
+ */
+function bindAgentToCleanup(
+  cleanup: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined,
+  agent: AgentInfo | undefined,
+): ((context: GlobalCleanupContext) => void | Promise<void>) | undefined {
+  return cleanup && ((context) => cleanup({ ...context, agent }));
+}
+
+/**
+ * Resolve the agent-only help preamble for the command whose help is shown.
+ */
+function resolveAgentHelp(
+  options: InternalCommandOptions,
+  context: CommandContext,
+): string | undefined {
+  const { agentHelp, _agent: agent } = options;
+  if (!agentHelp || !agent) return undefined;
+  return typeof agentHelp === "string"
+    ? agentHelp
+    : agentHelp({ agent, commandPath: context.commandPath ?? [] });
+}
+
+/**
  * Resolve the `RunInvocation` metadata for the command about to run: the
  * literal CLI token that reached it (canonical name or alias), and the
  * canonical name if that token was an alias.
@@ -126,6 +163,8 @@ interface InternalCommandOptions extends InternalRunOptions {
   _precedingArgs?: readonly string[] | undefined;
   /** Global cleanup hook for signal handling */
   _globalCleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
+  /** AI coding agent detected once per run */
+  _agent?: AgentInfo | undefined;
 }
 
 /**
@@ -160,6 +199,8 @@ export async function runCommand<TResult = unknown>(
   options: RunCommandOptions = {},
 ): Promise<RunResult<TResult>> {
   const globalExtracted = extractAndValidateGlobal(options);
+  const agent = detectAgent();
+  const globalCleanup = bindAgentToCleanup(options.cleanup, agent);
 
   // Start log collection for global setup/cleanup if enabled
   const shouldCaptureLogs = options.captureLogs ?? false;
@@ -169,12 +210,12 @@ export async function runCommand<TResult = unknown>(
   if (options.setup) {
     globalCollector?.start();
     try {
-      await options.setup({});
+      await options.setup({ agent });
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
-      if (options.cleanup) {
+      if (globalCleanup) {
         try {
-          await options.cleanup({ error });
+          await globalCleanup({ error });
         } catch {
           // Swallow cleanup error when setup already failed
         }
@@ -190,19 +231,20 @@ export async function runCommand<TResult = unknown>(
     ...options,
     handleSignals: false,
     _globalExtracted: globalExtracted,
-    _globalCleanup: options.cleanup,
+    _globalCleanup: globalCleanup,
     _existingLogs: globalCollector?.getLogs(),
+    _agent: agent,
   });
 
   // Global cleanup (always)
-  if (options.cleanup) {
+  if (globalCleanup) {
     const cleanupCollector = shouldCaptureLogs ? createLogCollector() : null;
     cleanupCollector?.start();
     const cleanupCtx: GlobalCleanupContext = {
       error: !result.success ? result.error : undefined,
     };
     try {
-      await options.cleanup(cleanupCtx);
+      await globalCleanup(cleanupCtx);
     } catch (e) {
       if (result.success) {
         const error = e instanceof Error ? e : new Error(String(e));
@@ -327,6 +369,8 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
   }
 
   const globalExtracted = extractAndValidateGlobal(effectiveOptions);
+  const agent = detectAgent();
+  const globalCleanup = bindAgentToCleanup(effectiveOptions.cleanup, agent);
 
   // Validate the root command's own `defaultSubCommand` before plugin dispatch
   // below: that dispatch can `process.exit` before ever reaching
@@ -375,12 +419,12 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
   // Global setup
   if (effectiveOptions.setup) {
     try {
-      await effectiveOptions.setup({});
+      await effectiveOptions.setup({ agent });
     } catch (e) {
       const error = e instanceof Error ? e : new Error(String(e));
-      if (effectiveOptions.cleanup) {
+      if (globalCleanup) {
         try {
-          await effectiveOptions.cleanup({ error });
+          await globalCleanup({ error });
         } catch {
           // Swallow cleanup error when setup already failed
         }
@@ -398,8 +442,10 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     globalArgs: effectiveOptions.globalArgs,
     prompt: effectiveOptions.prompt,
     onUnknownSubcommand: effectiveOptions.onUnknownSubcommand,
+    agentHelp: effectiveOptions.agentHelp,
     _globalExtracted: globalExtracted,
-    _globalCleanup: effectiveOptions.cleanup,
+    _globalCleanup: globalCleanup,
+    _agent: agent,
     _context: {
       commandPath: [],
       rootName: command.name,
@@ -415,12 +461,12 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
   }
 
   // Global cleanup (always)
-  if (effectiveOptions.cleanup) {
+  if (globalCleanup) {
     const cleanupCtx: GlobalCleanupContext = {
       error: !result.success ? result.error : undefined,
     };
     try {
-      await effectiveOptions.cleanup(cleanupCtx);
+      await globalCleanup(cleanupCtx);
     } catch {
       // Swallow - we're about to exit anyway
     }
@@ -576,14 +622,16 @@ async function runCommandInternal<TResult = unknown>(
         }
       }
 
+      const agentHelp = resolveAgentHelp(options, context);
       if (parseResult.helpJsonRequested) {
-        const helpData = generateHelpData(command, { context });
+        const helpData = generateHelpData(command, { context, agentHelp });
         logger.log(JSON.stringify(helpData));
       } else {
         const help = generateHelp(command, {
           showSubcommands: options.showSubcommands ?? true,
           showSubcommandOptions: parseResult.helpAllRequested || options.showSubcommandOptions,
           context,
+          agentHelp,
         });
         logger.log(help);
       }
@@ -768,6 +816,7 @@ async function runCommandInternal<TResult = unknown>(
       const help = generateHelp(command, {
         showSubcommands: options.showSubcommands ?? true,
         context,
+        agentHelp: resolveAgentHelp(options, context),
       });
       logger.log(help);
       collector?.stop();
@@ -909,6 +958,7 @@ async function runCommandInternal<TResult = unknown>(
       for (const name of envFallbackGlobalFields) globalSourceMap.set(name, "env");
       attachArgSource(validatedGlobalArgs, globalSourceMap);
       attachInvocation(validatedGlobalArgs, resolveInvocation(command, context));
+      attachAgent(validatedGlobalArgs, options._agent);
       const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
       if (options._globalExtracted && !isCompletionInvocation) {
         await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
@@ -992,6 +1042,7 @@ async function runCommandInternal<TResult = unknown>(
     for (const name of envFallbackGlobalFields) globalSourceMap.set(name, "env");
     attachArgSource(validatedGlobalArgs, globalSourceMap);
     attachInvocation(validatedGlobalArgs, resolveInvocation(command, context));
+    attachAgent(validatedGlobalArgs, options._agent);
     const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
 
     // Run effects after all validations succeed (global effects first, then command effects)
@@ -1037,6 +1088,7 @@ async function runCommandInternal<TResult = unknown>(
     }
     attachArgSource(mergedPlainArgs, argSourceMap);
     attachInvocation(mergedPlainArgs, resolveInvocation(command, context));
+    attachAgent(mergedPlainArgs, options._agent);
     const mergedArgs = createDualCaseProxy(mergedPlainArgs);
 
     // Run the command

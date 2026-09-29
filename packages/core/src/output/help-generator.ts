@@ -65,6 +65,8 @@ export interface HelpOptions {
   descriptions?: BuiltinOptionDescriptions | undefined;
   /** Command hierarchy context */
   context?: CommandContext | undefined;
+  /** Agent-only guidance (Markdown) shown above everything else */
+  agentHelp?: string | undefined;
 }
 
 /**
@@ -229,6 +231,8 @@ export interface HelpData {
   examples?: Example[] | undefined;
   /** Additional notes (raw Markdown, unrendered) */
   notes?: string | undefined;
+  /** Agent-only guidance (raw Markdown), set only when an AI coding agent is detected */
+  agentHelp?: string | undefined;
 }
 
 /**
@@ -918,6 +922,10 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   const sections: string[] = [];
   const context = options.context;
 
+  if (options.agentHelp) {
+    sections.push(renderMarkdown(options.agentHelp));
+  }
+
   // Command name + version
   const displayName = buildFullCommandName(command, context);
   if (displayName) {
@@ -1035,6 +1043,8 @@ export interface HelpDataOptions {
   descriptions?: BuiltinOptionDescriptions | undefined;
   /** Command hierarchy context */
   context?: CommandContext | undefined;
+  /** Agent-only guidance (raw Markdown) to include as {@link HelpData.agentHelp} */
+  agentHelp?: string | undefined;
 }
 
 /**
@@ -1236,6 +1246,7 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
     subcommands,
     examples: command.examples,
     notes: command.notes,
+    agentHelp: options.agentHelp,
   };
 }
 

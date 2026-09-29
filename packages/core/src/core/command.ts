@@ -1,5 +1,6 @@
 import type { InternalArgsSchema } from "../adapter/internal-args.js";
 import type { InferSchemaOutput, SchemaLike } from "../adapter/standard-schema.js";
+import type { AgentInfo } from "../agent/detect-agent.js";
 import type {
   ArgSource,
   ArgsSchema,
@@ -39,7 +40,7 @@ export type MergedArgs<TLocalArgs, TGlobalArgs> =
   IsEmpty<TGlobalArgs> extends true ? TLocalArgs : TLocalArgs & WithCaseVariants<TGlobalArgs>;
 
 /**
- * Add the `$source` and `$invocation` run-time metadata helpers.
+ * Add the `$source`, `$invocation` and `$agent` run-time metadata helpers.
  *
  * `$source` reports whether a given field's final value came from an
  * explicit CLI token, a `field.env` fallback, or neither (schema default /
@@ -53,10 +54,14 @@ export type MergedArgs<TLocalArgs, TGlobalArgs> =
  *
  * `$invocation` reports the CLI name (canonical or alias) this command was
  * invoked with.
+ *
+ * `$agent` reports the AI coding agent running the CLI (see `detectAgent`),
+ * or `undefined` when none is detected.
  */
 type WithRunMeta<T> = T & {
   $source?: (name: string) => ArgSource;
   $invocation?: RunInvocation;
+  $agent?: AgentInfo | undefined;
 };
 
 /**

@@ -9,7 +9,10 @@ export default defineConfig({
     // runs never litter the real user cache with fixture command names. The
     // pid suffix isolates concurrent vitest processes (watch mode + CI etc.)
     // from each other.
+    // Tests often run inside a coding agent, whose env would otherwise leak
+    // agent-only help and `$agent` into every run; agent tests re-enable it.
     env: {
+      POLITTY_NO_AGENT: "1",
       XDG_CACHE_HOME: join(tmpdir(), `politty-vitest-xdg-cache-${process.pid}`),
     },
     projects: [
