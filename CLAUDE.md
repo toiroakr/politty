@@ -39,9 +39,12 @@ set.
 
 ## Vendored detect-agent spec
 
-`packages/core/src/agent/spec/` vendors `agents.json` and `testcases.json`
-from [vercel/detect-agent](https://github.com/vercel/detect-agent). When the
-`detect-agent` devDependency of `@politty/core` is bumped (e.g. by Renovate),
+`packages/core/src/agent/spec/` vendors `agents.json`, `agents.schema.json`
+and `testcases.json` from [vercel/detect-agent](https://github.com/vercel/detect-agent).
+When the `detect-agent` devDependency of `@politty/core` is bumped (e.g. by
+Renovate), `.github/workflows/agent-spec-sync.yml` runs
+`pnpm --filter @politty/core sync:agent-spec` on the PR and autofix.ci commits
+the refreshed files (including the regenerated `known-agent-ids.ts`). Run the
+same command locally when bumping it by hand:
 `packages/core/src/agent/detect-agent.test.ts` fails until the vendored files
-are refreshed with `pnpm --filter @politty/core sync:agent-spec`, which also
-regenerates `known-agent-ids.ts`.
+match the installed version.
