@@ -2231,6 +2231,18 @@ describe("Redundant positionals", () => {
       );
     });
 
+    it("should accept --flag=false for a z.literal(false) argument", async () => {
+      const cmd = defineCommand({
+        name: "c",
+        args: z.object({ flag: arg(z.literal(false)) }),
+        run: (args) => args.flag,
+      });
+
+      const result = await runCommand(cmd, ["--flag=false"]);
+
+      expect(result).toMatchObject({ success: true, result: false });
+    });
+
     it("should error on a positional token for an argument the selected variant defines as an option", async () => {
       using _warn = spyOnConsoleWarn();
       using _error = spyOnConsoleError();

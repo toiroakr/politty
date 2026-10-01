@@ -107,8 +107,6 @@ interface ZodV4Def {
   argMeta?: ArgMeta;
   /** politty's arg() metadata, alternate storage location */
   meta?: ArgMeta;
-  /** Literal values (z.literal) */
-  values?: unknown[];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -190,6 +188,7 @@ function unwrapSchema(schema: z.ZodType): z.ZodType {
  */
 function detectType(schema: z.ZodType): ResolvedFieldMeta["type"] {
   const innerSchema = unwrapSchema(schema);
+  if (acceptsOnlyBooleans(innerSchema)) return "boolean";
   const typeName = getTypeName(innerSchema);
 
   switch (typeName) {
@@ -203,17 +202,14 @@ function detectType(schema: z.ZodType): ResolvedFieldMeta["type"] {
       return "boolean";
     case "array":
       return "array";
-    case "literal":
-      return isTrueLiteral(innerSchema) ? "boolean" : "unknown";
     default:
       return "unknown";
   }
 }
 
-function isTrueLiteral(schema: z.ZodType): boolean {
-  const def = (schema as ZodSchemaWithDef).def ?? (schema as ZodSchemaWithDef)._def;
-  const values = def?.values ?? [];
-  return values.length > 0 && values.every((v) => v === true);
+function acceptsOnlyBooleans(schema: z.ZodType): boolean {
+  const values = [...(schema._zod.values ?? [])];
+  return values.length > 0 && values.every((v) => typeof v === "boolean");
 }
 
 /**

@@ -104,8 +104,6 @@ interface ZodV4Def {
   /** Pipe output schema (zod v4 transform/refine) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   out?: any;
-  /** Literal values (z.literal) */
-  values?: unknown[];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -189,6 +187,7 @@ function unwrapSchema(schema: z.ZodMiniType): z.ZodMiniType {
  */
 function detectType(schema: z.ZodMiniType): ResolvedFieldMeta["type"] {
   const innerSchema = unwrapSchema(schema);
+  if (acceptsOnlyBooleans(innerSchema)) return "boolean";
   const typeName = getTypeName(innerSchema);
 
   switch (typeName) {
@@ -202,16 +201,14 @@ function detectType(schema: z.ZodMiniType): ResolvedFieldMeta["type"] {
       return "boolean";
     case "array":
       return "array";
-    case "literal":
-      return isTrueLiteral(innerSchema) ? "boolean" : "unknown";
     default:
       return "unknown";
   }
 }
 
-function isTrueLiteral(schema: z.ZodMiniType): boolean {
-  const values = (schema as ZodSchemaWithDef).def?.values ?? [];
-  return values.length > 0 && values.every((v) => v === true);
+function acceptsOnlyBooleans(schema: z.ZodMiniType): boolean {
+  const values = [...(schema._zod.values ?? [])];
+  return values.length > 0 && values.every((v) => typeof v === "boolean");
 }
 
 /**
