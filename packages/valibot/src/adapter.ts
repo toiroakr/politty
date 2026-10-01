@@ -121,6 +121,7 @@ function detectType(schema: ValibotNode): ResolvedFieldMeta["type"] {
 }
 
 function acceptsOnlyBooleans(node: ValibotNode): boolean {
+  if (node.type === "boolean") return true;
   if (node.type === "literal") return typeof node.literal === "boolean";
   if (node.type !== "union" || !node.options?.length) return false;
   return (node.options as ValibotNode[]).every(acceptsOnlyBooleans);

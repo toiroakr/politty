@@ -408,6 +408,10 @@ describe("zod-mini adapter - literal value types", () => {
     expect(typeOf(z.union([z.literal(true), z.literal(false)]))).toBe("boolean");
   });
 
+  it("should treat a union of a boolean schema and a boolean literal as a boolean field", () => {
+    expect(typeOf(z.union([z.boolean(), z.literal(false)]))).toBe("boolean");
+  });
+
   it("should keep a union of boolean and string literals untyped so that --flag=auto still reads a value", () => {
     expect(typeOf(z.union([z.literal(true), z.literal("auto")]))).toBe("unknown");
   });

@@ -547,6 +547,10 @@ describe("valibot adapter - literal value types", () => {
     expect(typeOf(v.union([v.literal(true), v.literal(false)]))).toBe("boolean");
   });
 
+  it("should treat a union of a boolean schema and a boolean literal as a boolean field", () => {
+    expect(typeOf(v.union([v.boolean(), v.literal(false)]))).toBe("boolean");
+  });
+
   it("should keep a union of boolean and string literals untyped so that --flag=auto still reads a value", () => {
     expect(typeOf(v.union([v.literal(true), v.literal("auto")]))).toBe("unknown");
   });

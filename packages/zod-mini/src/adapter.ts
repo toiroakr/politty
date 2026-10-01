@@ -207,8 +207,13 @@ function detectType(schema: z.ZodMiniType): ResolvedFieldMeta["type"] {
 }
 
 function acceptsOnlyBooleans(schema: z.ZodMiniType): boolean {
-  const values = [...(schema._zod.values ?? [])];
-  return values.length > 0 && values.every((v) => typeof v === "boolean");
+  const values = schema._zod.values;
+  if (values) return values.size > 0 && [...values].every((v) => typeof v === "boolean");
+  const typeName = getTypeName(schema);
+  if (typeName === "boolean") return true;
+  if (typeName !== "union") return false;
+  const options = (schema as ZodSchemaWithDef).def?.options ?? [];
+  return options.length > 0 && options.every(acceptsOnlyBooleans);
 }
 
 /**
