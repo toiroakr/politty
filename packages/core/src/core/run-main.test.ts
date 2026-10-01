@@ -2208,6 +2208,29 @@ describe("Redundant positionals", () => {
       ]);
     });
 
+    it("should select the union option whose z.literal(true) flag is given without a value", async () => {
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "login",
+        args: z.xor([
+          z.strictObject({ profile: arg(z.string().optional()) }),
+          z.strictObject({
+            "machine-user": arg(z.literal(true)),
+            "client-id": arg(z.string()),
+          }),
+        ]),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--machine-user", "--client-id", "x"]);
+
+      expect(result.success).toBe(true);
+      expect(runFn).toHaveBeenCalledWith(
+        expect.objectContaining({ "machine-user": true, "client-id": "x" }),
+      );
+    });
+
     it("should error on a positional token for an argument the selected variant defines as an option", async () => {
       using _warn = spyOnConsoleWarn();
       using _error = spyOnConsoleError();

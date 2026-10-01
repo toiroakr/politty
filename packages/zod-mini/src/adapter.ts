@@ -104,6 +104,8 @@ interface ZodV4Def {
   /** Pipe output schema (zod v4 transform/refine) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   out?: any;
+  /** Literal values (z.literal) */
+  values?: unknown[];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -200,9 +202,16 @@ function detectType(schema: z.ZodMiniType): ResolvedFieldMeta["type"] {
       return "boolean";
     case "array":
       return "array";
+    case "literal":
+      return isBooleanLiteral(innerSchema) ? "boolean" : "unknown";
     default:
       return "unknown";
   }
+}
+
+function isBooleanLiteral(schema: z.ZodMiniType): boolean {
+  const values = (schema as ZodSchemaWithDef).def?.values ?? [];
+  return values.length > 0 && values.every((v) => typeof v === "boolean");
 }
 
 /**

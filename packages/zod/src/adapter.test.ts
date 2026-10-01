@@ -55,3 +55,15 @@ describe("zod adapter - pipe recursion", () => {
     expect(field?.defaultValue).toBe("info");
   });
 });
+
+describe("zod adapter - boolean literals", () => {
+  it("should treat z.literal(true) as a boolean field", () => {
+    const extracted = extractZodFields(z.object({ machineUser: z.literal(true) }));
+    expect(extracted.fields[0]?.type).toBe("boolean");
+  });
+
+  it("should treat z.literal(false) as a boolean field", () => {
+    const extracted = extractZodFields(z.object({ machineUser: z.literal(false) }));
+    expect(extracted.fields[0]?.type).toBe("boolean");
+  });
+});

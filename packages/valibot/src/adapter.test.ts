@@ -530,3 +530,15 @@ describe("valibot adapter", () => {
     });
   });
 });
+
+describe("valibot adapter - boolean literals", () => {
+  it("should treat v.literal(true) as a boolean field", () => {
+    const extracted = extractValibotFields(v.object({ machineUser: v.literal(true) }));
+    expect(extracted.fields[0]?.type).toBe("boolean");
+  });
+
+  it("should treat v.literal(false) as a boolean field", () => {
+    const extracted = extractValibotFields(v.object({ machineUser: v.literal(false) }));
+    expect(extracted.fields[0]?.type).toBe("boolean");
+  });
+});
