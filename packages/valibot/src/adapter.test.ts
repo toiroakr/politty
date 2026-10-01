@@ -537,8 +537,8 @@ describe("valibot adapter - boolean literals", () => {
     expect(extracted.fields[0]?.type).toBe("boolean");
   });
 
-  it("should treat v.literal(false) as a boolean field", () => {
+  it("should not treat v.literal(false) as a boolean flag, which a bare --flag could never satisfy", () => {
     const extracted = extractValibotFields(v.object({ machineUser: v.literal(false) }));
-    expect(extracted.fields[0]?.type).toBe("boolean");
+    expect(extracted.fields[0]?.type).toBe("unknown");
   });
 });

@@ -204,16 +204,16 @@ function detectType(schema: z.ZodType): ResolvedFieldMeta["type"] {
     case "array":
       return "array";
     case "literal":
-      return isBooleanLiteral(innerSchema) ? "boolean" : "unknown";
+      return isTrueLiteral(innerSchema) ? "boolean" : "unknown";
     default:
       return "unknown";
   }
 }
 
-function isBooleanLiteral(schema: z.ZodType): boolean {
+function isTrueLiteral(schema: z.ZodType): boolean {
   const def = (schema as ZodSchemaWithDef).def ?? (schema as ZodSchemaWithDef)._def;
   const values = def?.values ?? [];
-  return values.length > 0 && values.every((v) => typeof v === "boolean");
+  return values.length > 0 && values.every((v) => v === true);
 }
 
 /**

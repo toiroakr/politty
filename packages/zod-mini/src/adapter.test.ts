@@ -394,8 +394,8 @@ describe("zod-mini adapter - boolean literals", () => {
     expect(extracted.fields[0]?.type).toBe("boolean");
   });
 
-  it("should treat z.literal(false) as a boolean field", () => {
+  it("should not treat z.literal(false) as a boolean flag, which a bare --flag could never satisfy", () => {
     const extracted = extractZodMiniFields(z.object({ machineUser: z.literal(false) }));
-    expect(extracted.fields[0]?.type).toBe("boolean");
+    expect(extracted.fields[0]?.type).toBe("unknown");
   });
 });

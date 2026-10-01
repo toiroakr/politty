@@ -112,7 +112,7 @@ function detectType(schema: ValibotNode): ResolvedFieldMeta["type"] {
   const inner = unwrapSchema(schema);
   const detected = bucketOf(inner.type);
   if (detected !== "unknown") return detected;
-  if (inner.type === "literal" && typeof inner.literal === "boolean") return "boolean";
+  if (inner.type === "literal" && inner.literal === true) return "boolean";
 
   if (inner.type === "unknown" || inner.type === "any") {
     return detectTypeFromPipes(schema) ?? "unknown";
