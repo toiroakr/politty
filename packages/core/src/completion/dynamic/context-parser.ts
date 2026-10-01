@@ -247,7 +247,8 @@ function parsePreSubGlobals(
         break;
       }
     } else {
-      globalParsedArgs[opt.name] = booleanFlagValue(opt, parsed, word);
+      const value = booleanFlagValue(opt, parsed, word);
+      if (value !== undefined) globalParsedArgs[opt.name] = value;
       captured.add(opt.name);
       i++;
     }
@@ -452,8 +453,9 @@ function hasInlineValue(word: string): boolean {
 }
 
 function booleanFlagValue(opt: CompletableOption, parsed: ParsedOption, word: string): unknown {
-  if (hasInlineValue(word)) return coerceBoolean(word.slice(word.indexOf("=") + 1));
-  return !isNegationOf(opt, parsed);
+  const negated = isNegationOf(opt, parsed);
+  if (!hasInlineValue(word)) return !negated;
+  return negated ? undefined : coerceBoolean(word.slice(word.indexOf("=") + 1));
 }
 
 /**
@@ -715,7 +717,8 @@ function scanCompletionContext(
    */
   const recordBooleanFlag = (opt: CompletableOption, parsed: ParsedOption, word = ""): void => {
     const target = opt.isGlobal === true ? globalParsedArgs : parsedArgs;
-    target[opt.name] = booleanFlagValue(opt, parsed, word);
+    const value = booleanFlagValue(opt, parsed, word);
+    if (value !== undefined) target[opt.name] = value;
   };
 
   // Process arguments to resolve subcommands and track state

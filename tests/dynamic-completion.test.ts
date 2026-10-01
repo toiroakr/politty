@@ -287,6 +287,32 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.beta).toBe(true);
     });
 
+    it("does not record a negation form given an inline value, which the runtime parser does not treat as negation", () => {
+      const negCmd = defineCommand({
+        name: "negcli",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: true }),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const ctx = parseCompletionContext(["--no-cache=true", "--field", ""], negCmd);
+      expect(ctx.parsedArgs.cache).toBeUndefined();
+    });
+
+    it("does not record a custom negation given an inline value", () => {
+      const negCmd = defineCommand({
+        name: "negcli",
+        args: z.object({
+          cache: arg(z.boolean().default(true), { negation: "disable-cache" }),
+          field: arg(z.string().optional()),
+        }),
+        run: () => {},
+      });
+      const ctx = parseCompletionContext(["--disable-cache=true", "--field", ""], negCmd);
+      expect(ctx.parsedArgs.cache).toBeUndefined();
+    });
+
     it("records negation flags as `false` in parsedArgs", () => {
       const negCmd = defineCommand({
         name: "negcli",
