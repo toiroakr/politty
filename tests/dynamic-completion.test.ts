@@ -156,6 +156,20 @@ describe("Dynamic completion (in-process resolver)", () => {
         const ctx = parseCompletionContext(["--action", "rollback", ""], releaseCmd);
         expect(ctx.positionals.map((p) => p.name)).toEqual([]);
       });
+
+      it("selects the variant from an inline false boolean discriminator", () => {
+        const dryRunCmd = defineCommand({
+          name: "release",
+          args: z.discriminatedUnion("dryRun", [
+            z.object({ dryRun: z.literal(true), target: arg(z.string(), { positional: true }) }),
+            z.object({ dryRun: z.literal(false), target: arg(z.string()) }),
+          ]),
+          run: () => {},
+        });
+
+        const ctx = parseCompletionContext(["--dry-run=false", ""], dryRunCmd);
+        expect(ctx.positionals.map((p) => p.name)).toEqual([]);
+      });
     });
 
     describe("named positional given as a long option", () => {
@@ -248,6 +262,11 @@ describe("Dynamic completion (in-process resolver)", () => {
     it("records short boolean aliases as `true` in parsedArgs", () => {
       const ctx = parseCompletionContext(["foo", "-v", "--field", ""], cmd);
       expect(ctx.parsedArgs.verbose).toBe(true);
+    });
+
+    it("reads an inline boolean flag value as the runtime parser does", () => {
+      const ctx = parseCompletionContext(["foo", "--verbose=false", "--field", ""], cmd);
+      expect(ctx.parsedArgs.verbose).toBe(false);
     });
 
     it("decomposes combined short boolean flags so each char is recorded", () => {
@@ -1441,6 +1460,16 @@ describe("Dynamic completion (in-process resolver)", () => {
         globals,
       );
       expect(ctx.parsedArgs.profile).toBe("prod");
+    });
+
+    it("reads an inline boolean value of a global flag given before the subcommand", () => {
+      const globals = z.object({ debug: arg(z.boolean().default(false)) });
+      const root = defineCommand({
+        name: "mycli",
+        subCommands: { child: defineCommand({ name: "child", run: () => {} }) },
+      });
+      const ctx = parseCompletionContext(["--debug=false", "child", ""], root, globals);
+      expect(ctx.parsedArgs.debug).toBe(false);
     });
 
     it("resolves a global's non-colliding alias even when a local owns the cliName", () => {
