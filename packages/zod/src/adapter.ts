@@ -188,6 +188,7 @@ function unwrapSchema(schema: z.ZodType): z.ZodType {
  */
 function detectType(schema: z.ZodType): ResolvedFieldMeta["type"] {
   const innerSchema = unwrapSchema(schema);
+  if (acceptsOnlyBooleans(innerSchema)) return "boolean";
   const typeName = getTypeName(innerSchema);
 
   switch (typeName) {
@@ -204,6 +205,17 @@ function detectType(schema: z.ZodType): ResolvedFieldMeta["type"] {
     default:
       return "unknown";
   }
+}
+
+function acceptsOnlyBooleans(schema: z.ZodType): boolean {
+  const values = schema._zod.values;
+  if (values) return values.size > 0 && [...values].every((v) => typeof v === "boolean");
+  const typeName = getTypeName(schema);
+  if (typeName === "boolean") return true;
+  if (typeName !== "union") return false;
+  const options =
+    ((schema as ZodSchemaWithDef).def ?? (schema as ZodSchemaWithDef)._def)?.options ?? [];
+  return options.length > 0 && options.every(acceptsOnlyBooleans);
 }
 
 /**

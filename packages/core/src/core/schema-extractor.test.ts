@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { extractFields, getUnknownKeysMode, toCamelCase } from "./schema-extractor.js";
+import {
+  extractFields,
+  getUnknownKeysMode,
+  selectDiscriminatedVariant,
+  toCamelCase,
+} from "./schema-extractor.js";
 
 describe("schema-extractor", () => {
   describe("getUnknownKeysMode", () => {
@@ -148,5 +153,18 @@ describe("schema-extractor", () => {
       expect(result.variants![0]!.discriminatorValue).toBe("a");
       expect(result.variants![1]!.discriminatorValue).toBe("b");
     });
+  });
+});
+
+describe("selectDiscriminatedVariant", () => {
+  const extracted = extractFields(
+    z.discriminatedUnion("mode", [
+      z.object({ mode: z.literal("a"), name: z.string() }),
+      z.object({ mode: z.literal("undefined"), name: z.string() }),
+    ]),
+  );
+
+  it("should not select a variant for a missing discriminator, even one declared as the string undefined", () => {
+    expect(selectDiscriminatedVariant(extracted, () => ({}))).toBe(extracted);
   });
 });

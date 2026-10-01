@@ -55,3 +55,31 @@ describe("zod adapter - pipe recursion", () => {
     expect(field?.defaultValue).toBe("info");
   });
 });
+
+describe("zod adapter - literal value types", () => {
+  const typeOf = (schema: z.ZodType) => extractZodFields(z.object({ f: schema })).fields[0]?.type;
+
+  it("should treat z.literal(true) as a boolean field", () => {
+    expect(typeOf(z.literal(true))).toBe("boolean");
+  });
+
+  it("should treat z.literal(false) as a boolean field so that --flag=false satisfies it", () => {
+    expect(typeOf(z.literal(false))).toBe("boolean");
+  });
+
+  it("should treat a multi-value boolean literal as a boolean field", () => {
+    expect(typeOf(z.literal([true, false]))).toBe("boolean");
+  });
+
+  it("should treat a union of boolean literals as a boolean field", () => {
+    expect(typeOf(z.union([z.literal(true), z.literal(false)]))).toBe("boolean");
+  });
+
+  it("should treat a union of a boolean schema and a boolean literal as a boolean field", () => {
+    expect(typeOf(z.union([z.boolean(), z.literal(false)]))).toBe("boolean");
+  });
+
+  it("should keep a union of boolean and string literals untyped so that --flag=auto still reads a value", () => {
+    expect(typeOf(z.union([z.literal(true), z.literal("auto")]))).toBe("unknown");
+  });
+});

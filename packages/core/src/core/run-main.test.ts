@@ -2208,6 +2208,75 @@ describe("Redundant positionals", () => {
       ]);
     });
 
+    it("should select the union option whose z.literal(true) flag is given without a value", async () => {
+      const runFn = vi.fn();
+
+      const cmd = defineCommand({
+        name: "login",
+        args: z.xor([
+          z.strictObject({ profile: arg(z.string().optional()) }),
+          z.strictObject({
+            "machine-user": arg(z.literal(true)),
+            "client-id": arg(z.string()),
+          }),
+        ]),
+        run: runFn,
+      });
+
+      const result = await runCommand(cmd, ["--machine-user", "--client-id", "x"]);
+
+      expect(result.success).toBe(true);
+      expect(runFn).toHaveBeenCalledWith(
+        expect.objectContaining({ "machine-user": true, "client-id": "x" }),
+      );
+    });
+
+    it("should accept --flag=false for a z.literal(false) argument", async () => {
+      const cmd = defineCommand({
+        name: "c",
+        args: z.object({ flag: arg(z.literal(false)) }),
+        run: (args) => args.flag,
+      });
+
+      const result = await runCommand(cmd, ["--flag=false"]);
+
+      expect(result).toMatchObject({ success: true, result: false });
+    });
+
+    it("should read argv with the variant a boolean discriminator selects", async () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("dryRun", [
+          z.object({ dryRun: z.literal(true), target: arg(z.string(), { positional: true }) }),
+          z.object({ dryRun: z.literal(false), target: arg(z.string()) }),
+        ]),
+        run: (args) => args.target,
+      });
+
+      const result = await runCommand(cmd, ["--dry-run=false", "--target", "v1"]);
+
+      expect(result).toMatchObject({ success: true, result: "v1" });
+    });
+
+    it("should leave a missing discriminator to schema validation, even when a variant declares the string undefined", async () => {
+      using _error = spyOnConsoleError();
+      const cmd = defineCommand({
+        name: "c",
+        args: z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("a"), name: arg(z.string()) }),
+          z.object({ mode: z.literal("undefined"), name: arg(z.string()) }),
+        ]),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["--name", "x"]);
+
+      expect(result.success).toBe(false);
+      expect(result.success ? "" : result.error.message).not.toContain(
+        "Arguments match none of the accepted forms",
+      );
+    });
+
     it("should error on a positional token for an argument the selected variant defines as an option", async () => {
       using _warn = spyOnConsoleWarn();
       using _error = spyOnConsoleError();

@@ -14,6 +14,7 @@ import {
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import { positionalSlotFields } from "../../parser/argv-parser.js";
+import { coerceBoolean } from "../../parser/coerce-boolean.js";
 import type { AnyCommand, ArgsSchema } from "../../types.js";
 import { collectOptionTokens } from "../shell-shared.js";
 import type { CompletableOption, CompletablePositional, ValueCompletion } from "../types.js";
@@ -246,7 +247,8 @@ function parsePreSubGlobals(
         break;
       }
     } else {
-      globalParsedArgs[opt.name] = !isNegationOf(opt, parsed);
+      const value = booleanFlagValue(opt, parsed, word);
+      if (value !== undefined) globalParsedArgs[opt.name] = value;
       captured.add(opt.name);
       i++;
     }
@@ -448,6 +450,12 @@ function parseOption(word: string): ParsedOption {
  */
 function hasInlineValue(word: string): boolean {
   return word.includes("=");
+}
+
+function booleanFlagValue(opt: CompletableOption, parsed: ParsedOption, word: string): unknown {
+  const negated = isNegationOf(opt, parsed);
+  if (!hasInlineValue(word)) return !negated;
+  return negated ? undefined : coerceBoolean(word.slice(word.indexOf("=") + 1));
 }
 
 /**
@@ -707,9 +715,10 @@ function scanCompletionContext(
    * based on flag state, so the absence of a writer here used to hide
    * boolean siblings entirely.
    */
-  const recordBooleanFlag = (opt: CompletableOption, parsed: ParsedOption): void => {
+  const recordBooleanFlag = (opt: CompletableOption, parsed: ParsedOption, word = ""): void => {
     const target = opt.isGlobal === true ? globalParsedArgs : parsedArgs;
-    target[opt.name] = !isNegationOf(opt, parsed);
+    const value = booleanFlagValue(opt, parsed, word);
+    if (value !== undefined) target[opt.name] = value;
   };
 
   // Process arguments to resolve subcommands and track state
@@ -798,7 +807,7 @@ function scanCompletionContext(
             }
           }
         } else {
-          recordBooleanFlag(opt, parsed);
+          recordBooleanFlag(opt, parsed, word);
         }
       }
       i++;

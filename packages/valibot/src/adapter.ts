@@ -112,11 +112,19 @@ function detectType(schema: ValibotNode): ResolvedFieldMeta["type"] {
   const inner = unwrapSchema(schema);
   const detected = bucketOf(inner.type);
   if (detected !== "unknown") return detected;
+  if (acceptsOnlyBooleans(inner)) return "boolean";
 
   if (inner.type === "unknown" || inner.type === "any") {
     return detectTypeFromPipes(schema) ?? "unknown";
   }
   return "unknown";
+}
+
+function acceptsOnlyBooleans(node: ValibotNode): boolean {
+  if (node.type === "boolean") return true;
+  if (node.type === "literal") return typeof node.literal === "boolean";
+  if (node.type !== "union" || !node.options?.length) return false;
+  return (node.options as ValibotNode[]).every(acceptsOnlyBooleans);
 }
 
 /**

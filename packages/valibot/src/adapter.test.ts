@@ -530,3 +530,28 @@ describe("valibot adapter", () => {
     });
   });
 });
+
+describe("valibot adapter - literal value types", () => {
+  const typeOf = (schema: v.GenericSchema) =>
+    extractValibotFields(v.object({ f: schema })).fields[0]?.type;
+
+  it("should treat v.literal(true) as a boolean field", () => {
+    expect(typeOf(v.literal(true))).toBe("boolean");
+  });
+
+  it("should treat v.literal(false) as a boolean field so that --flag=false satisfies it", () => {
+    expect(typeOf(v.literal(false))).toBe("boolean");
+  });
+
+  it("should treat a union of boolean literals as a boolean field", () => {
+    expect(typeOf(v.union([v.literal(true), v.literal(false)]))).toBe("boolean");
+  });
+
+  it("should treat a union of a boolean schema and a boolean literal as a boolean field", () => {
+    expect(typeOf(v.union([v.boolean(), v.literal(false)]))).toBe("boolean");
+  });
+
+  it("should keep a union of boolean and string literals untyped so that --flag=auto still reads a value", () => {
+    expect(typeOf(v.union([v.literal(true), v.literal("auto")]))).toBe("unknown");
+  });
+});
