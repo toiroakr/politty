@@ -2258,6 +2258,25 @@ describe("Redundant positionals", () => {
       expect(result).toMatchObject({ success: true, result: "v1" });
     });
 
+    it("should leave a missing discriminator to schema validation, even when a variant declares the string undefined", async () => {
+      using _error = spyOnConsoleError();
+      const cmd = defineCommand({
+        name: "c",
+        args: z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("a"), name: arg(z.string()) }),
+          z.object({ mode: z.literal("undefined"), name: arg(z.string()) }),
+        ]),
+        run: () => {},
+      });
+
+      const result = await runCommand(cmd, ["--name", "x"]);
+
+      expect(result.success).toBe(false);
+      expect(result.success ? "" : result.error.message).not.toContain(
+        "Arguments match none of the accepted forms",
+      );
+    });
+
     it("should error on a positional token for an argument the selected variant defines as an option", async () => {
       using _warn = spyOnConsoleWarn();
       using _error = spyOnConsoleError();

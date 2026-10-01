@@ -175,7 +175,8 @@ export function selectDiscriminatedVariant(
   if (!discriminator || !variants) return extracted;
   for (const variant of variants) {
     const variantFields = { ...extracted, fields: variant.fields };
-    if (String(readValues(variantFields)[discriminator]) === variant.discriminatorValue) {
+    const value = readValues(variantFields)[discriminator];
+    if (value !== undefined && String(value) === variant.discriminatorValue) {
       return variantFields;
     }
   }
