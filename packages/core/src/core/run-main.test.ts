@@ -2243,6 +2243,21 @@ describe("Redundant positionals", () => {
       expect(result).toMatchObject({ success: true, result: false });
     });
 
+    it("should read argv with the variant a boolean discriminator selects", async () => {
+      const cmd = defineCommand({
+        name: "release",
+        args: z.discriminatedUnion("dryRun", [
+          z.object({ dryRun: z.literal(true), target: arg(z.string(), { positional: true }) }),
+          z.object({ dryRun: z.literal(false), target: arg(z.string()) }),
+        ]),
+        run: (args) => args.target,
+      });
+
+      const result = await runCommand(cmd, ["--dry-run=false", "--target", "v1"]);
+
+      expect(result).toMatchObject({ success: true, result: "v1" });
+    });
+
     it("should error on a positional token for an argument the selected variant defines as an option", async () => {
       using _warn = spyOnConsoleWarn();
       using _error = spyOnConsoleError();

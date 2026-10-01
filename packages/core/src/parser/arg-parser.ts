@@ -368,7 +368,7 @@ function selectArgvFields(
     if (selected !== extracted) return selected;
     const declared = new Set(variants.map((v) => v.discriminatorValue));
     const readsAnotherVariant = variants.some((v) =>
-      declared.has(readValues({ ...extracted, fields: v.fields })[discriminator] as string),
+      declared.has(String(readValues({ ...extracted, fields: v.fields })[discriminator])),
     );
     return readsAnotherVariant ? undefined : extracted;
   }
