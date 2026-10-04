@@ -45,7 +45,7 @@ vi.stubEnv("AI_AGENT", "codex_cli"); // args.$agent => { id: "codex_cli", rawId:
 
 ### Testing Validation Errors
 
-You can verify that the expected exit code (usually 1) is returned when invalid arguments are passed.
+Invalid arguments fail with exit code 2, which separates them from a command that failed while running (exit code 1).
 
 ```typescript
 it("should fail validation", async () => {
@@ -59,7 +59,7 @@ it("should fail validation", async () => {
 
   const result = await runCommand(command, ["--age", "not-a-number"]);
 
-  expect(result.exitCode).toBe(1);
+  expect(result.exitCode).toBe(2);
 });
 ```
 

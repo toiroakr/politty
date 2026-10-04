@@ -73,7 +73,7 @@ describe("13-intersection", () => {
     using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["-o", "output.txt"]);
 
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(2);
   });
 
   it("fails when output is not provided", async () => {
@@ -81,7 +81,7 @@ describe("13-intersection", () => {
     using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["input.txt"]);
 
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(2);
   });
 
   it("documentation", async () => {

@@ -351,7 +351,7 @@ Define a command.
 
 ### `runMain(command, options?)`
 
-CLI entry point. Handles signals and calls `process.exit()`.
+CLI entry point. Handles signals and calls `process.exit()`: `2` for an invalid command line, `1` for other failures.
 
 ```typescript
 runMain(command, {

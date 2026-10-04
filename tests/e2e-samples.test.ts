@@ -433,7 +433,7 @@ describe("E2E Sample Commands", () => {
 
       const result = await runCommand(cli, ["data.csv", "-o", "out.txt", "-f", "invalid"]);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
     });
   });
 
@@ -557,7 +557,7 @@ describe("E2E Sample Commands", () => {
       const { cli } = createServerCli();
 
       const result = await runCommand(cli, ["start", "-p", "99999"]);
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
     });
 
     it("should require cert and key for SSL", async () => {

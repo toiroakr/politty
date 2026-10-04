@@ -71,7 +71,7 @@ describe("30-template-docs", () => {
     using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
     const result = await runCommand(command, ["add"]);
 
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(2);
   });
 
   it("documentation", async () => {
