@@ -63,9 +63,8 @@ const defaultLogger: Logger = {
 };
 
 /**
- * Exit code for invocations the command line itself got wrong (an unknown
- * flag or subcommand, or arguments that fail validation), following the
- * POSIX convention that separates usage errors from failures while running.
+ * Exit code for an invalid command line, kept apart from the `1` of failures
+ * while running (the usage-error code of shell builtins and argparse).
  */
 const USAGE_ERROR_EXIT_CODE = 2;
 

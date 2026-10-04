@@ -91,7 +91,7 @@ async function runMain(command: Command, options?: MainOptions): Promise<never>;
 
 `Promise<never>` - This function does not return as it calls `process.exit`.
 
-It exits with `0` on success, `2` when the command line is invalid (an unknown flag or subcommand, or arguments that fail validation), and `1` for any other failure.
+It exits with `0` on success, `2` when the command line is invalid (an unknown flag or subcommand, an unexpected positional argument, or arguments that fail validation), and `1` for any other failure. When an `onUnknownSubcommand` handler returns an exit code, it exits with that code instead.
 
 #### Example
 

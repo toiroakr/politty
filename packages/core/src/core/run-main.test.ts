@@ -1225,6 +1225,23 @@ describe("runMain displayErrors", () => {
     expect(exitSpy).toHaveBeenCalledWith(2);
     expect(consoleSpy).not.toHaveBeenCalled();
   });
+
+  it("should exit with 1 when the command fails while running", async () => {
+    using _argv = useArgv(["node", "test"]);
+    using _consoleSpy = spyOnConsoleError();
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const cmd = defineCommand({
+      name: "test",
+      run: () => {
+        throw new Error("boom");
+      },
+    });
+
+    await runMain(cmd);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
 });
 
 describe("runMain internal subcommand bypass", () => {
@@ -1855,7 +1872,7 @@ describe("runMain defaultSubCommand and onUnknownSubcommand", () => {
     using _argv = useArgv(["node", "test", "plugin-name", "--flag"]);
     using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
-    const onUnknownSubcommand = vi.fn().mockReturnValue(2);
+    const onUnknownSubcommand = vi.fn().mockReturnValue(3);
     const subFn = vi.fn();
     const sub = defineCommand({ name: "sub", run: subFn });
     const cmd = defineCommand({ name: "test", subCommands: { sub }, defaultSubCommand: "sub" });
@@ -1869,7 +1886,7 @@ describe("runMain defaultSubCommand and onUnknownSubcommand", () => {
       args: ["--flag"],
       precedingArgs: [],
     });
-    expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(exitSpy).toHaveBeenCalledWith(3);
   });
 
   it("still routes an explicitly-named, non-default subcommand normally", async () => {

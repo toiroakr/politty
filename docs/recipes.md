@@ -54,7 +54,7 @@ it("should fail validation", async () => {
 
   const command = defineCommand({
     name: "test",
-    args: z.object({ age: arg(z.number()) }),
+    args: z.object({ age: arg(z.coerce.number()) }),
   });
 
   const result = await runCommand(command, ["--age", "not-a-number"]);
