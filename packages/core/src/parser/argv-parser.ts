@@ -83,6 +83,7 @@ function looksLikeNegativeNumber(value: string): boolean {
  * @returns Parsed arguments
  */
 export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedArgv {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 0.1);
   const {
     aliasMap = new Map(),
     booleanFlags = new Set(),
