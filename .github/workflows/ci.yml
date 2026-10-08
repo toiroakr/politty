@@ -61,10 +61,17 @@ jobs:
       - name: Test with coverage
         shell: bash
         run: npx vitest run --coverage --project unit --project dist-compat
+      - name: Benchmark runtime performance
+        id: benchmark
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: pnpm bench
       - name: Run octocov
         # octocov is Linux-only and uploads coverage once; skip on Windows.
         if: matrix.os == 'ubuntu-latest'
         uses: k1LoW/octocov-action@a167dc0dee441b7ffc45e1b862ab55ec0d87f278 # v1.5.2
+        env:
+          OCTOCOV_CUSTOM_METRICS_PERFORMANCE: benchmark-results/octocov.json
 
   peer-floor:
     name: Peer Floor (${{ matrix.dep }}@${{ matrix.version }})

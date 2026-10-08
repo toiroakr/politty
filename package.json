@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "bench": "tsx tests/performance/run.ts",
     "typecheck": "tsgo --incremental",
     "lint": "oxlint -c oxlint.json packages tests",
     "lint:fix": "oxlint -c oxlint.json --fix packages tests",
