@@ -10,6 +10,7 @@ package-lock.json
 *.sqlite
 .pnpm-store
 coverage/
+benchmark-results/
 tests/temp-*.ts
 .tmp-bin/
 .claude/tmp/

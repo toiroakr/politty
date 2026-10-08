@@ -8,6 +8,9 @@ coverage:
 body:
   enable: true
 
+summary:
+  enable: true
+
 report:
   if: is_default_branch
   datastores:
