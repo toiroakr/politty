@@ -117,7 +117,7 @@ for (const scenario of scenarios) {
   samples.sort((a, b) => a - b);
   const value = samples[3]!;
   assert.ok(Number.isFinite(value) && value > 0);
-  metrics.push({ key: scenario.key, name: scenario.name, value, unit: "ns/op" });
+  metrics.push({ key: scenario.key, name: scenario.name, value, unit: " ns/op" });
   console.log(
     `${scenario.name}: ${value.toFixed(1)} ns/op (range ${samples[0]!.toFixed(1)}–${samples[6]!.toFixed(1)})`,
   );

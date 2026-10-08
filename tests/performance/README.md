@@ -22,8 +22,10 @@ improvement, positive differences mean regression. Fork PRs can view the job
 summary even when their token cannot edit the PR body.
 
 The first main CI run containing these benchmarks establishes the baseline;
-until then only current values are available. Comparisons use main, including for
-PRs targeting another branch. Runner hardware, load, Node.js, and dependency
+until then only current values are available. Comparisons use the PR's base-branch
+report when available, falling back to main. This workflow stores reports only
+for main, so its PR benchmarks use main as the baseline.
+Runner hardware, load, Node.js, and dependency
 changes can affect timing, so small differences should be confirmed with repeated
 runs on the same machine. No regression threshold fails CI. If fixture workloads
 or measurement methodology change, bump the metrics group key in `run.ts` to
