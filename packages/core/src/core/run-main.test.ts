@@ -707,7 +707,20 @@ describe("runCommand", () => {
 
       const result = await runCommand(cmd, ["--port", "not-a-number"]);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
+    });
+
+    it("should fail with the usage exit code when global args are invalid", async () => {
+      using _consoleSpy = spyOnConsoleError();
+
+      const cmd = defineCommand({ name: "test", run: () => {} });
+
+      const result = await runCommand(cmd, [], {
+        globalArgs: z.object({ token: arg(z.string()) }),
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(2);
     });
 
     it("should show error for missing required arguments", async () => {
@@ -722,7 +735,7 @@ describe("runCommand", () => {
 
       const result = await runCommand(cmd, []);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
     });
 
     it("should not display validation errors directly via console.error in runCommand", async () => {
@@ -737,7 +750,7 @@ describe("runCommand", () => {
 
       const result = await runCommand(cmd, []);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(result.success).toBe(false);
       // runCommand (programmatic API) should NOT display errors itself;
       // it should only return them in result.error for the caller to handle
@@ -1035,7 +1048,7 @@ describe("runCommand", () => {
       expect(consoleSpy).not.toHaveBeenCalled();
       expect(runFn).not.toHaveBeenCalled(); // Command should not run
       expect(result.success).toBe(false);
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       if (!result.success) {
         expect(result.error.message).toContain("Unknown flags");
         expect(result.error.message).not.toContain("Warning");
@@ -1063,7 +1076,7 @@ describe("runCommand", () => {
       expect(consoleSpy).not.toHaveBeenCalled();
       expect(runFn).not.toHaveBeenCalled();
       expect(result.success).toBe(false);
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
     });
 
     it("should silently ignore unknown flags with z.looseObject (passthrough mode)", async () => {
@@ -1150,7 +1163,7 @@ describe("runCommand", () => {
       expect(consoleSpy).not.toHaveBeenCalled();
       expect(runFn).not.toHaveBeenCalled();
       expect(result.success).toBe(false);
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
     });
 
     it("should silently ignore unknown short flags with z.looseObject (passthrough mode)", async () => {
@@ -1190,7 +1203,7 @@ describe("runMain displayErrors", () => {
 
     await runMain(cmd);
 
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(exitSpy).toHaveBeenCalledWith(2);
     expect(consoleSpy).toHaveBeenCalled();
     expect(consoleSpy.getLogs().join("\n")).toContain("name");
   });
@@ -1209,8 +1222,25 @@ describe("runMain displayErrors", () => {
 
     await runMain(cmd, { displayErrors: false });
 
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(exitSpy).toHaveBeenCalledWith(2);
     expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it("should exit with 1 when the command fails while running", async () => {
+    using _argv = useArgv(["node", "test"]);
+    using _consoleSpy = spyOnConsoleError();
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+
+    const cmd = defineCommand({
+      name: "test",
+      run: () => {
+        throw new Error("boom");
+      },
+    });
+
+    await runMain(cmd);
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
   });
 });
 
@@ -1608,7 +1638,7 @@ describe("runMain onUnknownSubcommand", () => {
     });
 
     expect(onUnknownSubcommand).not.toHaveBeenCalled();
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(exitSpy).toHaveBeenCalledWith(2);
   });
 
   it("dispatches for an unknown subcommand nested under a known parent", async () => {
@@ -1842,7 +1872,7 @@ describe("runMain defaultSubCommand and onUnknownSubcommand", () => {
     using _argv = useArgv(["node", "test", "plugin-name", "--flag"]);
     using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
 
-    const onUnknownSubcommand = vi.fn().mockReturnValue(2);
+    const onUnknownSubcommand = vi.fn().mockReturnValue(3);
     const subFn = vi.fn();
     const sub = defineCommand({ name: "sub", run: subFn });
     const cmd = defineCommand({ name: "test", subCommands: { sub }, defaultSubCommand: "sub" });
@@ -1856,7 +1886,7 @@ describe("runMain defaultSubCommand and onUnknownSubcommand", () => {
       args: ["--flag"],
       precedingArgs: [],
     });
-    expect(exitSpy).toHaveBeenCalledWith(2);
+    expect(exitSpy).toHaveBeenCalledWith(3);
   });
 
   it("still routes an explicitly-named, non-default subcommand normally", async () => {
@@ -1968,7 +1998,7 @@ describe("Redundant positionals", () => {
       const result = await runCommand(cmd, ["unknown-token", "--verbose"]);
 
       expect(result.success).toBe(false);
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(runFn).not.toHaveBeenCalled();
       expect(subRunFn).not.toHaveBeenCalled();
       if (!result.success) {
@@ -2029,7 +2059,7 @@ describe("Redundant positionals", () => {
       const result = await runCommand(cmd, ["unknown-token"]);
 
       expect(result.success).toBe(false);
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(subRunFn).not.toHaveBeenCalled();
       if (!result.success) {
         expect(result.error.message).toContain("Unknown subcommand");
@@ -2141,7 +2171,7 @@ describe("Redundant positionals", () => {
       expect(consoleSpy).not.toHaveBeenCalled();
       expect(runFn).not.toHaveBeenCalled();
       expect(result.success).toBe(false);
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       if (!result.success) {
         expect(result.error.message).toContain("stray-token");
       }
@@ -2508,7 +2538,7 @@ describe("Redundant positionals", () => {
       expect(consoleSpy).not.toHaveBeenCalled();
       expect(runFn).not.toHaveBeenCalled();
       expect(result.success).toBe(false);
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       if (!result.success) {
         expect(result.error.message).toContain("stray-token");
       }
@@ -2552,7 +2582,7 @@ describe("Redundant positionals", () => {
       expect(consoleSpy).not.toHaveBeenCalled();
       expect(runFn).not.toHaveBeenCalled();
       expect(result.success).toBe(false);
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       if (!result.success) {
         expect(result.error.message).toContain("extra-token");
       }

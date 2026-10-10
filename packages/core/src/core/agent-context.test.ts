@@ -75,7 +75,7 @@ describe("agentHelp", () => {
 
       const result = await runCommand(groupCli(), ["bulid", "--help"], { agentHelp: AGENT_HELP });
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
       expect(console.getLogs()[0]).toContain(AGENT_HELP);
     });
 

@@ -468,7 +468,12 @@ export interface RunResultFailure {
   result?: never;
   /** Error that occurred during execution */
   error: Error;
-  /** Exit code (non-zero for failure) */
+  /**
+   * Exit code: 2 when the command line is invalid (an unknown flag or
+   * subcommand, an unexpected positional argument, or arguments that fail
+   * validation), 1 for other failures, or the exit code an
+   * `onUnknownSubcommand` plugin returned
+   */
   exitCode: number;
   /** Collected logs during execution */
   logs: CollectedLogs;
