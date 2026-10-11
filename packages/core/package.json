@@ -30,7 +30,7 @@
   },
   "devDependencies": {
     "@clack/prompts": "1.2.0",
-    "@inquirer/prompts": "8.7.2",
+    "@inquirer/prompts": "8.7.3",
     "@types/node": "25.9.9",
     "detect-agent": "1.2.0",
     "zod": "4.6.5"
