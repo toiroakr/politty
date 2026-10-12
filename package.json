@@ -37,7 +37,7 @@
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "@vitest/coverage-v8": "5.0.3",
     "knip": "6.39.0",
-    "lefthook": "2.1.16",
+    "lefthook": "2.1.17",
     "organize-imports-cli": "1.0.2",
     "oxfmt": "0.71.0",
     "oxlint": "1.86.0",
@@ -51,5 +51,5 @@
   "engines": {
     "node": ">=20.12.0 <21.0.0 || >=21.7.0"
   },
-  "packageManager": "pnpm@12.9.0"
+  "packageManager": "pnpm@12.9.1"
 }
