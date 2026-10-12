@@ -3,13 +3,16 @@ import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as l from "../../packages/loculus/node_modules/loculus/dist/index.js";
+import type * as LoculusPolitty from "../../packages/loculus/src/index.js";
 
 const packageDir = resolve("packages/loculus");
 const dist = resolve(packageDir, "dist");
 
 describe("@politty/loculus published output", () => {
   it("runs commands from built output", async () => {
-    const { defineCommand, runCommand } = await import("../../packages/loculus/dist/index.js");
+    const { defineCommand, runCommand } = (await import(
+      `${dist}/index.js`
+    )) as typeof LoculusPolitty;
     const cmd = defineCommand({
       name: "serve",
       args: l.object({
