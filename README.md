@@ -628,3 +628,7 @@ The `playground/` directory contains many examples:
 ## License
 
 MIT
+
+### @politty/loculus
+
+Use flat string-input schemas with the same command, help, completion and prompt APIs as `@politty/zod`. See [the adapter guide](packages/loculus/README.md). Install `@politty/loculus` with `loculus`; the initial release requires publishing loculus first.

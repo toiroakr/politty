@@ -237,6 +237,37 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
 
+  packages/loculus:
+    dependencies:
+      '@clack/prompts':
+        specifier: ^0.10.0 || ^0.11.0 || ^1.0.0
+        version: 1.2.0
+      '@inquirer/prompts':
+        specifier: ^8.3.2
+        version: 8.7.2(@types/node@25.9.9)
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
+    devDependencies:
+      '@politty/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: 25.9.9
+        version: 25.9.9
+      '@typescript/native-preview':
+        specifier: 7.0.0-dev.20260707.2
+        version: 7.0.0-dev.20260707.2
+      loculus:
+        specifier: file:../../tests/fixtures/loculus/loculus-0.1.0.tgz
+        version: file:tests/fixtures/loculus/loculus-0.1.0.tgz(rolldown@1.2.11)
+      tsdown:
+        specifier: 0.23.0
+        version: 0.23.0(@typescript/native-preview@7.0.0-dev.20260707.2)(oxc-resolver@11.24.2)(tsx@4.23.15)(typescript@7.0.2)
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+
   packages/politty:
     dependencies:
       '@clack/prompts':
@@ -2036,6 +2067,16 @@ packages:
     resolution: {integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==}
     engines: {node: '>= 12.0.0'}
 
+  loculus@file:tests/fixtures/loculus/loculus-0.1.0.tgz:
+    resolution: {integrity: sha512-LMeBe/RCpu/yXRH5AAFYYpxkY//FHUO8U5bBBCchyjxIZVA/D1a+Yrt1f3KOYNJe9tP6fht3D3x7HlN6yeEWEw==, tarball: file:tests/fixtures/loculus/loculus-0.1.0.tgz}
+    version: 0.1.0
+    engines: {node: '>=24'}
+    peerDependencies:
+      rolldown: '>=1.2.13 <2'
+    peerDependenciesMeta:
+      rolldown:
+        optional: true
+
   magic-string@1.4.2:
     resolution: {integrity: sha512-vG+rjFRj1PqdIBozIxAGMjPlOhaVe+GXpbttY/iSK7rGcJRMlwNJO7dcUwmUqkymsFLJiNGI06t4D7Fr7yRC9g==}
 
@@ -3540,6 +3581,10 @@ snapshots:
       lightningcss-linux-x64-musl: 1.33.0
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
+
+  loculus@file:tests/fixtures/loculus/loculus-0.1.0.tgz(rolldown@1.2.11):
+    optionalDependencies:
+      rolldown: 1.2.11
 
   magic-string@1.4.2:
     dependencies:

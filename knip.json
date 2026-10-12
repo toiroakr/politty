@@ -16,6 +16,10 @@
       "project": ["src/**/*.ts"],
       "ignoreDependencies": ["yaml", "@typescript/native-preview"]
     },
+    "packages/loculus": {
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@typescript/native-preview", "@clack/prompts", "@inquirer/prompts"]
+    },
     "packages/zod-mini": {
       "project": ["src/**/*.ts"],
       "ignoreDependencies": ["yaml", "@typescript/native-preview"]

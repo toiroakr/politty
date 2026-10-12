@@ -1,0 +1,9 @@
+{
+  "package": "loculus",
+  "version": "0.1.0",
+  "sourceRepository": "https://github.com/toiroakr/loculus",
+  "sourceSha256": "181dcb12c1941d6b5a9c7c235fb09c127172277c7a26e0357d02421efb012bdf",
+  "archiveSha256": "6c3247f3e50beddb081b252e6ccbd06bd753b5bb7bfed3b977d31e6a725021d1",
+  "refresh": "Build loculus, run pnpm pack --pack-destination <politty>/tests/fixtures/loculus, then pnpm install --force in politty.",
+  "distSha256": "add4e2a2a56e31d3600d6a012f0e20f084bcb0ec43cfbac32cb105bc0c31f87f"
+}
