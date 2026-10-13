@@ -9,8 +9,7 @@ import {
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../lazy.js";
-import type { PackageRequirement } from "../package-requirements.js";
-import { formatPackageRequirements } from "../package-requirements.js";
+import { formatPackageRequirements, getInstallCommand } from "../package-requirements.js";
 import type { AnyCommand, Example, SubCommandsRecord, SubCommandValue } from "../types.js";
 import { styles } from "./logger.js";
 import { renderMarkdown } from "./markdown-renderer.js";
@@ -176,7 +175,7 @@ export interface HelpSubcommandData {
  * {@link generateHelp}'s formatted text.
  */
 export interface HelpData {
-  requires?: Pick<PackageRequirement, "name" | "install" | "description">[] | undefined;
+  requires?: { name: string; install: string; description?: string | undefined }[] | undefined;
   /** Command name (command.name) */
   name: string;
   /**
@@ -1260,10 +1259,10 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
     notes: command.notes,
     ...(command.requires?.length
       ? {
-          requires: command.requires.map(({ name, install, description }) => ({
-            name,
-            install,
-            description,
+          requires: command.requires.map((requirement) => ({
+            name: requirement.name,
+            install: getInstallCommand(requirement),
+            description: requirement.description,
           })),
         }
       : {}),

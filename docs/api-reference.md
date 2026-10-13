@@ -80,7 +80,7 @@ Resolve and dynamically import an external package. The result is the module nam
 ```typescript
 interface PackageRequirement<TArgs = unknown> {
   name: string;
-  install: string;
+  install?: string;
   from?: string | URL;
   description?: string;
   when?: (args: TArgs) => boolean;
@@ -91,7 +91,7 @@ function loadPackage<TModule = unknown>(
 ): Promise<TModule>;
 ```
 
-`name` is the package name; `install` is the exact installation command displayed to the user. The default resolution base is the current working directory. `from` overrides it with an absolute module URL, such as `import.meta.url`. Missing target packages produce installation guidance; errors inside installed packages retain their original error.
+`name` is the package name; `install` overrides the installation command displayed to the user. When omitted, politty detects npm, pnpm, Yarn, or Bun from the resolution base and its parents, preferring a supported `packageManager` field before lockfiles at each directory. The fallback is `npm install -D <name>`. Commands are generated for development dependencies; no installation occurs. The default resolution base is the current working directory. `from` overrides it with an absolute module URL, such as `import.meta.url`. Missing target packages produce installation guidance; errors inside installed packages retain their original error.
 
 In `defineCommand({ requires: [...] })`, each package loads before command setup and execution. An optional `when` predicate receives validated arguments and controls whether the requirement is active. `description` explains that condition in help. Help output and JSON help expose requirements without loading packages. See [Optional External Packages](./advanced-features.md#optional-external-packages) for subcommand, option, and lazy-command examples.
 
@@ -1344,7 +1344,7 @@ Structured, JSON-serializable representation of a command's help, returned by `g
 
 ```typescript
 interface HelpData {
-  requires?: Pick<PackageRequirement, "name" | "install" | "description">[];
+  requires?: { name: string; install: string; description?: string }[];
   /** Command name (command.name) */
   name: string;
   /** Full path from the root command. Empty at the true root; also empty when called directly on a non-root command without a context.commandPath */

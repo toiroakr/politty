@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { arg } from "./core/arg-registry.js";
@@ -238,5 +238,91 @@ describe("nested lazy requirements", () => {
     expect(result.success).toBe(true);
     expect(loads).toBe(0);
     expect(output.join("\n")).toContain("View data");
+  });
+});
+
+describe("automatic installation guidance", () => {
+  it("detects pnpm when install is omitted", async () => {
+    const installed = await fixture("");
+    const directory = dirname(fileURLToPath(installed.from));
+    await writeFile(join(directory, "pnpm-lock.yaml"), "");
+    const requirement = { name: "@politty-test/missing-studio", from: installed.from };
+    const command = defineCommand({
+      name: "studio",
+      requires: [requirement],
+      run: () => "unexpected",
+    });
+    const result = await runCommand(command, []);
+    expect(result.error?.message).toContain("pnpm add -D @politty-test/missing-studio");
+    const output: string[] = [];
+    await runCommand(command, ["--help"], {
+      logger: { log: (value) => output.push(value), error: () => {} },
+    });
+    expect(output.join("\n")).toContain("pnpm add -D @politty-test/missing-studio");
+  });
+});
+
+describe("project package managers", () => {
+  it.each([
+    ["package-lock.json", "npm install"],
+    ["npm-shrinkwrap.json", "npm install"],
+    ["pnpm-lock.yaml", "pnpm add"],
+    ["yarn.lock", "yarn add"],
+    ["bun.lock", "bun add"],
+    ["bun.lockb", "bun add"],
+  ])("uses %s for error and JSON help guidance", async (filename, command) => {
+    const installed = await fixture("");
+    const directory = dirname(fileURLToPath(installed.from));
+    await writeFile(join(directory, filename), "");
+    const requirement = { name: "@politty-test/missing-studio", from: installed.from };
+    const cli = defineCommand({ name: "studio", requires: [requirement], run: () => {} });
+    const result = await runCommand(cli, []);
+    expect(result.error?.message).toContain(`${command} -D @politty-test/missing-studio`);
+    const output: string[] = [];
+    await runCommand(cli, ["--help-json"], {
+      logger: { log: (value) => output.push(value), error: () => {} },
+    });
+    expect(JSON.parse(output[0]!).requires[0].install).toBe(
+      `${command} -D @politty-test/missing-studio`,
+    );
+  });
+
+  it("prefers the packageManager declaration and searches parent projects", async () => {
+    const installed = await fixture("");
+    const directory = dirname(fileURLToPath(installed.from));
+    await writeFile(
+      join(directory, "package.json"),
+      JSON.stringify({ packageManager: "yarn@4.6.0" }),
+    );
+    await writeFile(join(directory, "pnpm-lock.yaml"), "");
+    const nested = join(directory, "apps", "frontend");
+    await mkdir(nested, { recursive: true });
+    const requirement = {
+      name: "@politty-test/missing-studio",
+      from: pathToFileURL(join(nested, "cli.js")),
+    };
+    await expect(loadPackage(requirement)).rejects.toThrow(
+      "yarn add -D @politty-test/missing-studio",
+    );
+  });
+
+  it("keeps an explicit installation command even when a manager is detected", async () => {
+    const installed = await fixture("");
+    const directory = dirname(fileURLToPath(installed.from));
+    await writeFile(join(directory, "bun.lock"), "");
+    await expect(
+      loadPackage({
+        name: "@politty-test/missing-studio",
+        from: installed.from,
+        install: "pnpm add -D @politty-test/missing-studio@2",
+      }),
+    ).rejects.toThrow("pnpm add -D @politty-test/missing-studio@2");
+  });
+
+  it("falls back to npm without project metadata", async () => {
+    const installed = await fixture("");
+    await expect(
+      loadPackage({ name: "@politty-test/missing-studio", from: installed.from }),
+    ).rejects.toThrow("npm install -D @politty-test/missing-studio");
   });
 });

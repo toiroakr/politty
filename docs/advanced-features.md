@@ -63,7 +63,7 @@ See `playground/21-lazy-subcommands.ts` for a complete example.
 
 ### Optional External Packages
 
-Declare `requires` on a command to load a package before its `setup` and `run` hooks. The package is resolved only when the command executes. If it is missing, politty returns a failed result with its name and your installation command; `runMain` prints the error and exits with a nonzero status. Packages are never installed automatically.
+Declare `requires` on a command to load a package before its `setup` and `run` hooks. The package is resolved only when the command executes. If it is missing, politty returns a failed result with its name and the installation command; `runMain` prints the error and exits with a nonzero status. Packages are never installed automatically.
 
 ```typescript
 import { arg, defineCommand, loadPackage, runMain } from "politty";
@@ -91,6 +91,8 @@ const cli = defineCommand({
 
 runMain(cli);
 ```
+
+Omit `install` to automatically generate a development-dependency installation command. politty searches from the package resolution base upward, checking `package.json`’s supported `packageManager` declaration before lockfiles at each directory. It supports npm, pnpm, Yarn, and Bun, and falls back to `npm install -D` when none is detected. An explicit `install` always takes precedence. When multiple lockfiles coexist without a supported declaration, pnpm takes precedence, then Bun, Yarn, and npm. Help (including JSON help) and missing-package errors show the same generated command. Detection does not invoke a package manager or install anything.
 
 By default, packages are resolved from the current working directory, so dependencies installed in the consuming project are found. Set `from: import.meta.url` (or another absolute module URL) to resolve relative to a specific CLI module instead. Import-only package exports are supported. A missing dependency inside an installed package, a broken entry point, or an initialization error retains its original error.
 

@@ -23,6 +23,7 @@ describe("published package requirements", () => {
             exports: { import: "./index.js" },
           }),
         );
+        writeFileSync(join(directory, "pnpm-lock.yaml"), "");
         writeFileSync(join(dependency, "index.js"), "export const start = () => 'studio started';");
         const entry = pathToFileURL(join(root, "packages", adapter, "dist", "index.js")).href;
         const script = `
@@ -32,7 +33,7 @@ describe("published package requirements", () => {
             studio: defineCommand({ name: 'studio', requires: [requirement], run: async () => {
               console.log((await loadPackage(requirement)).start());
             } }),
-            missing: defineCommand({ name: 'missing', requires: [{ name: '@politty-test/missing', install: 'npm install -D @politty-test/missing' }], run: () => {} }),
+            missing: defineCommand({ name: 'missing', requires: [{ name: '@politty-test/missing' }], run: () => {} }),
           } });
           await runMain(command, { compileCache: false });
         `;
@@ -47,7 +48,7 @@ describe("published package requirements", () => {
           cwd: directory,
           encoding: "utf8",
         });
-        expect(help).toContain("npm install -D @politty-test/missing");
+        expect(help).toContain("pnpm add -D @politty-test/missing");
         let failure: { status?: number; stderr?: string } | undefined;
         try {
           execFileSync(process.execPath, [cli, "missing"], {
@@ -59,7 +60,7 @@ describe("published package requirements", () => {
           failure = error as { status?: number; stderr?: string };
         }
         expect(failure?.status).toBe(1);
-        expect(failure?.stderr).toContain("npm install -D @politty-test/missing");
+        expect(failure?.stderr).toContain("pnpm add -D @politty-test/missing");
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }
