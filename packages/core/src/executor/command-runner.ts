@@ -1,3 +1,4 @@
+import { loadRequiredPackages } from "../package-requirements.js";
 import type {
   AnyCommand,
   CleanupContext,
@@ -115,6 +116,7 @@ export async function executeLifecycle<TResult = unknown>(
   }
 
   try {
+    await loadRequiredPackages(command.requires, args);
     // Execute setup
     if (command.setup) {
       await command.setup(setupContext);

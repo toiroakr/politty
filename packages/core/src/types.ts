@@ -2,6 +2,7 @@ import type { SchemaLike } from "./adapter/standard-schema.js";
 import type { AgentInfo } from "./agent/detect-agent.js";
 import type { ExtractedFields } from "./core/schema-extractor.js";
 import type { LazyCommand } from "./lazy.js";
+import type { PackageRequirement } from "./package-requirements.js";
 
 /**
  * Global args interface for declaration merging (Pattern 3).
@@ -149,6 +150,7 @@ export interface CommandBase<
   aliases?: string[] | undefined;
   /** Argument schema (preserves the original schema type) */
   args: TArgsSchema;
+  requires?: readonly PackageRequirement<TArgs>[] | undefined;
   /** Subcommands */
   subCommands?: SubCommandsRecord | undefined;
   /** Setup hook */

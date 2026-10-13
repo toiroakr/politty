@@ -1,4 +1,5 @@
 import { isLazyCommand, resolveSubCommandMeta } from "../lazy.js";
+import { loadRequiredPackages } from "../package-requirements.js";
 import type { AnyCommand, SubCommandValue } from "../types.js";
 
 /**
@@ -7,8 +8,16 @@ import type { AnyCommand, SubCommandValue } from "../types.js";
  * @param cmd - The command or lazy loader function
  * @returns The resolved command
  */
-export async function resolveLazyCommand(cmd: SubCommandValue): Promise<AnyCommand> {
+export async function resolveLazyCommand(
+  cmd: SubCommandValue,
+  useMetadata?: (meta: AnyCommand) => boolean,
+): Promise<AnyCommand> {
   if (isLazyCommand(cmd)) {
+    if (useMetadata?.(cmd.meta)) return cmd.meta;
+    await loadRequiredPackages(
+      cmd.meta.requires?.filter((requirement) => !requirement.when),
+      {},
+    );
     return await cmd.load();
   }
   if (typeof cmd === "function") {
@@ -62,6 +71,7 @@ export async function resolveSubcommand(
 export async function resolveSubcommandWithAlias(
   command: AnyCommand,
   name: string,
+  useMetadata?: (meta: AnyCommand) => boolean,
 ): Promise<{ command: AnyCommand; aliasFor: string | undefined } | undefined> {
   if (!command.subCommands) {
     return undefined;
@@ -72,14 +82,14 @@ export async function resolveSubcommandWithAlias(
   // registered subcommand.
   const subCmd = Object.hasOwn(command.subCommands, name) ? command.subCommands[name] : undefined;
   if (subCmd) {
-    return { command: await resolveLazyCommand(subCmd), aliasFor: undefined };
+    return { command: await resolveLazyCommand(subCmd, useMetadata), aliasFor: undefined };
   }
 
   // Alias lookup
   const canonicalName = resolveSubCommandAlias(command, name);
   if (canonicalName) {
     return {
-      command: await resolveLazyCommand(command.subCommands[canonicalName]!),
+      command: await resolveLazyCommand(command.subCommands[canonicalName]!, useMetadata),
       aliasFor: canonicalName,
     };
   }

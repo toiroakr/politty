@@ -1,6 +1,7 @@
 import type { InternalArgsSchema } from "../adapter/internal-args.js";
 import type { InferSchemaOutput, SchemaLike } from "../adapter/standard-schema.js";
 import type { AgentInfo } from "../agent/detect-agent.js";
+import type { PackageRequirement } from "../package-requirements.js";
 import type {
   ArgSource,
   ArgsSchema,
@@ -96,6 +97,7 @@ interface DefineCommandConfig<
 > {
   name: string;
   description?: string;
+  requires?: readonly PackageRequirement<ResolvedArgs<TArgsSchema, TGlobalArgs>>[];
   aliases?: string[];
   args?: TArgsSchema;
   subCommands?: TSubCommands;
@@ -281,6 +283,7 @@ export function defineCommand<
   return {
     name: config.name,
     description: config.description,
+    requires: config.requires,
     aliases: config.aliases,
     args: config.args as TArgsSchema,
     subCommands: config.subCommands,

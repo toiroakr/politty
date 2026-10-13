@@ -9,6 +9,8 @@ import {
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../lazy.js";
+import type { PackageRequirement } from "../package-requirements.js";
+import { formatPackageRequirements } from "../package-requirements.js";
 import type { AnyCommand, Example, SubCommandsRecord, SubCommandValue } from "../types.js";
 import { styles } from "./logger.js";
 import { renderMarkdown } from "./markdown-renderer.js";
@@ -174,6 +176,7 @@ export interface HelpSubcommandData {
  * {@link generateHelp}'s formatted text.
  */
 export interface HelpData {
+  requires?: Pick<PackageRequirement, "name" | "install" | "description">[] | undefined;
   /** Command name (command.name) */
   name: string;
   /**
@@ -880,7 +883,9 @@ function renderSubcommandsWithOptions(
   for (const [name, subCmd] of getVisibleSubcommandEntries(subCommands)) {
     const cmd = resolveSubCommandMeta(subCmd);
     const fullPath = parentPath ? `${parentPath} ${name}` : name;
-    const desc = cmd?.description ?? "";
+    const desc = [cmd?.description, formatPackageRequirements(cmd?.requires)]
+      .filter(Boolean)
+      .join("\n");
     const aliases = cmd?.aliases;
     const displayName =
       aliases && aliases.length > 0 ? `${fullPath}, ${aliases.join(", ")}` : fullPath;
@@ -1004,7 +1009,9 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
       const subLines: string[] = [];
       for (const [name, subCmd] of Object.entries(visibleSubCommands)) {
         const cmd = resolveSubCommandMeta(subCmd);
-        const desc = cmd?.description ?? "";
+        const desc = [cmd?.description, formatPackageRequirements(cmd?.requires)]
+          .filter(Boolean)
+          .join("\n");
         // Include parent path in subcommand name, plus aliases
         const fullName = currentPath ? `${currentPath} ${name}` : name;
         const aliases = cmd?.aliases;
@@ -1020,6 +1027,11 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   if (command.examples && command.examples.length > 0) {
     const exampleLines = renderExamplesForHelp(command.examples, context);
     sections.push(`${styles.sectionHeader("Examples:")}\n${exampleLines}`);
+  }
+
+  const requirements = formatPackageRequirements(command.requires);
+  if (requirements) {
+    sections.push(`${styles.sectionHeader("Required packages:")}\n${requirements}`);
   }
 
   // Notes (render Markdown for styled terminal output, indented under header)
@@ -1246,6 +1258,15 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
     subcommands,
     examples: command.examples,
     notes: command.notes,
+    ...(command.requires?.length
+      ? {
+          requires: command.requires.map(({ name, install, description }) => ({
+            name,
+            install,
+            description,
+          })),
+        }
+      : {}),
     agentHelp: options.agentHelp,
   };
 }

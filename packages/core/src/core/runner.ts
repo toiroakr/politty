@@ -6,8 +6,10 @@ import {
   listSubCommandNamesWithAliases,
   listSubCommands,
   resolveLazyCommand,
+  resolveSubCommandAlias,
   resolveSubcommandWithAlias,
 } from "../executor/subcommand-router.js";
+import { resolveSubCommandMeta } from "../lazy.js";
 import { generateHelp, generateHelpData, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
 import { coerceEnvValue } from "../parser/coerce-boolean.js";
@@ -689,7 +691,35 @@ async function runCommandInternal<TResult = unknown>(
 
     // Handle subcommand
     if (parseResult.subCommand) {
-      const resolved = await resolveSubcommandWithAlias(command, parseResult.subCommand);
+      const resolved = await resolveSubcommandWithAlias(command, parseResult.subCommand, (meta) => {
+        if (!meta.requires?.length) return false;
+        let target = meta;
+        let remainingArgs = parseResult.remainingArgs;
+        while (true) {
+          const preview = parseArgs(remainingArgs, target, {
+            skipValidation: options.skipValidation,
+            globalExtracted: context.globalExtracted,
+            promptAvailable: !!options.prompt,
+          });
+          if (
+            preview.helpRequested ||
+            preview.helpAllRequested ||
+            preview.helpJsonRequested ||
+            preview.versionRequested
+          ) {
+            return true;
+          }
+          if (!preview.subCommand || !target.subCommands) return false;
+          const name = Object.hasOwn(target.subCommands, preview.subCommand)
+            ? preview.subCommand
+            : (resolveSubCommandAlias(target, preview.subCommand) ?? preview.subCommand);
+          const subCommand = target.subCommands[name];
+          const subMeta = subCommand ? resolveSubCommandMeta(subCommand) : null;
+          if (!subMeta) return false;
+          target = subMeta;
+          remainingArgs = preview.remainingArgs;
+        }
+      });
       if (resolved) {
         // Build new context for subcommand
         const subContext: CommandContext = {

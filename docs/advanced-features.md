@@ -61,6 +61,86 @@ const cli = defineCommand({
 
 See `playground/21-lazy-subcommands.ts` for a complete example.
 
+### Optional External Packages
+
+Declare `requires` on a command to load a package before its `setup` and `run` hooks. The package is resolved only when the command executes. If it is missing, politty returns a failed result with its name and your installation command; `runMain` prints the error and exits with a nonzero status. Packages are never installed automatically.
+
+```typescript
+import { arg, defineCommand, loadPackage, runMain } from "politty";
+import { z } from "zod";
+
+const studioPackage = {
+  name: "@lines-db/studio",
+  install: "npm install -D @lines-db/studio",
+};
+
+const studio = defineCommand({
+  name: "studio",
+  requires: [studioPackage],
+  args: z.object({ file: arg(z.string(), { positional: true }) }),
+  run: async (args) => {
+    const module = await loadPackage<{ start: (file: string) => Promise<void> }>(studioPackage);
+    await module.start(args.file);
+  },
+});
+
+const cli = defineCommand({
+  name: "lines-db",
+  subCommands: { studio },
+});
+
+runMain(cli);
+```
+
+By default, packages are resolved from the current working directory, so dependencies installed in the consuming project are found. Set `from: import.meta.url` (or another absolute module URL) to resolve relative to a specific CLI module instead. Import-only package exports are supported. A missing dependency inside an installed package, a broken entry point, or an initialization error retains its original error.
+
+Use `when` for an option that activates an optional feature. It receives the parsed and validated arguments, including defaults and global arguments. Supply a `description` to explain the condition in help.
+
+```typescript
+const uiPackage = {
+  name: "@vitest/ui",
+  install: "npm install -D @vitest/ui",
+};
+
+const test = defineCommand({
+  name: "test",
+  args: z.object({ ui: arg(z.boolean().default(false)) }),
+  requires: [{ ...uiPackage, description: "--ui", when: (args) => args.ui }],
+  run: async (args) => {
+    if (args.ui) {
+      const module = await loadPackage<{ start: () => Promise<void> }>(uiPackage);
+      await module.start();
+    } else {
+      await runTests();
+    }
+  },
+});
+```
+
+Here, `test` and `test --no-ui` work without the UI package, while `test --ui` loads it. Calls to `loadPackage` use Node's module cache, so a package loaded by `requires` is not initialized again by the run hook. Its generic type describes the module namespace; omit it to receive `unknown`.
+
+For a whole command supplied by an external package, put unconditional requirements on the synchronous metadata passed to `lazy()`:
+
+```typescript
+import { lazy, type AnyCommand } from "politty";
+
+const cli = defineCommand({
+  name: "lines-db",
+  subCommands: {
+    studio: lazy(
+      defineCommand({
+        name: "studio",
+        requires: [studioPackage],
+        args: z.object({ file: arg(z.string(), { positional: true }) }),
+      }),
+      async () => (await loadPackage<{ command: AnyCommand }>(studioPackage)).command,
+    ),
+  },
+});
+```
+
+Unconditional requirements are loaded before the lazy loader runs. Conditional requirements belong on the runnable command, where validated arguments are available. Provide the complete help and argument definitions in the metadata: `studio --help`, `--help-all`, and `--help-json` use it without calling the loader. Root help lists each subcommand's requirements, and JSON help includes each requirement's `name`, `install`, and optional `description`.
+
 ### Nested Subcommands
 
 Subcommands can have their own `subCommands`.

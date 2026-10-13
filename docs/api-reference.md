@@ -39,6 +39,7 @@ function defineCommand<TArgsSchema, TResult>(config: {
 | `description?` | `string`                                             | Command description                       |
 | `args?`        | `TArgsSchema`                                        | Argument schema (Zod schema)              |
 | `aliases?`     | `string[]`                                           | Alternative names for the command         |
+| `requires?`    | `readonly PackageRequirement<TArgs>[]`               | External packages required at execution   |
 | `subCommands?` | `SubCommandsRecord`                                  | Subcommands (supports lazy loading)       |
 | `setup?`       | `(context: SetupContext) => void \| Promise<void>`   | Initialization hook                       |
 | `run?`         | `(args: unknown) => TResult`                         | Main process                              |
@@ -69,6 +70,30 @@ const command = defineCommand({
   },
 });
 ```
+
+---
+
+### `loadPackage`
+
+Resolve and dynamically import an external package. The result is the module namespace, typed as `unknown` unless a generic module type is provided.
+
+```typescript
+interface PackageRequirement<TArgs = unknown> {
+  name: string;
+  install: string;
+  from?: string | URL;
+  description?: string;
+  when?: (args: TArgs) => boolean;
+}
+
+function loadPackage<TModule = unknown>(
+  requirement: Pick<PackageRequirement, "name" | "install" | "from">,
+): Promise<TModule>;
+```
+
+`name` is the package name; `install` is the exact installation command displayed to the user. The default resolution base is the current working directory. `from` overrides it with an absolute module URL, such as `import.meta.url`. Missing target packages produce installation guidance; errors inside installed packages retain their original error.
+
+In `defineCommand({ requires: [...] })`, each package loads before command setup and execution. An optional `when` predicate receives validated arguments and controls whether the requirement is active. `description` explains that condition in help. Help output and JSON help expose requirements without loading packages. See [Optional External Packages](./advanced-features.md#optional-external-packages) for subcommand, option, and lazy-command examples.
 
 ---
 
@@ -806,6 +831,7 @@ interface Command<TArgsSchema, TArgs, TResult> {
   aliases?: string[];
   /** Argument schema; `undefined` for a command with no args */
   args: TArgsSchema;
+  requires?: readonly PackageRequirement<TArgs>[];
   /** Also accepts `lazy()`-loaded and async-function subcommands (see SubCommandsRecord below) */
   subCommands?: SubCommandsRecord;
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
@@ -1318,6 +1344,7 @@ Structured, JSON-serializable representation of a command's help, returned by `g
 
 ```typescript
 interface HelpData {
+  requires?: Pick<PackageRequirement, "name" | "install" | "description">[];
   /** Command name (command.name) */
   name: string;
   /** Full path from the root command. Empty at the true root; also empty when called directly on a non-root command without a context.commandPath */
@@ -1565,7 +1592,8 @@ Type for validation result.
 
 ```typescript
 type ValidationResult<T> =
-  { success: true; data: T } | { success: false; errors: ValidationError[] };
+  | { success: true; data: T }
+  | { success: false; errors: ValidationError[] };
 ```
 
 ---
@@ -1639,7 +1667,8 @@ Type for command definition validation result.
 
 ```typescript
 type CommandValidationResult =
-  { success: true } | { success: false; errors: CommandValidationError[] };
+  | { success: true }
+  | { success: false; errors: CommandValidationError[] };
 ```
 
 ---
