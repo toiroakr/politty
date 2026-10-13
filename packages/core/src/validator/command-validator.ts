@@ -920,7 +920,7 @@ export async function validateCommand(
   // Recursively validate subcommands
   if (command.subCommands) {
     for (const [name, subCmd] of Object.entries(command.subCommands)) {
-      const resolvedSubCmd = await resolveLazyCommand(subCmd);
+      const resolvedSubCmd = await resolveLazyCommand(subCmd, (meta) => !!meta.requires?.length);
       // Validate subcommand registration key matches its own `.name`
       errors.push(...checkSubCommandKeyNameMismatch(name, resolvedSubCmd.name, commandPath));
       const subResult = await validateCommand(resolvedSubCmd, {

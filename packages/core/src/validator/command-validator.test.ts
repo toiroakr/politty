@@ -776,3 +776,30 @@ describe("validateCrossSchemaCollisions", () => {
     expect(() => validateCrossSchemaCollisions(globalExtracted, commandExtracted)).not.toThrow();
   });
 });
+
+describe("optional package validation", () => {
+  it("validates lazy command metadata without loading its optional package", async () => {
+    let loads = 0;
+    const meta = defineCommand({
+      name: "studio",
+      requires: [
+        {
+          name: "@politty-test/missing-studio",
+          install: "npm install -D @politty-test/missing-studio",
+        },
+      ],
+      args: z.object({ file: arg(z.string(), { positional: true }) }),
+    });
+    const command = defineCommand({
+      name: "cli",
+      subCommands: {
+        studio: lazy(meta, async () => {
+          loads++;
+          throw new Error("loader must not run during validation");
+        }),
+      },
+    });
+    expect(await validateCommand(command)).toEqual({ valid: true });
+    expect(loads).toBe(0);
+  });
+});

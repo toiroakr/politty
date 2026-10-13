@@ -1,5 +1,4 @@
 import { isLazyCommand, resolveSubCommandMeta } from "../lazy.js";
-import { loadRequiredPackages } from "../package-requirements.js";
 import type { AnyCommand, SubCommandValue } from "../types.js";
 
 /**
@@ -14,10 +13,6 @@ export async function resolveLazyCommand(
 ): Promise<AnyCommand> {
   if (isLazyCommand(cmd)) {
     if (useMetadata?.(cmd.meta)) return cmd.meta;
-    await loadRequiredPackages(
-      cmd.meta.requires?.filter((requirement) => !requirement.when),
-      {},
-    );
     return await cmd.load();
   }
   if (typeof cmd === "function") {

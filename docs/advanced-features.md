@@ -139,7 +139,7 @@ const cli = defineCommand({
 });
 ```
 
-Unconditional requirements are loaded before the lazy loader runs. Conditional requirements belong on the runnable command, where validated arguments are available. Provide the complete help and argument definitions in the metadata: `studio --help`, `--help-all`, and `--help-json` use it without calling the loader. Root help lists each subcommand's requirements, and JSON help includes each requirement's `name`, `install`, and optional `description`.
+Unconditional requirements are loaded before the lazy loader runs. Conditional requirements belong on the runnable command, where validated arguments are available. Provide the complete help and argument definitions in the metadata: `studio --help`, `--help-all`, and `--help-json` use it without calling the loader. Validation and documentation generation also use this synchronous metadata for commands with requirements, without invoking their loaders. Root help lists each subcommand's requirements, and JSON help includes each requirement's `name`, `install`, and optional `description`.
 
 ### Nested Subcommands
 

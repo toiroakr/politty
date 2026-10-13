@@ -23,7 +23,7 @@ export async function buildCommandInfo(
   const subCommands: SubCommandInfo[] = [];
   if (command.subCommands) {
     for (const [name, subCmd] of Object.entries(command.subCommands)) {
-      const resolved = await resolveLazyCommand(subCmd);
+      const resolved = await resolveLazyCommand(subCmd, (meta) => !!meta.requires?.length);
       const fullPath = [...commandPath, name];
       subCommands.push({
         name,
@@ -69,7 +69,7 @@ export async function collectAllCommands(
 
     if (cmd.subCommands) {
       for (const [name, subCmd] of Object.entries(cmd.subCommands)) {
-        const resolved = await resolveLazyCommand(subCmd);
+        const resolved = await resolveLazyCommand(subCmd, (meta) => !!meta.requires?.length);
         await traverse(resolved, [...path, name]);
       }
     }

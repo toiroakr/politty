@@ -2,6 +2,7 @@
  * Lazy-loaded subcommand with synchronous metadata
  */
 
+import { loadRequiredPackages } from "./package-requirements.js";
 import type { AnyCommand, SubCommandValue } from "./types.js";
 
 /**
@@ -64,7 +65,15 @@ export function lazy<T extends AnyCommand>(
   return {
     [LAZY_BRAND]: true as const,
     meta,
-    load,
+    load: meta.requires?.length
+      ? async () => {
+          await loadRequiredPackages(
+            meta.requires?.filter((requirement) => !requirement.when),
+            {},
+          );
+          return load();
+        }
+      : load,
   };
 }
 
