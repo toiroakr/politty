@@ -212,6 +212,25 @@ describe("installed optional packages", () => {
 });
 
 describe("nested lazy requirements", () => {
+  it("executes a lazy group whose run hook is supplied only by the loader", async () => {
+    const requirement = await fixture("export const ready = true;");
+    const view = defineCommand({ name: "view" });
+    const meta = defineCommand({ name: "studio", requires: [requirement], subCommands: { view } });
+    const command = defineCommand({
+      name: "lines-db",
+      subCommands: {
+        studio: lazy(meta, async () =>
+          defineCommand({
+            name: "studio",
+            subCommands: { view },
+            run: () => "studio started",
+          }),
+        ),
+      },
+    });
+    expect((await runCommand(command, ["studio"])).result).toBe("studio started");
+  });
+
   it("shows nested help from synchronous metadata without loading the parent package", async () => {
     let loads = 0;
     const leaf = defineCommand({ name: "view", aliases: ["v"], description: "View data" });
