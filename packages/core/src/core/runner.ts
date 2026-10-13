@@ -63,6 +63,12 @@ const defaultLogger: Logger = {
 };
 
 /**
+ * Exit code for an invalid command line, kept apart from the `1` of failures
+ * while running (the usage-error code of shell builtins and argparse).
+ */
+const USAGE_ERROR_EXIT_CODE = 2;
+
+/**
  * Attach a non-enumerable `$source` helper to the final args object so it
  * stays invisible to `Object.keys`/`JSON.stringify`/spread (those only ever
  * see real field values) while still being reachable via property access
@@ -645,7 +651,7 @@ async function runCommandInternal<TResult = unknown>(
           error: new Error(
             `Unknown subcommand: ${unknownCmd}${suggestion ? `.${suggestion}` : ""}`,
           ),
-          exitCode: 1,
+          exitCode: USAGE_ERROR_EXIT_CODE,
           logs: getCurrentLogs(),
         };
       }
@@ -663,7 +669,7 @@ async function runCommandInternal<TResult = unknown>(
         return {
           success: false,
           error: new Error(`Unknown flags: ${parseResult.unknownGlobalFlags.join(", ")}`),
-          exitCode: 1,
+          exitCode: USAGE_ERROR_EXIT_CODE,
           logs: getCurrentLogs(),
         };
       }
@@ -749,7 +755,7 @@ async function runCommandInternal<TResult = unknown>(
         error: new Error(
           "Arguments match none of the accepted forms. See --help for the accepted forms.",
         ),
-        exitCode: 1,
+        exitCode: USAGE_ERROR_EXIT_CODE,
         logs: getCurrentLogs(),
       };
     }
@@ -834,7 +840,7 @@ async function runCommandInternal<TResult = unknown>(
         return {
           success: false,
           error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
-          exitCode: 1,
+          exitCode: USAGE_ERROR_EXIT_CODE,
           logs: getCurrentLogs(),
         };
       } else if (unknownKeysMode === "strip") {
@@ -865,7 +871,7 @@ async function runCommandInternal<TResult = unknown>(
             error: new Error(
               `Unknown subcommand: ${unknownCmd}${suggestion ? `.${suggestion}` : ""}`,
             ),
-            exitCode: 1,
+            exitCode: USAGE_ERROR_EXIT_CODE,
             logs: getCurrentLogs(),
           };
         }
@@ -880,7 +886,7 @@ async function runCommandInternal<TResult = unknown>(
           error: new Error(
             `Unexpected positional argument${extraPositionals.length > 1 ? "s" : ""}: ${extraPositionals.join(", ")}`,
           ),
-          exitCode: 1,
+          exitCode: USAGE_ERROR_EXIT_CODE,
           logs: getCurrentLogs(),
         };
       } else if (unknownKeysMode === "strip") {
@@ -943,7 +949,7 @@ async function runCommandInternal<TResult = unknown>(
         return {
           success: false,
           error: new Error(formatPlainValidationErrors(globalValidation.errors)),
-          exitCode: 1,
+          exitCode: USAGE_ERROR_EXIT_CODE,
           logs: getCurrentLogs(),
         };
       }
@@ -1025,7 +1031,7 @@ async function runCommandInternal<TResult = unknown>(
       return {
         success: false,
         error: new Error(formatPlainValidationErrors(validationResult.errors)),
-        exitCode: 1,
+        exitCode: USAGE_ERROR_EXIT_CODE,
         logs: getCurrentLogs(),
       };
     }

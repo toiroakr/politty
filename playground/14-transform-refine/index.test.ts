@@ -36,7 +36,7 @@ describe("14-transform-refine", () => {
       using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
       const result = await runCommand(cli, ["transform", "--tags", "a"]);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
     });
 
     it("fails when tags is not provided", async () => {
@@ -44,7 +44,7 @@ describe("14-transform-refine", () => {
       using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
       const result = await runCommand(cli, ["transform", "hello"]);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
     });
   });
 
@@ -65,7 +65,7 @@ describe("14-transform-refine", () => {
       using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
       const result = await runCommand(cli, ["refine", "same.txt", "same.txt"]);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
     });
 
     it("can run refineCommand directly", async () => {
