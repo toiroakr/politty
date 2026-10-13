@@ -97,7 +97,7 @@ interface DefineCommandConfig<
 > {
   name: string;
   description?: string;
-  requires?: readonly PackageRequirement<ResolvedArgs<TArgsSchema, TGlobalArgs>>[];
+  requiredPackages?: readonly PackageRequirement<ResolvedArgs<TArgsSchema, TGlobalArgs>>[];
   aliases?: string[];
   args?: TArgsSchema;
   subCommands?: TSubCommands;
@@ -283,7 +283,7 @@ export function defineCommand<
   return {
     name: config.name,
     description: config.description,
-    requires: config.requires,
+    requiredPackages: config.requiredPackages,
     aliases: config.aliases,
     args: config.args as TArgsSchema,
     subCommands: config.subCommands,

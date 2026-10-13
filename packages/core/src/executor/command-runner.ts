@@ -116,8 +116,8 @@ export async function executeLifecycle<TResult = unknown>(
   }
 
   try {
-    if (command.requires?.length) {
-      await loadRequiredPackages(command.requires, args);
+    if (command.requiredPackages?.length) {
+      await loadRequiredPackages(command.requiredPackages, args);
     }
     // Execute setup
     if (command.setup) {

@@ -150,7 +150,7 @@ export interface CommandBase<
   aliases?: string[] | undefined;
   /** Argument schema (preserves the original schema type) */
   args: TArgsSchema;
-  requires?: readonly PackageRequirement<TArgs>[] | undefined;
+  requiredPackages?: readonly PackageRequirement<TArgs>[] | undefined;
   /** Subcommands */
   subCommands?: SubCommandsRecord | undefined;
   /** Setup hook */

@@ -34,7 +34,8 @@ async function buildCommandInfoInternal(
     for (const [name, subCmd] of Object.entries(command.subCommands)) {
       const resolved = await resolveLazyCommand(
         subCmd,
-        (meta) => metadataOnly || !!command.requires?.length || !!meta.requires?.length,
+        (meta) =>
+          metadataOnly || !!command.requiredPackages?.length || !!meta.requiredPackages?.length,
       );
       const fullPath = [...commandPath, name];
       subCommands.push({
@@ -75,7 +76,7 @@ export async function collectAllCommands(
   const result = new Map<string, CommandInfo>();
 
   async function traverse(cmd: AnyCommand, path: string[], metadataOnly: boolean): Promise<void> {
-    metadataOnly ||= !!cmd.requires?.length;
+    metadataOnly ||= !!cmd.requiredPackages?.length;
     const info = await buildCommandInfoInternal(cmd, root, path, metadataOnly);
     const pathKey = path.join(" ");
     result.set(pathKey, info);
@@ -84,7 +85,7 @@ export async function collectAllCommands(
       for (const [name, subCmd] of Object.entries(cmd.subCommands)) {
         const resolved = await resolveLazyCommand(
           subCmd,
-          (meta) => metadataOnly || !!meta.requires?.length,
+          (meta) => metadataOnly || !!meta.requiredPackages?.length,
         );
         await traverse(resolved, [...path, name], metadataOnly);
       }

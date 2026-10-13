@@ -65,10 +65,10 @@ export function lazy<T extends AnyCommand>(
   return {
     [LAZY_BRAND]: true as const,
     meta,
-    load: meta.requires?.length
+    load: meta.requiredPackages?.length
       ? async () => {
           await loadRequiredPackages(
-            meta.requires?.filter((requirement) => !requirement.when),
+            meta.requiredPackages?.filter((requirement) => !requirement.when),
             {},
           );
           return load();

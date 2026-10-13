@@ -33,19 +33,19 @@ function defineCommand<TArgsSchema, TResult>(config: {
 
 **config properties:**
 
-| Property       | Type                                                 | Description                               |
-| -------------- | ---------------------------------------------------- | ----------------------------------------- |
-| `name`         | `string`                                             | Command name (required)                   |
-| `description?` | `string`                                             | Command description                       |
-| `args?`        | `TArgsSchema`                                        | Argument schema (Zod schema)              |
-| `aliases?`     | `string[]`                                           | Alternative names for the command         |
-| `requires?`    | `readonly PackageRequirement<TArgs>[]`               | External packages required at execution   |
-| `subCommands?` | `SubCommandsRecord`                                  | Subcommands (supports lazy loading)       |
-| `setup?`       | `(context: SetupContext) => void \| Promise<void>`   | Initialization hook                       |
-| `run?`         | `(args: unknown) => TResult`                         | Main process                              |
-| `cleanup?`     | `(context: CleanupContext) => void \| Promise<void>` | Cleanup hook                              |
-| `notes?`       | `string`                                             | Additional notes (shown in help and docs) |
-| `examples?`    | `Example[]`                                          | Usage examples (shown in help and docs)   |
+| Property            | Type                                                 | Description                               |
+| ------------------- | ---------------------------------------------------- | ----------------------------------------- |
+| `name`              | `string`                                             | Command name (required)                   |
+| `description?`      | `string`                                             | Command description                       |
+| `args?`             | `TArgsSchema`                                        | Argument schema (Zod schema)              |
+| `aliases?`          | `string[]`                                           | Alternative names for the command         |
+| `requiredPackages?` | `readonly PackageRequirement<TArgs>[]`               | External packages required at execution   |
+| `subCommands?`      | `SubCommandsRecord`                                  | Subcommands (supports lazy loading)       |
+| `setup?`            | `(context: SetupContext) => void \| Promise<void>`   | Initialization hook                       |
+| `run?`              | `(args: unknown) => TResult`                         | Main process                              |
+| `cleanup?`          | `(context: CleanupContext) => void \| Promise<void>` | Cleanup hook                              |
+| `notes?`            | `string`                                             | Additional notes (shown in help and docs) |
+| `examples?`         | `Example[]`                                          | Usage examples (shown in help and docs)   |
 
 #### Example
 
@@ -93,7 +93,7 @@ function loadPackage<TModule = unknown>(
 
 `name` is the package name; `install` overrides the installation command displayed to the user. When omitted, politty detects npm, pnpm, Yarn, or Bun from the resolution base and its parents, preferring a supported `packageManager` field before lockfiles at each directory. The fallback is `npm install -D <name>`. Commands are generated for development dependencies; no installation occurs. The default resolution base is the current working directory. `from` overrides it with an absolute module URL, such as `import.meta.url`. Missing target packages produce installation guidance; errors inside installed packages retain their original error. Resolution uses the standard `node` and `import` export conditions; custom Node conditions (such as `--conditions=development`) and custom module loaders are not supported. Packages must expose an entry point under the standard conditions.
 
-In `defineCommand({ requires: [...] })`, each package loads before command setup and execution. An optional `when` predicate receives validated arguments and controls whether the requirement is active. `description` explains that condition in help. Help output and JSON help expose requirements without loading packages. See [Optional External Packages](./advanced-features.md#optional-external-packages) for subcommand, option, and lazy-command examples.
+In `defineCommand({ requiredPackages: [...] })`, each package loads before command setup and execution. An optional `when` predicate receives validated arguments and controls whether the requirement is active. `description` explains that condition in help. Help output and JSON help expose requirements without loading packages. See [Optional External Packages](./advanced-features.md#optional-external-packages) for subcommand, option, and lazy-command examples.
 
 ---
 
@@ -831,7 +831,7 @@ interface Command<TArgsSchema, TArgs, TResult> {
   aliases?: string[];
   /** Argument schema; `undefined` for a command with no args */
   args: TArgsSchema;
-  requires?: readonly PackageRequirement<TArgs>[];
+  requiredPackages?: readonly PackageRequirement<TArgs>[];
   /** Also accepts `lazy()`-loaded and async-function subcommands (see SubCommandsRecord below) */
   subCommands?: SubCommandsRecord;
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
@@ -1344,7 +1344,7 @@ Structured, JSON-serializable representation of a command's help, returned by `g
 
 ```typescript
 interface HelpData {
-  requires?: { name: string; install: string; description?: string }[];
+  requiredPackages?: { name: string; install: string; description?: string }[];
   /** Command name (command.name) */
   name: string;
   /** Full path from the root command. Empty at the true root; also empty when called directly on a non-root command without a context.commandPath */

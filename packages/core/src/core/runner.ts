@@ -695,7 +695,7 @@ async function runCommandInternal<TResult = unknown>(
       let metadataOnly = options._metadataOnly ?? false;
       const resolved = await resolveSubcommandWithAlias(command, parseResult.subCommand, (meta) => {
         if (metadataOnly) return true;
-        if (!meta.requires?.length) return false;
+        if (!meta.requiredPackages?.length) return false;
         let target = meta;
         let remainingArgs = parseResult.remainingArgs;
         while (true) {

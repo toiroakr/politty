@@ -175,7 +175,9 @@ export interface HelpSubcommandData {
  * {@link generateHelp}'s formatted text.
  */
 export interface HelpData {
-  requires?: { name: string; install: string; description?: string | undefined }[] | undefined;
+  requiredPackages?:
+    | { name: string; install: string; description?: string | undefined }[]
+    | undefined;
   /** Command name (command.name) */
   name: string;
   /**
@@ -882,7 +884,7 @@ function renderSubcommandsWithOptions(
   for (const [name, subCmd] of getVisibleSubcommandEntries(subCommands)) {
     const cmd = resolveSubCommandMeta(subCmd);
     const fullPath = parentPath ? `${parentPath} ${name}` : name;
-    const desc = [cmd?.description, formatPackageRequirements(cmd?.requires)]
+    const desc = [cmd?.description, formatPackageRequirements(cmd?.requiredPackages)]
       .filter(Boolean)
       .join("\n");
     const aliases = cmd?.aliases;
@@ -1008,7 +1010,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
       const subLines: string[] = [];
       for (const [name, subCmd] of Object.entries(visibleSubCommands)) {
         const cmd = resolveSubCommandMeta(subCmd);
-        const desc = [cmd?.description, formatPackageRequirements(cmd?.requires)]
+        const desc = [cmd?.description, formatPackageRequirements(cmd?.requiredPackages)]
           .filter(Boolean)
           .join("\n");
         // Include parent path in subcommand name, plus aliases
@@ -1028,7 +1030,7 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
     sections.push(`${styles.sectionHeader("Examples:")}\n${exampleLines}`);
   }
 
-  const requirements = formatPackageRequirements(command.requires);
+  const requirements = formatPackageRequirements(command.requiredPackages);
   if (requirements) {
     sections.push(`${styles.sectionHeader("Required packages:")}\n${requirements}`);
   }
@@ -1257,9 +1259,9 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
     subcommands,
     examples: command.examples,
     notes: command.notes,
-    ...(command.requires?.length
+    ...(command.requiredPackages?.length
       ? {
-          requires: command.requires.map((requirement) => ({
+          requiredPackages: command.requiredPackages.map((requirement) => ({
             name: requirement.name,
             install: getInstallCommand(requirement),
             description: requirement.description,

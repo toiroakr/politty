@@ -63,7 +63,7 @@ See `playground/21-lazy-subcommands.ts` for a complete example.
 
 ### Optional External Packages
 
-Declare `requires` on a command to load a package before its `setup` and `run` hooks. The package is resolved only when the command executes. If it is missing, politty returns a failed result with its name and the installation command; `runMain` prints the error and exits with a nonzero status. Packages are never installed automatically.
+Declare `requiredPackages` on a command to load a package before its `setup` and `run` hooks. The package is resolved only when the command executes. If it is missing, politty returns a failed result with its name and the installation command; `runMain` prints the error and exits with a nonzero status. Packages are never installed automatically.
 
 ```typescript
 import { arg, defineCommand, loadPackage, runMain } from "politty";
@@ -76,7 +76,7 @@ const studioPackage = {
 
 const studio = defineCommand({
   name: "studio",
-  requires: [studioPackage],
+  requiredPackages: [studioPackage],
   args: z.object({ file: arg(z.string(), { positional: true }) }),
   run: async (args) => {
     const module = await loadPackage<{ start: (file: string) => Promise<void> }>(studioPackage);
@@ -107,7 +107,7 @@ const uiPackage = {
 const test = defineCommand({
   name: "test",
   args: z.object({ ui: arg(z.boolean().default(false)) }),
-  requires: [{ ...uiPackage, description: "--ui", when: (args) => args.ui }],
+  requiredPackages: [{ ...uiPackage, description: "--ui", when: (args) => args.ui }],
   run: async (args) => {
     if (args.ui) {
       const module = await loadPackage<{ start: () => Promise<void> }>(uiPackage);
@@ -119,7 +119,7 @@ const test = defineCommand({
 });
 ```
 
-Here, `test` and `test --no-ui` work without the UI package, while `test --ui` loads it. Calls to `loadPackage` use Node's module cache, so a package loaded by `requires` is not initialized again by the run hook. Its generic type describes the module namespace; omit it to receive `unknown`.
+Here, `test` and `test --no-ui` work without the UI package, while `test --ui` loads it. Calls to `loadPackage` use Node's module cache, so a package loaded by `requiredPackages` is not initialized again by the run hook. Its generic type describes the module namespace; omit it to receive `unknown`.
 
 For a whole command supplied by an external package, put unconditional requirements on the synchronous metadata passed to `lazy()`:
 
@@ -132,7 +132,7 @@ const cli = defineCommand({
     studio: lazy(
       defineCommand({
         name: "studio",
-        requires: [studioPackage],
+        requiredPackages: [studioPackage],
         args: z.object({ file: arg(z.string(), { positional: true }) }),
       }),
       async () => (await loadPackage<{ command: AnyCommand }>(studioPackage)).command,

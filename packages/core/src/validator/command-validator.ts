@@ -905,7 +905,7 @@ async function validateCommandInternal(
   options: ValidateCommandOptions,
   metadataOnly: boolean,
 ): Promise<CommandValidationResult> {
-  metadataOnly ||= !!command.requires?.length;
+  metadataOnly ||= !!command.requiredPackages?.length;
   const commandPath = options.commandPath ?? [command.name];
   const errors: CommandValidationError[] = [];
   const hasSubCommands = command.subCommands ? Object.keys(command.subCommands).length > 0 : false;
@@ -931,7 +931,7 @@ async function validateCommandInternal(
     for (const [name, subCmd] of Object.entries(command.subCommands)) {
       const resolvedSubCmd = await resolveLazyCommand(
         subCmd,
-        (meta) => metadataOnly || !!meta.requires?.length,
+        (meta) => metadataOnly || !!meta.requiredPackages?.length,
       );
       // Validate subcommand registration key matches its own `.name`
       errors.push(...checkSubCommandKeyNameMismatch(name, resolvedSubCmd.name, commandPath));

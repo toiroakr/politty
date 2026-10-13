@@ -16,7 +16,7 @@ describe("external package requirements", () => {
     let ran = false;
     const config = {
       name: "studio",
-      requires: [
+      requiredPackages: [
         {
           name: "@politty-test/missing-studio",
           install: "npm install -D @politty-test/missing-studio",
@@ -63,7 +63,7 @@ describe("package loading", () => {
     const command = defineCommand({
       name: "vitest",
       args: z.object({ ui: arg(z.boolean().default(false)) }),
-      requires: [
+      requiredPackages: [
         {
           name: "@politty-test/missing-ui",
           install: "npm install -D @politty-test/missing-ui",
@@ -95,7 +95,7 @@ describe("package loading", () => {
     });
     const command = defineCommand({
       name: "studio",
-      requires: [requirement],
+      requiredPackages: [requirement],
       run: async () => (await loadPackage<{ start: () => string }>(requirement)).start(),
     });
     expect((await runCommand(command, [])).result).toBe("studio");
@@ -108,7 +108,7 @@ describe("package loading", () => {
     const requirement = await fixture(source);
     const command = defineCommand({
       name: "studio",
-      requires: [requirement],
+      requiredPackages: [requirement],
       run: () => "unexpected",
     });
     const original = await loadPackage(requirement).catch((error: unknown) => error);
@@ -134,7 +134,11 @@ describe("package loading", () => {
       name: "lines-db",
       subCommands: {
         validate: defineCommand({ name: "validate", run: () => "valid" }),
-        studio: defineCommand({ name: "studio", requires: [requirement], run: () => "studio" }),
+        studio: defineCommand({
+          name: "studio",
+          requiredPackages: [requirement],
+          run: () => "studio",
+        }),
       },
     });
     expect((await runCommand(command, ["validate"])).result).toBe("valid");
@@ -148,7 +152,7 @@ describe("package loading", () => {
     await runCommand(command, ["studio", "--help-json"], {
       logger: { log: (text) => json.push(text), error: () => {} },
     });
-    expect(JSON.parse(json[0]!).requires[0].name).toBe(requirement.name);
+    expect(JSON.parse(json[0]!).requiredPackages[0].name).toBe(requirement.name);
   });
 
   it.each(["--help", "--help-all", "--help-json"])(
@@ -162,10 +166,13 @@ describe("package loading", () => {
       const command = defineCommand({
         name: "lines-db",
         subCommands: {
-          studio: lazy(defineCommand({ name: "studio", requires: [requirement] }), async () => {
-            loads++;
-            return loadPackage(requirement);
-          }),
+          studio: lazy(
+            defineCommand({ name: "studio", requiredPackages: [requirement] }),
+            async () => {
+              loads++;
+              return loadPackage(requirement);
+            },
+          ),
         },
       });
       const output: string[] = [];
@@ -187,7 +194,7 @@ describe("installed optional packages", () => {
     const command = defineCommand({
       name: "vitest",
       args: z.object({ ui: arg(z.boolean().default(false), { alias: "u" }) }),
-      requires: [{ ...requirement, description: "--ui", when: (args) => args.ui }],
+      requiredPackages: [{ ...requirement, description: "--ui", when: (args) => args.ui }],
       run: async (args) =>
         args.ui ? (await loadPackage<{ start: () => string }>(requirement)).start() : "tests",
     });
@@ -202,7 +209,7 @@ describe("installed optional packages", () => {
       name: "lines-db",
       subCommands: {
         studio: lazy(
-          defineCommand({ name: "studio", aliases: ["s"], requires: [requirement] }),
+          defineCommand({ name: "studio", aliases: ["s"], requiredPackages: [requirement] }),
           async () => (await loadPackage<{ command: AnyCommand }>(requirement)).command,
         ),
       },
@@ -215,7 +222,11 @@ describe("nested lazy requirements", () => {
   it("executes a lazy group whose run hook is supplied only by the loader", async () => {
     const requirement = await fixture("export const ready = true;");
     const view = defineCommand({ name: "view" });
-    const meta = defineCommand({ name: "studio", requires: [requirement], subCommands: { view } });
+    const meta = defineCommand({
+      name: "studio",
+      requiredPackages: [requirement],
+      subCommands: { view },
+    });
     const command = defineCommand({
       name: "lines-db",
       subCommands: {
@@ -244,7 +255,7 @@ describe("nested lazy requirements", () => {
         studio: lazy(
           defineCommand({
             name: "studio",
-            requires: [requirement],
+            requiredPackages: [requirement],
             subCommands: {
               view: lazy(leaf, async () => {
                 loads++;
@@ -277,7 +288,7 @@ describe("automatic installation guidance", () => {
     const requirement = { name: "@politty-test/missing-studio", from: installed.from };
     const command = defineCommand({
       name: "studio",
-      requires: [requirement],
+      requiredPackages: [requirement],
       run: () => "unexpected",
     });
     const result = await runCommand(command, []);
@@ -303,14 +314,14 @@ describe("project package managers", () => {
     const directory = dirname(fileURLToPath(installed.from));
     await writeFile(join(directory, filename), "");
     const requirement = { name: "@politty-test/missing-studio", from: installed.from };
-    const cli = defineCommand({ name: "studio", requires: [requirement], run: () => {} });
+    const cli = defineCommand({ name: "studio", requiredPackages: [requirement], run: () => {} });
     const result = await runCommand(cli, []);
     expect(result.error?.message).toContain(`${command} -D @politty-test/missing-studio`);
     const output: string[] = [];
     await runCommand(cli, ["--help-json"], {
       logger: { log: (value) => output.push(value), error: () => {} },
     });
-    expect(JSON.parse(output[0]!).requires[0].install).toBe(
+    expect(JSON.parse(output[0]!).requiredPackages[0].install).toBe(
       `${command} -D @politty-test/missing-studio`,
     );
   });

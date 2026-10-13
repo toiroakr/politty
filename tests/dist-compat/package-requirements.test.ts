@@ -30,10 +30,10 @@ describe("published package requirements", () => {
           import { defineCommand, loadPackage, runMain } from ${JSON.stringify(entry)};
           const requirement = { name: '@politty-test/studio', install: 'npm install -D @politty-test/studio' };
           const command = defineCommand({ name: 'lines-db', subCommands: {
-            studio: defineCommand({ name: 'studio', requires: [requirement], run: async () => {
+            studio: defineCommand({ name: 'studio', requiredPackages: [requirement], run: async () => {
               console.log((await loadPackage(requirement)).start());
             } }),
-            missing: defineCommand({ name: 'missing', requires: [{ name: '@politty-test/missing' }], run: () => {} }),
+            missing: defineCommand({ name: 'missing', requiredPackages: [{ name: '@politty-test/missing' }], run: () => {} }),
           } });
           await runMain(command, { compileCache: false });
         `;

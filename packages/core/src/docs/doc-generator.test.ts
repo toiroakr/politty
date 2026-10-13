@@ -11,7 +11,7 @@ describe("optional package documentation", () => {
     const meta = defineCommand({
       name: "studio",
       description: "Browse data",
-      requires: [
+      requiredPackages: [
         {
           name: "@politty-test/missing-studio",
           install: "npm install -D @politty-test/missing-studio",
