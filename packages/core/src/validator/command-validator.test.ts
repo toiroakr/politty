@@ -789,6 +789,12 @@ describe("optional package validation", () => {
         },
       ],
       args: z.object({ file: arg(z.string(), { positional: true }) }),
+      subCommands: {
+        view: lazy(defineCommand({ name: "view" }), async () => {
+          loads++;
+          throw new Error("child loader must not run during validation");
+        }),
+      },
     });
     const command = defineCommand({
       name: "cli",

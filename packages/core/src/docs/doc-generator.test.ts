@@ -18,7 +18,12 @@ describe("optional package documentation", () => {
         },
       ],
       args: z.object({ file: arg(z.string(), { positional: true }) }),
-      subCommands: { view: defineCommand({ name: "view", description: "View data" }) },
+      subCommands: {
+        view: lazy(defineCommand({ name: "view", description: "View data" }), async () => {
+          loads++;
+          throw new Error("child loader must not run during documentation");
+        }),
+      },
     });
     const command = defineCommand({
       name: "cli",

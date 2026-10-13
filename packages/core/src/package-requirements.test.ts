@@ -223,7 +223,16 @@ describe("nested lazy requirements", () => {
       name: "lines-db",
       subCommands: {
         studio: lazy(
-          defineCommand({ name: "studio", requires: [requirement], subCommands: { view: leaf } }),
+          defineCommand({
+            name: "studio",
+            requires: [requirement],
+            subCommands: {
+              view: lazy(leaf, async () => {
+                loads++;
+                throw new Error("child loader must not run during help");
+              }),
+            },
+          }),
           async () => {
             loads++;
             return loadPackage(requirement);

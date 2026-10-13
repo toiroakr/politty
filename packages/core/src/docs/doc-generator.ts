@@ -15,6 +15,15 @@ export async function buildCommandInfo(
   rootName: string,
   commandPath: string[] = [],
 ): Promise<CommandInfo> {
+  return buildCommandInfoInternal(command, rootName, commandPath, false);
+}
+
+async function buildCommandInfoInternal(
+  command: AnyCommand,
+  rootName: string,
+  commandPath: string[],
+  metadataOnly: boolean,
+): Promise<CommandInfo> {
   const extracted = getExtractedFields(command);
 
   const positionalArgs = extracted ? positionalFieldsInAnyVariant(extracted) : [];
@@ -23,7 +32,10 @@ export async function buildCommandInfo(
   const subCommands: SubCommandInfo[] = [];
   if (command.subCommands) {
     for (const [name, subCmd] of Object.entries(command.subCommands)) {
-      const resolved = await resolveLazyCommand(subCmd, (meta) => !!meta.requires?.length);
+      const resolved = await resolveLazyCommand(
+        subCmd,
+        (meta) => metadataOnly || !!command.requires?.length || !!meta.requires?.length,
+      );
       const fullPath = [...commandPath, name];
       subCommands.push({
         name,
@@ -62,19 +74,23 @@ export async function collectAllCommands(
   const root = rootName ?? command.name ?? "command";
   const result = new Map<string, CommandInfo>();
 
-  async function traverse(cmd: AnyCommand, path: string[]): Promise<void> {
-    const info = await buildCommandInfo(cmd, root, path);
+  async function traverse(cmd: AnyCommand, path: string[], metadataOnly: boolean): Promise<void> {
+    metadataOnly ||= !!cmd.requires?.length;
+    const info = await buildCommandInfoInternal(cmd, root, path, metadataOnly);
     const pathKey = path.join(" ");
     result.set(pathKey, info);
 
     if (cmd.subCommands) {
       for (const [name, subCmd] of Object.entries(cmd.subCommands)) {
-        const resolved = await resolveLazyCommand(subCmd, (meta) => !!meta.requires?.length);
-        await traverse(resolved, [...path, name]);
+        const resolved = await resolveLazyCommand(
+          subCmd,
+          (meta) => metadataOnly || !!meta.requires?.length,
+        );
+        await traverse(resolved, [...path, name], metadataOnly);
       }
     }
   }
 
-  await traverse(command, []);
+  await traverse(command, [], false);
   return result;
 }

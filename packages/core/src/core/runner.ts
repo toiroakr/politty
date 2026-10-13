@@ -153,6 +153,7 @@ function resolveInvocation(command: AnyCommand, context: CommandContext): RunInv
  * Internal options for runCommand (includes context tracking)
  */
 interface InternalCommandOptions extends InternalRunOptions {
+  _metadataOnly?: boolean | undefined;
   /** Command hierarchy context (internal use) */
   _context?: CommandContext | undefined;
   /** Existing logs to include (for subcommand routing) */
@@ -691,7 +692,9 @@ async function runCommandInternal<TResult = unknown>(
 
     // Handle subcommand
     if (parseResult.subCommand) {
+      let metadataOnly = options._metadataOnly ?? false;
       const resolved = await resolveSubcommandWithAlias(command, parseResult.subCommand, (meta) => {
+        if (metadataOnly) return true;
         if (!meta.requires?.length) return false;
         let target = meta;
         let remainingArgs = parseResult.remainingArgs;
@@ -707,6 +710,7 @@ async function runCommandInternal<TResult = unknown>(
             preview.helpJsonRequested ||
             preview.versionRequested
           ) {
+            metadataOnly = true;
             return true;
           }
           if (!preview.subCommand || !target.subCommands) return false;
@@ -749,6 +753,7 @@ async function runCommandInternal<TResult = unknown>(
           .filter((token) => !isSuppressedFlag(token));
         return runCommandInternal<TResult>(resolved.command, parseResult.remainingArgs, {
           ...options,
+          _metadataOnly: metadataOnly,
           _context: subContext,
           _existingLogs: getCurrentLogs(),
           _parsedGlobalArgs: accumulatedGlobalArgs,
