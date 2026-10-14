@@ -16,21 +16,45 @@ describe("published package requirements", () => {
       );
       const metadata = { requiredPackages: [{ name: "@politty-test/missing-ui" }] };
       let args;
+      let discriminatedArgs;
       if (adapter === "valibot") {
         const v = await import("valibot");
         args = v.object({ ui: arg(v.optional(v.boolean(), false), metadata) });
+        discriminatedArgs = v.variant("mode", [
+          v.object({ mode: v.literal("tests") }),
+          v.object({ mode: arg(v.literal("ui"), metadata) }),
+        ]);
       } else if (adapter === "zod-mini") {
         const z = await import("zod/mini");
         args = z.object({ ui: arg(z._default(z.boolean(), false), metadata) });
+        discriminatedArgs = z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("tests") }),
+          z.object({ mode: arg(z.literal("ui"), metadata) }),
+        ]);
       } else {
         const { z } = await import("zod");
         args = z.object({ ui: arg(z.boolean().default(false), metadata) });
+        discriminatedArgs = z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("tests") }),
+          z.object({ mode: arg(z.literal("ui"), metadata) }),
+        ]);
       }
       const command = defineCommand({ name: "test", args, run: () => "tests" });
       expect((await runCommand(command, [])).result).toBe("tests");
       const enabled = await runCommand(command, ["--ui"]);
       expect(enabled.success).toBe(false);
       expect(enabled.error?.message).toContain('Package "@politty-test/missing-ui" is required.');
+      const variantCommand = defineCommand({
+        name: "test",
+        args: discriminatedArgs,
+        run: () => "tests",
+      });
+      expect((await runCommand(variantCommand, ["--mode", "tests"])).result).toBe("tests");
+      const variantEnabled = await runCommand(variantCommand, ["--mode", "ui"]);
+      expect(variantEnabled.success).toBe(false);
+      expect(variantEnabled.error?.message).toContain(
+        'Package "@politty-test/missing-ui" is required.',
+      );
     },
   );
 

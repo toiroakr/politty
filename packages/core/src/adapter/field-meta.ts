@@ -332,12 +332,6 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
   const negationDisplay: string | undefined =
     typeof negation === "string" ? negation : negation === true ? `no-${cliName}` : undefined;
 
-  if (argMeta?.requiredPackages?.length && fieldType !== "boolean") {
-    throw new Error(
-      `Invalid requiredPackages for field "${name}": requiredPackages can only be used on boolean fields.`,
-    );
-  }
-
   const positional = argMeta?.positional;
   const meta: ResolvedFieldMeta = {
     name,

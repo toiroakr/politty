@@ -1005,6 +1005,7 @@ async function runCommandInternal<TResult = unknown>(
         captureLogs: options.captureLogs,
         existingLogs: getCurrentLogs(),
         globalCleanup: options._globalCleanup,
+        packageDiscriminator: options._globalExtracted?.discriminator,
         packageFields: isCompletionInvocation ? undefined : options._globalExtracted?.fields,
       });
       return result as RunResult<TResult>;
@@ -1135,6 +1136,7 @@ async function runCommandInternal<TResult = unknown>(
       captureLogs: options.captureLogs,
       existingLogs: getCurrentLogs(),
       globalCleanup: options._globalCleanup,
+      packageDiscriminator: parseResult.extractedFields?.discriminator,
       packageFields: isCompletionInvocation
         ? undefined
         : [

@@ -120,7 +120,24 @@ const test = defineCommand({
 
 Here, `test` and `test --no-ui` work without the UI package, while `test --ui` loads it. Calls to `loadPackage` use Node's module cache, so a package loaded by `requiredPackages` is not initialized again by the run hook. Its generic type describes the module namespace; omit it to receive `unknown`.
 
-Argument-level `requiredPackages` is supported for boolean fields only. For conditions involving several arguments or non-boolean values, use command-level `requiredPackages` with a `when` predicate receiving the validated arguments. A requirement’s `description` can explain that condition in help.
+Argument-level `requiredPackages` is supported for boolean fields and discriminators. For conditions involving several arguments or non-boolean values, use command-level `requiredPackages` with a `when` predicate receiving the validated arguments. A requirement’s `description` can explain that condition in help.
+
+Declare packages on a discriminator value to require them only for that branch:
+
+```typescript
+const test = defineCommand({
+  name: "test",
+  args: z.discriminatedUnion("mode", [
+    z.object({ mode: z.literal("tests") }),
+    z.object({
+      mode: arg(z.literal("ui"), { requiredPackages: [{ name: "@vitest/ui" }] }),
+    }),
+  ]),
+  run: (args) => console.log(args.mode),
+});
+```
+
+`test --mode tests` needs no UI package; `test --mode ui` loads it before setup and execution. Help lists requirements under the corresponding branch, and JSON help includes them on that variant. Other non-boolean fields do not accept argument-level package requirements.
 
 For a whole command supplied by an external package, put unconditional requirements on the synchronous metadata passed to `lazy()`:
 

@@ -135,6 +135,44 @@ describe("package loading", () => {
     expect((await runCommand(command, ["--mode", "ui"])).success).toBe(false);
   });
 
+  it("loads packages declared on the selected discriminator without loading other branches", async () => {
+    const command = defineCommand({
+      name: "test",
+      args: z.discriminatedUnion("mode", [
+        z.object({ mode: z.literal("tests") }),
+        z.object({
+          mode: arg(z.literal("ui"), {
+            requiredPackages: [{ name: "@politty-test/missing-ui" }],
+          }),
+        }),
+      ]),
+      run: (args) => args.mode,
+    });
+    expect((await runCommand(command, ["--mode", "tests"])).result).toBe("tests");
+    const enabled = await runCommand(command, ["--mode", "ui"]);
+    expect(enabled.success).toBe(false);
+    expect(enabled.error?.message).toContain('Package "@politty-test/missing-ui" is required.');
+    const output: string[] = [];
+    const help = await runCommand(command, ["--help"], {
+      logger: { log: (text) => output.push(text), error: () => {} },
+    });
+    expect(help.success).toBe(true);
+    expect(output.join("\n")).toContain("@politty-test/missing-ui");
+    output.length = 0;
+    await runCommand(command, ["--help-json"], {
+      logger: { log: (text) => output.push(text), error: () => {} },
+    });
+    const data = JSON.parse(output[0]!);
+    expect(
+      data.variants.find(
+        (variant: { discriminatorValue: string }) => variant.discriminatorValue === "ui",
+      ).requiredPackages[0].name,
+    ).toBe("@politty-test/missing-ui");
+    expect(
+      data.options.find((field: { name: string }) => field.name === "mode").requiredPackages,
+    ).toBeUndefined();
+  });
+
   it("only requires the UI package when --ui is enabled", async () => {
     const command = defineCommand({
       name: "vitest",

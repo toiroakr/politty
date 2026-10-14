@@ -116,6 +116,7 @@ export interface HelpFieldData {
  * union option (see {@link ExtractedFields.variants} / `.unionOptions`).
  */
 export interface HelpVariantData {
+  requiredPackages?: HelpFieldData["requiredPackages"];
   /** Discriminator value this variant matches (discriminated unions only) */
   discriminatorValue?: string | undefined;
   /** Variant/option description */
@@ -582,9 +583,13 @@ function renderDiscriminatedUnionOptions(
       (f) => f.name !== discriminator && !commonFields.has(f.name) && !f.positional,
     );
 
-    if (variantFields.length > 0) {
+    const requirements = formatPackageRequirements(
+      variant.fields.find((field) => field.name === discriminator)?.requiredPackages,
+    );
+    if (variantFields.length > 0 || requirements) {
       lines.push("");
       lines.push(formatVariantLabel(discriminator, variant));
+      if (requirements) lines.push(indentDescription(requirements, 2));
 
       for (const field of variantFields) {
         const flags = formatFlags(field);
@@ -1180,7 +1185,7 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
         ...(discriminatorField
           ? [
               {
-                ...toHelpFieldData(discriminatorField),
+                ...toHelpFieldData({ ...discriminatorField, requiredPackages: undefined }),
                 description:
                   extracted.description ?? discriminatorField.description ?? "Action to perform",
               },
@@ -1188,16 +1193,22 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
           : []),
         ...commonFields.map(toHelpFieldData),
       ];
-      variants = groups.map((variant) => ({
-        discriminatorValue: variant.discriminatorValue,
-        description: variant.description,
-        // Positional fields specific to this variant are included here too
-        // (duplicated from the flat top-level `positionals`) so JSON
-        // consumers can tell which variant a given positional belongs to.
-        fields: variant.fields
-          .filter((f) => f.name !== disc && !commonNames.has(f.name))
-          .map(toHelpFieldData),
-      }));
+      variants = groups.map((variant) => {
+        const field = variant.fields.find((field) => field.name === disc);
+        return {
+          discriminatorValue: variant.discriminatorValue,
+          ...(field?.requiredPackages?.length
+            ? { requiredPackages: toHelpFieldData(field).requiredPackages }
+            : {}),
+          description: variant.description,
+          // Positional fields specific to this variant are included here too
+          // (duplicated from the flat top-level `positionals`) so JSON
+          // consumers can tell which variant a given positional belongs to.
+          fields: variant.fields
+            .filter((f) => f.name !== disc && !commonNames.has(f.name))
+            .map(toHelpFieldData),
+        };
+      });
     } else if (
       (extracted.schemaType === "union" || extracted.schemaType === "xor") &&
       extracted.unionOptions
