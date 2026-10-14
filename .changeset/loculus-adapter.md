@@ -19,3 +19,5 @@ Support Loculus 0.2.3 multi-value literals, including mixed typed discriminator 
 Normalize numeric discriminator spellings before selecting parser and completion layouts, reject ambiguous CLI discriminator spellings, and normalize typed discriminators independently in union, xor and intersection operands.
 
 Select nested discriminated-union argument layouts before checking whether an outer union candidate accepts the command line, across all adapters.
+
+Use normalized discriminator selection for interactive prompts and select nested union discriminator layouts for dynamic completion.

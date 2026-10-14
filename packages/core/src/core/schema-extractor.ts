@@ -214,7 +214,13 @@ export function selectDiscriminatedVariant(
   readValues: (fields: ExtractedFields) => Record<string, unknown>,
 ): ExtractedFields {
   const { discriminator, variants } = extracted;
-  if (!discriminator || !variants) return extracted;
+  if (!discriminator || !variants) {
+    for (const option of extracted.unionOptions ?? []) {
+      const selected = selectDiscriminatedVariant(option, readValues);
+      if (selected !== option) return { ...extracted, fields: selected.fields };
+    }
+    return extracted;
+  }
   const candidates = variants.map((variant) => {
     const fields = { ...extracted, fields: variant.fields };
     return { variant, fields, value: readValues(fields)[discriminator] };

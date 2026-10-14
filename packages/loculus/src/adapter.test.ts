@@ -8,6 +8,48 @@ import { arg, createDefineCommand, defineCommand, generateHelpData, runCommand }
 import { promptMissingArgs } from "./prompt.js";
 
 describe("@politty/loculus", () => {
+  it("prompts for the selected numeric branch with alternate discriminator spellings", async () => {
+    const args = l.discriminatedUnion("edition", [
+      l.object({ edition: l.literal(1), flag: arg(l.boolean(), { prompt: { message: "Flag?" } }) }),
+      l.object({ edition: l.literal(2), name: arg(l.string(), { prompt: { message: "Name?" } }) }),
+    ]);
+    const command = defineCommand({ name: "prompt-edition", args, run: (value) => value });
+    const adapter = {
+      text: vi.fn(async () => "Alice"),
+      password: vi.fn(async () => "unused"),
+      confirm: vi.fn(async () => true),
+      select: vi.fn(async () => "unused"),
+      isCancelled: () => false,
+    };
+    const outcome = await runCommand(command, ["--edition", "2.0"], {
+      prompt: (raw, fields) => promptMissingArgs(raw, fields, { adapter, interactive: true }),
+    });
+    expect(outcome.result).toEqual({ edition: 2, name: "Alice" });
+    expect(adapter.text).toHaveBeenCalledOnce();
+    expect(adapter.confirm).not.toHaveBeenCalled();
+  });
+  it("narrows completion layouts inside ordinary union candidates", async () => {
+    const nested = l.discriminatedUnion("edition", [
+      l.object({ edition: l.literal(1), value: l.boolean() }),
+      l.object({ edition: l.literal(2), value: l.string() }),
+    ]);
+    const command = defineCommand({
+      name: "nested",
+      args: l.union([nested, l.object({ other: l.string() })]),
+      run: (value) => value,
+    });
+    expect((await runCommand(command, ["--edition", "2.0", "--value", "hello"])).result).toEqual({
+      edition: 2,
+      value: "hello",
+    });
+    const context = parseCompletionContext(["--edition", "2.0", "--value", ""], command);
+    expect(context.completionType).toBe("option-value");
+    expect(context.targetOption).toMatchObject({
+      name: "value",
+      valueType: "string",
+      takesValue: true,
+    });
+  });
   it("rejects discriminator branches with indistinguishable CLI spellings", () => {
     const args = l.discriminatedUnion("edition", [
       l.object({ edition: l.literal(1), value: l.boolean() }),

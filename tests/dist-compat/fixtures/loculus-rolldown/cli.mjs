@@ -144,6 +144,19 @@ const layouts = defineCommand({
   ]),
   run: finish,
 });
+const nestedLayouts = defineCommand({
+  name: "nested-layouts",
+  args: l.union([layouts.args, l.object({ other: l.string() })]),
+  run: finish,
+});
+const promptVariant = defineCommand({
+  name: "prompt-variant",
+  args: l.discriminatedUnion("edition", [
+    l.object({ edition: l.literal(1), flag: arg(l.boolean(), { prompt: { message: "Flag?" } }) }),
+    l.object({ edition: l.literal(2), name: arg(l.string(), { prompt: { message: "Name?" } }) }),
+  ]),
+  run: finish,
+});
 const numericUnion = defineCommand({
   name: "numeric-union",
   args: l.union([numeric.args, l.object({ other: l.string() })]),
@@ -167,6 +180,8 @@ const cli = defineCommand({
   description: "統合確認",
   subCommands: {
     layouts,
+    "nested-layouts": nestedLayouts,
+    "prompt-variant": promptVariant,
     "numeric-union": numericUnion,
     "numeric-xor": numericXor,
     "numeric-intersection": numericIntersection,
@@ -269,10 +284,25 @@ else {
     },
   });
   const promptRun = await runCommand(promptCmd, ["--name", prompted.name]);
-  const completionLayouts = ["2", "2.0", "2e0"].map((spelling) => {
-    const context = parseCompletionContext(["--edition", spelling, "--value", ""], layouts);
-    return { completionType: context.completionType, targetOption: context.targetOption };
+  const variantPromptRun = await runCommand(promptVariant, ["--edition", "2.0"], {
+    prompt: (raw, fields) =>
+      promptMissingArgs(raw, fields, {
+        interactive: true,
+        adapter: {
+          text: async () => "Alice",
+          password: async () => "Alice",
+          confirm: async () => true,
+          select: async () => "Alice",
+          isCancelled: () => false,
+        },
+      }),
   });
+  const completionLayouts = [layouts, nestedLayouts].flatMap((command) =>
+    ["2", "2.0", "2e0"].map((spelling) => {
+      const context = parseCompletionContext(["--edition", spelling, "--value", ""], command);
+      return { completionType: context.completionType, targetOption: context.targetOption };
+    }),
+  );
   let collisionError;
   try {
     extractFields(
@@ -325,6 +355,7 @@ else {
       collisionError,
       prompted,
       promptRun: { success: promptRun.success, result: promptRun.result },
+      variantPromptRun: { success: variantPromptRun.success, result: variantPromptRun.result },
       help,
       table: renderArgsTable(serve.args.shape),
       completions,

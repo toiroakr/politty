@@ -1,4 +1,8 @@
-import type { ExtractedFields, ResolvedFieldMeta } from "../core/schema-extractor.js";
+import {
+  selectDiscriminatedVariant,
+  type ExtractedFields,
+  type ResolvedFieldMeta,
+} from "../core/schema-extractor.js";
 import { getFieldsToPrompt, resolvePromptConfig } from "./prompt-resolver.js";
 import { isInteractive } from "./tty-detector.js";
 import type { PromptAdapter, ResolvedPromptConfig } from "./types.js";
@@ -87,10 +91,9 @@ async function promptDiscriminatedUnion(
   }
 
   // Find the active variant based on discriminator value
-  const discValue = String(result[discriminator] ?? "");
-  const activeVariant = variants.find((v) => v.discriminatorValue === discValue);
+  const activeVariant = selectDiscriminatedVariant(extracted, () => result);
 
-  if (activeVariant) {
+  if (activeVariant !== extracted) {
     // Prompt only the active variant's fields (excluding discriminator)
     const variantFields = activeVariant.fields.filter((f) => f.name !== discriminator);
     await promptAllFields(adapter, result, variantFields);

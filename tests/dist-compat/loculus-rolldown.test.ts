@@ -10,6 +10,7 @@ type Probe = {
   outcomes: Array<{ argv?: string[]; success: boolean; result?: unknown; error?: string }>;
   prompted: Record<string, unknown>;
   promptRun: { success: boolean; result?: unknown };
+  variantPromptRun: { success: boolean; result?: unknown };
   help: Record<string, { plain: string; json: unknown }>;
   table: string;
   completions: Record<string, string>;
@@ -48,6 +49,7 @@ const invocations = [
   ["numeric-union", "--edition", "2.0", "--count", "3"],
   ["numeric-xor", "--edition", "2.0", "--count", "3"],
   ["numeric-intersection", "--edition", "2.0", "--count", "3"],
+  ["nested-layouts", "--edition", "2.0", "--value", "hello"],
 ];
 let directory: string;
 let baseline: BuildResult;
@@ -139,7 +141,7 @@ describe("Loculus Rolldown bundles", () => {
     expect(baseline.probe.outcomes[32]?.result).toMatchObject({ mode: 2, count: 3 });
     expect(baseline.probe.outcomes.slice(35, 40).every((outcome) => outcome.success)).toBe(true);
     expect(baseline.probe.completionLayouts).toEqual(
-      Array.from({ length: 3 }, () => ({
+      Array.from({ length: 6 }, () => ({
         completionType: "option-value",
         targetOption: expect.objectContaining({ valueType: "string" }),
       })),
@@ -150,6 +152,10 @@ describe("Loculus Rolldown bundles", () => {
     expect(baseline.probe.templateDoc).toContain("--port");
     expect(baseline.probe.prompted).toEqual({ name: "Alice" });
     expect(baseline.probe.promptRun).toMatchObject({ success: true, result: { name: "Alice" } });
+    expect(baseline.probe.variantPromptRun).toEqual({
+      success: true,
+      result: { edition: 2, name: "Alice" },
+    });
     expect(Object.keys(baseline.probe.completions)).toEqual(["bash", "zsh", "fish"]);
     expect(baseline.executions[0]).toMatchObject({ status: 0 });
     expect(baseline.executions[0]?.stdout).toContain("Usage:");
