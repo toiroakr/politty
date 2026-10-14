@@ -1,10 +1,17 @@
 # Runtime benchmarks
 
-Run `pnpm bench` from the repository root. It measures argument parsing, Zod
+Run `pnpm bench` from the repository root. It measures shared argument parsing plus Zod and Valibot
 schema extraction with a warm cache, subcommand execution with validation, help
 generation, and static/dispatcher completion generation for Bash, Zsh, and Fish. The fixtures
 exercise positional arguments, aliases, repeated array options, numeric coercion,
-and subcommand routing. Assertions check fixture behavior before measurement.
+and subcommand routing. Both adapters use equivalent five-field schemas and the same command tree and argv.
+Assertions check parsing, coercion, defaults, invalid enum and non-finite number rejection, command results,
+help, and completion generation before measurement. Each adapter is registered once
+before its scenarios run; adapter switching is excluded from timing. The shared parser
+is measured once because it consumes adapter-neutral parser options.
+
+Existing Zod metric keys and workloads are preserved. The nine additional Valibot
+metrics have no comparison until the first main CI run containing them stores a baseline.
 
 Each scenario warms up for 300 ms, then records seven samples of at least 250 ms
 each in batches of 100 operations. The reported value is the median time per
