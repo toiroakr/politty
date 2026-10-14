@@ -1,4 +1,5 @@
 import type { InferSchemaOutput, SchemaLike } from "../adapter/standard-schema.js";
+import type { PackageRequirement } from "../package-requirements.js";
 import type { ArgSource, GlobalArgs, IsEmpty } from "../types.js";
 import type { DynamicCompletionResolver } from "./dynamic-completion-types.js";
 import type { ExpandCompletion } from "./expand-completion-types.js";
@@ -150,6 +151,7 @@ export type EffectContext = {
  * Base metadata shared by all argument types
  */
 export interface BaseArgMeta<TValue = unknown> {
+  requiredPackages?: readonly Pick<PackageRequirement, "name" | "install" | "from">[];
   /** Argument description */
   description?: string;
   /**

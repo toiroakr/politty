@@ -78,6 +78,7 @@ export interface HelpOptions {
  * round-trip through JSON, and text help never surfaces them either.
  */
 export interface HelpFieldData {
+  requiredPackages?: { name: string; install: string }[] | undefined;
   /** Field name (camelCase, as defined in the schema) */
   name: string;
   /** CLI option name (kebab-case) */
@@ -481,7 +482,7 @@ export function renderOptions(
   const options = extracted.fields.filter((a) => !a.positional);
   for (const opt of options) {
     const flags = formatFlags(opt);
-    let desc = opt.description ?? "";
+    let desc = fieldDescription(opt);
 
     // Add default value indicator
     if (opt.defaultValue !== undefined) {
@@ -559,7 +560,7 @@ function renderDiscriminatedUnionOptions(
     const field = extracted.fields.find((f) => f.name === fieldName);
     if (field && !field.positional) {
       const flags = formatFlags(field);
-      let desc = field.description ?? "";
+      let desc = fieldDescription(field);
       if (field.defaultValue !== undefined) {
         desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(field.defaultValue)})`)}`;
       }
@@ -587,7 +588,7 @@ function renderDiscriminatedUnionOptions(
 
       for (const field of variantFields) {
         const flags = formatFlags(field);
-        let desc = field.description ?? "";
+        let desc = fieldDescription(field);
         if (field.defaultValue !== undefined) {
           desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(field.defaultValue)})`)}`;
         }
@@ -627,7 +628,7 @@ function renderUnionOptions(
     const field = extracted.fields.find((f) => f.name === fieldName);
     if (field && !field.positional) {
       const flags = formatFlags(field);
-      let desc = field.description ?? "";
+      let desc = fieldDescription(field);
       if (field.defaultValue !== undefined) {
         desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(field.defaultValue)})`)}`;
       }
@@ -658,7 +659,7 @@ function renderUnionOptions(
 
       for (const field of uniqueFields) {
         const flags = formatFlags(field);
-        let desc = field.description ?? "";
+        let desc = fieldDescription(field);
         if (field.defaultValue !== undefined) {
           desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(field.defaultValue)})`)}`;
         }
@@ -811,7 +812,7 @@ function formatOption(
  */
 function formatFieldLine(opt: ResolvedFieldMeta, indent = 0, extraDescPadding = 0): string {
   const flags = formatFlags(opt);
-  let desc = opt.description ?? "";
+  let desc = fieldDescription(opt);
 
   if (opt.defaultValue !== undefined) {
     desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(opt.defaultValue)})`)}`;
@@ -854,7 +855,7 @@ function renderSubcommandOptionsCompact(command: AnyCommand, indent: number): st
     const options = extracted.fields.filter((a) => !a.positional);
     for (const opt of options) {
       const flags = formatFlags(opt);
-      let desc = opt.description ?? "";
+      let desc = fieldDescription(opt);
       if (opt.defaultValue !== undefined) {
         desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(opt.defaultValue)})`)}`;
       }
@@ -1064,6 +1065,12 @@ export interface HelpDataOptions {
  * Convert a {@link ResolvedFieldMeta} to its JSON-safe {@link HelpFieldData}
  * counterpart, dropping the schema/completion/prompt/effect internals.
  */
+function fieldDescription(field: ResolvedFieldMeta): string {
+  return [field.description, formatPackageRequirements(field.requiredPackages)]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function toHelpFieldData(field: ResolvedFieldMeta): HelpFieldData {
   const data: HelpFieldData = {
     name: field.name,
@@ -1073,6 +1080,12 @@ function toHelpFieldData(field: ResolvedFieldMeta): HelpFieldData {
     required: field.required,
     type: field.type,
   };
+  if (field.requiredPackages?.length) {
+    data.requiredPackages = field.requiredPackages.map((requirement) => ({
+      name: requirement.name,
+      install: getInstallCommand(requirement),
+    }));
+  }
   if (field.alias) data.alias = field.alias;
   if (field.description !== undefined) data.description = field.description;
   if (field.placeholder !== undefined) data.placeholder = field.placeholder;

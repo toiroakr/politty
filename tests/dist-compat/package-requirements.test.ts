@@ -9,6 +9,32 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 describe("published package requirements", () => {
   it.each(["politty", "zod", "zod-mini", "valibot"])(
+    "%s supports packages attached to boolean options",
+    async (adapter) => {
+      const { arg, defineCommand, runCommand } = await import(
+        pathToFileURL(join(root, "packages", adapter, "dist", "index.js")).href
+      );
+      const metadata = { requiredPackages: [{ name: "@politty-test/missing-ui" }] };
+      let args;
+      if (adapter === "valibot") {
+        const v = await import("valibot");
+        args = v.object({ ui: arg(v.optional(v.boolean(), false), metadata) });
+      } else if (adapter === "zod-mini") {
+        const z = await import("zod/mini");
+        args = z.object({ ui: arg(z._default(z.boolean(), false), metadata) });
+      } else {
+        const { z } = await import("zod");
+        args = z.object({ ui: arg(z.boolean().default(false), metadata) });
+      }
+      const command = defineCommand({ name: "test", args, run: () => "tests" });
+      expect((await runCommand(command, [])).result).toBe("tests");
+      const enabled = await runCommand(command, ["--ui"]);
+      expect(enabled.success).toBe(false);
+      expect(enabled.error?.message).toContain('Package "@politty-test/missing-ui" is required.');
+    },
+  );
+
+  it.each(["politty", "zod", "zod-mini", "valibot"])(
     "%s resolves optional packages from the consuming working directory",
     (adapter) => {
       const directory = mkdtempSync(join(tmpdir(), "politty-consumer-"));

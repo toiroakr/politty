@@ -1005,6 +1005,7 @@ async function runCommandInternal<TResult = unknown>(
         captureLogs: options.captureLogs,
         existingLogs: getCurrentLogs(),
         globalCleanup: options._globalCleanup,
+        packageFields: isCompletionInvocation ? undefined : options._globalExtracted?.fields,
       });
       return result as RunResult<TResult>;
     }
@@ -1134,6 +1135,18 @@ async function runCommandInternal<TResult = unknown>(
       captureLogs: options.captureLogs,
       existingLogs: getCurrentLogs(),
       globalCleanup: options._globalCleanup,
+      packageFields: isCompletionInvocation
+        ? undefined
+        : [
+            ...(options._globalExtracted?.fields ?? []).filter(
+              (globalField) =>
+                !parseResult.extractedFields?.fields.some(
+                  (field) => field.name === globalField.name,
+                ),
+            ),
+            ...(parseResult.optionFields ?? []),
+            ...(parseResult.positionalSlotFields ?? []),
+          ],
     });
 
     return result as RunResult<TResult>;

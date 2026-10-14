@@ -59,6 +59,82 @@ async function fixture(source: string, exports: unknown = "./index.js") {
 }
 
 describe("package loading", () => {
+  it("loads packages attached to boolean arguments only when enabled", async () => {
+    const command = defineCommand({
+      name: "test",
+      args: z.object({
+        ui: arg(z.boolean().default(false), {
+          requiredPackages: [{ name: "@politty-test/missing-ui" }],
+        }),
+      }),
+      run: () => "tests",
+    });
+    expect((await runCommand(command, [])).result).toBe("tests");
+    expect((await runCommand(command, ["--no-ui"])).result).toBe("tests");
+    const enabled = await runCommand(command, ["--ui"]);
+    expect(enabled.success).toBe(false);
+    expect(enabled.error?.message).toContain('Package "@politty-test/missing-ui" is required.');
+    const output: string[] = [];
+    expect(
+      (
+        await runCommand(command, ["--ui", "--help"], {
+          logger: { log: (text) => output.push(text), error: () => {} },
+        })
+      ).success,
+    ).toBe(true);
+    expect(output.join("\n")).toContain("@politty-test/missing-ui");
+    output.length = 0;
+    await runCommand(command, ["--help-json"], {
+      logger: { log: (text) => output.push(text), error: () => {} },
+    });
+    expect(
+      JSON.parse(output[0]!).options.find((field: { name: string }) => field.name === "ui")
+        .requiredPackages[0].name,
+    ).toBe("@politty-test/missing-ui");
+  });
+
+  it("activates argument requirements for true defaults before setup", async () => {
+    let setup = false;
+    const command = defineCommand({
+      name: "test",
+      args: z.object({
+        ui: arg(z.boolean().default(true), {
+          negation: true,
+          requiredPackages: [{ name: "@politty-test/missing-ui" }],
+        }),
+      }),
+      setup: () => {
+        setup = true;
+      },
+      run: () => "tests",
+    });
+    expect((await runCommand(command, [])).success).toBe(false);
+    expect(setup).toBe(false);
+    expect((await runCommand(command, ["--no-ui"])).result).toBe("tests");
+  });
+
+  it("only loads argument packages from the selected discriminated-union variant", async () => {
+    const installed = await fixture("export const ready = true;");
+    const command = defineCommand({
+      name: "test",
+      args: z.discriminatedUnion("mode", [
+        z.object({
+          mode: z.literal("tests"),
+          ui: arg(z.boolean().default(true), { requiredPackages: [installed] }),
+        }),
+        z.object({
+          mode: z.literal("ui"),
+          ui: arg(z.boolean().default(true), {
+            requiredPackages: [{ name: "@politty-test/missing-ui" }],
+          }),
+        }),
+      ]),
+      run: () => "tests",
+    });
+    expect((await runCommand(command, ["--mode", "tests"])).result).toBe("tests");
+    expect((await runCommand(command, ["--mode", "ui"])).success).toBe(false);
+  });
+
   it("only requires the UI package when --ui is enabled", async () => {
     const command = defineCommand({
       name: "vitest",

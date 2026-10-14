@@ -71,7 +71,6 @@ import { z } from "zod";
 
 const studioPackage = {
   name: "@lines-db/studio",
-  install: "npm install -D @lines-db/studio",
 };
 
 const studio = defineCommand({
@@ -96,18 +95,18 @@ Omit `install` to automatically generate a development-dependency installation c
 
 By default, packages are resolved from the current working directory, so dependencies installed in the consuming project are found. Set `from: import.meta.url` (or another absolute module URL) to resolve relative to a specific CLI module instead. Import-only package exports are supported. Resolution uses the standard `node` and `import` export conditions; custom Node conditions (such as `--conditions=development`) and custom module loaders are not supported. Packages must expose an entry point under the standard conditions. A missing dependency inside an installed package, a broken entry point, or an initialization error retains its original error.
 
-Use `when` for an option that activates an optional feature. It receives the parsed and validated arguments, including defaults and global arguments. Supply a `description` to explain the condition in help.
+Attach `requiredPackages` directly to a boolean option. Its packages load before setup and execution only when the validated value is `true`, including values supplied by defaults or environment variables. Help shows the package requirements beside the option without loading them.
 
 ```typescript
 const uiPackage = {
   name: "@vitest/ui",
-  install: "npm install -D @vitest/ui",
 };
 
 const test = defineCommand({
   name: "test",
-  args: z.object({ ui: arg(z.boolean().default(false)) }),
-  requiredPackages: [{ ...uiPackage, description: "--ui", when: (args) => args.ui }],
+  args: z.object({
+    ui: arg(z.boolean().default(false), { requiredPackages: [uiPackage] }),
+  }),
   run: async (args) => {
     if (args.ui) {
       const module = await loadPackage<{ start: () => Promise<void> }>(uiPackage);
@@ -120,6 +119,8 @@ const test = defineCommand({
 ```
 
 Here, `test` and `test --no-ui` work without the UI package, while `test --ui` loads it. Calls to `loadPackage` use Node's module cache, so a package loaded by `requiredPackages` is not initialized again by the run hook. Its generic type describes the module namespace; omit it to receive `unknown`.
+
+Argument-level `requiredPackages` is supported for boolean fields only. For conditions involving several arguments or non-boolean values, use command-level `requiredPackages` with a `when` predicate receiving the validated arguments. A requirement’s `description` can explain that condition in help.
 
 For a whole command supplied by an external package, put unconditional requirements on the synchronous metadata passed to `lazy()`:
 

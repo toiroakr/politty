@@ -1,4 +1,5 @@
 import type { ArgMeta, CompletionMeta, EffectContext, PromptMeta } from "../core/arg-registry.js";
+import type { PackageRequirement } from "../package-requirements.js";
 import type { ArgsSchema } from "../types.js";
 
 /**
@@ -18,6 +19,7 @@ export const RESERVED_BUILTIN_LONG_NAMES: ReadonlySet<string> = new Set([
  * Resolved metadata for an argument field
  */
 export interface ResolvedFieldMeta {
+  requiredPackages?: readonly Pick<PackageRequirement, "name" | "install" | "from">[] | undefined;
   /** Field name (camelCase, as defined in schema) */
   name: string;
   /** CLI option name (kebab-case, for command line usage) */
@@ -330,6 +332,12 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
   const negationDisplay: string | undefined =
     typeof negation === "string" ? negation : negation === true ? `no-${cliName}` : undefined;
 
+  if (argMeta?.requiredPackages?.length && fieldType !== "boolean") {
+    throw new Error(
+      `Invalid requiredPackages for field "${name}": requiredPackages can only be used on boolean fields.`,
+    );
+  }
+
   const positional = argMeta?.positional;
   const meta: ResolvedFieldMeta = {
     name,
@@ -352,6 +360,7 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
     negationDisplay,
     negationDescription,
     effect: argMeta?.effect,
+    requiredPackages: argMeta?.requiredPackages,
   };
 
   // Add overrideBuiltinAlias only if it's true

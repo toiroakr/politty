@@ -948,6 +948,7 @@ Base metadata common to all argument types.
 
 ```typescript
 interface BaseArgMeta {
+  requiredPackages?: readonly Pick<PackageRequirement, "name" | "install" | "from">[];
   /** Argument description */
   description?: string;
   /** Treat as positional argument; `{ named: true }` also accepts it as `--<name>` */
@@ -968,6 +969,8 @@ interface BaseArgMeta {
 ```
 
 ---
+
+On boolean fields, `requiredPackages` loads the listed packages before setup and execution when the validated value is `true`. It is inactive for `false` or an absent optional value. `install` and `from` are optional, with the same defaults as command requirements. Non-boolean fields reject this metadata. JSON help includes package information on the corresponding option.
 
 ### `RegularArgMeta`
 
