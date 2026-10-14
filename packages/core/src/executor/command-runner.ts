@@ -1,3 +1,5 @@
+import type { ResolvedFieldMeta } from "../core/schema-extractor.js";
+import { loadRequiredPackages } from "../package-requirements.js";
 import type {
   AnyCommand,
   CleanupContext,
@@ -12,6 +14,8 @@ import { createLogCollector, emptyLogs, mergeLogs } from "./log-collector.js";
  * Options for lifecycle execution
  */
 export interface ExecuteLifecycleOptions {
+  packageFields?: readonly ResolvedFieldMeta[] | undefined;
+  packageDiscriminators?: readonly string[] | undefined;
   /** Handle signals (SIGINT, SIGTERM) */
   handleSignals?: boolean | undefined;
   /** Capture console output */
@@ -115,6 +119,21 @@ export async function executeLifecycle<TResult = unknown>(
   }
 
   try {
+    if (command.requiredPackages?.length) {
+      await loadRequiredPackages(command.requiredPackages, args);
+    }
+    for (const field of _options.packageFields ?? []) {
+      if (
+        field.requiredPackages?.length &&
+        typeof args === "object" &&
+        args !== null &&
+        field.name in args &&
+        (_options.packageDiscriminators?.includes(field.name) ||
+          (args as Record<string, unknown>)[field.name] === true)
+      ) {
+        await loadRequiredPackages(field.requiredPackages, args);
+      }
+    }
     // Execute setup
     if (command.setup) {
       await command.setup(setupContext);

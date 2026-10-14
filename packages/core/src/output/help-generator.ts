@@ -9,6 +9,7 @@ import {
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
 import { resolveSubCommandMeta } from "../lazy.js";
+import { formatPackageRequirements, getInstallCommand } from "../package-requirements.js";
 import type { AnyCommand, Example, SubCommandsRecord, SubCommandValue } from "../types.js";
 import { styles } from "./logger.js";
 import { renderMarkdown } from "./markdown-renderer.js";
@@ -77,6 +78,7 @@ export interface HelpOptions {
  * round-trip through JSON, and text help never surfaces them either.
  */
 export interface HelpFieldData {
+  requiredPackages?: { name: string; install: string }[] | undefined;
   /** Field name (camelCase, as defined in the schema) */
   name: string;
   /** CLI option name (kebab-case) */
@@ -114,6 +116,7 @@ export interface HelpFieldData {
  * union option (see {@link ExtractedFields.variants} / `.unionOptions`).
  */
 export interface HelpVariantData {
+  requiredPackages?: HelpFieldData["requiredPackages"];
   /** Discriminator value this variant matches (discriminated unions only) */
   discriminatorValue?: string | undefined;
   /** Variant/option description */
@@ -174,6 +177,9 @@ export interface HelpSubcommandData {
  * {@link generateHelp}'s formatted text.
  */
 export interface HelpData {
+  requiredPackages?:
+    | { name: string; install: string; description?: string | undefined }[]
+    | undefined;
   /** Command name (command.name) */
   name: string;
   /**
@@ -350,7 +356,7 @@ function formatArgumentLine(arg: ResolvedFieldMeta, indent = 0): string {
     : styles.placeholder(`[${arg.name}]`);
   const name = arg.named ? `${positional}, ${formatFlags(arg)}` : positional;
   const desc = [
-    arg.description,
+    fieldDescription(arg),
     arg.defaultValue !== undefined
       ? styles.defaultValue(`(default: ${JSON.stringify(arg.defaultValue)})`)
       : undefined,
@@ -477,7 +483,7 @@ export function renderOptions(
   const options = extracted.fields.filter((a) => !a.positional);
   for (const opt of options) {
     const flags = formatFlags(opt);
-    let desc = opt.description ?? "";
+    let desc = fieldDescription(opt);
 
     // Add default value indicator
     if (opt.defaultValue !== undefined) {
@@ -555,7 +561,7 @@ function renderDiscriminatedUnionOptions(
     const field = extracted.fields.find((f) => f.name === fieldName);
     if (field && !field.positional) {
       const flags = formatFlags(field);
-      let desc = field.description ?? "";
+      let desc = fieldDescription(field);
       if (field.defaultValue !== undefined) {
         desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(field.defaultValue)})`)}`;
       }
@@ -577,13 +583,17 @@ function renderDiscriminatedUnionOptions(
       (f) => f.name !== discriminator && !commonFields.has(f.name) && !f.positional,
     );
 
-    if (variantFields.length > 0) {
+    const requirements = formatPackageRequirements(
+      variant.fields.find((field) => field.name === discriminator)?.requiredPackages,
+    );
+    if (variantFields.length > 0 || requirements) {
       lines.push("");
       lines.push(formatVariantLabel(discriminator, variant));
+      if (requirements) lines.push(indentDescription(requirements, 2));
 
       for (const field of variantFields) {
         const flags = formatFlags(field);
-        let desc = field.description ?? "";
+        let desc = fieldDescription(field);
         if (field.defaultValue !== undefined) {
           desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(field.defaultValue)})`)}`;
         }
@@ -623,7 +633,7 @@ function renderUnionOptions(
     const field = extracted.fields.find((f) => f.name === fieldName);
     if (field && !field.positional) {
       const flags = formatFlags(field);
-      let desc = field.description ?? "";
+      let desc = fieldDescription(field);
       if (field.defaultValue !== undefined) {
         desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(field.defaultValue)})`)}`;
       }
@@ -654,7 +664,7 @@ function renderUnionOptions(
 
       for (const field of uniqueFields) {
         const flags = formatFlags(field);
-        let desc = field.description ?? "";
+        let desc = fieldDescription(field);
         if (field.defaultValue !== undefined) {
           desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(field.defaultValue)})`)}`;
         }
@@ -807,7 +817,7 @@ function formatOption(
  */
 function formatFieldLine(opt: ResolvedFieldMeta, indent = 0, extraDescPadding = 0): string {
   const flags = formatFlags(opt);
-  let desc = opt.description ?? "";
+  let desc = fieldDescription(opt);
 
   if (opt.defaultValue !== undefined) {
     desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(opt.defaultValue)})`)}`;
@@ -850,7 +860,7 @@ function renderSubcommandOptionsCompact(command: AnyCommand, indent: number): st
     const options = extracted.fields.filter((a) => !a.positional);
     for (const opt of options) {
       const flags = formatFlags(opt);
-      let desc = opt.description ?? "";
+      let desc = fieldDescription(opt);
       if (opt.defaultValue !== undefined) {
         desc += ` ${styles.defaultValue(`(default: ${JSON.stringify(opt.defaultValue)})`)}`;
       }
@@ -880,7 +890,9 @@ function renderSubcommandsWithOptions(
   for (const [name, subCmd] of getVisibleSubcommandEntries(subCommands)) {
     const cmd = resolveSubCommandMeta(subCmd);
     const fullPath = parentPath ? `${parentPath} ${name}` : name;
-    const desc = cmd?.description ?? "";
+    const desc = [cmd?.description, formatPackageRequirements(cmd?.requiredPackages)]
+      .filter(Boolean)
+      .join("\n");
     const aliases = cmd?.aliases;
     const displayName =
       aliases && aliases.length > 0 ? `${fullPath}, ${aliases.join(", ")}` : fullPath;
@@ -1004,7 +1016,9 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
       const subLines: string[] = [];
       for (const [name, subCmd] of Object.entries(visibleSubCommands)) {
         const cmd = resolveSubCommandMeta(subCmd);
-        const desc = cmd?.description ?? "";
+        const desc = [cmd?.description, formatPackageRequirements(cmd?.requiredPackages)]
+          .filter(Boolean)
+          .join("\n");
         // Include parent path in subcommand name, plus aliases
         const fullName = currentPath ? `${currentPath} ${name}` : name;
         const aliases = cmd?.aliases;
@@ -1020,6 +1034,11 @@ export function generateHelp(command: AnyCommand, options: HelpOptions): string 
   if (command.examples && command.examples.length > 0) {
     const exampleLines = renderExamplesForHelp(command.examples, context);
     sections.push(`${styles.sectionHeader("Examples:")}\n${exampleLines}`);
+  }
+
+  const requirements = formatPackageRequirements(command.requiredPackages);
+  if (requirements) {
+    sections.push(`${styles.sectionHeader("Required packages:")}\n${requirements}`);
   }
 
   // Notes (render Markdown for styled terminal output, indented under header)
@@ -1051,6 +1070,12 @@ export interface HelpDataOptions {
  * Convert a {@link ResolvedFieldMeta} to its JSON-safe {@link HelpFieldData}
  * counterpart, dropping the schema/completion/prompt/effect internals.
  */
+function fieldDescription(field: ResolvedFieldMeta): string {
+  return [field.description, formatPackageRequirements(field.requiredPackages)]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function toHelpFieldData(field: ResolvedFieldMeta): HelpFieldData {
   const data: HelpFieldData = {
     name: field.name,
@@ -1060,6 +1085,12 @@ function toHelpFieldData(field: ResolvedFieldMeta): HelpFieldData {
     required: field.required,
     type: field.type,
   };
+  if (field.requiredPackages?.length) {
+    data.requiredPackages = field.requiredPackages.map((requirement) => ({
+      name: requirement.name,
+      install: getInstallCommand(requirement),
+    }));
+  }
   if (field.alias) data.alias = field.alias;
   if (field.description !== undefined) data.description = field.description;
   if (field.placeholder !== undefined) data.placeholder = field.placeholder;
@@ -1154,7 +1185,7 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
         ...(discriminatorField
           ? [
               {
-                ...toHelpFieldData(discriminatorField),
+                ...toHelpFieldData({ ...discriminatorField, requiredPackages: undefined }),
                 description:
                   extracted.description ?? discriminatorField.description ?? "Action to perform",
               },
@@ -1162,16 +1193,22 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
           : []),
         ...commonFields.map(toHelpFieldData),
       ];
-      variants = groups.map((variant) => ({
-        discriminatorValue: variant.discriminatorValue,
-        description: variant.description,
-        // Positional fields specific to this variant are included here too
-        // (duplicated from the flat top-level `positionals`) so JSON
-        // consumers can tell which variant a given positional belongs to.
-        fields: variant.fields
-          .filter((f) => f.name !== disc && !commonNames.has(f.name))
-          .map(toHelpFieldData),
-      }));
+      variants = groups.map((variant) => {
+        const field = variant.fields.find((field) => field.name === disc);
+        return {
+          discriminatorValue: variant.discriminatorValue,
+          ...(field?.requiredPackages?.length
+            ? { requiredPackages: toHelpFieldData(field).requiredPackages }
+            : {}),
+          description: variant.description,
+          // Positional fields specific to this variant are included here too
+          // (duplicated from the flat top-level `positionals`) so JSON
+          // consumers can tell which variant a given positional belongs to.
+          fields: variant.fields
+            .filter((f) => f.name !== disc && !commonNames.has(f.name))
+            .map(toHelpFieldData),
+        };
+      });
     } else if (
       (extracted.schemaType === "union" || extracted.schemaType === "xor") &&
       extracted.unionOptions
@@ -1246,6 +1283,15 @@ export function generateHelpData(command: AnyCommand, options: HelpDataOptions =
     subcommands,
     examples: command.examples,
     notes: command.notes,
+    ...(command.requiredPackages?.length
+      ? {
+          requiredPackages: command.requiredPackages.map((requirement) => ({
+            name: requirement.name,
+            install: getInstallCommand(requirement),
+            description: requirement.description,
+          })),
+        }
+      : {}),
     agentHelp: options.agentHelp,
   };
 }

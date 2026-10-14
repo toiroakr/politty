@@ -6,8 +6,10 @@ import {
   listSubCommandNamesWithAliases,
   listSubCommands,
   resolveLazyCommand,
+  resolveSubCommandAlias,
   resolveSubcommandWithAlias,
 } from "../executor/subcommand-router.js";
+import { resolveSubCommandMeta } from "../lazy.js";
 import { generateHelp, generateHelpData, type CommandContext } from "../output/help-generator.js";
 import { parseArgs } from "../parser/arg-parser.js";
 import { coerceEnvValue } from "../parser/coerce-boolean.js";
@@ -48,6 +50,7 @@ import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import {
   extractFields,
+  selectDiscriminatedVariant,
   toCamelCase,
   toKebabCase,
   type ExtractedFields,
@@ -157,6 +160,7 @@ function resolveInvocation(command: AnyCommand, context: CommandContext): RunInv
  * Internal options for runCommand (includes context tracking)
  */
 interface InternalCommandOptions extends InternalRunOptions {
+  _metadataOnly?: boolean | undefined;
   /** Command hierarchy context (internal use) */
   _context?: CommandContext | undefined;
   /** Existing logs to include (for subcommand routing) */
@@ -695,7 +699,38 @@ async function runCommandInternal<TResult = unknown>(
 
     // Handle subcommand
     if (parseResult.subCommand) {
-      const resolved = await resolveSubcommandWithAlias(command, parseResult.subCommand);
+      let metadataOnly = options._metadataOnly ?? false;
+      const resolved = await resolveSubcommandWithAlias(command, parseResult.subCommand, (meta) => {
+        if (metadataOnly) return true;
+        if (!meta.requiredPackages?.length) return false;
+        let target = meta;
+        let remainingArgs = parseResult.remainingArgs;
+        while (true) {
+          const preview = parseArgs(remainingArgs, target, {
+            skipValidation: options.skipValidation,
+            globalExtracted: context.globalExtracted,
+            promptAvailable: !!options.prompt,
+          });
+          if (
+            preview.helpRequested ||
+            preview.helpAllRequested ||
+            preview.helpJsonRequested ||
+            preview.versionRequested
+          ) {
+            metadataOnly = true;
+            return true;
+          }
+          if (!preview.subCommand || !target.subCommands) return false;
+          const name = Object.hasOwn(target.subCommands, preview.subCommand)
+            ? preview.subCommand
+            : (resolveSubCommandAlias(target, preview.subCommand) ?? preview.subCommand);
+          const subCommand = target.subCommands[name];
+          const subMeta = subCommand ? resolveSubCommandMeta(subCommand) : null;
+          if (!subMeta) return false;
+          target = subMeta;
+          remainingArgs = preview.remainingArgs;
+        }
+      });
       if (resolved) {
         // Build new context for subcommand
         const subContext: CommandContext = {
@@ -725,6 +760,7 @@ async function runCommandInternal<TResult = unknown>(
           .filter((token) => !isSuppressedFlag(token));
         return runCommandInternal<TResult>(resolved.command, parseResult.remainingArgs, {
           ...options,
+          _metadataOnly: metadataOnly,
           _context: subContext,
           _existingLogs: getCurrentLogs(),
           _parsedGlobalArgs: accumulatedGlobalArgs,
@@ -976,6 +1012,14 @@ async function runCommandInternal<TResult = unknown>(
         captureLogs: options.captureLogs,
         existingLogs: getCurrentLogs(),
         globalCleanup: options._globalCleanup,
+        packageDiscriminators: options._globalExtracted?.discriminator
+          ? [options._globalExtracted.discriminator]
+          : [],
+        packageFields:
+          isCompletionInvocation || !options._globalExtracted
+            ? undefined
+            : selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs)
+                .fields,
       });
       return result as RunResult<TResult>;
     }
@@ -1105,6 +1149,20 @@ async function runCommandInternal<TResult = unknown>(
       captureLogs: options.captureLogs,
       existingLogs: getCurrentLogs(),
       globalCleanup: options._globalCleanup,
+      packageDiscriminators: [
+        parseResult.extractedFields?.discriminator,
+        options._globalExtracted?.discriminator,
+      ].filter((name): name is string => name !== undefined),
+      packageFields: isCompletionInvocation
+        ? undefined
+        : [
+            ...(options._globalExtracted
+              ? selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs)
+                  .fields
+              : []),
+            ...(parseResult.optionFields ?? []),
+            ...(parseResult.positionalSlotFields ?? []),
+          ],
     });
 
     return result as RunResult<TResult>;

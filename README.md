@@ -625,6 +625,8 @@ The `playground/` directory contains many examples:
 - `21-lazy-subcommands` - Lazy loading
 - `26-command-alias` - Command aliases
 
+For commands or options that need a separately installed package, see [Optional External Packages](./docs/advanced-features.md#optional-external-packages).
+
 ## License
 
 MIT
