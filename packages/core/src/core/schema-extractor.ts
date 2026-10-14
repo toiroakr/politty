@@ -103,12 +103,32 @@ export function computeCommonFieldNames(
     const sameRole = rest.every((group) =>
       group.fields.some(
         (f) =>
-          f.name === field.name && f.positional === field.positional && f.named === field.named,
+          f.name === field.name &&
+          f.positional === field.positional &&
+          f.named === field.named &&
+          samePackageRequirements(f.requiredPackages, field.requiredPackages),
       ),
     );
     if (sameRole) common.add(field.name);
   }
   return common;
+}
+
+function samePackageRequirements(
+  left: ResolvedFieldMeta["requiredPackages"],
+  right: ResolvedFieldMeta["requiredPackages"],
+): boolean {
+  return (
+    (left?.length ?? 0) === (right?.length ?? 0) &&
+    (left ?? []).every((requirement, index) => {
+      const other = right?.[index];
+      return (
+        requirement.name === other?.name &&
+        requirement.install === other.install &&
+        requirement.from?.toString() === other.from?.toString()
+      );
+    })
+  );
 }
 
 /**

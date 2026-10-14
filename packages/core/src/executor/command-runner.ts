@@ -15,7 +15,7 @@ import { createLogCollector, emptyLogs, mergeLogs } from "./log-collector.js";
  */
 export interface ExecuteLifecycleOptions {
   packageFields?: readonly ResolvedFieldMeta[] | undefined;
-  packageDiscriminator?: string | undefined;
+  packageDiscriminators?: readonly string[] | undefined;
   /** Handle signals (SIGINT, SIGTERM) */
   handleSignals?: boolean | undefined;
   /** Capture console output */
@@ -128,7 +128,7 @@ export async function executeLifecycle<TResult = unknown>(
         typeof args === "object" &&
         args !== null &&
         field.name in args &&
-        (field.name === _options.packageDiscriminator ||
+        (_options.packageDiscriminators?.includes(field.name) ||
           (args as Record<string, unknown>)[field.name] === true)
       ) {
         await loadRequiredPackages(field.requiredPackages, args);

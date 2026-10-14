@@ -356,7 +356,7 @@ function formatArgumentLine(arg: ResolvedFieldMeta, indent = 0): string {
     : styles.placeholder(`[${arg.name}]`);
   const name = arg.named ? `${positional}, ${formatFlags(arg)}` : positional;
   const desc = [
-    arg.description,
+    fieldDescription(arg),
     arg.defaultValue !== undefined
       ? styles.defaultValue(`(default: ${JSON.stringify(arg.defaultValue)})`)
       : undefined,

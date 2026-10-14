@@ -105,7 +105,7 @@ const uiPackage = {
 const test = defineCommand({
   name: "test",
   args: z.object({
-    ui: arg(z.boolean().default(false), { requiredPackages: [uiPackage] }),
+    ui: arg(z.boolean().default(false), { negation: true, requiredPackages: [uiPackage] }),
   }),
   run: async (args) => {
     if (args.ui) {

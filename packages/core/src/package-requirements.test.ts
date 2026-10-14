@@ -173,6 +173,70 @@ describe("package loading", () => {
     ).toBeUndefined();
   });
 
+  it("loads global discriminator packages for commands with local schemas", async () => {
+    const command = defineCommand({
+      name: "test",
+      args: z.object({ file: z.string().default("data") }),
+      run: () => "tests",
+    });
+    const globalArgs = z.discriminatedUnion("mode", [
+      z.object({ mode: z.literal("tests") }),
+      z.object({
+        mode: arg(z.literal("ui"), { requiredPackages: [{ name: "@politty-test/missing-ui" }] }),
+      }),
+    ]);
+    expect((await runCommand(command, ["--mode", "tests"], { globalArgs })).result).toBe("tests");
+    const result = await runCommand(command, ["--mode", "ui"], { globalArgs });
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toContain("@politty-test/missing-ui");
+  });
+
+  it("keeps different boolean package requirements in their help variants", async () => {
+    const command = defineCommand({
+      name: "test",
+      args: z.discriminatedUnion("mode", [
+        z.object({
+          mode: z.literal("a"),
+          ui: arg(z.boolean(), { requiredPackages: [{ name: "@politty-test/a" }] }),
+        }),
+        z.object({
+          mode: z.literal("b"),
+          ui: arg(z.boolean(), { requiredPackages: [{ name: "@politty-test/b" }] }),
+        }),
+      ]),
+      run: () => {},
+    });
+    const output: string[] = [];
+    const logger = { log: (text: string) => output.push(text), error: () => {} };
+    await runCommand(command, ["--help"], { logger });
+    expect(output.join("\n")).toContain("@politty-test/a");
+    expect(output.join("\n")).toContain("@politty-test/b");
+    output.length = 0;
+    await runCommand(command, ["--help-json"], { logger });
+    const data = JSON.parse(output[0]!);
+    expect(data.options.some((field: { name: string }) => field.name === "ui")).toBe(false);
+    expect(data.variants[0].fields[0].requiredPackages[0].name).toBe("@politty-test/a");
+    expect(data.variants[1].fields[0].requiredPackages[0].name).toBe("@politty-test/b");
+  });
+
+  it("shows positional boolean package requirements in text help", async () => {
+    const command = defineCommand({
+      name: "test",
+      args: z.object({
+        ui: arg(z.boolean(), {
+          positional: true,
+          requiredPackages: [{ name: "@politty-test/missing-ui" }],
+        }),
+      }),
+      run: () => {},
+    });
+    const output: string[] = [];
+    await runCommand(command, ["--help"], {
+      logger: { log: (text) => output.push(text), error: () => {} },
+    });
+    expect(output.join("\n")).toContain("@politty-test/missing-ui");
+  });
+
   it("only requires the UI package when --ui is enabled", async () => {
     const command = defineCommand({
       name: "vitest",

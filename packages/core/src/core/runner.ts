@@ -50,6 +50,7 @@ import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import {
   extractFields,
+  selectDiscriminatedVariant,
   toCamelCase,
   toKebabCase,
   type ExtractedFields,
@@ -1005,8 +1006,14 @@ async function runCommandInternal<TResult = unknown>(
         captureLogs: options.captureLogs,
         existingLogs: getCurrentLogs(),
         globalCleanup: options._globalCleanup,
-        packageDiscriminator: options._globalExtracted?.discriminator,
-        packageFields: isCompletionInvocation ? undefined : options._globalExtracted?.fields,
+        packageDiscriminators: options._globalExtracted?.discriminator
+          ? [options._globalExtracted.discriminator]
+          : [],
+        packageFields:
+          isCompletionInvocation || !options._globalExtracted
+            ? undefined
+            : selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs)
+                .fields,
       });
       return result as RunResult<TResult>;
     }
@@ -1136,11 +1143,18 @@ async function runCommandInternal<TResult = unknown>(
       captureLogs: options.captureLogs,
       existingLogs: getCurrentLogs(),
       globalCleanup: options._globalCleanup,
-      packageDiscriminator: parseResult.extractedFields?.discriminator,
+      packageDiscriminators: [
+        parseResult.extractedFields?.discriminator,
+        options._globalExtracted?.discriminator,
+      ].filter((name): name is string => name !== undefined),
       packageFields: isCompletionInvocation
         ? undefined
         : [
-            ...(options._globalExtracted?.fields ?? []).filter(
+            ...(options._globalExtracted
+              ? selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs)
+                  .fields
+              : []
+            ).filter(
               (globalField) =>
                 !parseResult.extractedFields?.fields.some(
                   (field) => field.name === globalField.name,
