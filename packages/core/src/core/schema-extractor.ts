@@ -37,6 +37,8 @@ export function getUnknownKeysMode(schema: ArgsSchema): UnknownKeysMode {
   return getValidatorAdapter().getUnknownKeysMode(schema);
 }
 
+const validatedPackageFields = new WeakSet<ExtractedFields>();
+
 /**
  * Extract all fields from a schema
  *
@@ -47,7 +49,10 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
   const extracted = isInternalArgsSchema(schema)
     ? extractInternalFields(schema)
     : getValidatorAdapter().extractFields(schema);
-  validatePackageFields(extracted);
+  if (!validatedPackageFields.has(extracted)) {
+    validatePackageFields(extracted);
+    validatedPackageFields.add(extracted);
+  }
   return extracted;
 }
 

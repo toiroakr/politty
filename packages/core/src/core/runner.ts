@@ -1153,13 +1153,7 @@ async function runCommandInternal<TResult = unknown>(
             ...(options._globalExtracted
               ? selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs)
                   .fields
-              : []
-            ).filter(
-              (globalField) =>
-                !parseResult.extractedFields?.fields.some(
-                  (field) => field.name === globalField.name,
-                ),
-            ),
+              : []),
             ...(parseResult.optionFields ?? []),
             ...(parseResult.positionalSlotFields ?? []),
           ],
