@@ -32,4 +32,4 @@ jobs:
       - name: Build
         run: pnpm build
       - name: Publish preview
-        run: pnpm dlx pkg-pr-new@0.0.90 publish --commentWithSha --compact ./packages/zod ./packages/valibot ./packages/zod-mini ./packages/politty
+        run: pnpm dlx pkg-pr-new@0.0.91 publish --commentWithSha --compact ./packages/zod ./packages/valibot ./packages/zod-mini ./packages/politty
