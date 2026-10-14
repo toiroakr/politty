@@ -27,16 +27,38 @@ Schema outputs are inferred in `run`. `arg` supports positionals, aliases, hidde
 
 Constructor `nullable` / `nullish` flags preserve null output types. A scalar `default` applies to undefined; `default: { nullish: value }` applies to undefined and null. Null-only defaults still require an argument. Help displays only the undefined default, because CLI omission produces undefined.
 
+Loculus 0.2.3 supports string, boolean and numeric literal fields with exact output types. Boolean literals use boolean CLI flags; numeric literals accept numeric strings. Literal choices appear in JSON help and completion, and typed literals can select discriminated command branches.
+
+Multi-value literals also work as CLI fields: `l.literal([1, 2, 3])`, `l.literal([true, false])` and `l.literal([true, "auto"])` infer their output unions and expose choices to help/completion. Mixed boolean/string fields take an explicit value, for example `--mode true` or `--mode auto`.
+
 Public subpaths: `docs`, `completion`, `skill`, `agent`, `prompt`, `prompt/clack`, `prompt/inquirer`, `compile-cache`, `cli`. The optional prompt integrations use the same optional peers as `@politty/zod`. No Zod or Valibot runtime is loaded.
 
-Flat objects, discriminated unions, ordinary unions, xor and intersections are supported. Nested object fields, arbitrary recursive schemas and asynchronous validation are outside loculus's scope. `arg` replaces Zod-specific `.meta()` augmentation; a Zod `augment` subpath is therefore unnecessary.
+Flat objects, discriminated unions, ordinary unions, xor and intersections are supported. Loculus 0.2 supports finite nested objects and multidimensional arrays, but Politty CLI arguments remain flat: nested object fields and nested arrays have no dedicated token mapping. Arbitrary recursive schemas and asynchronous validation are outside the supported CLI contract. `arg` replaces Zod-specific `.meta()` augmentation; a Zod `augment` subpath is therefore unnecessary.
 
 Composite schemas use their branches' common CLI unknown-flag policy. When the branches have different policies, they use the core's default strip-with-warning policy, independent of branch order.
 
-## Development before the first loculus release
+Arrays require array inputs by default in Loculus 0.2. Politty collects repeated CLI values into arrays, so `--tags a` and `--tags a --tags b` work without `wrapScalar`. Environment fallbacks supply strings, so array fields with `env` need `wrapScalar: true`. Non-CLI callers passing scalar values need the same option.
 
-The devDependency uses `tests/fixtures/loculus/loculus-0.1.0.tgz`, a snapshot of loculus's published package layout, so a clean checkout can build and test without an unpublished npm dependency or an adjacent worktree. Runtime consumers use the `loculus` peer dependency `^0.1.0`. The snapshot contains no additional source implementation.
+## Build-time optimization
 
-To update the fixture from a loculus checkout, build loculus and run `pnpm pack --pack-destination <politty-checkout>/tests/fixtures/loculus`, then `pnpm install --force` in politty. Keep the archive version, devDependency and peer range in sync. Once loculus is published, replace the archive devDependency with the npm version and remove the archive.
+Loculus 0.2.x can be used with `@loculus/rolldown` 0.2.x to specialize supported static schemas during the CLI build. The generated validators preserve the metadata used by help, docs, completion and prompts. Dynamic or unsupported definitions retain ordinary validation.
 
-Publish loculus before publishing `@politty/loculus`. This repository's first-package release procedure in CLAUDE.md applies to the adapter as well. Neither package has been published by this implementation task.
+```ts
+import { defineConfig } from "tsdown";
+import { loculusPlugin } from "@loculus/rolldown";
+
+export default defineConfig({
+  entry: ["src/main.ts"],
+  plugins: [loculusPlugin()],
+});
+```
+
+The plugin requires Rolldown `>=1.2.13 <2`. It is optional and belongs in the CLI project's devDependencies.
+
+## Development
+
+The adapter uses the published `loculus` 0.2.3 package for development and requires `loculus ^0.2.3` at runtime. No local archive or adjacent loculus checkout is needed.
+
+This repository's first-package release procedure in CLAUDE.md applies to `@politty/loculus`.
+
+The `dist-compat` CI suite bundles a complete CLI with each Rolldown object strategy and compares post-bundle execution, help, generated docs, completion and prompts against an unoptimized bundle on Linux and Windows.

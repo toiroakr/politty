@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { extractLoculusFields, loculusAdapter } from "./adapter.js";
 import { generateCompletion } from "./completion.js";
 import { renderArgsTable } from "./docs.js";
-import { arg, createDefineCommand, defineCommand, runCommand } from "./index.js";
+import { arg, createDefineCommand, defineCommand, generateHelpData, runCommand } from "./index.js";
 import { promptMissingArgs } from "./prompt.js";
 
 describe("@politty/loculus", () => {
@@ -121,6 +121,24 @@ describe("@politty/loculus", () => {
       vi.unstubAllEnvs();
     }
   });
+  it("uses scalar wrapping for array environment fallbacks", async () => {
+    vi.stubEnv("LOCULUS_TAGS", "a");
+    try {
+      const command = defineCommand({
+        name: "serve",
+        args: l.object({
+          tags: arg(l.array(l.enum(["a", "b"]), { wrapScalar: true }), {
+            env: "LOCULUS_TAGS",
+          }),
+        }),
+        run: (args) => args.tags,
+      });
+      expect((await runCommand(command, [])).result).toEqual(["a"]);
+      expect((await runCommand(command, ["--tags", "b"])).result).toEqual(["b"]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it("reports paths and enforces unknown keys", () => {
     const schema = l.object(
       { count: l.number({ gte: 1 }), tags: l.array(l.enum(["a", "b"])) },
@@ -193,6 +211,141 @@ describe("@politty/loculus", () => {
       expect(result.success).toBe(true);
       expect(result.result).toBe("b");
     }
+  });
+  it("runs boolean and numeric literals with exact output types", async () => {
+    const args = l.object({ confirm: l.literal(true), code: l.literal(42) });
+    const command = defineCommand({
+      name: "literal",
+      args,
+      run: (values) => {
+        values.confirm satisfies true;
+        values.code satisfies 42;
+        return values;
+      },
+    });
+    expect((await runCommand(command, ["--confirm", "--code", "42"])).result).toEqual({
+      confirm: true,
+      code: 42,
+    });
+    expect((await runCommand(command, ["--confirm=false", "--code", "42"])).success).toBe(false);
+    expect((await runCommand(command, ["--confirm", "--code", "43"])).success).toBe(false);
+    expect(generateHelpData(command).options).toEqual([
+      expect.objectContaining({ name: "confirm", type: "boolean", enumValues: ["true"] }),
+      expect.objectContaining({ name: "code", type: "number", enumValues: ["42"] }),
+    ]);
+    expect(renderArgsTable(args.shape)).toContain("`--confirm`");
+    const completion = generateCompletion(command, {
+      shell: "bash",
+      programName: "literal",
+    }).script;
+    expect(completion).toContain("42");
+  });
+  it("runs typed discriminator branches and exposes their help metadata", async () => {
+    const numeric = defineCommand({
+      name: "numeric",
+      args: l.discriminatedUnion("edition", [
+        l.object({ edition: l.literal(1), name: l.string() }),
+        l.object({ edition: l.literal(2), count: l.number() }),
+      ]),
+      run: (args) => args,
+    });
+    expect((await runCommand(numeric, ["--edition", "1", "--name", "app"])).result).toEqual({
+      edition: 1,
+      name: "app",
+    });
+    expect((await runCommand(numeric, ["--edition", "2", "--count", "3"])).result).toEqual({
+      edition: 2,
+      count: 3,
+    });
+    expect((await runCommand(numeric, ["--edition", "2"])).success).toBe(false);
+    expect(generateHelpData(numeric).variants?.map((branch) => branch.discriminatorValue)).toEqual([
+      "1",
+      "2",
+    ]);
+    const boolean = defineCommand({
+      name: "boolean",
+      args: l.discriminatedUnion("enabled", [
+        l.object({ enabled: l.literal(true), name: l.string() }),
+        l.object({ enabled: l.literal(false), reason: l.string() }),
+      ]),
+      run: (args) => args,
+    });
+    expect((await runCommand(boolean, ["--enabled", "--name", "app"])).result).toEqual({
+      enabled: true,
+      name: "app",
+    });
+    expect(
+      (await runCommand(boolean, ["--enabled=false", "--reason", "maintenance"])).result,
+    ).toEqual({ enabled: false, reason: "maintenance" });
+    expect(generateHelpData(boolean).variants?.map((branch) => branch.discriminatorValue)).toEqual([
+      "true",
+      "false",
+    ]);
+  });
+  it("runs multi-value literals and preserves their output unions", async () => {
+    const args = l.object({
+      count: l.literal([1, 2, 3]),
+      enabled: l.literal([true, false]),
+      mode: l.literal([true, "auto"]),
+    });
+    const command = defineCommand({
+      name: "choices",
+      args,
+      run: (values) => {
+        values.count satisfies 1 | 2 | 3;
+        values.enabled satisfies boolean;
+        values.mode satisfies true | "auto";
+        return values;
+      },
+    });
+    expect(
+      (await runCommand(command, ["--count", "2", "--enabled=false", "--mode", "auto"])).result,
+    ).toEqual({ count: 2, enabled: false, mode: "auto" });
+    expect(
+      (await runCommand(command, ["--count", "1", "--enabled", "--mode", "true"])).result,
+    ).toEqual({ count: 1, enabled: true, mode: true });
+    expect(
+      (await runCommand(command, ["--count", "4", "--enabled", "--mode", "auto"])).success,
+    ).toBe(false);
+    expect(generateHelpData(command).options).toEqual([
+      expect.objectContaining({ name: "count", type: "number", enumValues: ["1", "2", "3"] }),
+      expect.objectContaining({ name: "enabled", type: "boolean", enumValues: ["true", "false"] }),
+      expect.objectContaining({ name: "mode", type: "unknown", enumValues: ["true", "auto"] }),
+    ]);
+    expect(renderArgsTable(args.shape)).toContain("`--mode <MODE>`");
+  });
+  it("runs mixed multi-value discriminator branches", async () => {
+    const command = defineCommand({
+      name: "mixed",
+      args: l.discriminatedUnion("mode", [
+        l.object({ mode: l.literal([1, "auto"]), name: l.string() }),
+        l.object({ mode: l.literal([false, 2]), count: l.number() }),
+      ]),
+      run: (args) => args,
+    });
+    expect((await runCommand(command, ["--mode", "1", "--name", "app"])).result).toEqual({
+      mode: 1,
+      name: "app",
+    });
+    expect((await runCommand(command, ["--mode", "auto", "--name", "app"])).result).toEqual({
+      mode: "auto",
+      name: "app",
+    });
+    expect((await runCommand(command, ["--mode", "false", "--count", "3"])).result).toEqual({
+      mode: false,
+      count: 3,
+    });
+    expect((await runCommand(command, ["--mode", "2", "--count", "3"])).result).toEqual({
+      mode: 2,
+      count: 3,
+    });
+    expect((await runCommand(command, ["--mode", "2"])).success).toBe(false);
+    expect(generateHelpData(command).variants?.map((branch) => branch.discriminatorValue)).toEqual([
+      "1",
+      "auto",
+      "false",
+      "2",
+    ]);
   });
   it("renders docs and shell completion with argument metadata", () => {
     const shape = {

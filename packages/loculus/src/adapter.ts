@@ -7,7 +7,7 @@ import {
 import type { ValidatorAdapter } from "@politty/core/adapter/types";
 import { getArgMeta, type ArgMeta } from "@politty/core/core/arg-registry";
 import type { ArgsSchema } from "@politty/core/types";
-import type { AnySchema, Meta } from "loculus";
+import { boolean, number, type AnySchema, type Meta } from "loculus";
 
 function metadata(schema: AnySchema): ArgMeta | undefined {
   const own = getArgMeta(schema);
@@ -26,7 +26,7 @@ function resolve(name: string, schema: AnySchema): ResolvedFieldMeta {
         : ["string", "number", "boolean", "array"].includes(meta.kind)
           ? (meta.kind as ResolvedFieldMeta["type"])
           : "unknown",
-    enumValues: meta.enumValues ? [...meta.enumValues] : undefined,
+    enumValues: (meta.enumValues ?? meta.literalValues)?.map(String),
     schema,
   });
 }
@@ -67,9 +67,10 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
       const key = meta.discriminator;
       result.discriminator = key;
       result.variants = options.flatMap((option, i) => {
-        const values = meta.options![i]!.meta.shape?.[key]?.meta.enumValues ?? [];
+        const discriminatorMeta = meta.options![i]!.meta.shape?.[key]?.meta;
+        const values = discriminatorMeta?.enumValues ?? discriminatorMeta?.literalValues ?? [];
         return values.map((discriminatorValue) => ({
-          discriminatorValue,
+          discriminatorValue: String(discriminatorValue),
           fields: option.fields,
           ...(option.description ? { description: option.description } : {}),
         }));
@@ -80,13 +81,45 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
   cache.set(schema, result);
   return result;
 }
+const discriminatorValidators = {
+  number: number()["~standard"].validate,
+  boolean: boolean()["~standard"].validate,
+};
+function normalizeDiscriminator(
+  raw: Record<string, unknown>,
+  schema: AnySchema,
+): Record<string, unknown> {
+  const key = schema.meta.discriminator;
+  if (!key || typeof raw[key] !== "string") return raw;
+  const fields = (schema.meta.options ?? []).map((option) => option.meta.shape?.[key]);
+  const value = raw[key] as string;
+  if (
+    fields.some(
+      (field) =>
+        field?.meta.enumValues?.includes(value) || field?.meta.literalValues?.includes(value),
+    )
+  )
+    return raw;
+  for (const field of fields) {
+    for (const literal of field?.meta.literalValues ?? []) {
+      const kind = typeof literal;
+      if (kind !== "number" && kind !== "boolean") continue;
+      const result = discriminatorValidators[kind](value);
+      if (!result.issues && result.value === literal) {
+        return { ...raw, [key]: result.value };
+      }
+    }
+  }
+  return raw;
+}
 export const loculusAdapter: ValidatorAdapter = {
   vendor: "loculus",
   extractFields: extractLoculusFields,
   resolveFieldMeta: (name, schema) => resolve(name, schema as AnySchema),
   getUnknownKeysMode: (schema) => extractLoculusFields(schema).unknownKeysMode,
   validate: (raw, schema) => {
-    const result = (schema as AnySchema)["~standard"].validate(raw);
+    const concrete = schema as AnySchema;
+    const result = concrete["~standard"].validate(normalizeDiscriminator(raw, concrete));
     return result.issues
       ? {
           success: false,
