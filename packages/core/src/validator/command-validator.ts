@@ -897,6 +897,15 @@ export async function validateCommand(
   command: AnyCommand,
   options: ValidateCommandOptions = {},
 ): Promise<CommandValidationResult> {
+  return validateCommandInternal(command, options, false);
+}
+
+async function validateCommandInternal(
+  command: AnyCommand,
+  options: ValidateCommandOptions,
+  metadataOnly: boolean,
+): Promise<CommandValidationResult> {
+  metadataOnly ||= !!command.requiredPackages?.length;
   const commandPath = options.commandPath ?? [command.name];
   const errors: CommandValidationError[] = [];
   const hasSubCommands = command.subCommands ? Object.keys(command.subCommands).length > 0 : false;
@@ -920,13 +929,20 @@ export async function validateCommand(
   // Recursively validate subcommands
   if (command.subCommands) {
     for (const [name, subCmd] of Object.entries(command.subCommands)) {
-      const resolvedSubCmd = await resolveLazyCommand(subCmd);
+      const resolvedSubCmd = await resolveLazyCommand(
+        subCmd,
+        (meta) => metadataOnly || !!meta.requiredPackages?.length,
+      );
       // Validate subcommand registration key matches its own `.name`
       errors.push(...checkSubCommandKeyNameMismatch(name, resolvedSubCmd.name, commandPath));
-      const subResult = await validateCommand(resolvedSubCmd, {
-        commandPath: [...commandPath, name],
-        ...(options.globalArgs ? { globalArgs: options.globalArgs } : {}),
-      });
+      const subResult = await validateCommandInternal(
+        resolvedSubCmd,
+        {
+          commandPath: [...commandPath, name],
+          ...(options.globalArgs ? { globalArgs: options.globalArgs } : {}),
+        },
+        metadataOnly,
+      );
       if (!subResult.valid) {
         errors.push(...subResult.errors);
       }

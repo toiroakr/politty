@@ -37,6 +37,8 @@ export function getUnknownKeysMode(schema: ArgsSchema): UnknownKeysMode {
   return getValidatorAdapter().getUnknownKeysMode(schema);
 }
 
+const validatedPackageFields = new WeakSet<ExtractedFields>();
+
 /**
  * Extract all fields from a schema
  *
@@ -44,12 +46,32 @@ export function getUnknownKeysMode(schema: ArgsSchema): UnknownKeysMode {
  * @returns Extracted field information
  */
 export function extractFields(schema: ArgsSchema): ExtractedFields {
-  // politty's own internal commands describe their args with validator-free
-  // descriptors so they never pull a schema library into the import graph.
-  if (isInternalArgsSchema(schema)) {
-    return extractInternalFields(schema);
+  const extracted = isInternalArgsSchema(schema)
+    ? extractInternalFields(schema)
+    : getValidatorAdapter().extractFields(schema);
+  if (!validatedPackageFields.has(extracted)) {
+    validatePackageFields(extracted);
+    validatedPackageFields.add(extracted);
   }
-  return getValidatorAdapter().extractFields(schema);
+  return extracted;
+}
+
+function validatePackageFields(extracted: ExtractedFields): void {
+  const groups = extracted.variants ?? [extracted];
+  for (const group of groups) {
+    for (const field of group.fields) {
+      if (
+        field.requiredPackages?.length &&
+        field.type !== "boolean" &&
+        field.name !== extracted.discriminator
+      ) {
+        throw new Error(
+          `Invalid requiredPackages for field "${field.name}": requiredPackages can only be used on boolean fields or discriminators.`,
+        );
+      }
+    }
+  }
+  for (const option of extracted.unionOptions ?? []) validatePackageFields(option);
 }
 
 /**
@@ -86,12 +108,32 @@ export function computeCommonFieldNames(
     const sameRole = rest.every((group) =>
       group.fields.some(
         (f) =>
-          f.name === field.name && f.positional === field.positional && f.named === field.named,
+          f.name === field.name &&
+          f.positional === field.positional &&
+          f.named === field.named &&
+          samePackageRequirements(f.requiredPackages, field.requiredPackages),
       ),
     );
     if (sameRole) common.add(field.name);
   }
   return common;
+}
+
+function samePackageRequirements(
+  left: ResolvedFieldMeta["requiredPackages"],
+  right: ResolvedFieldMeta["requiredPackages"],
+): boolean {
+  return (
+    (left?.length ?? 0) === (right?.length ?? 0) &&
+    (left ?? []).every((requirement, index) => {
+      const other = right?.[index];
+      return (
+        requirement.name === other?.name &&
+        requirement.install === other.install &&
+        requirement.from?.toString() === other.from?.toString()
+      );
+    })
+  );
 }
 
 /**
@@ -173,12 +215,22 @@ export function selectDiscriminatedVariant(
 ): ExtractedFields {
   const { discriminator, variants } = extracted;
   if (!discriminator || !variants) return extracted;
-  for (const variant of variants) {
-    const variantFields = { ...extracted, fields: variant.fields };
-    const value = readValues(variantFields)[discriminator];
+  const candidates = variants.map((variant) => {
+    const fields = { ...extracted, fields: variant.fields };
+    return { variant, fields, value: readValues(fields)[discriminator] };
+  });
+  for (const { variant, fields, value } of candidates) {
     if (value !== undefined && String(value) === variant.discriminatorValue) {
-      return variantFields;
+      return fields;
     }
+  }
+  for (const { variant, fields, value } of candidates) {
+    if (
+      value !== undefined &&
+      variant.normalizeDiscriminator &&
+      String(variant.normalizeDiscriminator(value)) === variant.discriminatorValue
+    )
+      return fields;
   }
   return extracted;
 }

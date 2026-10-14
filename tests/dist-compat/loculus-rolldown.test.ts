@@ -16,6 +16,8 @@ type Probe = {
   doc: string;
   templateDoc: string;
   docSuccess: boolean;
+  completionLayouts: Array<{ completionType: string; targetOption: { valueType: string } }>;
+  collisionError: string;
 };
 type BuildResult = {
   probe: Probe;
@@ -42,6 +44,10 @@ const invocations = [
   ["boolean", "--enabled=false", "--reason", "maintenance"],
   ["choices", "--count", "2", "--enabled=false", "--mode", "auto"],
   ["mixed", "--mode", "2", "--count", "3"],
+  ["layouts", "--edition", "2.0", "--value", "hello"],
+  ["numeric-union", "--edition", "2.0", "--count", "3"],
+  ["numeric-xor", "--edition", "2.0", "--count", "3"],
+  ["numeric-intersection", "--edition", "2.0", "--count", "3"],
 ];
 let directory: string;
 let baseline: BuildResult;
@@ -118,7 +124,7 @@ describe("Loculus Rolldown bundles", () => {
   });
   it("runs the baseline CLI and generates help, docs, completion and prompts", () => {
     expect(baseline.transformed).toBe(false);
-    expect(baseline.probe.outcomes).toHaveLength(38);
+    expect(baseline.probe.outcomes).toHaveLength(43);
     expect(baseline.probe.outcomes.filter((outcome) => !outcome.success)).toHaveLength(11);
     expect(baseline.probe.outcomes[1]?.result).toMatchObject({
       port: 8080,
@@ -131,6 +137,14 @@ describe("Loculus Rolldown bundles", () => {
       mode: "auto",
     });
     expect(baseline.probe.outcomes[32]?.result).toMatchObject({ mode: 2, count: 3 });
+    expect(baseline.probe.outcomes.slice(35, 40).every((outcome) => outcome.success)).toBe(true);
+    expect(baseline.probe.completionLayouts).toEqual(
+      Array.from({ length: 3 }, () => ({
+        completionType: "option-value",
+        targetOption: expect.objectContaining({ valueType: "string" }),
+      })),
+    );
+    expect(baseline.probe.collisionError).toBe("Ambiguous CLI discriminator: edition=1");
     expect(baseline.probe.docSuccess).toBe(true);
     expect(baseline.probe.doc).toContain("# serve");
     expect(baseline.probe.templateDoc).toContain("--port");
@@ -141,7 +155,7 @@ describe("Loculus Rolldown bundles", () => {
     expect(baseline.executions[0]?.stdout).toContain("Usage:");
     expect(baseline.executions[5]).toMatchObject({ status: 0 });
     expect(baseline.executions[5]?.stdout).toContain('"port":8080');
-    expect(baseline.executions[6]).toMatchObject({ status: 1 });
+    expect(baseline.executions[6]).toMatchObject({ status: 2 });
     expect(baseline.executions[6]?.stderr).toContain("Expected at least 1");
   });
   it.each(modes)("preserves post-bundle behavior with objects=%s", async (mode) => {

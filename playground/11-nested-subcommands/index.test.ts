@@ -29,7 +29,7 @@ describe("11-nested-subcommands", () => {
       using _errorSpy = vi.spyOn(globalThis.console, "error").mockImplementation(() => {});
       const result = await runCommand(cli, ["config", "get"]);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
     });
   });
 

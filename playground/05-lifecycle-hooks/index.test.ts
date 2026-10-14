@@ -69,7 +69,7 @@ describe("05-lifecycle-hooks", () => {
 
     const result = await runCommand(command, ["--query", "SELECT 1"]);
 
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(2);
   });
 
   it("fails when query is not provided", async () => {
@@ -78,7 +78,7 @@ describe("05-lifecycle-hooks", () => {
 
     const result = await runCommand(command, ["--database", "postgres://localhost/mydb"]);
 
-    expect(result.exitCode).toBe(1);
+    expect(result.exitCode).toBe(2);
   });
 
   it("documentation", async () => {

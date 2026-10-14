@@ -168,3 +168,5 @@ export {
 } from "./validator/command-validator.js";
 // Validation types
 export type { ValidationError, ValidationResult } from "./validator/args-validator.js";
+
+export { loadPackage, type PackageRequirement } from "./package-requirements.js";

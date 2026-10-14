@@ -31,6 +31,8 @@ Loculus 0.2.3 supports string, boolean and numeric literal fields with exact out
 
 Multi-value literals also work as CLI fields: `l.literal([1, 2, 3])`, `l.literal([true, false])` and `l.literal([true, "auto"])` infer their output unions and expose choices to help/completion. Mixed boolean/string fields take an explicit value, for example `--mode true` or `--mode auto`.
 
+Numeric discriminators accept the same decimal spellings as numeric fields: `--edition 2`, `--edition 2.0` and `--edition 2e0` select the same branch for execution and dynamic completion. Different branches must have distinct CLI spellings: a numeric `1` and a string `"1"` cannot identify separate branches. Such schemas fail during command metadata extraction.
+
 Public subpaths: `docs`, `completion`, `skill`, `agent`, `prompt`, `prompt/clack`, `prompt/inquirer`, `compile-cache`, `cli`. The optional prompt integrations use the same optional peers as `@politty/zod`. No Zod or Valibot runtime is loaded.
 
 Flat objects, discriminated unions, ordinary unions, xor and intersections are supported. Loculus 0.2 supports finite nested objects and multidimensional arrays, but Politty CLI arguments remain flat: nested object fields and nested arrays have no dedicated token mapping. Arbitrary recursive schemas and asynchronous validation are outside the supported CLI contract. `arg` replaces Zod-specific `.meta()` augmentation; a Zod `augment` subpath is therefore unnecessary.

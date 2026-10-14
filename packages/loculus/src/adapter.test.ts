@@ -2,12 +2,80 @@ import { parseArgs } from "@politty/core/parser/arg-parser";
 import * as l from "loculus";
 import { describe, expect, it, vi } from "vitest";
 import { extractLoculusFields, loculusAdapter } from "./adapter.js";
-import { generateCompletion } from "./completion.js";
+import { generateCompletion, parseCompletionContext } from "./completion.js";
 import { renderArgsTable } from "./docs.js";
 import { arg, createDefineCommand, defineCommand, generateHelpData, runCommand } from "./index.js";
 import { promptMissingArgs } from "./prompt.js";
 
 describe("@politty/loculus", () => {
+  it("rejects discriminator branches with indistinguishable CLI spellings", () => {
+    const args = l.discriminatedUnion("edition", [
+      l.object({ edition: l.literal(1), value: l.boolean() }),
+      l.object({ edition: l.literal("1"), value: l.string() }),
+    ]);
+    expect(() => extractLoculusFields(args)).toThrow("Ambiguous CLI discriminator: edition=1");
+  });
+  it("selects the same argument and completion layout for alternate numeric spellings", async () => {
+    const command = defineCommand({
+      name: "edition",
+      args: l.discriminatedUnion("edition", [
+        l.object({ edition: l.literal(1), value: l.boolean() }),
+        l.object({ edition: l.literal(2), value: l.string() }),
+      ]),
+      run: (args) => args,
+    });
+    for (const spelling of ["2", "2.0", "2e0", "+2"]) {
+      expect(
+        (await runCommand(command, ["--edition", spelling, "--value", "hello"])).result,
+      ).toEqual({ edition: 2, value: "hello" });
+      const context = parseCompletionContext(["--edition", spelling, "--value", ""], command);
+      expect(context.completionType).toBe("option-value");
+      expect(context.targetOption).toMatchObject({
+        name: "value",
+        takesValue: true,
+        valueType: "string",
+      });
+    }
+  });
+  it("normalizes typed discriminators independently inside composite schemas", async () => {
+    const numeric = l.discriminatedUnion("edition", [
+      l.object({ edition: l.literal(1), value: l.string() }),
+      l.object({ edition: l.literal(2), value: l.string() }),
+    ]);
+    const other = l.object({ other: l.string() });
+    for (const args of [
+      l.union([numeric, other]),
+      l.xor([numeric, other]),
+      l.intersection(
+        numeric,
+        l.object({ suffix: l.string({ default: "!" }) }, { unknownKeys: "strip" }),
+      ),
+    ]) {
+      const command = defineCommand({ name: "composite", args, run: (values) => values });
+      const outcome = await runCommand(command, ["--edition", "2.0", "--value", "hello"]);
+      expect(outcome.success, outcome.error?.message).toBe(true);
+      expect(outcome.result).toMatchObject({ edition: 2, value: "hello" });
+    }
+    const textual = l.discriminatedUnion("edition", [
+      l.object({ edition: l.literal("2"), value: l.string() }),
+      l.object({ edition: l.literal("other"), value: l.string() }),
+    ]);
+    expect(
+      loculusAdapter.validate({ edition: "2", value: "hello" }, l.xor([numeric, textual])).success,
+    ).toBe(false);
+    expect(
+      loculusAdapter.validate({ edition: "2", value: "hello" }, l.union([numeric, textual])),
+    ).toMatchObject({ success: true, data: { edition: 2 } });
+    const wrapped = l.transform(
+      l.refine(numeric, (value) => value.value !== "bad", "Bad value"),
+      (value) => ({ ...value, value: value.value.toUpperCase() }),
+    );
+    expect(loculusAdapter.validate({ edition: "2.0", value: "hello" }, wrapped)).toMatchObject({
+      success: true,
+      data: { edition: 2, value: "HELLO" },
+    });
+    expect(loculusAdapter.validate({ edition: "2.0", value: "bad" }, wrapped).success).toBe(false);
+  });
   it("uses constructor defaults and preserves nullable metadata and output types", async () => {
     const args = l.object({
       port: arg(l.number({ default: 3000 }), { alias: "p" }),

@@ -351,7 +351,7 @@ Define a command.
 
 ### `runMain(command, options?)`
 
-CLI entry point. Handles signals and calls `process.exit()`.
+CLI entry point. Handles signals and calls `process.exit()`: `2` for an invalid command line, `1` for other failures, or the code an `onUnknownSubcommand` handler returns.
 
 ```typescript
 runMain(command, {
@@ -625,10 +625,12 @@ The `playground/` directory contains many examples:
 - `21-lazy-subcommands` - Lazy loading
 - `26-command-alias` - Command aliases
 
+For commands or options that need a separately installed package, see [Optional External Packages](./docs/advanced-features.md#optional-external-packages).
+
+## @politty/loculus
+
+Use flat string-input schemas with the same command, help, completion and prompt APIs as `@politty/zod`. See [the adapter guide](packages/loculus/README.md). Install `@politty/loculus` with `loculus ^0.2.3`.
+
 ## License
 
 MIT
-
-### @politty/loculus
-
-Use flat string-input schemas with the same command, help, completion and prompt APIs as `@politty/zod`. See [the adapter guide](packages/loculus/README.md). Install `@politty/loculus` with `loculus`; the initial release requires publishing loculus first.

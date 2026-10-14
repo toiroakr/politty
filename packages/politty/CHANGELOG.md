@@ -1,5 +1,24 @@
 # politty
 
+## 0.15.1
+
+### Patch Changes
+
+- a5699d5: Support optional external packages with `requiredPackages` declarations, argument-dependent activation (including boolean-option and discriminator metadata), installation guidance in help, and deferred loading from the consuming project. Automatically detect npm, pnpm, Yarn, or Bun to generate installation guidance when no explicit command is supplied. Preserve transitive dependency and initialization errors.
+- Updated dependencies [a5699d5]
+  - @politty/zod@0.5.1
+
+## 0.15.0
+
+### Minor Changes
+
+- 11225cc: Exit with code 2 instead of 1 when the command line is invalid: an unknown flag or subcommand, an unexpected positional argument, or arguments that fail validation. `runMain` exits with it and `runCommand` reports it as `exitCode`, so scripts and agents can tell a mistyped invocation from a command that failed while running, which still exits with 1. Code that checks for exit code 1 after an invalid command line needs to accept 2.
+
+### Patch Changes
+
+- Updated dependencies [11225cc]
+  - @politty/zod@0.5.0
+
 ## 0.14.3
 
 ### Patch Changes

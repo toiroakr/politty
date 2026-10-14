@@ -7,7 +7,7 @@ import {
 import type { ValidatorAdapter } from "@politty/core/adapter/types";
 import { getArgMeta, type ArgMeta } from "@politty/core/core/arg-registry";
 import type { ArgsSchema } from "@politty/core/types";
-import { boolean, number, type AnySchema, type Meta } from "loculus";
+import { boolean, intersection, number, union, xor, type AnySchema, type Meta } from "loculus";
 
 function metadata(schema: AnySchema): ArgMeta | undefined {
   const own = getArgMeta(schema);
@@ -65,15 +65,24 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
     };
     if (meta.discriminator) {
       const key = meta.discriminator;
+      const spellings = new Map<string, number>();
       result.discriminator = key;
       result.variants = options.flatMap((option, i) => {
         const discriminatorMeta = meta.options![i]!.meta.shape?.[key]?.meta;
         const values = discriminatorMeta?.enumValues ?? discriminatorMeta?.literalValues ?? [];
-        return values.map((discriminatorValue) => ({
-          discriminatorValue: String(discriminatorValue),
-          fields: option.fields,
-          ...(option.description ? { description: option.description } : {}),
-        }));
+        return [...new Set(values)].map((discriminatorValue) => {
+          const spelling = String(discriminatorValue);
+          const previous = spellings.get(spelling);
+          if (previous !== undefined && previous !== i)
+            throw new TypeError(`Ambiguous CLI discriminator: ${key}=${spelling}`);
+          spellings.set(spelling, i);
+          return {
+            discriminatorValue: spelling,
+            normalizeDiscriminator: (value: unknown) => normalizeLiteral(value, discriminatorMeta!),
+            fields: option.fields,
+            ...(option.description ? { description: option.description } : {}),
+          };
+        });
       });
     } else if (meta.kind !== "intersection") result.unionOptions = options;
   } else throw new TypeError("loculus command arguments must have object output");
@@ -85,6 +94,21 @@ const discriminatorValidators = {
   number: number()["~standard"].validate,
   boolean: boolean()["~standard"].validate,
 };
+function normalizeLiteral(value: unknown, meta: Meta): unknown {
+  if (
+    typeof value !== "string" ||
+    meta.enumValues?.includes(value) ||
+    meta.literalValues?.includes(value)
+  )
+    return value;
+  for (const literal of meta.literalValues ?? []) {
+    const kind = typeof literal;
+    if (kind !== "number" && kind !== "boolean") continue;
+    const result = discriminatorValidators[kind](value);
+    if (!result.issues && result.value === literal) return result.value;
+  }
+  return value;
+}
 function normalizeDiscriminator(
   raw: Record<string, unknown>,
   schema: AnySchema,
@@ -101,16 +125,53 @@ function normalizeDiscriminator(
   )
     return raw;
   for (const field of fields) {
-    for (const literal of field?.meta.literalValues ?? []) {
-      const kind = typeof literal;
-      if (kind !== "number" && kind !== "boolean") continue;
-      const result = discriminatorValidators[kind](value);
-      if (!result.issues && result.value === literal) {
-        return { ...raw, [key]: result.value };
+    if (!field) continue;
+    const normalized = normalizeLiteral(value, field.meta);
+    if (normalized !== value) return { ...raw, [key]: normalized };
+  }
+  return raw;
+}
+const validators = new WeakMap<AnySchema, AnySchema["~standard"]["validate"]>();
+function validatorFor(schema: AnySchema): AnySchema["~standard"]["validate"] {
+  const cached = validators.get(schema);
+  if (cached) return cached;
+  let validate = schema["~standard"].validate;
+  const { meta } = schema;
+  if (
+    meta.discriminator &&
+    meta.options?.some((option) =>
+      option.meta.shape?.[meta.discriminator!]?.meta.literalValues?.some(
+        (value) => typeof value !== "string",
+      ),
+    )
+  ) {
+    validate = (raw) => {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw))
+        return schema["~standard"].validate(raw);
+      return schema["~standard"].validate(
+        normalizeDiscriminator(raw as Record<string, unknown>, schema),
+      );
+    };
+  } else if (meta.options && !meta.inner) {
+    const options = meta.options.map((option) => ({
+      ...option,
+      "~standard": { ...option["~standard"], validate: validatorFor(option) },
+    }));
+    if (
+      options.some(
+        (option, i) => option["~standard"].validate !== meta.options![i]!["~standard"].validate,
+      )
+    ) {
+      if (meta.kind === "intersection")
+        validate = intersection(options[0]!, options[1]!)["~standard"].validate;
+      else if (meta.kind === "union" || meta.kind === "xor") {
+        const branches = options as [AnySchema, AnySchema, ...AnySchema[]];
+        validate = (meta.kind === "union" ? union(branches) : xor(branches))["~standard"].validate;
       }
     }
   }
-  return raw;
+  validators.set(schema, validate);
+  return validate;
 }
 export const loculusAdapter: ValidatorAdapter = {
   vendor: "loculus",
@@ -119,7 +180,7 @@ export const loculusAdapter: ValidatorAdapter = {
   getUnknownKeysMode: (schema) => extractLoculusFields(schema).unknownKeysMode,
   validate: (raw, schema) => {
     const concrete = schema as AnySchema;
-    const result = concrete["~standard"].validate(normalizeDiscriminator(raw, concrete));
+    const result = validatorFor(concrete)(raw);
     return result.issues
       ? {
           success: false,

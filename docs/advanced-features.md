@@ -61,6 +61,106 @@ const cli = defineCommand({
 
 See `playground/21-lazy-subcommands.ts` for a complete example.
 
+### Optional External Packages
+
+Declare `requiredPackages` on a command to load a package before its `setup` and `run` hooks. The package is resolved only when the command executes. If it is missing, politty returns a failed result with its name and the installation command; `runMain` prints the error and exits with a nonzero status. Packages are never installed automatically.
+
+```typescript
+import { arg, defineCommand, loadPackage, runMain } from "politty";
+import { z } from "zod";
+
+const studioPackage = {
+  name: "@lines-db/studio",
+};
+
+const studio = defineCommand({
+  name: "studio",
+  requiredPackages: [studioPackage],
+  args: z.object({ file: arg(z.string(), { positional: true }) }),
+  run: async (args) => {
+    const module = await loadPackage<{ start: (file: string) => Promise<void> }>(studioPackage);
+    await module.start(args.file);
+  },
+});
+
+const cli = defineCommand({
+  name: "lines-db",
+  subCommands: { studio },
+});
+
+runMain(cli);
+```
+
+Omit `install` to automatically generate a development-dependency installation command. politty searches from the package resolution base upward, checking `package.json`’s supported `packageManager` declaration before lockfiles at each directory. It supports npm, pnpm, Yarn, and Bun, and falls back to `npm install -D` when none is detected. An explicit `install` always takes precedence. When multiple lockfiles coexist without a supported declaration, pnpm takes precedence, then Bun, Yarn, and npm. Help (including JSON help) and missing-package errors show the same generated command. Detection does not invoke a package manager or install anything.
+
+By default, packages are resolved from the current working directory, so dependencies installed in the consuming project are found. Set `from: import.meta.url` (or another absolute module URL) to resolve relative to a specific CLI module instead. Import-only package exports are supported. Resolution uses the standard `node` and `import` export conditions; custom Node conditions (such as `--conditions=development`) and custom module loaders are not supported. Packages must expose an entry point under the standard conditions. A missing dependency inside an installed package, a broken entry point, or an initialization error retains its original error.
+
+Attach `requiredPackages` directly to a boolean option. Its packages load before setup and execution only when the validated value is `true`, including values supplied by defaults or environment variables. Help shows the package requirements beside the option without loading them.
+
+```typescript
+const uiPackage = {
+  name: "@vitest/ui",
+};
+
+const test = defineCommand({
+  name: "test",
+  args: z.object({
+    ui: arg(z.boolean().default(false), { negation: true, requiredPackages: [uiPackage] }),
+  }),
+  run: async (args) => {
+    if (args.ui) {
+      const module = await loadPackage<{ start: () => Promise<void> }>(uiPackage);
+      await module.start();
+    } else {
+      await runTests();
+    }
+  },
+});
+```
+
+Here, `test` and `test --no-ui` work without the UI package, while `test --ui` loads it. Calls to `loadPackage` use Node's module cache, so a package loaded by `requiredPackages` is not initialized again by the run hook. Its generic type describes the module namespace; omit it to receive `unknown`.
+
+Argument-level `requiredPackages` is supported for boolean fields and discriminators. For conditions involving several arguments or non-boolean values, use command-level `requiredPackages` with a `when` predicate receiving the validated arguments. A requirement’s `description` can explain that condition in help.
+
+Declare packages on a discriminator value to require them only for that branch:
+
+```typescript
+const test = defineCommand({
+  name: "test",
+  args: z.discriminatedUnion("mode", [
+    z.object({ mode: z.literal("tests") }),
+    z.object({
+      mode: arg(z.literal("ui"), { requiredPackages: [{ name: "@vitest/ui" }] }),
+    }),
+  ]),
+  run: (args) => console.log(args.mode),
+});
+```
+
+`test --mode tests` needs no UI package; `test --mode ui` loads it before setup and execution. Help lists requirements under the corresponding branch, and JSON help includes them on that variant. Other non-boolean fields do not accept argument-level package requirements.
+
+For a whole command supplied by an external package, put unconditional requirements on the synchronous metadata passed to `lazy()`:
+
+```typescript
+import { lazy, type AnyCommand } from "politty";
+
+const cli = defineCommand({
+  name: "lines-db",
+  subCommands: {
+    studio: lazy(
+      defineCommand({
+        name: "studio",
+        requiredPackages: [studioPackage],
+        args: z.object({ file: arg(z.string(), { positional: true }) }),
+      }),
+      async () => (await loadPackage<{ command: AnyCommand }>(studioPackage)).command,
+    ),
+  },
+});
+```
+
+Unconditional requirements are loaded before the lazy loader runs. Conditional requirements belong on the runnable command, where validated arguments are available. Provide the complete help and argument definitions in the metadata: `studio --help`, `--help-all`, and `--help-json` use it without calling the loader. Validation and documentation generation also use this synchronous metadata for commands with requirements, without invoking their loaders. Root help lists each subcommand's requirements, and JSON help includes each requirement's `name`, `install`, and optional `description`.
+
 ### Nested Subcommands
 
 Subcommands can have their own `subCommands`.

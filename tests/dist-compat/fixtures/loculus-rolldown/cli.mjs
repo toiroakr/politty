@@ -10,7 +10,7 @@ import {
   lazy,
 } from "@politty/loculus";
 import { renderArgsTable, generateDoc } from "@politty/loculus/docs";
-import { generateCompletion } from "@politty/loculus/completion";
+import { generateCompletion, parseCompletionContext } from "@politty/loculus/completion";
 import { promptMissingArgs } from "@politty/loculus/prompt";
 import { writeFileSync, readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -136,10 +136,40 @@ const mixed = defineCommand({
   run: finish,
 });
 const globalArgs = l.object({ verbose: arg(l.boolean({ default: false }), { alias: "v" }) });
+const layouts = defineCommand({
+  name: "layouts",
+  args: l.discriminatedUnion("edition", [
+    l.object({ edition: l.literal(1), value: l.boolean() }),
+    l.object({ edition: l.literal(2), value: l.string() }),
+  ]),
+  run: finish,
+});
+const numericUnion = defineCommand({
+  name: "numeric-union",
+  args: l.union([numeric.args, l.object({ other: l.string() })]),
+  run: finish,
+});
+const numericXor = defineCommand({
+  name: "numeric-xor",
+  args: l.xor([numeric.args, l.object({ other: l.string() })]),
+  run: finish,
+});
+const numericIntersection = defineCommand({
+  name: "numeric-intersection",
+  args: l.intersection(
+    numeric.args,
+    l.object({ suffix: l.string({ default: "!" }) }, { unknownKeys: "strip" }),
+  ),
+  run: finish,
+});
 const cli = defineCommand({
   name: "app",
   description: "統合確認",
   subCommands: {
+    layouts,
+    "numeric-union": numericUnion,
+    "numeric-xor": numericXor,
+    "numeric-intersection": numericIntersection,
     choices,
     mixed,
     literal,
@@ -196,6 +226,11 @@ else {
     ["mixed", "--mode", "2", "--count", "3"],
     ["mixed", "--mode", "2"],
     ["choices", "--count", "4", "--enabled", "--mode", "auto"],
+    ["layouts", "--edition", "2.0", "--value", "hello"],
+    ["layouts", "--edition", "2e0", "--value", "hello"],
+    ["numeric-union", "--edition", "2.0", "--count", "3"],
+    ["numeric-xor", "--edition", "2.0", "--count", "3"],
+    ["numeric-intersection", "--edition", "2.0", "--count", "3"],
   ];
   for (const argv of inputs) {
     events.length = 0;
@@ -234,6 +269,21 @@ else {
     },
   });
   const promptRun = await runCommand(promptCmd, ["--name", prompted.name]);
+  const completionLayouts = ["2", "2.0", "2e0"].map((spelling) => {
+    const context = parseCompletionContext(["--edition", spelling, "--value", ""], layouts);
+    return { completionType: context.completionType, targetOption: context.targetOption };
+  });
+  let collisionError;
+  try {
+    extractFields(
+      l.discriminatedUnion("edition", [
+        l.object({ edition: l.literal(1) }),
+        l.object({ edition: l.literal("1") }),
+      ]),
+    );
+  } catch (error) {
+    collisionError = error.message;
+  }
   const help = {};
   for (const [name, cmd] of Object.entries(cli.subCommands)) {
     const command = name === "deferred" ? serve : cmd;
@@ -271,6 +321,8 @@ else {
   console.log(
     JSON.stringify({
       outcomes,
+      completionLayouts,
+      collisionError,
       prompted,
       promptRun: { success: promptRun.success, result: promptRun.result },
       help,

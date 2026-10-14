@@ -157,7 +157,7 @@ describe("E2E Tests", () => {
 
       const result = await runCommand(cmd, ["--port", "80"]);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
     });
 
     it("should validate with zod transforms", async () => {
@@ -362,7 +362,7 @@ describe("E2E Tests", () => {
       // Missing second required positional
       const result = await runCommand(cmd, ["input.txt"]);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
     });
 
     it("should handle optional positional with default", async () => {
@@ -619,7 +619,7 @@ describe("E2E Tests", () => {
 
       const result = await runCommand(cmd, ["--ports", "8080", "--ports", "99999"]);
 
-      expect(result.exitCode).toBe(1);
+      expect(result.exitCode).toBe(2);
     });
 
     it("should transform array elements", async () => {
