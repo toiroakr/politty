@@ -1,5 +1,13 @@
 # politty
 
+## 0.15.1
+
+### Patch Changes
+
+- a5699d5: Support optional external packages with `requiredPackages` declarations, argument-dependent activation (including boolean-option and discriminator metadata), installation guidance in help, and deferred loading from the consuming project. Automatically detect npm, pnpm, Yarn, or Bun to generate installation guidance when no explicit command is supplied. Preserve transitive dependency and initialization errors.
+- Updated dependencies [a5699d5]
+  - @politty/zod@0.5.1
+
 ## 0.15.0
 
 ### Minor Changes
