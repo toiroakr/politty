@@ -19,7 +19,7 @@ export default defineConfig({
   treeshake: true,
   sourcemap: false,
   minify: true,
-  target: "node24",
+  target: "node22.18",
   outDir: "dist",
   deps: {
     neverBundle: ["loculus", "yaml", "@clack/prompts", "@inquirer/prompts"],

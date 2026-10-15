@@ -4,8 +4,8 @@ packages:
 minimumReleaseAge: 10080
 minimumReleaseAgeStrict: true
 minimumReleaseAgeExclude:
-  - "loculus@0.2.4"
-  - "@loculus/rolldown@0.2.2"
+  - "loculus@0.2.5"
+  - "@loculus/rolldown@0.2.3"
 
 allowBuilds:
   esbuild: true

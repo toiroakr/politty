@@ -1,6 +1,6 @@
 # @politty/loculus
 
-Politty with [loculus](https://github.com/toiroakr/loculus) flat string-input schemas. Requires Node 24 or newer. Uses the same core command execution, help, docs, completion, prompt, skills and agent functionality as `@politty/zod`.
+Politty with [loculus](https://github.com/toiroakr/loculus) flat string-input schemas. Requires Node.js 22.18.0 or newer. Uses the same core command execution, help, docs, completion, prompt, skills and agent functionality as `@politty/zod`.
 
 ```ts
 import * as l from "loculus";
@@ -43,7 +43,7 @@ Arrays require array inputs by default in Loculus 0.2. Politty collects repeated
 
 ## Build-time optimization
 
-Loculus 0.2.4 or newer in the 0.2 line can be used with `@loculus/rolldown` 0.2.2 or newer in the 0.2 line to specialize supported static schemas during the CLI build. The generated validators preserve the metadata used by help, docs, completion and prompts. Dynamic or unsupported definitions retain ordinary validation.
+Loculus 0.2.5 or newer in the 0.2 line can be used with `@loculus/rolldown` 0.2.3 or newer in the 0.2 line to specialize supported static schemas during the CLI build. The generated validators preserve the metadata used by help, docs, completion and prompts. Dynamic or unsupported definitions retain ordinary validation.
 
 ```ts
 import { defineConfig } from "tsdown";
@@ -55,11 +55,11 @@ export default defineConfig({
 });
 ```
 
-The plugin requires Node.js 24 or newer at build time and Rolldown `>=1.2.13 <2`. It is optional and belongs in the CLI project's devDependencies.
+The plugin requires Node.js 22.18.0 or newer at build time and Rolldown `>=1.2.13 <2`. It is optional and belongs in the CLI project's devDependencies.
 
 ## Development
 
-The adapter uses the published `loculus` 0.2.4 package for development and requires `loculus ^0.2.4` at runtime. No local archive or adjacent loculus checkout is needed.
+The adapter uses the published `loculus` 0.2.5 package for development and requires `loculus ^0.2.5` at runtime. No local archive or adjacent loculus checkout is needed.
 
 This repository's first-package release procedure in CLAUDE.md applies to `@politty/loculus`.
 
