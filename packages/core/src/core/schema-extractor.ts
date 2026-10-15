@@ -238,8 +238,17 @@ export function selectDiscriminatedVariant(
       for (const field of option.fields) {
         const previous = fields.get(field.name);
         if (!previous) fields.set(field.name, field);
-        else if (previous.type !== field.type)
-          fields.set(field.name, { ...previous, type: "unknown" });
+        else
+          fields.set(field.name, {
+            ...previous,
+            type: previous.type === field.type ? previous.type : "unknown",
+            named: previous.named || field.named,
+            positional: previous.positional || field.positional,
+            alias: [...new Set([...(previous.alias ?? []), ...(field.alias ?? [])])],
+            hiddenAlias: [
+              ...new Set([...(previous.hiddenAlias ?? []), ...(field.hiddenAlias ?? [])]),
+            ],
+          });
       }
     return { ...extracted, fields: [...fields.values()] };
   }

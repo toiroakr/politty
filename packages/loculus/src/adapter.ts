@@ -132,6 +132,10 @@ function normalizeDiscriminator(
   )
     return raw;
   for (const field of fields) {
+    const literal = field?.meta.literalValues?.find((literal) => String(literal) === value);
+    if (literal !== undefined) return { ...raw, [key]: literal };
+  }
+  for (const field of fields) {
     if (!field) continue;
     const normalized = normalizeLiteral(value, field.meta);
     if (normalized !== value) return { ...raw, [key]: normalized };

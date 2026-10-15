@@ -8,6 +8,47 @@ import { arg, createDefineCommand, defineCommand, generateHelpData, runCommand }
 import { promptMissingArgs } from "./prompt.js";
 
 describe("@politty/loculus", () => {
+  it("validates canonical numeric discriminators before boolean coercion in either branch order", async () => {
+    const boolean = l.object({ mode: l.literal(true), flag: l.boolean() });
+    const numeric = l.object({ mode: l.literal(1), count: l.number() });
+    for (const options of [
+      [boolean, numeric],
+      [numeric, boolean],
+    ] as const) {
+      const command = defineCommand({
+        name: "canonical",
+        args: l.discriminatedUnion("mode", options),
+        run: (value) => value,
+      });
+      expect((await runCommand(command, ["--mode", "1", "--count", "3"])).result).toEqual({
+        mode: 1,
+        count: 3,
+      });
+    }
+  });
+  it("keeps sibling named roles and aliases when a nested variant uses the same field positionally", async () => {
+    const nested = l.discriminatedUnion("mode", [
+      l.object({ mode: l.literal("a"), target: arg(l.string(), { positional: true }) }),
+      l.object({ mode: l.literal("b"), count: l.number() }),
+    ]);
+    const command = defineCommand({
+      name: "roles",
+      args: l.union([
+        nested,
+        l.object({ mode: l.string(), target: arg(l.string(), { alias: "t" }) }),
+      ]),
+      run: (value) => value,
+    });
+    expect((await runCommand(command, ["--mode", "a", "--target", "hello"])).result).toEqual({
+      mode: "a",
+      target: "hello",
+    });
+    for (const option of ["--target", "-t"]) {
+      const context = parseCompletionContext(["--mode", "a", option, ""], command);
+      expect(context.completionType).toBe("option-value");
+      expect(context.targetOption).toMatchObject({ name: "target", takesValue: true });
+    }
+  });
   it("keeps sibling union value completion when the nested discriminator branch does not fit", async () => {
     const nested = l.discriminatedUnion("mode", [
       l.object({ mode: l.literal("a"), flag: l.boolean() }),

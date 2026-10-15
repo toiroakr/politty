@@ -23,3 +23,5 @@ Select nested discriminated-union argument layouts before checking whether an ou
 Use normalized discriminator selection for interactive prompts and select nested union discriminator layouts for dynamic completion.
 
 Require Loculus 0.2.4 to preserve scalar discriminator conversion and refinement/transform callbacks in wrapped composites.
+
+Prioritize canonical numeric and boolean discriminator spellings before scalar conversion, and preserve named/positional roles and aliases when merging viable completion layouts.
