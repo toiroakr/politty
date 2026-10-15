@@ -366,19 +366,22 @@ function selectArgvFields(
     };
     const selected = selectDiscriminatedVariant(extracted, readValues);
     if (selected !== extracted) return selected;
-    const declared = new Set(variants.map((v) => v.discriminatorValue));
     const readsAnotherVariant = variants.some((v) => {
-      const value = readValues({ ...extracted, fields: v.fields })[discriminator];
-      return value !== undefined && declared.has(String(value));
+      const values = readValues({ ...extracted, fields: v.fields });
+      return selectDiscriminatedVariant(extracted, () => values) !== extracted;
     });
     return readsAnotherVariant ? undefined : extracted;
   }
   if (unionOptions) {
+    const options = unionOptions.flatMap((option) => {
+      const selected = selectArgvFields(option, argv, context);
+      return selected ? [selected] : [];
+    });
     const promptable = context.promptAvailable
-      ? unionOptions.filter((o) => fitsArgv(o, argv, undefined))
+      ? options.filter((o) => fitsArgv(o, argv, undefined))
       : [];
     const option =
-      unionOptions.find((o) => fitsArgv(o, argv, context.inheritedNames)) ??
+      options.find((o) => fitsArgv(o, argv, context.inheritedNames)) ??
       (promptable.length === 1 ? promptable[0] : undefined);
     return option && { ...extracted, fields: option.fields };
   }

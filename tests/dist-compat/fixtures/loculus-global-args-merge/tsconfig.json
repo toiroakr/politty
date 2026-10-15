@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "exactOptionalPropertyTypes": true,
+    "paths": {
+      "@politty/loculus": ["../../../../packages/loculus/dist/index.d.ts"]
+    }
+  },
+  "include": ["user.ts"]
+}

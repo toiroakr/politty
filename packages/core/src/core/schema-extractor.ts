@@ -214,13 +214,60 @@ export function selectDiscriminatedVariant(
   readValues: (fields: ExtractedFields) => Record<string, unknown>,
 ): ExtractedFields {
   const { discriminator, variants } = extracted;
-  if (!discriminator || !variants) return extracted;
-  for (const variant of variants) {
-    const variantFields = { ...extracted, fields: variant.fields };
-    const value = readValues(variantFields)[discriminator];
+  if (!discriminator || !variants) {
+    const options = extracted.unionOptions ?? [];
+    const selected = options.map((option) => selectDiscriminatedVariant(option, readValues));
+    if (selected.every((option, i) => option === options[i])) return extracted;
+    const viable = selected.filter((option, i) => {
+      const values = readValues(option);
+      const original = options[i]!;
+      if (
+        original.discriminator &&
+        values[original.discriminator] !== undefined &&
+        option === original
+      )
+        return false;
+      const names = new Set(option.fields.map((field) => field.name));
+      return !extracted.fields.some(
+        (field) => values[field.name] !== undefined && !names.has(field.name),
+      );
+    });
+    if (!viable.length) return extracted;
+    const fields = new Map<string, ResolvedFieldMeta>();
+    for (const option of viable)
+      for (const field of option.fields) {
+        const previous = fields.get(field.name);
+        if (!previous) fields.set(field.name, field);
+        else
+          fields.set(field.name, {
+            ...previous,
+            type: previous.type === field.type ? previous.type : "unknown",
+            named: previous.named || field.named,
+            positional: previous.positional || field.positional,
+            alias: [...new Set([...(previous.alias ?? []), ...(field.alias ?? [])])],
+            hiddenAlias: [
+              ...new Set([...(previous.hiddenAlias ?? []), ...(field.hiddenAlias ?? [])]),
+            ],
+          });
+      }
+    return { ...extracted, fields: [...fields.values()] };
+  }
+  const candidates = variants.map((variant) => {
+    const fields = { ...extracted, fields: variant.fields };
+    return { variant, fields, value: readValues(fields)[discriminator] };
+  });
+  for (const { variant, fields, value } of candidates) {
     if (value !== undefined && String(value) === variant.discriminatorValue) {
-      return variantFields;
+      return fields;
     }
+  }
+  for (const { variant, fields, value } of candidates) {
+    if (
+      value !== undefined &&
+      variant.normalizeDiscriminator &&
+      String(variant.normalizeDiscriminator(value)) === variant.discriminatorValue
+    )
+      return fields;
   }
   return extracted;
 }

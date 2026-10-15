@@ -110,6 +110,7 @@ export interface ExtractedFields {
   /** Variants (for discriminatedUnion) */
   variants?: Array<{
     discriminatorValue: string;
+    normalizeDiscriminator?: (value: unknown) => unknown;
     fields: ResolvedFieldMeta[];
     description?: string;
   }>;

@@ -627,6 +627,10 @@ The `playground/` directory contains many examples:
 
 For commands or options that need a separately installed package, see [Optional External Packages](./docs/advanced-features.md#optional-external-packages).
 
+## @politty/loculus
+
+Use flat string-input schemas with the same command, help, completion and prompt APIs as `@politty/zod`. See [the adapter guide](packages/loculus/README.md). Install `@politty/loculus` with `loculus ^0.2.3`.
+
 ## License
 
 MIT
