@@ -8,6 +8,83 @@ import { arg, createDefineCommand, defineCommand, generateHelpData, runCommand }
 import { promptMissingArgs } from "./prompt.js";
 
 describe("@politty/loculus", () => {
+  it("keeps sibling union value completion when the nested discriminator branch does not fit", async () => {
+    const nested = l.discriminatedUnion("mode", [
+      l.object({ mode: l.literal("a"), flag: l.boolean() }),
+      l.object({ mode: l.literal("b"), count: l.number() }),
+    ]);
+    const command = defineCommand({
+      name: "sibling",
+      args: l.union([nested, l.object({ mode: l.string(), payload: l.string() })]),
+      run: (value) => value,
+    });
+    expect((await runCommand(command, ["--mode", "a", "--payload", "hello"])).result).toEqual({
+      mode: "a",
+      payload: "hello",
+    });
+    const context = parseCompletionContext(["--mode", "a", "--payload", ""], command);
+    expect(context.completionType).toBe("option-value");
+    expect(context.targetOption).toMatchObject({ name: "payload", takesValue: true });
+    const flags = parseCompletionContext(["--mode", "a", "--pa"], command);
+    expect(flags.options.some((option) => option.name === "payload")).toBe(true);
+  });
+  it("reads mixed boolean and string discriminators independently of branch order", async () => {
+    const boolean = l.object({ mode: l.literal(true), flag: l.boolean() });
+    const textual = l.object({ mode: l.literal("auto"), name: l.string() });
+    for (const options of [
+      [boolean, textual],
+      [textual, boolean],
+    ] as const) {
+      const command = defineCommand({
+        name: "mixed-layout",
+        args: l.discriminatedUnion("mode", options),
+        run: (value) => value,
+      });
+      expect((await runCommand(command, ["--mode", "auto", "--name", "app"])).result).toEqual({
+        mode: "auto",
+        name: "app",
+      });
+      expect((await runCommand(command, ["--mode", "true", "--flag"])).result).toEqual({
+        mode: true,
+        flag: true,
+      });
+      const context = parseCompletionContext(["--mode", "auto", "--name", ""], command);
+      expect(context.targetOption).toMatchObject({ name: "name", takesValue: true });
+    }
+  });
+  it("preserves transform and refine callbacks around composites with numeric discriminators", () => {
+    const numeric = l.discriminatedUnion("edition", [
+      l.object({ edition: l.literal(1), value: l.string() }),
+      l.object({ edition: l.literal(2), value: l.string() }),
+    ]);
+    for (const composite of [
+      l.union([numeric, l.object({ other: l.string() })]),
+      l.xor([numeric, l.object({ other: l.string() })]),
+      l.intersection(numeric, l.object({ edition: l.number(), value: l.string() })),
+    ]) {
+      const refine = vi.fn(
+        (value: { value: string } | { other: string }) =>
+          !("value" in value) || value.value !== "bad",
+      );
+      const transform = vi.fn((value) => ({ ...value, transformed: true }));
+      const wrapped = l.transform(l.refine(composite, refine, "Bad value"), transform);
+      for (const edition of ["2", "2.0", "2e0", "+2"]) {
+        refine.mockClear();
+        transform.mockClear();
+        expect(loculusAdapter.validate({ edition, value: "hello" }, wrapped)).toMatchObject({
+          success: true,
+          data: { edition: 2, value: "hello", transformed: true },
+        });
+        expect(refine).toHaveBeenCalledOnce();
+        expect(transform).toHaveBeenCalledOnce();
+        refine.mockClear();
+        transform.mockClear();
+        expect(loculusAdapter.validate({ edition, value: "bad" }, wrapped).success).toBe(false);
+        expect(refine).toHaveBeenCalledOnce();
+        expect(transform).not.toHaveBeenCalled();
+      }
+    }
+  });
   it("prompts for the selected numeric branch with alternate discriminator spellings", async () => {
     const args = l.discriminatedUnion("edition", [
       l.object({ edition: l.literal(1), flag: arg(l.boolean(), { prompt: { message: "Flag?" } }) }),

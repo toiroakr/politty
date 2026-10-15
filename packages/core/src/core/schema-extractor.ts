@@ -215,11 +215,33 @@ export function selectDiscriminatedVariant(
 ): ExtractedFields {
   const { discriminator, variants } = extracted;
   if (!discriminator || !variants) {
-    for (const option of extracted.unionOptions ?? []) {
-      const selected = selectDiscriminatedVariant(option, readValues);
-      if (selected !== option) return { ...extracted, fields: selected.fields };
-    }
-    return extracted;
+    const options = extracted.unionOptions ?? [];
+    const selected = options.map((option) => selectDiscriminatedVariant(option, readValues));
+    if (selected.every((option, i) => option === options[i])) return extracted;
+    const viable = selected.filter((option, i) => {
+      const values = readValues(option);
+      const original = options[i]!;
+      if (
+        original.discriminator &&
+        values[original.discriminator] !== undefined &&
+        option === original
+      )
+        return false;
+      const names = new Set(option.fields.map((field) => field.name));
+      return !extracted.fields.some(
+        (field) => values[field.name] !== undefined && !names.has(field.name),
+      );
+    });
+    if (!viable.length) return extracted;
+    const fields = new Map<string, ResolvedFieldMeta>();
+    for (const option of viable)
+      for (const field of option.fields) {
+        const previous = fields.get(field.name);
+        if (!previous) fields.set(field.name, field);
+        else if (previous.type !== field.type)
+          fields.set(field.name, { ...previous, type: "unknown" });
+      }
+    return { ...extracted, fields: [...fields.values()] };
   }
   const candidates = variants.map((variant) => {
     const fields = { ...extracted, fields: variant.fields };

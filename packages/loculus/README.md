@@ -27,7 +27,7 @@ Schema outputs are inferred in `run`. `arg` supports positionals, aliases, hidde
 
 Constructor `nullable` / `nullish` flags preserve null output types. A scalar `default` applies to undefined; `default: { nullish: value }` applies to undefined and null. Null-only defaults still require an argument. Help displays only the undefined default, because CLI omission produces undefined.
 
-Loculus 0.2.3 supports string, boolean and numeric literal fields with exact output types. Boolean literals use boolean CLI flags; numeric literals accept numeric strings. Literal choices appear in JSON help and completion, and typed literals can select discriminated command branches.
+Loculus 0.2.4 supports string, boolean and numeric literal fields with exact output types. Boolean literals use boolean CLI flags; numeric literals accept numeric strings. Literal choices appear in JSON help and completion, and typed literals can select discriminated command branches.
 
 Multi-value literals also work as CLI fields: `l.literal([1, 2, 3])`, `l.literal([true, false])` and `l.literal([true, "auto"])` infer their output unions and expose choices to help/completion. Mixed boolean/string fields take an explicit value, for example `--mode true` or `--mode auto`.
 
@@ -43,7 +43,7 @@ Arrays require array inputs by default in Loculus 0.2. Politty collects repeated
 
 ## Build-time optimization
 
-Loculus 0.2.3 or newer in the 0.2 line can be used with `@loculus/rolldown` 0.2.2 or newer in the 0.2 line to specialize supported static schemas during the CLI build. The generated validators preserve the metadata used by help, docs, completion and prompts. Dynamic or unsupported definitions retain ordinary validation.
+Loculus 0.2.4 or newer in the 0.2 line can be used with `@loculus/rolldown` 0.2.2 or newer in the 0.2 line to specialize supported static schemas during the CLI build. The generated validators preserve the metadata used by help, docs, completion and prompts. Dynamic or unsupported definitions retain ordinary validation.
 
 ```ts
 import { defineConfig } from "tsdown";
@@ -59,7 +59,7 @@ The plugin requires Node.js 24 or newer at build time and Rolldown `>=1.2.13 <2`
 
 ## Development
 
-The adapter uses the published `loculus` 0.2.3 package for development and requires `loculus ^0.2.3` at runtime. No local archive or adjacent loculus checkout is needed.
+The adapter uses the published `loculus` 0.2.4 package for development and requires `loculus ^0.2.4` at runtime. No local archive or adjacent loculus checkout is needed.
 
 This repository's first-package release procedure in CLAUDE.md applies to `@politty/loculus`.
 

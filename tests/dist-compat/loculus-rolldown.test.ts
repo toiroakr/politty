@@ -50,6 +50,10 @@ const invocations = [
   ["numeric-xor", "--edition", "2.0", "--count", "3"],
   ["numeric-intersection", "--edition", "2.0", "--count", "3"],
   ["nested-layouts", "--edition", "2.0", "--value", "hello"],
+  ...["union", "xor", "intersection"].flatMap((kind) => [
+    [`wrapped-numeric-${kind}`, "--edition", "2.0", "--count", "3"],
+    [`wrapped-numeric-${kind}`, "--edition", "2.0", "--count", "-1"],
+  ]),
 ];
 let directory: string;
 let baseline: BuildResult;
@@ -126,8 +130,8 @@ describe("Loculus Rolldown bundles", () => {
   });
   it("runs the baseline CLI and generates help, docs, completion and prompts", () => {
     expect(baseline.transformed).toBe(false);
-    expect(baseline.probe.outcomes).toHaveLength(43);
-    expect(baseline.probe.outcomes.filter((outcome) => !outcome.success)).toHaveLength(11);
+    expect(baseline.probe.outcomes).toHaveLength(49);
+    expect(baseline.probe.outcomes.filter((outcome) => !outcome.success)).toHaveLength(14);
     expect(baseline.probe.outcomes[1]?.result).toMatchObject({
       port: 8080,
       cache: false,
@@ -146,6 +150,16 @@ describe("Loculus Rolldown bundles", () => {
         targetOption: expect.objectContaining({ valueType: "string" }),
       })),
     );
+    for (const kind of ["union", "xor", "intersection"]) {
+      const outcomes = baseline.probe.outcomes.filter(
+        (outcome) => outcome.argv?.[0] === `wrapped-numeric-${kind}`,
+      );
+      expect(outcomes[0]).toMatchObject({
+        success: true,
+        result: { edition: 2, count: 3, transformed: true },
+      });
+      expect(outcomes[1]).toMatchObject({ success: false });
+    }
     expect(baseline.probe.collisionError).toBe("Ambiguous CLI discriminator: edition=1");
     expect(baseline.probe.docSuccess).toBe(true);
     expect(baseline.probe.doc).toContain("# serve");

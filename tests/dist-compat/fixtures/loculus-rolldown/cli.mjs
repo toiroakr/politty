@@ -175,10 +175,31 @@ const numericIntersection = defineCommand({
   ),
   run: finish,
 });
+const wrappedComposites = Object.fromEntries(
+  [numericUnion, numericXor, numericIntersection].map((command) => {
+    const name = `wrapped-${command.name}`;
+    return [
+      name,
+      defineCommand({
+        name,
+        args: l.transform(
+          l.refine(
+            command.args,
+            (value) => !("count" in value) || value.count > 0,
+            "positive count",
+          ),
+          (value) => ({ ...value, transformed: true }),
+        ),
+        run: finish,
+      }),
+    ];
+  }),
+);
 const cli = defineCommand({
   name: "app",
   description: "統合確認",
   subCommands: {
+    ...wrappedComposites,
     layouts,
     "nested-layouts": nestedLayouts,
     "prompt-variant": promptVariant,
@@ -246,6 +267,10 @@ else {
     ["numeric-union", "--edition", "2.0", "--count", "3"],
     ["numeric-xor", "--edition", "2.0", "--count", "3"],
     ["numeric-intersection", "--edition", "2.0", "--count", "3"],
+    ...Object.keys(wrappedComposites).flatMap((name) => [
+      [name, "--edition", "2.0", "--count", "3"],
+      [name, "--edition", "2.0", "--count", "-1"],
+    ]),
   ];
   for (const argv of inputs) {
     events.length = 0;

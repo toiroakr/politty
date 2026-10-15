@@ -65,6 +65,13 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
     };
     if (meta.discriminator) {
       const key = meta.discriminator;
+      const types = new Set(
+        options.map((option) => option.fields.find((field) => field.name === key)?.type),
+      );
+      const discriminatorType = types.size === 1 ? [...types][0]! : "unknown";
+      const fieldsFor = (fields: ResolvedFieldMeta[]) =>
+        fields.map((field) => (field.name === key ? { ...field, type: discriminatorType } : field));
+      result.fields = fieldsFor(result.fields);
       const spellings = new Map<string, number>();
       result.discriminator = key;
       result.variants = options.flatMap((option, i) => {
@@ -79,7 +86,7 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
           return {
             discriminatorValue: spelling,
             normalizeDiscriminator: (value: unknown) => normalizeLiteral(value, discriminatorMeta!),
-            fields: option.fields,
+            fields: fieldsFor(option.fields),
             ...(option.description ? { description: option.description } : {}),
           };
         });

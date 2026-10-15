@@ -171,7 +171,7 @@ importers:
         version: 3.0.3
       '@loculus/rolldown':
         specifier: 0.2.2
-        version: 0.2.2(loculus@0.2.3)(rolldown@1.2.13)
+        version: 0.2.2(loculus@0.2.4)(rolldown@1.2.13)
       '@quansync/fs':
         specifier: 1.1.0
         version: 1.1.0
@@ -268,8 +268,8 @@ importers:
         specifier: 7.0.0-dev.20260707.2
         version: 7.0.0-dev.20260707.2
       loculus:
-        specifier: 0.2.3
-        version: 0.2.3
+        specifier: 0.2.4
+        version: 0.2.4
       tsdown:
         specifier: 0.23.0
         version: 0.23.0(@typescript/native-preview@7.0.0-dev.20260707.2)(oxc-resolver@11.24.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -2182,8 +2182,8 @@ packages:
     resolution: {integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==}
     engines: {node: '>= 12.0.0'}
 
-  loculus@0.2.3:
-    resolution: {integrity: sha512-kKGh/IbiHSewmjfixWPZKRPvJufYTbWpFso/rRnBfnDTE9KPe8mUOtJ5X1SThmbwXGGcbj2lTzm+hyGEL1Gmrw==}
+  loculus@0.2.4:
+    resolution: {integrity: sha512-p+swtXAm96owpvvj4OsZwNnZ8ep876K7Rejk+9UNvSGBJ2fIYUajbVhZiBe2rxiY3Wcba9X9Wc6v3+GNiCXpXg==}
     engines: {node: '>=24'}
 
   magic-string@1.4.3:
@@ -2912,9 +2912,9 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@loculus/rolldown@0.2.2(loculus@0.2.3)(rolldown@1.2.13)':
+  '@loculus/rolldown@0.2.2(loculus@0.2.4)(rolldown@1.2.13)':
     dependencies:
-      loculus: 0.2.3
+      loculus: 0.2.4
       rolldown: 1.2.13
 
   '@manypkg/find-root@3.1.0':
@@ -3748,7 +3748,7 @@ snapshots:
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
 
-  loculus@0.2.3: {}
+  loculus@0.2.4: {}
 
   magic-string@1.4.3:
     dependencies:

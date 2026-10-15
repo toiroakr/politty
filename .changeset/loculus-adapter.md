@@ -21,3 +21,5 @@ Normalize numeric discriminator spellings before selecting parser and completion
 Select nested discriminated-union argument layouts before checking whether an outer union candidate accepts the command line, across all adapters.
 
 Use normalized discriminator selection for interactive prompts and select nested union discriminator layouts for dynamic completion.
+
+Require Loculus 0.2.4 to preserve scalar discriminator conversion and refinement/transform callbacks in wrapped composites.
