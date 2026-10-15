@@ -59,7 +59,7 @@ The plugin requires Node.js 22.18.0 or newer at build time and Rolldown `>=1.2.1
 
 ## Development
 
-The adapter uses the published `loculus` 0.2.4 package for development and requires `loculus ^0.2.5` at runtime. No local archive or adjacent loculus checkout is needed.
+The adapter uses the published `loculus` 0.2.5 package for development and requires `loculus ^0.2.5` at runtime. No local archive or adjacent loculus checkout is needed.
 
 This repository's first-package release procedure in CLAUDE.md applies to `@politty/loculus`.
 

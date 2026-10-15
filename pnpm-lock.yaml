@@ -170,8 +170,8 @@ importers:
         specifier: 3.0.3
         version: 3.0.3
       '@loculus/rolldown':
-        specifier: 0.2.2
-        version: 0.2.2(loculus@0.2.4)(rolldown@1.2.13)
+        specifier: 0.2.3
+        version: 0.2.3(loculus@0.2.5)(rolldown@1.2.13)
       '@quansync/fs':
         specifier: 1.1.0
         version: 1.1.0
@@ -268,8 +268,8 @@ importers:
         specifier: 7.0.0-dev.20260707.2
         version: 7.0.0-dev.20260707.2
       loculus:
-        specifier: 0.2.4
-        version: 0.2.4
+        specifier: 0.2.5
+        version: 0.2.5
       tsdown:
         specifier: 0.23.0
         version: 0.23.0(@typescript/native-preview@7.0.0-dev.20260707.2)(oxc-resolver@11.24.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -805,11 +805,11 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@loculus/rolldown@0.2.2':
-    resolution: {integrity: sha512-g5sh7oR7rRsVEvDabHAJaUBg2XffwOMAc6EZ10xRpB51/ZP1e/JbW7UKDkn4XwilLqgJ90G+6lCwOmm97sPuXw==}
-    engines: {node: '>=24'}
+  '@loculus/rolldown@0.2.3':
+    resolution: {integrity: sha512-PMIyzNjSyzGjCA8HRLl+LQclTVP832BHVMAfSp64d8ZRVSWmpXUrjkjqtQT2X7msm/OcSZo0WORHPozjXhwBWg==}
+    engines: {node: '>=22.18.0'}
     peerDependencies:
-      loculus: ^0.2.3
+      loculus: ^0.2.5
       rolldown: '>=1.2.13 <2'
 
   '@manypkg/find-root@3.1.0':
@@ -2182,9 +2182,9 @@ packages:
     resolution: {integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==}
     engines: {node: '>= 12.0.0'}
 
-  loculus@0.2.4:
-    resolution: {integrity: sha512-p+swtXAm96owpvvj4OsZwNnZ8ep876K7Rejk+9UNvSGBJ2fIYUajbVhZiBe2rxiY3Wcba9X9Wc6v3+GNiCXpXg==}
-    engines: {node: '>=24'}
+  loculus@0.2.5:
+    resolution: {integrity: sha512-idAO14ke9seznkaPNm4L9l3Ka6DQFJqT8IJZne1W6MtBEfucayu2gmGB+YGP/mgHuvoTteL7iibI6s/ezTDNCA==}
+    engines: {node: '>=22.18.0'}
 
   magic-string@1.4.3:
     resolution: {integrity: sha512-z12OxmaPGE0F4xlpGdjuAUckipLpQlTAuAmyGhNoD7ODpYUzvDfvtxUbjM/jwznyP178oju/KDdyi220wNJ0RQ==}
@@ -2912,9 +2912,9 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@loculus/rolldown@0.2.2(loculus@0.2.4)(rolldown@1.2.13)':
+  '@loculus/rolldown@0.2.3(loculus@0.2.5)(rolldown@1.2.13)':
     dependencies:
-      loculus: 0.2.4
+      loculus: 0.2.5
       rolldown: 1.2.13
 
   '@manypkg/find-root@3.1.0':
@@ -3748,7 +3748,7 @@ snapshots:
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
 
-  loculus@0.2.4: {}
+  loculus@0.2.5: {}
 
   magic-string@1.4.3:
     dependencies:
@@ -4056,7 +4056,7 @@ snapshots:
       lightningcss: 1.33.0
       picomatch: 4.0.7
       postcss: 8.5.29
-      rolldown: 1.2.12
+      rolldown: 1.2.13
       tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 25.9.9

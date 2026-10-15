@@ -82,7 +82,7 @@
     "@politty/core": "workspace:*",
     "@types/node": "25.9.9",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "loculus": "0.2.4",
+    "loculus": "0.2.5",
     "tsdown": "0.23.0",
     "typescript": "7.0.2"
   },
