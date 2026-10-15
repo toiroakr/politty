@@ -170,8 +170,8 @@ importers:
         specifier: 3.0.3
         version: 3.0.3
       '@loculus/rolldown':
-        specifier: 0.2.1
-        version: 0.2.1(loculus@0.2.3)(rolldown@1.2.13)
+        specifier: 0.2.2
+        version: 0.2.2(loculus@0.2.3)(rolldown@1.2.13)
       '@quansync/fs':
         specifier: 1.1.0
         version: 1.1.0
@@ -805,11 +805,11 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@loculus/rolldown@0.2.1':
-    resolution: {integrity: sha512-os+wSc02xPWpycZKOsAFUiZ+mjkWsXhkjjOWcj89aq/QDPpRg9sA3WDTS5bv8DHObaljF53Tm1TIODRxg5X2kQ==}
+  '@loculus/rolldown@0.2.2':
+    resolution: {integrity: sha512-g5sh7oR7rRsVEvDabHAJaUBg2XffwOMAc6EZ10xRpB51/ZP1e/JbW7UKDkn4XwilLqgJ90G+6lCwOmm97sPuXw==}
     engines: {node: '>=24'}
     peerDependencies:
-      loculus: ^0.2.1
+      loculus: ^0.2.3
       rolldown: '>=1.2.13 <2'
 
   '@manypkg/find-root@3.1.0':
@@ -2912,7 +2912,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@loculus/rolldown@0.2.1(loculus@0.2.3)(rolldown@1.2.13)':
+  '@loculus/rolldown@0.2.2(loculus@0.2.3)(rolldown@1.2.13)':
     dependencies:
       loculus: 0.2.3
       rolldown: 1.2.13

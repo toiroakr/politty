@@ -43,7 +43,7 @@ Arrays require array inputs by default in Loculus 0.2. Politty collects repeated
 
 ## Build-time optimization
 
-Loculus 0.2.x can be used with `@loculus/rolldown` 0.2.x to specialize supported static schemas during the CLI build. The generated validators preserve the metadata used by help, docs, completion and prompts. Dynamic or unsupported definitions retain ordinary validation.
+Loculus 0.2.3 or newer in the 0.2 line can be used with `@loculus/rolldown` 0.2.2 or newer in the 0.2 line to specialize supported static schemas during the CLI build. The generated validators preserve the metadata used by help, docs, completion and prompts. Dynamic or unsupported definitions retain ordinary validation.
 
 ```ts
 import { defineConfig } from "tsdown";
@@ -55,7 +55,7 @@ export default defineConfig({
 });
 ```
 
-The plugin requires Rolldown `>=1.2.13 <2`. It is optional and belongs in the CLI project's devDependencies.
+The plugin requires Node.js 24 or newer at build time and Rolldown `>=1.2.13 <2`. It is optional and belongs in the CLI project's devDependencies.
 
 ## Development
 
