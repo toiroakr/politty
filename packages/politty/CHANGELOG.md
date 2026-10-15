@@ -1,5 +1,16 @@
 # politty
 
+## 0.15.2
+
+### Patch Changes
+
+- d807ec7: Fix argument parsing and dynamic completion for discriminated unions nested inside ordinary unions. Retain compatible sibling branches and preserve named/positional argument roles and aliases when combining completion layouts.
+
+  Use shared discriminator selection when prompting for missing arguments.
+
+- Updated dependencies [d807ec7]
+  - @politty/zod@0.5.2
+
 ## 0.15.1
 
 ### Patch Changes
