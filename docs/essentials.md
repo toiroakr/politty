@@ -134,6 +134,63 @@ $ my-cli --include file1.txt -i file2.txt
 # args.include = ["file1.txt", "file2.txt"]
 ```
 
+### Nested Object Options
+
+An object field is expanded into one option per property. Values are passed
+to `run` nested under the field again. Nested objects are expanded
+recursively. Set `arg()` metadata such as `alias`, `env` or `description` on
+the properties: an object field itself only accepts `description` and
+`flatten`, and other metadata on it is a type error.
+
+```typescript
+args: z.object({
+  config: z
+    .object({
+      port: arg(z.coerce.number(), { alias: "p", env: "PORT" }),
+      host: z.string().default("localhost"),
+    })
+    .optional(),
+});
+```
+
+```bash
+$ my-cli --config.port 8080
+# args.config = { port: 8080, host: "localhost" }
+```
+
+An optional object stays `undefined` until one of its options is given. When
+the object has a `.default({...})`, properties that are not given keep the
+default's values.
+
+`flatten` picks how keys are joined into option names (default: `"dot"`).
+A nested object without its own `flatten` inherits the style of the object
+that contains it.
+
+| `flatten` | Shown in help, docs and completion | Also accepted          |
+| --------- | ---------------------------------- | ---------------------- |
+| `"dot"`   | `--config.server-port`             | `--config.serverPort`  |
+| `"kebab"` | `--config-server-port`             | `--configServerPort`   |
+| `"camel"` | `--configServerPort`               | `--config-server-port` |
+
+Like every other option, each style accepts both its kebab-case and
+camelCase forms; only the shown form appears in help, generated docs and
+shell completion.
+
+- `"kebab"` and `"camel"` accept exactly the same options and differ only in
+  the shown form. Other fields are always shown in kebab-case, so with
+  `"camel"` help lists e.g. `--dry-run` next to `--configServerPort`.
+- `"dot"` accepts different options: `--config.port` and `--config-port` are
+  separate, so a dot option never collides with a top-level `configPort`
+  field.
+
+```typescript
+config: arg(z.object({ serverPort: z.coerce.number() }), { flatten: "kebab" }),
+```
+
+If an expanded option has the same name as another field or long alias
+(e.g. `--config-port` from a `configPort` field), extracting the fields
+throws an error.
+
 ## Validation and Types
 
 Since politty is built on Zod, you get powerful validation features out of the box.

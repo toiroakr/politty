@@ -42,6 +42,7 @@ export {
   type CompletionType,
   type CustomCompletion,
   type EffectContext,
+  type NestedKeyStyle,
   type PromptMeta,
   type PromptType,
   type ValidateArgMeta,

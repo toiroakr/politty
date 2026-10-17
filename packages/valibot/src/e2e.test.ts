@@ -195,4 +195,42 @@ describe("@politty/valibot e2e", () => {
     expect(table).toContain("`-e`");
     expect(table).toContain("Path to environment file");
   });
+
+  it("should expand nested object fields into options and nest their values", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: v.object({
+        config: arg(
+          v.optional(
+            v.object({
+              serverPort: v.pipe(v.string(), v.transform(Number)),
+              host: v.optional(v.string(), "localhost"),
+            }),
+          ),
+          { flatten: "kebab" },
+        ),
+      }),
+      run: (args) => args.config,
+    });
+
+    const result = await runCommand(cmd, ["--config-server-port", "80"]);
+    expect(result.success).toBe(true);
+    expect(result.result).toEqual({ serverPort: 80, host: "localhost" });
+
+    const absent = await runCommand(cmd, []);
+    expect(absent.result).toBeUndefined();
+  });
+
+  it("should keep nested properties of both intersection members", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: v.intersect([
+        v.object({ config: v.object({ host: v.string() }) }),
+        v.object({ config: v.object({ port: v.string() }) }),
+      ]),
+      run: (args) => args.config,
+    });
+    const result = await runCommand(cmd, ["--config.host", "h", "--config.port", "1"]);
+    expect(result.result).toEqual({ host: "h", port: "1" });
+  });
 });

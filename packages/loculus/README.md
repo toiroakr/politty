@@ -35,7 +35,7 @@ Numeric discriminators accept the same decimal spellings as numeric fields: `--e
 
 Public subpaths: `docs`, `completion`, `skill`, `agent`, `prompt`, `prompt/clack`, `prompt/inquirer`, `compile-cache`, `cli`. The optional prompt integrations use the same optional peers as `@politty/zod`. No Zod or Valibot runtime is loaded.
 
-Flat objects, discriminated unions, ordinary unions, xor and intersections are supported. Loculus 0.2 supports finite nested objects and multidimensional arrays, but Politty CLI arguments remain flat: nested object fields and nested arrays have no dedicated token mapping. Arbitrary recursive schemas and asynchronous validation are outside the supported CLI contract. `arg` replaces Zod-specific `.meta()` augmentation; a Zod `augment` subpath is therefore unnecessary.
+Flat objects, discriminated unions, ordinary unions, xor and intersections are supported. Nested object fields expand into one option per property (`--config.port`) and reach `run` nested again; `arg(l.object({...}), { flatten: "kebab" })` picks the option naming style, and `description` is the only other metadata an object field takes (see the core docs' "Nested Object Options"). Nested arrays have no dedicated token mapping. Arbitrary recursive schemas and asynchronous validation are outside the supported CLI contract. `arg` replaces Zod-specific `.meta()` augmentation; a Zod `augment` subpath is therefore unnecessary.
 
 Composite schemas use their branches' common CLI unknown-flag policy. When the branches have different policies, they use the core's default strip-with-warning policy, independent of branch order.
 

@@ -1,4 +1,10 @@
-import type { ArgMeta, CompletionMeta, EffectContext, PromptMeta } from "../core/arg-registry.js";
+import type {
+  ArgMeta,
+  CompletionMeta,
+  EffectContext,
+  NestedKeyStyle,
+  PromptMeta,
+} from "../core/arg-registry.js";
 import type { PackageRequirement } from "../package-requirements.js";
 import type { ArgsSchema } from "../types.js";
 
@@ -93,6 +99,45 @@ export interface ResolvedFieldMeta {
   negationDescription?: string | undefined;
   /** Side-effect callback from arg() metadata */
   effect?: ((value: unknown, context: EffectContext) => void | PromiseLike<void>) | undefined;
+  /**
+   * Field schemas of an object field, keyed by property name. Set by the
+   * adapter; `extractFields` expands such a field into its leaf fields.
+   */
+  objectShape?: Record<string, unknown> | undefined;
+  /**
+   * Every member's property schemas of an object field defined by several
+   * intersection members (see {@link mergeIntersectionField}).
+   */
+  objectShapes?: Array<Record<string, unknown>> | undefined;
+  /** Naming style for the options an object field expands into */
+  flatten?: NestedKeyStyle | undefined;
+  /**
+   * Set on a leaf expanded from an object field. Its value is parsed under
+   * `name` and moved to `path` (e.g. `["config", "port"]`) before
+   * validation.
+   */
+  nested?: NestedFieldInfo | undefined;
+}
+
+/**
+ * Where a leaf expanded from an object field lives in the validated args
+ */
+export interface NestedFieldInfo {
+  /** Property path, starting with the top-level field name */
+  path: string[];
+}
+
+/**
+ * An object field (or nested object) whose leaves were expanded into
+ * options. Kept per field group so objects without any leaf are still known.
+ */
+export interface NestedObjectInfo {
+  /** Property path, starting with the top-level field name */
+  path: string[];
+  /** Whether the object itself is required within its parent */
+  required: boolean;
+  /** The object's default value, if any */
+  defaultValue: unknown;
 }
 
 /**
@@ -113,9 +158,13 @@ export interface ExtractedFields {
     normalizeDiscriminator?: (value: unknown) => unknown;
     fields: ResolvedFieldMeta[];
     description?: string;
+    /** Object fields expanded into this variant's fields */
+    nestedObjects?: NestedObjectInfo[];
   }>;
   /** Options (for union) */
   unionOptions?: ExtractedFields[];
+  /** Object fields expanded into `fields` (see {@link NestedObjectInfo}) */
+  nestedObjects?: NestedObjectInfo[];
   /** Schema description */
   description?: string;
   /**
@@ -197,7 +246,11 @@ export interface FieldIntrospection {
   enumValues: string[] | undefined;
   /** The original schema, carried through for downstream consumers */
   schema: unknown;
+  /** Field schemas by property name, when the schema is an object */
+  objectShape?: Record<string, unknown> | undefined;
 }
+
+const NESTED_KEY_STYLES: readonly NestedKeyStyle[] = ["dot", "kebab", "camel"];
 
 /**
  * Assemble a {@link ResolvedFieldMeta} from adapter-provided introspection.
@@ -333,6 +386,20 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
   const negationDisplay: string | undefined =
     typeof negation === "string" ? negation : negation === true ? `no-${cliName}` : undefined;
 
+  const rawFlatten = (argMeta as { flatten?: unknown } | undefined)?.flatten;
+  if (rawFlatten !== undefined) {
+    if (!NESTED_KEY_STYLES.includes(rawFlatten as NestedKeyStyle)) {
+      throw new Error(
+        `Invalid flatten "${String(rawFlatten)}" for field "${name}": expected one of ${NESTED_KEY_STYLES.map((s) => `"${s}"`).join(", ")}.`,
+      );
+    }
+    if (!intro.objectShape) {
+      throw new Error(
+        `Invalid flatten for field "${name}": flatten can only be used on object fields.`,
+      );
+    }
+  }
+
   const positional = argMeta?.positional;
   const meta: ResolvedFieldMeta = {
     name,
@@ -356,6 +423,8 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
     negationDescription,
     effect: argMeta?.effect,
     requiredPackages: argMeta?.requiredPackages,
+    objectShape: intro.objectShape,
+    flatten: rawFlatten as NestedKeyStyle | undefined,
   };
 
   // Add overrideBuiltinAlias only if it's true
@@ -364,4 +433,51 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
   }
 
   return meta;
+}
+
+/**
+ * Combine two definitions of the same field from the members of an
+ * intersection: the first definition wins, except that two object fields
+ * keep the property schemas of both (expanded together, so a property both
+ * define as an object is merged in turn), the object is required when
+ * either member requires it, and it keeps the defaults of both.
+ *
+ * @param first - The definition seen first
+ * @param next - A later definition of the same field
+ * @returns The definition to keep
+ */
+export function mergeIntersectionField(
+  first: ResolvedFieldMeta,
+  next: ResolvedFieldMeta,
+): ResolvedFieldMeta {
+  if (!first.objectShape || !next.objectShape) return first;
+  return {
+    ...first,
+    required: first.required || next.required,
+    defaultValue: mergeDefaults(first.defaultValue, next.defaultValue),
+    objectShapes: [
+      ...(first.objectShapes ?? [first.objectShape]),
+      ...(next.objectShapes ?? [next.objectShape]),
+    ],
+  };
+}
+
+/**
+ * Combine two members' defaults for the same object: properties of both,
+ * merged recursively, with `first` winning where they conflict.
+ */
+function mergeDefaults(first: unknown, next: unknown): unknown {
+  if (first === undefined) return next;
+  if (!isRecord(first) || !isRecord(next)) return first;
+  const merged: Record<string, unknown> = { ...next };
+  for (const [key, value] of Object.entries(first)) {
+    merged[key] = key in next ? mergeDefaults(value, next[key]) : value;
+  }
+  return merged;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }

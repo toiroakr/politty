@@ -10,6 +10,7 @@
 
 import {
   resolveFieldMeta as assembleFieldMeta,
+  mergeIntersectionField,
   type ExtractedFields,
   type ResolvedFieldMeta,
   type UnknownKeysMode,
@@ -69,7 +70,7 @@ function getArgMeta(schema: z.ZodType, seen = new Set<z.ZodType>()): ArgMeta | u
 
   const typeName = getTypeName(schema);
 
-  if (typeName === "optional" || typeName === "nullable" || typeName === "default") {
+  if (typeName && INNER_TYPE_WRAPPERS.has(typeName)) {
     const innerSchema = def?.innerType;
     if (innerSchema) return getArgMeta(innerSchema, seen);
   }
@@ -111,6 +112,18 @@ interface ZodV4Def {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ZodSchemaWithDef = z.ZodType & { def?: ZodV4Def; _def?: ZodV4Def; type?: string; shape?: any };
+
+/**
+ * Wrappers that keep their inner schema in `def.innerType` and accept the
+ * same input as it.
+ */
+const INNER_TYPE_WRAPPERS: ReadonlySet<string> = new Set([
+  "optional",
+  "nullable",
+  "default",
+  "prefault",
+  "readonly",
+]);
 
 /**
  * Get the type name from a zod schema (v4 compatible)
@@ -165,7 +178,7 @@ function unwrapSchema(schema: z.ZodType): z.ZodType {
   const s = schema as ZodSchemaWithDef;
   const def = s.def ?? s._def;
 
-  if (typeName === "optional" || typeName === "nullable" || typeName === "default") {
+  if (typeName && INNER_TYPE_WRAPPERS.has(typeName)) {
     const innerSchema = def?.innerType;
     if (innerSchema) {
       return unwrapSchema(innerSchema);
@@ -304,7 +317,9 @@ function extractDefaultValue(schema: z.ZodType): unknown {
   const s = schema as ZodSchemaWithDef;
   const def = s.def ?? s._def;
 
-  if (typeName === "default") {
+  // A prefault's default is an input value; both are what an omitted
+  // argument resolves to.
+  if (typeName === "default" || typeName === "prefault") {
     const defaultValue = def?.defaultValue;
     // In zod v4, defaultValue can be a direct value or a function
     if (typeof defaultValue === "function") {
@@ -314,7 +329,7 @@ function extractDefaultValue(schema: z.ZodType): unknown {
   }
 
   // Check for nested default in optional/nullable/pipe
-  if (typeName === "optional" || typeName === "nullable") {
+  if (typeName === "optional" || typeName === "nullable" || typeName === "readonly") {
     const innerSchema = def?.innerType;
     if (innerSchema) {
       return extractDefaultValue(innerSchema);
@@ -344,7 +359,7 @@ function extractDescription(schema: z.ZodType): string | undefined {
   const s = schema as ZodSchemaWithDef;
   const def = s.def ?? s._def;
 
-  if (typeName === "optional" || typeName === "nullable" || typeName === "default") {
+  if (typeName && INNER_TYPE_WRAPPERS.has(typeName)) {
     const innerSchema = def?.innerType;
     if (innerSchema) {
       return extractDescription(innerSchema);
@@ -375,7 +390,17 @@ export function resolveZodFieldMeta(name: string, schema: z.ZodType): ResolvedFi
     type: detectType(schema),
     enumValues: extractEnumValues(schema),
     schema,
+    objectShape: extractObjectShape(schema),
   });
+}
+
+/**
+ * Property schemas of an object field (through optional/default/pipe
+ * wrappers), or `undefined` for any other field.
+ */
+function extractObjectShape(schema: z.ZodType): Record<string, z.ZodType> | undefined {
+  const inner = unwrapSchema(schema);
+  return getTypeName(inner) === "object" ? getObjectShape(inner) : undefined;
 }
 
 /**
@@ -415,7 +440,8 @@ function extractFromDiscriminatedUnion(schema: z.ZodType): ExtractedFields {
     // Get discriminator value from the variant's discriminator schema.
     // Supports z.literal() and single-value z.enum() discriminators.
     let discriminatorValue = "";
-    const discriminatorSchema = shape[discriminator];
+    // Read through wrappers such as `.default()`, which keep the value.
+    const discriminatorSchema = shape[discriminator] && unwrapSchema(shape[discriminator]);
     if (discriminatorSchema) {
       const typeName = getTypeName(discriminatorSchema);
       if (typeName === "literal") {
@@ -523,9 +549,8 @@ function extractFromIntersection(schema: z.ZodType): ExtractedFields {
 
     const extracted = extractZodFields(subSchema as ArgsSchema);
     for (const field of extracted.fields) {
-      if (!allFieldsMap.has(field.name)) {
-        allFieldsMap.set(field.name, field);
-      }
+      const existing = allFieldsMap.get(field.name);
+      allFieldsMap.set(field.name, existing ? mergeIntersectionField(existing, field) : field);
     }
   };
 

@@ -1,4 +1,8 @@
-import type { InferSchemaOutput, SchemaLike } from "../adapter/standard-schema.js";
+import type {
+  InferSchemaInput,
+  InferSchemaOutput,
+  SchemaLike,
+} from "../adapter/standard-schema.js";
 import type { PackageRequirement } from "../package-requirements.js";
 import type { ArgSource, GlobalArgs, IsEmpty } from "../types.js";
 import type { DynamicCompletionResolver } from "./dynamic-completion-types.js";
@@ -84,6 +88,11 @@ export type CompletionMeta = {
       extensions?: never;
     }
 );
+
+/**
+ * Naming style for the CLI options a nested object field expands into
+ */
+export type NestedKeyStyle = "dot" | "kebab" | "camel";
 
 /**
  * Prompt input type for interactive prompts
@@ -243,6 +252,33 @@ export interface BaseArgMeta<TValue = unknown> {
    * Disallowed when `negation` is `false`.
    */
   negationDescription?: string;
+  /**
+   * How the keys of a nested object field are joined into CLI option names.
+   * Object fields are always expanded into one option per leaf field; this
+   * only picks the naming style (default: `"dot"`). Nested objects without
+   * their own `flatten` inherit the style of the enclosing object. Two
+   * options resolving to the same name raise an error when fields are
+   * extracted.
+   *
+   * - `"dot"`   — `--config.server-port` (also accepts `--config.serverPort`)
+   * - `"kebab"` — `--config-server-port` (also accepts `--configServerPort`)
+   * - `"camel"` — `--configServerPort` (also accepts `--config-server-port`)
+   *
+   * `"kebab"` and `"camel"` accept the same options and differ only in the
+   * form shown in help, generated docs and shell completion.
+   *
+   * Only valid on object fields.
+   *
+   * @example
+   * ```ts
+   * config: arg(z.object({ port: z.number(), host: z.string() }), {
+   *   flatten: "kebab",
+   * })
+   * // Accepts: --config-port 8080 --config-host localhost
+   * // Run receives: { config: { port: 8080, host: "localhost" } }
+   * ```
+   */
+  flatten?: NestedKeyStyle;
   /**
    * Side-effect callback executed after argument parsing and validation.
    * Runs before the command lifecycle (setup/run/cleanup).
@@ -404,20 +440,77 @@ type ValidateNegation<M, TValue> =
         : NegationTypeError<M>
       : M;
 
+type ObjectFieldMetaTypeError<M> = {
+  [K in keyof M]: M[K];
+} & {
+  __typeError: "Object fields only accept description and flatten";
+};
+
+type FlattenTypeError<M> = {
+  [K in keyof M]: M[K];
+} & {
+  __typeError: "flatten can only be used on object fields";
+};
+
+/** Keys of `T` other than its index signatures */
+type KnownKeys<T> = keyof {
+  [
+    K in keyof T as string extends K
+      ? never
+      : number extends K
+        ? never
+        : symbol extends K
+          ? never
+          : K
+  ]: T[K];
+};
+
+/**
+ * Whether a schema input type is an object with known properties, i.e. a
+ * field that expands into one option per property. Loose objects (known
+ * properties plus an index signature) are; records (only an index
+ * signature), arrays and `unknown` inputs (e.g. coercions) are not.
+ */
+type IsObjectInput<TInput> = unknown extends TInput
+  ? false
+  : [NonNullable<TInput>] extends [readonly unknown[]]
+    ? false
+    : [NonNullable<TInput>] extends [Record<string, unknown>]
+      ? string extends keyof NonNullable<TInput>
+        ? [KnownKeys<NonNullable<TInput>>] extends [never]
+          ? false
+          : true
+        : true
+      : false;
+
+/**
+ * Reject `flatten` on fields that do not expand into nested options.
+ */
+type ValidateFlatten<M, TValue> =
+  HasExplicit<M, "flatten"> extends true ? FlattenTypeError<M> : ValidateNegation<M, TValue>;
+
 /**
  * Type helper to validate ArgMeta.
  * Forces a type error when a reserved alias ("h" / "H") is used without
  * `overrideBuiltinAlias: true`, whether the alias is provided as a string
  * or as part of an array, and whether it appears in `alias` or `hiddenAlias`.
- * Also rejects `negation` / `negationDescription` on non-boolean fields.
+ * Also rejects `negation` / `negationDescription` on non-boolean fields,
+ * `flatten` on fields that are not objects, and anything but `description`
+ * and `flatten` on object fields (judged by the schema's input type, as
+ * object fields are expanded by their input shape).
  */
-export type ValidateArgMeta<M, TValue = unknown> = M extends { overrideBuiltinAlias: true }
-  ? ValidateNegation<M, TValue>
-  : ContainsReservedAlias<AliasFieldOf<M>> extends true
-    ? ReservedAliasTypeError<M>
-    : ContainsReservedAlias<HiddenAliasFieldOf<M>> extends true
-      ? ReservedAliasTypeError<M>
-      : ValidateNegation<M, TValue>;
+export type ValidateArgMeta<M, TValue = unknown, TInput = unknown> =
+  IsObjectInput<TInput> extends true
+    ? [Exclude<keyof M, "description" | "flatten">] extends [never]
+      ? M
+      : ObjectFieldMetaTypeError<M>
+    : M extends { overrideBuiltinAlias: true }
+      ? ValidateFlatten<M, TValue>
+      : ContainsReservedAlias<AliasFieldOf<M>> extends true
+        ? ReservedAliasTypeError<M>
+        : ContainsReservedAlias<HiddenAliasFieldOf<M>> extends true
+          ? ReservedAliasTypeError<M>
+          : ValidateFlatten<M, TValue>;
 
 /**
  * The overloaded `arg()` signature, parameterized by the schema constraint.
@@ -430,14 +523,14 @@ export interface ArgFn<TSchemaBase extends SchemaLike = SchemaLike> {
   <T extends TSchemaBase>(schema: T): T;
   <T extends TSchemaBase, M extends ArgMeta<InferSchemaOutput<T>>>(
     schema: T,
-    meta: ValidateArgMeta<M, InferSchemaOutput<T>>,
+    meta: ValidateArgMeta<M, InferSchemaOutput<T>, InferSchemaInput<T>>,
   ): T;
 }
 
 export function arg<T extends SchemaLike>(schema: T): T;
 export function arg<T extends SchemaLike, M extends ArgMeta<InferSchemaOutput<T>>>(
   schema: T,
-  meta: ValidateArgMeta<M, InferSchemaOutput<T>>,
+  meta: ValidateArgMeta<M, InferSchemaOutput<T>, InferSchemaInput<T>>,
 ): T;
 export function arg<T extends SchemaLike>(
   schema: T,

@@ -10,6 +10,7 @@
 
 import {
   resolveFieldMeta as assembleFieldMeta,
+  mergeIntersectionField,
   type ExtractedFields,
   type ResolvedFieldMeta,
   type UnknownKeysMode,
@@ -82,6 +83,14 @@ const UNWRAPPABLE: ReadonlySet<string> = new Set([
   "non_optional",
   "non_nullable",
   "non_nullish",
+]);
+
+/** Object-like schema types whose `entries` hold the property schemas */
+const OBJECT_TYPES: ReadonlySet<string> = new Set([
+  "object",
+  "strict_object",
+  "loose_object",
+  "object_with_rest",
 ]);
 
 /**
@@ -389,7 +398,17 @@ export function resolveValibotFieldMeta(name: string, schema: unknown): Resolved
     type: detectType(node),
     enumValues: extractEnumValues(node),
     schema,
+    objectShape: extractObjectShape(node),
   });
+}
+
+/**
+ * Property schemas of an object field (through optional/nullable/etc.
+ * wrappers), or `undefined` for any other field.
+ */
+function extractObjectShape(schema: ValibotNode): Record<string, ValibotNode> | undefined {
+  const inner = unwrapSchema(schema);
+  return inner.type && OBJECT_TYPES.has(inner.type) ? (inner.entries ?? {}) : undefined;
 }
 
 /**
@@ -527,9 +546,8 @@ function extractFromIntersect(schema: ValibotNode): ExtractedFields {
   for (const option of schema.options ?? []) {
     const extracted = extractValibotFields(option as ArgsSchema);
     for (const field of extracted.fields) {
-      if (!allFieldsMap.has(field.name)) {
-        allFieldsMap.set(field.name, field);
-      }
+      const existing = allFieldsMap.get(field.name);
+      allFieldsMap.set(field.name, existing ? mergeIntersectionField(existing, field) : field);
     }
   }
 

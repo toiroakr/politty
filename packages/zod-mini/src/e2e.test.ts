@@ -193,4 +193,54 @@ describe("@politty/zod-mini e2e", () => {
     expect(table).toContain("`-e`");
     expect(table).toContain("Path to environment file");
   });
+
+  it("should expand nested object fields into options and nest their values", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: z.object({
+        config: arg(
+          z.optional(
+            z.object({
+              serverPort: z.pipe(z.string(), z.transform(Number)),
+              host: z._default(z.string(), "localhost"),
+            }),
+          ),
+          { flatten: "kebab" },
+        ),
+      }),
+      run: (args) => args.config,
+    });
+
+    const result = await runCommand(cmd, ["--config-server-port", "80"]);
+    expect(result.success).toBe(true);
+    expect(result.result).toEqual({ serverPort: 80, host: "localhost" });
+
+    const absent = await runCommand(cmd, []);
+    expect(absent.result).toBeUndefined();
+  });
+
+  it("should keep nested properties of both intersection members", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: z.intersection(
+        z.object({ config: z.object({ host: z.string() }) }),
+        z.object({ config: z.object({ port: z.string() }) }),
+      ),
+      run: (args) => args.config,
+    });
+    const result = await runCommand(cmd, ["--config.host", "h", "--config.port", "1"]);
+    expect(result.result).toEqual({ host: "h", port: "1" });
+  });
+
+  it("should expand readonly object fields", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: z.object({
+        config: arg(z.readonly(z.object({ port: z.string() })), { flatten: "kebab" }),
+      }),
+      run: (args) => args.config,
+    });
+    const result = await runCommand(cmd, ["--config-port", "1"]);
+    expect(result.result).toEqual({ port: "1" });
+  });
 });

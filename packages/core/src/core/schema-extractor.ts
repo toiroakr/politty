@@ -11,6 +11,7 @@
  */
 
 import { extractInternalFields, isInternalArgsSchema } from "../adapter/internal-args.js";
+import { flattenNestedFields } from "../adapter/nested-fields.js";
 import { getValidatorAdapter } from "../adapter/registry.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 
@@ -38,6 +39,7 @@ export function getUnknownKeysMode(schema: ArgsSchema): UnknownKeysMode {
 }
 
 const validatedPackageFields = new WeakSet<ExtractedFields>();
+const flattenedFields = new WeakMap<ExtractedFields, ExtractedFields>();
 
 /**
  * Extract all fields from a schema
@@ -48,12 +50,28 @@ const validatedPackageFields = new WeakSet<ExtractedFields>();
 export function extractFields(schema: ArgsSchema): ExtractedFields {
   const extracted = isInternalArgsSchema(schema)
     ? extractInternalFields(schema)
-    : getValidatorAdapter().extractFields(schema);
+    : flattenAdapterFields(getValidatorAdapter().extractFields(schema));
   if (!validatedPackageFields.has(extracted)) {
     validatePackageFields(extracted);
     validatedPackageFields.add(extracted);
   }
   return extracted;
+}
+
+/**
+ * Expand the object fields of an adapter's extraction into leaf fields,
+ * memoized per extraction so repeated calls keep returning the same object.
+ */
+function flattenAdapterFields(extracted: ExtractedFields): ExtractedFields {
+  let flattened = flattenedFields.get(extracted);
+  if (!flattened) {
+    const adapter = getValidatorAdapter();
+    flattened = flattenNestedFields(extracted, (name, fieldSchema) =>
+      adapter.resolveFieldMeta(name, fieldSchema),
+    );
+    flattenedFields.set(extracted, flattened);
+  }
+  return flattened;
 }
 
 function validatePackageFields(extracted: ExtractedFields): void {

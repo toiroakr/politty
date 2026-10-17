@@ -1,3 +1,10 @@
+import {
+  getFieldValue,
+  isPlainObject,
+  mergeNestedValues,
+  nestedObjectPaths,
+  nestedPathKey,
+} from "../adapter/nested-fields.js";
 import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
 import { enableCompileCache } from "../compile-cache.js";
 import { executeLifecycle } from "../executor/command-runner.js";
@@ -1057,12 +1064,19 @@ async function runCommandInternal<TResult = unknown>(
       for (const field of parseResult.extractedFields.fields) {
         const localHasOwnValue =
           Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
+        // The validated global value lives where the global definition puts
+        // it, which for a nested leaf is its property path.
+        const globalField = options._globalExtracted?.fields.find((f) => f.name === field.name);
+        const globalValue = globalField && getFieldValue(validatedGlobalArgs, globalField);
         if (
           !localHasOwnValue &&
           cliProvidedGlobalFields.has(field.name) &&
-          Object.hasOwn(validatedGlobalArgs, field.name)
+          globalField &&
+          (globalField.nested
+            ? globalValue !== undefined
+            : Object.hasOwn(validatedGlobalArgs, field.name))
         ) {
-          argsToValidate = { ...argsToValidate, [field.name]: validatedGlobalArgs[field.name] };
+          argsToValidate = { ...argsToValidate, [field.name]: globalValue };
           globalPrefilledFields.add(field.name);
         }
       }
@@ -1108,6 +1122,17 @@ async function runCommandInternal<TResult = unknown>(
       ...proxiedGlobalArgs,
       ...proxiedCommandArgs,
     };
+    // Objects expanded into options may carry properties from both schemas:
+    // merge them per property, still letting command values win.
+    const objectPaths = nestedObjectPaths(options._globalExtracted, parseResult.extractedFields);
+    const isObject = (path: string[]) => objectPaths.has(nestedPathKey(path));
+    for (const key of Object.keys(proxiedCommandArgs)) {
+      const globalValue = proxiedGlobalArgs[key];
+      const commandValue = proxiedCommandArgs[key];
+      if (isObject([key]) && isPlainObject(globalValue) && isPlainObject(commandValue)) {
+        mergedPlainArgs[key] = mergeNestedValues(globalValue, commandValue, isObject, [key]);
+      }
+    }
     const argSourceMap = new Map<string, ArgSource>(globalSourceMap);
     const localEnvFallbackFields = parseResult.envFallbackFields ?? new Set<string>();
     // Local fields take precedence on collision, mirroring the value merge above:

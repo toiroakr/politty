@@ -1,3 +1,4 @@
+import { getFieldValue } from "../adapter/nested-fields.js";
 import type { ExtractedFields } from "./schema-extractor.js";
 
 /**
@@ -17,7 +18,7 @@ export async function runEffects(
 ): Promise<void> {
   for (const field of extracted.fields) {
     if (!field.effect) continue;
-    await field.effect(validatedArgs[field.name], {
+    await field.effect(getFieldValue(validatedArgs, field), {
       name: field.name,
       args: validatedArgs,
       ...(globalArgs != null && { globalArgs }),

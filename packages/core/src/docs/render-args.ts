@@ -1,6 +1,8 @@
+import { flattenNestedFields } from "../adapter/nested-fields.js";
 import { getValidatorAdapter } from "../adapter/registry.js";
 import type { SchemaLike } from "../adapter/standard-schema.js";
 import type { ResolvedFieldMeta } from "../core/schema-extractor.js";
+import type { ArgsSchema } from "../types.js";
 import { type ColumnId, emitMarkdownTable, toOptionRows } from "./option-rows.js";
 
 /**
@@ -28,9 +30,19 @@ export type ArgsTableOptions = {
  */
 function extractArgsFields(args: ArgsShape): ResolvedFieldMeta[] {
   const adapter = getValidatorAdapter();
-  return Object.entries(args).map(([name, fieldSchema]) =>
+  const fields = Object.entries(args).map(([name, fieldSchema]) =>
     adapter.resolveFieldMeta(name, fieldSchema),
   );
+  // Object fields document the options they expand into, as parsing does.
+  return flattenNestedFields(
+    {
+      fields,
+      schema: args as unknown as ArgsSchema,
+      schemaType: "object",
+      unknownKeysMode: "strip",
+    },
+    (name, fieldSchema) => adapter.resolveFieldMeta(name, fieldSchema),
+  ).fields;
 }
 
 /**

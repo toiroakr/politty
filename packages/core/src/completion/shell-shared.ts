@@ -8,7 +8,7 @@
  * when one generator gets a fix that the others should mirror.
  */
 
-import { toCamelCase } from "../core/schema-extractor.js";
+import { toCamelCase, toKebabCase } from "../core/schema-extractor.js";
 import type { NamedPositionalFrame } from "./extractor.js";
 import type { CompletableOption, CompletablePositional, ValueCompletion } from "./types.js";
 
@@ -211,10 +211,24 @@ function pushUnique(tokens: string[], t: string): void {
 }
 
 /**
+ * Push the other case spellings runtime accepts for a long name: the
+ * camelCase form of a hyphenated name, and the kebab-case form of one with
+ * uppercase letters (camel-style nested fields register it as a hidden
+ * alias). Names mixing both styles get both.
+ */
+function pushCaseVariants(tokens: string[], name: string): void {
+  // camelCase of the kebab-case form too: `configBaseURL` is also accepted
+  // as `--configBaseUrl` through its kebab-case hidden alias.
+  for (const variant of [toCamelCase(name), toKebabCase(name), toCamelCase(toKebabCase(name))]) {
+    if (variant !== name && !tokens.includes(`--${variant}`)) tokens.push(`--${variant}`);
+  }
+}
+
+/**
  * Every CLI spelling the runtime's aliasMap routes to this option:
  *  - `--cliName` (always),
  *  - `-x` when `cliName` is one character,
- *  - `--toCamelCase(cliName)` when `cliName` is hyphenated,
+ *  - `--toCamelCase(cliName)` / `--toKebabCase(cliName)` when they differ,
  *  - and the analogous forms for each alias.
  *
  * The order is stable so shell-side case patterns stay diff-friendly.
@@ -225,7 +239,7 @@ export function collectOptionTokens(
 ): string[] {
   const tokens = [`--${cliName}`];
   if (cliName.length === 1) tokens.push(`-${cliName}`);
-  if (cliName.includes("-")) tokens.push(`--${toCamelCase(cliName)}`);
+  pushCaseVariants(tokens, cliName);
   for (const a of aliases ?? []) pushAliasTokens(tokens, a);
   return tokens;
 }
@@ -277,7 +291,16 @@ export function quotedAvailabilityTokens(
   const tokens = new Set<string>(collectOptionTokens(cliName, aliases));
   if (negation) {
     tokens.add(`--${negation}`);
-    if (negation.includes("-")) tokens.add(`--${toCamelCase(negation)}`);
+    // A default negation (`no-<cliName>`) takes every spelling the option
+    // does; a custom one only its camelCase form, as the parser registers.
+    const isDefault =
+      negation === `no-${toKebabCase(cliName)}` ||
+      negation === `no${cliName.charAt(0).toUpperCase()}${cliName.slice(1)}`;
+    if (isDefault) {
+      const variants: string[] = [];
+      pushCaseVariants(variants, negation);
+      for (const variant of variants) tokens.add(variant);
+    } else if (negation.includes("-")) tokens.add(`--${toCamelCase(negation)}`);
   }
   // Drop tokens runtime would NOT route to this option. For a LOCAL
   // option, a short token owned by a global at the same frame is
@@ -403,7 +426,7 @@ export function localShadowingTokens(
   // registers in the local aliasMap unless an EXPLICIT `alias: "x"`
   // declares it.
   const tokens = [`--${cliName}`];
-  if (cliName.includes("-")) tokens.push(`--${toCamelCase(cliName)}`);
+  pushCaseVariants(tokens, cliName);
   for (const a of aliases ?? []) pushAliasTokens(tokens, a);
   return tokens;
 }

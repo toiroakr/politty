@@ -1,4 +1,5 @@
 import {
+  mergeIntersectionField,
   resolveFieldMeta,
   type ExtractedFields,
   type ResolvedFieldMeta,
@@ -28,7 +29,12 @@ function resolve(name: string, schema: AnySchema): ResolvedFieldMeta {
           : "unknown",
     enumValues: (meta.enumValues ?? meta.literalValues)?.map(String),
     schema,
+    objectShape: objectShape(schema),
   });
+}
+function objectShape(schema: AnySchema): Record<string, AnySchema> | undefined {
+  const { meta } = schema;
+  return meta.shape ?? (meta.inner ? objectShape(meta.inner) : undefined);
 }
 function mode(meta: Meta): UnknownKeysMode {
   return meta.unknownKeys ?? "strip";
@@ -52,7 +58,13 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
     const unknownKeysMode = options[0]?.unknownKeysMode ?? "strip";
     const fields = new Map<string, ResolvedFieldMeta>();
     for (const option of options)
-      for (const field of option.fields) if (!fields.has(field.name)) fields.set(field.name, field);
+      for (const field of option.fields) {
+        const existing = fields.get(field.name);
+        if (!existing) fields.set(field.name, field);
+        // An intersection requires every member, so keep both object shapes.
+        else if (meta.kind === "intersection")
+          fields.set(field.name, mergeIntersectionField(existing, field));
+      }
     result = {
       fields: [...fields.values()],
       schema,

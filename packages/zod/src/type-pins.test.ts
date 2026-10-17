@@ -50,4 +50,26 @@ describe("@politty/zod type pins", () => {
       defaultSubCommand: "other",
     });
   });
+
+  it("limits object field metadata to description and flatten", () => {
+    arg(z.object({ port: z.number() }), { description: "Server", flatten: "kebab" });
+    arg(z.object({ port: z.number() }).optional(), { flatten: "camel" });
+    // @ts-expect-error object fields only accept description and flatten
+    arg(z.object({ port: z.number() }), { alias: "c" });
+    arg(z.looseObject({ port: z.number() }), { flatten: "kebab" });
+    // @ts-expect-error loose objects are object fields too
+    arg(z.looseObject({ port: z.number() }), { alias: "c" });
+    // @ts-expect-error wrappers keep an object field an object field
+    arg(z.object({ port: z.number() }).default({ port: 1 }), { env: "CONFIG" });
+
+    // Fields whose input is not an object keep the full metadata.
+    arg(
+      z.string().transform((value) => ({ value })),
+      { alias: "c" },
+    );
+    arg(z.record(z.string(), z.string()), { env: "LABELS" });
+    arg(z.array(z.object({ id: z.string() })), { alias: "i" });
+    // @ts-expect-error flatten can only be used on object fields
+    arg(z.string(), { flatten: "dot" });
+  });
 });

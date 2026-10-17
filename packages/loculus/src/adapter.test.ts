@@ -625,4 +625,47 @@ describe("@politty/loculus", () => {
     const flags = parseArgs(["--help-json"], command);
     expect(flags).toMatchObject({ helpJsonRequested: true });
   });
+
+  it("expands nested object fields into options and nests their values", async () => {
+    const command = defineCommand({
+      name: "serve",
+      args: l.object({
+        config: arg(
+          l.object(
+            {
+              serverPort: l.number(),
+              host: l.string({ default: "localhost" }),
+            },
+            { optional: true },
+          ),
+          { flatten: "kebab" },
+        ),
+        db: l.object(
+          { url: l.string(), pool: l.number() },
+          { default: { undefined: { url: "x", pool: 1 } } },
+        ),
+      }),
+      run: (args) => args,
+    });
+
+    expect(
+      (await runCommand(command, ["--config-server-port", "80", "--db.pool", "5"])).result,
+    ).toEqual({ config: { serverPort: 80, host: "localhost" }, db: { url: "x", pool: 5 } });
+    expect((await runCommand(command, [])).result).toEqual({ db: { url: "x", pool: 1 } });
+  });
+
+  it("keeps nested properties of both intersection members", async () => {
+    const command = defineCommand({
+      name: "serve",
+      // Loculus intersections validate each member on its own, so the nested
+      // objects have to pass the other member's keys through.
+      args: l.intersection(
+        l.object({ config: l.object({ host: l.string() }, { unknownKeys: "passthrough" }) }),
+        l.object({ config: l.object({ port: l.string() }, { unknownKeys: "passthrough" }) }),
+      ),
+      run: (args) => args.config,
+    });
+    const result = await runCommand(command, ["--config.host", "h", "--config.port", "1"]);
+    expect(result.result).toEqual({ host: "h", port: "1" });
+  });
 });

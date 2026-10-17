@@ -1,3 +1,4 @@
+import { getFieldValue } from "../adapter/nested-fields.js";
 import type { ResolvedFieldMeta } from "../core/schema-extractor.js";
 import { loadRequiredPackages } from "../package-requirements.js";
 import type {
@@ -127,9 +128,9 @@ export async function executeLifecycle<TResult = unknown>(
         field.requiredPackages?.length &&
         typeof args === "object" &&
         args !== null &&
-        field.name in args &&
-        (_options.packageDiscriminators?.includes(field.name) ||
-          (args as Record<string, unknown>)[field.name] === true)
+        (_options.packageDiscriminators?.includes(field.name)
+          ? field.name in args
+          : getFieldValue(args as Record<string, unknown>, field) === true)
       ) {
         await loadRequiredPackages(field.requiredPackages, args);
       }
