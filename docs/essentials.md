@@ -134,6 +134,52 @@ $ my-cli --include file1.txt -i file2.txt
 # args.include = ["file1.txt", "file2.txt"]
 ```
 
+### Nested Object Options
+
+An object field is expanded into one option per property. Values are passed
+to `run` nested under the field again. Nested objects are expanded
+recursively. Set `arg()` metadata such as `alias`, `env` or `description` on
+the properties: an object field itself only accepts `description` and
+`flatten`.
+
+```typescript
+args: z.object({
+  config: z
+    .object({
+      port: arg(z.coerce.number(), { alias: "p", env: "PORT" }),
+      host: z.string().default("localhost"),
+    })
+    .optional(),
+});
+```
+
+```bash
+$ my-cli --config.port 8080
+# args.config = { port: 8080, host: "localhost" }
+```
+
+An optional object stays `undefined` until one of its options is given. When
+the object has a `.default({...})`, properties that are not given keep the
+default's values.
+
+`flatten` picks how keys are joined into option names (default: `"dot"`).
+A nested object without its own `flatten` inherits the style of the object
+that contains it.
+
+| `flatten` | Option                 | Also accepted         |
+| --------- | ---------------------- | --------------------- |
+| `"dot"`   | `--config.server-port` | `--config.serverPort` |
+| `"kebab"` | `--config-server-port` | `--configServerPort`  |
+| `"camel"` | `--configServerPort`   |                       |
+
+```typescript
+config: arg(z.object({ serverPort: z.coerce.number() }), { flatten: "kebab" }),
+```
+
+If an expanded option has the same name as another field or long alias
+(e.g. `--config-port` from a `configPort` field), extracting the fields
+throws an error.
+
 ## Validation and Types
 
 Since politty is built on Zod, you get powerful validation features out of the box.

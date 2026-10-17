@@ -84,6 +84,14 @@ const UNWRAPPABLE: ReadonlySet<string> = new Set([
   "non_nullish",
 ]);
 
+/** Object-like schema types whose `entries` hold the property schemas */
+const OBJECT_TYPES: ReadonlySet<string> = new Set([
+  "object",
+  "strict_object",
+  "loose_object",
+  "object_with_rest",
+]);
+
 /**
  * Get the inner schema, unwrapping optional/nullable/etc. wrappers. Piped
  * schemas need no explicit handling: `v.pipe` spreads its base schema, so
@@ -389,7 +397,17 @@ export function resolveValibotFieldMeta(name: string, schema: unknown): Resolved
     type: detectType(node),
     enumValues: extractEnumValues(node),
     schema,
+    objectShape: extractObjectShape(node),
   });
+}
+
+/**
+ * Property schemas of an object field (through optional/nullable/etc.
+ * wrappers), or `undefined` for any other field.
+ */
+function extractObjectShape(schema: ValibotNode): Record<string, ValibotNode> | undefined {
+  const inner = unwrapSchema(schema);
+  return inner.type && OBJECT_TYPES.has(inner.type) ? (inner.entries ?? {}) : undefined;
 }
 
 /**

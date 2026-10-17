@@ -86,6 +86,11 @@ export type CompletionMeta = {
 );
 
 /**
+ * Naming style for the CLI options a nested object field expands into
+ */
+export type NestedKeyStyle = "dot" | "kebab" | "camel";
+
+/**
  * Prompt input type for interactive prompts
  *
  * - "text": free-form text input (default for string schemas)
@@ -243,6 +248,30 @@ export interface BaseArgMeta<TValue = unknown> {
    * Disallowed when `negation` is `false`.
    */
   negationDescription?: string;
+  /**
+   * How the keys of a nested object field are joined into CLI option names.
+   * Object fields are always expanded into one option per leaf field; this
+   * only picks the naming style (default: `"dot"`). Nested objects without
+   * their own `flatten` inherit the style of the enclosing object. Two
+   * options resolving to the same name raise an error when fields are
+   * extracted.
+   *
+   * - `"dot"`   — `--config.server-port`
+   * - `"kebab"` — `--config-server-port` (also accepts `--configServerPort`)
+   * - `"camel"` — `--configServerPort`
+   *
+   * Only valid on object fields.
+   *
+   * @example
+   * ```ts
+   * config: arg(z.object({ port: z.number(), host: z.string() }), {
+   *   flatten: "kebab",
+   * })
+   * // Accepts: --config-port 8080 --config-host localhost
+   * // Run receives: { config: { port: 8080, host: "localhost" } }
+   * ```
+   */
+  flatten?: NestedKeyStyle;
   /**
    * Side-effect callback executed after argument parsing and validation.
    * Runs before the command lifecycle (setup/run/cleanup).

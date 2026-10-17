@@ -1,4 +1,10 @@
-import type { ArgMeta, CompletionMeta, EffectContext, PromptMeta } from "../core/arg-registry.js";
+import type {
+  ArgMeta,
+  CompletionMeta,
+  EffectContext,
+  NestedKeyStyle,
+  PromptMeta,
+} from "../core/arg-registry.js";
 import type { PackageRequirement } from "../package-requirements.js";
 import type { ArgsSchema } from "../types.js";
 
@@ -93,6 +99,32 @@ export interface ResolvedFieldMeta {
   negationDescription?: string | undefined;
   /** Side-effect callback from arg() metadata */
   effect?: ((value: unknown, context: EffectContext) => void | PromiseLike<void>) | undefined;
+  /**
+   * Field schemas of an object field, keyed by property name. Set by the
+   * adapter; `extractFields` expands such a field into its leaf fields.
+   */
+  objectShape?: Record<string, unknown> | undefined;
+  /** Naming style for the options an object field expands into */
+  flatten?: NestedKeyStyle | undefined;
+  /**
+   * Set on a leaf expanded from an object field. Its value is parsed under
+   * `name` and moved to `path` (e.g. `["config", "port"]`) before
+   * validation.
+   */
+  nested?: NestedFieldInfo | undefined;
+}
+
+/**
+ * Where a leaf expanded from an object field lives in the validated args
+ */
+export interface NestedFieldInfo {
+  /** Property path, starting with the top-level field name */
+  path: string[];
+  /**
+   * The objects enclosing the leaf, one per `path` prefix: whether the
+   * object is required (it and every enclosing object), and its default.
+   */
+  objects: Array<{ required: boolean; defaultValue: unknown }>;
 }
 
 /**
@@ -197,7 +229,11 @@ export interface FieldIntrospection {
   enumValues: string[] | undefined;
   /** The original schema, carried through for downstream consumers */
   schema: unknown;
+  /** Field schemas by property name, when the schema is an object */
+  objectShape?: Record<string, unknown> | undefined;
 }
+
+const NESTED_KEY_STYLES: readonly NestedKeyStyle[] = ["dot", "kebab", "camel"];
 
 /**
  * Assemble a {@link ResolvedFieldMeta} from adapter-provided introspection.
@@ -333,6 +369,20 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
   const negationDisplay: string | undefined =
     typeof negation === "string" ? negation : negation === true ? `no-${cliName}` : undefined;
 
+  const rawFlatten = (argMeta as { flatten?: unknown } | undefined)?.flatten;
+  if (rawFlatten !== undefined) {
+    if (!NESTED_KEY_STYLES.includes(rawFlatten as NestedKeyStyle)) {
+      throw new Error(
+        `Invalid flatten "${String(rawFlatten)}" for field "${name}": expected one of ${NESTED_KEY_STYLES.map((s) => `"${s}"`).join(", ")}.`,
+      );
+    }
+    if (!intro.objectShape) {
+      throw new Error(
+        `Invalid flatten for field "${name}": flatten can only be used on object fields.`,
+      );
+    }
+  }
+
   const positional = argMeta?.positional;
   const meta: ResolvedFieldMeta = {
     name,
@@ -356,6 +406,8 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
     negationDescription,
     effect: argMeta?.effect,
     requiredPackages: argMeta?.requiredPackages,
+    objectShape: intro.objectShape,
+    flatten: rawFlatten as NestedKeyStyle | undefined,
   };
 
   // Add overrideBuiltinAlias only if it's true
