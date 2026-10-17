@@ -166,11 +166,22 @@ default's values.
 A nested object without its own `flatten` inherits the style of the object
 that contains it.
 
-| `flatten` | Option                 | Also accepted          |
-| --------- | ---------------------- | ---------------------- |
-| `"dot"`   | `--config.server-port` | `--config.serverPort`  |
-| `"kebab"` | `--config-server-port` | `--configServerPort`   |
-| `"camel"` | `--configServerPort`   | `--config-server-port` |
+| `flatten` | Shown in help, docs and completion | Also accepted          |
+| --------- | ---------------------------------- | ---------------------- |
+| `"dot"`   | `--config.server-port`             | `--config.serverPort`  |
+| `"kebab"` | `--config-server-port`             | `--configServerPort`   |
+| `"camel"` | `--configServerPort`               | `--config-server-port` |
+
+Like every other option, each style accepts both its kebab-case and
+camelCase forms; only the shown form appears in help, generated docs and
+shell completion.
+
+- `"kebab"` and `"camel"` accept exactly the same options and differ only in
+  the shown form. Other fields are always shown in kebab-case, so with
+  `"camel"` help lists e.g. `--dry-run` next to `--configServerPort`.
+- `"dot"` accepts different options: `--config.port` and `--config-port` are
+  separate, so a dot option never collides with a top-level `configPort`
+  field.
 
 ```typescript
 config: arg(z.object({ serverPort: z.coerce.number() }), { flatten: "kebab" }),

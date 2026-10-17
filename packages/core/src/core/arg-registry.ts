@@ -260,6 +260,9 @@ export interface BaseArgMeta<TValue = unknown> {
    * - `"kebab"` — `--config-server-port` (also accepts `--configServerPort`)
    * - `"camel"` — `--configServerPort` (also accepts `--config-server-port`)
    *
+   * `"kebab"` and `"camel"` accept the same options and differ only in the
+   * form shown in help, generated docs and shell completion.
+   *
    * Only valid on object fields.
    *
    * @example
