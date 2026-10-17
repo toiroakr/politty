@@ -625,4 +625,32 @@ describe("@politty/loculus", () => {
     const flags = parseArgs(["--help-json"], command);
     expect(flags).toMatchObject({ helpJsonRequested: true });
   });
+
+  it("expands nested object fields into options and nests their values", async () => {
+    const command = defineCommand({
+      name: "serve",
+      args: l.object({
+        config: arg(
+          l.object(
+            {
+              serverPort: l.number(),
+              host: l.string({ default: "localhost" }),
+            },
+            { optional: true },
+          ),
+          { flatten: "kebab" },
+        ),
+        db: l.object(
+          { url: l.string(), pool: l.number() },
+          { default: { undefined: { url: "x", pool: 1 } } },
+        ),
+      }),
+      run: (args) => args,
+    });
+
+    expect(
+      (await runCommand(command, ["--config-server-port", "80", "--db.pool", "5"])).result,
+    ).toEqual({ config: { serverPort: 80, host: "localhost" }, db: { url: "x", pool: 5 } });
+    expect((await runCommand(command, [])).result).toEqual({ db: { url: "x", pool: 1 } });
+  });
 });
