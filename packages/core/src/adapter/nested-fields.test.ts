@@ -595,6 +595,20 @@ describe("nested object fields", () => {
       expect(seen[0]).toEqual({ config: { host: "remote", port: "80" } });
     });
 
+    it("should keep a later variant's scalar field named like an earlier object", async () => {
+      const effect = vi.fn();
+      const schema = z.discriminatedUnion("mode", [
+        z.object({ mode: z.literal("a"), config: z.object({ port: z.string() }) }),
+        z.object({ mode: z.literal("b"), config: arg(z.string(), { effect }) }),
+      ]);
+      expect(extractFields(schema).fields.map((f) => f.name)).toEqual(
+        expect.arrayContaining(["config.port", "config"]),
+      );
+      const { cmd } = captureArgs(schema);
+      await runCommand(cmd, ["--mode", "b", "--config", "x"]);
+      expect(effect).toHaveBeenCalledWith("x", expect.anything());
+    });
+
     it("should not check collisions across exclusive variants", async () => {
       const { cmd, seen } = captureArgs(
         z.discriminatedUnion("mode", [
@@ -694,6 +708,10 @@ describe("nested object fields", () => {
       expect(collectOptionTokens("configMode", undefined)).toContain("--config-mode");
       // An acronym is also accepted camelCased from its kebab-case form.
       expect(collectOptionTokens("configBaseURL", undefined)).toContain("--configBaseUrl");
+      // A custom negation only takes the spellings the parser registers.
+      expect(quotedAvailabilityTokens("tls", undefined, "disableTLS")).not.toContain(
+        '"--disable-tls"',
+      );
       // A camelCase parent with a kebab-case child mixes both styles.
       expect(collectOptionTokens("configTls-cert-file", undefined)).toEqual(
         expect.arrayContaining(["--configTlsCertFile", "--config-tls-cert-file"]),

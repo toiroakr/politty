@@ -83,7 +83,8 @@ export function flattenNestedFields(
       for (const leaf of branch.fields) if (leaf.nested?.path[0] === field.name) add(leaf);
     }
   }
-  for (const branch of branches) for (const leaf of branch.fields) if (leaf.nested) add(leaf);
+  // Then whatever only later branches define, scalar or leaf.
+  for (const branch of branches) for (const field of branch.fields) add(field);
   return {
     ...extracted,
     fields,

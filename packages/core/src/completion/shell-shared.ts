@@ -291,9 +291,16 @@ export function quotedAvailabilityTokens(
   const tokens = new Set<string>(collectOptionTokens(cliName, aliases));
   if (negation) {
     tokens.add(`--${negation}`);
-    const variants: string[] = [];
-    pushCaseVariants(variants, negation);
-    for (const variant of variants) tokens.add(variant);
+    // A default negation (`no-<cliName>`) takes every spelling the option
+    // does; a custom one only its camelCase form, as the parser registers.
+    const isDefault =
+      negation === `no-${toKebabCase(cliName)}` ||
+      negation === `no${cliName.charAt(0).toUpperCase()}${cliName.slice(1)}`;
+    if (isDefault) {
+      const variants: string[] = [];
+      pushCaseVariants(variants, negation);
+      for (const variant of variants) tokens.add(variant);
+    } else if (negation.includes("-")) tokens.add(`--${toCamelCase(negation)}`);
   }
   // Drop tokens runtime would NOT route to this option. For a LOCAL
   // option, a short token owned by a global at the same frame is
