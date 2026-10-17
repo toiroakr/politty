@@ -129,10 +129,17 @@ function expandObjectField(
             ? `no${capitalize(cliName)}`
             : `no-${cliName}`
           : child.negationDisplay;
+      // Like every other option, accept both the kebab-case and camelCase
+      // forms; the parser derives camelCase from `name`, so a camelCase
+      // option only needs its kebab-case form added (hidden from help).
+      const kebabName = toKebabCase(cliName);
+      const hiddenAlias =
+        kebabName === cliName ? child.hiddenAlias : [...(child.hiddenAlias ?? []), kebabName];
       leaves.push({
         ...child,
         name,
         cliName,
+        hiddenAlias,
         // Name the value after the property, not the whole option path.
         placeholder: child.placeholder ?? toKebabCase(key).toUpperCase(),
         required: objects.at(-1)!.required && child.required,

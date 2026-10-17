@@ -182,10 +182,21 @@ describe("nested object fields", () => {
       expect(seen[0]).toEqual({ config: { serverPort: 8, tls: { enabled: false } } });
     });
 
-    it("should accept the camelCase form of kebab options", async () => {
-      const { cmd, seen } = captureArgs(styled("kebab"));
-      await runCommand(cmd, ["--configServerPort", "8"]);
-      expect(seen[0]).toEqual({ config: { serverPort: 8 } });
+    it.each([
+      ["kebab", "configServerPort", "noConfigTlsEnabled"],
+      ["camel", "config-server-port", "no-config-tls-enabled"],
+    ] as const)(
+      "should also accept the other case form of %s options",
+      async (style, port, negation) => {
+        const { cmd, seen } = captureArgs(styled(style));
+        await runCommand(cmd, [`--${port}`, "8", `--${negation}`]);
+        expect(seen[0]).toEqual({ config: { serverPort: 8, tls: { enabled: false } } });
+      },
+    );
+
+    it("should keep the kebab-case form of camel options out of help", () => {
+      const { cmd } = captureArgs(styled("camel"));
+      expect(generateHelp(cmd, {})).not.toContain("config-server-port");
     });
 
     it("should let a nested object override the inherited style", () => {

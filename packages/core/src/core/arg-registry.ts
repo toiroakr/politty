@@ -256,9 +256,9 @@ export interface BaseArgMeta<TValue = unknown> {
    * options resolving to the same name raise an error when fields are
    * extracted.
    *
-   * - `"dot"`   — `--config.server-port`
+   * - `"dot"`   — `--config.server-port` (also accepts `--config.serverPort`)
    * - `"kebab"` — `--config-server-port` (also accepts `--configServerPort`)
-   * - `"camel"` — `--configServerPort`
+   * - `"camel"` — `--configServerPort` (also accepts `--config-server-port`)
    *
    * Only valid on object fields.
    *

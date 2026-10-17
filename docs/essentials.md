@@ -166,11 +166,11 @@ default's values.
 A nested object without its own `flatten` inherits the style of the object
 that contains it.
 
-| `flatten` | Option                 | Also accepted         |
-| --------- | ---------------------- | --------------------- |
-| `"dot"`   | `--config.server-port` | `--config.serverPort` |
-| `"kebab"` | `--config-server-port` | `--configServerPort`  |
-| `"camel"` | `--configServerPort`   |                       |
+| `flatten` | Option                 | Also accepted          |
+| --------- | ---------------------- | ---------------------- |
+| `"dot"`   | `--config.server-port` | `--config.serverPort`  |
+| `"kebab"` | `--config-server-port` | `--configServerPort`   |
+| `"camel"` | `--configServerPort`   | `--config-server-port` |
 
 ```typescript
 config: arg(z.object({ serverPort: z.coerce.number() }), { flatten: "kebab" }),
