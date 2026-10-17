@@ -8,7 +8,7 @@
  * when one generator gets a fix that the others should mirror.
  */
 
-import { toCamelCase } from "../core/schema-extractor.js";
+import { toCamelCase, toKebabCase } from "../core/schema-extractor.js";
 import type { NamedPositionalFrame } from "./extractor.js";
 import type { CompletableOption, CompletablePositional, ValueCompletion } from "./types.js";
 
@@ -214,7 +214,8 @@ function pushUnique(tokens: string[], t: string): void {
  * Every CLI spelling the runtime's aliasMap routes to this option:
  *  - `--cliName` (always),
  *  - `-x` when `cliName` is one character,
- *  - `--toCamelCase(cliName)` when `cliName` is hyphenated,
+ *  - `--toCamelCase(cliName)` when `cliName` is hyphenated, or
+ *    `--toKebabCase(cliName)` when it is camelCase,
  *  - and the analogous forms for each alias.
  *
  * The order is stable so shell-side case patterns stay diff-friendly.
@@ -226,6 +227,9 @@ export function collectOptionTokens(
   const tokens = [`--${cliName}`];
   if (cliName.length === 1) tokens.push(`-${cliName}`);
   if (cliName.includes("-")) tokens.push(`--${toCamelCase(cliName)}`);
+  // A camelCase option (camel-style nested fields) also accepts its
+  // kebab-case form, which runtime registers as a hidden alias.
+  else if (toKebabCase(cliName) !== cliName) tokens.push(`--${toKebabCase(cliName)}`);
   for (const a of aliases ?? []) pushAliasTokens(tokens, a);
   return tokens;
 }
@@ -278,6 +282,7 @@ export function quotedAvailabilityTokens(
   if (negation) {
     tokens.add(`--${negation}`);
     if (negation.includes("-")) tokens.add(`--${toCamelCase(negation)}`);
+    else if (toKebabCase(negation) !== negation) tokens.add(`--${toKebabCase(negation)}`);
   }
   // Drop tokens runtime would NOT route to this option. For a LOCAL
   // option, a short token owned by a global at the same frame is
@@ -404,6 +409,9 @@ export function localShadowingTokens(
   // declares it.
   const tokens = [`--${cliName}`];
   if (cliName.includes("-")) tokens.push(`--${toCamelCase(cliName)}`);
+  // A camelCase option (camel-style nested fields) also accepts its
+  // kebab-case form, which runtime registers as a hidden alias.
+  else if (toKebabCase(cliName) !== cliName) tokens.push(`--${toKebabCase(cliName)}`);
   for (const a of aliases ?? []) pushAliasTokens(tokens, a);
   return tokens;
 }

@@ -231,4 +231,16 @@ describe("@politty/zod-mini e2e", () => {
     const result = await runCommand(cmd, ["--config.host", "h", "--config.port", "1"]);
     expect(result.result).toEqual({ host: "h", port: "1" });
   });
+
+  it("should expand readonly object fields", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: z.object({
+        config: arg(z.readonly(z.object({ port: z.string() })), { flatten: "kebab" }),
+      }),
+      run: (args) => args.config,
+    });
+    const result = await runCommand(cmd, ["--config-port", "1"]);
+    expect(result.result).toEqual({ port: "1" });
+  });
 });

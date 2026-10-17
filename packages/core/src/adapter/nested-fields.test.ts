@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { collectOptionTokens, quotedAvailabilityTokens } from "../completion/shell-shared.js";
+import { renderArgsTable } from "../docs/render-args.js";
 import { arg, defineCommand, extractFields, generateHelp, runCommand } from "../index.js";
 import type { AnyCommand } from "../types.js";
+import { validateArgs } from "../validator/args-validator.js";
 
 function captureArgs(schema: z.ZodType) {
   const seen: unknown[] = [];
@@ -468,6 +471,98 @@ describe("nested object fields", () => {
       );
       await runCommand(cmd, ["--config.tls.cert", "c", "--config.tls.key", "k"]);
       expect(seen[0]).toEqual({ config: { tls: { cert: "c", key: "k" } } });
+    });
+  });
+
+  describe("union fallback", () => {
+    const configs = (
+      union: (options: [z.ZodObject<z.ZodRawShape>, z.ZodObject<z.ZodRawShape>]) => z.ZodType,
+    ) =>
+      union([
+        z.object({
+          mode: z.literal("a"),
+          config: z
+            .object({ port: z.string(), host: z.string() })
+            .default({ port: "1", host: "a" }),
+        }),
+        z.object({
+          mode: z.literal("b"),
+          config: z.object({ port: z.string(), host: z.string() }),
+        }),
+      ]);
+
+    it.each([
+      ["discriminated union", configs((options) => z.discriminatedUnion("mode", options))],
+      ["union", configs((options) => z.union(options))],
+    ])("should not borrow another option's default in a %s", async (_, schema) => {
+      const { cmd, seen } = captureArgs(schema);
+      const result = await runCommand(cmd, ["--mode", "b", "--config.host", "h"]);
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain("config.port");
+      expect(seen).toEqual([]);
+    });
+
+    it("should reject options no single union option defines together", () => {
+      const schema = z.union([
+        z.object({ a: z.object({ x: z.string() }).optional() }),
+        z.object({ b: z.object({ y: z.string() }).optional() }),
+      ]);
+      const result = validateArgs({ "a.x": "1", "b.y": "2" }, schema);
+      expect(result.success).toBe(false);
+      expect(!result.success && result.errors[0]?.message).toContain("--a.x, --b.y");
+    });
+  });
+
+  describe("wrappers and spellings", () => {
+    it("should expand readonly and prefault objects", async () => {
+      expect(
+        extractFields(
+          z.object({
+            config: arg(z.object({ port: z.string() }).readonly(), { flatten: "kebab" }),
+          }),
+        ).fields.map((f) => f.cliName),
+      ).toEqual(["config-port"]);
+
+      const { cmd, seen } = captureArgs(
+        z.object({
+          config: z
+            .object({ port: z.string(), host: z.string() })
+            .prefault({ port: "1", host: "h" }),
+        }),
+      );
+      await runCommand(cmd, ["--config.port", "2"]);
+      expect(seen[0]).toEqual({ config: { port: "2", host: "h" } });
+    });
+
+    it("should show a negation runtime accepts under a camelCase prefix", async () => {
+      const schema = z.object({
+        config: arg(
+          z.object({
+            tls: arg(z.object({ enabled: arg(z.boolean().optional(), { negation: true }) }), {
+              flatten: "dot",
+            }),
+          }),
+          { flatten: "camel" },
+        ).optional(),
+      });
+      const [field] = extractFields(schema).fields;
+      expect(field?.negationDisplay).toBe("no-config-tls.enabled");
+      const { cmd, seen } = captureArgs(schema);
+      await runCommand(cmd, [`--${field?.negationDisplay}`]);
+      expect(seen[0]).toEqual({ config: { tls: { enabled: false } } });
+    });
+
+    it("should let shell completion match the kebab-case form of camel options", () => {
+      expect(collectOptionTokens("configMode", undefined)).toContain("--config-mode");
+      expect(quotedAvailabilityTokens("configUi", undefined, "noConfigUi")).toContain(
+        '"--no-config-ui"',
+      );
+    });
+
+    it("should document the options of object fields in an args table", () => {
+      const table = renderArgsTable({ config: z.object({ port: z.number() }) });
+      expect(table).toContain("--config.port");
+      expect(table).not.toContain("--config <");
     });
   });
 

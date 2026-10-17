@@ -70,7 +70,7 @@ function getArgMeta(schema: z.ZodMiniType, seen = new Set<z.ZodMiniType>()): Arg
   const s = schema as ZodSchemaWithDef;
   const def = s.def;
 
-  if (typeName === "optional" || typeName === "nullable" || typeName === "default") {
+  if (typeName && INNER_TYPE_WRAPPERS.has(typeName)) {
     const innerSchema = def?.innerType;
     if (innerSchema) return getArgMeta(innerSchema, seen);
   }
@@ -109,6 +109,18 @@ interface ZodV4Def {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ZodSchemaWithDef = z.ZodMiniType & { def?: ZodV4Def; type?: string; shape?: any };
+
+/**
+ * Wrappers that keep their inner schema in `def.innerType` and accept the
+ * same input as it.
+ */
+const INNER_TYPE_WRAPPERS: ReadonlySet<string> = new Set([
+  "optional",
+  "nullable",
+  "default",
+  "prefault",
+  "readonly",
+]);
 
 /**
  * Get the type name from a zod schema. `zod/mini` always has `.def.type`
@@ -165,7 +177,7 @@ function unwrapSchema(schema: z.ZodMiniType): z.ZodMiniType {
   const s = schema as ZodSchemaWithDef;
   const def = s.def;
 
-  if (typeName === "optional" || typeName === "nullable" || typeName === "default") {
+  if (typeName && INNER_TYPE_WRAPPERS.has(typeName)) {
     const innerSchema = def?.innerType;
     if (innerSchema) {
       return unwrapSchema(innerSchema);
@@ -315,7 +327,9 @@ function extractDefaultValue(schema: z.ZodMiniType): unknown {
   const s = schema as ZodSchemaWithDef;
   const def = s.def;
 
-  if (typeName === "default") {
+  // A prefault's default is an input value; both are what an omitted
+  // argument resolves to.
+  if (typeName === "default" || typeName === "prefault") {
     const defaultValue = def?.defaultValue;
     // In zod v4, defaultValue can be a direct value or a function
     if (typeof defaultValue === "function") {
@@ -325,7 +339,7 @@ function extractDefaultValue(schema: z.ZodMiniType): unknown {
   }
 
   // Check for nested default in optional/nullable/pipe
-  if (typeName === "optional" || typeName === "nullable") {
+  if (typeName === "optional" || typeName === "nullable" || typeName === "readonly") {
     const innerSchema = def?.innerType;
     if (innerSchema) {
       return extractDefaultValue(innerSchema);
@@ -365,7 +379,7 @@ function extractDescription(schema: z.ZodMiniType): string | undefined {
   const s = schema as ZodSchemaWithDef;
   const def = s.def;
 
-  if (typeName === "optional" || typeName === "nullable" || typeName === "default") {
+  if (typeName && INNER_TYPE_WRAPPERS.has(typeName)) {
     const innerSchema = def?.innerType;
     if (innerSchema) {
       return extractDescription(innerSchema);

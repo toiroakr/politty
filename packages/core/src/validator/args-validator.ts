@@ -35,22 +35,43 @@ export function validateArgs<T extends ArgsSchema>(
   // Leaves of nested object fields are parsed under flat names; validate
   // them at their property path, as nested by the first branch that fits.
   const adapter = getValidatorAdapter();
+  // Failures in order of preference: the whole schema rejecting a branch's
+  // nesting, the branch itself rejecting it, then the diagnostic nesting.
   let reported: ValidationResult<unknown> | undefined;
+  let branchFailure: ValidationResult<unknown> | undefined;
   let last: ValidationResult<unknown> | undefined;
   for (const candidate of nestingCandidates(rawArgs, extractFields(schema))) {
-    if (candidate.branchSchema && !adapter.validate(candidate.args, candidate.branchSchema).success)
+    if (candidate.branchSchema) {
+      const own = adapter.validate(candidate.args, candidate.branchSchema);
+      if (!own.success) {
+        // Prefer the option that rejects the fewest given values: one that
+        // only misses values says more than one the given values rule out.
+        if (
+          !onlyDefaulted(own, candidate.defaultedPaths) &&
+          (!branchFailure ||
+            issuesUnder(own, candidate.givenPaths) <
+              issuesUnder(branchFailure, candidate.givenPaths))
+        )
+          branchFailure = own;
+        continue;
+      }
+    }
+    const result = adapter.validate(candidate.args, schema);
+    if (result.success) {
+      if (!candidate.diagnosticOnly) return result as ValidationResult<InferSchemaOutput<T>>;
+      last = {
+        success: false,
+        errors: [{ path: [], message: candidate.diagnosticOnly.message, code: "invalid_union" }],
+      };
       continue;
-    last = adapter.validate(candidate.args, schema);
-    if (last.success) return last as ValidationResult<InferSchemaOutput<T>>;
-    // Report the first failure that is about the given args, not about
-    // values copied from an object default.
-    const defaulted = candidate.defaultedPaths ?? [];
-    const onlyDefaulted = last.errors.every((error) =>
-      defaulted.some((path) => path.every((key, i) => error.path[i] === key)),
-    );
-    if (!onlyDefaulted) reported ??= last;
+    }
+    last = result;
+    // Skip failures about values copied from an object default rather
+    // than given.
+    if (!candidate.diagnosticOnly && !onlyDefaulted(result, candidate.defaultedPaths))
+      reported ??= result;
   }
-  return (reported ?? last) as ValidationResult<InferSchemaOutput<T>>;
+  return (reported ?? branchFailure ?? last) as ValidationResult<InferSchemaOutput<T>>;
 }
 
 /**
@@ -63,4 +84,30 @@ export function formatValidationErrors(errors: ValidationError[]): string {
       return `${path}${e.message}`;
     })
     .join("\n");
+}
+
+/**
+ * How many issues of a failed validation lie under one of `paths`.
+ */
+function issuesUnder(
+  result: ValidationResult<unknown>,
+  paths: readonly string[][] | undefined,
+): number {
+  if (result.success || !paths?.length) return 0;
+  return result.errors.filter((error) =>
+    paths.some((path) => path.every((key, i) => error.path[i] === key)),
+  ).length;
+}
+
+/**
+ * Whether every issue of a failed validation lies under one of `paths`.
+ */
+function onlyDefaulted(
+  result: ValidationResult<unknown>,
+  paths: readonly string[][] | undefined,
+): boolean {
+  if (result.success || !paths?.length) return false;
+  return result.errors.every((error) =>
+    paths.some((path) => path.every((key, i) => error.path[i] === key)),
+  );
 }

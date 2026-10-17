@@ -148,11 +148,13 @@ function expandObjectField(
         continue;
       }
 
+      // Runtime reads `--no-` followed by a lowercase name, so a non-camel
+      // negation spells out a camelCase prefix in kebab-case.
       const negationDisplay =
         child.negation === true
           ? style === "camel"
             ? `no${capitalize(cliName)}`
-            : `no-${cliName}`
+            : `no-${toKebabCase(cliName)}`
           : child.negationDisplay;
       // Like every other option, accept both the kebab-case and camelCase
       // forms; the parser derives camelCase from `name`, so a camelCase
@@ -282,6 +284,17 @@ export interface NestingCandidate {
    * the user's to fix.
    */
   defaultedPaths?: string[][] | undefined;
+  /**
+   * Set on the nesting by every branch at once, which is only for
+   * reporting errors: no branch decided it, so it must not be accepted.
+   * The message explains why it fails when it would otherwise pass.
+   */
+  diagnosticOnly?: { message: string } | undefined;
+  /**
+   * Paths of the values given on the command line (or from env), so a
+   * failure can be ranked by how much of it is about them.
+   */
+  givenPaths?: string[][] | undefined;
 }
 
 /**
@@ -353,19 +366,36 @@ export function nestingCandidates(
   };
   // A branch without one of the given options would drop its value.
   const given = [...leaves.values()].filter((leaf) => rawArgs[leaf.name] !== undefined);
+  const givenPaths = [
+    ...Object.keys(rawArgs)
+      .filter((name) => !leafNames.has(name) && rawArgs[name] !== undefined)
+      .map((name) => [name]),
+    ...given.map((leaf) => leaf.nested!.path),
+  ];
   const covering = branches(extracted, undefined).filter(({ group }) => {
     const names = new Set(group.fields.map((field) => field.name));
     return given.every((leaf) => names.has(leaf.name));
   });
   // Every branch's leaves and objects, with no branch deciding which
-  // required objects exist: the last resort when no branch fits.
+  // required objects exist: reports errors when no branch fits.
   const merged = nestGroup(
     rawArgs,
     { fields: [...leaves.values()], nestedObjects: [...objects.values()] },
     leafNames,
     { createRequired: false, seed: true },
   );
-  return [...covering.flatMap(({ group, schema }) => nest(group, schema)), merged];
+  const options = given.map((leaf) => `--${leaf.cliName}`).join(", ");
+  return [
+    ...covering.flatMap(({ group, schema }) =>
+      nest(group, schema).map((candidate) => ({ ...candidate, givenPaths })),
+    ),
+    {
+      ...merged,
+      diagnosticOnly: {
+        message: `No single schema option accepts ${options || "these arguments"}.`,
+      },
+    },
+  ];
 }
 
 function pathKey(path: string[]): string {
