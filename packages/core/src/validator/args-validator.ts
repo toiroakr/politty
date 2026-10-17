@@ -58,12 +58,19 @@ export function validateArgs<T extends ArgsSchema>(
       }
     }
     const result = adapter.validate(candidate.args, schema);
-    if (result.success && own?.success) {
-      // The whole union may have matched an earlier option that drops
-      // values this branch keeps; never accept that silently.
-      const dropped = (candidate.givenPaths ?? []).filter(
-        (path) => valueAt(own.data, path) !== undefined && valueAt(result.data, path) === undefined,
-      );
+    if (result.success && own?.success && candidate.precedingBranchSchemas?.length) {
+      // The union takes the first option accepting the args; if that is an
+      // earlier option dropping values this branch keeps, never accept it
+      // silently. (Compared per option, before any enclosing transform.)
+      const first = candidate.precedingBranchSchemas
+        .map((option) => adapter.validate(candidate.args, option))
+        .find((earlier) => earlier.success);
+      const dropped = first?.success
+        ? (candidate.givenPaths ?? []).filter(
+            (path) =>
+              valueAt(own.data, path) !== undefined && valueAt(first.data, path) === undefined,
+          )
+        : [];
       if (dropped.length > 0) {
         const message = `${dropped.map((path) => path.join(".")).join(", ")} would be ignored: another schema option accepts the arguments without them.`;
         reported ??= { success: false, errors: [{ path: [], message, code: "invalid_union" }] };

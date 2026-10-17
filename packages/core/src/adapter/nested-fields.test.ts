@@ -569,6 +569,55 @@ describe("nested object fields", () => {
     });
   });
 
+  describe("union and intersection details", () => {
+    it("should accept a union whose transform moves a nested value", async () => {
+      const { cmd, seen } = captureArgs(
+        z
+          .union([
+            z.object({ a: z.object({ x: z.string() }) }),
+            z.object({ config: z.object({ port: z.string() }) }),
+          ])
+          .transform((value) => ("config" in value ? { selected: value.config } : value)),
+      );
+      const result = await runCommand(cmd, ["--config.port", "80"]);
+      expect(result.error).toBeUndefined();
+      expect(seen[0]).toEqual({ selected: { port: "80" } });
+    });
+
+    it("should keep the defaults of both intersection members", async () => {
+      const { cmd, seen } = captureArgs(
+        z.intersection(
+          z.object({ config: z.object({ host: z.string() }).default({ host: "h" }) }),
+          z.object({ config: z.object({ port: z.string() }).default({ port: "80" }) }),
+        ),
+      );
+      await runCommand(cmd, ["--config.host", "remote"]);
+      expect(seen[0]).toEqual({ config: { host: "remote", port: "80" } });
+    });
+
+    it("should not check collisions across exclusive variants", async () => {
+      const { cmd, seen } = captureArgs(
+        z.discriminatedUnion("mode", [
+          z.object({
+            mode: z.literal("b"),
+            config: arg(z.object({ port: z.string() }), { flatten: "kebab" }),
+          }),
+          z.object({
+            mode: z.literal("a"),
+            config: z.object({ host: z.string() }),
+            configPort: z.string().optional(),
+          }),
+        ]),
+      );
+      await runCommand(cmd, ["--mode", "a", "--config.host", "h", "--config-port", "80"]);
+      await runCommand(cmd, ["--mode", "b", "--config-port", "81"]);
+      expect(seen).toEqual([
+        { mode: "a", config: { host: "h" }, configPort: "80" },
+        { mode: "b", config: { port: "81" } },
+      ]);
+    });
+  });
+
   describe("wrappers and spellings", () => {
     it("should expand readonly and prefault objects", async () => {
       expect(
@@ -679,6 +728,30 @@ describe("nested object fields", () => {
       );
       expect(result.success).toBe(true);
       expect(seen[0]).toEqual(new Date("2021-01-01"));
+    });
+
+    it("should replace an object-valued option rather than merge it", async () => {
+      const seen: unknown[] = [];
+      const labels = () =>
+        z.object({
+          config: z
+            .object({ labels: z.string().transform((v) => JSON.parse(v) as unknown) })
+            .optional(),
+        });
+      const sub = defineCommand({
+        name: "sub",
+        args: labels(),
+        run: (args) => {
+          seen.push(args.config?.labels);
+        },
+      });
+      const main = defineCommand({ name: "app", subCommands: { sub } });
+      await runCommand(
+        main,
+        ["--config.labels", '{"old":1}', "sub", "--config.labels", '{"new":2}'],
+        { globalArgs: labels() },
+      );
+      expect(seen[0]).toEqual({ new: 2 });
     });
 
     it("should pre-fill a nested option from a flat global field of the same name", async () => {

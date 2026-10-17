@@ -2,7 +2,8 @@ import {
   getFieldValue,
   isPlainObject,
   mergeNestedValues,
-  nestedRootNames,
+  nestedObjectPaths,
+  nestedPathKey,
 } from "../adapter/nested-fields.js";
 import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
 import { enableCompileCache } from "../compile-cache.js";
@@ -1123,11 +1124,13 @@ async function runCommandInternal<TResult = unknown>(
     };
     // Objects expanded into options may carry properties from both schemas:
     // merge them per property, still letting command values win.
-    for (const root of nestedRootNames(options._globalExtracted, parseResult.extractedFields)) {
-      const globalValue = proxiedGlobalArgs[root];
-      const commandValue = proxiedCommandArgs[root];
-      if (isPlainObject(globalValue) && isPlainObject(commandValue)) {
-        mergedPlainArgs[root] = mergeNestedValues(globalValue, commandValue);
+    const objectPaths = nestedObjectPaths(options._globalExtracted, parseResult.extractedFields);
+    const isObject = (path: string[]) => objectPaths.has(nestedPathKey(path));
+    for (const key of Object.keys(proxiedCommandArgs)) {
+      const globalValue = proxiedGlobalArgs[key];
+      const commandValue = proxiedCommandArgs[key];
+      if (isObject([key]) && isPlainObject(globalValue) && isPlainObject(commandValue)) {
+        mergedPlainArgs[key] = mergeNestedValues(globalValue, commandValue, isObject, [key]);
       }
     }
     const argSourceMap = new Map<string, ArgSource>(globalSourceMap);

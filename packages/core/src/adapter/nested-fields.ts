@@ -61,21 +61,33 @@ export function flattenNestedFields(
     ...flattenGroup(variant.fields),
   }));
   const flatOptions = unionOptions?.map((option) => flattenNestedFields(option, resolveChild));
-  const top = flattenGroup(extracted.fields);
-  // The adapter merged same-named object fields of the variants before
-  // expansion, so add the leaves only a later variant or option defines.
-  const names = new Set(top.fields.map((f) => f.name));
-  for (const group of [...(flatVariants ?? []), ...(flatOptions ?? [])]) {
-    for (const field of group.fields) {
-      if (field.nested && !names.has(field.name)) {
-        names.add(field.name);
-        top.fields.push(field);
-      }
+  const branches = [...(flatVariants ?? []), ...(flatOptions ?? [])];
+  if (branches.length === 0) return { ...extracted, ...flattenGroup(extracted.fields) };
+
+  // Branches are exclusive, so each checked its own collisions; the
+  // combined list takes each name's first definition, with an object
+  // field's place holding the leaves every branch expands it into.
+  const fields: ResolvedFieldMeta[] = [];
+  const names = new Set<string>();
+  const add = (field: ResolvedFieldMeta): void => {
+    if (names.has(field.name)) return;
+    names.add(field.name);
+    fields.push(field);
+  };
+  for (const field of extracted.fields) {
+    if (!field.objectShape) {
+      add(field);
+      continue;
+    }
+    for (const branch of branches) {
+      for (const leaf of branch.fields) if (leaf.nested?.path[0] === field.name) add(leaf);
     }
   }
+  for (const branch of branches) for (const leaf of branch.fields) if (leaf.nested) add(leaf);
   return {
     ...extracted,
-    ...top,
+    fields,
+    nestedObjects: branches.flatMap((branch) => branch.nestedObjects ?? []),
     ...(flatVariants && { variants: flatVariants }),
     ...(flatOptions && { unionOptions: flatOptions }),
   };
@@ -295,6 +307,12 @@ export interface NestingCandidate {
    * failure can be ranked by how much of it is about them.
    */
   givenPaths?: string[][] | undefined;
+  /**
+   * The union options before this one, in schema order. A union takes the
+   * first option that accepts its input, so one of these may accept the
+   * args by dropping values this nesting gives.
+   */
+  precedingBranchSchemas?: ArgsSchema[] | undefined;
 }
 
 /**
@@ -364,6 +382,7 @@ export function nestingCandidates(
     }
     return [{ group, schema }];
   };
+  const all = branches(extracted, undefined);
   // A branch without one of the given options would drop its value.
   const given = [...leaves.values()].filter((leaf) => rawArgs[leaf.name] !== undefined);
   const givenPaths = [
@@ -372,7 +391,7 @@ export function nestingCandidates(
       .map((name) => [name]),
     ...given.map((leaf) => leaf.nested!.path),
   ];
-  const covering = branches(extracted, undefined).filter(({ group }) => {
+  const covering = all.filter(({ group }) => {
     const names = new Set(group.fields.map((field) => field.name));
     return given.every((leaf) => names.has(leaf.name));
   });
@@ -386,9 +405,16 @@ export function nestingCandidates(
   );
   const options = given.map((leaf) => `--${leaf.cliName}`).join(", ");
   return [
-    ...covering.flatMap(({ group, schema }) =>
-      nest(group, schema).map((candidate) => ({ ...candidate, givenPaths })),
-    ),
+    ...covering.flatMap((branch) => {
+      const preceding = all
+        .slice(0, all.indexOf(branch))
+        .flatMap(({ schema }) => (schema && schema !== branch.schema ? [schema] : []));
+      return nest(branch.group, branch.schema).map((candidate) => ({
+        ...candidate,
+        givenPaths,
+        precedingBranchSchemas: [...new Set(preceding)],
+      }));
+    }),
     {
       ...merged,
       diagnosticOnly: {
@@ -508,34 +534,47 @@ export function getFieldValue(args: Record<string, unknown>, field: ResolvedFiel
 }
 
 /**
- * Names of the top-level fields that were expanded from object fields, in
+ * Keys (see {@link nestedPathKey}) of every object expanded into options, in
  * any branch of the given extractions.
  */
-export function nestedRootNames(...extractions: Array<ExtractedFields | undefined>): Set<string> {
-  const roots = new Set<string>();
+export function nestedObjectPaths(...extractions: Array<ExtractedFields | undefined>): Set<string> {
+  const paths = new Set<string>();
   const collect = (group: ExtractedFields): void => {
     for (const g of [group, ...(group.variants ?? [])]) {
-      for (const object of g.nestedObjects ?? []) roots.add(object.path[0]!);
+      for (const object of g.nestedObjects ?? []) paths.add(pathKey(object.path));
     }
     for (const option of group.unionOptions ?? []) collect(option);
   };
   for (const extracted of extractions) if (extracted) collect(extracted);
-  return roots;
+  return paths;
+}
+
+/** The key {@link nestedObjectPaths} uses for a property path. */
+export function nestedPathKey(path: string[]): string {
+  return pathKey(path);
 }
 
 /**
- * Merge two nested object values property by property; `override` wins
- * where both have a non-object value.
+ * Merge two values of an expanded object property by property, recursing
+ * only into the objects `isObject` names; every other value (including an
+ * option whose value is itself an object) is replaced by `override`'s.
+ *
+ * @param path - Property path of `base` and `override`
  */
 export function mergeNestedValues(
   base: Record<string, unknown>,
   override: Record<string, unknown>,
+  isObject: (path: string[]) => boolean,
+  path: string[],
 ): Record<string, unknown> {
   const merged: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(override)) {
     const current = merged[key];
+    const childPath = [...path, key];
     merged[key] =
-      isPlainObject(current) && isPlainObject(value) ? mergeNestedValues(current, value) : value;
+      isObject(childPath) && isPlainObject(current) && isPlainObject(value)
+        ? mergeNestedValues(current, value, isObject, childPath)
+        : value;
   }
   return merged;
 }
