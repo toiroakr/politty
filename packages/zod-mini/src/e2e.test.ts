@@ -218,4 +218,17 @@ describe("@politty/zod-mini e2e", () => {
     const absent = await runCommand(cmd, []);
     expect(absent.result).toBeUndefined();
   });
+
+  it("should keep nested properties of both intersection members", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: z.intersection(
+        z.object({ config: z.object({ host: z.string() }) }),
+        z.object({ config: z.object({ port: z.string() }) }),
+      ),
+      run: (args) => args.config,
+    });
+    const result = await runCommand(cmd, ["--config.host", "h", "--config.port", "1"]);
+    expect(result.result).toEqual({ host: "h", port: "1" });
+  });
 });

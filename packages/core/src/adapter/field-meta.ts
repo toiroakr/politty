@@ -120,11 +120,19 @@ export interface ResolvedFieldMeta {
 export interface NestedFieldInfo {
   /** Property path, starting with the top-level field name */
   path: string[];
-  /**
-   * The objects enclosing the leaf, one per `path` prefix: whether the
-   * object is required (it and every enclosing object), and its default.
-   */
-  objects: Array<{ required: boolean; defaultValue: unknown }>;
+}
+
+/**
+ * An object field (or nested object) whose leaves were expanded into
+ * options. Kept per field group so objects without any leaf are still known.
+ */
+export interface NestedObjectInfo {
+  /** Property path, starting with the top-level field name */
+  path: string[];
+  /** Whether the object itself is required within its parent */
+  required: boolean;
+  /** The object's default value, if any */
+  defaultValue: unknown;
 }
 
 /**
@@ -145,9 +153,13 @@ export interface ExtractedFields {
     normalizeDiscriminator?: (value: unknown) => unknown;
     fields: ResolvedFieldMeta[];
     description?: string;
+    /** Object fields expanded into this variant's fields */
+    nestedObjects?: NestedObjectInfo[];
   }>;
   /** Options (for union) */
   unionOptions?: ExtractedFields[];
+  /** Object fields expanded into `fields` (see {@link NestedObjectInfo}) */
+  nestedObjects?: NestedObjectInfo[];
   /** Schema description */
   description?: string;
   /**
@@ -416,4 +428,25 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
   }
 
   return meta;
+}
+
+/**
+ * Combine two definitions of the same field from the members of an
+ * intersection: the first definition wins, except that two object fields
+ * keep the properties of both, as the intersection requires both.
+ *
+ * @param first - The definition seen first
+ * @param next - A later definition of the same field
+ * @returns The definition to keep
+ */
+export function mergeIntersectionField(
+  first: ResolvedFieldMeta,
+  next: ResolvedFieldMeta,
+): ResolvedFieldMeta {
+  if (!first.objectShape || !next.objectShape) return first;
+  // Spread `first` twice: its keys keep their order and its schemas win.
+  return {
+    ...first,
+    objectShape: { ...first.objectShape, ...next.objectShape, ...first.objectShape },
+  };
 }

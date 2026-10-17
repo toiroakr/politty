@@ -295,4 +295,187 @@ describe("nested object fields", () => {
       ).toThrow('Invalid flatten "snake" for field "c"');
     });
   });
+
+  describe("object reconstruction", () => {
+    it("should keep values regardless of declaration order when a flat name equals an object key", async () => {
+      const { cmd, seen } = captureArgs(
+        z.object({
+          aB: z.object({ c: z.string() }).optional(),
+          a: arg(z.object({ b: z.string() }), { flatten: "kebab" }).optional(),
+        }),
+      );
+      await runCommand(cmd, ["--a-b.c", "C", "--a-b", "B"]);
+      expect(seen[0]).toEqual({ aB: { c: "C" }, a: { b: "B" } });
+    });
+
+    it("should create required empty objects", async () => {
+      const { cmd, seen } = captureArgs(
+        z.object({
+          config: z.object({ port: z.coerce.number().optional(), extra: z.object({}) }).optional(),
+          empty: z.object({}),
+        }),
+      );
+      await runCommand(cmd, []);
+      await runCommand(cmd, ["--config.port", "1"]);
+      expect(seen).toEqual([{ empty: {} }, { config: { port: 1, extra: {} }, empty: {} }]);
+    });
+
+    it("should create required objects inside an optional object that is given", async () => {
+      const { cmd, seen } = captureArgs(
+        z.object({
+          config: z
+            .object({
+              port: z.coerce.number().optional(),
+              tls: z.object({ enabled: z.boolean().default(false) }),
+            })
+            .optional(),
+        }),
+      );
+      await runCommand(cmd, ["--config.port", "80"]);
+      expect(seen[0]).toEqual({ config: { port: 80, tls: { enabled: false } } });
+    });
+
+    it("should nest with the selected variant's object defaults and required objects", async () => {
+      const { cmd, seen } = captureArgs(
+        z.discriminatedUnion("mode", [
+          z.object({
+            mode: z.literal("a"),
+            config: z
+              .object({ port: z.coerce.number(), host: z.string() })
+              .default({ port: 1, host: "host-a" }),
+            db: z.object({ port: z.coerce.number().default(80) }),
+          }),
+          z.object({
+            mode: z.literal("b"),
+            config: z
+              .object({ port: z.coerce.number(), host: z.string() })
+              .default({ port: 2, host: "host-b" }),
+          }),
+        ]),
+      );
+      await runCommand(cmd, ["--mode", "b", "--config.port", "9"]);
+      await runCommand(cmd, ["--mode", "a"]);
+      expect(seen).toEqual([
+        { mode: "b", config: { port: 9, host: "host-b" } },
+        { mode: "a", config: { port: 1, host: "host-a" }, db: { port: 80 } },
+      ]);
+    });
+
+    it("should nest by the union option that validates", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ a: z.object({ x: z.string() }) }),
+          z.object({ b: z.object({ y: z.string().default("d") }) }),
+        ]),
+      );
+      await runCommand(cmd, ["--a.x", "1"]);
+      await runCommand(cmd, []);
+      expect(seen).toEqual([{ a: { x: "1" } }, { b: { y: "d" } }]);
+    });
+
+    it("should keep the properties of both members of an intersection", async () => {
+      const { cmd, seen } = captureArgs(
+        z.intersection(
+          z.object({ config: z.object({ host: z.string() }) }),
+          z.object({ config: z.object({ port: z.coerce.number() }) }),
+        ),
+      );
+      await runCommand(cmd, ["--config.host", "h", "--config.port", "1"]);
+      expect(seen[0]).toEqual({ config: { host: "h", port: 1 } });
+    });
+
+    it("should list leaves that only a later variant defines and run their effects", async () => {
+      const effect = vi.fn();
+      const schema = z.discriminatedUnion("mode", [
+        z.object({ mode: z.literal("a"), config: z.object({ host: z.string() }) }),
+        z.object({
+          mode: z.literal("b"),
+          config: z.object({ port: arg(z.coerce.number(), { effect }) }),
+        }),
+      ]);
+      expect(extractFields(schema).fields.map((f) => f.name)).toContain("config.port");
+      const { cmd } = captureArgs(schema);
+      await runCommand(cmd, ["--mode", "b", "--config.port", "3"]);
+      expect(effect).toHaveBeenCalledWith(3, expect.objectContaining({ name: "config.port" }));
+    });
+
+    it("should check required packages of nested boolean options", async () => {
+      const { cmd } = captureArgs(
+        z.object({
+          config: z
+            .object({
+              ui: arg(z.boolean().optional(), {
+                requiredPackages: [{ name: "@politty-test/missing-ui" }],
+              }),
+            })
+            .optional(),
+        }),
+      );
+      expect((await runCommand(cmd, [])).success).toBe(true);
+      const result = await runCommand(cmd, ["--config.ui"]);
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain("@politty-test/missing-ui");
+    });
+  });
+
+  describe("global args", () => {
+    it("should merge global and command properties of the same object", async () => {
+      const seen: unknown[] = [];
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ log: z.object({ file: z.string() }).optional() }),
+        run: (args) => {
+          seen.push(JSON.parse(JSON.stringify(args)));
+        },
+      });
+      const main = defineCommand({ name: "app", subCommands: { sub } });
+      const result = await runCommand(main, ["--log.level", "debug", "sub", "--log.file", "f"], {
+        globalArgs: z.object({ log: z.object({ level: z.string() }).optional() }),
+      });
+      expect(result.success).toBe(true);
+      expect(seen[0]).toEqual({ log: { level: "debug", file: "f" } });
+    });
+
+    it("should pre-fill a nested option both schemas define from the global value", async () => {
+      const seen: unknown[] = [];
+      const config = () => z.object({ config: z.object({ port: z.string() }) });
+      const sub = defineCommand({
+        name: "sub",
+        args: config(),
+        run: (args) => {
+          seen.push(JSON.parse(JSON.stringify(args)));
+        },
+      });
+      const main = defineCommand({ name: "app", subCommands: { sub } });
+      const result = await runCommand(main, ["--config.port", "80", "sub"], {
+        globalArgs: config(),
+      });
+      expect(result.success).toBe(true);
+      expect(seen[0]).toEqual({ config: { port: "80" } });
+    });
+  });
+
+  describe("leaf metadata", () => {
+    it("should describe a leaf without its own description by its object", () => {
+      const { fields } = extractFields(
+        z.object({
+          config: arg(z.object({ port: z.number(), host: z.string().describe("Host name") }), {
+            description: "Server settings",
+          }),
+        }),
+      );
+      expect(fields.map((f) => f.description)).toEqual(["Server settings", "Host name"]);
+    });
+
+    it("should keep an explicit null default over the object default", () => {
+      const { fields } = extractFields(
+        z.object({
+          config: z
+            .object({ name: z.string().nullable().default(null) })
+            .default({ name: "object-default" }),
+        }),
+      );
+      expect(fields[0]?.defaultValue).toBeNull();
+    });
+  });
 });

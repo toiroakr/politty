@@ -452,10 +452,24 @@ type FlattenTypeError<M> = {
   __typeError: "flatten can only be used on object fields";
 };
 
+/** Keys of `T` other than its index signatures */
+type KnownKeys<T> = keyof {
+  [
+    K in keyof T as string extends K
+      ? never
+      : number extends K
+        ? never
+        : symbol extends K
+          ? never
+          : K
+  ]: T[K];
+};
+
 /**
  * Whether a schema input type is an object with known properties, i.e. a
- * field that expands into one option per property. Records (index
- * signatures), arrays and `unknown` inputs (e.g. coercions) are not.
+ * field that expands into one option per property. Loose objects (known
+ * properties plus an index signature) are; records (only an index
+ * signature), arrays and `unknown` inputs (e.g. coercions) are not.
  */
 type IsObjectInput<TInput> = unknown extends TInput
   ? false
@@ -463,7 +477,9 @@ type IsObjectInput<TInput> = unknown extends TInput
     ? false
     : [NonNullable<TInput>] extends [Record<string, unknown>]
       ? string extends keyof NonNullable<TInput>
-        ? false
+        ? [KnownKeys<NonNullable<TInput>>] extends [never]
+          ? false
+          : true
         : true
       : false;
 

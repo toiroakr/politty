@@ -220,4 +220,17 @@ describe("@politty/valibot e2e", () => {
     const absent = await runCommand(cmd, []);
     expect(absent.result).toBeUndefined();
   });
+
+  it("should keep nested properties of both intersection members", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: v.intersect([
+        v.object({ config: v.object({ host: v.string() }) }),
+        v.object({ config: v.object({ port: v.string() }) }),
+      ]),
+      run: (args) => args.config,
+    });
+    const result = await runCommand(cmd, ["--config.host", "h", "--config.port", "1"]);
+    expect(result.result).toEqual({ host: "h", port: "1" });
+  });
 });

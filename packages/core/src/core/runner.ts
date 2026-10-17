@@ -1,3 +1,9 @@
+import {
+  getFieldValue,
+  isPlainObject,
+  mergeNestedValues,
+  nestedRootNames,
+} from "../adapter/nested-fields.js";
 import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
 import { enableCompileCache } from "../compile-cache.js";
 import { executeLifecycle } from "../executor/command-runner.js";
@@ -1057,12 +1063,16 @@ async function runCommandInternal<TResult = unknown>(
       for (const field of parseResult.extractedFields.fields) {
         const localHasOwnValue =
           Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
+        // A nested leaf's validated global value lives at its property path.
+        const globalValue = getFieldValue(validatedGlobalArgs, field);
         if (
           !localHasOwnValue &&
           cliProvidedGlobalFields.has(field.name) &&
-          Object.hasOwn(validatedGlobalArgs, field.name)
+          (field.nested
+            ? globalValue !== undefined
+            : Object.hasOwn(validatedGlobalArgs, field.name))
         ) {
-          argsToValidate = { ...argsToValidate, [field.name]: validatedGlobalArgs[field.name] };
+          argsToValidate = { ...argsToValidate, [field.name]: globalValue };
           globalPrefilledFields.add(field.name);
         }
       }
@@ -1108,6 +1118,15 @@ async function runCommandInternal<TResult = unknown>(
       ...proxiedGlobalArgs,
       ...proxiedCommandArgs,
     };
+    // Objects expanded into options may carry properties from both schemas:
+    // merge them per property, still letting command values win.
+    for (const root of nestedRootNames(options._globalExtracted, parseResult.extractedFields)) {
+      const globalValue = proxiedGlobalArgs[root];
+      const commandValue = proxiedCommandArgs[root];
+      if (isPlainObject(globalValue) && isPlainObject(commandValue)) {
+        mergedPlainArgs[root] = mergeNestedValues(globalValue, commandValue);
+      }
+    }
     const argSourceMap = new Map<string, ArgSource>(globalSourceMap);
     const localEnvFallbackFields = parseResult.envFallbackFields ?? new Set<string>();
     // Local fields take precedence on collision, mirroring the value merge above:

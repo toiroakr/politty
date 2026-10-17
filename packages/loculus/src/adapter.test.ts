@@ -653,4 +653,19 @@ describe("@politty/loculus", () => {
     ).toEqual({ config: { serverPort: 80, host: "localhost" }, db: { url: "x", pool: 5 } });
     expect((await runCommand(command, [])).result).toEqual({ db: { url: "x", pool: 1 } });
   });
+
+  it("keeps nested properties of both intersection members", async () => {
+    const command = defineCommand({
+      name: "serve",
+      // Loculus intersections validate each member on its own, so the nested
+      // objects have to pass the other member's keys through.
+      args: l.intersection(
+        l.object({ config: l.object({ host: l.string() }, { unknownKeys: "passthrough" }) }),
+        l.object({ config: l.object({ port: l.string() }, { unknownKeys: "passthrough" }) }),
+      ),
+      run: (args) => args.config,
+    });
+    const result = await runCommand(command, ["--config.host", "h", "--config.port", "1"]);
+    expect(result.result).toEqual({ host: "h", port: "1" });
+  });
 });

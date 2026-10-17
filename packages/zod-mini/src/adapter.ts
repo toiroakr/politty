@@ -20,6 +20,7 @@
 
 import {
   resolveFieldMeta as assembleFieldMeta,
+  mergeIntersectionField,
   type ExtractedFields,
   type ResolvedFieldMeta,
   type UnknownKeysMode,
@@ -553,9 +554,8 @@ function extractFromIntersection(schema: z.ZodMiniType): ExtractedFields {
 
     const extracted = extractZodMiniFields(subSchema as ArgsSchema);
     for (const field of extracted.fields) {
-      if (!allFieldsMap.has(field.name)) {
-        allFieldsMap.set(field.name, field);
-      }
+      const existing = allFieldsMap.get(field.name);
+      allFieldsMap.set(field.name, existing ? mergeIntersectionField(existing, field) : field);
     }
   };
 

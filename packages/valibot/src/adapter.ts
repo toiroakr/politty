@@ -10,6 +10,7 @@
 
 import {
   resolveFieldMeta as assembleFieldMeta,
+  mergeIntersectionField,
   type ExtractedFields,
   type ResolvedFieldMeta,
   type UnknownKeysMode,
@@ -545,9 +546,8 @@ function extractFromIntersect(schema: ValibotNode): ExtractedFields {
   for (const option of schema.options ?? []) {
     const extracted = extractValibotFields(option as ArgsSchema);
     for (const field of extracted.fields) {
-      if (!allFieldsMap.has(field.name)) {
-        allFieldsMap.set(field.name, field);
-      }
+      const existing = allFieldsMap.get(field.name);
+      allFieldsMap.set(field.name, existing ? mergeIntersectionField(existing, field) : field);
     }
   }
 

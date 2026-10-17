@@ -5,12 +5,12 @@
  * line as a single value, so `extractFields` expands it into one field per
  * leaf (`config: { port }` → `--config.port`). Every other layer (parser,
  * help, completion, docs, prompts) sees the leaves as ordinary fields keyed
- * by their flat `name`; {@link nestFlattenedArgs} moves the parsed values
+ * by their flat `name`; {@link nestingCandidates} moves the parsed values
  * back under their property path right before validation.
  */
 
 import type { NestedKeyStyle } from "../core/arg-registry.js";
-import type { ExtractedFields, NestedFieldInfo, ResolvedFieldMeta } from "./field-meta.js";
+import type { ExtractedFields, NestedObjectInfo, ResolvedFieldMeta } from "./field-meta.js";
 import { getAllAliases, toCamelCase, toKebabCase } from "./field-meta.js";
 
 type ResolveChild = (name: string, fieldSchema: unknown) => ResolvedFieldMeta;
@@ -46,23 +46,37 @@ export function flattenNestedFields(
   resolveChild: ResolveChild,
 ): ExtractedFields {
   if (!hasObjectField(extracted)) return extracted;
-  const flattenGroup = (fields: ResolvedFieldMeta[]): ResolvedFieldMeta[] => {
+  const flattenGroup = (fields: ResolvedFieldMeta[]) => {
+    const nestedObjects: NestedObjectInfo[] = [];
     const flat = fields.flatMap((field) =>
-      field.objectShape ? expandObjectField(field, resolveChild) : [field],
+      field.objectShape ? expandObjectField(field, resolveChild, nestedObjects) : [field],
     );
     checkNestedCollisions(flat);
-    return flat;
+    return { fields: flat, nestedObjects };
   };
   const { variants, unionOptions } = extracted;
+  const flatVariants = variants?.map((variant) => ({
+    ...variant,
+    ...flattenGroup(variant.fields),
+  }));
+  const flatOptions = unionOptions?.map((option) => flattenNestedFields(option, resolveChild));
+  const top = flattenGroup(extracted.fields);
+  // The adapter merged same-named object fields of the variants before
+  // expansion, so add the leaves only a later variant or option defines.
+  const names = new Set(top.fields.map((f) => f.name));
+  for (const group of [...(flatVariants ?? []), ...(flatOptions ?? [])]) {
+    for (const field of group.fields) {
+      if (field.nested && !names.has(field.name)) {
+        names.add(field.name);
+        top.fields.push(field);
+      }
+    }
+  }
   return {
     ...extracted,
-    fields: flattenGroup(extracted.fields),
-    ...(variants && {
-      variants: variants.map((variant) => ({ ...variant, fields: flattenGroup(variant.fields) })),
-    }),
-    ...(unionOptions && {
-      unionOptions: unionOptions.map((option) => flattenNestedFields(option, resolveChild)),
-    }),
+    ...top,
+    ...(flatVariants && { variants: flatVariants }),
+    ...(flatOptions && { unionOptions: flatOptions }),
   };
 }
 
@@ -78,17 +92,22 @@ function capitalize(key: string): string {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
+/**
+ * Expand an object field into its leaves, recording the field and every
+ * nested object (even one without leaves) in `nestedObjects`.
+ */
 function expandObjectField(
   root: ResolvedFieldMeta,
   resolveChild: ResolveChild,
+  nestedObjects: NestedObjectInfo[],
 ): ResolvedFieldMeta[] {
   const leaves: ResolvedFieldMeta[] = [];
   const walk = (
     object: ResolvedFieldMeta,
     path: string[],
     names: { name: string; cliName: string },
-    inherited: NestedKeyStyle,
-    enclosing: NestedFieldInfo["objects"],
+    inherited: { style: NestedKeyStyle; description: string | undefined },
+    enclosing: Array<{ required: boolean; defaultValue: unknown }>,
   ): void => {
     const unsupported = UNSUPPORTED_OBJECT_META.filter((key) => Boolean(object[key]));
     if (unsupported.length > 0) {
@@ -96,9 +115,12 @@ function expandObjectField(
         `Invalid arg() metadata for object field "${path.join(".")}": ${unsupported.join(", ")} cannot be used on object fields (set them on its properties instead).`,
       );
     }
-    const style = object.flatten ?? inherited;
+    nestedObjects.push({ path, required: object.required, defaultValue: object.defaultValue });
+    const style = object.flatten ?? inherited.style;
+    const description = object.description ?? inherited.description;
     // A camelCase parent prefix keeps camelCase all the way down.
     const cliPrefix = style === "camel" && path.length === 1 ? names.name : names.cliName;
+    // Whether this object, and so every enclosing one, must be present.
     const objects = [
       ...enclosing,
       {
@@ -119,7 +141,7 @@ function expandObjectField(
             : `${cliPrefix}${capitalize(key)}`;
 
       if (child.objectShape) {
-        walk(child, childPath, { name, cliName }, style, objects);
+        walk(child, childPath, { name, cliName }, { style, description }, objects);
         continue;
       }
 
@@ -140,16 +162,27 @@ function expandObjectField(
         name,
         cliName,
         hiddenAlias,
+        // Without a description of its own, an option describes its object.
+        description: child.description ?? description,
         // Name the value after the property, not the whole option path.
         placeholder: child.placeholder ?? toKebabCase(key).toUpperCase(),
         required: objects.at(-1)!.required && child.required,
-        defaultValue: child.defaultValue ?? defaultFromEnclosing(objects, childPath),
+        defaultValue:
+          child.defaultValue !== undefined
+            ? child.defaultValue
+            : defaultFromEnclosing(objects, childPath),
         negationDisplay,
-        nested: { path: childPath, objects },
+        nested: { path: childPath },
       });
     }
   };
-  walk(root, [root.name], { name: root.name, cliName: root.cliName }, "dot", []);
+  walk(
+    root,
+    [root.name],
+    { name: root.name, cliName: root.cliName },
+    { style: "dot", description: undefined },
+    [],
+  );
   return leaves;
 }
 
@@ -157,7 +190,7 @@ function expandObjectField(
  * The value at `path` in the nearest enclosing object default that has one.
  * `objects[i]` is the object at `path.slice(0, i + 1)`.
  */
-function defaultFromEnclosing(objects: NestedFieldInfo["objects"], path: string[]): unknown {
+function defaultFromEnclosing(objects: Array<{ defaultValue: unknown }>, path: string[]): unknown {
   for (let i = objects.length - 1; i >= 0; i--) {
     let value = objects[i]!.defaultValue;
     for (const key of path.slice(i + 1)) {
@@ -168,7 +201,8 @@ function defaultFromEnclosing(objects: NestedFieldInfo["objects"], path: string[
   return undefined;
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+/** Whether a value is an object that is not an array (or null). */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -204,65 +238,144 @@ function checkNestedCollisions(fields: ResolvedFieldMeta[]): void {
   }
 }
 
+/** Fields and expanded objects that one schema branch validates */
+interface NestingGroup {
+  fields: ResolvedFieldMeta[];
+  nestedObjects?: NestedObjectInfo[] | undefined;
+}
+
 /**
- * Move the values of nested leaves from their flat `name` to their property
- * path. An optional enclosing object is created only when one of its leaves
- * has a value, starting from the object's default so unspecified properties
- * keep it; otherwise it stays absent and the schema's own default (or
- * optionality) applies. A required object of a plain object schema is
- * always created, so a missing value is reported on the leaf option rather
- * than on an object no option names.
+ * The args to validate, with the values of nested leaves moved from their
+ * flat `name` to their property path. Each candidate nests by one schema
+ * branch, as branches may define the same objects differently; validate
+ * them in order and keep the first that passes, or report the last.
+ *
+ * Within a branch, an object is created when one of its leaves has a value
+ * (starting from the object's default, so unspecified properties keep it) or
+ * when it is required and its parent exists, so a missing value is reported
+ * on the leaf option rather than on an object no option names. An optional
+ * object without values stays absent so its own default (or optionality)
+ * applies.
  *
  * @param rawArgs - Parsed args keyed by field name
  * @param extracted - Extracted fields of the schema
- * @returns `rawArgs` itself when there is nothing to nest, else a nested copy
+ * @returns Candidates to validate; `[rawArgs]` when nothing is nested
  */
-export function nestFlattenedArgs(
+export function nestingCandidates(
   rawArgs: Record<string, unknown>,
   extracted: ExtractedFields,
-): Record<string, unknown> {
-  const leaves = new Map<string, ResolvedFieldMeta & { nested: NestedFieldInfo }>();
+): Record<string, unknown>[] {
+  const leafNames = new Set<string>();
+  const objects = new Map<string, NestedObjectInfo>();
+  const leaves = new Map<string, ResolvedFieldMeta>();
   const collect = (group: ExtractedFields): void => {
-    const fields = [group.fields, ...(group.variants ?? []).map((v) => v.fields)].flat();
-    for (const field of fields) {
-      if (field.nested && !leaves.has(field.name))
-        leaves.set(field.name, { ...field, nested: field.nested });
+    for (const g of [group, ...(group.variants ?? [])]) {
+      for (const field of g.fields) {
+        if (!field.nested) continue;
+        leafNames.add(field.name);
+        if (!leaves.has(field.name)) leaves.set(field.name, field);
+      }
+      for (const object of g.nestedObjects ?? []) {
+        const key = pathKey(object.path);
+        if (!objects.has(key)) objects.set(key, object);
+      }
     }
     for (const option of group.unionOptions ?? []) collect(option);
   };
   collect(extracted);
-  if (leaves.size === 0) return rawArgs;
+  if (objects.size === 0) return [rawArgs];
 
-  // Variants and union options decide which objects exist, so only a plain
-  // object schema pre-creates its required ones.
-  const createRequired = !extracted.variants && !extracted.unionOptions;
-  const result: Record<string, unknown> = { ...rawArgs };
-  const ensureObjects = (leaf: { nested: NestedFieldInfo }, depth: number) => {
-    let target = result;
-    for (let i = 0; i < depth; i++) {
-      const key = leaf.nested.path[i]!;
-      const current = target[key];
-      const base = isPlainObject(current) ? current : leaf.nested.objects[i]!.defaultValue;
-      // Copy at every level so a shared default object is never mutated.
-      const object = isPlainObject(base) ? { ...base } : {};
-      target[key] = object;
-      target = object;
+  const nest = (group: NestingGroup, createRequired: boolean) =>
+    nestGroup(rawArgs, group, leafNames, createRequired);
+  // Every branch's leaves and objects; no branch decides which required
+  // objects exist. Used when no single branch can be picked.
+  const merged = () =>
+    nest({ fields: [...leaves.values()], nestedObjects: [...objects.values()] }, false);
+
+  const branches = (group: ExtractedFields): NestingGroup[] => {
+    if (group.variants && group.discriminator) {
+      const variant = selectVariant(rawArgs[group.discriminator], group.variants);
+      return variant ? [variant] : [];
     }
-    return target;
+    if (group.unionOptions) return group.unionOptions.flatMap(branches);
+    return [group];
   };
+  const selected = branches(extracted);
+  if (!extracted.variants && !extracted.unionOptions) return [nest(selected[0]!, true)];
+  return [...selected.map((group) => nest(group, true)), merged()];
+}
 
-  for (const leaf of leaves.values()) {
-    const value = rawArgs[leaf.name];
-    delete result[leaf.name];
-    const { path, objects } = leaf.nested;
-    if (value !== undefined) {
-      ensureObjects(leaf, path.length - 1)[path[path.length - 1]!] = value;
-    } else if (createRequired) {
-      const requiredDepth = objects.findIndex((o) => !o.required);
-      ensureObjects(leaf, requiredDepth === -1 ? objects.length : requiredDepth);
+function pathKey(path: string[]): string {
+  return path.join("\0");
+}
+
+/**
+ * The discriminated-union variant that a discriminator value selects, by its
+ * exact spelling first and then by its normalized value.
+ */
+function selectVariant(
+  value: unknown,
+  variants: NonNullable<ExtractedFields["variants"]>,
+): NonNullable<ExtractedFields["variants"]>[number] | undefined {
+  if (value === undefined) return undefined;
+  return (
+    variants.find((v) => String(value) === v.discriminatorValue) ??
+    variants.find(
+      (v) =>
+        v.normalizeDiscriminator &&
+        String(v.normalizeDiscriminator(value)) === v.discriminatorValue,
+    )
+  );
+}
+
+function nestGroup(
+  rawArgs: Record<string, unknown>,
+  group: NestingGroup,
+  leafNames: ReadonlySet<string>,
+  createRequired: boolean,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...rawArgs };
+  // Remove every flat name before building objects: a flat name may equal
+  // the key of another object (`aB` from `a.b` next to an `aB` object).
+  for (const name of leafNames) delete result[name];
+
+  const leaves = group.fields.filter((field) => field.nested && rawArgs[field.name] !== undefined);
+  const present = new Set<string>();
+  for (const leaf of leaves) {
+    const path = leaf.nested!.path;
+    for (let depth = 1; depth < path.length; depth++) present.add(pathKey(path.slice(0, depth)));
+  }
+  const objects = [...(group.nestedObjects ?? [])].sort((a, b) => a.path.length - b.path.length);
+  if (createRequired) {
+    for (const object of objects) {
+      const parent = object.path.slice(0, -1);
+      if (object.required && (parent.length === 0 || present.has(pathKey(parent)))) {
+        present.add(pathKey(object.path));
+      }
     }
   }
+
+  // Parents first, so every object is built inside an existing one.
+  for (const object of objects) {
+    if (!present.has(pathKey(object.path))) continue;
+    const parent = containerAt(result, object.path.slice(0, -1));
+    const key = object.path[object.path.length - 1]!;
+    const current = parent[key];
+    const base = isPlainObject(current) ? current : object.defaultValue;
+    // Copy so a shared default object is never mutated.
+    parent[key] = isPlainObject(base) ? { ...base } : {};
+  }
+  for (const leaf of leaves) {
+    const path = leaf.nested!.path;
+    containerAt(result, path.slice(0, -1))[path[path.length - 1]!] = rawArgs[leaf.name];
+  }
   return result;
+}
+
+function containerAt(args: Record<string, unknown>, path: string[]): Record<string, unknown> {
+  let target = args;
+  for (const key of path) target = target[key] as Record<string, unknown>;
+  return target;
 }
 
 /**
@@ -275,4 +388,37 @@ export function getFieldValue(args: Record<string, unknown>, field: ResolvedFiel
     value = isPlainObject(value) ? value[key] : undefined;
   }
   return value;
+}
+
+/**
+ * Names of the top-level fields that were expanded from object fields, in
+ * any branch of the given extractions.
+ */
+export function nestedRootNames(...extractions: Array<ExtractedFields | undefined>): Set<string> {
+  const roots = new Set<string>();
+  const collect = (group: ExtractedFields): void => {
+    for (const g of [group, ...(group.variants ?? [])]) {
+      for (const object of g.nestedObjects ?? []) roots.add(object.path[0]!);
+    }
+    for (const option of group.unionOptions ?? []) collect(option);
+  };
+  for (const extracted of extractions) if (extracted) collect(extracted);
+  return roots;
+}
+
+/**
+ * Merge two nested object values property by property; `override` wins
+ * where both have a non-object value.
+ */
+export function mergeNestedValues(
+  base: Record<string, unknown>,
+  override: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    const current = merged[key];
+    merged[key] =
+      isPlainObject(current) && isPlainObject(value) ? mergeNestedValues(current, value) : value;
+  }
+  return merged;
 }

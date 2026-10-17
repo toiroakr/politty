@@ -9,7 +9,7 @@
  */
 
 import { isInternalArgsSchema, validateInternalArgs } from "../adapter/internal-args.js";
-import { nestFlattenedArgs } from "../adapter/nested-fields.js";
+import { nestingCandidates } from "../adapter/nested-fields.js";
 import { getValidatorAdapter } from "../adapter/registry.js";
 import type { InferSchemaOutput } from "../adapter/standard-schema.js";
 import type { ValidationError, ValidationResult } from "../adapter/types.js";
@@ -33,11 +33,14 @@ export function validateArgs<T extends ArgsSchema>(
     return validateInternalArgs(rawArgs, schema) as ValidationResult<InferSchemaOutput<T>>;
   }
   // Leaves of nested object fields are parsed under flat names; validate
-  // them at their property path.
-  const nestedArgs = nestFlattenedArgs(rawArgs, extractFields(schema));
-  return getValidatorAdapter().validate(nestedArgs, schema) as ValidationResult<
-    InferSchemaOutput<T>
-  >;
+  // them at their property path, as nested by the first branch that fits.
+  const adapter = getValidatorAdapter();
+  let result: ValidationResult<unknown> | undefined;
+  for (const args of nestingCandidates(rawArgs, extractFields(schema))) {
+    result = adapter.validate(args, schema);
+    if (result.success) break;
+  }
+  return result as ValidationResult<InferSchemaOutput<T>>;
 }
 
 /**
