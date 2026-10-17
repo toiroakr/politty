@@ -104,6 +104,11 @@ export interface ResolvedFieldMeta {
    * adapter; `extractFields` expands such a field into its leaf fields.
    */
   objectShape?: Record<string, unknown> | undefined;
+  /**
+   * Every member's property schemas of an object field defined by several
+   * intersection members (see {@link mergeIntersectionField}).
+   */
+  objectShapes?: Array<Record<string, unknown>> | undefined;
   /** Naming style for the options an object field expands into */
   flatten?: NestedKeyStyle | undefined;
   /**
@@ -433,7 +438,9 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
 /**
  * Combine two definitions of the same field from the members of an
  * intersection: the first definition wins, except that two object fields
- * keep the properties of both, as the intersection requires both.
+ * keep the property schemas of both (expanded together, so a property both
+ * define as an object is merged in turn), and the object is required when
+ * either member requires it.
  *
  * @param first - The definition seen first
  * @param next - A later definition of the same field
@@ -444,9 +451,12 @@ export function mergeIntersectionField(
   next: ResolvedFieldMeta,
 ): ResolvedFieldMeta {
   if (!first.objectShape || !next.objectShape) return first;
-  // Spread `first` twice: its keys keep their order and its schemas win.
   return {
     ...first,
-    objectShape: { ...first.objectShape, ...next.objectShape, ...first.objectShape },
+    required: first.required || next.required,
+    objectShapes: [
+      ...(first.objectShapes ?? [first.objectShape]),
+      ...(next.objectShapes ?? [next.objectShape]),
+    ],
   };
 }

@@ -418,6 +418,75 @@ describe("nested object fields", () => {
     });
   });
 
+  describe("union and intersection reconstruction", () => {
+    const modes = (config: (mode: string) => z.ZodType) =>
+      z.union([
+        z.object({ mode: z.literal("a"), a: z.object({ x: z.string() }), config: config("a") }),
+        z.object({ mode: z.literal("b"), config: config("b") }),
+      ]);
+
+    it("should not let another union option drop a given value", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ mode: z.literal("a"), a: z.object({ x: z.string().optional() }) }),
+          z.object({ mode: z.literal("b"), config: z.object({ port: z.string() }).optional() }),
+        ]),
+      );
+      await runCommand(cmd, ["--mode", "b", "--config.port", "80"]);
+      expect(seen[0]).toEqual({ mode: "b", config: { port: "80" } });
+    });
+
+    it("should use the matching union option's object default", async () => {
+      const { cmd, seen } = captureArgs(
+        modes((mode) =>
+          z
+            .object({ port: z.string(), host: z.string() })
+            .default({ port: "1", host: `host-${mode}` }),
+        ),
+      );
+      await runCommand(cmd, ["--mode", "b", "--config.port", "9"]);
+      expect(seen[0]).toEqual({ mode: "b", config: { port: "9", host: "host-b" } });
+    });
+
+    it("should require an intersection object when either member requires it", async () => {
+      const { cmd, seen } = captureArgs(
+        z.intersection(
+          z.object({ config: z.object({ host: z.string().default("h") }).optional() }),
+          z.object({ config: z.object({ port: z.coerce.number().default(80) }) }),
+        ),
+      );
+      await runCommand(cmd, []);
+      expect(seen[0]).toEqual({ config: { host: "h", port: 80 } });
+    });
+
+    it("should merge an object both intersection members define inside an object", async () => {
+      const { cmd, seen } = captureArgs(
+        z.intersection(
+          z.object({ config: z.object({ tls: z.object({ cert: z.string() }) }) }),
+          z.object({ config: z.object({ tls: z.object({ key: z.string() }) }) }),
+        ),
+      );
+      await runCommand(cmd, ["--config.tls.cert", "c", "--config.tls.key", "k"]);
+      expect(seen[0]).toEqual({ config: { tls: { cert: "c", key: "k" } } });
+    });
+  });
+
+  describe("object defaults", () => {
+    it("should not report a transformed default value as the user's error", async () => {
+      const { cmd } = captureArgs(
+        z.object({
+          config: z
+            .object({ port: z.string().transform(Number), host: z.string() })
+            .default({ port: 80, host: "local" }),
+        }),
+      );
+      const result = await runCommand(cmd, ["--config.host", "remote"]);
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain("config.port");
+      expect(result.error?.message).not.toContain("received number");
+    });
+  });
+
   describe("global args", () => {
     it("should merge global and command properties of the same object", async () => {
       const seen: unknown[] = [];
@@ -434,6 +503,44 @@ describe("nested object fields", () => {
       });
       expect(result.success).toBe(true);
       expect(seen[0]).toEqual({ log: { level: "debug", file: "f" } });
+    });
+
+    it("should keep non-plain values when merging global and command objects", async () => {
+      const seen: unknown[] = [];
+      const when = () =>
+        z.object({ when: z.object({ at: z.string().transform((v) => new Date(v)) }).optional() });
+      const sub = defineCommand({
+        name: "sub",
+        args: when(),
+        run: (args) => {
+          seen.push(args.when?.at);
+        },
+      });
+      const main = defineCommand({ name: "app", subCommands: { sub } });
+      const result = await runCommand(
+        main,
+        ["--when.at", "2020-01-01", "sub", "--when.at", "2021-01-01"],
+        { globalArgs: when() },
+      );
+      expect(result.success).toBe(true);
+      expect(seen[0]).toEqual(new Date("2021-01-01"));
+    });
+
+    it("should pre-fill a nested option from a flat global field of the same name", async () => {
+      const seen: unknown[] = [];
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ config: arg(z.object({ port: z.string() }), { flatten: "kebab" }) }),
+        run: (args) => {
+          seen.push(JSON.parse(JSON.stringify(args)));
+        },
+      });
+      const main = defineCommand({ name: "app", subCommands: { sub } });
+      const result = await runCommand(main, ["--config-port", "80", "sub"], {
+        globalArgs: z.object({ configPort: z.string().optional() }),
+      });
+      expect(result.error).toBeUndefined();
+      expect(seen[0]).toMatchObject({ config: { port: "80" } });
     });
 
     it("should pre-fill a nested option both schemas define from the global value", async () => {

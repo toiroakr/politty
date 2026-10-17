@@ -1063,12 +1063,15 @@ async function runCommandInternal<TResult = unknown>(
       for (const field of parseResult.extractedFields.fields) {
         const localHasOwnValue =
           Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
-        // A nested leaf's validated global value lives at its property path.
-        const globalValue = getFieldValue(validatedGlobalArgs, field);
+        // The validated global value lives where the global definition puts
+        // it, which for a nested leaf is its property path.
+        const globalField = options._globalExtracted?.fields.find((f) => f.name === field.name);
+        const globalValue = globalField && getFieldValue(validatedGlobalArgs, globalField);
         if (
           !localHasOwnValue &&
           cliProvidedGlobalFields.has(field.name) &&
-          (field.nested
+          globalField &&
+          (globalField.nested
             ? globalValue !== undefined
             : Object.hasOwn(validatedGlobalArgs, field.name))
         ) {

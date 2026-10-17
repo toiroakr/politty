@@ -35,12 +35,22 @@ export function validateArgs<T extends ArgsSchema>(
   // Leaves of nested object fields are parsed under flat names; validate
   // them at their property path, as nested by the first branch that fits.
   const adapter = getValidatorAdapter();
-  let result: ValidationResult<unknown> | undefined;
-  for (const args of nestingCandidates(rawArgs, extractFields(schema))) {
-    result = adapter.validate(args, schema);
-    if (result.success) break;
+  let reported: ValidationResult<unknown> | undefined;
+  let last: ValidationResult<unknown> | undefined;
+  for (const candidate of nestingCandidates(rawArgs, extractFields(schema))) {
+    if (candidate.branchSchema && !adapter.validate(candidate.args, candidate.branchSchema).success)
+      continue;
+    last = adapter.validate(candidate.args, schema);
+    if (last.success) return last as ValidationResult<InferSchemaOutput<T>>;
+    // Report the first failure that is about the given args, not about
+    // values copied from an object default.
+    const defaulted = candidate.defaultedPaths ?? [];
+    const onlyDefaulted = last.errors.every((error) =>
+      defaulted.some((path) => path.every((key, i) => error.path[i] === key)),
+    );
+    if (!onlyDefaulted) reported ??= last;
   }
-  return result as ValidationResult<InferSchemaOutput<T>>;
+  return (reported ?? last) as ValidationResult<InferSchemaOutput<T>>;
 }
 
 /**

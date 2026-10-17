@@ -10,8 +10,9 @@
  */
 
 import type { NestedKeyStyle } from "../core/arg-registry.js";
+import type { ArgsSchema } from "../types.js";
 import type { ExtractedFields, NestedObjectInfo, ResolvedFieldMeta } from "./field-meta.js";
-import { getAllAliases, toCamelCase, toKebabCase } from "./field-meta.js";
+import { getAllAliases, mergeIntersectionField, toCamelCase, toKebabCase } from "./field-meta.js";
 
 type ResolveChild = (name: string, fieldSchema: unknown) => ResolvedFieldMeta;
 
@@ -129,8 +130,10 @@ function expandObjectField(
       },
     ];
 
-    for (const [key, fieldSchema] of Object.entries(object.objectShape ?? {})) {
-      const child = resolveChild(key, fieldSchema);
+    for (const [key, schemas] of propertySchemas(object)) {
+      const child = schemas
+        .map((fieldSchema) => resolveChild(key, fieldSchema))
+        .reduce((merged, definition) => mergeIntersectionField(merged, definition));
       const childPath = [...path, key];
       const name = style === "dot" ? `${names.name}.${key}` : `${names.name}${capitalize(key)}`;
       const cliName =
@@ -187,6 +190,20 @@ function expandObjectField(
 }
 
 /**
+ * Property schemas of an object field by key, with every intersection
+ * member's schema for a property more than one member defines.
+ */
+function propertySchemas(object: ResolvedFieldMeta): Map<string, unknown[]> {
+  const properties = new Map<string, unknown[]>();
+  for (const shape of object.objectShapes ?? [object.objectShape ?? {}]) {
+    for (const [key, fieldSchema] of Object.entries(shape)) {
+      properties.set(key, [...(properties.get(key) ?? []), fieldSchema]);
+    }
+  }
+  return properties;
+}
+
+/**
  * The value at `path` in the nearest enclosing object default that has one.
  * `objects[i]` is the object at `path.slice(0, i + 1)`.
  */
@@ -201,9 +218,14 @@ function defaultFromEnclosing(objects: Array<{ defaultValue: unknown }>, path: s
   return undefined;
 }
 
-/** Whether a value is an object that is not an array (or null). */
+/**
+ * Whether a value is a plain object (object literal or null prototype), as
+ * opposed to an array, a class instance such as a Date, or a primitive.
+ */
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  if (typeof value !== "object" || value === null) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function fieldLabel(field: ResolvedFieldMeta): string {
@@ -244,27 +266,47 @@ interface NestingGroup {
   nestedObjects?: NestedObjectInfo[] | undefined;
 }
 
+/** Args nested by one schema branch, to validate against the whole schema */
+export interface NestingCandidate {
+  args: Record<string, unknown>;
+  /**
+   * The union option the args were nested for. They are only valid when this
+   * option accepts them too, as another option could accept them by
+   * dropping values this nesting moved elsewhere.
+   */
+  branchSchema?: ArgsSchema | undefined;
+  /**
+   * Paths whose values were copied from an object default rather than
+   * given. A default may hold output values that do not validate again as
+   * input (e.g. after a transform), so issues only on these paths are not
+   * the user's to fix.
+   */
+  defaultedPaths?: string[][] | undefined;
+}
+
 /**
  * The args to validate, with the values of nested leaves moved from their
  * flat `name` to their property path. Each candidate nests by one schema
- * branch, as branches may define the same objects differently; validate
- * them in order and keep the first that passes, or report the last.
+ * branch that defines every given option, as branches may define the same
+ * objects differently; validate them in order and keep the first that
+ * passes.
  *
  * Within a branch, an object is created when one of its leaves has a value
- * (starting from the object's default, so unspecified properties keep it) or
- * when it is required and its parent exists, so a missing value is reported
- * on the leaf option rather than on an object no option names. An optional
- * object without values stays absent so its own default (or optionality)
- * applies.
+ * or when it is required and its parent exists, so a missing value is
+ * reported on the leaf option rather than on an object no option names. An
+ * optional object without values stays absent so its own default (or
+ * optionality) applies. An object that is created starts from its default,
+ * so unspecified properties keep it; a second candidate starts it empty, for
+ * defaults that do not validate as input.
  *
  * @param rawArgs - Parsed args keyed by field name
  * @param extracted - Extracted fields of the schema
- * @returns Candidates to validate; `[rawArgs]` when nothing is nested
+ * @returns Candidates to validate; just `rawArgs` when nothing is nested
  */
 export function nestingCandidates(
   rawArgs: Record<string, unknown>,
   extracted: ExtractedFields,
-): Record<string, unknown>[] {
+): NestingCandidate[] {
   const leafNames = new Set<string>();
   const objects = new Map<string, NestedObjectInfo>();
   const leaves = new Map<string, ResolvedFieldMeta>();
@@ -283,26 +325,47 @@ export function nestingCandidates(
     for (const option of group.unionOptions ?? []) collect(option);
   };
   collect(extracted);
-  if (objects.size === 0) return [rawArgs];
+  if (objects.size === 0) return [{ args: rawArgs }];
 
-  const nest = (group: NestingGroup, createRequired: boolean) =>
-    nestGroup(rawArgs, group, leafNames, createRequired);
-  // Every branch's leaves and objects; no branch decides which required
-  // objects exist. Used when no single branch can be picked.
-  const merged = () =>
-    nest({ fields: [...leaves.values()], nestedObjects: [...objects.values()] }, false);
+  const nest = (group: NestingGroup, branchSchema?: ArgsSchema): NestingCandidate[] => {
+    const seeded = nestGroup(rawArgs, group, leafNames, { createRequired: true, seed: true });
+    const candidates: NestingCandidate[] = [{ ...seeded, branchSchema }];
+    if (seeded.defaultedPaths.length > 0) {
+      const empty = nestGroup(rawArgs, group, leafNames, { createRequired: true, seed: false });
+      candidates.push({ ...empty, branchSchema });
+    }
+    return candidates;
+  };
+  if (!extracted.variants && !extracted.unionOptions) return nest(extracted);
 
-  const branches = (group: ExtractedFields): NestingGroup[] => {
+  const branches = (
+    group: ExtractedFields,
+    schema: ArgsSchema | undefined,
+  ): Array<{ group: NestingGroup; schema: ArgsSchema | undefined }> => {
     if (group.variants && group.discriminator) {
       const variant = selectVariant(rawArgs[group.discriminator], group.variants);
-      return variant ? [variant] : [];
+      return variant ? [{ group: variant, schema }] : [];
     }
-    if (group.unionOptions) return group.unionOptions.flatMap(branches);
-    return [group];
+    if (group.unionOptions) {
+      return group.unionOptions.flatMap((option) => branches(option, option.schema));
+    }
+    return [{ group, schema }];
   };
-  const selected = branches(extracted);
-  if (!extracted.variants && !extracted.unionOptions) return [nest(selected[0]!, true)];
-  return [...selected.map((group) => nest(group, true)), merged()];
+  // A branch without one of the given options would drop its value.
+  const given = [...leaves.values()].filter((leaf) => rawArgs[leaf.name] !== undefined);
+  const covering = branches(extracted, undefined).filter(({ group }) => {
+    const names = new Set(group.fields.map((field) => field.name));
+    return given.every((leaf) => names.has(leaf.name));
+  });
+  // Every branch's leaves and objects, with no branch deciding which
+  // required objects exist: the last resort when no branch fits.
+  const merged = nestGroup(
+    rawArgs,
+    { fields: [...leaves.values()], nestedObjects: [...objects.values()] },
+    leafNames,
+    { createRequired: false, seed: true },
+  );
+  return [...covering.flatMap(({ group, schema }) => nest(group, schema)), merged];
 }
 
 function pathKey(path: string[]): string {
@@ -332,8 +395,8 @@ function nestGroup(
   rawArgs: Record<string, unknown>,
   group: NestingGroup,
   leafNames: ReadonlySet<string>,
-  createRequired: boolean,
-): Record<string, unknown> {
+  options: { createRequired: boolean; seed: boolean },
+): { args: Record<string, unknown>; defaultedPaths: string[][] } {
   const result: Record<string, unknown> = { ...rawArgs };
   // Remove every flat name before building objects: a flat name may equal
   // the key of another object (`aB` from `a.b` next to an `aB` object).
@@ -346,7 +409,7 @@ function nestGroup(
     for (let depth = 1; depth < path.length; depth++) present.add(pathKey(path.slice(0, depth)));
   }
   const objects = [...(group.nestedObjects ?? [])].sort((a, b) => a.path.length - b.path.length);
-  if (createRequired) {
+  if (options.createRequired) {
     for (const object of objects) {
       const parent = object.path.slice(0, -1);
       if (object.required && (parent.length === 0 || present.has(pathKey(parent)))) {
@@ -355,21 +418,34 @@ function nestGroup(
     }
   }
 
+  const defaulted = new Map<string, string[]>();
   // Parents first, so every object is built inside an existing one.
   for (const object of objects) {
     if (!present.has(pathKey(object.path))) continue;
     const parent = containerAt(result, object.path.slice(0, -1));
     const key = object.path[object.path.length - 1]!;
     const current = parent[key];
-    const base = isPlainObject(current) ? current : object.defaultValue;
+    const base = isPlainObject(current)
+      ? current
+      : options.seed && isPlainObject(object.defaultValue)
+        ? object.defaultValue
+        : {};
+    if (base === object.defaultValue) {
+      for (const property of Object.keys(base)) {
+        const path = [...object.path, property];
+        defaulted.set(pathKey(path), path);
+      }
+    }
     // Copy so a shared default object is never mutated.
-    parent[key] = isPlainObject(base) ? { ...base } : {};
+    parent[key] = { ...base };
   }
   for (const leaf of leaves) {
     const path = leaf.nested!.path;
     containerAt(result, path.slice(0, -1))[path[path.length - 1]!] = rawArgs[leaf.name];
+    for (let depth = 1; depth <= path.length; depth++)
+      defaulted.delete(pathKey(path.slice(0, depth)));
   }
-  return result;
+  return { args: result, defaultedPaths: [...defaulted.values()] };
 }
 
 function containerAt(args: Record<string, unknown>, path: string[]): Record<string, unknown> {
