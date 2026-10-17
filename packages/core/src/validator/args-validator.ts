@@ -41,8 +41,9 @@ export function validateArgs<T extends ArgsSchema>(
   let branchFailure: ValidationResult<unknown> | undefined;
   let last: ValidationResult<unknown> | undefined;
   for (const candidate of nestingCandidates(rawArgs, extractFields(schema))) {
+    let own: ValidationResult<unknown> | undefined;
     if (candidate.branchSchema) {
-      const own = adapter.validate(candidate.args, candidate.branchSchema);
+      own = adapter.validate(candidate.args, candidate.branchSchema);
       if (!own.success) {
         // Prefer the option that rejects the fewest given values: one that
         // only misses values says more than one the given values rule out.
@@ -57,6 +58,18 @@ export function validateArgs<T extends ArgsSchema>(
       }
     }
     const result = adapter.validate(candidate.args, schema);
+    if (result.success && own?.success) {
+      // The whole union may have matched an earlier option that drops
+      // values this branch keeps; never accept that silently.
+      const dropped = (candidate.givenPaths ?? []).filter(
+        (path) => valueAt(own.data, path) !== undefined && valueAt(result.data, path) === undefined,
+      );
+      if (dropped.length > 0) {
+        const message = `${dropped.map((path) => path.join(".")).join(", ")} would be ignored: another schema option accepts the arguments without them.`;
+        reported ??= { success: false, errors: [{ path: [], message, code: "invalid_union" }] };
+        continue;
+      }
+    }
     if (result.success) {
       if (!candidate.diagnosticOnly) return result as ValidationResult<InferSchemaOutput<T>>;
       last = {
@@ -110,4 +123,15 @@ function onlyDefaulted(
   return result.errors.every((error) =>
     paths.some((path) => path.every((key, i) => error.path[i] === key)),
   );
+}
+
+function valueAt(value: unknown, path: readonly string[]): unknown {
+  let current = value;
+  for (const key of path) {
+    current =
+      typeof current === "object" && current !== null
+        ? (current as Record<string, unknown>)[key]
+        : undefined;
+  }
+  return current;
 }

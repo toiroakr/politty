@@ -513,6 +513,58 @@ describe("nested object fields", () => {
     });
   });
 
+  describe("branch selection", () => {
+    const defaultedMode = () =>
+      z.discriminatedUnion("mode", [
+        z.object({
+          mode: z.literal("a").default("a"),
+          config: z.object({ port: z.string() }).optional(),
+        }),
+        z.object({ mode: z.literal("b") }),
+      ]);
+
+    it("should select a variant by a defaulted discriminator", async () => {
+      const { cmd, seen } = captureArgs(defaultedMode());
+      await runCommand(cmd, ["--mode", "a", "--config.port", "x"]);
+      await runCommand(cmd, ["--config.port", "y"]);
+      expect(seen).toEqual([
+        { mode: "a", config: { port: "x" } },
+        { mode: "a", config: { port: "y" } },
+      ]);
+    });
+
+    it("should keep the selected variant's own field named like another variant's leaf", async () => {
+      const { cmd, seen } = captureArgs(
+        z.discriminatedUnion("mode", [
+          z.object({
+            mode: z.literal("a"),
+            config: z.object({ host: z.string() }),
+            configPort: z.string().optional(),
+          }),
+          z.object({
+            mode: z.literal("b"),
+            config: arg(z.object({ port: z.string() }), { flatten: "kebab" }),
+          }),
+        ]),
+      );
+      await runCommand(cmd, ["--mode", "a", "--config.host", "h", "--config-port", "80"]);
+      expect(seen[0]).toEqual({ mode: "a", config: { host: "h" }, configPort: "80" });
+    });
+
+    it("should not let an earlier union option silently drop a given value", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ name: z.string().optional() }),
+          z.object({ config: z.object({ port: z.string() }) }),
+        ]),
+      );
+      const result = await runCommand(cmd, ["--config.port", "80"]);
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain("config.port would be ignored");
+      expect(seen).toEqual([]);
+    });
+  });
+
   describe("wrappers and spellings", () => {
     it("should expand readonly and prefault objects", async () => {
       expect(
@@ -554,6 +606,10 @@ describe("nested object fields", () => {
 
     it("should let shell completion match the kebab-case form of camel options", () => {
       expect(collectOptionTokens("configMode", undefined)).toContain("--config-mode");
+      // A camelCase parent with a kebab-case child mixes both styles.
+      expect(collectOptionTokens("configTls-cert-file", undefined)).toEqual(
+        expect.arrayContaining(["--configTlsCertFile", "--config-tls-cert-file"]),
+      );
       expect(quotedAvailabilityTokens("configUi", undefined, "noConfigUi")).toContain(
         '"--no-config-ui"',
       );

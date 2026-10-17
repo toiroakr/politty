@@ -440,7 +440,8 @@ function extractFromDiscriminatedUnion(schema: z.ZodType): ExtractedFields {
     // Get discriminator value from the variant's discriminator schema.
     // Supports z.literal() and single-value z.enum() discriminators.
     let discriminatorValue = "";
-    const discriminatorSchema = shape[discriminator];
+    // Read through wrappers such as `.default()`, which keep the value.
+    const discriminatorSchema = shape[discriminator] && unwrapSchema(shape[discriminator]);
     if (discriminatorSchema) {
       const typeName = getTypeName(discriminatorSchema);
       if (typeName === "literal") {

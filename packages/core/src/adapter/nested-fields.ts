@@ -356,7 +356,7 @@ export function nestingCandidates(
     schema: ArgsSchema | undefined,
   ): Array<{ group: NestingGroup; schema: ArgsSchema | undefined }> => {
     if (group.variants && group.discriminator) {
-      const variant = selectVariant(rawArgs[group.discriminator], group.variants);
+      const variant = selectVariant(rawArgs, group.discriminator, group.variants);
       return variant ? [{ group: variant, schema }] : [];
     }
     if (group.unionOptions) {
@@ -404,13 +404,21 @@ function pathKey(path: string[]): string {
 
 /**
  * The discriminated-union variant that a discriminator value selects, by its
- * exact spelling first and then by its normalized value.
+ * exact spelling first and then by its normalized value. Without a value,
+ * the variant whose discriminator has a default, if exactly one does.
  */
 function selectVariant(
-  value: unknown,
+  rawArgs: Record<string, unknown>,
+  discriminator: string,
   variants: NonNullable<ExtractedFields["variants"]>,
 ): NonNullable<ExtractedFields["variants"]>[number] | undefined {
-  if (value === undefined) return undefined;
+  const value = rawArgs[discriminator];
+  if (value === undefined) {
+    const defaulted = variants.filter(
+      (v) => v.fields.find((f) => f.name === discriminator)?.defaultValue !== undefined,
+    );
+    return defaulted.length === 1 ? defaulted[0] : undefined;
+  }
   return (
     variants.find((v) => String(value) === v.discriminatorValue) ??
     variants.find(
@@ -429,8 +437,11 @@ function nestGroup(
 ): { args: Record<string, unknown>; defaultedPaths: string[][] } {
   const result: Record<string, unknown> = { ...rawArgs };
   // Remove every flat name before building objects: a flat name may equal
-  // the key of another object (`aB` from `a.b` next to an `aB` object).
-  for (const name of leafNames) delete result[name];
+  // the key of another object (`aB` from `a.b` next to an `aB` object). A
+  // name another branch uses for a leaf stays when this group's own field
+  // of that name is not nested.
+  const ownFields = new Set(group.fields.filter((f) => !f.nested).map((f) => f.name));
+  for (const name of leafNames) if (!ownFields.has(name)) delete result[name];
 
   const leaves = group.fields.filter((field) => field.nested && rawArgs[field.name] !== undefined);
   const present = new Set<string>();
