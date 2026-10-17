@@ -217,7 +217,9 @@ function pushUnique(tokens: string[], t: string): void {
  * alias). Names mixing both styles get both.
  */
 function pushCaseVariants(tokens: string[], name: string): void {
-  for (const variant of [toCamelCase(name), toKebabCase(name)]) {
+  // camelCase of the kebab-case form too: `configBaseURL` is also accepted
+  // as `--configBaseUrl` through its kebab-case hidden alias.
+  for (const variant of [toCamelCase(name), toKebabCase(name), toCamelCase(toKebabCase(name))]) {
     if (variant !== name && !tokens.includes(`--${variant}`)) tokens.push(`--${variant}`);
   }
 }

@@ -475,6 +475,9 @@ function nestGroup(
     const path = leaf.nested!.path;
     for (let depth = 1; depth < path.length; depth++) present.add(pathKey(path.slice(0, depth)));
   }
+  // Objects a given value lives in, as opposed to required ones created
+  // only so a missing value is reported on its option.
+  const opened = new Set(present);
   const objects = [...(group.nestedObjects ?? [])].sort((a, b) => a.path.length - b.path.length);
   if (options.createRequired) {
     for (const object of objects) {
@@ -487,11 +490,24 @@ function nestGroup(
 
   const defaulted = new Map<string, string[]>();
   // Parents first, so every object is built inside an existing one.
+  const kept = new Set<string>();
   for (const object of objects) {
-    if (!present.has(pathKey(object.path))) continue;
+    const objectKey = pathKey(object.path);
+    if (!present.has(objectKey)) continue;
+    const parentKey = pathKey(object.path.slice(0, -1));
+    if (kept.has(parentKey)) {
+      kept.add(objectKey);
+      continue;
+    }
     const parent = containerAt(result, object.path.slice(0, -1));
     const key = object.path[object.path.length - 1]!;
     const current = parent[key];
+    // A required object without given values keeps a value its parent's
+    // default gave it (such as `null` for a nullable object).
+    if (!opened.has(objectKey) && current !== undefined && !isPlainObject(current)) {
+      kept.add(objectKey);
+      continue;
+    }
     const base = isPlainObject(current)
       ? current
       : options.seed && isPlainObject(object.defaultValue)
@@ -528,7 +544,11 @@ export function getFieldValue(args: Record<string, unknown>, field: ResolvedFiel
   if (!field.nested) return args[field.name];
   let value: unknown = args;
   for (const key of field.nested.path) {
-    value = isPlainObject(value) ? value[key] : undefined;
+    // Any object, as a transform may turn an object into a class instance.
+    value =
+      typeof value === "object" && value !== null
+        ? (value as Record<string, unknown>)[key]
+        : undefined;
   }
   return value;
 }

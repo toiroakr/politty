@@ -618,6 +618,39 @@ describe("nested object fields", () => {
     });
   });
 
+  describe("values inside objects", () => {
+    it("should keep a null its parent's default gives a nullable object", async () => {
+      const { cmd, seen } = captureArgs(
+        z.object({
+          config: z
+            .object({
+              port: z.string(),
+              tls: z.object({ enabled: z.boolean() }).nullable(),
+            })
+            .default({ port: "1", tls: null }),
+        }),
+      );
+      await runCommand(cmd, ["--config.port", "2"]);
+      expect(seen[0]).toEqual({ config: { port: "2", tls: null } });
+    });
+
+    it("should run leaf effects when the object becomes a class instance", async () => {
+      class Config {
+        constructor(readonly port: number) {}
+      }
+      const effect = vi.fn();
+      const { cmd } = captureArgs(
+        z.object({
+          config: z
+            .object({ port: arg(z.coerce.number(), { effect }) })
+            .transform((value) => new Config(value.port)),
+        }),
+      );
+      await runCommand(cmd, ["--config.port", "5"]);
+      expect(effect).toHaveBeenCalledWith(5, expect.anything());
+    });
+  });
+
   describe("wrappers and spellings", () => {
     it("should expand readonly and prefault objects", async () => {
       expect(
@@ -659,6 +692,8 @@ describe("nested object fields", () => {
 
     it("should let shell completion match the kebab-case form of camel options", () => {
       expect(collectOptionTokens("configMode", undefined)).toContain("--config-mode");
+      // An acronym is also accepted camelCased from its kebab-case form.
+      expect(collectOptionTokens("configBaseURL", undefined)).toContain("--configBaseUrl");
       // A camelCase parent with a kebab-case child mixes both styles.
       expect(collectOptionTokens("configTls-cert-file", undefined)).toEqual(
         expect.arrayContaining(["--configTlsCertFile", "--config-tls-cert-file"]),
