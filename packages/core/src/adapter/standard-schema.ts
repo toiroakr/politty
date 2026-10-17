@@ -23,7 +23,7 @@ export interface StandardSchemaProps<Output = unknown> {
   /** Standard validation entry point (unused by politty; see module doc) */
   readonly validate: (value: unknown) => unknown;
   /** Type-inference carrier (never exists at runtime) */
-  readonly types?: { readonly output: Output } | undefined;
+  readonly types?: { readonly input: unknown; readonly output: Output } | undefined;
 }
 
 /**
@@ -44,4 +44,9 @@ export interface SchemaLike<Output = unknown> {
 /** Infer the output type of a {@link SchemaLike}. */
 export type InferSchemaOutput<S> = S extends SchemaLike
   ? NonNullable<S["~standard"]["types"]>["output"]
+  : never;
+
+/** Infer the input type of a {@link SchemaLike}. */
+export type InferSchemaInput<S> = S extends SchemaLike
+  ? NonNullable<S["~standard"]["types"]>["input"]
   : never;

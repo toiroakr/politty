@@ -271,21 +271,26 @@ describe("nested object fields", () => {
     it("should reject value-level metadata on an object field", () => {
       expect(() =>
         extractFields(
-          z.object({ config: arg(z.object({ port: z.string() }), { alias: "c", env: "C" }) }),
+          z.object({
+            // @ts-expect-error Object fields only accept description and flatten.
+            config: arg(z.object({ port: z.string() }), { alias: "c", env: "C" }),
+          }),
         ),
       ).toThrow('object field "config": alias, env cannot be used on object fields');
     });
 
     it("should reject flatten on a non-object field", () => {
       expect(() =>
-        extractFields(z.object({ s: arg(z.string(), { flatten: "dot" } as never) })),
+        // @ts-expect-error flatten can only be used on object fields.
+        extractFields(z.object({ s: arg(z.string(), { flatten: "dot" }) })),
       ).toThrow('Invalid flatten for field "s": flatten can only be used on object fields.');
     });
 
     it("should reject an unknown flatten style", () => {
       expect(() =>
         extractFields(
-          z.object({ c: arg(z.object({ a: z.string() }), { flatten: "snake" } as never) }),
+          // @ts-expect-error flatten only accepts the supported naming styles.
+          z.object({ c: arg(z.object({ a: z.string() }), { flatten: "snake" }) }),
         ),
       ).toThrow('Invalid flatten "snake" for field "c"');
     });

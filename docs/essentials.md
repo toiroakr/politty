@@ -140,7 +140,7 @@ An object field is expanded into one option per property. Values are passed
 to `run` nested under the field again. Nested objects are expanded
 recursively. Set `arg()` metadata such as `alias`, `env` or `description` on
 the properties: an object field itself only accepts `description` and
-`flatten`.
+`flatten`, and other metadata on it is a type error.
 
 ```typescript
 args: z.object({

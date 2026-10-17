@@ -36,4 +36,13 @@ describe("@politty/zod-mini type pins", () => {
     // @ts-expect-error non-zod/mini standard schemas must not type-check here
     arg(foreignSchema, { positional: true });
   });
+
+  it("limits object field metadata to description and flatten", () => {
+    arg(z.object({ port: z.number() }), { description: "Server", flatten: "kebab" });
+    arg(z.optional(z.object({ port: z.number() })), { flatten: "camel" });
+    // @ts-expect-error object fields only accept description and flatten
+    arg(z.object({ port: z.number() }), { alias: "c" });
+    // @ts-expect-error flatten can only be used on object fields
+    arg(z.string(), { flatten: "dot" });
+  });
 });

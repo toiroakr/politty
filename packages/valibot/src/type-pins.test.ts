@@ -35,4 +35,13 @@ describe("@politty/valibot type pins", () => {
     // @ts-expect-error non-valibot standard schemas must not type-check here
     arg(foreignSchema, { positional: true });
   });
+
+  it("limits object field metadata to description and flatten", () => {
+    arg(v.object({ port: v.number() }), { description: "Server", flatten: "kebab" });
+    arg(v.optional(v.object({ port: v.number() })), { flatten: "camel" });
+    // @ts-expect-error object fields only accept description and flatten
+    arg(v.object({ port: v.number() }), { alias: "c" });
+    // @ts-expect-error flatten can only be used on object fields
+    arg(v.string(), { flatten: "dot" });
+  });
 });
