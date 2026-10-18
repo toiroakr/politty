@@ -517,6 +517,24 @@ describe("nested object fields", () => {
   });
 
   describe("branch selection", () => {
+    it.each([false, true])(
+      "should create an object a later union option requires (reversed: %s)",
+      async (reversed) => {
+        const a = z.object({
+          mode: z.literal("a"),
+          config: z.object({ port: z.string().default("80") }).optional(),
+        });
+        const b = z.object({
+          mode: z.literal("b"),
+          config: z.object({ port: z.string().default("80") }),
+        });
+        const { cmd, seen } = captureArgs(z.union(reversed ? [b, a] : [a, b]));
+        await runCommand(cmd, ["--mode", "b"]);
+        await runCommand(cmd, ["--mode", "a"]);
+        expect(seen).toEqual([{ mode: "b", config: { port: "80" } }, { mode: "a" }]);
+      },
+    );
+
     it("should run a union option's leaf transform once", async () => {
       const transform = vi.fn((value: string) => value);
       const { cmd, seen } = captureArgs(

@@ -392,7 +392,11 @@ export function nestingCandidates(
       }
       for (const object of g.nestedObjects ?? []) {
         const key = pathKey(object.path);
-        if (!objects.has(key)) objects.set(key, object);
+        const existing = objects.get(key);
+        // Required if any option requires it: the first nesting creates
+        // required objects only where a value opened them, and an option
+        // that does not require one accepts it either way.
+        if (!existing || (object.required && !existing.required)) objects.set(key, object);
       }
     }
     for (const option of group.unionOptions ?? []) collect(option);
