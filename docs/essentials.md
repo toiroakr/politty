@@ -165,6 +165,9 @@ none of its options is given. An expanded object itself cannot have a default
 Object fields of a union (or discriminated union) inside an intersection
 cannot be expanded either: put the fields the intersection adds into each union
 option instead.
+In a plain union, every option must expand the same property into the same
+option (give their objects the same `flatten` style), as the options are
+nested together before the union takes the first one that accepts them.
 A property cannot have an `effect` or `requiredPackages` when an enclosing object has a transform
 (or pipes into another schema), as that may change the value the effect would
 receive: run the effect on the transformed value in `run`, or move the

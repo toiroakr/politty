@@ -109,8 +109,6 @@ export interface ResolvedFieldMeta {
    * intersection members (see {@link mergeIntersectionField}).
    */
   objectShapes?: Array<Record<string, unknown>> | undefined;
-  /** How an object field treats properties it does not define */
-  objectUnknownKeys?: UnknownKeysMode | undefined;
   /**
    * Whether a transform (or a pipe into another schema) may replace an
    * object field's validated value, so its properties' values are not
@@ -144,8 +142,6 @@ export interface NestedObjectInfo {
   path: string[];
   /** Whether the object itself is required within its parent */
   required: boolean;
-  /** Whether the object keeps properties it does not define */
-  passthrough?: boolean | undefined;
 }
 
 /**
@@ -168,8 +164,6 @@ export interface ExtractedFields {
     description?: string;
     /** Object fields expanded into this variant's fields */
     nestedObjects?: NestedObjectInfo[];
-    /** Whether validation keeps properties this variant does not define */
-    retainsUnknownKeys?: boolean;
   }>;
   /** Options (for union) */
   unionOptions?: ExtractedFields[];
@@ -184,11 +178,6 @@ export interface ExtractedFields {
    * - "passthrough": Unknown keys are silently ignored (z.looseObject or z.object().passthrough())
    */
   unknownKeysMode: UnknownKeysMode;
-  /**
-   * Whether validation keeps properties the schema does not define, which a
-   * typed catchall does even though unknown flags are not passed through
-   */
-  retainsUnknownKeys?: boolean | undefined;
   /**
    * The union (or discriminated union) members of an intersection, nested
    * intersections included. Its fields combine every branch of them, so
@@ -269,8 +258,6 @@ export interface FieldIntrospection {
   schema: unknown;
   /** Field schemas by property name, when the schema is an object */
   objectShape?: Record<string, unknown> | undefined;
-  /** How the object treats properties it does not define */
-  objectUnknownKeys?: UnknownKeysMode | undefined;
   /** Whether a transform may replace the object's validated value */
   objectTransformed?: boolean | undefined;
 }
@@ -449,7 +436,6 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
     effect: argMeta?.effect,
     requiredPackages: argMeta?.requiredPackages,
     objectShape: intro.objectShape,
-    objectUnknownKeys: intro.objectShape ? intro.objectUnknownKeys : undefined,
     objectTransformed: intro.objectShape ? intro.objectTransformed : undefined,
     flatten: rawFlatten as NestedKeyStyle | undefined,
   };
@@ -460,11 +446,6 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
   }
 
   return meta;
-}
-
-/** Whether validating against extracted fields keeps properties they do not define */
-export function retainsKeys(extracted: ExtractedFields): boolean {
-  return extracted.retainsUnknownKeys ?? extracted.unknownKeysMode === "passthrough";
 }
 
 /**
@@ -494,11 +475,6 @@ export function mergeIntersectionField(
     required: first.required || next.required,
     // `null` is a default too.
     defaultValue: first.defaultValue !== undefined ? first.defaultValue : next.defaultValue,
-    // A property one member keeps stays in the merged output.
-    objectUnknownKeys:
-      first.objectUnknownKeys === "passthrough" || next.objectUnknownKeys === "passthrough"
-        ? "passthrough"
-        : first.objectUnknownKeys,
     objectTransformed: first.objectTransformed || next.objectTransformed,
     objectShapes: [
       ...(first.objectShapes ?? [first.objectShape]),

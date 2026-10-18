@@ -512,22 +512,39 @@ describe("nested object fields", () => {
       const { cmd, seen } = captureArgs(schema);
       const result = await runCommand(cmd, ["--mode", "b", "--config.host", "h"]);
       expect(result.success).toBe(false);
-      expect(result.error?.message).toContain("config.port");
       expect(seen).toEqual([]);
-    });
-
-    it("should reject options no single union option defines together", () => {
-      const schema = z.union([
-        z.object({ a: z.object({ x: z.string() }).optional() }),
-        z.object({ b: z.object({ y: z.string() }).optional() }),
-      ]);
-      const result = validateArgs({ "a.x": "1", "b.y": "2" }, schema);
-      expect(result.success).toBe(false);
-      expect(!result.success && result.errors[0]?.message).toContain("--a.x, --b.y");
     });
   });
 
   describe("branch selection", () => {
+    it("should run a union option's leaf transform once", async () => {
+      const transform = vi.fn((value: string) => value);
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ config: z.object({ port: z.string().transform(transform) }) }),
+          z.object({ other: z.string() }),
+        ]),
+      );
+      await runCommand(cmd, ["--config.port", "80"]);
+      expect(seen).toEqual([{ config: { port: "80" } }]);
+      expect(transform).toHaveBeenCalledTimes(1);
+    });
+
+    it("should accept an omitted optional discriminator", async () => {
+      const { cmd, seen } = captureArgs(
+        z.discriminatedUnion("mode", [
+          z.object({
+            mode: z.literal("a").optional(),
+            config: z.object({ port: z.string() }).optional(),
+          }),
+          z.object({ mode: z.literal("b"), name: z.string() }),
+        ]),
+      );
+      expect((await runCommand(cmd, [])).success).toBe(true);
+      expect((await runCommand(cmd, ["--config.port", "80"])).success).toBe(true);
+      expect(seen).toEqual([{}, { config: { port: "80" } }]);
+    });
+
     const defaultedMode = () =>
       z.discriminatedUnion("mode", [
         z.object({
@@ -547,7 +564,6 @@ describe("nested object fields", () => {
       // the zod version, so check the nesting itself.)
       const [candidate] = nestingCandidates({ "config.port": "y" }, extractFields(defaultedMode()));
       expect(candidate).toMatchObject({ args: { config: { port: "y" } } });
-      expect(candidate?.diagnosticOnly).toBeUndefined();
     });
 
     it("should keep the selected variant's own field named like another variant's leaf", async () => {
@@ -568,33 +584,7 @@ describe("nested object fields", () => {
       expect(seen[0]).toEqual({ mode: "a", config: { host: "h" }, configPort: "80" });
     });
 
-    it("should not let an earlier union option silently drop a given value", async () => {
-      const { cmd, seen } = captureArgs(
-        z.union([
-          z.object({ name: z.string().optional() }),
-          z.object({ config: z.object({ port: z.string() }) }),
-        ]),
-      );
-      const result = await runCommand(cmd, ["--config.port", "80"]);
-      expect(result.success).toBe(false);
-      expect(result.error?.message).toContain("config.port would be ignored");
-      expect(seen).toEqual([]);
-    });
-
-    it("should report a value a passthrough option drops inside a stripping object", async () => {
-      const { cmd, seen } = captureArgs(
-        z.union([
-          z.looseObject({ config: z.object({ host: z.string().optional() }) }),
-          z.object({ config: z.object({ port: z.string() }) }),
-        ]),
-      );
-      const result = await runCommand(cmd, ["--config.port", "80"]);
-      expect(result.success).toBe(false);
-      expect(result.error?.message).toContain("config.port would be ignored");
-      expect(seen).toEqual([]);
-    });
-
-    it("should report a value an earlier option's same-named field holds elsewhere", async () => {
+    it("should reject union options that put the same option at different paths", async () => {
       const { cmd, seen } = captureArgs(
         z.union([
           z.object({ configPort: z.literal("other").optional() }),
@@ -603,7 +593,7 @@ describe("nested object fields", () => {
       );
       const result = await runCommand(cmd, ["--config-port", "80"]);
       expect(result.success).toBe(false);
-      expect(result.error?.message).toContain("config.port would be ignored");
+      expect(result.error?.message).toContain("must use the same option for the same property");
       expect(seen).toEqual([]);
     });
 
@@ -638,33 +628,6 @@ describe("nested object fields", () => {
       );
       await runCommand(cmd, ["--config.port", "80"]);
       expect(seen).toEqual([{ config: { port: "80" } }]);
-    });
-
-    it("should report a value an earlier option's typed catchall strips below it", async () => {
-      const { cmd, seen } = captureArgs(
-        z.union([
-          z.object({}).catchall(z.object({ host: z.string().optional() })),
-          z.object({ config: z.object({ port: z.string() }) }),
-        ]),
-      );
-      const result = await runCommand(cmd, ["--config.port", "80"]);
-      expect(result.success).toBe(false);
-      expect(result.error?.message).toContain("config.port would be ignored");
-      expect(seen).toEqual([]);
-    });
-
-    it("should not take a branch its enclosing union rejects", async () => {
-      const inner = z
-        .union([
-          z.object({ config: z.object({ port: z.string() }) }),
-          z.object({ other: z.string() }),
-        ])
-        .refine(() => false);
-      const { cmd, seen } = captureArgs(
-        z.union([inner, z.object({ name: z.string().optional() })]),
-      );
-      expect((await runCommand(cmd, ["--config.port", "80"])).success).toBe(false);
-      expect(seen).toEqual([]);
     });
 
     it("should accept a value an earlier passthrough option keeps under a transform", async () => {
@@ -754,21 +717,6 @@ describe("nested object fields", () => {
       );
       await runCommand(cmd, ["--config.port", "90"]);
       expect(seen).toEqual([{ config: { port: "90" } }]);
-    });
-
-    it("should report a value an earlier option's own field drops below it", async () => {
-      const { cmd, seen } = captureArgs(
-        z.union([
-          z.object({
-            config: z.record(z.string(), z.object({ host: z.string().optional() })),
-          }),
-          z.object({ config: z.object({ tls: z.object({ port: z.string() }) }) }),
-        ]),
-      );
-      const result = await runCommand(cmd, ["--config.tls.port", "80"]);
-      expect(result.success).toBe(false);
-      expect(result.error?.message).toContain("config.tls.port would be ignored");
-      expect(seen).toEqual([]);
     });
 
     it("should not count an earlier option its enclosing union rejects", async () => {
@@ -862,21 +810,6 @@ describe("nested object fields", () => {
       expect(seen).toEqual([{ verbose: true, name: "alice" }]);
     });
 
-    it("should report a value an earlier option drops before a later option's transform", async () => {
-      const { cmd, seen } = captureArgs(
-        z.union([
-          z.object({ name: z.string().optional() }),
-          z
-            .object({ config: z.object({ port: z.string() }) })
-            .transform((value) => ({ selected: value.config })),
-        ]),
-      );
-      const result = await runCommand(cmd, ["--config.port", "80"]);
-      expect(result.success).toBe(false);
-      expect(result.error?.message).toContain("config.port would be ignored");
-      expect(seen).toEqual([]);
-    });
-
     it("should accept a variant whose leaf another variant expands further", async () => {
       const { cmd, seen } = captureArgs(
         z.discriminatedUnion("mode", [
@@ -926,7 +859,6 @@ describe("nested object fields", () => {
         ),
       );
       expect(candidate).toMatchObject({ args: { config: { port: "1" } } });
-      expect(candidate?.diagnosticOnly).toBeUndefined();
     });
 
     it("should list every value of a multi-value discriminator", () => {
@@ -1403,31 +1335,14 @@ describe("nested object fields", () => {
       expect(seen[0]).toEqual({ log: { level: "debug", file: "f" } });
     });
 
-    it("should reject values two global union options' spellings give for the same property", async () => {
-      const seen: unknown[] = [];
-      const sub = defineCommand({
-        name: "sub",
-        run: (args) => {
-          seen.push(JSON.parse(JSON.stringify(args)));
-        },
-      });
-      const main = defineCommand({ name: "app", subCommands: { sub } });
+    it("should reject union options that spell the same property differently", () => {
       const option = (flatten: "dot" | "kebab") =>
         z.object({
           config: arg(z.object({ port: z.string().optional() }), { flatten }).optional(),
         });
-      const globalArgs = z.union([option("kebab"), option("dot")]);
-      const result = await runCommand(
-        main,
-        ["--config-port", "first", "--config.port", "second", "sub"],
-        { globalArgs },
+      expect(() => extractFields(z.union([option("kebab"), option("dot")]))).toThrow(
+        /must use the same option for the same property/,
       );
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.message).toContain("config.port is given by more than one option");
-      }
-      await runCommand(main, ["--config.port", "second", "sub"], { globalArgs });
-      expect(seen).toEqual([{ config: { port: "second" } }]);
     });
 
     it("should keep non-plain values when merging global and command objects", async () => {
@@ -1479,34 +1394,6 @@ describe("nested object fields", () => {
       const seen: unknown[] = [];
       const schema = () =>
         z.discriminatedUnion("mode", [
-          z.object({
-            mode: z.literal("a"),
-            config: z
-              .object({ labels: z.string().transform((v) => JSON.parse(v) as unknown) })
-              .optional(),
-          }),
-          z.object({
-            mode: z.literal("b"),
-            config: z.object({ labels: z.object({ x: z.string().optional() }) }).optional(),
-          }),
-        ]);
-      const sub = defineCommand({
-        name: "sub",
-        args: schema(),
-        run: (args) => {
-          seen.push(JSON.parse(JSON.stringify(args)));
-        },
-      });
-      const main = defineCommand({ name: "app", subCommands: { sub } });
-      const argv = ["--mode", "a", "--config.labels", '{"old":1}', "sub"];
-      await runCommand(main, [...argv, "--config.labels", '{"new":2}'], { globalArgs: schema() });
-      expect(seen[0]).toEqual({ mode: "a", config: { labels: { new: 2 } } });
-    });
-
-    it("should merge only objects the accepted union options expand", async () => {
-      const seen: unknown[] = [];
-      const schema = () =>
-        z.union([
           z.object({
             mode: z.literal("a"),
             config: z

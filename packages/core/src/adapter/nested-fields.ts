@@ -10,7 +10,6 @@
  */
 
 import type { NestedKeyStyle } from "../core/arg-registry.js";
-import type { ArgsSchema } from "../types.js";
 import type { ExtractedFields, NestedObjectInfo, ResolvedFieldMeta } from "./field-meta.js";
 import { getAllAliases, mergeIntersectionField, toCamelCase, toKebabCase } from "./field-meta.js";
 
@@ -69,6 +68,7 @@ export function flattenNestedFields(
     ...flattenGroup(variant.fields),
   }));
   const flatOptions = unionOptions?.map((option) => flattenNestedFields(option, resolveChild));
+  if (flatOptions) checkUnionSpellings(flatOptions);
   const branches = [...(flatVariants ?? []), ...(flatOptions ?? [])];
   if (branches.length === 0) return { ...extracted, ...flattenGroup(extracted.fields) };
 
@@ -100,6 +100,41 @@ export function flattenNestedFields(
     ...(flatVariants && { variants: flatVariants }),
     ...(flatOptions && { unionOptions: flatOptions }),
   };
+}
+
+/**
+ * Check that a union's options agree on where each option's value goes: its
+ * options are nested together before the union picks one, so an option name
+ * must hold the same path, and a property path take the same name, in every
+ * union option (and in each one's variants and nested union options).
+ */
+function checkUnionSpellings(options: ExtractedFields[]): void {
+  const paths = new Map<string, ResolvedFieldMeta>();
+  const names = new Map<string, ResolvedFieldMeta>();
+  const visit = (group: ExtractedFields): void => {
+    for (const g of [group, ...(group.variants ?? [])]) {
+      for (const field of g.fields) {
+        const path = pathKey(field.nested?.path ?? [field.name]);
+        const byName = paths.get(field.name);
+        const byPath = names.get(path);
+        const other =
+          byName && pathKey(byName.nested?.path ?? [byName.name]) !== path
+            ? byName
+            : byPath && byPath.name !== field.name && (byPath.nested || field.nested)
+              ? byPath
+              : undefined;
+        if (other) {
+          throw new Error(
+            `Field "${fieldLabel(field)}" (--${field.cliName}) and field "${fieldLabel(other)}" (--${other.cliName}) of another union option must use the same option for the same property: give their objects the same flatten style or rename one.`,
+          );
+        }
+        paths.set(field.name, field);
+        names.set(path, field);
+      }
+    }
+    for (const option of group.unionOptions ?? []) visit(option);
+  };
+  for (const option of options) visit(option);
 }
 
 /** The name of the first object field in any branch of an extraction */
@@ -160,7 +195,6 @@ function expandObjectField(
     nestedObjects.push({
       path,
       required: object.required,
-      passthrough: object.objectUnknownKeys === "passthrough",
     });
     const style = object.flatten ?? inherited.style;
     const description = object.description ?? inherited.description;
@@ -314,122 +348,30 @@ export interface NestingGroup {
   nestedObjects?: NestedObjectInfo[] | undefined;
 }
 
-/** A union option that precedes the one a candidate nests by */
-export interface PrecedingBranch {
-  /**
-   * The option and the union options enclosing it, outermost first: the
-   * union takes it only when every one of them accepts the args
-   */
-  schemas: ArgsSchema[];
-  /** The option's fields and expanded objects */
-  group: NestingGroup;
-  /**
-   * Keys (see {@link nestedPathKey}) of the paths the option's fields hold
-   * values at: a leaf's property path, else the field name
-   */
-  paths: ReadonlySet<string>;
-  /** Keys of the objects the option expands, to whether each keeps unknown keys */
-  objects: ReadonlyMap<string, boolean>;
-  /** Whether the option keeps top-level keys it does not define */
-  passthrough: boolean;
-}
-
-/**
- * What a union option does with a given value when it accepts the args: it
- * keeps a value at a path one of its fields holds, and drops one under a
- * key its enclosing object (or the option itself) does not define unless
- * that object keeps unknown keys. A value kept as an unknown key is only
- * `"retained"`: what the object keeps it as (a typed catchall validates it
- * in turn) is not known here.
- *
- * @param branch - The option that accepts the args
- * @param path - Property path of the given value
- */
-export function givenValueFate(
-  branch: Pick<PrecedingBranch, "paths" | "objects" | "passthrough">,
-  path: string[],
-): { fate: "kept" | "dropped" } | { fate: "retained"; container: string[] } {
-  for (let depth = 1; depth <= path.length; depth++) {
-    const key = pathKey(path.slice(0, depth));
-    // A field holding the value itself keeps it; one holding an enclosing
-    // object (such as a record) may still drop it below, like a catchall.
-    if (branch.paths.has(key)) {
-      return depth === path.length
-        ? { fate: "kept" }
-        : { fate: "retained", container: path.slice(0, depth - 1) };
-    }
-    if (branch.objects.has(key)) continue;
-    // The object (or option) keeping the value as an unknown key.
-    const container = path.slice(0, depth - 1);
-    const keepsUnknown =
-      container.length === 0
-        ? branch.passthrough
-        : (branch.objects.get(pathKey(container)) ?? false);
-    return keepsUnknown ? { fate: "retained", container } : { fate: "dropped" };
-  }
-  return { fate: "kept" };
-}
-
-/** Args nested by one schema branch, to validate against the whole schema */
+/** Args nested for validation against the whole schema */
 export interface NestingCandidate {
   args: Record<string, unknown>;
-  /** The branch whose fields and objects nested the args */
+  /**
+   * The discriminated-union variant whose fields and objects nested the
+   * args, when the discriminator selects one
+   */
   group?: NestingGroup | undefined;
-  /**
-   * The union option the args were nested for. They are only valid when this
-   * option accepts them too, as another option could accept them by
-   * dropping values this nesting moved elsewhere.
-   */
-  branchSchema?: ArgsSchema | undefined;
-  /**
-   * The union options enclosing `branchSchema`, outermost first and ending
-   * with it: the union takes the branch only when every one accepts
-   */
-  branchSchemas?: ArgsSchema[] | undefined;
-  /**
-   * Set on the nesting by every branch at once, which is only for
-   * reporting errors: no branch decided it, so it must not be accepted.
-   * The message explains why it fails when it would otherwise pass.
-   */
-  diagnosticOnly?: { message: string } | undefined;
-  /**
-   * Paths of the values given on the command line (or from env), so a
-   * failure can be ranked by how much of it is about them.
-   */
-  givenPaths?: string[][] | undefined;
-  /**
-   * The union options before this one, in schema order. A union takes the
-   * first option that accepts its input, so one of these may accept the
-   * args by dropping given values it does not define.
-   */
-  precedingBranches?: PrecedingBranch[] | undefined;
-  /** The given values, by field name and property path */
-  given?: Array<{ name: string; path: string[] }> | undefined;
-  /**
-   * What the branch keeps (see {@link givenValueFate}): it may take given
-   * values it does not define only as unknown keys
-   */
-  retention?: Pick<PrecedingBranch, "paths" | "objects" | "passthrough"> | undefined;
-  /**
-   * Paths of another option's given values that a plain union option could
-   * not place, as a value given for the same property took their place: it
-   * would lose them, so it must not accept the args.
-   */
-  unplaced?: string[][] | undefined;
 }
 
 /**
  * The args to validate, with the values of nested leaves moved from their
- * flat `name` to their property path. Each candidate nests by one schema
- * branch that defines every given option, as branches may define the same
- * objects differently; validate them in order and keep the first that
- * passes.
+ * flat `name` to their property path. Validate the candidates in order and
+ * keep the first that passes; a union then takes its first option that
+ * accepts them, as it does for any other args.
  *
- * Within a branch, an object is created when one of its leaves has a value
- * or when it is required and its parent exists, so a missing value is
- * reported on the leaf option rather than on an object no option names, and
- * its properties' defaults apply. An optional object without values stays
- * absent. (Expanded objects have no defaults of their own.)
+ * An object is created when one of its leaves has a value or when it is
+ * required and its parent exists, so a missing value is reported on the
+ * leaf option rather than on an object no option names, and its
+ * properties' defaults apply. An optional object without values stays
+ * absent. (Expanded objects have no defaults of their own.) A union's
+ * options are nested together, creating required objects only inside one a
+ * given value opened first, so no option is chosen for objects nothing
+ * named, and then all of them, so their defaults apply.
  *
  * @param rawArgs - Parsed args keyed by field name
  * @param extracted - Extracted fields of the schema
@@ -440,14 +382,13 @@ export function nestingCandidates(
   extracted: ExtractedFields,
 ): NestingCandidate[] {
   const leafNames = new Set<string>();
+  const fields = new Map<string, ResolvedFieldMeta>();
   const objects = new Map<string, NestedObjectInfo>();
-  const leaves = new Map<string, ResolvedFieldMeta>();
   const collect = (group: ExtractedFields): void => {
     for (const g of [group, ...(group.variants ?? [])]) {
       for (const field of g.fields) {
-        if (!field.nested) continue;
-        leafNames.add(field.name);
-        if (!leaves.has(field.name)) leaves.set(field.name, field);
+        if (field.nested) leafNames.add(field.name);
+        if (!fields.has(field.name)) fields.set(field.name, field);
       }
       for (const object of g.nestedObjects ?? []) {
         const key = pathKey(object.path);
@@ -458,143 +399,26 @@ export function nestingCandidates(
   };
   collect(extracted);
   if (objects.size === 0) return [{ args: rawArgs }];
-
-  const nest = (
-    group: NestingGroup,
-    branchSchema?: ArgsSchema,
-    createRequired: CreateRequired = true,
-    foreign: ResolvedFieldMeta[] = [],
-  ): NestingCandidate[] => {
-    const unplaced: string[][] = [];
-    const args = nestGroup(rawArgs, group, leafNames, { createRequired, foreign, unplaced });
-    return [{ args, group, branchSchema, ...(unplaced.length > 0 && { unplaced }) }];
-  };
-  if (!extracted.variants && !extracted.unionOptions) return nest(extracted);
-
-  interface Branch {
-    group: NestingGroup;
-    schema: ArgsSchema | undefined;
-    /** The union options enclosing this branch, outermost first, ending with `schema` */
-    schemas: ArgsSchema[];
-    names: ReadonlySet<string>;
-    paths: ReadonlySet<string>;
-    objects: ReadonlyMap<string, boolean>;
-    /** An option of a plain union, which takes the first option that fits */
-    plain: boolean;
-    passthrough: boolean;
+  if (!extracted.variants && !extracted.unionOptions) {
+    return [{ args: nestGroup(rawArgs, extracted, leafNames, { createRequired: true }) }];
   }
-  const branches = (group: ExtractedFields, schemas: ArgsSchema[], plain: boolean): Branch[] => {
-    const branch = (
-      fields: NestingGroup & { retainsUnknownKeys?: boolean | undefined },
-    ): Branch => ({
-      group: fields,
-      schema: schemas.at(-1),
-      schemas,
-      names: new Set(fields.fields.map((field) => field.name)),
-      paths: new Set(fields.fields.map((field) => pathKey(field.nested?.path ?? [field.name]))),
-      objects: new Map(
-        (fields.nestedObjects ?? []).map((object) => [pathKey(object.path), !!object.passthrough]),
-      ),
-      plain,
-      // A variant keeps unknown keys by its own policy.
-      passthrough:
-        fields.retainsUnknownKeys ??
-        (group.unknownKeysMode === "passthrough" || !!group.retainsUnknownKeys),
-    });
-    if (group.variants && group.discriminator) {
-      const variant = selectVariant(rawArgs, group.discriminator, group.variants);
-      return variant ? [branch(variant)] : [];
-    }
-    if (group.unionOptions) {
-      return group.unionOptions.flatMap((option) =>
-        branches(option, [...schemas, option.schema], true),
+  if (extracted.variants && extracted.discriminator) {
+    const variant = selectVariant(rawArgs, extracted.discriminator, extracted.variants);
+    if (variant) {
+      // Another variant's given leaves go to their path, for this variant's
+      // unknown-key policy to strip, keep or reject like any unknown option.
+      const names = new Set(variant.fields.map((field) => field.name));
+      const foreign = [...fields.values()].filter(
+        (field) => field.nested && !names.has(field.name) && isGiven(rawArgs, field.name),
       );
+      const args = nestGroup(rawArgs, variant, leafNames, { createRequired: true, foreign });
+      return [{ args, group: variant }];
     }
-    return [branch(group)];
-  };
-  const all = branches(extracted, [], false);
-  // The given values of fields some branch defines.
-  const known = new Map<string, ResolvedFieldMeta>();
-  for (const { group } of all) {
-    for (const field of group.fields) if (!known.has(field.name)) known.set(field.name, field);
   }
-  for (const [name, leaf] of leaves) if (!known.has(name)) known.set(name, leaf);
-  const givenFields = [...known.values()].filter((field) => isGiven(rawArgs, field.name));
-  const givenPaths = [
-    ...Object.keys(rawArgs)
-      .filter((name) => !known.has(name) && rawArgs[name] !== undefined)
-      .map((name) => [name]),
-    ...givenFields.map((field) => field.nested?.path ?? [field.name]),
-  ];
-  // A plain union option without one of the given options would drop its
-  // value: a nested leaf is never placed, and a value it does not define is
-  // stripped. A discriminated union's variant treats the options of other
-  // variants like any unknown option, by its own unknown-key policy.
-  const covering = all.filter((branch) =>
-    givenFields.every(
-      (field) =>
-        branch.names.has(field.name) ||
-        !branch.plain ||
-        (field.nested
-          ? givenValueFate(branch, field.nested.path).fate !== "dropped"
-          : branch.passthrough),
-    ),
-  );
-  // Every branch's leaves and objects, with no branch deciding which
-  // required objects exist: reports errors when no branch fits.
-  const merged = nestGroup(
-    rawArgs,
-    { fields: [...leaves.values()], nestedObjects: [...objects.values()] },
-    leafNames,
-    { createRequired: false },
-  );
-  const options = givenFields.map((field) => `--${field.cliName}`).join(", ");
-  const nestBranch = (branch: Branch, createRequired: CreateRequired): NestingCandidate[] => {
-    const preceding = all
-      .slice(0, all.indexOf(branch))
-      .filter((earlier) => earlier.schema && earlier.schema !== branch.schema);
-    // Where this branch puts each given value, which another branch may
-    // define elsewhere under the same name.
-    const own = new Map(branch.group.fields.map((field) => [field.name, field]));
-    const given = givenFields.map((field) => {
-      const defined = own.get(field.name) ?? field;
-      return { name: field.name, path: defined.nested?.path ?? [defined.name] };
-    });
-    // Another variant's given leaves, placed at their path for this
-    // variant's policy to strip, keep or reject.
-    const foreign = givenFields.filter((field) => field.nested && !branch.names.has(field.name));
-    return nest(branch.group, branch.schema, createRequired, foreign).map((candidate) => ({
-      ...candidate,
-      branchSchemas: branch.schemas,
-      retention: branch,
-      // A variant leaves them to its unknown-key policy instead.
-      unplaced: branch.plain ? candidate.unplaced : undefined,
-      givenPaths,
-      given,
-      precedingBranches: preceding.map(({ schemas, group, paths, objects, passthrough }) => ({
-        schemas,
-        group,
-        paths,
-        objects,
-        passthrough,
-      })),
-    }));
-  };
-  // A plain union option is taken as a whole, so first create its required
-  // objects only inside an object a given value opened: otherwise an option
-  // would be chosen for values that never named it. Only when no option
-  // fits that way, create them all, so their defaults apply.
-  const plain = covering.filter((branch) => branch.plain);
-  return [
-    ...covering.flatMap((branch) => nestBranch(branch, branch.plain ? "opened" : true)),
-    ...plain.flatMap((branch) => nestBranch(branch, true)),
-    {
-      args: merged,
-      diagnosticOnly: {
-        message: `No single schema option accepts ${options || "these arguments"}.`,
-      },
-    },
-  ];
+  const merged = { fields: [...fields.values()], nestedObjects: [...objects.values()] };
+  return (["opened", true] as const).map((createRequired) => ({
+    args: nestGroup(rawArgs, merged, leafNames, { createRequired }),
+  }));
 }
 
 /**
@@ -646,12 +470,7 @@ function nestGroup(
   rawArgs: Record<string, unknown>,
   group: NestingGroup,
   leafNames: ReadonlySet<string>,
-  options: {
-    createRequired: CreateRequired;
-    foreign?: ResolvedFieldMeta[];
-    /** Collects the paths of foreign leaves that could not be placed */
-    unplaced?: string[][];
-  },
+  options: { createRequired: CreateRequired; foreign?: ResolvedFieldMeta[] },
 ): Record<string, unknown> {
   const result: Record<string, unknown> = { ...rawArgs };
   // Remove every flat name before building objects: a flat name may equal
@@ -705,9 +524,9 @@ function nestGroup(
   // One that cannot be placed stays under its flat name, for the schema's
   // unknown-key policy to handle rather than vanishing.
   for (const leaf of options.foreign ?? []) {
-    if (placeAt(result, leaf.nested!.path, rawArgs[leaf.name])) continue;
-    result[leaf.name] = rawArgs[leaf.name];
-    options.unplaced?.push(leaf.nested!.path);
+    if (!placeAt(result, leaf.nested!.path, rawArgs[leaf.name])) {
+      result[leaf.name] = rawArgs[leaf.name];
+    }
   }
   return result;
 }

@@ -1,7 +1,6 @@
 import {
   mergeIntersectionField,
   resolveFieldMeta,
-  retainsKeys,
   type ExtractedFields,
   type ResolvedFieldMeta,
   type UnknownKeysMode,
@@ -31,7 +30,6 @@ function resolve(name: string, schema: AnySchema): ResolvedFieldMeta {
     enumValues: (meta.enumValues ?? meta.literalValues)?.map(String),
     schema,
     objectShape: objectShape(schema),
-    objectUnknownKeys: objectMode(schema),
     objectTransformed: transformsObject(schema),
   });
 }
@@ -48,11 +46,6 @@ function transformsObject(schema: AnySchema): boolean {
   const { meta } = schema;
   if (meta.kind === "array" || !meta.inner) return false;
   return !("shape" in schema) || transformsObject(meta.inner);
-}
-function objectMode(schema: AnySchema): UnknownKeysMode | undefined {
-  const { meta } = schema;
-  if (meta.kind === "array") return undefined;
-  return meta.shape ? mode(meta) : meta.inner ? objectMode(meta.inner) : undefined;
 }
 function mode(meta: Meta): UnknownKeysMode {
   return meta.unknownKeys ?? "strip";
@@ -115,7 +108,6 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
           spellings.set(spelling, i);
           return {
             discriminatorValue: spelling,
-            retainsUnknownKeys: option.unknownKeysMode === "passthrough",
             normalizeDiscriminator: (value: unknown) => normalizeLiteral(value, discriminatorMeta!),
             fields: fieldsFor(option.fields),
             ...(option.description ? { description: option.description } : {}),
@@ -129,8 +121,6 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
         ...(option.unionMembers ?? []),
       ]);
       if (unionMembers.length > 0) result.unionMembers = unionMembers;
-      // The merged output keeps a property any member keeps.
-      result.retainsUnknownKeys = options.some(retainsKeys);
     }
   } else throw new TypeError("loculus command arguments must have object output");
   if (meta.description) result.description = meta.description;

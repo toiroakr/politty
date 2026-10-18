@@ -119,10 +119,7 @@ describe("package loading", () => {
     const command = defineCommand({
       name: "test",
       args: z.union([
-        z.object({
-          mode: z.literal("a"),
-          configPort: arg(z.boolean().optional(), { requiredPackages: missing }),
-        }),
+        z.object({ mode: z.literal("a"), name: z.string().optional() }),
         z.object({
           mode: z.literal("b"),
           config: arg(
@@ -136,28 +133,6 @@ describe("package loading", () => {
       },
     });
     expect((await runCommand(command, ["--mode", "b", "--config-port"])).success).toBe(false);
-    expect(ran).toBe(false);
-  });
-
-  it("loads argument packages from the earlier union option that kept the args", async () => {
-    let ran = false;
-    const command = defineCommand({
-      name: "test",
-      args: z.union([
-        z.object({
-          config: z.looseObject({
-            ui: arg(z.boolean().default(true), {
-              requiredPackages: [{ name: "@politty-test/missing-ui" }],
-            }),
-          }),
-        }),
-        z.object({ config: z.object({ port: z.string() }) }),
-      ]),
-      run: () => {
-        ran = true;
-      },
-    });
-    expect((await runCommand(command, ["--config.port", "80"])).success).toBe(false);
     expect(ran).toBe(false);
   });
 

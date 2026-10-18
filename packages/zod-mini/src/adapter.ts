@@ -21,7 +21,6 @@
 import {
   resolveFieldMeta as assembleFieldMeta,
   mergeIntersectionField,
-  retainsKeys,
   type ExtractedFields,
   type ResolvedFieldMeta,
   type UnknownKeysMode,
@@ -168,17 +167,6 @@ export function getUnknownKeysMode(schema: z.ZodMiniType): UnknownKeysMode {
 
   // Unknown catchall type, default to strip behavior
   return "strip";
-}
-
-/**
- * How a nested object field treats properties it does not define: as
- * {@link getUnknownKeysMode}, except that a typed catchall keeps the
- * unknown properties it validates.
- */
-function getObjectUnknownKeys(schema: z.ZodMiniType): UnknownKeysMode {
-  const mode = getUnknownKeysMode(schema);
-  const s = unwrapSchema(schema) as ZodSchemaWithDef;
-  return mode === "strip" && s.def?.catchall ? "passthrough" : mode;
 }
 
 /**
@@ -441,7 +429,6 @@ export function resolveZodMiniFieldMeta(name: string, schema: z.ZodMiniType): Re
     enumValues: extractEnumValues(schema),
     schema,
     objectShape: extractObjectShape(schema),
-    objectUnknownKeys: getObjectUnknownKeys(schema),
     objectTransformed: passesThroughPipe(schema),
   });
 }
@@ -536,7 +523,6 @@ function extractFromDiscriminatedUnion(schema: z.ZodMiniType): ExtractedFields {
     for (const value of allowed.length > 0 ? allowed : [discriminatorValue]) {
       variants.push({
         discriminatorValue: value,
-        retainsUnknownKeys: getObjectUnknownKeys(option as never) === "passthrough",
         fields: variantFields,
         ...(variantDescription ? { description: variantDescription } : {}),
       });
@@ -603,15 +589,12 @@ function extractFromIntersection(schema: z.ZodMiniType): ExtractedFields {
 
   const allFieldsMap = new Map<string, ResolvedFieldMeta>();
   const unionMembers: ExtractedFields[] = [];
-  let retainsUnknownKeys = false;
 
   // Helper to extract fields from a sub-schema
   const extractSubFields = (subSchema: z.ZodMiniType | undefined) => {
     if (!subSchema) return;
 
     const extracted = extractZodMiniFields(subSchema as ArgsSchema);
-    // The merged output keeps a property either member keeps.
-    retainsUnknownKeys ||= retainsKeys(extracted);
     if (extracted.unionOptions || extracted.variants) unionMembers.push(extracted);
     unionMembers.push(...(extracted.unionMembers ?? []));
     for (const field of extracted.fields) {
@@ -629,7 +612,6 @@ function extractFromIntersection(schema: z.ZodMiniType): ExtractedFields {
     schema: schema as ArgsSchema,
     schemaType: "intersection",
     unknownKeysMode: getUnknownKeysMode(schema),
-    retainsUnknownKeys,
     ...(unionMembers.length > 0 ? { unionMembers } : {}),
     ...(description ? { description } : {}),
   };
@@ -665,7 +647,6 @@ export function extractZodMiniFields(schema: ArgsSchema): ExtractedFields {
         schema,
         schemaType: "object",
         unknownKeysMode: getUnknownKeysMode(zodSchema),
-        retainsUnknownKeys: getObjectUnknownKeys(zodSchema) === "passthrough",
         ...(description ? { description } : {}),
       };
       break;
