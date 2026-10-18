@@ -175,11 +175,21 @@ function expandObjectField(
             : `no-${toKebabCase(cliName)}`
           : child.negationDisplay;
       // Like every other option, accept both the kebab-case and camelCase
-      // forms; the parser derives camelCase from `name`, so a camelCase
-      // option only needs its kebab-case form added (hidden from help).
+      // forms (hidden from help). The parser derives camelCase from `name`,
+      // which keeps an acronym (`baseURL`), so the camelCase form of the
+      // kebab-case spelling (`baseUrl`) is added too.
       const kebabName = toKebabCase(cliName);
+      const spellings = [kebabName, toCamelCase(kebabName)].filter(
+        (spelling) => spelling !== cliName && spelling !== name,
+      );
       const hiddenAlias =
-        kebabName === cliName ? child.hiddenAlias : [...(child.hiddenAlias ?? []), kebabName];
+        spellings.length === 0
+          ? child.hiddenAlias
+          : [...new Set([...(child.hiddenAlias ?? []), ...spellings])];
+      const defaultValue =
+        child.defaultValue !== undefined
+          ? child.defaultValue
+          : defaultFromEnclosing(objects, childPath);
       leaves.push({
         ...child,
         name,
@@ -189,11 +199,9 @@ function expandObjectField(
         description: child.description ?? description,
         // Name the value after the property, not the whole option path.
         placeholder: child.placeholder ?? toKebabCase(key).toUpperCase(),
-        required: objects.at(-1)!.required && child.required,
-        defaultValue:
-          child.defaultValue !== undefined
-            ? child.defaultValue
-            : defaultFromEnclosing(objects, childPath),
+        // A value an enclosing object's default supplies is never missing.
+        required: objects.at(-1)!.required && child.required && defaultValue === undefined,
+        defaultValue,
         negationDisplay,
         nested: { path: childPath },
       });
@@ -289,6 +297,8 @@ export interface NestingGroup {
 /** A union option that precedes the one a candidate nests by */
 export interface PrecedingBranch {
   schema: ArgsSchema;
+  /** The option's fields and expanded objects */
+  group: NestingGroup;
   /**
    * Keys (see {@link nestedPathKey}) of the paths the option's fields hold
    * values at: a leaf's property path, else the field name
@@ -502,8 +512,9 @@ export function nestingCandidates(
       ...candidate,
       givenPaths,
       given,
-      precedingBranches: preceding.map(({ schema, paths, objects, passthrough }) => ({
+      precedingBranches: preceding.map(({ schema, group, paths, objects, passthrough }) => ({
         schema: schema!,
+        group,
         paths,
         objects,
         passthrough,

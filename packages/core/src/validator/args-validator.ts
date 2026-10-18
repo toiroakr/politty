@@ -73,6 +73,8 @@ export function validateArgsBranch<T extends ArgsSchema>(
       }
     }
     const result = adapter.validate(candidate.args, schema);
+    // The branch whose output the union returns.
+    let producer = candidate.group;
     if (result.success && own?.success && candidate.precedingBranches?.length) {
       // The union takes the first option accepting the args; if that is an
       // earlier option without some of the given fields, it drops their
@@ -88,12 +90,13 @@ export function validateArgsBranch<T extends ArgsSchema>(
         reported ??= { success: false, errors: [{ path: [], message, code: "invalid_union" }] };
         continue;
       }
+      if (first) producer = first.group;
     }
     if (result.success) {
       if (!candidate.diagnosticOnly)
         return {
           result: result as ValidationResult<InferSchemaOutput<T>>,
-          branch: candidate.group,
+          branch: producer,
         };
       last = {
         success: false,

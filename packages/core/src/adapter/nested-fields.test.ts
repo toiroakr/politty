@@ -223,6 +223,20 @@ describe("nested object fields", () => {
     });
   });
 
+  it("should accept the camelCase spelling of an acronym property in every style", async () => {
+    for (const [flatten, option] of [
+      ["kebab", "--configBaseUrl"],
+      ["dot", "--config.baseUrl"],
+      ["camel", "--configBaseUrl"],
+    ] as const) {
+      const { cmd, seen } = captureArgs(
+        z.object({ config: arg(z.object({ baseURL: z.string() }), { flatten }) }),
+      );
+      await runCommand(cmd, [option, "x"]);
+      expect(seen).toEqual([{ config: { baseURL: "x" } }]);
+    }
+  });
+
   describe("errors", () => {
     it.each([
       [
@@ -603,6 +617,31 @@ describe("nested object fields", () => {
       );
       await runCommand(cmd, ["--config.port", "80"]);
       expect(seen).toEqual([{ config: { port: "80" } }]);
+    });
+
+    it("should accept a value an earlier option keeps through a typed catchall", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ config: z.object({ host: z.string().optional() }).catchall(z.string()) }),
+          z.object({ config: z.object({ port: z.string() }) }),
+        ]),
+      );
+      await runCommand(cmd, ["--config.port", "80"]);
+      expect(seen).toEqual([{ config: { port: "80" } }]);
+    });
+
+    it("should not require a leaf an enclosing intersection default supplies", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.intersection(
+            z.object({ config: z.object({ host: z.string() }).default({ host: "h" }) }),
+            z.object({ config: z.object({ port: z.string() }) }),
+          ),
+          z.object({ other: z.string() }),
+        ]),
+      );
+      await runCommand(cmd, ["--config.port", "80"]);
+      expect(seen).toEqual([{ config: { host: "h", port: "80" } }]);
     });
 
     it("should not take a union option for a required object no value named", async () => {

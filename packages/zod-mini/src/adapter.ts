@@ -170,6 +170,17 @@ export function getUnknownKeysMode(schema: z.ZodMiniType): UnknownKeysMode {
 }
 
 /**
+ * How a nested object field treats properties it does not define: as
+ * {@link getUnknownKeysMode}, except that a typed catchall keeps the
+ * unknown properties it validates.
+ */
+function getObjectUnknownKeys(schema: z.ZodMiniType): UnknownKeysMode {
+  const mode = getUnknownKeysMode(schema);
+  const s = unwrapSchema(schema) as ZodSchemaWithDef;
+  return mode === "strip" && s.def?.catchall ? "passthrough" : mode;
+}
+
+/**
  * Get the inner schema, unwrapping optional, nullable, default, etc.
  */
 function unwrapSchema(schema: z.ZodMiniType): z.ZodMiniType {
@@ -411,7 +422,7 @@ export function resolveZodMiniFieldMeta(name: string, schema: z.ZodMiniType): Re
     enumValues: extractEnumValues(schema),
     schema,
     objectShape: extractObjectShape(schema),
-    objectUnknownKeys: getUnknownKeysMode(schema),
+    objectUnknownKeys: getObjectUnknownKeys(schema),
   });
 }
 
