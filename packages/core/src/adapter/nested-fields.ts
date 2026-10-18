@@ -326,7 +326,13 @@ export function givenValueFate(
 ): { fate: "kept" | "dropped" } | { fate: "retained"; container: string[] } {
   for (let depth = 1; depth <= path.length; depth++) {
     const key = pathKey(path.slice(0, depth));
-    if (branch.paths.has(key)) return { fate: "kept" };
+    // A field holding the value itself keeps it; one holding an enclosing
+    // object (such as a record) may still drop it below, like a catchall.
+    if (branch.paths.has(key)) {
+      return depth === path.length
+        ? { fate: "kept" }
+        : { fate: "retained", container: path.slice(0, depth - 1) };
+    }
     if (branch.objects.has(key)) continue;
     // The object (or option) keeping the value as an unknown key.
     const container = path.slice(0, depth - 1);
@@ -579,9 +585,12 @@ function selectVariant(
 ): NonNullable<ExtractedFields["variants"]>[number] | undefined {
   const value = rawArgs[discriminator];
   if (value === undefined) {
-    const defaulted = variants.filter(
-      (v) => v.fields.find((f) => f.name === discriminator)?.defaultValue !== undefined,
-    );
+    // A variant listed once per allowed value counts only for the value
+    // its discriminator defaults to.
+    const defaulted = variants.filter((v) => {
+      const defaultValue = v.fields.find((f) => f.name === discriminator)?.defaultValue;
+      return defaultValue !== undefined && String(defaultValue) === v.discriminatorValue;
+    });
     return defaulted.length === 1 ? defaulted[0] : undefined;
   }
   return (

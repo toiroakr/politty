@@ -19,8 +19,12 @@ export async function runEffects(
 ): Promise<void> {
   for (const field of extracted.fields) {
     if (!field.effect) continue;
-    // A leaf of an object that was left out has no value of its own type.
-    if (field.nested && getFieldValue(validatedArgs, objectOf(field)) === undefined) continue;
+    // A leaf of an object that was left out, or that a transform turned
+    // into something else, has no value of its own type.
+    if (field.nested) {
+      const object = getFieldValue(validatedArgs, objectOf(field));
+      if (typeof object !== "object" || object === null) continue;
+    }
     await field.effect(getFieldValue(validatedArgs, field), {
       name: field.name,
       args: validatedArgs,

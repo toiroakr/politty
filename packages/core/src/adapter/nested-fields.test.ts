@@ -753,6 +753,21 @@ describe("nested object fields", () => {
       expect(seen).toEqual([{ config: { port: "90" } }]);
     });
 
+    it("should report a value an earlier option's own field drops below it", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({
+            config: z.record(z.string(), z.object({ host: z.string().optional() })),
+          }),
+          z.object({ config: z.object({ tls: z.object({ port: z.string() }) }) }),
+        ]),
+      );
+      const result = await runCommand(cmd, ["--config.tls.port", "80"]);
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain("config.tls.port would be ignored");
+      expect(seen).toEqual([]);
+    });
+
     it("should not count an earlier option its enclosing union rejects", async () => {
       const inner = z
         .union([z.object({ name: z.string().optional() }), z.object({ other: z.string() })])
@@ -892,6 +907,23 @@ describe("nested object fields", () => {
       await runCommand(cmd, ["--mode", "a"]);
       await runCommand(cmd, ["--mode", "b", "--config.port", "1"]);
       expect(seen).toEqual([{ mode: "a" }, { mode: "b", config: { port: "1" } }]);
+    });
+
+    it("should select the defaulted variant of a multi-value discriminator", () => {
+      const [candidate] = nestingCandidates(
+        { "config.port": "1" },
+        extractFields(
+          z.discriminatedUnion("mode", [
+            z.object({
+              mode: z.enum(["a", "b"]).default("a"),
+              config: z.object({ port: z.string() }).optional(),
+            }),
+            z.object({ mode: z.literal("c") }),
+          ]),
+        ),
+      );
+      expect(candidate).toMatchObject({ args: { config: { port: "1" } } });
+      expect(candidate?.diagnosticOnly).toBeUndefined();
     });
 
     it("should list every value of a multi-value discriminator", () => {
@@ -1043,9 +1075,11 @@ describe("nested object fields", () => {
       expect(collectOptionTokens("configTls-cert-file", undefined)).toEqual(
         expect.arrayContaining(["--configTlsCertFile", "--config-tls-cert-file"]),
       );
-      expect(quotedAvailabilityTokens("configUi", undefined, "noConfigUi")).toContain(
-        '"--no-config-ui"',
-      );
+      expect(
+        quotedAvailabilityTokens("configUi", undefined, "noConfigUi", { defaultNegation: true }),
+      ).toContain('"--no-config-ui"');
+      // A custom negation spelled like a default one is still custom.
+      expect(quotedAvailabilityTokens("tls", undefined, "noTls")).not.toContain('"--no-tls"');
     });
 
     it("should document the options of object fields in an args table", () => {
@@ -1076,6 +1110,20 @@ describe("nested object fields", () => {
     await runCommand(cmd, ["--config.port", "1"]);
     expect(seen).toEqual([{}, { config: { port: 1 } }]);
     expect(effect).toHaveBeenCalledTimes(1);
+  });
+
+  it("should not run the effects of an object a transform reshaped", async () => {
+    const effect = vi.fn((value: number) => {
+      value.toFixed();
+    });
+    const { cmd, seen } = captureArgs(
+      z.object({
+        config: z.object({ port: arg(z.coerce.number(), { effect }) }).transform((v) => v.port),
+      }),
+    );
+    const result = await runCommand(cmd, ["--config.port", "5"]);
+    expect(result.success).toBe(true);
+    expect(seen).toEqual([{ config: 5 }]);
   });
 
   describe("global args", () => {

@@ -389,6 +389,7 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
       continue;
     }
     const checks = quotedAvailabilityTokens(opt.cliName, opt.alias, opt.negation, {
+      defaultNegation: opt.defaultNegationAccepted,
       isGlobal: opt.isGlobal === true,
       frameOptions: options,
     });

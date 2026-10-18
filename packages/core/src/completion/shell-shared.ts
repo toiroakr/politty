@@ -281,6 +281,11 @@ export function quotedAvailabilityTokens(
      * \`--e\` suggestion.
      */
     frameOptions?: readonly CompletableOption[];
+    /**
+     * Whether the negation is the default `no-` form, which the parser
+     * accepts in every spelling of the option, unlike a custom one.
+     */
+    defaultNegation?: boolean | undefined;
   },
 ): string[] {
   // Mirror every spelling the runtime aliasMap accepts so the
@@ -293,10 +298,7 @@ export function quotedAvailabilityTokens(
     tokens.add(`--${negation}`);
     // A default negation (`no-<cliName>`) takes every spelling the option
     // does; a custom one only its camelCase form, as the parser registers.
-    const isDefault =
-      negation === `no-${toKebabCase(cliName)}` ||
-      negation === `no${cliName.charAt(0).toUpperCase()}${cliName.slice(1)}`;
-    if (isDefault) {
+    if (options?.defaultNegation) {
       const variants: string[] = [];
       pushCaseVariants(variants, negation);
       for (const variant of variants) tokens.add(variant);
@@ -343,7 +345,10 @@ export function namedPositionalGuards(
     const opt = options.find((o) => o.isGlobal !== true && o.name === pos.name);
     return (
       opt &&
-      quotedAvailabilityTokens(opt.cliName, opt.alias, opt.negation, { frameOptions: options })
+      quotedAvailabilityTokens(opt.cliName, opt.alias, opt.negation, {
+        frameOptions: options,
+        defaultNegation: opt.defaultNegationAccepted,
+      })
     );
   });
 }
