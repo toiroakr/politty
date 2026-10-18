@@ -1,5 +1,5 @@
 import {
-  addIntersectionField,
+  addIntersectionMember,
   resolveFieldMeta,
   type ExtractedFields,
   type ResolvedFieldMeta,
@@ -69,9 +69,10 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
     const unknownKeysMode = options[0]?.unknownKeysMode ?? "strip";
     const fields = new Map<string, ResolvedFieldMeta>();
     for (const option of options)
-      for (const field of option.fields)
-        if (meta.kind === "intersection") addIntersectionField(fields, field);
-        else if (!fields.has(field.name)) fields.set(field.name, field);
+      if (meta.kind === "intersection") addIntersectionMember(fields, option);
+      else
+        for (const field of option.fields)
+          if (!fields.has(field.name)) fields.set(field.name, field);
     result = {
       fields: [...fields.values()],
       schema,

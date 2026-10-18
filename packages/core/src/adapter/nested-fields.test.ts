@@ -351,6 +351,32 @@ describe("nested object fields", () => {
       ).toThrow(/Object field "config" is defined by more than one intersection member/);
     });
 
+    it("should reject an object field of a union inside an intersection", () => {
+      for (const union of [
+        z.union([
+          z.object({ config: z.object({ a: z.string() }) }),
+          z.object({ config: z.object({ b: z.string() }) }),
+        ]),
+        z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("a"), a: z.object({ x: z.string() }) }),
+          z.object({ mode: z.literal("b"), b: z.string() }),
+        ]),
+      ]) {
+        expect(() =>
+          extractFields(z.intersection(union, z.object({ n: z.string().optional() }))),
+        ).toThrow(/Object field "(config|a)" of a union inside an intersection/);
+      }
+      // A union without object fields is fine.
+      expect(() =>
+        extractFields(
+          z.intersection(
+            z.union([z.object({ a: z.string() }), z.object({ b: z.string() })]),
+            z.object({ config: z.object({ port: z.string().optional() }).optional() }),
+          ),
+        ),
+      ).not.toThrow();
+    });
+
     it("should reject a required object of a union option that no property is required for", () => {
       expect(() =>
         extractFields(

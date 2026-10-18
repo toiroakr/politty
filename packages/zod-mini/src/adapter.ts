@@ -19,7 +19,7 @@
  */
 
 import {
-  addIntersectionField,
+  addIntersectionMember,
   resolveFieldMeta as assembleFieldMeta,
   type ExtractedFields,
   type ResolvedFieldMeta,
@@ -569,7 +569,7 @@ function extractFromIntersection(schema: z.ZodMiniType): ExtractedFields {
     if (!subSchema) return;
 
     const extracted = extractZodMiniFields(subSchema as ArgsSchema);
-    for (const field of extracted.fields) addIntersectionField(allFieldsMap, field);
+    addIntersectionMember(allFieldsMap, extracted);
   };
 
   extractSubFields(left);

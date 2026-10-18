@@ -675,5 +675,13 @@ describe("@politty/loculus", () => {
         ),
       ),
     ).toMatch(/more than one intersection member/);
+    expect(
+      await failure(
+        l.intersection(
+          l.union([l.object({ config: l.object({ a: l.string() }) }), l.object({ b: l.string() })]),
+          l.object({ n: l.string({ optional: true }) }),
+        ),
+      ),
+    ).toMatch(/of a union inside an intersection/);
   });
 });

@@ -188,7 +188,9 @@ when fields are extracted:
 - A property cannot have an `effect` or `requiredPackages` when an enclosing
   object has a transform (or pipes into another schema), as the transform may
   change the value they read. Refinements are fine.
-- An object field cannot be defined by more than one intersection member.
+- An object field cannot be defined by more than one intersection member,
+  nor by a union (or discriminated union) inside an intersection: put the
+  fields the intersection adds into each union option instead.
 - In a plain union, a required object needs at least one required property
   (or make it optional, or use a discriminated union): a union cannot tell
   which option's objects to create from their defaults.

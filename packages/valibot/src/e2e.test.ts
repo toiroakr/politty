@@ -251,5 +251,13 @@ describe("@politty/valibot e2e", () => {
         ]),
       ),
     ).toMatch(/more than one intersection member/);
+    expect(
+      await failure(
+        v.intersect([
+          v.union([v.object({ config: v.object({ a: v.string() }) }), v.object({ b: v.string() })]),
+          v.object({ n: v.optional(v.string()) }),
+        ]),
+      ),
+    ).toMatch(/of a union inside an intersection/);
   });
 });

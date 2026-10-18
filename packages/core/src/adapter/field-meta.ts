@@ -423,22 +423,42 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
 }
 
 /**
- * Add one intersection member's definition of a field to the fields of the
- * members before it, keeping the first definition.
+ * Add the fields of one intersection member to the fields of the members
+ * before it, keeping the first definition of each.
  *
- * @throws When several members define the field and one of them as an
- * object: only one definition's properties could become options
+ * @throws When several members define a field and one of them as an
+ * object, or a union member has an object field: only one definition's
+ * properties could become options
  */
-export function addIntersectionField(
+export function addIntersectionMember(
   fields: Map<string, ResolvedFieldMeta>,
-  field: ResolvedFieldMeta,
+  member: ExtractedFields,
 ): void {
-  const existing = fields.get(field.name);
-  if (!existing) {
-    fields.set(field.name, field);
-  } else if (existing.objectShape || field.objectShape) {
-    throw new Error(
-      `Object field "${field.name}" is defined by more than one intersection member: define it in one member only.`,
-    );
+  // A union member's fields keep only its first option's definition of each.
+  if (member.variants || member.unionOptions) {
+    const object = branchFields(member).find((field) => field.objectShape);
+    if (object) {
+      throw new Error(
+        `Object field "${object.name}" of a union inside an intersection cannot be expanded into options: move the fields the intersection adds into each union option instead.`,
+      );
+    }
   }
+  for (const field of member.fields) {
+    const existing = fields.get(field.name);
+    if (!existing) {
+      fields.set(field.name, field);
+    } else if (existing.objectShape || field.objectShape) {
+      throw new Error(
+        `Object field "${field.name}" is defined by more than one intersection member: define it in one member only.`,
+      );
+    }
+  }
+}
+
+function branchFields(extracted: ExtractedFields): ResolvedFieldMeta[] {
+  return [
+    ...extracted.fields,
+    ...(extracted.variants ?? []).flatMap((variant) => variant.fields),
+    ...(extracted.unionOptions ?? []).flatMap(branchFields),
+  ];
 }

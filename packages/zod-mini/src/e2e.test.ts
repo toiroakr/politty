@@ -249,5 +249,13 @@ describe("@politty/zod-mini e2e", () => {
         ),
       ),
     ).toMatch(/more than one intersection member/);
+    expect(
+      await failure(
+        z.intersection(
+          z.union([z.object({ config: z.object({ a: z.string() }) }), z.object({ b: z.string() })]),
+          z.object({ n: z.optional(z.string()) }),
+        ),
+      ),
+    ).toMatch(/of a union inside an intersection/);
   });
 });

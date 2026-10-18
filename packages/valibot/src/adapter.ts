@@ -9,7 +9,7 @@
  */
 
 import {
-  addIntersectionField,
+  addIntersectionMember,
   resolveFieldMeta as assembleFieldMeta,
   type ExtractedFields,
   type ResolvedFieldMeta,
@@ -560,7 +560,7 @@ function extractFromIntersect(schema: ValibotNode): ExtractedFields {
 
   for (const option of schema.options ?? []) {
     const extracted = extractValibotFields(option as ArgsSchema);
-    for (const field of extracted.fields) addIntersectionField(allFieldsMap, field);
+    addIntersectionMember(allFieldsMap, extracted);
   }
 
   const description = extractDescription(schema);
