@@ -417,7 +417,10 @@ export function nestingCandidates(
   // option with all its required objects, so their defaults apply, and the
   // given leaves of other options at their paths.
   const merged = { fields: [...fields.values()], nestedObjects: [...objects.values()] };
-  const options = extracted.unionOptions ?? extracted.variants ?? [];
+  // Every alternative, through nested unions and variants.
+  const alternatives = (group: ExtractedFields): NestingGroup[] =>
+    group.unionOptions?.flatMap(alternatives) ?? group.variants ?? [group];
+  const options = alternatives(extracted);
   return [
     { args: nestGroup(rawArgs, merged, leafNames, { createRequired: false }) },
     ...options.map((option) => {

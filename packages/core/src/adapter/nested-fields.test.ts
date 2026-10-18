@@ -550,6 +550,22 @@ describe("nested object fields", () => {
       ]);
     });
 
+    it("should create only the required objects of a nested union's variant", async () => {
+      const variant = (mode: "a" | "b") =>
+        z.strictObject({
+          mode: z.literal(mode),
+          [mode]: z.object({ port: z.string().default("80") }),
+        });
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.discriminatedUnion("mode", [variant("a"), variant("b")]),
+          z.object({ name: z.string() }),
+        ]),
+      );
+      await runCommand(cmd, ["--mode", "a"]);
+      expect(seen).toEqual([{ mode: "a", a: { port: "80" } }]);
+    });
+
     it("should not create another option's required object inside a strict one", async () => {
       const { cmd, seen } = captureArgs(
         z.union([
