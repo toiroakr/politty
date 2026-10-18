@@ -483,6 +483,11 @@ export function mergeIntersectionField(
   first: ResolvedFieldMeta,
   next: ResolvedFieldMeta,
 ): ResolvedFieldMeta {
+  // Only one member defining an object still expands it; the schema
+  // validates the other member's constraint.
+  if (!first.objectShape && next.objectShape) {
+    return { ...next, required: first.required || next.required };
+  }
   if (!first.objectShape || !next.objectShape) return first;
   return {
     ...first,

@@ -1294,6 +1294,24 @@ describe("nested object fields", () => {
     expect(seen).toEqual([{ config: { port: "80" } }]);
   });
 
+  it.each([
+    ["first", false],
+    ["second", true],
+  ] as const)(
+    "should expand an object only the %s intersection member defines",
+    async (_, reversed) => {
+      const members = [
+        z.object({ config: z.unknown() }),
+        z.object({ config: z.object({ port: z.string() }) }),
+      ] as const;
+      const [left, right] = reversed ? [members[0], members[1]] : [members[1], members[0]];
+      const { cmd, seen } = captureArgs(z.intersection(left, right));
+      const result = await runCommand(cmd, ["--config.port", "80"]);
+      expect(result.success).toBe(true);
+      expect(seen).toEqual([{ config: { port: "80" } }]);
+    },
+  );
+
   describe("global args", () => {
     it("should keep the source of a retained global property by the accepted variant", async () => {
       vi.stubEnv("NESTED_TEST_TOKEN", "secret");
