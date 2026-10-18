@@ -469,6 +469,10 @@ export function mergeIntersectionField(
   if (!first.objectShape && next.objectShape) {
     return { ...next, required: first.required || next.required };
   }
+  // The expanded object is created when either member requires it.
+  if (first.objectShape && !next.objectShape) {
+    return { ...first, required: first.required || next.required };
+  }
   if (!first.objectShape || !next.objectShape) return first;
   return {
     ...first,

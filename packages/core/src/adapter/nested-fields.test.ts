@@ -535,6 +535,37 @@ describe("nested object fields", () => {
       },
     );
 
+    it("should create only the required objects of the option it tries", async () => {
+      const option = (mode: "a" | "b") =>
+        z.strictObject({
+          mode: z.literal(mode),
+          [mode]: z.object({ port: z.string().default("80") }),
+        });
+      const { cmd, seen } = captureArgs(z.union([option("a"), option("b")]));
+      await runCommand(cmd, ["--mode", "a"]);
+      await runCommand(cmd, ["--mode", "b"]);
+      expect(seen).toEqual([
+        { mode: "a", a: { port: "80" } },
+        { mode: "b", b: { port: "80" } },
+      ]);
+    });
+
+    it("should not create another option's required object inside a strict one", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ config: z.strictObject({ port: z.string() }) }),
+          z.object({
+            config: z.object({
+              port: z.string(),
+              tls: z.object({ cert: z.string().default("c") }),
+            }),
+          }),
+        ]),
+      );
+      await runCommand(cmd, ["--config.port", "80"]);
+      expect(seen).toEqual([{ config: { port: "80" } }]);
+    });
+
     it("should run a union option's leaf transform once", async () => {
       const transform = vi.fn((value: string) => value);
       const { cmd, seen } = captureArgs(
@@ -1257,6 +1288,22 @@ describe("nested object fields", () => {
       const [left, right] = reversed ? [members[0], members[1]] : [members[1], members[0]];
       const { cmd, seen } = captureArgs(z.intersection(left, right));
       const result = await runCommand(cmd, ["--config.port", "80"]);
+      expect(result.success).toBe(true);
+      expect(seen).toEqual([{ config: { port: "80" } }]);
+    },
+  );
+
+  it.each([false, true])(
+    "should create an object a non-object intersection member requires (reversed: %s)",
+    async (reversed) => {
+      const members = [
+        z.object({ config: z.object({ port: z.string().default("80") }).optional() }),
+        z.object({ config: z.record(z.string(), z.string()) }),
+      ] as const;
+      const { cmd, seen } = captureArgs(
+        reversed ? z.intersection(members[1], members[0]) : z.intersection(members[0], members[1]),
+      );
+      const result = await runCommand(cmd, []);
       expect(result.success).toBe(true);
       expect(seen).toEqual([{ config: { port: "80" } }]);
     },

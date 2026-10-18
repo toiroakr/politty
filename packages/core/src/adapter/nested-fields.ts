@@ -368,10 +368,7 @@ export interface NestingCandidate {
  * required and its parent exists, so a missing value is reported on the
  * leaf option rather than on an object no option names, and its
  * properties' defaults apply. An optional object without values stays
- * absent. (Expanded objects have no defaults of their own.) A union's
- * options are nested together, creating required objects only inside one a
- * given value opened first, so no option is chosen for objects nothing
- * named, and then all of them, so their defaults apply.
+ * absent. (Expanded objects have no defaults of their own.)
  *
  * @param rawArgs - Parsed args keyed by field name
  * @param extracted - Extracted fields of the schema
@@ -392,11 +389,7 @@ export function nestingCandidates(
       }
       for (const object of g.nestedObjects ?? []) {
         const key = pathKey(object.path);
-        const existing = objects.get(key);
-        // Required if any option requires it: the first nesting creates
-        // required objects only where a value opened them, and an option
-        // that does not require one accepts it either way.
-        if (!existing || (object.required && !existing.required)) objects.set(key, object);
+        if (!objects.has(key)) objects.set(key, object);
       }
     }
     for (const option of group.unionOptions ?? []) collect(option);
@@ -419,17 +412,23 @@ export function nestingCandidates(
       return [{ args, group: variant }];
     }
   }
+  // First every option's leaves at once, creating only the objects holding
+  // them, so no option is chosen for objects nothing named. Then each
+  // option with all its required objects, so their defaults apply, and the
+  // given leaves of other options at their paths.
   const merged = { fields: [...fields.values()], nestedObjects: [...objects.values()] };
-  return (["opened", true] as const).map((createRequired) => ({
-    args: nestGroup(rawArgs, merged, leafNames, { createRequired }),
-  }));
+  const options = extracted.unionOptions ?? extracted.variants ?? [];
+  return [
+    { args: nestGroup(rawArgs, merged, leafNames, { createRequired: false }) },
+    ...options.map((option) => {
+      const names = new Set(option.fields.map((field) => field.name));
+      const foreign = [...fields.values()].filter(
+        (field) => field.nested && !names.has(field.name) && isGiven(rawArgs, field.name),
+      );
+      return { args: nestGroup(rawArgs, option, leafNames, { createRequired: true, foreign }) };
+    }),
+  ];
 }
-
-/**
- * Which required objects to create: all of them, only those inside an
- * object a given value opened (`"opened"`), or none.
- */
-type CreateRequired = boolean | "opened";
 
 /** Whether a value was given under a name: an inherited `toString` is none */
 function isGiven(rawArgs: Record<string, unknown>, name: string): boolean {
@@ -474,7 +473,11 @@ function nestGroup(
   rawArgs: Record<string, unknown>,
   group: NestingGroup,
   leafNames: ReadonlySet<string>,
-  options: { createRequired: CreateRequired; foreign?: ResolvedFieldMeta[] },
+  options: {
+    /** Whether to create required objects (inside existing parents) too */
+    createRequired: boolean;
+    foreign?: ResolvedFieldMeta[];
+  },
 ): Record<string, unknown> {
   const result: Record<string, unknown> = { ...rawArgs };
   // Remove every flat name before building objects: a flat name may equal
@@ -496,8 +499,7 @@ function nestGroup(
   if (options.createRequired) {
     for (const object of objects) {
       const parent = object.path.slice(0, -1);
-      const inside =
-        parent.length === 0 ? options.createRequired === true : present.has(pathKey(parent));
+      const inside = parent.length === 0 || present.has(pathKey(parent));
       if (object.required && inside) {
         present.add(pathKey(object.path));
       }
