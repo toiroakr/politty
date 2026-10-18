@@ -211,6 +211,34 @@ describe("@politty/valibot e2e", () => {
     expect(result.result).toEqual({ mode: "b", config: { port: "80" } });
   });
 
+  it("should reject effects inside an object a transform may replace", async () => {
+    const port = () => arg(v.string(), { effect: () => {} });
+    for (const config of [
+      v.pipe(
+        v.object({ port: port() }),
+        v.transform((value) => ({ listen: value.port })),
+      ),
+      v.optional(v.pipe(v.object({ port: port() }), v.object({ port: v.string() }))),
+    ]) {
+      const cmd = defineCommand({ name: "serve", args: v.object({ config }), run: () => {} });
+      const result = await runCommand(cmd, ["--config.port", "1"]);
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toMatch(/cannot have an effect/);
+    }
+
+    const checked = defineCommand({
+      name: "serve",
+      args: v.object({
+        config: v.pipe(
+          v.object({ port: port() }),
+          v.check((value) => value.port !== ""),
+        ),
+      }),
+      run: (args) => args.config,
+    });
+    expect((await runCommand(checked, ["--config.port", "1"])).result).toEqual({ port: "1" });
+  });
+
   it("should reject a default on an object field", async () => {
     const cmd = defineCommand({
       name: "serve",

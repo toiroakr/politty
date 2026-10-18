@@ -111,6 +111,12 @@ export interface ResolvedFieldMeta {
   objectShapes?: Array<Record<string, unknown>> | undefined;
   /** How an object field treats properties it does not define */
   objectUnknownKeys?: UnknownKeysMode | undefined;
+  /**
+   * Whether a transform (or a pipe into another schema) may replace an
+   * object field's validated value, so its properties' values are not
+   * what their own schemas produce
+   */
+  objectTransformed?: boolean | undefined;
   /** Naming style for the options an object field expands into */
   flatten?: NestedKeyStyle | undefined;
   /**
@@ -265,6 +271,8 @@ export interface FieldIntrospection {
   objectShape?: Record<string, unknown> | undefined;
   /** How the object treats properties it does not define */
   objectUnknownKeys?: UnknownKeysMode | undefined;
+  /** Whether a transform may replace the object's validated value */
+  objectTransformed?: boolean | undefined;
 }
 
 const NESTED_KEY_STYLES: readonly NestedKeyStyle[] = ["dot", "kebab", "camel"];
@@ -442,6 +450,7 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
     requiredPackages: argMeta?.requiredPackages,
     objectShape: intro.objectShape,
     objectUnknownKeys: intro.objectShape ? intro.objectUnknownKeys : undefined,
+    objectTransformed: intro.objectShape ? intro.objectTransformed : undefined,
     flatten: rawFlatten as NestedKeyStyle | undefined,
   };
 
@@ -480,6 +489,7 @@ export function mergeIntersectionField(
       first.objectUnknownKeys === "passthrough" || next.objectUnknownKeys === "passthrough"
         ? "passthrough"
         : first.objectUnknownKeys,
+    objectTransformed: first.objectTransformed || next.objectTransformed,
     objectShapes: [
       ...(first.objectShapes ?? [first.objectShape]),
       ...(next.objectShapes ?? [next.objectShape]),

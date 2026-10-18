@@ -107,6 +107,24 @@ function unwrapSchema(schema: ValibotNode): ValibotNode {
 }
 
 /**
+ * Whether a pipe on the schema or a wrapper {@link unwrapSchema} reads
+ * through transforms the value, or pipes it into another schema.
+ */
+function transformsWrapped(schema: ValibotNode): boolean {
+  let current: ValibotNode | undefined = schema;
+  while (current) {
+    if (
+      current.pipe
+        ?.slice(1)
+        .some((item) => item.kind === "transformation" || item.kind === "schema")
+    )
+      return true;
+    current = current.type && UNWRAPPABLE.has(current.type) ? current.wrapped : undefined;
+  }
+  return false;
+}
+
+/**
  * Detect the base type of a schema.
  *
  * Input-side detection (matching the zod adapter, which unwraps pipes to
@@ -400,6 +418,7 @@ export function resolveValibotFieldMeta(name: string, schema: unknown): Resolved
     schema,
     objectShape: extractObjectShape(node),
     objectUnknownKeys: getUnknownKeysMode(node),
+    objectTransformed: transformsWrapped(node),
   });
 }
 

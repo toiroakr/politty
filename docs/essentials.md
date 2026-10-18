@@ -165,6 +165,10 @@ none of its options is given. An expanded object itself cannot have a default
 Object fields of a union (or discriminated union) inside an intersection
 cannot be expanded either: put the fields the intersection adds into each union
 option instead.
+A property cannot have an `effect` when an enclosing object has a transform
+(or pipes into another schema), as that may change the value the effect would
+receive: run the effect on the transformed value in `run`, or move the
+transform onto the property. Refinements are fine.
 
 `flatten` picks how keys are joined into option names (default: `"dot"`).
 A nested object without its own `flatten` inherits the style of the object

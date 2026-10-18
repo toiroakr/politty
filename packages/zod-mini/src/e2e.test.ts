@@ -282,6 +282,22 @@ describe("@politty/zod-mini e2e", () => {
     expect(absent.result).toBeUndefined();
   });
 
+  it("should reject effects inside an object a transform may replace", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: z.object({
+        config: z.pipe(
+          z.object({ port: arg(z.string(), { effect: () => {} }) }),
+          z.transform((value) => ({ listen: value.port })),
+        ),
+      }),
+      run: () => {},
+    });
+    const result = await runCommand(cmd, ["--config.port", "1"]);
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toMatch(/cannot have an effect/);
+  });
+
   it("should keep nested properties of both intersection members", async () => {
     const cmd = defineCommand({
       name: "serve",

@@ -207,6 +207,20 @@ function unwrapSchema(schema: z.ZodMiniType): z.ZodMiniType {
 }
 
 /**
+ * Whether the wrappers {@link unwrapSchema} reads through include a pipe
+ * (a transform, or a pipe into another schema), which may replace the
+ * value of the schema it wraps.
+ */
+function passesThroughPipe(schema: z.ZodMiniType): boolean {
+  const typeName = getTypeName(schema);
+  const s = schema as ZodSchemaWithDef;
+  const def = s.def;
+  if (typeName === "pipe") return true;
+  const innerSchema = typeName && INNER_TYPE_WRAPPERS.has(typeName) ? def?.innerType : undefined;
+  return innerSchema ? passesThroughPipe(innerSchema) : false;
+}
+
+/**
  * Detect the base type of a schema
  */
 function detectType(schema: z.ZodMiniType): ResolvedFieldMeta["type"] {
@@ -427,6 +441,7 @@ export function resolveZodMiniFieldMeta(name: string, schema: z.ZodMiniType): Re
     schema,
     objectShape: extractObjectShape(schema),
     objectUnknownKeys: getObjectUnknownKeys(schema),
+    objectTransformed: passesThroughPipe(schema),
   });
 }
 

@@ -136,7 +136,12 @@ function expandObjectField(
     object: ResolvedFieldMeta,
     path: string[],
     names: { name: string; cliName: string; kebab: string },
-    inherited: { style: NestedKeyStyle; description: string | undefined },
+    inherited: {
+      style: NestedKeyStyle;
+      description: string | undefined;
+      /** The nearest enclosing object (or this one) a transform may replace */
+      transformed: string[] | undefined;
+    },
     enclosingRequired: boolean,
   ): void => {
     const unsupported = UNSUPPORTED_OBJECT_META.filter((key) => Boolean(object[key]));
@@ -159,6 +164,7 @@ function expandObjectField(
     });
     const style = object.flatten ?? inherited.style;
     const description = object.description ?? inherited.description;
+    const transformed = object.objectTransformed ? path : inherited.transformed;
     // A camelCase parent prefix keeps camelCase all the way down.
     const cliPrefix = style === "camel" && path.length === 1 ? names.name : names.cliName;
     // Whether this object, and so every enclosing one, must be present.
@@ -181,8 +187,22 @@ function expandObjectField(
       const kebab = `${names.kebab}${style === "dot" ? "." : "-"}${toKebabCase(key)}`;
 
       if (child.objectShape) {
-        walk(child, childPath, { name, cliName, kebab }, { style, description }, required);
+        walk(
+          child,
+          childPath,
+          { name, cliName, kebab },
+          { style, description, transformed },
+          required,
+        );
         continue;
+      }
+
+      // An effect takes its property's value, which a transform of an
+      // enclosing object may replace or reshape.
+      if (child.effect && transformed) {
+        throw new Error(
+          `Property "${childPath.join(".")}" cannot have an effect: its object "${transformed.join(".")}" has a transform, which may change the value. Run the effect on the transformed value elsewhere, or move the transform onto the property.`,
+        );
       }
 
       // Runtime reads `--no-` followed by a lowercase name, so a non-camel
@@ -223,7 +243,7 @@ function expandObjectField(
     root,
     [root.name],
     { name: root.name, cliName: root.cliName, kebab: toKebabCase(root.cliName) },
-    { style: "dot", description: undefined },
+    { style: "dot", description: undefined, transformed: undefined },
     true,
   );
   return leaves;

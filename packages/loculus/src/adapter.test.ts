@@ -678,6 +678,29 @@ describe("@politty/loculus", () => {
     expect((await runCommand(command, [])).result).toEqual([]);
   });
 
+  it("rejects effects inside an object a transform may replace", async () => {
+    const port = () => arg(l.string(), { effect: () => {} });
+    const transformed = defineCommand({
+      name: "serve",
+      args: l.object({
+        config: l.transform(l.object({ port: port() }), (value) => ({ listen: value.port })),
+      }),
+      run: () => {},
+    });
+    const result = await runCommand(transformed, ["--config.port", "1"]);
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toMatch(/cannot have an effect/);
+
+    const refined = defineCommand({
+      name: "serve",
+      args: l.object({
+        config: l.refine(l.object({ port: port() }), (value) => value.port !== "", "Empty"),
+      }),
+      run: (args) => args.config,
+    });
+    expect((await runCommand(refined, ["--config.port", "1"])).result).toEqual({ port: "1" });
+  });
+
   it("rejects a default on an object field", async () => {
     const command = defineCommand({
       name: "serve",

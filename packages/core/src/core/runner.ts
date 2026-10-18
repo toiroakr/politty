@@ -79,11 +79,6 @@ const defaultLogger: Logger = {
  */
 const USAGE_ERROR_EXIT_CODE = 2;
 
-/** Whether the args to validate hold a value of their own for a field */
-function isGivenValue(args: Record<string, unknown>, name: string): boolean {
-  return Object.hasOwn(args, name) && args[name] !== undefined;
-}
-
 /**
  * Attach a non-enumerable `$source` helper to the final args object so it
  * stays invisible to `Object.keys`/`JSON.stringify`/spread (those only ever
@@ -1064,9 +1059,7 @@ async function runCommandInternal<TResult = unknown>(
           accumulatedGlobalArgs,
         );
       if (selectedGlobal && !isCompletionInvocation) {
-        await runEffects(proxiedGlobalArgs, selectedGlobal, proxiedGlobalArgs, (name) =>
-          isGivenValue(accumulatedGlobalArgs, name),
-        );
+        await runEffects(proxiedGlobalArgs, selectedGlobal, proxiedGlobalArgs);
       }
       collector?.stop();
       const mergedArgs = proxiedGlobalArgs as Record<string, never>;
@@ -1185,18 +1178,10 @@ async function runCommandInternal<TResult = unknown>(
         argsToValidate,
       );
     if (selectedGlobal && !isCompletionInvocation) {
-      await runEffects(proxiedGlobalArgs, selectedGlobal, proxiedGlobalArgs, (name) =>
-        isGivenValue(accumulatedGlobalArgs, name),
-      );
+      await runEffects(proxiedGlobalArgs, selectedGlobal, proxiedGlobalArgs);
     }
     if (selectedLocal && !isCompletionInvocation) {
-      await runEffects(
-        proxiedCommandArgs,
-        selectedLocal,
-        proxiedGlobalArgs,
-        // CLI, env, prompted and prefilled values alike.
-        (name) => isGivenValue(argsToValidate, name),
-      );
+      await runEffects(proxiedCommandArgs, selectedLocal, proxiedGlobalArgs);
     }
 
     // Merge global args with command args (command args take precedence on collision)

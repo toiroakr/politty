@@ -1017,16 +1017,26 @@ describe("nested object fields", () => {
   });
 
   describe("values inside objects", () => {
-    it("should run leaf effects when the object becomes a class instance", async () => {
-      class Config {
-        constructor(readonly port: number) {}
+    it("should reject effects inside an object a transform may replace", () => {
+      const effect = vi.fn();
+      const port = () => arg(z.coerce.number(), { effect });
+      for (const config of [
+        z.object({ port: port() }).transform((v) => ({ port: String(v.port) })),
+        z
+          .object({ port: port() })
+          .pipe(z.object({ port: z.number() }))
+          .optional(),
+        z.object({ server: z.object({ port: port() }) }).transform((v) => v.server),
+      ]) {
+        expect(() => extractFields(z.object({ config }))).toThrow(/cannot have an effect/);
       }
+    });
+
+    it("should keep effects inside refined objects", async () => {
       const effect = vi.fn();
       const { cmd } = captureArgs(
         z.object({
-          config: z
-            .object({ port: arg(z.coerce.number(), { effect }) })
-            .transform((value) => new Config(value.port)),
+          config: z.object({ port: arg(z.coerce.number(), { effect }) }).refine((v) => v.port > 0),
         }),
       );
       await runCommand(cmd, ["--config.port", "5"]);
@@ -1132,64 +1142,6 @@ describe("nested object fields", () => {
     await runCommand(cmd, ["--config.port", "1"]);
     expect(seen).toEqual([{}, { config: { port: 1 } }]);
     expect(effect).toHaveBeenCalledTimes(1);
-  });
-
-  it("should not run the effects of an object a transform reshaped", async () => {
-    const effect = vi.fn((value: number) => {
-      value.toFixed();
-    });
-    const { cmd, seen } = captureArgs(
-      z.object({
-        config: z.object({ port: arg(z.coerce.number(), { effect }) }).transform((v) => v.port),
-      }),
-    );
-    const result = await runCommand(cmd, ["--config.port", "5"]);
-    expect(result.success).toBe(true);
-    expect(seen).toEqual([{ config: 5 }]);
-  });
-
-  it("should not run the effects of leaves an object-to-object transform renamed", async () => {
-    const portEffect = vi.fn((value: number) => {
-      value.toFixed();
-    });
-    const hostEffect = vi.fn((value: string | undefined) => {
-      value!.trim();
-    });
-    const { cmd, seen } = captureArgs(
-      z.object({
-        config: z
-          .object({
-            port: arg(z.coerce.number(), { effect: portEffect }),
-            host: arg(z.string().optional(), { effect: hostEffect }),
-          })
-          .transform((v) => ({ listenPort: v.port, listenHost: v.host })),
-      }),
-    );
-    const result = await runCommand(cmd, ["--config.port", "5", "--config.host", "h"]);
-    expect(result.success).toBe(true);
-    expect(seen).toEqual([{ config: { listenPort: 5, listenHost: "h" } }]);
-    expect(portEffect).not.toHaveBeenCalled();
-    expect(hostEffect).not.toHaveBeenCalled();
-  });
-
-  it("should not run the effects of renamed leaves whose value was prompted for", async () => {
-    const effect = vi.fn((value: number) => {
-      value.toFixed();
-    });
-    const { cmd, seen } = captureArgs(
-      z.object({
-        config: z
-          .object({ port: arg(z.coerce.number(), { effect }) })
-          .transform((v) => ({ listenPort: v.port }))
-          .optional(),
-      }),
-    );
-    const result = await runCommand(cmd, [], {
-      prompt: async () => ({ "config.port": "5" }),
-    });
-    expect(result.success).toBe(true);
-    expect(seen).toEqual([{ config: { listenPort: 5 } }]);
-    expect(effect).not.toHaveBeenCalled();
   });
 
   it("should run the effects of optional leaves that were left out", async () => {

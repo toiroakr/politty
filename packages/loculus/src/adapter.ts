@@ -31,6 +31,7 @@ function resolve(name: string, schema: AnySchema): ResolvedFieldMeta {
     schema,
     objectShape: objectShape(schema),
     objectUnknownKeys: objectMode(schema),
+    objectTransformed: transformsObject(schema),
   });
 }
 // `inner` is a wrapped schema, or an array's element schema: an array of
@@ -39,6 +40,13 @@ function objectShape(schema: AnySchema): Record<string, AnySchema> | undefined {
   const { meta } = schema;
   if (meta.kind === "array") return undefined;
   return meta.shape ?? (meta.inner ? objectShape(meta.inner) : undefined);
+}
+// `transform` wraps a schema as `inner` without keeping the object's own
+// `shape` property, which `refine` keeps along with everything else.
+function transformsObject(schema: AnySchema): boolean {
+  const { meta } = schema;
+  if (meta.kind === "array" || !meta.inner) return false;
+  return !("shape" in schema) || transformsObject(meta.inner);
 }
 function objectMode(schema: AnySchema): UnknownKeysMode | undefined {
   const { meta } = schema;
