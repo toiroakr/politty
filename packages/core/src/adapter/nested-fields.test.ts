@@ -728,6 +728,20 @@ describe("nested object fields", () => {
       expect(seen).toEqual([{ selected: { port: "80" } }]);
     });
 
+    it("should keep a value a loose variant of an earlier option retains", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.discriminatedUnion("mode", [
+            z.looseObject({ mode: z.literal("a") }),
+            z.object({ mode: z.literal("b") }),
+          ]),
+          z.object({ mode: z.literal("a"), config: z.object({ port: z.string() }) }),
+        ]),
+      );
+      await runCommand(cmd, ["--mode", "a", "--config.port", "80"]);
+      expect(seen).toEqual([{ mode: "a", config: { port: "80" } }]);
+    });
+
     it("should not count an earlier option its enclosing union rejects", async () => {
       const inner = z
         .union([z.object({ name: z.string().optional() }), z.object({ other: z.string() })])

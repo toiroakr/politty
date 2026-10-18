@@ -162,6 +162,8 @@ export interface ExtractedFields {
     description?: string;
     /** Object fields expanded into this variant's fields */
     nestedObjects?: NestedObjectInfo[];
+    /** Whether validation keeps properties this variant does not define */
+    retainsUnknownKeys?: boolean;
   }>;
   /** Options (for union) */
   unionOptions?: ExtractedFields[];

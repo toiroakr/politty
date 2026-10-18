@@ -487,6 +487,7 @@ function extractFromVariant(schema: ValibotNode): ExtractedFields {
     const variantDescription = extractDescription(optionNode);
     variants.push({
       discriminatorValue: allowed[0] ?? "",
+      retainsUnknownKeys: getUnknownKeysMode(optionNode) === "passthrough",
       // A variant allowing several values is selected by any of them.
       ...(allowed.length > 1
         ? {

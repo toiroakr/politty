@@ -446,7 +446,9 @@ export function nestingCandidates(
     passthrough: boolean;
   }
   const branches = (group: ExtractedFields, schemas: ArgsSchema[], plain: boolean): Branch[] => {
-    const branch = (fields: NestingGroup): Branch => ({
+    const branch = (
+      fields: NestingGroup & { retainsUnknownKeys?: boolean | undefined },
+    ): Branch => ({
       group: fields,
       schema: schemas.at(-1),
       schemas,
@@ -456,7 +458,10 @@ export function nestingCandidates(
         (fields.nestedObjects ?? []).map((object) => [pathKey(object.path), !!object.passthrough]),
       ),
       plain,
-      passthrough: group.unknownKeysMode === "passthrough" || !!group.retainsUnknownKeys,
+      // A variant keeps unknown keys by its own policy.
+      passthrough:
+        fields.retainsUnknownKeys ??
+        (group.unknownKeysMode === "passthrough" || !!group.retainsUnknownKeys),
     });
     if (group.variants && group.discriminator) {
       const variant = selectVariant(rawArgs, group.discriminator, group.variants);

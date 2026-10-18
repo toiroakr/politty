@@ -518,6 +518,7 @@ function extractFromDiscriminatedUnion(schema: z.ZodMiniType): ExtractedFields {
     const canonical = discriminatorValue;
     variants.push({
       discriminatorValue,
+      retainsUnknownKeys: getObjectUnknownKeys(option as never) === "passthrough",
       ...(allowed.length > 1
         ? {
             normalizeDiscriminator: (value: unknown) =>

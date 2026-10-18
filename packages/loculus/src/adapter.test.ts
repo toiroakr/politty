@@ -668,6 +668,16 @@ describe("@politty/loculus", () => {
     expect(result.error?.message).toMatch(/union inside an intersection/);
   });
 
+  it("keeps an array of objects a single option", async () => {
+    const command = defineCommand({
+      name: "serve",
+      args: l.object({ items: l.array(l.object({ id: l.string() }), { default: [] }) }),
+      run: (args) => args.items,
+    });
+    expect(extractLoculusFields(command.args as never).fields[0]?.objectShape).toBeUndefined();
+    expect((await runCommand(command, [])).result).toEqual([]);
+  });
+
   it("rejects a default on an object field", async () => {
     const command = defineCommand({
       name: "serve",

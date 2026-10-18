@@ -33,12 +33,16 @@ function resolve(name: string, schema: AnySchema): ResolvedFieldMeta {
     objectUnknownKeys: objectMode(schema),
   });
 }
+// `inner` is a wrapped schema, or an array's element schema: an array of
+// objects is no object.
 function objectShape(schema: AnySchema): Record<string, AnySchema> | undefined {
   const { meta } = schema;
+  if (meta.kind === "array") return undefined;
   return meta.shape ?? (meta.inner ? objectShape(meta.inner) : undefined);
 }
 function objectMode(schema: AnySchema): UnknownKeysMode | undefined {
   const { meta } = schema;
+  if (meta.kind === "array") return undefined;
   return meta.shape ? mode(meta) : meta.inner ? objectMode(meta.inner) : undefined;
 }
 function mode(meta: Meta): UnknownKeysMode {
@@ -102,6 +106,7 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
           spellings.set(spelling, i);
           return {
             discriminatorValue: spelling,
+            retainsUnknownKeys: option.unknownKeysMode === "passthrough",
             normalizeDiscriminator: (value: unknown) => normalizeLiteral(value, discriminatorMeta!),
             fields: fieldsFor(option.fields),
             ...(option.description ? { description: option.description } : {}),
