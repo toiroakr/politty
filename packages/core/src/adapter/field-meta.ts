@@ -470,7 +470,8 @@ export function mergeIntersectionField(
   return {
     ...first,
     required: first.required || next.required,
-    defaultValue: first.defaultValue ?? next.defaultValue,
+    // `null` is a default too.
+    defaultValue: first.defaultValue !== undefined ? first.defaultValue : next.defaultValue,
     // A property one member keeps stays in the merged output.
     objectUnknownKeys:
       first.objectUnknownKeys === "passthrough" || next.objectUnknownKeys === "passthrough"

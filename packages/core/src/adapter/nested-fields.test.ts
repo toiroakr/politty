@@ -111,6 +111,15 @@ describe("nested object fields", () => {
     ]) {
       expect(() => extractFields(z.object({ config }))).toThrow(/cannot have a default value/);
     }
+    // A null default of one intersection member counts too.
+    expect(() =>
+      extractFields(
+        z.intersection(
+          z.object({ config: z.object({ port: z.number() }).nullable().default(null) }),
+          z.object({ config: z.object({ host: z.string() }) }),
+        ),
+      ),
+    ).toThrow(/cannot have a default value/);
   });
 
   it("should read leaf values from their environment variables", async () => {
@@ -1180,6 +1189,24 @@ describe("nested object fields", () => {
         globalArgs: z.object({ log: z.object({ level: z.string() }) }),
       });
       expect(seen[0]).toEqual({ log: { level: "debug" } });
+    });
+
+    it("should pre-fill a command option with the global value as given", async () => {
+      const seen: unknown[] = [];
+      const schema = () => z.object({ config: z.object({ port: z.string().transform(Number) }) });
+      const sub = defineCommand({
+        name: "sub",
+        args: schema(),
+        run: (args) => {
+          seen.push(args);
+        },
+      });
+      const main = defineCommand({ name: "app", subCommands: { sub } });
+      const result = await runCommand(main, ["--config.port", "80", "sub"], {
+        globalArgs: schema(),
+      });
+      expect(result.success).toBe(true);
+      expect(seen[0]).toEqual({ config: { port: 80 } });
     });
 
     it("should pre-fill a nested option from a flat global field of the same name", async () => {

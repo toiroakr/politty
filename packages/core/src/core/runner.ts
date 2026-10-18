@@ -1119,17 +1119,16 @@ async function runCommandInternal<TResult = unknown>(
       for (const field of parseResult.extractedFields.fields) {
         const localHasOwnValue =
           Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
-        // The validated global value lives where the global definition puts
-        // it, which for a nested leaf is its property path.
+        // The value as given, not as the global schema validated it: the
+        // local schema validates it in turn, so a transform must not apply
+        // twice. Only when the selected global variant defines the field.
         const globalField = selectedGlobal?.fields.find((f) => f.name === field.name);
-        const globalValue = globalField && getFieldValue(validatedGlobalArgs, globalField);
+        const globalValue = accumulatedGlobalArgs[field.name];
         if (
           !localHasOwnValue &&
           cliProvidedGlobalFields.has(field.name) &&
           globalField &&
-          (globalField.nested
-            ? globalValue !== undefined
-            : Object.hasOwn(validatedGlobalArgs, field.name))
+          globalValue !== undefined
         ) {
           argsToValidate = { ...argsToValidate, [field.name]: globalValue };
           globalPrefilledFields.add(field.name);
