@@ -618,7 +618,8 @@ export function effectiveOptionTokens(
     if (!t.startsWith("-") || t.startsWith("--")) return true;
     if (!globalShort.has(t)) return true;
     // Keep if the local explicitly declares the matching short alias.
-    return opt.alias?.includes(t.slice(1)) === true;
+    const short = t.slice(1);
+    return opt.alias?.includes(short) === true || opt.hiddenAlias?.includes(short) === true;
   });
 }
 

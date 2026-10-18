@@ -256,7 +256,7 @@ export function globalShortTokens(frameOptions: readonly CompletableOption[]): S
   for (const o of frameOptions) {
     if (o.isGlobal !== true) continue;
     if (o.cliName.length === 1) out.add(`-${o.cliName}`);
-    for (const a of o.alias ?? []) {
+    for (const a of [...(o.alias ?? []), ...(o.hiddenAlias ?? [])]) {
       if (a.length === 1) out.add(`-${a}`);
     }
   }
@@ -323,7 +323,9 @@ export function quotedAvailabilityTokens(
       const globalShort = globalShortTokens(options.frameOptions);
       if (globalShort.size > 0) {
         const localExplicitShort = new Set(
-          (aliases ?? []).filter((a) => a.length === 1).map((a) => `-${a}`),
+          [...(aliases ?? []), ...(options.hiddenAliases ?? [])]
+            .filter((a) => a.length === 1)
+            .map((a) => `-${a}`),
         );
         for (const g of globalShort) {
           if (!localExplicitShort.has(g)) tokens.delete(g);

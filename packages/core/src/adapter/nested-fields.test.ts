@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { effectiveOptionTokens } from "../completion/extractor.js";
 import { generateCompletion } from "../completion/index.js";
 import { collectOptionTokens, quotedAvailabilityTokens } from "../completion/shell-shared.js";
+import type { CompletableOption } from "../completion/types.js";
 import { renderArgsTable } from "../docs/render-args.js";
 import { arg, defineCommand, extractFields, generateHelp, runCommand } from "../index.js";
 import type { AnyCommand } from "../types.js";
@@ -1144,6 +1146,34 @@ describe("nested object fields", () => {
         expect(script).toContain("--s3-region");
       },
     );
+
+    it("should keep a local hidden short alias that shadows a global option", () => {
+      const global: CompletableOption = {
+        name: "g",
+        cliName: "g",
+        takesValue: true,
+        valueType: "string",
+        required: false,
+        isGlobal: true,
+      };
+      const local: CompletableOption = {
+        name: "config.port",
+        cliName: "config.port",
+        takesValue: true,
+        valueType: "string",
+        required: false,
+        hiddenAlias: ["g"],
+      };
+      const frame = [global, local];
+      expect(effectiveOptionTokens(local, frame)).toContain("-g");
+      expect(effectiveOptionTokens(global, frame)).not.toContain("-g");
+      expect(
+        quotedAvailabilityTokens(local.cliName, local.alias, undefined, {
+          frameOptions: frame,
+          hiddenAliases: local.hiddenAlias,
+        }),
+      ).toContain('"-g"');
+    });
 
     it("should document the options of object fields in an args table", () => {
       const table = renderArgsTable({ config: z.object({ port: z.number() }) });
