@@ -161,7 +161,24 @@ An optional object stays `undefined` until one of its options is given. A
 required object is always created, so its properties' defaults apply even
 when none of its options is given. Set `arg()` metadata such as `alias`,
 `env` or `effect` on the properties: on an object field itself, only
-`description` is accepted.
+`description` and `flatten` are accepted.
+
+`flatten` picks how keys are joined into option names (default: `"dot"`). A
+nested object without its own `flatten` inherits the style of the object
+containing it.
+
+| `flatten` | Shown in help, docs and completion | Also accepted          |
+| --------- | ---------------------------------- | ---------------------- |
+| `"dot"`   | `--config.server-port`             | `--config.serverPort`  |
+| `"kebab"` | `--config-server-port`             | `--configServerPort`   |
+| `"camel"` | `--configServerPort`               | `--config-server-port` |
+
+```typescript
+config: arg(z.object({ serverPort: z.coerce.number() }), { flatten: "kebab" }),
+```
+
+An option that has the same name as another field (e.g. `--config-port` next
+to a `configPort` field) is reported as a duplicate field.
 
 ## Validation and Types
 

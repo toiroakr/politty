@@ -86,6 +86,11 @@ export type CompletionMeta = {
 );
 
 /**
+ * Naming style for the CLI options a nested object field expands into
+ */
+export type NestedKeyStyle = "dot" | "kebab" | "camel";
+
+/**
  * Prompt input type for interactive prompts
  *
  * - "text": free-form text input (default for string schemas)
@@ -243,6 +248,18 @@ export interface BaseArgMeta<TValue = unknown> {
    * Disallowed when `negation` is `false`.
    */
   negationDescription?: string;
+  /**
+   * How the keys of an object field are joined into the option names its
+   * properties expand into (default: `"dot"`). A nested object without its
+   * own `flatten` inherits the style of the object containing it.
+   *
+   * - `"dot"`   — `--config.server-port` (also accepts `--config.serverPort`)
+   * - `"kebab"` — `--config-server-port` (also accepts `--configServerPort`)
+   * - `"camel"` — `--configServerPort` (also accepts `--config-server-port`)
+   *
+   * Only valid on object fields.
+   */
+  flatten?: NestedKeyStyle;
   /**
    * Side-effect callback executed after argument parsing and validation.
    * Runs before the command lifecycle (setup/run/cleanup).

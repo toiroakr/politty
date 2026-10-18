@@ -3,13 +3,15 @@
  *
  * An args field whose schema is an object cannot be given on the command
  * line as a single value, so `extractFields` expands it into one field per
- * property, named by its dotted path (`config: { serverPort }` →
- * `config.serverPort`, shown as `--config.server-port`). The parser, help,
+ * property, named by its path in the `flatten` style of its object
+ * (`config: { serverPort }` → `config.serverPort`, shown as
+ * `--config.server-port`, by default). The parser, help,
  * completion and docs see these as ordinary fields; {@link nestArgs} moves
  * their parsed values back under the object right before validation, so
  * the original schema validates them in place.
  */
 
+import type { NestedKeyStyle } from "../core/arg-registry.js";
 import type { ExtractedFields, NestedFieldInfo, ResolvedFieldMeta } from "./field-meta.js";
 import { toKebabCase } from "./field-meta.js";
 
@@ -79,43 +81,87 @@ export function expandObjectFields(
 ): ResolvedFieldMeta[] {
   if (!fields.some((field) => field.objectShape)) return fields;
   return fields.flatMap((field) =>
-    field.objectShape ? expandObject(field, [field.name], [], resolve) : [field],
+    field.objectShape
+      ? expandObject(field, {
+          path: [field.name],
+          name: field.name,
+          kebab: field.cliName,
+          style: field.flatten ?? "dot",
+          objectRequired: [],
+          resolve,
+        })
+      : [field],
   );
 }
 
-function expandObject(
-  object: ResolvedFieldMeta,
-  path: string[],
-  enclosingRequired: boolean[],
-  resolve: ResolveField,
-): ResolvedFieldMeta[] {
+interface ObjectContext {
+  /** Property path, starting with the top-level field name */
+  path: string[];
+  /** Field name prefix of the object's properties */
+  name: string;
+  /** kebab-case option name prefix of the object's properties */
+  kebab: string;
+  /** Naming style inherited from the enclosing object */
+  style: NestedKeyStyle;
+  /** Whether each enclosing object (outermost first) is required */
+  objectRequired: boolean[];
+  resolve: ResolveField;
+}
+
+function expandObject(object: ResolvedFieldMeta, context: ObjectContext): ResolvedFieldMeta[] {
   const unsupported = UNSUPPORTED_OBJECT_META.filter((key) => Boolean(object[key]));
   if (unsupported.length > 0) {
     throw new Error(
-      `Invalid arg() metadata for object field "${path.join(".")}": ${unsupported.join(", ")} cannot be used on object fields (set them on its properties instead).`,
+      `Invalid arg() metadata for object field "${context.path.join(".")}": ${unsupported.join(", ")} cannot be used on object fields (set them on its properties instead).`,
     );
   }
-  const objectRequired = [...enclosingRequired, object.required];
+  const style = object.flatten ?? context.style;
+  const objectRequired = [...context.objectRequired, object.required];
   return Object.entries(object.objectShape ?? {}).flatMap(([key, fieldSchema]) => {
-    const childPath = [...path, key];
-    const child = resolve(childPath.join("."), fieldSchema);
+    const path = [...context.path, key];
+    const name = style === "dot" ? `${context.name}.${key}` : `${context.name}${capitalize(key)}`;
+    const kebab = `${context.kebab}${style === "dot" ? "." : "-"}${toKebabCase(key)}`;
+    const child = context.resolve(name, fieldSchema);
     // Without a description of its own, a property describes its object.
     const description = child.description ?? object.description;
     if (child.objectShape) {
-      return expandObject({ ...child, description }, childPath, objectRequired, resolve);
+      return expandObject(
+        { ...child, description },
+        { ...context, path, name, kebab, style, objectRequired },
+      );
     }
+    // "camel" shows the field name and accepts the kebab-case form too;
+    // the others show the kebab-case form, and the parser accepts the
+    // field name as it does for any field.
+    const cliName = style === "camel" ? name : kebab;
+    const hiddenAlias =
+      style === "camel" ? [...new Set([...(child.hiddenAlias ?? []), kebab])] : child.hiddenAlias;
     return [
       {
         ...child,
+        cliName,
+        hiddenAlias,
         description,
         // Name the value after the property, not the whole option path.
         placeholder: child.placeholder ?? toKebabCase(key).toUpperCase(),
+        // The parser reads `--no-` with a lowercase name, and `--no` with a
+        // capitalized camelCase one.
+        negationDisplay:
+          child.negation === true
+            ? style === "camel"
+              ? `no${capitalize(cliName)}`
+              : `no-${cliName}`
+            : child.negationDisplay,
         // Only required when every enclosing object is.
         required: child.required && objectRequired.every(Boolean),
-        nested: { path: childPath, objectRequired },
+        nested: { path, objectRequired },
       },
     ];
   });
+}
+
+function capitalize(key: string): string {
+  return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
 /**

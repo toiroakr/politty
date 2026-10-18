@@ -1,4 +1,10 @@
-import type { ArgMeta, CompletionMeta, EffectContext, PromptMeta } from "../core/arg-registry.js";
+import type {
+  ArgMeta,
+  CompletionMeta,
+  EffectContext,
+  NestedKeyStyle,
+  PromptMeta,
+} from "../core/arg-registry.js";
 import type { PackageRequirement } from "../package-requirements.js";
 import type { ArgsSchema } from "../types.js";
 
@@ -98,6 +104,8 @@ export interface ResolvedFieldMeta {
    * expands such a field into one field per property (see nested-fields.ts).
    */
   objectShape?: Record<string, unknown> | undefined;
+  /** Naming style for the options an object field expands into */
+  flatten?: NestedKeyStyle | undefined;
   /** Set on a field expanded from an object field */
   nested?: NestedFieldInfo | undefined;
 }
@@ -217,6 +225,8 @@ export interface FieldIntrospection {
   /** Property schemas, when the field schema is an object */
   objectShape?: Record<string, unknown> | undefined;
 }
+
+const NESTED_KEY_STYLES: readonly NestedKeyStyle[] = ["dot", "kebab", "camel"];
 
 /**
  * Assemble a {@link ResolvedFieldMeta} from adapter-provided introspection.
@@ -352,6 +362,20 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
   const negationDisplay: string | undefined =
     typeof negation === "string" ? negation : negation === true ? `no-${cliName}` : undefined;
 
+  const flatten = (argMeta as { flatten?: unknown } | undefined)?.flatten;
+  if (flatten !== undefined) {
+    if (!NESTED_KEY_STYLES.includes(flatten as NestedKeyStyle)) {
+      throw new Error(
+        `Invalid flatten "${String(flatten)}" for field "${name}": expected one of ${NESTED_KEY_STYLES.map((s) => `"${s}"`).join(", ")}.`,
+      );
+    }
+    if (!intro.objectShape) {
+      throw new Error(
+        `Invalid flatten for field "${name}": flatten can only be used on object fields.`,
+      );
+    }
+  }
+
   const positional = argMeta?.positional;
   const meta: ResolvedFieldMeta = {
     name,
@@ -376,6 +400,7 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
     effect: argMeta?.effect,
     requiredPackages: argMeta?.requiredPackages,
     objectShape: intro.objectShape,
+    flatten: flatten as NestedKeyStyle | undefined,
   };
 
   // Add overrideBuiltinAlias only if it's true

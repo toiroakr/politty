@@ -214,4 +214,83 @@ describe("nested object fields", () => {
     expect(table).toContain("--config.host");
     expect(table).toContain("Server config");
   });
+
+  describe("flatten", () => {
+    const styled = (flatten: "dot" | "kebab" | "camel") =>
+      z.object({
+        config: arg(
+          z.object({
+            serverPort: z.coerce.number().optional(),
+            tls: z.object({ enabled: arg(z.boolean().default(false), { negation: true }) }),
+          }),
+          { flatten },
+        ),
+      });
+
+    it.each([
+      ["dot", ["config.server-port", "config.tls.enabled"], "no-config.tls.enabled"],
+      ["kebab", ["config-server-port", "config-tls-enabled"], "no-config-tls-enabled"],
+      ["camel", ["configServerPort", "configTlsEnabled"], "noConfigTlsEnabled"],
+    ] as const)("should name %s options", (style, cliNames, negation) => {
+      const { fields } = extractFields(styled(style));
+      expect(fields.map((f) => f.cliName)).toEqual(cliNames);
+      expect(fields[1]?.negationDisplay).toBe(negation);
+    });
+
+    it.each([
+      [
+        "dot",
+        ["--config.server-port", "1"],
+        ["--config.serverPort", "2", "--no-config.tls.enabled"],
+      ],
+      [
+        "kebab",
+        ["--config-server-port", "1"],
+        ["--configServerPort", "2", "--no-config-tls-enabled"],
+      ],
+      ["camel", ["--configServerPort", "1"], ["--config-server-port", "2", "--noConfigTlsEnabled"]],
+    ] as const)("should accept both spellings of %s options", async (style, shown, other) => {
+      const { cmd, seen } = captureArgs(styled(style));
+      await runCommand(cmd, [...shown]);
+      await runCommand(cmd, [...other]);
+      expect(seen).toEqual([
+        { config: { serverPort: 1, tls: { enabled: false } } },
+        { config: { serverPort: 2, tls: { enabled: false } } },
+      ]);
+    });
+
+    it("should let a nested object override the inherited style", () => {
+      const { fields } = extractFields(
+        z.object({
+          config: arg(z.object({ db: arg(z.object({ url: z.string() }), { flatten: "dot" }) }), {
+            flatten: "kebab",
+          }),
+        }),
+      );
+      expect(fields.map((f) => [f.name, f.cliName])).toEqual([["configDb.url", "config-db.url"]]);
+    });
+
+    it("should reject an invalid style or flatten on a non-object field", () => {
+      expect(() =>
+        extractFields(z.object({ config: arg(z.object({}), { flatten: "snake" } as never) })),
+      ).toThrow(/Invalid flatten "snake"/);
+      expect(() => extractFields(z.object({ port: arg(z.string(), { flatten: "dot" }) }))).toThrow(
+        /only be used on object fields/,
+      );
+    });
+
+    it("should reject an option that collides with another field", async () => {
+      const cmd = defineCommand({
+        name: "app",
+        args: z.object({
+          configPort: z.string().optional(),
+          config: arg(z.object({ port: z.string().optional() }), { flatten: "kebab" }),
+        }),
+        run: () => {},
+      });
+      const result = await runCommand(cmd, []);
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain("configPort");
+    });
+  });
 });
