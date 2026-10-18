@@ -936,7 +936,7 @@ describe("runCommand", () => {
         expect(subFn).not.toHaveBeenCalled();
       });
 
-      it("does not route to defaultSubCommand when the group's own strict schema has an unknown flag", async () => {
+      it("rejects an unknown flag under the group's own strict schema instead of routing to defaultSubCommand", async () => {
         using console = spyOnConsoleLog();
         const subFn = vi.fn();
         const sub = defineCommand({ name: "sub", run: subFn });
@@ -947,12 +947,32 @@ describe("runCommand", () => {
           defaultSubCommand: "sub",
         });
 
-        await runCommand(root, ["--typo"]);
+        const result = await runCommand(root, ["--typo"]);
 
-        // A typo/unknown flag must not be silently discarded by running the
-        // default subcommand's action instead of surfacing the mistake.
         expect(subFn).not.toHaveBeenCalled();
-        expect(console).toHaveBeenCalled();
+        expect(console).not.toHaveBeenCalled();
+        expect(result.exitCode).toBe(2);
+        if (!result.success) {
+          expect(result.error.message).toBe("Unknown flags: typo");
+        }
+      });
+
+      it("warns about an unknown flag under the group's own strip schema and routes to defaultSubCommand", async () => {
+        using consoleError = spyOnConsoleError();
+        const subFn = vi.fn();
+        const sub = defineCommand({ name: "sub", run: subFn });
+        const root = defineCommand({
+          name: "group",
+          args: z.object({}),
+          subCommands: { sub },
+          defaultSubCommand: "sub",
+        });
+
+        const result = await runCommand(root, ["--typo"]);
+
+        expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("typo"));
+        expect(subFn).toHaveBeenCalled();
+        expect(result.success).toBe(true);
       });
 
       it("resolves a lazy-loaded defaultSubCommand", async () => {
@@ -1001,6 +1021,217 @@ describe("runCommand", () => {
 
         expect(result.success).toBe(true);
         expect(console).toHaveBeenCalled();
+      });
+    });
+
+    describe("group without args invoked without a subcommand", () => {
+      it("rejects an unknown flag under a strict globalArgs schema", async () => {
+        using console = spyOnConsoleLog();
+        const cmd = defineCommand({
+          name: "cli",
+          subCommands: { sub: defineCommand({ name: "sub", run: () => {} }) },
+        });
+
+        const result = await runCommand(cmd, ["--bogus"], {
+          globalArgs: z.strictObject({ verbose: arg(z.boolean().default(false)) }),
+        });
+
+        expect(console).not.toHaveBeenCalled();
+        expect(result.exitCode).toBe(2);
+        if (!result.success) {
+          expect(result.error.message).toBe("Unknown flags: bogus");
+        }
+      });
+
+      it("rejects an unknown flag under a strict globalArgs schema instead of routing to defaultSubCommand", async () => {
+        const subFn = vi.fn();
+        const cmd = defineCommand({
+          name: "cli",
+          subCommands: { sub: defineCommand({ name: "sub", run: subFn }) },
+          defaultSubCommand: "sub",
+        });
+
+        const result = await runCommand(cmd, ["--bogus"], {
+          globalArgs: z.strictObject({ verbose: arg(z.boolean().default(false)) }),
+        });
+
+        expect(subFn).not.toHaveBeenCalled();
+        expect(result.exitCode).toBe(2);
+        if (!result.success) {
+          expect(result.error.message).toBe("Unknown flags: bogus");
+        }
+      });
+
+      it("warns about an unknown flag and shows help without a strict globalArgs schema", async () => {
+        using consoleLog = spyOnConsoleLog();
+        using consoleError = spyOnConsoleError();
+        const cmd = defineCommand({
+          name: "cli",
+          subCommands: { sub: defineCommand({ name: "sub", run: () => {} }) },
+        });
+
+        const result = await runCommand(cmd, ["--bogus"]);
+
+        expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("Unknown option"));
+        expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
+        expect(result.success).toBe(true);
+      });
+
+      it("warns about an unknown flag and routes to defaultSubCommand without a strict globalArgs schema", async () => {
+        using consoleError = spyOnConsoleError();
+        const subFn = vi.fn();
+        const cmd = defineCommand({
+          name: "cli",
+          subCommands: { sub: defineCommand({ name: "sub", run: subFn }) },
+          defaultSubCommand: "sub",
+        });
+
+        const result = await runCommand(cmd, ["--bogus"]);
+
+        expect(consoleError).toHaveBeenCalledWith(expect.stringContaining("Unknown option"));
+        expect(subFn).toHaveBeenCalled();
+        expect(result.success).toBe(true);
+      });
+
+      it("does not report combined short global flags as unknown under a strict globalArgs schema", async () => {
+        using consoleLog = spyOnConsoleLog();
+        const cmd = defineCommand({
+          name: "cli",
+          subCommands: { sub: defineCommand({ name: "sub", run: () => {} }) },
+        });
+
+        const result = await runCommand(cmd, ["-vq"], {
+          globalArgs: z.strictObject({
+            verbose: arg(z.boolean().default(false), { alias: "v" }),
+            quiet: arg(z.boolean().default(false), { alias: "q" }),
+          }),
+        });
+
+        expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
+        expect(result.success).toBe(true);
+      });
+
+      it("rejects an unknown flag given to a nested group under a strict globalArgs schema", async () => {
+        const cmd = defineCommand({
+          name: "cli",
+          subCommands: {
+            group: defineCommand({
+              name: "group",
+              subCommands: { sub: defineCommand({ name: "sub", run: () => {} }) },
+            }),
+          },
+        });
+
+        const result = await runCommand(cmd, ["group", "--bogus"], {
+          globalArgs: z.strictObject({ verbose: arg(z.boolean().default(false)) }),
+        });
+
+        expect(result.exitCode).toBe(2);
+        if (!result.success) {
+          expect(result.error.message).toBe("Unknown flags: bogus");
+        }
+      });
+
+      it("silently routes to defaultSubCommand past an unknown flag under a passthrough globalArgs schema", async () => {
+        using consoleError = spyOnConsoleError();
+        const subFn = vi.fn();
+        const cmd = defineCommand({
+          name: "cli",
+          subCommands: { sub: defineCommand({ name: "sub", run: subFn }) },
+          defaultSubCommand: "sub",
+        });
+
+        const result = await runCommand(cmd, ["--bogus"], {
+          globalArgs: z.looseObject({ verbose: arg(z.boolean().default(false)) }),
+        });
+
+        expect(consoleError).not.toHaveBeenCalled();
+        expect(subFn).toHaveBeenCalled();
+        expect(result.success).toBe(true);
+      });
+
+      it("reports a token after an unknown flag as an unknown subcommand", async () => {
+        using _consoleSpy = spyOnConsoleError();
+        const cmd = defineCommand({
+          name: "cli",
+          subCommands: { sub: defineCommand({ name: "sub", run: () => {} }) },
+        });
+
+        const result = await runCommand(cmd, ["--bogus", "value"]);
+
+        expect(result.exitCode).toBe(2);
+        if (!result.success) {
+          expect(result.error.message).toBe("Unknown subcommand: value");
+        }
+      });
+
+      describe("global option values", () => {
+        const originalEnv = process.env;
+        const globalArgs = z.object({
+          json: arg(z.boolean().default(false), { env: "GROUP_TEST_JSON" }),
+        });
+        const cli = defineCommand({
+          name: "cli",
+          subCommands: {
+            group: defineCommand({
+              name: "group",
+              subCommands: { sub: defineCommand({ name: "sub", run: () => {} }) },
+            }),
+          },
+        });
+
+        beforeEach(() => {
+          process.env = { ...originalEnv };
+        });
+
+        afterEach(() => {
+          process.env = originalEnv;
+        });
+
+        it("rejects an invalid global option value instead of showing help", async () => {
+          using console = spyOnConsoleLog();
+
+          const result = await runCommand(cli, ["--json=yes"], { globalArgs });
+
+          expect(console).not.toHaveBeenCalled();
+          expect(result.exitCode).toBe(2);
+          if (!result.success) {
+            expect(result.error.message).toContain("json");
+          }
+        });
+
+        it("rejects an invalid global option value given through its environment variable", async () => {
+          using console = spyOnConsoleLog();
+          process.env.GROUP_TEST_JSON = "maybe";
+
+          const result = await runCommand(cli, [], { globalArgs });
+
+          expect(console).not.toHaveBeenCalled();
+          expect(result.exitCode).toBe(2);
+          if (!result.success) {
+            expect(result.error.message).toContain("json");
+          }
+        });
+
+        it("rejects an invalid global option value given to a nested group", async () => {
+          using console = spyOnConsoleLog();
+
+          const result = await runCommand(cli, ["group", "--json=yes"], { globalArgs });
+
+          expect(console).not.toHaveBeenCalled();
+          expect(result.exitCode).toBe(2);
+        });
+
+        it("shows help when a required global option is missing", async () => {
+          using console = spyOnConsoleLog();
+
+          const result = await runCommand(cli, ["--json"], {
+            globalArgs: globalArgs.extend({ token: z.string() }),
+          });
+
+          expect(console).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
+          expect(result.success).toBe(true);
+        });
       });
     });
   });

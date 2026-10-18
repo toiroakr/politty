@@ -240,11 +240,22 @@ export function parseArgs(
   }
 
   // If no schema, split on -- manually so that flag-like tokens (e.g. `-x stray`)
-  // are not silently consumed by the parser; everything before -- is a positional.
+  // are not silently consumed by the parser; everything before -- is a positional,
+  // except that a command group takes no positional of its own, so its flag-like
+  // tokens are unknown flags.
   if (!extracted) {
     const ddIdx = commandArgv.indexOf("--");
-    const positionals = ddIdx >= 0 ? commandArgv.slice(0, ddIdx) : commandArgv;
+    const tokens = ddIdx >= 0 ? commandArgv.slice(0, ddIdx) : commandArgv;
     const rest = ddIdx >= 0 ? commandArgv.slice(ddIdx + 1) : [];
+    const isGroupFlag = (token: string): boolean =>
+      hasSubCommands && !command.run && token.startsWith("-") && token !== "-";
+    const globalNames = new Set(
+      options.globalExtracted?.fields.flatMap((f) => [f.name, f.cliName, ...getAllAliases(f)]),
+    );
+    const unknownFlags = tokens
+      .filter(isGroupFlag)
+      .flatMap((token) => Object.keys(parseArgv([token]).options))
+      .filter((name) => !globalNames.has(name));
     return {
       helpRequested: false,
       helpAllRequested: false,
@@ -253,9 +264,9 @@ export function parseArgs(
       subCommand: undefined,
       remainingArgs: [],
       rawArgs: {},
-      positionals,
+      positionals: tokens.filter((token) => !isGroupFlag(token)),
       rest,
-      unknownFlags: [],
+      unknownFlags,
       unknownGlobalFlags: suppressedGlobalFlags,
       rawGlobalArgs,
     };
@@ -394,7 +405,7 @@ function selectArgvFields(
  *
  * @returns Names of the fields filled from an environment variable
  */
-function applyEnvFallbacks(
+export function applyEnvFallbacks(
   rawArgs: Record<string, unknown>,
   extracted: ExtractedFields,
 ): Set<string> {
