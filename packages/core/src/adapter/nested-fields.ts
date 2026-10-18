@@ -134,6 +134,7 @@ function expandObjectField(
       required: object.required,
       defaultValue: object.defaultValue,
       passthrough: object.objectUnknownKeys === "passthrough",
+      getDefault: object.getDefault,
     });
     const style = object.flatten ?? inherited.style;
     const description = object.description ?? inherited.description;
@@ -634,12 +635,15 @@ function nestGroup(
       kept.add(objectKey);
       continue;
     }
-    const base = isPlainObject(current)
-      ? current
-      : options.seed && isPlainObject(object.defaultValue)
-        ? object.defaultValue
-        : {};
-    if (base === object.defaultValue) {
+    // Evaluated per nesting, as a default may differ on every parse.
+    const defaultValue =
+      !isPlainObject(current) && options.seed
+        ? object.getDefault
+          ? object.getDefault()
+          : object.defaultValue
+        : undefined;
+    const base = isPlainObject(current) ? current : isPlainObject(defaultValue) ? defaultValue : {};
+    if (base === defaultValue) {
       for (const property of Object.keys(base)) {
         const path = [...object.path, property];
         defaulted.set(pathKey(path), path);

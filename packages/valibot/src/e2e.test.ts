@@ -211,6 +211,25 @@ describe("@politty/valibot e2e", () => {
     expect(result.result).toEqual({ mode: "b", config: { port: "80" } });
   });
 
+  it("should evaluate an object default factory anew on every run", async () => {
+    let calls = 0;
+    const cmd = defineCommand({
+      name: "serve",
+      args: v.object({
+        config: v.optional(v.object({ id: v.number(), port: v.optional(v.string()) }), () => ({
+          id: ++calls,
+        })),
+      }),
+      run: (args) => args.config,
+    });
+
+    const first = (await runCommand(cmd, ["--config.port", "1"])).result as { id: number };
+    const second = (await runCommand(cmd, ["--config.port", "2"])).result as { id: number };
+    expect(first).toMatchObject({ port: "1" });
+    expect(second).toMatchObject({ port: "2" });
+    expect(first.id).not.toBe(second.id);
+  });
+
   it("should expand nested object fields into options and nest their values", async () => {
     const cmd = defineCommand({
       name: "serve",

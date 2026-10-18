@@ -395,6 +395,7 @@ export function resolveValibotFieldMeta(name: string, schema: unknown): Resolved
     description: extractDescription(node),
     required: isRequired(node),
     defaultValue: extractDefaultValue(node),
+    getDefault: () => extractDefaultValue(node),
     type: detectType(node),
     enumValues: extractEnumValues(node),
     schema,

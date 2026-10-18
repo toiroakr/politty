@@ -398,6 +398,7 @@ export function resolveZodFieldMeta(name: string, schema: z.ZodType): ResolvedFi
     description: extractDescription(schema),
     required: isRequired(schema),
     defaultValue: extractDefaultValue(schema),
+    getDefault: () => extractDefaultValue(schema),
     type: detectType(schema),
     enumValues: extractEnumValues(schema),
     schema,

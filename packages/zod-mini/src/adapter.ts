@@ -418,6 +418,7 @@ export function resolveZodMiniFieldMeta(name: string, schema: z.ZodMiniType): Re
     description: extractDescription(schema),
     required: isRequired(schema),
     defaultValue: extractDefaultValue(schema),
+    getDefault: () => extractDefaultValue(schema),
     type: detectType(schema),
     enumValues: extractEnumValues(schema),
     schema,

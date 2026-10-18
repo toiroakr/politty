@@ -900,6 +900,23 @@ describe("nested object fields", () => {
   });
 
   describe("object defaults", () => {
+    it("should evaluate a default factory anew on every run", async () => {
+      let calls = 0;
+      const { cmd, seen } = captureArgs(
+        z.object({
+          config: z
+            .object({ id: z.number(), port: z.string().optional() })
+            .default(() => ({ id: ++calls })),
+        }),
+      );
+      await runCommand(cmd, ["--config.port", "1"]);
+      await runCommand(cmd, ["--config.port", "2"]);
+      const [first, second] = seen as Array<{ config: { id: number; port: string } }>;
+      expect(first!.config.port).toBe("1");
+      expect(second!.config.port).toBe("2");
+      expect(first!.config.id).not.toBe(second!.config.id);
+    });
+
     it("should create an object whose key names an Object.prototype property", async () => {
       const { cmd, seen } = captureArgs(
         z.object({ config: z.object({ constructor: z.object({ port: z.number().default(80) }) }) }),

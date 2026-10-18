@@ -111,6 +111,11 @@ export interface ResolvedFieldMeta {
   objectShapes?: Array<Record<string, unknown>> | undefined;
   /** How an object field treats properties it does not define */
   objectUnknownKeys?: UnknownKeysMode | undefined;
+  /**
+   * Evaluates an object field's default anew, for a default the schema
+   * computes per parse (`defaultValue` holds one evaluation, for display)
+   */
+  getDefault?: (() => unknown) | undefined;
   /** Naming style for the options an object field expands into */
   flatten?: NestedKeyStyle | undefined;
   /**
@@ -142,6 +147,8 @@ export interface NestedObjectInfo {
   defaultValue: unknown;
   /** Whether the object keeps properties it does not define */
   passthrough?: boolean | undefined;
+  /** Evaluates the object's default anew (see {@link ResolvedFieldMeta.getDefault}) */
+  getDefault?: (() => unknown) | undefined;
 }
 
 /**
@@ -254,6 +261,8 @@ export interface FieldIntrospection {
   objectShape?: Record<string, unknown> | undefined;
   /** How the object treats properties it does not define */
   objectUnknownKeys?: UnknownKeysMode | undefined;
+  /** Evaluates the default anew, when the schema computes it per parse */
+  getDefault?: (() => unknown) | undefined;
 }
 
 const NESTED_KEY_STYLES: readonly NestedKeyStyle[] = ["dot", "kebab", "camel"];
@@ -431,6 +440,7 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
     requiredPackages: argMeta?.requiredPackages,
     objectShape: intro.objectShape,
     objectUnknownKeys: intro.objectShape ? intro.objectUnknownKeys : undefined,
+    getDefault: intro.objectShape ? intro.getDefault : undefined,
     flatten: rawFlatten as NestedKeyStyle | undefined,
   };
 
@@ -462,6 +472,14 @@ export function mergeIntersectionField(
     ...first,
     required: first.required || next.required,
     defaultValue: mergeDefaults(first.defaultValue, next.defaultValue),
+    getDefault:
+      first.getDefault || next.getDefault
+        ? () =>
+            mergeDefaults(
+              first.getDefault ? first.getDefault() : first.defaultValue,
+              next.getDefault ? next.getDefault() : next.defaultValue,
+            )
+        : undefined,
     // A property one member keeps stays in the merged output.
     objectUnknownKeys:
       first.objectUnknownKeys === "passthrough" || next.objectUnknownKeys === "passthrough"
