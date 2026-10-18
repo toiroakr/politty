@@ -1150,6 +1150,22 @@ describe("runCommand", () => {
         expect(result.success).toBe(true);
       });
 
+      it("reports an unknown subcommand before an unknown flag given after it", async () => {
+        const cmd = defineCommand({
+          name: "cli",
+          subCommands: { deploy: defineCommand({ name: "deploy", run: () => {} }) },
+        });
+
+        const result = await runCommand(cmd, ["deplyo", "--dry-run"], {
+          globalArgs: z.strictObject({ verbose: arg(z.boolean().default(false)) }),
+        });
+
+        expect(result.exitCode).toBe(2);
+        if (!result.success) {
+          expect(result.error.message).toBe("Unknown subcommand: deplyo. Did you mean: deploy?");
+        }
+      });
+
       it("reports a token after an unknown flag as an unknown subcommand", async () => {
         using _consoleSpy = spyOnConsoleError();
         const cmd = defineCommand({

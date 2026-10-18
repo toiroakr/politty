@@ -795,6 +795,24 @@ async function runCommandInternal<TResult = unknown>(
       };
     }
 
+    // Reported before unknown flags, which are likely meant for the mistyped subcommand.
+    const subCmdNames = listSubCommandNamesWithAliases(command);
+    const unknownCmd =
+      subCmdNames.size > 0
+        ? unconsumedRegulars.find((t) => !t.startsWith("-") && !subCmdNames.has(t))
+        : undefined;
+    if (unknownCmd) {
+      const similar = findSimilar(unknownCmd, [...subCmdNames]);
+      const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
+      collector?.stop();
+      return {
+        success: false,
+        error: new Error(`Unknown subcommand: ${unknownCmd}${suggestion ? `.${suggestion}` : ""}`),
+        exitCode: USAGE_ERROR_EXIT_CODE,
+        logs: getCurrentLogs(),
+      };
+    }
+
     // Handle unknown flags based on schema's unknownKeysMode
     if (parseResult.unknownFlags.length > 0) {
       // A group without its own args accepts only global options, so the global schema decides.
@@ -916,26 +934,6 @@ async function runCommandInternal<TResult = unknown>(
     // allPositionals combines regular positionals with tokens explicitly passed after --,
     // since mergeWithPositionals already consumes both sources in order.
     if (extraPositionals.length > 0) {
-      const subCmdNames = listSubCommandNamesWithAliases(command);
-      if (subCmdNames.size > 0) {
-        const unknownCmd = unconsumedRegulars.find(
-          (t) => !t.startsWith("-") && !subCmdNames.has(t),
-        );
-        if (unknownCmd) {
-          const similar = findSimilar(unknownCmd, [...subCmdNames]);
-          const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
-          collector?.stop();
-          return {
-            success: false,
-            error: new Error(
-              `Unknown subcommand: ${unknownCmd}${suggestion ? `.${suggestion}` : ""}`,
-            ),
-            exitCode: USAGE_ERROR_EXIT_CODE,
-            logs: getCurrentLogs(),
-          };
-        }
-      }
-
       // No subcommands (or all extras are '-'-prefixed / after --): follow schema's unknownKeysMode
       const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
       if (unknownKeysMode === "strict") {
