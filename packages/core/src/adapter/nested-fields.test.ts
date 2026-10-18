@@ -1035,6 +1035,28 @@ describe("nested object fields", () => {
   });
 
   describe("wrappers and spellings", () => {
+    it("should accept the kebab-case spelling after a digit-ending key in every style", async () => {
+      for (const flatten of ["camel", "kebab"] as const) {
+        const { cmd, seen } = captureArgs(
+          z.object({ s3: arg(z.object({ region: z.string() }), { flatten }) }),
+        );
+        const result = await runCommand(cmd, ["--s3-region", "r"]);
+        expect(result.success).toBe(true);
+        expect(seen).toEqual([{ s3: { region: "r" } }]);
+      }
+    });
+
+    it("should not take inherited properties for given values", async () => {
+      const { cmd, seen } = captureArgs(
+        z.object({
+          to: arg(z.object({ string: z.string().default("x") }), { flatten: "kebab" }),
+        }),
+      );
+      const result = await runCommand(cmd, []);
+      expect(result.success).toBe(true);
+      expect(seen).toEqual([{ to: { string: "x" } }]);
+    });
+
     it("should expand readonly objects", () => {
       expect(
         extractFields(
@@ -1148,6 +1170,26 @@ describe("nested object fields", () => {
     expect(seen).toEqual([{ config: { listenPort: 5, listenHost: "h" } }]);
     expect(portEffect).not.toHaveBeenCalled();
     expect(hostEffect).not.toHaveBeenCalled();
+  });
+
+  it("should not run the effects of renamed leaves whose value was prompted for", async () => {
+    const effect = vi.fn((value: number) => {
+      value.toFixed();
+    });
+    const { cmd, seen } = captureArgs(
+      z.object({
+        config: z
+          .object({ port: arg(z.coerce.number(), { effect }) })
+          .transform((v) => ({ listenPort: v.port }))
+          .optional(),
+      }),
+    );
+    const result = await runCommand(cmd, [], {
+      prompt: async () => ({ "config.port": "5" }),
+    });
+    expect(result.success).toBe(true);
+    expect(seen).toEqual([{ config: { listenPort: 5 } }]);
+    expect(effect).not.toHaveBeenCalled();
   });
 
   it("should run the effects of optional leaves that were left out", async () => {

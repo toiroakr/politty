@@ -135,7 +135,7 @@ function expandObjectField(
   const walk = (
     object: ResolvedFieldMeta,
     path: string[],
-    names: { name: string; cliName: string },
+    names: { name: string; cliName: string; kebab: string },
     inherited: { style: NestedKeyStyle; description: string | undefined },
     enclosingRequired: boolean,
   ): void => {
@@ -176,9 +176,12 @@ function expandObjectField(
           : style === "kebab"
             ? `${cliPrefix}-${toKebabCase(key)}`
             : `${cliPrefix}${capitalize(key)}`;
+      // The kebab-case spelling is built key by key: one rebuilt from a
+      // camelCase name loses the boundary after a digit (`s3Region`).
+      const kebab = `${names.kebab}${style === "dot" ? "." : "-"}${toKebabCase(key)}`;
 
       if (child.objectShape) {
-        walk(child, childPath, { name, cliName }, { style, description }, required);
+        walk(child, childPath, { name, cliName, kebab }, { style, description }, required);
         continue;
       }
 
@@ -188,14 +191,13 @@ function expandObjectField(
         child.negation === true
           ? style === "camel"
             ? `no${capitalize(cliName)}`
-            : `no-${toKebabCase(cliName)}`
+            : `no-${kebab}`
           : child.negationDisplay;
       // Like every other option, accept both the kebab-case and camelCase
       // forms (hidden from help). The parser derives camelCase from `name`,
       // which keeps an acronym (`baseURL`), so the camelCase form of the
       // kebab-case spelling (`baseUrl`) is added too.
-      const kebabName = toKebabCase(cliName);
-      const spellings = [kebabName, toCamelCase(kebabName)].filter(
+      const spellings = [kebab, toCamelCase(kebab)].filter(
         (spelling) => spelling !== cliName && spelling !== name,
       );
       const hiddenAlias =
@@ -220,7 +222,7 @@ function expandObjectField(
   walk(
     root,
     [root.name],
-    { name: root.name, cliName: root.cliName },
+    { name: root.name, cliName: root.cliName, kebab: toKebabCase(root.cliName) },
     { style: "dot", description: undefined },
     true,
   );
@@ -494,7 +496,7 @@ export function nestingCandidates(
     for (const field of group.fields) if (!known.has(field.name)) known.set(field.name, field);
   }
   for (const [name, leaf] of leaves) if (!known.has(name)) known.set(name, leaf);
-  const givenFields = [...known.values()].filter((field) => rawArgs[field.name] !== undefined);
+  const givenFields = [...known.values()].filter((field) => isGiven(rawArgs, field.name));
   const givenPaths = [
     ...Object.keys(rawArgs)
       .filter((name) => !known.has(name) && rawArgs[name] !== undefined)
@@ -578,6 +580,11 @@ export function nestingCandidates(
  */
 type CreateRequired = boolean | "opened";
 
+/** Whether a value was given under a name: an inherited `toString` is none */
+function isGiven(rawArgs: Record<string, unknown>, name: string): boolean {
+  return Object.hasOwn(rawArgs, name) && rawArgs[name] !== undefined;
+}
+
 function pathKey(path: string[]): string {
   return path.join("\0");
 }
@@ -631,7 +638,7 @@ function nestGroup(
   const ownFields = new Set(group.fields.filter((f) => !f.nested).map((f) => f.name));
   for (const name of leafNames) if (!ownFields.has(name)) delete result[name];
 
-  const leaves = group.fields.filter((field) => field.nested && rawArgs[field.name] !== undefined);
+  const leaves = group.fields.filter((field) => field.nested && isGiven(rawArgs, field.name));
   const present = new Set<string>();
   // Another variant's leaves open this variant's objects along their path
   // too, so their required objects are created as well.

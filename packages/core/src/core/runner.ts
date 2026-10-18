@@ -79,6 +79,11 @@ const defaultLogger: Logger = {
  */
 const USAGE_ERROR_EXIT_CODE = 2;
 
+/** Whether the args to validate hold a value of their own for a field */
+function isGivenValue(args: Record<string, unknown>, name: string): boolean {
+  return Object.hasOwn(args, name) && args[name] !== undefined;
+}
+
 /**
  * Attach a non-enumerable `$source` helper to the final args object so it
  * stays invisible to `Object.keys`/`JSON.stringify`/spread (those only ever
@@ -1060,7 +1065,7 @@ async function runCommandInternal<TResult = unknown>(
         );
       if (selectedGlobal && !isCompletionInvocation) {
         await runEffects(proxiedGlobalArgs, selectedGlobal, proxiedGlobalArgs, (name) =>
-          globalSourceMap.has(name),
+          isGivenValue(accumulatedGlobalArgs, name),
         );
       }
       collector?.stop();
@@ -1181,7 +1186,7 @@ async function runCommandInternal<TResult = unknown>(
       );
     if (selectedGlobal && !isCompletionInvocation) {
       await runEffects(proxiedGlobalArgs, selectedGlobal, proxiedGlobalArgs, (name) =>
-        globalSourceMap.has(name),
+        isGivenValue(accumulatedGlobalArgs, name),
       );
     }
     if (selectedLocal && !isCompletionInvocation) {
@@ -1189,8 +1194,8 @@ async function runCommandInternal<TResult = unknown>(
         proxiedCommandArgs,
         selectedLocal,
         proxiedGlobalArgs,
-        (name) =>
-          Object.hasOwn(parseResult.rawArgs, name) || !!parseResult.envFallbackFields?.has(name),
+        // CLI, env, prompted and prefilled values alike.
+        (name) => isGivenValue(argsToValidate, name),
       );
     }
 
