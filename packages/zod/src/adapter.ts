@@ -568,12 +568,15 @@ function extractFromIntersection(schema: z.ZodType): ExtractedFields {
   const right = def?.right;
 
   const allFieldsMap = new Map<string, ResolvedFieldMeta>();
+  let hasUnionMember = false;
 
   // Helper to extract fields from a sub-schema
   const extractSubFields = (subSchema: z.ZodType | undefined) => {
     if (!subSchema) return;
 
     const extracted = extractZodFields(subSchema as ArgsSchema);
+    if (extracted.unionOptions || extracted.variants || extracted.hasUnionMember)
+      hasUnionMember = true;
     for (const field of extracted.fields) {
       const existing = allFieldsMap.get(field.name);
       allFieldsMap.set(field.name, existing ? mergeIntersectionField(existing, field) : field);
@@ -589,6 +592,7 @@ function extractFromIntersection(schema: z.ZodType): ExtractedFields {
     schema: schema as ArgsSchema,
     schemaType: "intersection",
     unknownKeysMode: getUnknownKeysMode(schema),
+    ...(hasUnionMember ? { hasUnionMember } : {}),
     ...(description ? { description } : {}),
   };
 }

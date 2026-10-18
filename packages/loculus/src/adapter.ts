@@ -109,6 +109,10 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
         });
       });
     } else if (meta.kind !== "intersection") result.unionOptions = options;
+    else if (
+      options.some((option) => option.unionOptions || option.variants || option.hasUnionMember)
+    )
+      result.hasUnionMember = true;
   } else throw new TypeError("loculus command arguments must have object output");
   if (meta.description) result.description = meta.description;
   cache.set(schema, result);

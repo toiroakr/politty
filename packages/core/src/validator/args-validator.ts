@@ -79,6 +79,17 @@ export function validateArgsBranch<T extends ArgsSchema>(
         continue;
       }
     }
+    // The branch itself may only keep a given value as an unknown key.
+    if (own?.success && candidate.retention) {
+      const output = own.data;
+      const retention = candidate.retention;
+      const lost = (candidate.given ?? []).filter(({ path }) => drops(retention, path, output));
+      if (lost.length > 0) {
+        const message = `${lost.map(({ path }) => path.join(".")).join(", ")} would be ignored by the schema option that accepts the arguments.`;
+        reported ??= { success: false, errors: [{ path: [], message, code: "invalid_union" }] };
+        continue;
+      }
+    }
     const result = adapter.validate(candidate.args, schema);
     // The branch whose output the union returns.
     let producer = candidate.group;
@@ -96,20 +107,8 @@ export function validateArgsBranch<T extends ArgsSchema>(
         firstOutput = output?.success ? output.data : undefined;
         return true;
       });
-      // A value kept only as an unknown key may still be dropped below it
-      // (by a typed catchall), so check that the option's output holds it,
-      // unless a transform reshaped the object keeping it.
       const dropped = first
-        ? (candidate.given ?? []).filter(({ path }) => {
-            const fate = givenValueFate(first, path);
-            if (fate.fate !== "retained") return fate.fate === "dropped";
-            const container = valueAt(firstOutput, fate.container);
-            return (
-              typeof container === "object" &&
-              container !== null &&
-              valueAt(firstOutput, path) === undefined
-            );
-          })
+        ? (candidate.given ?? []).filter(({ path }) => drops(first, path, firstOutput))
         : [];
       if (dropped.length > 0) {
         const message = `${dropped.map(({ path }) => path.join(".")).join(", ")} would be ignored: another schema option accepts the arguments without them.`;
@@ -159,6 +158,24 @@ function issuesUnder(
   return result.errors.filter((error) =>
     paths.some((path) => path.every((key, i) => error.path[i] === key)),
   ).length;
+}
+
+/**
+ * Whether a branch that accepts the args, with `output` as its own output,
+ * drops the given value at `path`. A value it keeps only as an unknown key
+ * may still be dropped below that key (by a typed catchall), so the output
+ * must hold it, unless a transform reshaped the object keeping it: an
+ * unknown key that is kept at all stays under its own name.
+ */
+function drops(
+  branch: Parameters<typeof givenValueFate>[0],
+  path: string[],
+  output: unknown,
+): boolean {
+  const fate = givenValueFate(branch, path);
+  if (fate.fate !== "retained") return fate.fate === "dropped";
+  const unknownKey = path.slice(0, fate.container.length + 1);
+  return valueAt(output, unknownKey) !== undefined && valueAt(output, path) === undefined;
 }
 
 function valueAt(value: unknown, path: readonly string[]): unknown {

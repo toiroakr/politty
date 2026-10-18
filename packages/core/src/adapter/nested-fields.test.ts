@@ -666,6 +666,48 @@ describe("nested object fields", () => {
       expect(seen).toEqual([{ selected: { port: "80" } }]);
     });
 
+    it("should leave a value given in an expanded object's place to the schema", () => {
+      const schema = z.object({ config: z.object({ port: z.string().default("80") }) });
+      expect(validateArgs({ config: "invalid" }, schema).success).toBe(false);
+    });
+
+    it("should not take an intersected union's option for a required object no value named", async () => {
+      const { cmd, seen } = captureArgs(
+        z.intersection(
+          z.union([
+            z.object({ config: z.object({ port: z.string().default("80") }) }),
+            z.object({ name: z.string() }),
+          ]),
+          z.object({ verbose: z.boolean().optional() }),
+        ),
+      );
+      await runCommand(cmd, ["--name", "alice"]);
+      await runCommand(cmd, []);
+      expect(seen).toEqual([{ name: "alice" }, { config: { port: "80" } }]);
+    });
+
+    it("should take a union option that keeps a value it does not define", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ config: z.looseObject({}) }),
+          z.object({ config: z.object({ port: z.literal("80") }) }),
+        ]),
+      );
+      await runCommand(cmd, ["--config.port", "90"]);
+      expect(seen).toEqual([{ config: { port: "90" } }]);
+    });
+
+    it("should accept a value an earlier option's root transform moves", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.looseObject({}).transform((value) => ({ selected: value["config"] })),
+          z.object({ config: z.object({ port: z.string() }) }),
+        ]),
+      );
+      await runCommand(cmd, ["--config.port", "80"]);
+      expect(seen).toEqual([{ selected: { port: "80" } }]);
+    });
+
     it("should not count an earlier option its enclosing union rejects", async () => {
       const inner = z
         .union([z.object({ name: z.string().optional() }), z.object({ other: z.string() })])

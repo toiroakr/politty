@@ -181,6 +181,11 @@ export interface ExtractedFields {
    * typed catchall does even though unknown flags are not passed through
    */
   retainsUnknownKeys?: boolean | undefined;
+  /**
+   * Set on an intersection with a union member: its fields combine every
+   * branch of that union, so which objects one branch requires is unknown
+   */
+  hasUnionMember?: boolean | undefined;
 }
 
 /**

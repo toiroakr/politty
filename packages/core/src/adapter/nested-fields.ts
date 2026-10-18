@@ -305,7 +305,7 @@ export interface PrecedingBranch {
  * @param path - Property path of the given value
  */
 export function givenValueFate(
-  branch: PrecedingBranch,
+  branch: Pick<PrecedingBranch, "paths" | "objects" | "passthrough">,
   path: string[],
 ): { fate: "kept" | "dropped" } | { fate: "retained"; container: string[] } {
   for (let depth = 1; depth <= path.length; depth++) {
@@ -358,6 +358,11 @@ export interface NestingCandidate {
   precedingBranches?: PrecedingBranch[] | undefined;
   /** The given values, by field name and property path */
   given?: Array<{ name: string; path: string[] }> | undefined;
+  /**
+   * What the branch keeps (see {@link givenValueFate}): it may take given
+   * values it does not define only as unknown keys
+   */
+  retention?: Pick<PrecedingBranch, "paths" | "objects" | "passthrough"> | undefined;
 }
 
 /**
@@ -410,7 +415,14 @@ export function nestingCandidates(
     const args = nestGroup(rawArgs, group, leafNames, { createRequired, foreign });
     return [{ args, group, branchSchema }];
   };
-  if (!extracted.variants && !extracted.unionOptions) return nest(extracted);
+  if (!extracted.variants && !extracted.unionOptions) {
+    // An intersection with a union member combines that union's branches:
+    // as for a plain union, create required objects only inside opened ones
+    // first, so a branch the given values never named is not chosen.
+    return extracted.hasUnionMember
+      ? [...nest(extracted, undefined, "opened"), ...nest(extracted, undefined, true)]
+      : nest(extracted);
+  }
 
   interface Branch {
     group: NestingGroup;
@@ -469,7 +481,11 @@ export function nestingCandidates(
   const covering = all.filter((branch) =>
     givenFields.every(
       (field) =>
-        branch.names.has(field.name) || !branch.plain || (!field.nested && branch.passthrough),
+        branch.names.has(field.name) ||
+        !branch.plain ||
+        (field.nested
+          ? givenValueFate(branch, field.nested.path).fate === "retained"
+          : branch.passthrough),
     ),
   );
   // Every branch's leaves and objects, with no branch deciding which
@@ -494,12 +510,11 @@ export function nestingCandidates(
     });
     // Another variant's given leaves, placed at their path for this
     // variant's policy to strip, keep or reject.
-    const foreign = branch.plain
-      ? []
-      : givenFields.filter((field) => field.nested && !branch.names.has(field.name));
+    const foreign = givenFields.filter((field) => field.nested && !branch.names.has(field.name));
     return nest(branch.group, branch.schema, createRequired, foreign).map((candidate) => ({
       ...candidate,
       branchSchemas: branch.schemas,
+      retention: branch,
       givenPaths,
       given,
       precedingBranches: preceding.map(({ schemas, group, paths, objects, passthrough }) => ({
@@ -609,6 +624,9 @@ function nestGroup(
     const key = object.path[object.path.length - 1]!;
     // An own property only: `constructor` is no value given.
     const current = Object.hasOwn(parent, key) ? parent[key] : undefined;
+    // A value given in its place that is no object is the schema's to
+    // reject, not to be replaced.
+    if (current !== undefined && !isPlainObject(current)) continue;
     // Copy so a value given as a whole is never mutated.
     parent[key] = isPlainObject(current) ? { ...current } : {};
   }
