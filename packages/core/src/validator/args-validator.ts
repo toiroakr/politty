@@ -58,7 +58,16 @@ export function validateArgsBranch<T extends ArgsSchema>(
   for (const candidate of nestingCandidates(rawArgs, extractFields(schema))) {
     let own: ValidationResult<unknown> | undefined;
     if (candidate.branchSchema) {
-      own = adapter.validate(candidate.args, candidate.branchSchema);
+      // Every union option enclosing the branch must accept it too.
+      for (const option of candidate.branchSchemas ?? []) {
+        if (option === candidate.branchSchema) continue;
+        const enclosing = adapter.validate(candidate.args, option);
+        if (!enclosing.success) {
+          own = enclosing;
+          break;
+        }
+      }
+      own ??= adapter.validate(candidate.args, candidate.branchSchema);
       if (!own.success) {
         // Prefer the option that rejects the fewest given values: one that
         // only misses values says more than one the given values rule out.
@@ -90,13 +99,17 @@ export function validateArgsBranch<T extends ArgsSchema>(
         return true;
       });
       // A value kept only as an unknown key may still be dropped below it
-      // (by a typed catchall), so check that the option's output holds it.
+      // (by a typed catchall), so check that the option's output holds it,
+      // unless a transform reshaped the object keeping it.
       const dropped = first
         ? (candidate.given ?? []).filter(({ path }) => {
             const fate = givenValueFate(first, path);
+            if (fate.fate !== "retained") return fate.fate === "dropped";
+            const container = valueAt(firstOutput, fate.container);
             return (
-              fate === "dropped" ||
-              (fate === "retained" && valueAt(firstOutput, path) === undefined)
+              typeof container === "object" &&
+              container !== null &&
+              valueAt(firstOutput, path) === undefined
             );
           })
         : [];

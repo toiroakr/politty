@@ -329,19 +329,20 @@ export interface PrecedingBranch {
 export function givenValueFate(
   branch: PrecedingBranch,
   path: string[],
-): "kept" | "dropped" | "retained" {
+): { fate: "kept" | "dropped" } | { fate: "retained"; container: string[] } {
   for (let depth = 1; depth <= path.length; depth++) {
     const key = pathKey(path.slice(0, depth));
-    if (branch.paths.has(key)) return "kept";
+    if (branch.paths.has(key)) return { fate: "kept" };
     if (branch.objects.has(key)) continue;
+    // The object (or option) keeping the value as an unknown key.
     const container = path.slice(0, depth - 1);
     const keepsUnknown =
       container.length === 0
         ? branch.passthrough
         : (branch.objects.get(pathKey(container)) ?? false);
-    return keepsUnknown ? "retained" : "dropped";
+    return keepsUnknown ? { fate: "retained", container } : { fate: "dropped" };
   }
-  return "kept";
+  return { fate: "kept" };
 }
 
 /** Args nested by one schema branch, to validate against the whole schema */
@@ -355,6 +356,11 @@ export interface NestingCandidate {
    * dropping values this nesting moved elsewhere.
    */
   branchSchema?: ArgsSchema | undefined;
+  /**
+   * The union options enclosing `branchSchema`, outermost first and ending
+   * with it: the union takes the branch only when every one accepts
+   */
+  branchSchemas?: ArgsSchema[] | undefined;
   /**
    * Paths whose values were copied from an object default rather than
    * given. A default may hold output values that do not validate again as
@@ -530,6 +536,7 @@ export function nestingCandidates(
       : givenFields.filter((field) => field.nested && !branch.names.has(field.name));
     return nest(branch.group, branch.schema, createRequired, foreign).map((candidate) => ({
       ...candidate,
+      branchSchemas: branch.schemas,
       givenPaths,
       given,
       precedingBranches: preceding.map(({ schemas, group, paths, objects, passthrough }) => ({
@@ -682,31 +689,56 @@ function nestGroup(
       defaulted.delete(pathKey(path.slice(0, depth)));
   }
   // One that cannot be placed stays under its flat name, for the schema's
-  // unknown-key policy to handle rather than vanishing.
+  // unknown-key policy to handle rather than vanishing. A given value
+  // replaces one a default supplied.
   for (const leaf of options.foreign ?? []) {
-    if (!placeAt(result, leaf.nested!.path, rawArgs[leaf.name]))
+    const path = leaf.nested!.path;
+    const fromDefault = (depth: number) => defaulted.has(pathKey(path.slice(0, depth)));
+    if (!placeAt(result, path, rawArgs[leaf.name], fromDefault)) {
       result[leaf.name] = rawArgs[leaf.name];
+      continue;
+    }
+    for (let depth = 1; depth <= path.length; depth++)
+      defaulted.delete(pathKey(path.slice(0, depth)));
   }
   return { args: result, defaultedPaths: [...defaulted.values()] };
 }
 
 /**
- * Set a value at a property path, creating the objects along it, unless the
- * path is taken or runs through a value that is no plain object.
+ * Set a value at a property path, creating the objects along it (and copying
+ * existing ones, which may be shared defaults), unless the path is taken or
+ * runs through a value that is no plain object. A value at a depth
+ * `replaceable` accepts counts as free, such as one a default supplied.
  *
  * @returns Whether the value was set
  */
-function placeAt(args: Record<string, unknown>, path: string[], value: unknown): boolean {
+function placeAt(
+  args: Record<string, unknown>,
+  path: string[],
+  value: unknown,
+  replaceable: (depth: number) => boolean,
+): boolean {
+  // Check before writing, so a value that cannot be placed changes nothing.
+  let probe: unknown = args;
+  for (let depth = 1; depth <= path.length; depth++) {
+    const key = path[depth - 1]!;
+    const next = isPlainObject(probe) && Object.hasOwn(probe, key) ? probe[key] : undefined;
+    if (next === undefined) break;
+    if (depth < path.length && isPlainObject(next)) {
+      probe = next;
+      continue;
+    }
+    if (replaceable(depth)) break;
+    return false;
+  }
   let target = args;
-  for (const key of path.slice(0, -1)) {
+  for (let depth = 1; depth < path.length; depth++) {
+    const key = path[depth - 1]!;
     const next = Object.hasOwn(target, key) ? target[key] : undefined;
-    if (next === undefined) target[key] = {};
-    else if (!isPlainObject(next)) return false;
+    target[key] = isPlainObject(next) ? { ...next } : {};
     target = target[key] as Record<string, unknown>;
   }
-  const last = path[path.length - 1]!;
-  if (Object.hasOwn(target, last)) return false;
-  target[last] = value;
+  target[path[path.length - 1]!] = value;
   return true;
 }
 

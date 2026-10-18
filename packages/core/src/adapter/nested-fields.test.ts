@@ -668,6 +668,31 @@ describe("nested object fields", () => {
       expect(seen).toEqual([]);
     });
 
+    it("should not take a branch its enclosing union rejects", async () => {
+      const inner = z
+        .union([
+          z.object({ config: z.object({ port: z.string() }) }),
+          z.object({ other: z.string() }),
+        ])
+        .refine(() => false);
+      const { cmd, seen } = captureArgs(
+        z.union([inner, z.object({ name: z.string().optional() })]),
+      );
+      expect((await runCommand(cmd, ["--config.port", "80"])).success).toBe(false);
+      expect(seen).toEqual([]);
+    });
+
+    it("should accept a value an earlier passthrough option keeps under a transform", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ config: z.looseObject({}) }).transform(({ config }) => ({ selected: config })),
+          z.object({ config: z.object({ port: z.string() }) }),
+        ]),
+      );
+      await runCommand(cmd, ["--config.port", "80"]);
+      expect(seen).toEqual([{ selected: { port: "80" } }]);
+    });
+
     it("should not count an earlier option its enclosing union rejects", async () => {
       const inner = z
         .union([z.object({ name: z.string().optional() }), z.object({ other: z.string() })])
@@ -692,6 +717,49 @@ describe("nested object fields", () => {
       const argv = ["--mode", "a", "--config.tls", "text", "--config.tls.enabled", "on"];
       expect((await runCommand(cmd, argv)).success).toBe(false);
       expect(seen).toEqual([]);
+    });
+
+    it("should not write another variant's option into a shared default", async () => {
+      const shared = { extra: {} as Record<string, unknown> };
+      const { cmd, seen } = captureArgs(
+        z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("a"), config: z.looseObject({}).default(shared) }),
+          z.object({
+            mode: z.literal("b"),
+            config: z.object({ extra: z.object({ port: z.string() }) }).optional(),
+          }),
+        ]),
+      );
+      await runCommand(cmd, ["--mode", "a", "--config.extra.port", "90"]);
+      await runCommand(cmd, ["--mode", "a"]);
+      expect(seen).toEqual([
+        { mode: "a", config: { extra: { port: "90" } } },
+        { mode: "a", config: { extra: {} } },
+      ]);
+      expect(shared).toEqual({ extra: {} });
+    });
+
+    it("should let another variant's option replace a value a default supplied", async () => {
+      const { cmd, seen } = captureArgs(
+        z.discriminatedUnion("mode", [
+          z.object({
+            mode: z.literal("a"),
+            config: z
+              .looseObject({ host: z.string() })
+              .default({ host: "h", extra: "default", deep: "default" }),
+          }),
+          z.object({
+            mode: z.literal("b"),
+            config: z
+              .object({ extra: z.string(), deep: z.object({ port: z.string() }) })
+              .optional(),
+          }),
+        ]),
+      );
+      await runCommand(cmd, ["--mode", "a", "--config.extra", "CLI", "--config.deep.port", "1"]);
+      expect(seen).toEqual([
+        { mode: "a", config: { host: "h", extra: "CLI", deep: { port: "1" } } },
+      ]);
     });
 
     it("should apply the selected variant's default to an object another variant's option opens", async () => {
