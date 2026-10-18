@@ -1237,11 +1237,13 @@ async function runCommandInternal<TResult = unknown>(
       const localHasCliOrEnvValue =
         Object.hasOwn(parseResult.rawArgs, field.name) || localEnvFallbackFields.has(field.name);
       // A nested property the command's value leaves out, whose global
-      // value the merge above kept, keeps the global source too.
+      // value the merge above kept, keeps the global source too. Read its
+      // path from the branch that accepted the args, as the merge does.
+      const selectedField = selectedLocal?.fields.find((f) => f.name === field.name) ?? field;
       if (
         !localHasCliOrEnvValue &&
-        !ownsLeaf(validationResult.data as Record<string, unknown>, field) &&
-        ownsLeaf(mergedPlainArgs, field)
+        !ownsLeaf(validationResult.data as Record<string, unknown>, selectedField) &&
+        ownsLeaf(mergedPlainArgs, selectedField)
       ) {
         continue;
       }

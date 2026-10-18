@@ -304,6 +304,10 @@ export function quotedAvailabilityTokens(
     if (options?.defaultNegation) {
       const variants: string[] = [];
       pushCaseVariants(variants, negation);
+      // `--no-` also takes the hidden spellings (e.g. `--no-s3-enabled`).
+      for (const hidden of options.hiddenAliases ?? []) {
+        if (hidden.length > 1) pushAliasTokens(variants, `no-${hidden}`);
+      }
       for (const variant of variants) tokens.add(variant);
     } else if (negation.includes("-")) tokens.add(`--${toCamelCase(negation)}`);
   }

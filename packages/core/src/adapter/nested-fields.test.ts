@@ -1175,6 +1175,35 @@ describe("nested object fields", () => {
       ).toContain('"-g"');
     });
 
+    it("should show a camel negation the parser accepts for an acronym key", async () => {
+      const schema = z.object({
+        HTTPConfig: arg(z.object({ enabled: arg(z.boolean().optional(), { negation: true }) }), {
+          flatten: "camel",
+        }).optional(),
+      });
+      const [field] = extractFields(schema).fields;
+      expect(field?.negationDisplay).toBe("noHttpConfigEnabled");
+      const { cmd, seen } = captureArgs(schema);
+      await runCommand(cmd, [`--${field?.negationDisplay}`]);
+      expect(seen[0]).toEqual({ HTTPConfig: { enabled: false } });
+    });
+
+    it("should guard the default negation of a hidden spelling", () => {
+      const [field] = extractFields(
+        z.object({
+          s3: arg(z.object({ enabled: arg(z.boolean().optional(), { negation: true }) }), {
+            flatten: "camel",
+          }),
+        }),
+      ).fields;
+      expect(
+        quotedAvailabilityTokens(field!.cliName, field!.alias, field!.negationDisplay, {
+          defaultNegation: true,
+          hiddenAliases: field!.hiddenAlias,
+        }),
+      ).toContain('"--no-s3-enabled"');
+    });
+
     it("should document the options of object fields in an args table", () => {
       const table = renderArgsTable({ config: z.object({ port: z.number() }) });
       expect(table).toContain("--config.port");
@@ -1223,6 +1252,42 @@ describe("nested object fields", () => {
   });
 
   describe("global args", () => {
+    it("should keep the source of a retained global property by the accepted variant", async () => {
+      vi.stubEnv("NESTED_TEST_TOKEN", "secret");
+      try {
+        const sources: unknown[] = [];
+        const sub = defineCommand({
+          name: "sub",
+          args: z.discriminatedUnion("mode", [
+            z.object({ mode: z.literal("a"), configToken: z.string().optional() }),
+            z.object({
+              mode: z.literal("b"),
+              config: arg(
+                z.object({ token: z.string().optional(), region: z.string().default("us") }),
+                { flatten: "kebab" },
+              ),
+            }),
+          ]),
+          run: (args) => {
+            sources.push([JSON.parse(JSON.stringify(args)), args.$source?.("configToken")]);
+          },
+        });
+        const main = defineCommand({ name: "app", subCommands: { sub } });
+        const globalArgs = z.object({
+          config: arg(
+            z.object({ token: arg(z.string().optional(), { env: "NESTED_TEST_TOKEN" }) }),
+            { flatten: "kebab" },
+          ).optional(),
+        });
+        await runCommand(main, ["sub", "--mode", "b"], { globalArgs });
+        expect(sources).toEqual([
+          [{ mode: "b", config: { token: "secret", region: "us" } }, "env"],
+        ]);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it("should keep the source of global properties the command's value leaves out", async () => {
       vi.stubEnv("NESTED_TEST_TOKEN", "secret");
       try {

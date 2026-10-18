@@ -211,7 +211,9 @@ function expandObjectField(
       const negationDisplay =
         child.negation === true
           ? style === "camel"
-            ? `no${capitalize(cliName)}`
+            ? // From the camelCase form the parser registers: `noHTTPConfig`
+              // would be read as `hTTPConfig`.
+              `no${capitalize(toCamelCase(kebab))}`
             : `no-${kebab}`
           : child.negationDisplay;
       // Like every other option, accept both the kebab-case and camelCase
