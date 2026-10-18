@@ -162,6 +162,9 @@ An optional object stays `undefined` until one of its options is given. A
 required object is always created, so its properties' defaults apply even when
 none of its options is given. An expanded object itself cannot have a default
 (`.default(...)`, `.prefault(...)`): give its properties defaults instead.
+Object fields of a union (or discriminated union) inside an intersection
+cannot be expanded either: put the fields the intersection adds into each union
+option instead.
 
 `flatten` picks how keys are joined into option names (default: `"dot"`).
 A nested object without its own `flatten` inherits the style of the object

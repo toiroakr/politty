@@ -225,6 +225,24 @@ describe("@politty/valibot e2e", () => {
     expect(result.error?.message).toMatch(/cannot have a default value/);
   });
 
+  it("should reject object fields of a union inside an intersection", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: v.intersect([
+        v.union([
+          v.object({ config: v.object({ host: v.string() }) }),
+          v.object({ config: v.object({ port: v.string() }) }),
+        ]),
+        v.object({ verbose: v.optional(v.boolean()) }),
+      ]),
+      run: () => {},
+    });
+
+    const result = await runCommand(cmd, []);
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toMatch(/union inside an intersection/);
+  });
+
   it("should expand nested object fields into options and nest their values", async () => {
     const cmd = defineCommand({
       name: "serve",

@@ -651,6 +651,23 @@ describe("@politty/loculus", () => {
     expect((await runCommand(command, [])).result).toEqual({ db: { url: "x", pool: 1 } });
   });
 
+  it("rejects object fields of a union inside an intersection", async () => {
+    const command = defineCommand({
+      name: "serve",
+      args: l.intersection(
+        l.union([
+          l.object({ config: l.object({ host: l.string() }) }),
+          l.object({ config: l.object({ port: l.string() }) }),
+        ]),
+        l.object({ verbose: l.boolean({ optional: true }) }),
+      ),
+      run: () => {},
+    });
+    const result = await runCommand(command, []);
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toMatch(/union inside an intersection/);
+  });
+
   it("rejects a default on an object field", async () => {
     const command = defineCommand({
       name: "serve",

@@ -547,12 +547,12 @@ function extractFromUnion(schema: ValibotNode): ExtractedFields {
  */
 function extractFromIntersect(schema: ValibotNode): ExtractedFields {
   const allFieldsMap = new Map<string, ResolvedFieldMeta>();
-  let hasUnionMember = false;
+  const unionMembers: ExtractedFields[] = [];
 
   for (const option of schema.options ?? []) {
     const extracted = extractValibotFields(option as ArgsSchema);
-    if (extracted.unionOptions || extracted.variants || extracted.hasUnionMember)
-      hasUnionMember = true;
+    if (extracted.unionOptions || extracted.variants) unionMembers.push(extracted);
+    unionMembers.push(...(extracted.unionMembers ?? []));
     for (const field of extracted.fields) {
       const existing = allFieldsMap.get(field.name);
       allFieldsMap.set(field.name, existing ? mergeIntersectionField(existing, field) : field);
@@ -565,7 +565,7 @@ function extractFromIntersect(schema: ValibotNode): ExtractedFields {
     schema: schema as unknown as ArgsSchema,
     schemaType: "intersection",
     unknownKeysMode: getUnknownKeysMode(schema),
-    ...(hasUnionMember ? { hasUnionMember } : {}),
+    ...(unionMembers.length > 0 ? { unionMembers } : {}),
     ...(description ? { description } : {}),
   };
 }

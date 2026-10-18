@@ -46,6 +46,14 @@ export function flattenNestedFields(
   extracted: ExtractedFields,
   resolveChild: ResolveChild,
 ): ExtractedFields {
+  // An intersection keeps only its union members' combined fields, which
+  // take the first branch's definition of an object.
+  const unionObject = extracted.unionMembers?.map(firstObjectField).find(Boolean);
+  if (unionObject) {
+    throw new Error(
+      `Object field "${unionObject}" of a union inside an intersection cannot be expanded into options: move the fields the intersection adds into each union option instead.`,
+    );
+  }
   if (!hasObjectField(extracted)) return extracted;
   const flattenGroup = (fields: ResolvedFieldMeta[]) => {
     const nestedObjects: NestedObjectInfo[] = [];
@@ -92,6 +100,14 @@ export function flattenNestedFields(
     ...(flatVariants && { variants: flatVariants }),
     ...(flatOptions && { unionOptions: flatOptions }),
   };
+}
+
+/** The name of the first object field in any branch of an extraction */
+function firstObjectField(extracted: ExtractedFields): string | undefined {
+  const field = [extracted, ...(extracted.variants ?? [])]
+    .flatMap((group) => group.fields)
+    .find((f) => f.objectShape);
+  return field?.name ?? (extracted.unionOptions ?? []).map(firstObjectField).find(Boolean);
 }
 
 function hasObjectField(extracted: ExtractedFields): boolean {
@@ -415,14 +431,7 @@ export function nestingCandidates(
     const args = nestGroup(rawArgs, group, leafNames, { createRequired, foreign });
     return [{ args, group, branchSchema }];
   };
-  if (!extracted.variants && !extracted.unionOptions) {
-    // An intersection with a union member combines that union's branches:
-    // as for a plain union, create required objects only inside opened ones
-    // first, so a branch the given values never named is not chosen.
-    return extracted.hasUnionMember
-      ? [...nest(extracted, undefined, "opened"), ...nest(extracted, undefined, true)]
-      : nest(extracted);
-  }
+  if (!extracted.variants && !extracted.unionOptions) return nest(extracted);
 
   interface Branch {
     group: NestingGroup;

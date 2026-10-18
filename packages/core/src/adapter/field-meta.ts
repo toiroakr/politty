@@ -182,10 +182,11 @@ export interface ExtractedFields {
    */
   retainsUnknownKeys?: boolean | undefined;
   /**
-   * Set on an intersection with a union member: its fields combine every
-   * branch of that union, so which objects one branch requires is unknown
+   * The union (or discriminated union) members of an intersection, nested
+   * intersections included. Its fields combine every branch of them, so
+   * object fields in these members cannot be expanded per branch.
    */
-  hasUnionMember?: boolean | undefined;
+  unionMembers?: ExtractedFields[] | undefined;
 }
 
 /**

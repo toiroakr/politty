@@ -680,19 +680,30 @@ describe("nested object fields", () => {
       expect(validateArgs({ config: "invalid" }, schema).success).toBe(false);
     });
 
-    it("should not take an intersected union's option for a required object no value named", async () => {
+    it("should reject object fields of a union inside an intersection", async () => {
+      const union = z.union([
+        z.object({ config: z.object({ host: z.string() }) }),
+        z.object({ config: z.object({ port: z.string() }) }),
+      ]);
+      for (const schema of [
+        z.intersection(union, z.object({ verbose: z.boolean().optional() })),
+        z.intersection(
+          z.object({ verbose: z.boolean().optional() }),
+          z.intersection(union, z.object({ id: z.string().optional() })),
+        ),
+      ]) {
+        expect(() => extractFields(schema)).toThrow(/union inside an intersection/);
+      }
+
+      // A union of plain options keeps working, with objects from another member.
       const { cmd, seen } = captureArgs(
         z.intersection(
-          z.union([
-            z.object({ config: z.object({ port: z.string().default("80") }) }),
-            z.object({ name: z.string() }),
-          ]),
-          z.object({ verbose: z.boolean().optional() }),
+          z.union([z.object({ name: z.string() }), z.object({ id: z.string() })]),
+          z.object({ config: z.object({ port: z.string().default("80") }) }),
         ),
       );
       await runCommand(cmd, ["--name", "alice"]);
-      await runCommand(cmd, []);
-      expect(seen).toEqual([{ name: "alice" }, { config: { port: "80" } }]);
+      expect(seen).toEqual([{ name: "alice", config: { port: "80" } }]);
     });
 
     it("should take a union option that keeps a value it does not define", async () => {
