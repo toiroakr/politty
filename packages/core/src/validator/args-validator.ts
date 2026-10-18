@@ -72,10 +72,8 @@ export function validateArgsBranch<T extends ArgsSchema>(
         // Prefer the option that rejects the fewest given values: one that
         // only misses values says more than one the given values rule out.
         if (
-          !onlyDefaulted(own, candidate.defaultedPaths) &&
-          (!branchFailure ||
-            issuesUnder(own, candidate.givenPaths) <
-              issuesUnder(branchFailure, candidate.givenPaths))
+          !branchFailure ||
+          issuesUnder(own, candidate.givenPaths) < issuesUnder(branchFailure, candidate.givenPaths)
         )
           branchFailure = own;
         continue;
@@ -133,10 +131,7 @@ export function validateArgsBranch<T extends ArgsSchema>(
       continue;
     }
     last = result;
-    // Skip failures about values copied from an object default rather
-    // than given.
-    if (!candidate.diagnosticOnly && !onlyDefaulted(result, candidate.defaultedPaths))
-      reported ??= result;
+    if (!candidate.diagnosticOnly) reported ??= result;
   }
   return { result: (reported ?? branchFailure ?? last) as ValidationResult<InferSchemaOutput<T>> };
 }
@@ -164,19 +159,6 @@ function issuesUnder(
   return result.errors.filter((error) =>
     paths.some((path) => path.every((key, i) => error.path[i] === key)),
   ).length;
-}
-
-/**
- * Whether every issue of a failed validation lies under one of `paths`.
- */
-function onlyDefaulted(
-  result: ValidationResult<unknown>,
-  paths: readonly string[][] | undefined,
-): boolean {
-  if (result.success || !paths?.length) return false;
-  return result.errors.every((error) =>
-    paths.some((path) => path.every((key, i) => error.path[i] === key)),
-  );
 }
 
 function valueAt(value: unknown, path: readonly string[]): unknown {

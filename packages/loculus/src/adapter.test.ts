@@ -640,10 +640,7 @@ describe("@politty/loculus", () => {
           ),
           { flatten: "kebab" },
         ),
-        db: l.object(
-          { url: l.string(), pool: l.number() },
-          { default: { undefined: { url: "x", pool: 1 } } },
-        ),
+        db: l.object({ url: l.string({ default: "x" }), pool: l.number({ default: 1 }) }),
       }),
       run: (args) => args,
     });
@@ -652,6 +649,19 @@ describe("@politty/loculus", () => {
       (await runCommand(command, ["--config-server-port", "80", "--db.pool", "5"])).result,
     ).toEqual({ config: { serverPort: 80, host: "localhost" }, db: { url: "x", pool: 5 } });
     expect((await runCommand(command, [])).result).toEqual({ db: { url: "x", pool: 1 } });
+  });
+
+  it("rejects a default on an object field", async () => {
+    const command = defineCommand({
+      name: "serve",
+      args: l.object({
+        db: l.object({ url: l.string() }, { default: { undefined: { url: "x" } } }),
+      }),
+      run: () => {},
+    });
+    const result = await runCommand(command, []);
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toMatch(/cannot have a default value/);
   });
 
   it("keeps nested properties of both intersection members", async () => {

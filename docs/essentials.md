@@ -158,9 +158,10 @@ $ my-cli --config.port 8080
 # args.config = { port: 8080, host: "localhost" }
 ```
 
-An optional object stays `undefined` until one of its options is given. When
-the object has a `.default({...})`, properties that are not given keep the
-default's values.
+An optional object stays `undefined` until one of its options is given. A
+required object is always created, so its properties' defaults apply even when
+none of its options is given. An expanded object itself cannot have a default
+(`.default(...)`, `.prefault(...)`): give its properties defaults instead.
 
 `flatten` picks how keys are joined into option names (default: `"dot"`).
 A nested object without its own `flatten` inherits the style of the object

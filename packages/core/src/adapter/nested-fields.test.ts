@@ -85,12 +85,13 @@ describe("nested object fields", () => {
     expect(result.error?.message).toContain("db.url");
   });
 
-  it("should fill unspecified properties from the object default", async () => {
+  it("should build a required object from its properties' defaults", async () => {
     const { cmd, seen } = captureArgs(
       z.object({
-        config: z
-          .object({ port: z.coerce.number(), host: z.string() })
-          .default({ port: 1, host: "default-host" }),
+        config: z.object({
+          port: z.coerce.number().default(1),
+          host: z.string().default("default-host"),
+        }),
       }),
     );
     await runCommand(cmd, ["--config.port", "9"]);
@@ -101,11 +102,15 @@ describe("nested object fields", () => {
     ]);
   });
 
-  it("should show a property's default from the object default in help", () => {
-    const { fields } = extractFields(
-      z.object({ config: z.object({ port: z.number() }).default({ port: 3 }) }),
-    );
-    expect(fields[0]?.defaultValue).toBe(3);
+  it("should reject a default on an object field", () => {
+    for (const config of [
+      z.object({ port: z.number() }).default({ port: 1 }),
+      z.object({ port: z.number() }).prefault({ port: 1 }),
+      z.object({ db: z.object({ port: z.number() }).default(() => ({ port: 1 })) }),
+      z.object({ port: z.number() }).nullable().default(null),
+    ]) {
+      expect(() => extractFields(z.object({ config }))).toThrow(/cannot have a default value/);
+    }
   });
 
   it("should read leaf values from their environment variables", async () => {
@@ -358,16 +363,18 @@ describe("nested object fields", () => {
         z.discriminatedUnion("mode", [
           z.object({
             mode: z.literal("a"),
-            config: z
-              .object({ port: z.coerce.number(), host: z.string() })
-              .default({ port: 1, host: "host-a" }),
+            config: z.object({
+              port: z.coerce.number().default(1),
+              host: z.string().default("host-a"),
+            }),
             db: z.object({ port: z.coerce.number().default(80) }),
           }),
           z.object({
             mode: z.literal("b"),
-            config: z
-              .object({ port: z.coerce.number(), host: z.string() })
-              .default({ port: 2, host: "host-b" }),
+            config: z.object({
+              port: z.coerce.number().default(2),
+              host: z.string().default("host-b"),
+            }),
           }),
         ]),
       );
@@ -437,12 +444,6 @@ describe("nested object fields", () => {
   });
 
   describe("union and intersection reconstruction", () => {
-    const modes = (config: (mode: string) => z.ZodType) =>
-      z.union([
-        z.object({ mode: z.literal("a"), a: z.object({ x: z.string() }), config: config("a") }),
-        z.object({ mode: z.literal("b"), config: config("b") }),
-      ]);
-
     it("should not let another union option drop a given value", async () => {
       const { cmd, seen } = captureArgs(
         z.union([
@@ -452,18 +453,6 @@ describe("nested object fields", () => {
       );
       await runCommand(cmd, ["--mode", "b", "--config.port", "80"]);
       expect(seen[0]).toEqual({ mode: "b", config: { port: "80" } });
-    });
-
-    it("should use the matching union option's object default", async () => {
-      const { cmd, seen } = captureArgs(
-        modes((mode) =>
-          z
-            .object({ port: z.string(), host: z.string() })
-            .default({ port: "1", host: `host-${mode}` }),
-        ),
-      );
-      await runCommand(cmd, ["--mode", "b", "--config.port", "9"]);
-      expect(seen[0]).toEqual({ mode: "b", config: { port: "9", host: "host-b" } });
     });
 
     it("should require an intersection object when either member requires it", async () => {
@@ -496,9 +485,7 @@ describe("nested object fields", () => {
       union([
         z.object({
           mode: z.literal("a"),
-          config: z
-            .object({ port: z.string(), host: z.string() })
-            .default({ port: "1", host: "a" }),
+          config: z.object({ port: z.string().default("1"), host: z.string().default("a") }),
         }),
         z.object({
           mode: z.literal("b"),
@@ -630,20 +617,6 @@ describe("nested object fields", () => {
       expect(seen).toEqual([{ config: { port: "80" } }]);
     });
 
-    it("should not require a leaf an enclosing intersection default supplies", async () => {
-      const { cmd, seen } = captureArgs(
-        z.union([
-          z.intersection(
-            z.object({ config: z.object({ host: z.string() }).default({ host: "h" }) }),
-            z.object({ config: z.object({ port: z.string() }) }),
-          ),
-          z.object({ other: z.string() }),
-        ]),
-      );
-      await runCommand(cmd, ["--config.port", "80"]);
-      expect(seen).toEqual([{ config: { host: "h", port: "80" } }]);
-    });
-
     it("should accept a value an earlier option keeps through its own typed catchall", async () => {
       const { cmd, seen } = captureArgs(
         z.union([
@@ -719,55 +692,12 @@ describe("nested object fields", () => {
       expect(seen).toEqual([]);
     });
 
-    it("should not write another variant's option into a shared default", async () => {
-      const shared = { extra: {} as Record<string, unknown> };
-      const { cmd, seen } = captureArgs(
-        z.discriminatedUnion("mode", [
-          z.object({ mode: z.literal("a"), config: z.looseObject({}).default(shared) }),
-          z.object({
-            mode: z.literal("b"),
-            config: z.object({ extra: z.object({ port: z.string() }) }).optional(),
-          }),
-        ]),
-      );
-      await runCommand(cmd, ["--mode", "a", "--config.extra.port", "90"]);
-      await runCommand(cmd, ["--mode", "a"]);
-      expect(seen).toEqual([
-        { mode: "a", config: { extra: { port: "90" } } },
-        { mode: "a", config: { extra: {} } },
-      ]);
-      expect(shared).toEqual({ extra: {} });
-    });
-
-    it("should let another variant's option replace a value a default supplied", async () => {
+    it("should create the selected variant's object another variant's option opens", async () => {
       const { cmd, seen } = captureArgs(
         z.discriminatedUnion("mode", [
           z.object({
             mode: z.literal("a"),
-            config: z
-              .looseObject({ host: z.string() })
-              .default({ host: "h", extra: "default", deep: "default" }),
-          }),
-          z.object({
-            mode: z.literal("b"),
-            config: z
-              .object({ extra: z.string(), deep: z.object({ port: z.string() }) })
-              .optional(),
-          }),
-        ]),
-      );
-      await runCommand(cmd, ["--mode", "a", "--config.extra", "CLI", "--config.deep.port", "1"]);
-      expect(seen).toEqual([
-        { mode: "a", config: { host: "h", extra: "CLI", deep: { port: "1" } } },
-      ]);
-    });
-
-    it("should apply the selected variant's default to an object another variant's option opens", async () => {
-      const { cmd, seen } = captureArgs(
-        z.discriminatedUnion("mode", [
-          z.object({
-            mode: z.literal("a"),
-            config: z.looseObject({ host: z.string() }).default({ host: "h" }),
+            config: z.looseObject({ host: z.string().default("h") }),
           }),
           z.object({ mode: z.literal("b"), config: z.object({ extra: z.string() }).optional() }),
         ]),
@@ -920,17 +850,6 @@ describe("nested object fields", () => {
       expect(seen[0]).toEqual({ selected: { port: "80" } });
     });
 
-    it("should keep the defaults of both intersection members", async () => {
-      const { cmd, seen } = captureArgs(
-        z.intersection(
-          z.object({ config: z.object({ host: z.string() }).default({ host: "h" }) }),
-          z.object({ config: z.object({ port: z.string() }).default({ port: "80" }) }),
-        ),
-      );
-      await runCommand(cmd, ["--config.host", "remote"]);
-      expect(seen[0]).toEqual({ config: { host: "remote", port: "80" } });
-    });
-
     it("should keep a later variant's scalar field named like an earlier object", async () => {
       const effect = vi.fn();
       const schema = z.discriminatedUnion("mode", [
@@ -969,21 +888,6 @@ describe("nested object fields", () => {
   });
 
   describe("values inside objects", () => {
-    it("should keep a null its parent's default gives a nullable object", async () => {
-      const { cmd, seen } = captureArgs(
-        z.object({
-          config: z
-            .object({
-              port: z.string(),
-              tls: z.object({ enabled: z.boolean() }).nullable(),
-            })
-            .default({ port: "1", tls: null }),
-        }),
-      );
-      await runCommand(cmd, ["--config.port", "2"]);
-      expect(seen[0]).toEqual({ config: { port: "2", tls: null } });
-    });
-
     it("should run leaf effects when the object becomes a class instance", async () => {
       class Config {
         constructor(readonly port: number) {}
@@ -1002,7 +906,7 @@ describe("nested object fields", () => {
   });
 
   describe("wrappers and spellings", () => {
-    it("should expand readonly and prefault objects", async () => {
+    it("should expand readonly objects", () => {
       expect(
         extractFields(
           z.object({
@@ -1010,16 +914,6 @@ describe("nested object fields", () => {
           }),
         ).fields.map((f) => f.cliName),
       ).toEqual(["config-port"]);
-
-      const { cmd, seen } = captureArgs(
-        z.object({
-          config: z
-            .object({ port: z.string(), host: z.string() })
-            .prefault({ port: "1", host: "h" }),
-        }),
-      );
-      await runCommand(cmd, ["--config.port", "2"]);
-      expect(seen[0]).toEqual({ config: { port: "2", host: "h" } });
     });
 
     it("should show a negation runtime accepts under a camelCase prefix", async () => {
@@ -1065,43 +959,12 @@ describe("nested object fields", () => {
   });
 
   describe("object defaults", () => {
-    it("should evaluate a default factory anew on every run", async () => {
-      let calls = 0;
-      const { cmd, seen } = captureArgs(
-        z.object({
-          config: z
-            .object({ id: z.number(), port: z.string().optional() })
-            .default(() => ({ id: ++calls })),
-        }),
-      );
-      await runCommand(cmd, ["--config.port", "1"]);
-      await runCommand(cmd, ["--config.port", "2"]);
-      const [first, second] = seen as Array<{ config: { id: number; port: string } }>;
-      expect(first!.config.port).toBe("1");
-      expect(second!.config.port).toBe("2");
-      expect(first!.config.id).not.toBe(second!.config.id);
-    });
-
     it("should create an object whose key names an Object.prototype property", async () => {
       const { cmd, seen } = captureArgs(
         z.object({ config: z.object({ constructor: z.object({ port: z.number().default(80) }) }) }),
       );
       await runCommand(cmd, []);
       expect(seen).toEqual([{ config: { constructor: { port: 80 } } }]);
-    });
-
-    it("should not report a transformed default value as the user's error", async () => {
-      const { cmd } = captureArgs(
-        z.object({
-          config: z
-            .object({ port: z.string().transform(Number), host: z.string() })
-            .default({ port: 80, host: "local" }),
-        }),
-      );
-      const result = await runCommand(cmd, ["--config.host", "remote"]);
-      expect(result.success).toBe(false);
-      expect(result.error?.message).toContain("config.port");
-      expect(result.error?.message).not.toContain("received number");
     });
   });
 
@@ -1323,17 +1186,6 @@ describe("nested object fields", () => {
         }),
       );
       expect(fields.map((f) => f.description)).toEqual(["Server settings", "Host name"]);
-    });
-
-    it("should keep an explicit null default over the object default", () => {
-      const { fields } = extractFields(
-        z.object({
-          config: z
-            .object({ name: z.string().nullable().default(null) })
-            .default({ name: "object-default" }),
-        }),
-      );
-      expect(fields[0]?.defaultValue).toBeNull();
     });
   });
 });

@@ -121,7 +121,7 @@ function expandObjectField(
     path: string[],
     names: { name: string; cliName: string },
     inherited: { style: NestedKeyStyle; description: string | undefined },
-    enclosing: Array<{ required: boolean; defaultValue: unknown }>,
+    enclosingRequired: boolean,
   ): void => {
     const unsupported = UNSUPPORTED_OBJECT_META.filter((key) => Boolean(object[key]));
     if (unsupported.length > 0) {
@@ -129,25 +129,24 @@ function expandObjectField(
         `Invalid arg() metadata for object field "${path.join(".")}": ${unsupported.join(", ")} cannot be used on object fields (set them on its properties instead).`,
       );
     }
+    // Its options are built and defaulted property by property; an object
+    // default would have to be merged into given values on every branch.
+    if (object.defaultValue !== undefined) {
+      throw new Error(
+        `Object field "${path.join(".")}" cannot have a default value: set defaults on its properties instead. A required object is created from its properties' defaults when no option is given.`,
+      );
+    }
     nestedObjects.push({
       path,
       required: object.required,
-      defaultValue: object.defaultValue,
       passthrough: object.objectUnknownKeys === "passthrough",
-      getDefault: object.getDefault,
     });
     const style = object.flatten ?? inherited.style;
     const description = object.description ?? inherited.description;
     // A camelCase parent prefix keeps camelCase all the way down.
     const cliPrefix = style === "camel" && path.length === 1 ? names.name : names.cliName;
     // Whether this object, and so every enclosing one, must be present.
-    const objects = [
-      ...enclosing,
-      {
-        required: (enclosing.at(-1)?.required ?? true) && object.required,
-        defaultValue: object.defaultValue,
-      },
-    ];
+    const required = enclosingRequired && object.required;
 
     for (const [key, schemas] of propertySchemas(object)) {
       const child = schemas
@@ -163,7 +162,7 @@ function expandObjectField(
             : `${cliPrefix}${capitalize(key)}`;
 
       if (child.objectShape) {
-        walk(child, childPath, { name, cliName }, { style, description }, objects);
+        walk(child, childPath, { name, cliName }, { style, description }, required);
         continue;
       }
 
@@ -187,10 +186,6 @@ function expandObjectField(
         spellings.length === 0
           ? child.hiddenAlias
           : [...new Set([...(child.hiddenAlias ?? []), ...spellings])];
-      const defaultValue =
-        child.defaultValue !== undefined
-          ? child.defaultValue
-          : defaultFromEnclosing(objects, childPath);
       leaves.push({
         ...child,
         name,
@@ -200,9 +195,7 @@ function expandObjectField(
         description: child.description ?? description,
         // Name the value after the property, not the whole option path.
         placeholder: child.placeholder ?? toKebabCase(key).toUpperCase(),
-        // A value an enclosing object's default supplies is never missing.
-        required: objects.at(-1)!.required && child.required && defaultValue === undefined,
-        defaultValue,
+        required: required && child.required,
         negationDisplay,
         nested: { path: childPath },
       });
@@ -213,7 +206,7 @@ function expandObjectField(
     [root.name],
     { name: root.name, cliName: root.cliName },
     { style: "dot", description: undefined },
-    [],
+    true,
   );
   return leaves;
 }
@@ -230,21 +223,6 @@ function propertySchemas(object: ResolvedFieldMeta): Map<string, unknown[]> {
     }
   }
   return properties;
-}
-
-/**
- * The value at `path` in the nearest enclosing object default that has one.
- * `objects[i]` is the object at `path.slice(0, i + 1)`.
- */
-function defaultFromEnclosing(objects: Array<{ defaultValue: unknown }>, path: string[]): unknown {
-  for (let i = objects.length - 1; i >= 0; i--) {
-    let value = objects[i]!.defaultValue;
-    for (const key of path.slice(i + 1)) {
-      value = isPlainObject(value) ? value[key] : undefined;
-    }
-    if (value !== undefined) return value;
-  }
-  return undefined;
 }
 
 /**
@@ -362,13 +340,6 @@ export interface NestingCandidate {
    */
   branchSchemas?: ArgsSchema[] | undefined;
   /**
-   * Paths whose values were copied from an object default rather than
-   * given. A default may hold output values that do not validate again as
-   * input (e.g. after a transform), so issues only on these paths are not
-   * the user's to fix.
-   */
-  defaultedPaths?: string[][] | undefined;
-  /**
    * Set on the nesting by every branch at once, which is only for
    * reporting errors: no branch decided it, so it must not be accepted.
    * The message explains why it fails when it would otherwise pass.
@@ -398,11 +369,9 @@ export interface NestingCandidate {
  *
  * Within a branch, an object is created when one of its leaves has a value
  * or when it is required and its parent exists, so a missing value is
- * reported on the leaf option rather than on an object no option names. An
- * optional object without values stays absent so its own default (or
- * optionality) applies. An object that is created starts from its default,
- * so unspecified properties keep it; a second candidate starts it empty, for
- * defaults that do not validate as input.
+ * reported on the leaf option rather than on an object no option names, and
+ * its properties' defaults apply. An optional object without values stays
+ * absent. (Expanded objects have no defaults of their own.)
  *
  * @param rawArgs - Parsed args keyed by field name
  * @param extracted - Extracted fields of the schema
@@ -438,14 +407,8 @@ export function nestingCandidates(
     createRequired: CreateRequired = true,
     foreign: ResolvedFieldMeta[] = [],
   ): NestingCandidate[] => {
-    const options = { createRequired, foreign };
-    const seeded = nestGroup(rawArgs, group, leafNames, { ...options, seed: true });
-    const candidates: NestingCandidate[] = [{ ...seeded, group, branchSchema }];
-    if (seeded.defaultedPaths.length > 0) {
-      const empty = nestGroup(rawArgs, group, leafNames, { ...options, seed: false });
-      candidates.push({ ...empty, group, branchSchema });
-    }
-    return candidates;
+    const args = nestGroup(rawArgs, group, leafNames, { createRequired, foreign });
+    return [{ args, group, branchSchema }];
   };
   if (!extracted.variants && !extracted.unionOptions) return nest(extracted);
 
@@ -515,7 +478,7 @@ export function nestingCandidates(
     rawArgs,
     { fields: [...leaves.values()], nestedObjects: [...objects.values()] },
     leafNames,
-    { createRequired: false, seed: true },
+    { createRequired: false },
   );
   const options = givenFields.map((field) => `--${field.cliName}`).join(", ");
   const nestBranch = (branch: Branch, createRequired: CreateRequired): NestingCandidate[] => {
@@ -557,7 +520,7 @@ export function nestingCandidates(
     ...covering.flatMap((branch) => nestBranch(branch, branch.plain ? "opened" : true)),
     ...plain.flatMap((branch) => nestBranch(branch, true)),
     {
-      ...merged,
+      args: merged,
       diagnosticOnly: {
         message: `No single schema option accepts ${options || "these arguments"}.`,
       },
@@ -606,8 +569,8 @@ function nestGroup(
   rawArgs: Record<string, unknown>,
   group: NestingGroup,
   leafNames: ReadonlySet<string>,
-  options: { createRequired: CreateRequired; seed: boolean; foreign?: ResolvedFieldMeta[] },
-): { args: Record<string, unknown>; defaultedPaths: string[][] } {
+  options: { createRequired: CreateRequired; foreign?: ResolvedFieldMeta[] },
+): Record<string, unknown> {
   const result: Record<string, unknown> = { ...rawArgs };
   // Remove every flat name before building objects: a flat name may equal
   // the key of another object (`aB` from `a.b` next to an `aB` object). A
@@ -619,14 +582,11 @@ function nestGroup(
   const leaves = group.fields.filter((field) => field.nested && rawArgs[field.name] !== undefined);
   const present = new Set<string>();
   // Another variant's leaves open this variant's objects along their path
-  // too, so those objects start from their defaults.
+  // too, so their required objects are created as well.
   for (const leaf of [...leaves, ...(options.foreign ?? [])]) {
     const path = leaf.nested!.path;
     for (let depth = 1; depth < path.length; depth++) present.add(pathKey(path.slice(0, depth)));
   }
-  // Objects a given value lives in, as opposed to required ones created
-  // only so a missing value is reported on its option.
-  const opened = new Set(present);
   const objects = [...(group.nestedObjects ?? [])].sort((a, b) => a.path.length - b.path.length);
   if (options.createRequired) {
     for (const object of objects) {
@@ -639,101 +599,52 @@ function nestGroup(
     }
   }
 
-  const defaulted = new Map<string, string[]>();
   // Parents first, so every object is built inside an existing one.
-  const kept = new Set<string>();
   for (const object of objects) {
-    const objectKey = pathKey(object.path);
-    if (!present.has(objectKey)) continue;
-    const parentKey = pathKey(object.path.slice(0, -1));
-    if (kept.has(parentKey)) {
-      kept.add(objectKey);
-      continue;
-    }
+    if (!present.has(pathKey(object.path))) continue;
     const parent = containerAt(result, object.path.slice(0, -1));
     // Only the diagnostic nesting of every branch at once can place an
     // object inside another branch's leaf value; leave such paths out.
     if (!parent) continue;
     const key = object.path[object.path.length - 1]!;
-    // An own property only: `constructor` is no value a default gave.
+    // An own property only: `constructor` is no value given.
     const current = Object.hasOwn(parent, key) ? parent[key] : undefined;
-    // A required object without given values keeps a value its parent's
-    // default gave it (such as `null` for a nullable object).
-    if (!opened.has(objectKey) && current !== undefined && !isPlainObject(current)) {
-      kept.add(objectKey);
-      continue;
-    }
-    // Evaluated per nesting, as a default may differ on every parse.
-    const defaultValue =
-      !isPlainObject(current) && options.seed
-        ? object.getDefault
-          ? object.getDefault()
-          : object.defaultValue
-        : undefined;
-    const base = isPlainObject(current) ? current : isPlainObject(defaultValue) ? defaultValue : {};
-    if (base === defaultValue) {
-      for (const property of Object.keys(base)) {
-        const path = [...object.path, property];
-        defaulted.set(pathKey(path), path);
-      }
-    }
-    // Copy so a shared default object is never mutated.
-    parent[key] = { ...base };
+    // Copy so a value given as a whole is never mutated.
+    parent[key] = isPlainObject(current) ? { ...current } : {};
   }
   for (const leaf of leaves) {
     const path = leaf.nested!.path;
     const container = containerAt(result, path.slice(0, -1));
-    if (!container) continue;
-    container[path[path.length - 1]!] = rawArgs[leaf.name];
-    for (let depth = 1; depth <= path.length; depth++)
-      defaulted.delete(pathKey(path.slice(0, depth)));
+    if (container) container[path[path.length - 1]!] = rawArgs[leaf.name];
   }
   // One that cannot be placed stays under its flat name, for the schema's
-  // unknown-key policy to handle rather than vanishing. A given value
-  // replaces one a default supplied.
+  // unknown-key policy to handle rather than vanishing.
   for (const leaf of options.foreign ?? []) {
-    const path = leaf.nested!.path;
-    const fromDefault = (depth: number) => defaulted.has(pathKey(path.slice(0, depth)));
-    if (!placeAt(result, path, rawArgs[leaf.name], fromDefault)) {
+    if (!placeAt(result, leaf.nested!.path, rawArgs[leaf.name]))
       result[leaf.name] = rawArgs[leaf.name];
-      continue;
-    }
-    for (let depth = 1; depth <= path.length; depth++)
-      defaulted.delete(pathKey(path.slice(0, depth)));
   }
-  return { args: result, defaultedPaths: [...defaulted.values()] };
+  return result;
 }
 
 /**
  * Set a value at a property path, creating the objects along it (and copying
- * existing ones, which may be shared defaults), unless the path is taken or
- * runs through a value that is no plain object. A value at a depth
- * `replaceable` accepts counts as free, such as one a default supplied.
+ * existing ones), unless the path is taken or runs through a value that is
+ * no plain object.
  *
  * @returns Whether the value was set
  */
-function placeAt(
-  args: Record<string, unknown>,
-  path: string[],
-  value: unknown,
-  replaceable: (depth: number) => boolean,
-): boolean {
+function placeAt(args: Record<string, unknown>, path: string[], value: unknown): boolean {
   // Check before writing, so a value that cannot be placed changes nothing.
   let probe: unknown = args;
   for (let depth = 1; depth <= path.length; depth++) {
     const key = path[depth - 1]!;
     const next = isPlainObject(probe) && Object.hasOwn(probe, key) ? probe[key] : undefined;
     if (next === undefined) break;
-    if (depth < path.length && isPlainObject(next)) {
-      probe = next;
-      continue;
-    }
-    if (replaceable(depth)) break;
-    return false;
+    if (depth === path.length || !isPlainObject(next)) return false;
+    probe = next;
   }
   let target = args;
-  for (let depth = 1; depth < path.length; depth++) {
-    const key = path[depth - 1]!;
+  for (const key of path.slice(0, -1)) {
     const next = Object.hasOwn(target, key) ? target[key] : undefined;
     target[key] = isPlainObject(next) ? { ...next } : {};
     target = target[key] as Record<string, unknown>;
