@@ -106,6 +106,24 @@ describe("@politty/zod-mini e2e", () => {
     expect((await runCommand(cmd, ["--action", "delete", "--id", "7"])).result).toBe("delete:7");
   });
 
+  it("should select a variant with nested options by a literal-union discriminator", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: z.discriminatedUnion("mode", [
+        z.object({
+          mode: z.union([z.literal("a"), z.literal("b")]),
+          config: z.optional(z.object({ port: z.string() })),
+        }),
+        z.object({ mode: z.literal("c") }),
+      ]),
+      run: (args) => args,
+    });
+
+    expect((await runCommand(cmd, ["--mode", "a"])).result).toEqual({ mode: "a" });
+    const result = await runCommand(cmd, ["--mode", "b", "--config.port", "1"]);
+    expect(result.result).toEqual({ mode: "b", config: { port: "1" } });
+  });
+
   it("should fail with zod's rich validation errors", async () => {
     const cmd = defineCommand({
       name: "serve",

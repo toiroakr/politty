@@ -81,7 +81,7 @@ export function validateArgsBranch<T extends ArgsSchema>(
         (earlier) => adapter.validate(candidate.args, earlier.schema).success,
       );
       const dropped = first
-        ? (candidate.given ?? []).filter((given) => dropsGivenValue(first, given))
+        ? (candidate.given ?? []).filter(({ path }) => dropsGivenValue(first, path))
         : [];
       if (dropped.length > 0) {
         const message = `${dropped.map(({ path }) => path.join(".")).join(", ")} would be ignored: another schema option accepts the arguments without them.`;

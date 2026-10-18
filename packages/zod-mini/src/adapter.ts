@@ -411,6 +411,7 @@ export function resolveZodMiniFieldMeta(name: string, schema: z.ZodMiniType): Re
     enumValues: extractEnumValues(schema),
     schema,
     objectShape: extractObjectShape(schema),
+    objectUnknownKeys: getUnknownKeysMode(schema),
   });
 }
 
@@ -460,8 +461,8 @@ function extractFromDiscriminatedUnion(schema: z.ZodMiniType): ExtractedFields {
     const variantFields: ResolvedFieldMeta[] = [];
 
     // Get discriminator value from the variant's discriminator schema.
-    // Supports z.literal() and z.enum() discriminators; a variant allowing
-    // several values is selected by any of them.
+    // Supports z.literal(), z.enum() and literal-union discriminators; a
+    // variant allowing several values is selected by any of them.
     let discriminatorValue = "";
     let allowed: string[] = [];
     // Read through wrappers such as `.default()`, which keep the value.
@@ -475,8 +476,9 @@ function extractFromDiscriminatedUnion(schema: z.ZodMiniType): ExtractedFields {
         const values = (litDef as { value?: unknown; values?: unknown[] })?.values;
         discriminatorValue = String(value ?? values?.[0] ?? "");
         allowed = (values ?? [value]).map(String);
-      } else if (typeName === "enum") {
-        // A multi-value enum (z.enum(['a','b'])) is shown by its first value.
+      } else {
+        // An enum (z.enum(['a','b'])) or a union of literals is shown by its
+        // first value.
         const enumValues = extractEnumValues(discriminatorSchema);
         if (enumValues && enumValues.length > 0) {
           discriminatorValue = enumValues[0]!;

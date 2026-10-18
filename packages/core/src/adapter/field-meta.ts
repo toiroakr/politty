@@ -109,6 +109,8 @@ export interface ResolvedFieldMeta {
    * intersection members (see {@link mergeIntersectionField}).
    */
   objectShapes?: Array<Record<string, unknown>> | undefined;
+  /** How an object field treats properties it does not define */
+  objectUnknownKeys?: UnknownKeysMode | undefined;
   /** Naming style for the options an object field expands into */
   flatten?: NestedKeyStyle | undefined;
   /**
@@ -138,6 +140,8 @@ export interface NestedObjectInfo {
   required: boolean;
   /** The object's default value, if any */
   defaultValue: unknown;
+  /** Whether the object keeps properties it does not define */
+  passthrough?: boolean | undefined;
 }
 
 /**
@@ -248,6 +252,8 @@ export interface FieldIntrospection {
   schema: unknown;
   /** Field schemas by property name, when the schema is an object */
   objectShape?: Record<string, unknown> | undefined;
+  /** How the object treats properties it does not define */
+  objectUnknownKeys?: UnknownKeysMode | undefined;
 }
 
 const NESTED_KEY_STYLES: readonly NestedKeyStyle[] = ["dot", "kebab", "camel"];
@@ -424,6 +430,7 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
     effect: argMeta?.effect,
     requiredPackages: argMeta?.requiredPackages,
     objectShape: intro.objectShape,
+    objectUnknownKeys: intro.objectShape ? intro.objectUnknownKeys : undefined,
     flatten: rawFlatten as NestedKeyStyle | undefined,
   };
 
@@ -455,6 +462,11 @@ export function mergeIntersectionField(
     ...first,
     required: first.required || next.required,
     defaultValue: mergeDefaults(first.defaultValue, next.defaultValue),
+    // A property one member keeps stays in the merged output.
+    objectUnknownKeys:
+      first.objectUnknownKeys === "passthrough" || next.objectUnknownKeys === "passthrough"
+        ? "passthrough"
+        : first.objectUnknownKeys,
     objectShapes: [
       ...(first.objectShapes ?? [first.objectShape]),
       ...(next.objectShapes ?? [next.objectShape]),

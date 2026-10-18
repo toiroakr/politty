@@ -1050,14 +1050,16 @@ async function runCommandInternal<TResult = unknown>(
       attachInvocation(validatedGlobalArgs, resolveInvocation(command, context));
       attachAgent(validatedGlobalArgs, options._agent);
       const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
-      if (options._globalExtracted && !isCompletionInvocation) {
-        const selected = selectBranch(
+      const selectedGlobal =
+        options._globalExtracted &&
+        selectBranch(
           options._globalExtracted,
           globalBranch,
           validatedGlobalArgs,
           accumulatedGlobalArgs,
         );
-        await runEffects(proxiedGlobalArgs, selected, proxiedGlobalArgs);
+      if (selectedGlobal && !isCompletionInvocation) {
+        await runEffects(proxiedGlobalArgs, selectedGlobal, proxiedGlobalArgs);
       }
       collector?.stop();
       const mergedArgs = proxiedGlobalArgs as Record<string, never>;
@@ -1069,11 +1071,7 @@ async function runCommandInternal<TResult = unknown>(
         packageDiscriminators: options._globalExtracted?.discriminator
           ? [options._globalExtracted.discriminator]
           : [],
-        packageFields:
-          isCompletionInvocation || !options._globalExtracted
-            ? undefined
-            : selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs)
-                .fields,
+        packageFields: isCompletionInvocation ? undefined : selectedGlobal?.fields,
       });
       return result as RunResult<TResult>;
     }
@@ -1257,12 +1255,12 @@ async function runCommandInternal<TResult = unknown>(
       packageFields: isCompletionInvocation
         ? undefined
         : [
-            ...(options._globalExtracted
-              ? selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs)
-                  .fields
-              : []),
-            ...(parseResult.optionFields ?? []),
-            ...(parseResult.positionalSlotFields ?? []),
+            ...(selectedGlobal?.fields ?? []),
+            // The branch validation accepted, which another branch may
+            // read a field of the same name at another path for.
+            ...(localBranch && selectedLocal
+              ? selectedLocal.fields
+              : [...(parseResult.optionFields ?? []), ...(parseResult.positionalSlotFields ?? [])]),
           ],
     });
 

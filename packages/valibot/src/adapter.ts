@@ -399,6 +399,7 @@ export function resolveValibotFieldMeta(name: string, schema: unknown): Resolved
     enumValues: extractEnumValues(node),
     schema,
     objectShape: extractObjectShape(node),
+    objectUnknownKeys: getUnknownKeysMode(node),
   });
 }
 

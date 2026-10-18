@@ -30,11 +30,16 @@ function resolve(name: string, schema: AnySchema): ResolvedFieldMeta {
     enumValues: (meta.enumValues ?? meta.literalValues)?.map(String),
     schema,
     objectShape: objectShape(schema),
+    objectUnknownKeys: objectMode(schema),
   });
 }
 function objectShape(schema: AnySchema): Record<string, AnySchema> | undefined {
   const { meta } = schema;
   return meta.shape ?? (meta.inner ? objectShape(meta.inner) : undefined);
+}
+function objectMode(schema: AnySchema): UnknownKeysMode | undefined {
+  const { meta } = schema;
+  return meta.shape ? mode(meta) : meta.inner ? objectMode(meta.inner) : undefined;
 }
 function mode(meta: Meta): UnknownKeysMode {
   return meta.unknownKeys ?? "strip";

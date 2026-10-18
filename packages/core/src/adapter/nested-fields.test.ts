@@ -581,6 +581,30 @@ describe("nested object fields", () => {
       expect(seen).toEqual([]);
     });
 
+    it("should report a value an earlier option's same-named field holds elsewhere", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ configPort: z.literal("other").optional() }),
+          z.object({ config: arg(z.object({ port: z.string() }), { flatten: "kebab" }) }),
+        ]),
+      );
+      const result = await runCommand(cmd, ["--config-port", "80"]);
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain("config.port would be ignored");
+      expect(seen).toEqual([]);
+    });
+
+    it("should accept a value an earlier option keeps in a loose nested object", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ config: z.looseObject({ host: z.string().optional() }) }),
+          z.object({ config: z.object({ port: z.string() }) }),
+        ]),
+      );
+      await runCommand(cmd, ["--config.port", "80"]);
+      expect(seen).toEqual([{ config: { port: "80" } }]);
+    });
+
     it("should not take a union option for a required object no value named", async () => {
       const { cmd, seen } = captureArgs(
         z.union([
@@ -646,6 +670,21 @@ describe("nested object fields", () => {
       );
       await runCommand(cmd, ["--mode", "a", "--config-tls", "text", "--config-tls-enabled", "on"]);
       expect(seen).toEqual([{ mode: "a", config: { tls: "text" }, configTlsEnabled: "on" }]);
+    });
+
+    it("should select a variant by a literal-union discriminator", async () => {
+      const { cmd, seen } = captureArgs(
+        z.discriminatedUnion("mode", [
+          z.object({
+            mode: z.union([z.literal("a"), z.literal("b")]),
+            config: z.object({ port: z.string() }).optional(),
+          }),
+          z.object({ mode: z.literal("c") }),
+        ]),
+      );
+      await runCommand(cmd, ["--mode", "a"]);
+      await runCommand(cmd, ["--mode", "b", "--config.port", "1"]);
+      expect(seen).toEqual([{ mode: "a" }, { mode: "b", config: { port: "1" } }]);
     });
 
     it("should select a variant by any value of a multi-value discriminator", async () => {
