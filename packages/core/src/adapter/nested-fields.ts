@@ -197,11 +197,12 @@ function expandObjectField(
         continue;
       }
 
-      // An effect takes its property's value, which a transform of an
-      // enclosing object may replace or reshape.
-      if (child.effect && transformed) {
+      // An effect and package requirements read their property's value,
+      // which a transform of an enclosing object may replace or reshape.
+      const valueMeta = (["effect", "requiredPackages"] as const).filter((key) => child[key]);
+      if (valueMeta.length > 0 && transformed) {
         throw new Error(
-          `Property "${childPath.join(".")}" cannot have an effect: its object "${transformed.join(".")}" has a transform, which may change the value. Run the effect on the transformed value elsewhere, or move the transform onto the property.`,
+          `Property "${childPath.join(".")}" cannot have ${valueMeta.map((key) => (key === "effect" ? "an effect" : key)).join(" or ")}: its object "${transformed.join(".")}" has a transform, which may change the value. Use the transformed value elsewhere, or move the transform onto the property.`,
         );
       }
 

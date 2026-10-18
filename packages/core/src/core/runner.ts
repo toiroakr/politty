@@ -1,3 +1,4 @@
+import type { ResolvedFieldMeta } from "../adapter/field-meta.js";
 import {
   getFieldValue,
   isPlainObject,
@@ -78,6 +79,17 @@ const defaultLogger: Logger = {
  * while running (the usage-error code of shell builtins and argparse).
  */
 const USAGE_ERROR_EXIT_CODE = 2;
+
+/**
+ * Whether a nested leaf's object holds a property of its own for it (always
+ * true for a top-level field, whose value replaces the global one whole)
+ */
+function ownsLeaf(args: Record<string, unknown>, field: ResolvedFieldMeta): boolean {
+  if (!field.nested) return true;
+  const path = field.nested.path;
+  const parent = getFieldValue(args, { ...field, nested: { path: path.slice(0, -1) } });
+  return isPlainObject(parent) && Object.hasOwn(parent, path[path.length - 1]!);
+}
 
 /**
  * Attach a non-enumerable `$source` helper to the final args object so it
@@ -1224,6 +1236,15 @@ async function runCommandInternal<TResult = unknown>(
 
       const localHasCliOrEnvValue =
         Object.hasOwn(parseResult.rawArgs, field.name) || localEnvFallbackFields.has(field.name);
+      // A nested property the command's value leaves out, whose global
+      // value the merge above kept, keeps the global source too.
+      if (
+        !localHasCliOrEnvValue &&
+        !ownsLeaf(validationResult.data as Record<string, unknown>, field) &&
+        ownsLeaf(mergedPlainArgs, field)
+      ) {
+        continue;
+      }
 
       argSourceMap.set(
         field.name,

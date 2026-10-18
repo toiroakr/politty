@@ -1018,6 +1018,22 @@ describe("nested object fields", () => {
   });
 
   describe("values inside objects", () => {
+    it("should reject package requirements inside an object a transform may replace", () => {
+      expect(() =>
+        extractFields(
+          z.object({
+            config: z
+              .object({
+                ui: arg(z.boolean().optional(), {
+                  requiredPackages: [{ name: "@politty-test/missing-ui" }],
+                }),
+              })
+              .transform((v) => ({ enabled: v.ui })),
+          }),
+        ),
+      ).toThrow(/cannot have requiredPackages/);
+    });
+
     it("should reject effects inside an object a transform may replace", () => {
       const effect = vi.fn();
       const port = () => arg(z.coerce.number(), { effect });
@@ -1177,6 +1193,43 @@ describe("nested object fields", () => {
   });
 
   describe("global args", () => {
+    it("should keep the source of global properties the command's value leaves out", async () => {
+      vi.stubEnv("NESTED_TEST_TOKEN", "secret");
+      try {
+        const sources: unknown[] = [];
+        const sub = defineCommand({
+          name: "sub",
+          args: z.object({
+            config: z.object({
+              token: z.string().optional(),
+              region: z.string().default("us"),
+            }),
+          }),
+          run: (args) => {
+            sources.push([
+              JSON.parse(JSON.stringify(args)),
+              args.$source?.("config.token"),
+              args.$source?.("config.region"),
+            ]);
+          },
+        });
+        const main = defineCommand({ name: "app", subCommands: { sub } });
+        const globalArgs = z.object({
+          config: z
+            .object({ token: arg(z.string().optional(), { env: "NESTED_TEST_TOKEN" }) })
+            .optional(),
+        });
+        await runCommand(main, ["sub"], { globalArgs });
+        await runCommand(main, ["sub", "--config.token", "local"], { globalArgs });
+        expect(sources).toEqual([
+          [{ config: { token: "secret", region: "us" } }, "env", "default"],
+          [{ config: { token: "local", region: "us" } }, "cli", "default"],
+        ]);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it("should merge global and command properties of the same object", async () => {
       const seen: unknown[] = [];
       const sub = defineCommand({
