@@ -276,7 +276,7 @@ function checkNestedCollisions(fields: ResolvedFieldMeta[]): void {
 }
 
 /** Fields and expanded objects that one schema branch validates */
-interface NestingGroup {
+export interface NestingGroup {
   fields: ResolvedFieldMeta[];
   nestedObjects?: NestedObjectInfo[] | undefined;
 }
@@ -286,13 +286,38 @@ export interface PrecedingBranch {
   schema: ArgsSchema;
   /** Field names the option defines, nested leaves by their flat name */
   names: ReadonlySet<string>;
-  /** Whether the option keeps keys it does not define */
+  /** Keys (see {@link nestedPathKey}) of the objects the option expands */
+  objects: ReadonlySet<string>;
+  /** Whether the option keeps top-level keys it does not define */
   passthrough: boolean;
+}
+
+/**
+ * Whether a union option drops a given value when it accepts the args:
+ * it keeps the values of the fields it defines, and of top-level keys it
+ * does not know when it keeps unknown keys. An object it expands is taken
+ * to strip keys it does not define, as its own policy is not known here.
+ *
+ * @param branch - The option that accepts the args
+ * @param given - The given value's field name and property path
+ */
+export function dropsGivenValue(
+  branch: PrecedingBranch,
+  given: { name: string; path: string[] },
+): boolean {
+  const { name, path } = given;
+  if (branch.names.has(name) || branch.names.has(path[0]!)) return false;
+  for (let depth = 1; depth < path.length; depth++) {
+    if (branch.objects.has(pathKey(path.slice(0, depth)))) return true;
+  }
+  return !branch.passthrough;
 }
 
 /** Args nested by one schema branch, to validate against the whole schema */
 export interface NestingCandidate {
   args: Record<string, unknown>;
+  /** The branch whose fields and objects nested the args */
+  group?: NestingGroup | undefined;
   /**
    * The union option the args were nested for. They are only valid when this
    * option accepts them too, as another option could accept them by
@@ -376,10 +401,10 @@ export function nestingCandidates(
     createRequired: CreateRequired = true,
   ): NestingCandidate[] => {
     const seeded = nestGroup(rawArgs, group, leafNames, { createRequired, seed: true });
-    const candidates: NestingCandidate[] = [{ ...seeded, branchSchema }];
+    const candidates: NestingCandidate[] = [{ ...seeded, group, branchSchema }];
     if (seeded.defaultedPaths.length > 0) {
       const empty = nestGroup(rawArgs, group, leafNames, { createRequired, seed: false });
-      candidates.push({ ...empty, branchSchema });
+      candidates.push({ ...empty, group, branchSchema });
     }
     return candidates;
   };
@@ -389,6 +414,7 @@ export function nestingCandidates(
     group: NestingGroup;
     schema: ArgsSchema | undefined;
     names: ReadonlySet<string>;
+    objects: ReadonlySet<string>;
     /** An option of a plain union, which takes the first option that fits */
     plain: boolean;
     passthrough: boolean;
@@ -402,6 +428,7 @@ export function nestingCandidates(
       group: fields,
       schema,
       names: new Set(fields.fields.map((field) => field.name)),
+      objects: new Set((fields.nestedObjects ?? []).map((object) => pathKey(object.path))),
       plain,
       passthrough: group.unknownKeysMode === "passthrough",
     });
@@ -459,9 +486,10 @@ export function nestingCandidates(
       ...candidate,
       givenPaths,
       given,
-      precedingBranches: preceding.map(({ schema, names, passthrough }) => ({
+      precedingBranches: preceding.map(({ schema, names, objects, passthrough }) => ({
         schema: schema!,
         names,
+        objects,
         passthrough,
       })),
     }));

@@ -9,7 +9,7 @@
  */
 
 import { isInternalArgsSchema, validateInternalArgs } from "../adapter/internal-args.js";
-import { nestingCandidates } from "../adapter/nested-fields.js";
+import { dropsGivenValue, nestingCandidates, type NestingGroup } from "../adapter/nested-fields.js";
 import { getValidatorAdapter } from "../adapter/registry.js";
 import type { InferSchemaOutput } from "../adapter/standard-schema.js";
 import type { ValidationError, ValidationResult } from "../adapter/types.js";
@@ -29,8 +29,23 @@ export function validateArgs<T extends ArgsSchema>(
   rawArgs: Record<string, unknown>,
   schema: T,
 ): ValidationResult<InferSchemaOutput<T>> {
+  return validateArgsBranch(rawArgs, schema).result;
+}
+
+/**
+ * {@link validateArgs}, also telling which branch of the schema accepted the
+ * args: the fields and expanded objects whose paths the validated args
+ * follow. `branch` is absent when no field is nested, as every branch then
+ * reads its fields at their names.
+ */
+export function validateArgsBranch<T extends ArgsSchema>(
+  rawArgs: Record<string, unknown>,
+  schema: T,
+): { result: ValidationResult<InferSchemaOutput<T>>; branch?: NestingGroup | undefined } {
   if (isInternalArgsSchema(schema)) {
-    return validateInternalArgs(rawArgs, schema) as ValidationResult<InferSchemaOutput<T>>;
+    return {
+      result: validateInternalArgs(rawArgs, schema) as ValidationResult<InferSchemaOutput<T>>,
+    };
   }
   // Leaves of nested object fields are parsed under flat names; validate
   // them at their property path, as nested by the first branch that fits.
@@ -65,12 +80,9 @@ export function validateArgs<T extends ArgsSchema>(
       const first = candidate.precedingBranches.find(
         (earlier) => adapter.validate(candidate.args, earlier.schema).success,
       );
-      const dropped =
-        first && !first.passthrough
-          ? (candidate.given ?? []).filter(
-              ({ name, path }) => !first.names.has(name) && !first.names.has(path[0]!),
-            )
-          : [];
+      const dropped = first
+        ? (candidate.given ?? []).filter((given) => dropsGivenValue(first, given))
+        : [];
       if (dropped.length > 0) {
         const message = `${dropped.map(({ path }) => path.join(".")).join(", ")} would be ignored: another schema option accepts the arguments without them.`;
         reported ??= { success: false, errors: [{ path: [], message, code: "invalid_union" }] };
@@ -78,7 +90,11 @@ export function validateArgs<T extends ArgsSchema>(
       }
     }
     if (result.success) {
-      if (!candidate.diagnosticOnly) return result as ValidationResult<InferSchemaOutput<T>>;
+      if (!candidate.diagnosticOnly)
+        return {
+          result: result as ValidationResult<InferSchemaOutput<T>>,
+          branch: candidate.group,
+        };
       last = {
         success: false,
         errors: [{ path: [], message: candidate.diagnosticOnly.message, code: "invalid_union" }],
@@ -91,7 +107,7 @@ export function validateArgs<T extends ArgsSchema>(
     if (!candidate.diagnosticOnly && !onlyDefaulted(result, candidate.defaultedPaths))
       reported ??= result;
   }
-  return (reported ?? branchFailure ?? last) as ValidationResult<InferSchemaOutput<T>>;
+  return { result: (reported ?? branchFailure ?? last) as ValidationResult<InferSchemaOutput<T>> };
 }
 
 /**

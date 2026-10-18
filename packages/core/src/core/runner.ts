@@ -4,6 +4,7 @@ import {
   mergeNestedValues,
   nestedObjectPaths,
   nestedPathKey,
+  type NestingGroup,
 } from "../adapter/nested-fields.js";
 import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
 import { enableCompileCache } from "../compile-cache.js";
@@ -37,7 +38,7 @@ import type {
 } from "../types.js";
 import {
   formatValidationErrors as formatPlainValidationErrors,
-  validateArgs,
+  validateArgsBranch,
 } from "../validator/args-validator.js";
 import {
   validateCaseVariantCollisions,
@@ -146,6 +147,21 @@ function resolveAgentHelp(
   return typeof agentHelp === "string"
     ? agentHelp
     : agentHelp({ agent, commandPath: context.commandPath ?? [] });
+}
+
+/**
+ * The extraction narrowed to the branch that accepted the args: the one
+ * validation reports, else the variant the values select.
+ */
+function selectBranch(
+  extracted: ExtractedFields,
+  branch: NestingGroup | undefined,
+  validated: Record<string, unknown>,
+  raw: Record<string, unknown>,
+): ExtractedFields {
+  return branch
+    ? { ...extracted, fields: branch.fields, nestedObjects: branch.nestedObjects ?? [] }
+    : selectDiscriminatedVariant(extracted, readFieldValues(validated, raw));
 }
 
 /**
@@ -968,6 +984,8 @@ async function runCommandInternal<TResult = unknown>(
     // typing them. Skip global validation here so resolvers always
     // receive a context, even when the typed line is not yet valid.
     let validatedGlobalArgs: Record<string, unknown> = {};
+    // The global schema's branch that accepted the global args, if known.
+    let globalBranch: NestingGroup | undefined;
     const isCompletionInvocation = command.name === "__complete";
     // Snapshot which global fields came from the CLI (this level or an
     // ancestor's) before env fallbacks below mutate accumulatedGlobalArgs.
@@ -1005,7 +1023,11 @@ async function runCommandInternal<TResult = unknown>(
       // (e.g., --verboes) are treated as local flags by the scanner, so a strict
       // global schema cannot catch them. They are rejected only if the local
       // command schema is also strict.
-      const globalValidation = validateArgs(accumulatedGlobalArgs, options.globalArgs);
+      const { result: globalValidation, branch } = validateArgsBranch(
+        accumulatedGlobalArgs,
+        options.globalArgs,
+      );
+      globalBranch = branch;
       if (!globalValidation.success) {
         collector?.stop();
         return {
@@ -1029,7 +1051,13 @@ async function runCommandInternal<TResult = unknown>(
       attachAgent(validatedGlobalArgs, options._agent);
       const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
       if (options._globalExtracted && !isCompletionInvocation) {
-        await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
+        const selected = selectBranch(
+          options._globalExtracted,
+          globalBranch,
+          validatedGlobalArgs,
+          accumulatedGlobalArgs,
+        );
+        await runEffects(proxiedGlobalArgs, selected, proxiedGlobalArgs);
       }
       collector?.stop();
       const mergedArgs = proxiedGlobalArgs as Record<string, never>;
@@ -1083,9 +1111,11 @@ async function runCommandInternal<TResult = unknown>(
     // variant may define the same name elsewhere.
     const selectedGlobal =
       options._globalExtracted &&
-      selectDiscriminatedVariant(
+      selectBranch(
         options._globalExtracted,
-        readFieldValues(validatedGlobalArgs, accumulatedGlobalArgs),
+        globalBranch,
+        validatedGlobalArgs,
+        accumulatedGlobalArgs,
       );
     if (parseResult.extractedFields) {
       for (const field of parseResult.extractedFields.fields) {
@@ -1109,7 +1139,10 @@ async function runCommandInternal<TResult = unknown>(
       }
     }
 
-    const validationResult = validateArgs(argsToValidate, command.args);
+    const { result: validationResult, branch: localBranch } = validateArgsBranch(
+      argsToValidate,
+      command.args,
+    );
 
     if (!validationResult.success) {
       collector?.stop();
@@ -1137,11 +1170,21 @@ async function runCommandInternal<TResult = unknown>(
     const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
 
     // Run effects after all validations succeed (global effects first, then command effects)
-    if (options._globalExtracted && !isCompletionInvocation) {
-      await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
+    // The fields of the branches that accepted the args: another branch
+    // may read a field of the same name at another path.
+    const selectedLocal =
+      parseResult.extractedFields &&
+      selectBranch(
+        parseResult.extractedFields,
+        localBranch,
+        validationResult.data as Record<string, unknown>,
+        argsToValidate,
+      );
+    if (selectedGlobal && !isCompletionInvocation) {
+      await runEffects(proxiedGlobalArgs, selectedGlobal, proxiedGlobalArgs);
     }
-    if (parseResult.extractedFields && !isCompletionInvocation) {
-      await runEffects(proxiedCommandArgs, parseResult.extractedFields, proxiedGlobalArgs);
+    if (selectedLocal && !isCompletionInvocation) {
+      await runEffects(proxiedCommandArgs, selectedLocal, proxiedGlobalArgs);
     }
 
     // Merge global args with command args (command args take precedence on collision)
@@ -1153,13 +1196,7 @@ async function runCommandInternal<TResult = unknown>(
     // merge them per property, still letting command values win. Only an
     // object both selected branches expand is merged; any other value is
     // an option's own and replaced whole.
-    const localObjectPaths = nestedObjectPaths(
-      parseResult.extractedFields &&
-        selectDiscriminatedVariant(
-          parseResult.extractedFields,
-          readFieldValues(validationResult.data as Record<string, unknown>, argsToValidate),
-        ),
-    );
+    const localObjectPaths = nestedObjectPaths(selectedLocal);
     const globalObjectPaths = nestedObjectPaths(selectedGlobal);
     const isObject = (path: string[]) => {
       const key = nestedPathKey(path);

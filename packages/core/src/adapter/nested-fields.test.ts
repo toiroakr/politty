@@ -568,6 +568,19 @@ describe("nested object fields", () => {
       expect(seen).toEqual([]);
     });
 
+    it("should report a value a passthrough option drops inside a stripping object", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.looseObject({ config: z.object({ host: z.string().optional() }) }),
+          z.object({ config: z.object({ port: z.string() }) }),
+        ]),
+      );
+      const result = await runCommand(cmd, ["--config.port", "80"]);
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain("config.port would be ignored");
+      expect(seen).toEqual([]);
+    });
+
     it("should not take a union option for a required object no value named", async () => {
       const { cmd, seen } = captureArgs(
         z.union([
@@ -921,6 +934,50 @@ describe("nested object fields", () => {
       const argv = ["--mode", "a", "--config.labels", '{"old":1}', "sub"];
       await runCommand(main, [...argv, "--config.labels", '{"new":2}'], { globalArgs: schema() });
       expect(seen[0]).toEqual({ mode: "a", config: { labels: { new: 2 } } });
+    });
+
+    it("should merge only objects the accepted union options expand", async () => {
+      const seen: unknown[] = [];
+      const schema = () =>
+        z.union([
+          z.object({
+            mode: z.literal("a"),
+            config: z
+              .object({ labels: z.string().transform((v) => JSON.parse(v) as unknown) })
+              .optional(),
+          }),
+          z.object({
+            mode: z.literal("b"),
+            config: z.object({ labels: z.object({ x: z.string().optional() }) }).optional(),
+          }),
+        ]);
+      const sub = defineCommand({
+        name: "sub",
+        args: schema(),
+        run: (args) => {
+          seen.push(JSON.parse(JSON.stringify(args)));
+        },
+      });
+      const main = defineCommand({ name: "app", subCommands: { sub } });
+      const argv = ["--mode", "a", "--config.labels", '{"old":1}', "sub"];
+      await runCommand(main, [...argv, "--config.labels", '{"new":2}'], { globalArgs: schema() });
+      expect(seen[0]).toEqual({ mode: "a", config: { labels: { new: 2 } } });
+    });
+
+    it("should run effects with the field of the accepted variant", async () => {
+      const effect = vi.fn();
+      const config = () =>
+        arg(z.object({ port: arg(z.string(), { effect }) }), { flatten: "kebab" });
+      const cmd = defineCommand({
+        name: "app",
+        args: z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("a"), configPort: arg(z.string().optional(), { effect }) }),
+          z.object({ mode: z.literal("b"), config: config() }),
+        ]),
+        run: () => {},
+      });
+      await runCommand(cmd, ["--mode", "b", "--config-port", "80"]);
+      expect(effect).toHaveBeenCalledWith("80", expect.anything());
     });
 
     it("should pre-fill from the global variant that was selected", async () => {
