@@ -567,8 +567,12 @@ function nestGroup(
       continue;
     }
     const parent = containerAt(result, object.path.slice(0, -1));
+    // Only the diagnostic nesting of every branch at once can place an
+    // object inside another branch's leaf value; leave such paths out.
+    if (!parent) continue;
     const key = object.path[object.path.length - 1]!;
-    const current = parent[key];
+    // An own property only: `constructor` is no value a default gave.
+    const current = Object.hasOwn(parent, key) ? parent[key] : undefined;
     // A required object without given values keeps a value its parent's
     // default gave it (such as `null` for a nullable object).
     if (!opened.has(objectKey) && current !== undefined && !isPlainObject(current)) {
@@ -591,17 +595,25 @@ function nestGroup(
   }
   for (const leaf of leaves) {
     const path = leaf.nested!.path;
-    containerAt(result, path.slice(0, -1))[path[path.length - 1]!] = rawArgs[leaf.name];
+    const container = containerAt(result, path.slice(0, -1));
+    if (!container) continue;
+    container[path[path.length - 1]!] = rawArgs[leaf.name];
     for (let depth = 1; depth <= path.length; depth++)
       defaulted.delete(pathKey(path.slice(0, depth)));
   }
   return { args: result, defaultedPaths: [...defaulted.values()] };
 }
 
-function containerAt(args: Record<string, unknown>, path: string[]): Record<string, unknown> {
-  let target = args;
-  for (const key of path) target = target[key] as Record<string, unknown>;
-  return target;
+function containerAt(
+  args: Record<string, unknown>,
+  path: string[],
+): Record<string, unknown> | undefined {
+  let target: unknown = args;
+  for (const key of path) {
+    if (!isPlainObject(target) || !Object.hasOwn(target, key)) return undefined;
+    target = target[key];
+  }
+  return isPlainObject(target) ? target : undefined;
 }
 
 /**
@@ -621,13 +633,14 @@ export function getFieldValue(args: Record<string, unknown>, field: ResolvedFiel
 }
 
 /**
- * Keys (see {@link nestedPathKey}) of the objects the given fields' nested
- * leaves live in. Pass the fields of the branch actually used, so an object
- * only another branch expands is not mistaken for one.
+ * Keys (see {@link nestedPathKey}) of the objects expanded into options,
+ * including empty ones. Pass the extraction narrowed to the branch actually
+ * used, so an object only another branch expands is not mistaken for one.
  */
-export function nestedObjectPaths(fields: readonly ResolvedFieldMeta[]): Set<string> {
+export function nestedObjectPaths(extracted: ExtractedFields | undefined): Set<string> {
   const paths = new Set<string>();
-  for (const field of fields) {
+  for (const object of extracted?.nestedObjects ?? []) paths.add(pathKey(object.path));
+  for (const field of extracted?.fields ?? []) {
     const path = field.nested?.path ?? [];
     for (let depth = 1; depth < path.length; depth++) paths.add(pathKey(path.slice(0, depth)));
   }

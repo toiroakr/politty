@@ -48,5 +48,9 @@ describe("@politty/valibot type pins", () => {
     arg(v.record(v.string(), v.string()), { env: "LABELS" });
     // @ts-expect-error flatten can only be used on object fields
     arg(v.string(), { flatten: "dot" });
+    arg(v.record(v.picklist(["a", "b"]), v.string()), { env: "LABELS" });
+    arg(v.optional(v.record(v.picklist(["a", "b"]), v.string())), { alias: "l" });
+    // @ts-expect-error flatten can only be used on object fields
+    arg(v.record(v.picklist(["a", "b"]), v.string()), { flatten: "dot" });
   });
 });

@@ -20,6 +20,7 @@ import {
   type ArgFn,
   type CreateDefineCommandFn,
   type DefineCommandFn,
+  type ObjectFieldCheck,
 } from "@politty/core";
 import type { z } from "zod";
 
@@ -47,4 +48,26 @@ export type ArgsSchema = z.ZodType<Record<string, any>>;
 // at the type level instead.
 export const defineCommand: DefineCommandFn<ArgsSchema> = coreDefineCommand;
 export const createDefineCommand: CreateDefineCommandFn<ArgsSchema> = coreCreateDefineCommand;
-export const arg: ArgFn<z.ZodType> = coreArg;
+/**
+ * Whether the adapter expands a zod field schema into nested options: an
+ * object, through the wrappers and pipes it reads through. (A record with
+ * finite keys has an object's input but is no object.)
+ */
+type ExpandsZodObject<T> = T extends { _zod: { def: infer D } }
+  ? D extends {
+      type: "optional" | "nullable" | "default" | "prefault" | "readonly";
+      innerType: infer I;
+    }
+    ? ExpandsZodObject<I>
+    : D extends { type: "pipe"; in: infer I }
+      ? ExpandsZodObject<I>
+      : D extends { type: "object" }
+        ? true
+        : false
+  : false;
+
+interface ZodObjectFieldCheck extends ObjectFieldCheck {
+  expands: ExpandsZodObject<this["schema"]>;
+}
+
+export const arg: ArgFn<z.ZodType, ZodObjectFieldCheck> = coreArg;

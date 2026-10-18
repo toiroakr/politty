@@ -149,14 +149,22 @@ function resolveAgentHelp(
 }
 
 /**
- * Reads validated (nested) args by the given fields' names, for selecting
- * the variant they validated as.
+ * Reads args by the given fields' names, for selecting the variant they
+ * validated as: the raw values as given, as a transform may change the
+ * validated ones, and the validated (nested) values for the rest, such as
+ * a defaulted discriminator.
  */
 function readFieldValues(
-  args: Record<string, unknown>,
+  validated: Record<string, unknown>,
+  raw: Record<string, unknown>,
 ): (fields: ExtractedFields) => Record<string, unknown> {
   return (fields) =>
-    Object.fromEntries(fields.fields.map((field) => [field.name, getFieldValue(args, field)]));
+    Object.fromEntries(
+      fields.fields.map((field) => [
+        field.name,
+        raw[field.name] !== undefined ? raw[field.name] : getFieldValue(validated, field),
+      ]),
+    );
 }
 
 /**
@@ -1075,7 +1083,10 @@ async function runCommandInternal<TResult = unknown>(
     // variant may define the same name elsewhere.
     const selectedGlobal =
       options._globalExtracted &&
-      selectDiscriminatedVariant(options._globalExtracted, readFieldValues(validatedGlobalArgs));
+      selectDiscriminatedVariant(
+        options._globalExtracted,
+        readFieldValues(validatedGlobalArgs, accumulatedGlobalArgs),
+      );
     if (parseResult.extractedFields) {
       for (const field of parseResult.extractedFields.fields) {
         const localHasOwnValue =
@@ -1142,15 +1153,14 @@ async function runCommandInternal<TResult = unknown>(
     // merge them per property, still letting command values win. Only an
     // object both selected branches expand is merged; any other value is
     // an option's own and replaced whole.
-    const localObjectPaths = parseResult.extractedFields
-      ? nestedObjectPaths(
-          selectDiscriminatedVariant(
-            parseResult.extractedFields,
-            readFieldValues(validationResult.data as Record<string, unknown>),
-          ).fields,
-        )
-      : new Set<string>();
-    const globalObjectPaths = nestedObjectPaths(selectedGlobal?.fields ?? []);
+    const localObjectPaths = nestedObjectPaths(
+      parseResult.extractedFields &&
+        selectDiscriminatedVariant(
+          parseResult.extractedFields,
+          readFieldValues(validationResult.data as Record<string, unknown>, argsToValidate),
+        ),
+    );
+    const globalObjectPaths = nestedObjectPaths(selectedGlobal);
     const isObject = (path: string[]) => {
       const key = nestedPathKey(path);
       return localObjectPaths.has(key) && globalObjectPaths.has(key);

@@ -71,5 +71,13 @@ describe("@politty/zod type pins", () => {
     arg(z.array(z.object({ id: z.string() })), { alias: "i" });
     // @ts-expect-error flatten can only be used on object fields
     arg(z.string(), { flatten: "dot" });
+    arg(z.record(z.enum(["a", "b"]), z.string()), { env: "LABELS" });
+    arg(z.record(z.enum(["a", "b"]), z.string()).optional(), { alias: "l" });
+    arg(
+      z.object({ port: z.number() }).transform((v) => v.port),
+      { flatten: "dot" },
+    );
+    // @ts-expect-error flatten can only be used on object fields
+    arg(z.record(z.enum(["a", "b"]), z.string()), { flatten: "dot" });
   });
 });

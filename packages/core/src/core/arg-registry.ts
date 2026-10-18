@@ -484,6 +484,27 @@ type IsObjectInput<TInput> = unknown extends TInput
       : false;
 
 /**
+ * A type-level check, by which an adapter tells whether it expands a field
+ * schema into one option per property: the `expands` of this type with
+ * `schema` set to the field schema. An input type alone cannot tell, e.g.
+ * a record with finite keys has the input of an object.
+ */
+export interface ObjectFieldCheck {
+  schema: unknown;
+  expands: boolean;
+}
+
+/** Judges a field by its input type, for schemas without a check of their own */
+export interface InputObjectFieldCheck extends ObjectFieldCheck {
+  expands: IsObjectInput<InferSchemaInput<this["schema"]>>;
+}
+
+/** Whether `TCheck` says `T` expands into nested options */
+export type ExpandsObjectField<TCheck extends ObjectFieldCheck, T> = (TCheck & {
+  schema: T;
+})["expands"];
+
+/**
  * Reject `flatten` on fields that do not expand into nested options.
  */
 type ValidateFlatten<M, TValue> =
@@ -496,41 +517,47 @@ type ValidateFlatten<M, TValue> =
  * or as part of an array, and whether it appears in `alias` or `hiddenAlias`.
  * Also rejects `negation` / `negationDescription` on non-boolean fields,
  * `flatten` on fields that are not objects, and anything but `description`
- * and `flatten` on object fields (judged by the schema's input type, as
- * object fields are expanded by their input shape).
+ * and `flatten` on object fields (`TObjectField`, see {@link ObjectFieldCheck}).
  */
-export type ValidateArgMeta<M, TValue = unknown, TInput = unknown> =
-  IsObjectInput<TInput> extends true
-    ? [Exclude<keyof M, "description" | "flatten">] extends [never]
-      ? M
-      : ObjectFieldMetaTypeError<M>
-    : M extends { overrideBuiltinAlias: true }
-      ? ValidateFlatten<M, TValue>
-      : ContainsReservedAlias<AliasFieldOf<M>> extends true
+export type ValidateArgMeta<
+  M,
+  TValue = unknown,
+  TObjectField extends boolean = false,
+> = TObjectField extends true
+  ? [Exclude<keyof M, "description" | "flatten">] extends [never]
+    ? M
+    : ObjectFieldMetaTypeError<M>
+  : M extends { overrideBuiltinAlias: true }
+    ? ValidateFlatten<M, TValue>
+    : ContainsReservedAlias<AliasFieldOf<M>> extends true
+      ? ReservedAliasTypeError<M>
+      : ContainsReservedAlias<HiddenAliasFieldOf<M>> extends true
         ? ReservedAliasTypeError<M>
-        : ContainsReservedAlias<HiddenAliasFieldOf<M>> extends true
-          ? ReservedAliasTypeError<M>
-          : ValidateFlatten<M, TValue>;
+        : ValidateFlatten<M, TValue>;
 
 /**
  * The overloaded `arg()` signature, parameterized by the schema constraint.
  * Core's `arg` accepts any Standard Schema; adapter packages re-pin the same
  * runtime function to their library's schema type (e.g. `ArgFn<z.ZodType>`
  * in `@politty/zod`) so a schema from the wrong library is rejected at the
- * type level.
+ * type level. An adapter also passes the check of which schemas it expands
+ * into nested options (see {@link ObjectFieldCheck}).
  */
-export interface ArgFn<TSchemaBase extends SchemaLike = SchemaLike> {
+export interface ArgFn<
+  TSchemaBase extends SchemaLike = SchemaLike,
+  TCheck extends ObjectFieldCheck = InputObjectFieldCheck,
+> {
   <T extends TSchemaBase>(schema: T): T;
   <T extends TSchemaBase, M extends ArgMeta<InferSchemaOutput<T>>>(
     schema: T,
-    meta: ValidateArgMeta<M, InferSchemaOutput<T>, InferSchemaInput<T>>,
+    meta: ValidateArgMeta<M, InferSchemaOutput<T>, ExpandsObjectField<TCheck, T>>,
   ): T;
 }
 
 export function arg<T extends SchemaLike>(schema: T): T;
 export function arg<T extends SchemaLike, M extends ArgMeta<InferSchemaOutput<T>>>(
   schema: T,
-  meta: ValidateArgMeta<M, InferSchemaOutput<T>, InferSchemaInput<T>>,
+  meta: ValidateArgMeta<M, InferSchemaOutput<T>, ExpandsObjectField<InputObjectFieldCheck, T>>,
 ): T;
 export function arg<T extends SchemaLike>(
   schema: T,

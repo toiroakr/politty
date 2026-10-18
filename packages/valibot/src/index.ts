@@ -23,6 +23,7 @@ import {
   type ArgFn,
   type CreateDefineCommandFn,
   type DefineCommandFn,
+  type ObjectFieldCheck,
 } from "@politty/core";
 import type { GenericSchema } from "valibot";
 
@@ -46,4 +47,30 @@ export type ArgsSchema = GenericSchema<unknown, Record<string, any>>;
 // Re-pin the schema-taking API to valibot types (see module doc).
 export const defineCommand: DefineCommandFn<ArgsSchema> = coreDefineCommand;
 export const createDefineCommand: CreateDefineCommandFn<ArgsSchema> = coreCreateDefineCommand;
-export const arg: ArgFn<GenericSchema<unknown, unknown>> = coreArg;
+/**
+ * Whether the adapter expands a valibot field schema into nested options:
+ * an object, through the wrappers it reads through. (A record with finite
+ * keys has an object's input but is no object.)
+ */
+type ExpandsValibotObject<T> = T extends {
+  type:
+    | "optional"
+    | "exact_optional"
+    | "nullish"
+    | "undefinedable"
+    | "nullable"
+    | "non_optional"
+    | "non_nullable"
+    | "non_nullish";
+  wrapped: infer I;
+}
+  ? ExpandsValibotObject<I>
+  : T extends { type: "object" | "strict_object" | "loose_object" | "object_with_rest" }
+    ? true
+    : false;
+
+interface ValibotObjectFieldCheck extends ObjectFieldCheck {
+  expands: ExpandsValibotObject<this["schema"]>;
+}
+
+export const arg: ArgFn<GenericSchema<unknown, unknown>, ValibotObjectFieldCheck> = coreArg;

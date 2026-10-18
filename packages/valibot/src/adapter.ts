@@ -443,22 +443,18 @@ function extractFromObject(schema: ValibotNode): ResolvedFieldMeta[] {
 }
 
 /**
- * Get the discriminator value of one variant option for `v.variant(key, ...)`.
- * Supports `v.literal()` and single-value `v.picklist()` / `v.enum()`.
+ * Get the discriminator values one variant option of `v.variant(key, ...)`
+ * allows: a `v.literal()`, or every value of a `v.picklist()` / `v.enum()`.
  */
-function getDiscriminatorValue(option: ValibotNode, key: string): string {
+function getDiscriminatorValues(option: ValibotNode, key: string): string[] {
   const discriminatorSchema = option.entries?.[key];
-  if (!discriminatorSchema) return "";
+  if (!discriminatorSchema) return [];
 
   const inner = unwrapSchema(discriminatorSchema);
   if (inner.type === "literal" && inner.literal !== undefined) {
-    return String(inner.literal);
+    return [String(inner.literal)];
   }
-  const enumValues = extractEnumValues(inner);
-  if (enumValues && enumValues.length === 1) {
-    return enumValues[0]!;
-  }
-  return "";
+  return extractEnumValues(inner) ?? [];
 }
 
 /**
@@ -475,6 +471,7 @@ function extractFromVariant(schema: ValibotNode): ExtractedFields {
   for (const option of options) {
     const optionNode = asNode(option);
     const variantFields: ResolvedFieldMeta[] = [];
+    const allowed = getDiscriminatorValues(optionNode, discriminator);
 
     for (const [name, fieldSchema] of Object.entries(optionNode.entries ?? {})) {
       const fieldMeta = resolveValibotFieldMeta(name, fieldSchema);
@@ -488,7 +485,14 @@ function extractFromVariant(schema: ValibotNode): ExtractedFields {
 
     const variantDescription = extractDescription(optionNode);
     variants.push({
-      discriminatorValue: getDiscriminatorValue(optionNode, discriminator),
+      discriminatorValue: allowed[0] ?? "",
+      // A variant allowing several values is selected by any of them.
+      ...(allowed.length > 1
+        ? {
+            normalizeDiscriminator: (value: unknown) =>
+              allowed.includes(String(value)) ? allowed[0] : value,
+          }
+        : {}),
       fields: variantFields,
       ...(variantDescription ? { description: variantDescription } : {}),
     });

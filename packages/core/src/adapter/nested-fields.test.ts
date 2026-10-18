@@ -615,6 +615,26 @@ describe("nested object fields", () => {
       expect(seen).toEqual([]);
     });
 
+    it("should accept a variant whose leaf another variant expands further", async () => {
+      const { cmd, seen } = captureArgs(
+        z.discriminatedUnion("mode", [
+          z.object({
+            mode: z.literal("a"),
+            config: arg(z.object({ tls: z.string() }), { flatten: "kebab" }),
+            configTlsEnabled: z.string(),
+          }),
+          z.object({
+            mode: z.literal("b"),
+            config: arg(z.object({ tls: z.object({ enabled: z.string() }) }), {
+              flatten: "kebab",
+            }),
+          }),
+        ]),
+      );
+      await runCommand(cmd, ["--mode", "a", "--config-tls", "text", "--config-tls-enabled", "on"]);
+      expect(seen).toEqual([{ mode: "a", config: { tls: "text" }, configTlsEnabled: "on" }]);
+    });
+
     it("should select a variant by any value of a multi-value discriminator", async () => {
       for (const mode of [z.literal(["a", "b"]), z.enum(["a", "b"])]) {
         const { cmd, seen } = captureArgs(
@@ -789,6 +809,14 @@ describe("nested object fields", () => {
   });
 
   describe("object defaults", () => {
+    it("should create an object whose key names an Object.prototype property", async () => {
+      const { cmd, seen } = captureArgs(
+        z.object({ config: z.object({ constructor: z.object({ port: z.number().default(80) }) }) }),
+      );
+      await runCommand(cmd, []);
+      expect(seen).toEqual([{ config: { constructor: { port: 80 } } }]);
+    });
+
     it("should not report a transformed default value as the user's error", async () => {
       const { cmd } = captureArgs(
         z.object({
@@ -914,6 +942,22 @@ describe("nested object fields", () => {
       });
       expect(result.success).toBe(true);
       expect(seen[0]).toEqual({ mode: "b", config: { port: "80" } });
+    });
+
+    it("should merge into an expanded object without properties of its own", async () => {
+      const seen: unknown[] = [];
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ log: z.object({}) }),
+        run: (args) => {
+          seen.push(JSON.parse(JSON.stringify(args)));
+        },
+      });
+      const main = defineCommand({ name: "app", subCommands: { sub } });
+      await runCommand(main, ["--log.level", "debug", "sub"], {
+        globalArgs: z.object({ log: z.object({ level: z.string() }) }),
+      });
+      expect(seen[0]).toEqual({ log: { level: "debug" } });
     });
 
     it("should pre-fill a nested option from a flat global field of the same name", async () => {

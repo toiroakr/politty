@@ -268,10 +268,18 @@ export function selectDiscriminatedVariant(
             ],
           });
       }
-    return { ...extracted, fields: [...fields.values()] };
+    return {
+      ...extracted,
+      fields: [...fields.values()],
+      nestedObjects: viable.flatMap((option) => option.nestedObjects ?? []),
+    };
   }
   const candidates = variants.map((variant) => {
-    const fields = { ...extracted, fields: variant.fields };
+    const fields = {
+      ...extracted,
+      fields: variant.fields,
+      nestedObjects: variant.nestedObjects ?? [],
+    };
     return { variant, fields, value: readValues(fields)[discriminator] };
   });
   for (const { variant, fields, value } of candidates) {

@@ -196,6 +196,21 @@ describe("@politty/valibot e2e", () => {
     expect(table).toContain("Path to environment file");
   });
 
+  it("should select a variant by any value of a multi-value picklist discriminator", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: v.variant("mode", [
+        v.object({ mode: v.picklist(["a", "b"]), config: v.object({ port: v.string() }) }),
+        v.object({ mode: v.literal("c") }),
+      ]),
+      run: (args) => args,
+    });
+
+    const result = await runCommand(cmd, ["--mode", "b", "--config.port", "80"]);
+    expect(result.success).toBe(true);
+    expect(result.result).toEqual({ mode: "b", config: { port: "80" } });
+  });
+
   it("should expand nested object fields into options and nest their values", async () => {
     const cmd = defineCommand({
       name: "serve",
