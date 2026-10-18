@@ -28,7 +28,15 @@ function resolve(name: string, schema: AnySchema): ResolvedFieldMeta {
           : "unknown",
     enumValues: (meta.enumValues ?? meta.literalValues)?.map(String),
     schema,
+    objectShape: objectShape(schema),
   });
+}
+// `inner` is a wrapped schema, or an array's element schema: an array of
+// objects is no object.
+function objectShape(schema: AnySchema): Record<string, AnySchema> | undefined {
+  const { meta } = schema;
+  if (meta.kind === "array") return undefined;
+  return meta.shape ?? (meta.inner ? objectShape(meta.inner) : undefined);
 }
 function mode(meta: Meta): UnknownKeysMode {
   return meta.unknownKeys ?? "strip";

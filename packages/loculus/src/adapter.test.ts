@@ -625,4 +625,18 @@ describe("@politty/loculus", () => {
     const flags = parseArgs(["--help-json"], command);
     expect(flags).toMatchObject({ helpJsonRequested: true });
   });
+
+  it("expands an object field into nested options", async () => {
+    const command = defineCommand({
+      name: "serve",
+      args: l.object({
+        config: l.object({ port: l.number(), host: l.string({ default: "localhost" }) }),
+      }),
+      run: (args) => args.config,
+    });
+    expect((await runCommand(command, ["--config.port", "8080"])).result).toEqual({
+      port: 8080,
+      host: "localhost",
+    });
+  });
 });

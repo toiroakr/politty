@@ -389,7 +389,25 @@ export function resolveValibotFieldMeta(name: string, schema: unknown): Resolved
     type: detectType(node),
     enumValues: extractEnumValues(node),
     schema,
+    objectShape: extractObjectShape(node),
   });
+}
+
+/** Object-like schema types whose `entries` hold the property schemas */
+const OBJECT_TYPES: ReadonlySet<string> = new Set([
+  "object",
+  "strict_object",
+  "loose_object",
+  "object_with_rest",
+]);
+
+/**
+ * Property schemas of an object field (through optional/nullable/etc.
+ * wrappers), or `undefined` for any other field.
+ */
+function extractObjectShape(schema: ValibotNode): Record<string, unknown> | undefined {
+  const inner = unwrapSchema(schema);
+  return inner.type && OBJECT_TYPES.has(inner.type) ? (inner.entries ?? {}) : undefined;
 }
 
 /**

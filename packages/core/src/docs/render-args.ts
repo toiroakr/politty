@@ -1,3 +1,4 @@
+import { expandObjectFields } from "../adapter/nested-fields.js";
 import { getValidatorAdapter } from "../adapter/registry.js";
 import type { SchemaLike } from "../adapter/standard-schema.js";
 import type { ResolvedFieldMeta } from "../core/schema-extractor.js";
@@ -28,8 +29,12 @@ export type ArgsTableOptions = {
  */
 function extractArgsFields(args: ArgsShape): ResolvedFieldMeta[] {
   const adapter = getValidatorAdapter();
-  return Object.entries(args).map(([name, fieldSchema]) =>
-    adapter.resolveFieldMeta(name, fieldSchema),
+  const resolve = (name: string, fieldSchema: unknown) =>
+    adapter.resolveFieldMeta(name, fieldSchema);
+  // Object fields document the options they expand into, as parsing does.
+  return expandObjectFields(
+    Object.entries(args).map(([name, fieldSchema]) => resolve(name, fieldSchema)),
+    resolve,
   );
 }
 

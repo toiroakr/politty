@@ -395,7 +395,17 @@ export function resolveZodMiniFieldMeta(name: string, schema: z.ZodMiniType): Re
     type: detectType(schema),
     enumValues: extractEnumValues(schema),
     schema,
+    objectShape: extractObjectShape(schema),
   });
+}
+
+/**
+ * Property schemas of an object field (through optional/default/pipe
+ * wrappers), or `undefined` for any other field.
+ */
+function extractObjectShape(schema: z.ZodMiniType): Record<string, z.ZodMiniType> | undefined {
+  const inner = unwrapSchema(schema);
+  return getTypeName(inner) === "object" ? getObjectShape(inner) : undefined;
 }
 
 /**

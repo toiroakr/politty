@@ -195,4 +195,24 @@ describe("@politty/valibot e2e", () => {
     expect(table).toContain("`-e`");
     expect(table).toContain("Path to environment file");
   });
+
+  it("should expand an object field into nested options", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: v.object({
+        config: v.optional(
+          v.object({
+            port: v.pipe(v.unknown(), v.transform(Number), v.number()),
+            host: v.optional(v.string(), "localhost"),
+          }),
+        ),
+      }),
+      run: (args) => args.config,
+    });
+    expect((await runCommand(cmd, ["--config.port", "8080"])).result).toEqual({
+      port: 8080,
+      host: "localhost",
+    });
+    expect((await runCommand(cmd, [])).result).toBeUndefined();
+  });
 });

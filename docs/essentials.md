@@ -134,6 +134,35 @@ $ my-cli --include file1.txt -i file2.txt
 # args.include = ["file1.txt", "file2.txt"]
 ```
 
+### Nested Object Options
+
+An object field is expanded into one option per property, named by its
+dotted path. Values are passed to `run` nested under the field again and
+validated by the object's own schema (refinements included). Nested objects
+are expanded recursively.
+
+```typescript
+args: z.object({
+  config: z
+    .object({
+      serverPort: arg(z.coerce.number(), { alias: "p", env: "PORT" }),
+      host: z.string().default("localhost"),
+    })
+    .optional(),
+});
+```
+
+```bash
+$ my-cli --config.server-port 8080   # or --config.serverPort 8080
+# args.config = { serverPort: 8080, host: "localhost" }
+```
+
+An optional object stays `undefined` until one of its options is given. A
+required object is always created, so its properties' defaults apply even
+when none of its options is given. Set `arg()` metadata such as `alias`,
+`env` or `effect` on the properties: on an object field itself, only
+`description` is accepted.
+
 ## Validation and Types
 
 Since politty is built on Zod, you get powerful validation features out of the box.

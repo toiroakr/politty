@@ -193,4 +193,24 @@ describe("@politty/zod-mini e2e", () => {
     expect(table).toContain("`-e`");
     expect(table).toContain("Path to environment file");
   });
+
+  it("should expand an object field into nested options", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: z.object({
+        config: z.optional(
+          z.object({
+            port: z.coerce.number(),
+            host: z._default(z.string(), "localhost"),
+          }),
+        ),
+      }),
+      run: (args) => args.config,
+    });
+    expect((await runCommand(cmd, ["--config.port", "8080"])).result).toEqual({
+      port: 8080,
+      host: "localhost",
+    });
+    expect((await runCommand(cmd, [])).result).toBeUndefined();
+  });
 });

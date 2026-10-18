@@ -11,6 +11,7 @@
  */
 
 import { extractInternalFields, isInternalArgsSchema } from "../adapter/internal-args.js";
+import { expandNestedFields } from "../adapter/nested-fields.js";
 import { getValidatorAdapter } from "../adapter/registry.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 
@@ -38,6 +39,7 @@ export function getUnknownKeysMode(schema: ArgsSchema): UnknownKeysMode {
 }
 
 const validatedPackageFields = new WeakSet<ExtractedFields>();
+const expandedFields = new WeakMap<ExtractedFields, ExtractedFields>();
 
 /**
  * Extract all fields from a schema
@@ -48,12 +50,28 @@ const validatedPackageFields = new WeakSet<ExtractedFields>();
 export function extractFields(schema: ArgsSchema): ExtractedFields {
   const extracted = isInternalArgsSchema(schema)
     ? extractInternalFields(schema)
-    : getValidatorAdapter().extractFields(schema);
+    : expandAdapterFields(getValidatorAdapter().extractFields(schema));
   if (!validatedPackageFields.has(extracted)) {
     validatePackageFields(extracted);
     validatedPackageFields.add(extracted);
   }
   return extracted;
+}
+
+/**
+ * Expand the object fields of an adapter's extraction into their property
+ * fields, memoized so repeated calls keep returning the same object.
+ */
+function expandAdapterFields(extracted: ExtractedFields): ExtractedFields {
+  let expanded = expandedFields.get(extracted);
+  if (!expanded) {
+    const adapter = getValidatorAdapter();
+    expanded = expandNestedFields(extracted, (name, fieldSchema) =>
+      adapter.resolveFieldMeta(name, fieldSchema),
+    );
+    expandedFields.set(extracted, expanded);
+  }
+  return expanded;
 }
 
 function validatePackageFields(extracted: ExtractedFields): void {

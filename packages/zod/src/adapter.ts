@@ -375,7 +375,17 @@ export function resolveZodFieldMeta(name: string, schema: z.ZodType): ResolvedFi
     type: detectType(schema),
     enumValues: extractEnumValues(schema),
     schema,
+    objectShape: extractObjectShape(schema),
   });
+}
+
+/**
+ * Property schemas of an object field (through optional/default/pipe
+ * wrappers), or `undefined` for any other field.
+ */
+function extractObjectShape(schema: z.ZodType): Record<string, z.ZodType> | undefined {
+  const inner = unwrapSchema(schema);
+  return getTypeName(inner) === "object" ? getObjectShape(inner) : undefined;
 }
 
 /**

@@ -93,6 +93,23 @@ export interface ResolvedFieldMeta {
   negationDescription?: string | undefined;
   /** Side-effect callback from arg() metadata */
   effect?: ((value: unknown, context: EffectContext) => void | PromiseLike<void>) | undefined;
+  /**
+   * Property schemas of an object field, set by the adapter. `extractFields`
+   * expands such a field into one field per property (see nested-fields.ts).
+   */
+  objectShape?: Record<string, unknown> | undefined;
+  /** Set on a field expanded from an object field */
+  nested?: NestedFieldInfo | undefined;
+}
+
+/**
+ * Where a field expanded from an object field lives in the validated args
+ */
+export interface NestedFieldInfo {
+  /** Property path, starting with the top-level field name */
+  path: string[];
+  /** Whether each enclosing object (outermost first) is required */
+  objectRequired: boolean[];
 }
 
 /**
@@ -197,6 +214,8 @@ export interface FieldIntrospection {
   enumValues: string[] | undefined;
   /** The original schema, carried through for downstream consumers */
   schema: unknown;
+  /** Property schemas, when the field schema is an object */
+  objectShape?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -356,6 +375,7 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
     negationDescription,
     effect: argMeta?.effect,
     requiredPackages: argMeta?.requiredPackages,
+    objectShape: intro.objectShape,
   };
 
   // Add overrideBuiltinAlias only if it's true
