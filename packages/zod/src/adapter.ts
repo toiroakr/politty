@@ -11,6 +11,7 @@
 import {
   resolveFieldMeta as assembleFieldMeta,
   mergeIntersectionField,
+  retainsKeys,
   type ExtractedFields,
   type ResolvedFieldMeta,
   type UnknownKeysMode,
@@ -582,12 +583,15 @@ function extractFromIntersection(schema: z.ZodType): ExtractedFields {
 
   const allFieldsMap = new Map<string, ResolvedFieldMeta>();
   const unionMembers: ExtractedFields[] = [];
+  let retainsUnknownKeys = false;
 
   // Helper to extract fields from a sub-schema
   const extractSubFields = (subSchema: z.ZodType | undefined) => {
     if (!subSchema) return;
 
     const extracted = extractZodFields(subSchema as ArgsSchema);
+    // The merged output keeps a property either member keeps.
+    retainsUnknownKeys ||= retainsKeys(extracted);
     if (extracted.unionOptions || extracted.variants) unionMembers.push(extracted);
     unionMembers.push(...(extracted.unionMembers ?? []));
     for (const field of extracted.fields) {
@@ -605,6 +609,7 @@ function extractFromIntersection(schema: z.ZodType): ExtractedFields {
     schema: schema as ArgsSchema,
     schemaType: "intersection",
     unknownKeysMode: getUnknownKeysMode(schema),
+    retainsUnknownKeys,
     ...(unionMembers.length > 0 ? { unionMembers } : {}),
     ...(description ? { description } : {}),
   };

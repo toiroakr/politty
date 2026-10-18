@@ -1114,21 +1114,40 @@ describe("nested object fields", () => {
       expect(seen[0]).toEqual({ config: { tls: { enabled: false } } });
     });
 
-    it("should let shell completion match the kebab-case form of camel options", () => {
-      expect(collectOptionTokens("configMode", undefined)).toContain("--config-mode");
+    it("should let shell completion match the spellings the parser registers", () => {
+      const tokens = (schema: Parameters<typeof extractFields>[0]) => {
+        const [field] = extractFields(schema).fields;
+        return collectOptionTokens(field!.cliName, field!.alias, field!.hiddenAlias);
+      };
+      const camel = (child: z.ZodType) =>
+        z.object({ config: arg(z.object({ child }), { flatten: "camel" }) });
+      expect(
+        tokens(z.object({ config: arg(z.object({ mode: z.string() }), { flatten: "camel" }) })),
+      ).toEqual(expect.arrayContaining(["--configMode", "--config-mode"]));
       // An acronym is also accepted camelCased from its kebab-case form.
-      expect(collectOptionTokens("configBaseURL", undefined)).toContain("--configBaseUrl");
+      expect(
+        tokens(z.object({ config: arg(z.object({ baseURL: z.string() }), { flatten: "camel" }) })),
+      ).toContain("--configBaseUrl");
+      // A digit-ending key keeps its boundary; the unregistered `--s3region` is no spelling.
+      const s3 = tokens(
+        z.object({ s3: arg(z.object({ region: z.string() }), { flatten: "camel" }) }),
+      );
+      expect(s3).toContain("--s3-region");
+      expect(s3).not.toContain("--s3region");
+      // A camelCase parent with a kebab-case child mixes both styles.
+      expect(tokens(camel(arg(z.object({ certFile: z.string() }), { flatten: "kebab" })))).toEqual(
+        expect.arrayContaining(["--configChild-cert-file", "--config-child-cert-file"]),
+      );
       // A custom negation only takes the spellings the parser registers.
       expect(quotedAvailabilityTokens("tls", undefined, "disableTLS")).not.toContain(
         '"--disable-tls"',
       );
-      // A camelCase parent with a kebab-case child mixes both styles.
-      expect(collectOptionTokens("configTls-cert-file", undefined)).toEqual(
-        expect.arrayContaining(["--configTlsCertFile", "--config-tls-cert-file"]),
-      );
       expect(
-        quotedAvailabilityTokens("configUi", undefined, "noConfigUi", { defaultNegation: true }),
-      ).toContain('"--no-config-ui"');
+        quotedAvailabilityTokens("configUi", undefined, "noConfigUi", {
+          defaultNegation: true,
+          hiddenAliases: ["config-ui"],
+        }),
+      ).toEqual(expect.arrayContaining(['"--no-config-ui"', '"--noConfigUi"']));
       // A custom negation spelled like a default one is still custom.
       expect(quotedAvailabilityTokens("tls", undefined, "noTls")).not.toContain('"--no-tls"');
     });
@@ -1211,6 +1230,18 @@ describe("nested object fields", () => {
     });
   });
 
+  it("should create a required `__proto__` object without replacing its parent's prototype", async () => {
+    const { cmd, seen } = captureArgs(
+      z.object({
+        config: z.object({ ["__proto__"]: z.object({}), port: z.string() }),
+      }),
+    );
+    const result = await runCommand(cmd, ["--config.port", "80"]);
+    expect(result.success).toBe(true);
+    // The validated object holds what zod keeps of it.
+    expect(seen).toEqual([{ config: { port: "80" } }]);
+  });
+
   describe("object defaults", () => {
     it("should create an object whose key names an Object.prototype property", async () => {
       const { cmd, seen } = captureArgs(
@@ -1249,6 +1280,18 @@ describe("nested object fields", () => {
       undefined,
       expect.objectContaining({ name: "config.host" }),
     );
+  });
+
+  it("should take a union option that keeps values through an intersection of loose objects", async () => {
+    const { cmd, seen } = captureArgs(
+      z.union([
+        z.intersection(z.looseObject({}), z.looseObject({})),
+        z.object({ config: z.object({ port: z.string() }) }),
+      ]),
+    );
+    const result = await runCommand(cmd, ["--config.port", "80"]);
+    expect(result.success).toBe(true);
+    expect(seen).toEqual([{ config: { port: "80" } }]);
   });
 
   describe("global args", () => {

@@ -11,6 +11,7 @@
 import {
   resolveFieldMeta as assembleFieldMeta,
   mergeIntersectionField,
+  retainsKeys,
   type ExtractedFields,
   type ResolvedFieldMeta,
   type UnknownKeysMode,
@@ -565,9 +566,12 @@ function extractFromUnion(schema: ValibotNode): ExtractedFields {
 function extractFromIntersect(schema: ValibotNode): ExtractedFields {
   const allFieldsMap = new Map<string, ResolvedFieldMeta>();
   const unionMembers: ExtractedFields[] = [];
+  let retainsUnknownKeys = false;
 
   for (const option of schema.options ?? []) {
     const extracted = extractValibotFields(option as ArgsSchema);
+    // The merged output keeps a property any member keeps.
+    retainsUnknownKeys ||= retainsKeys(extracted);
     if (extracted.unionOptions || extracted.variants) unionMembers.push(extracted);
     unionMembers.push(...(extracted.unionMembers ?? []));
     for (const field of extracted.fields) {
@@ -582,6 +586,7 @@ function extractFromIntersect(schema: ValibotNode): ExtractedFields {
     schema: schema as unknown as ArgsSchema,
     schemaType: "intersection",
     unknownKeysMode: getUnknownKeysMode(schema),
+    retainsUnknownKeys,
     ...(unionMembers.length > 0 ? { unionMembers } : {}),
     ...(description ? { description } : {}),
   };

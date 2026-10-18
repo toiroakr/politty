@@ -8,7 +8,7 @@
  * when one generator gets a fix that the others should mirror.
  */
 
-import { toCamelCase, toKebabCase } from "../core/schema-extractor.js";
+import { toCamelCase } from "../core/schema-extractor.js";
 import type { NamedPositionalFrame } from "./extractor.js";
 import type { CompletableOption, CompletablePositional, ValueCompletion } from "./types.js";
 
@@ -211,24 +211,39 @@ function pushUnique(tokens: string[], t: string): void {
 }
 
 /**
- * Push the other case spellings runtime accepts for a long name: the
- * camelCase form of a hyphenated name, and the kebab-case form of one with
- * uppercase letters (camel-style nested fields register it as a hidden
- * alias). Names mixing both styles get both.
+ * Push the camelCase form runtime registers for a hyphenated long name.
+ * Other spellings (such as the kebab-case form of a camel-style nested
+ * option) are registered as hidden aliases and come from those.
  */
 function pushCaseVariants(tokens: string[], name: string): void {
-  // camelCase of the kebab-case form too: `configBaseURL` is also accepted
-  // as `--configBaseUrl` through its kebab-case hidden alias.
-  for (const variant of [toCamelCase(name), toKebabCase(name), toCamelCase(toKebabCase(name))]) {
-    if (variant !== name && !tokens.includes(`--${variant}`)) tokens.push(`--${variant}`);
+  const variant = toCamelCase(name);
+  if (variant !== name) pushUnique(tokens, `--${variant}`);
+}
+
+/**
+ * The default negations runtime accepts for an option's long spellings:
+ * `--no-<spelling>` for an all-lowercase one and `--no<Spelling>` for one
+ * starting lowercase (see `resolveLongOption`).
+ */
+function defaultNegationTokens(tokens: Iterable<string>): string[] {
+  const out: string[] = [];
+  for (const token of tokens) {
+    if (!token.startsWith("--")) continue;
+    const spelling = token.slice(2);
+    if (spelling === spelling.toLowerCase()) out.push(`--no-${spelling}`);
+    const first = spelling.charAt(0);
+    if (first === first.toLowerCase() && first !== first.toUpperCase()) {
+      out.push(`--no${first.toUpperCase()}${spelling.slice(1)}`);
+    }
   }
+  return out;
 }
 
 /**
  * Every CLI spelling the runtime's aliasMap routes to this option:
  *  - `--cliName` (always),
  *  - `-x` when `cliName` is one character,
- *  - `--toCamelCase(cliName)` / `--toKebabCase(cliName)` when they differ,
+ *  - `--toCamelCase(cliName)` when it differs,
  *  - and the analogous forms for each alias.
  *
  * The order is stable so shell-side case patterns stay diff-friendly.
@@ -296,19 +311,14 @@ export function quotedAvailabilityTokens(
   // tracker) might consume. Without this, the option-name suggestion
   // path still offers the canonical \`--cliName\` after the user
   // consumed it as \`-x\` / \`--f\` / \`--toBe\`.
-  const tokens = new Set<string>(collectOptionTokens(cliName, aliases, options?.hiddenAliases));
+  const optionTokens = collectOptionTokens(cliName, aliases, options?.hiddenAliases);
+  const tokens = new Set<string>(optionTokens);
   if (negation) {
     tokens.add(`--${negation}`);
     // A default negation (`no-<cliName>`) takes every spelling the option
     // does; a custom one only its camelCase form, as the parser registers.
     if (options?.defaultNegation) {
-      const variants: string[] = [];
-      pushCaseVariants(variants, negation);
-      // `--no-` also takes the hidden spellings (e.g. `--no-s3-enabled`).
-      for (const hidden of options.hiddenAliases ?? []) {
-        if (hidden.length > 1) pushAliasTokens(variants, `no-${hidden}`);
-      }
-      for (const variant of variants) tokens.add(variant);
+      for (const variant of defaultNegationTokens(optionTokens)) tokens.add(variant);
     } else if (negation.includes("-")) tokens.add(`--${toCamelCase(negation)}`);
   }
   // Drop tokens runtime would NOT route to this option. For a LOCAL

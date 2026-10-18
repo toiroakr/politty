@@ -462,6 +462,11 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
   return meta;
 }
 
+/** Whether validating against extracted fields keeps properties they do not define */
+export function retainsKeys(extracted: ExtractedFields): boolean {
+  return extracted.retainsUnknownKeys ?? extracted.unknownKeysMode === "passthrough";
+}
+
 /**
  * Combine two definitions of the same field from the members of an
  * intersection: the first definition wins, except that two object fields

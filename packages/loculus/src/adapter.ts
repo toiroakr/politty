@@ -1,6 +1,7 @@
 import {
   mergeIntersectionField,
   resolveFieldMeta,
+  retainsKeys,
   type ExtractedFields,
   type ResolvedFieldMeta,
   type UnknownKeysMode,
@@ -128,6 +129,8 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
         ...(option.unionMembers ?? []),
       ]);
       if (unionMembers.length > 0) result.unionMembers = unionMembers;
+      // The merged output keeps a property any member keeps.
+      result.retainsUnknownKeys = options.some(retainsKeys);
     }
   } else throw new TypeError("loculus command arguments must have object output");
   if (meta.description) result.description = meta.description;

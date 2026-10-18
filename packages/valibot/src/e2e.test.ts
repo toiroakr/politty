@@ -239,6 +239,20 @@ describe("@politty/valibot e2e", () => {
     expect((await runCommand(checked, ["--config.port", "1"])).result).toEqual({ port: "1" });
   });
 
+  it("should take a union option that keeps values through an intersection of loose objects", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: v.union([
+        v.intersect([v.looseObject({}), v.looseObject({})]),
+        v.object({ config: v.object({ port: v.string() }) }),
+      ]),
+      run: (args) => args,
+    });
+    const result = await runCommand(cmd, ["--config.port", "80"]);
+    expect(result.success).toBe(true);
+    expect(result.result).toEqual({ config: { port: "80" } });
+  });
+
   it("should reject a default on an object field", async () => {
     const cmd = defineCommand({
       name: "serve",

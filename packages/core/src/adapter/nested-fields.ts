@@ -695,12 +695,12 @@ function nestGroup(
     // reject, not to be replaced.
     if (current !== undefined && !isPlainObject(current)) continue;
     // Copy so a value given as a whole is never mutated.
-    parent[key] = isPlainObject(current) ? { ...current } : {};
+    setOwn(parent, key, isPlainObject(current) ? { ...current } : {});
   }
   for (const leaf of leaves) {
     const path = leaf.nested!.path;
     const container = containerAt(result, path.slice(0, -1));
-    if (container) container[path[path.length - 1]!] = rawArgs[leaf.name];
+    if (container) setOwn(container, path[path.length - 1]!, rawArgs[leaf.name]);
   }
   // One that cannot be placed stays under its flat name, for the schema's
   // unknown-key policy to handle rather than vanishing.
@@ -719,6 +719,19 @@ function nestGroup(
  *
  * @returns Whether the value was set
  */
+/**
+ * Set an own data property, also for a key such as `__proto__`, which an
+ * assignment would pass to the inherited setter
+ */
+function setOwn(target: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
+}
+
 function placeAt(args: Record<string, unknown>, path: string[], value: unknown): boolean {
   // Check before writing, so a value that cannot be placed changes nothing.
   let probe: unknown = args;
@@ -732,10 +745,11 @@ function placeAt(args: Record<string, unknown>, path: string[], value: unknown):
   let target = args;
   for (const key of path.slice(0, -1)) {
     const next = Object.hasOwn(target, key) ? target[key] : undefined;
-    target[key] = isPlainObject(next) ? { ...next } : {};
-    target = target[key] as Record<string, unknown>;
+    const copy = isPlainObject(next) ? { ...next } : {};
+    setOwn(target, key, copy);
+    target = copy;
   }
-  target[path[path.length - 1]!] = value;
+  setOwn(target, path[path.length - 1]!, value);
   return true;
 }
 
@@ -804,10 +818,13 @@ export function mergeNestedValues(
   for (const [key, value] of Object.entries(override)) {
     const current = merged[key];
     const childPath = [...path, key];
-    merged[key] =
+    setOwn(
+      merged,
+      key,
       isObject(childPath) && isPlainObject(current) && isPlainObject(value)
         ? mergeNestedValues(current, value, isObject, childPath)
-        : value;
+        : value,
+    );
   }
   return merged;
 }
