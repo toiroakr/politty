@@ -620,6 +620,7 @@ export function extractZodFields(schema: ArgsSchema): ExtractedFields {
         schema,
         schemaType: "object",
         unknownKeysMode: getUnknownKeysMode(zodSchema),
+        retainsUnknownKeys: getObjectUnknownKeys(zodSchema) === "passthrough",
         ...(description ? { description } : {}),
       };
       break;

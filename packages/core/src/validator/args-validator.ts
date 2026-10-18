@@ -79,8 +79,8 @@ export function validateArgsBranch<T extends ArgsSchema>(
       // The union takes the first option accepting the args; if that is an
       // earlier option without some of the given fields, it drops their
       // values (before any transform could tell), so never accept it.
-      const first = candidate.precedingBranches.find(
-        (earlier) => adapter.validate(candidate.args, earlier.schema).success,
+      const first = candidate.precedingBranches.find((earlier) =>
+        earlier.schemas.every((option) => adapter.validate(candidate.args, option).success),
       );
       const dropped = first
         ? (candidate.given ?? []).filter(({ path }) => dropsGivenValue(first, path))

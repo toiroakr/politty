@@ -640,6 +640,7 @@ export function extractZodMiniFields(schema: ArgsSchema): ExtractedFields {
         schema,
         schemaType: "object",
         unknownKeysMode: getUnknownKeysMode(zodSchema),
+        retainsUnknownKeys: getObjectUnknownKeys(zodSchema) === "passthrough",
         ...(description ? { description } : {}),
       };
       break;

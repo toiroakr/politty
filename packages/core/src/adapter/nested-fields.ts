@@ -297,7 +297,11 @@ export interface NestingGroup {
 
 /** A union option that precedes the one a candidate nests by */
 export interface PrecedingBranch {
-  schema: ArgsSchema;
+  /**
+   * The option and the union options enclosing it, outermost first: the
+   * union takes it only when every one of them accepts the args
+   */
+  schemas: ArgsSchema[];
   /** The option's fields and expanded objects */
   group: NestingGroup;
   /**
@@ -419,11 +423,13 @@ export function nestingCandidates(
     group: NestingGroup,
     branchSchema?: ArgsSchema,
     createRequired: CreateRequired = true,
+    foreign: ResolvedFieldMeta[] = [],
   ): NestingCandidate[] => {
-    const seeded = nestGroup(rawArgs, group, leafNames, { createRequired, seed: true });
+    const options = { createRequired, foreign };
+    const seeded = nestGroup(rawArgs, group, leafNames, { ...options, seed: true });
     const candidates: NestingCandidate[] = [{ ...seeded, group, branchSchema }];
     if (seeded.defaultedPaths.length > 0) {
-      const empty = nestGroup(rawArgs, group, leafNames, { createRequired, seed: false });
+      const empty = nestGroup(rawArgs, group, leafNames, { ...options, seed: false });
       candidates.push({ ...empty, group, branchSchema });
     }
     return candidates;
@@ -433,6 +439,8 @@ export function nestingCandidates(
   interface Branch {
     group: NestingGroup;
     schema: ArgsSchema | undefined;
+    /** The union options enclosing this branch, outermost first, ending with `schema` */
+    schemas: ArgsSchema[];
     names: ReadonlySet<string>;
     paths: ReadonlySet<string>;
     objects: ReadonlyMap<string, boolean>;
@@ -440,32 +448,31 @@ export function nestingCandidates(
     plain: boolean;
     passthrough: boolean;
   }
-  const branches = (
-    group: ExtractedFields,
-    schema: ArgsSchema | undefined,
-    plain: boolean,
-  ): Branch[] => {
+  const branches = (group: ExtractedFields, schemas: ArgsSchema[], plain: boolean): Branch[] => {
     const branch = (fields: NestingGroup): Branch => ({
       group: fields,
-      schema,
+      schema: schemas.at(-1),
+      schemas,
       names: new Set(fields.fields.map((field) => field.name)),
       paths: new Set(fields.fields.map((field) => pathKey(field.nested?.path ?? [field.name]))),
       objects: new Map(
         (fields.nestedObjects ?? []).map((object) => [pathKey(object.path), !!object.passthrough]),
       ),
       plain,
-      passthrough: group.unknownKeysMode === "passthrough",
+      passthrough: group.unknownKeysMode === "passthrough" || !!group.retainsUnknownKeys,
     });
     if (group.variants && group.discriminator) {
       const variant = selectVariant(rawArgs, group.discriminator, group.variants);
       return variant ? [branch(variant)] : [];
     }
     if (group.unionOptions) {
-      return group.unionOptions.flatMap((option) => branches(option, option.schema, true));
+      return group.unionOptions.flatMap((option) =>
+        branches(option, [...schemas, option.schema], true),
+      );
     }
     return [branch(group)];
   };
-  const all = branches(extracted, undefined, false);
+  const all = branches(extracted, [], false);
   // The given values of fields some branch defines.
   const known = new Map<string, ResolvedFieldMeta>();
   for (const { group } of all) {
@@ -479,14 +486,14 @@ export function nestingCandidates(
       .map((name) => [name]),
     ...givenFields.map((field) => field.nested?.path ?? [field.name]),
   ];
-  // A branch without one of the given options would drop its value: a
-  // nested leaf is never placed, and a plain union option strips a value
-  // it does not define (a discriminated union reports it like any other
-  // command does).
+  // A plain union option without one of the given options would drop its
+  // value: a nested leaf is never placed, and a value it does not define is
+  // stripped. A discriminated union's variant treats the options of other
+  // variants like any unknown option, by its own unknown-key policy.
   const covering = all.filter((branch) =>
     givenFields.every(
       (field) =>
-        branch.names.has(field.name) || (!field.nested && (!branch.plain || branch.passthrough)),
+        branch.names.has(field.name) || !branch.plain || (!field.nested && branch.passthrough),
     ),
   );
   // Every branch's leaves and objects, with no branch deciding which
@@ -509,12 +516,17 @@ export function nestingCandidates(
       const defined = own.get(field.name) ?? field;
       return { name: field.name, path: defined.nested?.path ?? [defined.name] };
     });
-    return nest(branch.group, branch.schema, createRequired).map((candidate) => ({
+    // Another variant's given leaves, placed at their path for this
+    // variant's policy to strip, keep or reject.
+    const foreign = branch.plain
+      ? []
+      : givenFields.filter((field) => field.nested && !branch.names.has(field.name));
+    return nest(branch.group, branch.schema, createRequired, foreign).map((candidate) => ({
       ...candidate,
       givenPaths,
       given,
-      precedingBranches: preceding.map(({ schema, group, paths, objects, passthrough }) => ({
-        schema: schema!,
+      precedingBranches: preceding.map(({ schemas, group, paths, objects, passthrough }) => ({
+        schemas,
         group,
         paths,
         objects,
@@ -580,7 +592,7 @@ function nestGroup(
   rawArgs: Record<string, unknown>,
   group: NestingGroup,
   leafNames: ReadonlySet<string>,
-  options: { createRequired: CreateRequired; seed: boolean },
+  options: { createRequired: CreateRequired; seed: boolean; foreign?: ResolvedFieldMeta[] },
 ): { args: Record<string, unknown>; defaultedPaths: string[][] } {
   const result: Record<string, unknown> = { ...rawArgs };
   // Remove every flat name before building objects: a flat name may equal
@@ -660,7 +672,24 @@ function nestGroup(
     for (let depth = 1; depth <= path.length; depth++)
       defaulted.delete(pathKey(path.slice(0, depth)));
   }
+  for (const leaf of options.foreign ?? []) placeAt(result, leaf.nested!.path, rawArgs[leaf.name]);
   return { args: result, defaultedPaths: [...defaulted.values()] };
+}
+
+/**
+ * Set a value at a property path, creating the objects along it, unless the
+ * path is taken or runs through a value that is no plain object.
+ */
+function placeAt(args: Record<string, unknown>, path: string[], value: unknown): void {
+  let target = args;
+  for (const key of path.slice(0, -1)) {
+    const next = Object.hasOwn(target, key) ? target[key] : undefined;
+    if (next === undefined) target[key] = {};
+    else if (!isPlainObject(next)) return;
+    target = target[key] as Record<string, unknown>;
+  }
+  const last = path[path.length - 1]!;
+  if (!Object.hasOwn(target, last)) target[last] = value;
 }
 
 function containerAt(

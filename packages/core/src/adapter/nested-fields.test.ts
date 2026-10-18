@@ -644,6 +644,47 @@ describe("nested object fields", () => {
       expect(seen).toEqual([{ config: { host: "h", port: "80" } }]);
     });
 
+    it("should accept a value an earlier option keeps through its own typed catchall", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ name: z.string().optional() }).catchall(z.object({ port: z.string() })),
+          z.object({ config: z.object({ port: z.string() }) }),
+        ]),
+      );
+      await runCommand(cmd, ["--config.port", "80"]);
+      expect(seen).toEqual([{ config: { port: "80" } }]);
+    });
+
+    it("should not count an earlier option its enclosing union rejects", async () => {
+      const inner = z
+        .union([z.object({ name: z.string().optional() }), z.object({ other: z.string() })])
+        .refine(() => false);
+      const { cmd, seen } = captureArgs(
+        z.union([inner, z.object({ config: z.object({ port: z.string() }) })]),
+      );
+      await runCommand(cmd, ["--config.port", "80"]);
+      expect(seen).toEqual([{ config: { port: "80" } }]);
+    });
+
+    it("should treat another variant's option by the selected variant's unknown-key policy", async () => {
+      const results: Array<{ success: boolean; args?: unknown }> = [];
+      for (const object of [z.object, z.looseObject, z.strictObject]) {
+        const { cmd, seen } = captureArgs(
+          z.discriminatedUnion("mode", [
+            object({ mode: z.literal("a"), config: z.object({ port: z.string() }).optional() }),
+            object({ mode: z.literal("b") }),
+          ]),
+        );
+        const result = await runCommand(cmd, ["--mode", "b", "--config.port", "80"]);
+        results.push({ success: result.success, args: seen[0] });
+      }
+      expect(results).toEqual([
+        { success: true, args: { mode: "b" } },
+        { success: true, args: { mode: "b", config: { port: "80" } } },
+        { success: false, args: undefined },
+      ]);
+    });
+
     it("should not take a union option for a required object no value named", async () => {
       const { cmd, seen } = captureArgs(
         z.union([

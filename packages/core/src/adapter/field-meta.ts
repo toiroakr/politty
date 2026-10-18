@@ -185,6 +185,11 @@ export interface ExtractedFields {
    * - "passthrough": Unknown keys are silently ignored (z.looseObject or z.object().passthrough())
    */
   unknownKeysMode: UnknownKeysMode;
+  /**
+   * Whether validation keeps properties the schema does not define, which a
+   * typed catchall does even though unknown flags are not passed through
+   */
+  retainsUnknownKeys?: boolean | undefined;
 }
 
 /**

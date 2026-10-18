@@ -120,6 +120,20 @@ describe("@politty/zod-mini e2e", () => {
     expect(result.result).toEqual({ config: { port: "80" } });
   });
 
+  it("should accept a value an earlier union option keeps through its root catchall", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: z.union([
+        z.catchall(z.object({ name: z.optional(z.string()) }), z.object({ port: z.string() })),
+        z.object({ config: z.object({ port: z.string() }) }),
+      ]),
+      run: (args) => args,
+    });
+
+    const result = await runCommand(cmd, ["--config.port", "80"]);
+    expect(result.result).toEqual({ config: { port: "80" } });
+  });
+
   it("should select a variant with nested options by a literal-union discriminator", async () => {
     const cmd = defineCommand({
       name: "serve",
