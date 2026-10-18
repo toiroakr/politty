@@ -180,6 +180,23 @@ config: arg(z.object({ serverPort: z.coerce.number() }), { flatten: "kebab" }),
 An option that has the same name as another field (e.g. `--config-port` next
 to a `configPort` field) is reported as a duplicate field.
 
+Schemas whose expanded options could not be given as expected are rejected
+when fields are extracted:
+
+- An object field cannot have a default (`.default(...)`): give its
+  properties defaults instead.
+- A property cannot have an `effect` or `requiredPackages` when an enclosing
+  object has a transform (or pipes into another schema), as the transform may
+  change the value they read. Refinements are fine.
+- An object field cannot be defined by more than one intersection member.
+- In a plain union, a required object needs at least one required property
+  (or make it optional, or use a discriminated union): a union cannot tell
+  which option's objects to create from their defaults.
+
+When the global args and a command both expand an object of the same name,
+`run` receives both objects merged property by property, with the command's
+values taking precedence.
+
 ## Validation and Types
 
 Since politty is built on Zod, you get powerful validation features out of the box.

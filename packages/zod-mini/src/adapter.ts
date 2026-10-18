@@ -19,6 +19,7 @@
  */
 
 import {
+  addIntersectionField,
   resolveFieldMeta as assembleFieldMeta,
   type ExtractedFields,
   type ResolvedFieldMeta,
@@ -396,7 +397,22 @@ export function resolveZodMiniFieldMeta(name: string, schema: z.ZodMiniType): Re
     enumValues: extractEnumValues(schema),
     schema,
     objectShape: extractObjectShape(schema),
+    objectTransformed: passesThroughPipe(schema),
   });
+}
+
+/**
+ * Whether the wrappers {@link unwrapSchema} reads through include a pipe (a
+ * transform, or a pipe into another schema), which may replace the value
+ * of the schema it wraps.
+ */
+function passesThroughPipe(schema: z.ZodMiniType): boolean {
+  const typeName = getTypeName(schema);
+  if (typeName === "pipe") return true;
+  const s = schema as ZodSchemaWithDef;
+  const def = s.def;
+  const isWrapper = typeName === "optional" || typeName === "nullable" || typeName === "default";
+  return isWrapper && def?.innerType ? passesThroughPipe(def.innerType) : false;
 }
 
 /**
@@ -447,7 +463,8 @@ function extractFromDiscriminatedUnion(schema: z.ZodMiniType): ExtractedFields {
     // Get discriminator value from the variant's discriminator schema.
     // Supports z.literal() and single-value z.enum() discriminators.
     let discriminatorValue = "";
-    const discriminatorSchema = shape[discriminator];
+    // Read through wrappers such as `.default()`, which keep the value.
+    const discriminatorSchema = shape[discriminator] && unwrapSchema(shape[discriminator]);
     if (discriminatorSchema) {
       const typeName = getTypeName(discriminatorSchema);
       if (typeName === "literal") {
@@ -552,11 +569,7 @@ function extractFromIntersection(schema: z.ZodMiniType): ExtractedFields {
     if (!subSchema) return;
 
     const extracted = extractZodMiniFields(subSchema as ArgsSchema);
-    for (const field of extracted.fields) {
-      if (!allFieldsMap.has(field.name)) {
-        allFieldsMap.set(field.name, field);
-      }
-    }
+    for (const field of extracted.fields) addIntersectionField(allFieldsMap, field);
   };
 
   extractSubFields(left);

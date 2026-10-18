@@ -639,4 +639,41 @@ describe("@politty/loculus", () => {
       host: "localhost",
     });
   });
+
+  const failure = async (args: unknown): Promise<string | undefined> => {
+    const cmd = defineCommand({ name: "app", args: args as never, run: () => {} });
+    try {
+      const result = await runCommand(cmd as never, []);
+      return result.success ? undefined : result.error?.message;
+    } catch (error) {
+      return (error as Error).message;
+    }
+  };
+
+  it("rejects nested objects whose options could not be given", async () => {
+    const effect = () => {};
+    const inner = l.object({ v: arg(l.boolean({ optional: true }), { effect }) });
+    expect(await failure(l.object({ config: l.transform(inner, (c) => c.v) }))).toMatch(
+      /has a transform/,
+    );
+    expect(await failure(l.object({ config: l.refine(inner, () => true, "x") }))).toBeUndefined();
+    expect(
+      await failure(
+        l.object({
+          config: l.object(
+            { v: arg(l.boolean({ optional: true }), { effect }) },
+            { optional: true },
+          ),
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      await failure(
+        l.intersection(
+          l.object({ config: l.object({ port: l.string() }) }),
+          l.object({ config: l.object({ host: l.string() }) }),
+        ),
+      ),
+    ).toMatch(/more than one intersection member/);
+  });
 });

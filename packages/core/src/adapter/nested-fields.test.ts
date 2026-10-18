@@ -293,4 +293,148 @@ describe("nested object fields", () => {
       expect(result.error?.message).toContain("configPort");
     });
   });
+
+  describe("rejected schemas", () => {
+    it("should reject a default on an object field", () => {
+      for (const config of [
+        z.object({ port: z.number() }).default({ port: 1 }),
+        z.object({ port: z.number() }).nullable().default(null),
+        z.object({ db: z.object({ port: z.number() }).default({ port: 1 }) }),
+      ]) {
+        expect(() => extractFields(z.object({ config }))).toThrow(/cannot have a default value/);
+      }
+    });
+
+    it("should reject an effect or requiredPackages under a transformed object", () => {
+      const effect = () => {};
+      expect(() =>
+        extractFields(
+          z.object({
+            config: z
+              .object({ inner: z.object({ v: arg(z.boolean(), { effect }) }) })
+              .transform((c) => c.inner),
+          }),
+        ),
+      ).toThrow(
+        /Property "config.inner.v" cannot have effect: its object "config" has a transform/,
+      );
+      expect(() =>
+        extractFields(
+          z.object({
+            config: z
+              .object({
+                v: arg(z.boolean().optional(), { requiredPackages: [{ name: "x" }] }),
+              })
+              .optional()
+              .transform((c) => c),
+          }),
+        ),
+      ).toThrow(/cannot have requiredPackages/);
+      // Refinements keep the value.
+      expect(() =>
+        extractFields(
+          z.object({
+            config: z.object({ v: arg(z.boolean(), { effect }) }).refine(() => true),
+          }),
+        ),
+      ).not.toThrow();
+    });
+
+    it("should reject an object field defined by several intersection members", () => {
+      expect(() =>
+        extractFields(
+          z.intersection(
+            z.object({ config: z.object({ port: z.coerce.number() }) }),
+            z.object({ config: z.object({ host: z.string() }) }),
+          ),
+        ),
+      ).toThrow(/Object field "config" is defined by more than one intersection member/);
+    });
+
+    it("should reject a required object of a union option that no property is required for", () => {
+      expect(() =>
+        extractFields(
+          z.union([
+            z.object({ config: z.object({ port: z.coerce.number().default(80) }) }),
+            z.object({ name: z.string() }),
+          ]),
+        ),
+      ).toThrow(/Object field "config" of a union option is required/);
+      // A required object inside an optional one is never created either.
+      expect(() =>
+        extractFields(
+          z.union([
+            z.object({
+              config: z
+                .object({ name: z.string(), inner: z.object({ debug: z.boolean().optional() }) })
+                .optional(),
+            }),
+            z.object({ name: z.string() }),
+          ]),
+        ),
+      ).toThrow(/Object field "config.inner" of a union option is required/);
+      // An object with a required property, or an optional one, is fine.
+      expect(() =>
+        extractFields(
+          z.union([
+            z.object({ file: z.object({ path: z.string() }) }),
+            z.object({ config: z.object({ port: z.coerce.number().default(80) }).optional() }),
+          ]),
+        ),
+      ).not.toThrow();
+    });
+  });
+
+  it("should create the required objects of the variant a defaulted discriminator selects", async () => {
+    const { cmd, seen } = captureArgs(
+      z.discriminatedUnion("mode", [
+        z.object({
+          mode: z.literal("server").default("server"),
+          server: z.object({ port: z.coerce.number().default(80) }),
+        }),
+        z.object({ mode: z.literal("client"), client: z.object({ url: z.string() }) }),
+      ]),
+    );
+    await runCommand(cmd, []);
+    expect(seen).toEqual([{ mode: "server", server: { port: 80 } }]);
+  });
+
+  describe("global args", () => {
+    const run = async (
+      globalArgs: z.ZodType,
+      args: z.ZodType,
+      argv: string[],
+    ): Promise<{ result: unknown; source: unknown }> => {
+      const cmd = defineCommand({
+        name: "app",
+        args: args as never,
+        run: (a: Record<string, unknown> & { $source: (name: string) => unknown }) => ({
+          result: JSON.parse(JSON.stringify(a)),
+          source: a.$source("config.host"),
+        }),
+      });
+      const r = await runCommand(cmd as never, argv, { globalArgs: globalArgs as never });
+      expect(r.success).toBe(true);
+      return r.result as { result: unknown; source: unknown };
+    };
+
+    it("should merge an object both schemas expand property by property", async () => {
+      const { result, source } = await run(
+        z.object({ config: z.object({ host: z.string().optional() }) }),
+        z.object({ config: z.object({ port: z.coerce.number().default(80) }) }),
+        ["--config.host", "x"],
+      );
+      expect(result).toEqual({ config: { host: "x", port: 80 } });
+      expect(source).toBe("cli");
+    });
+
+    it("should let the command value of a shared property win", async () => {
+      const { result } = await run(
+        z.object({ config: z.object({ port: z.coerce.number().optional() }) }),
+        z.object({ config: z.object({ port: z.coerce.number().optional() }) }),
+        ["--config.port", "1"],
+      );
+      expect(result).toEqual({ config: { port: 1 } });
+    });
+  });
 });

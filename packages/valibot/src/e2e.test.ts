@@ -215,4 +215,41 @@ describe("@politty/valibot e2e", () => {
     });
     expect((await runCommand(cmd, [])).result).toBeUndefined();
   });
+
+  const failure = async (args: unknown): Promise<string | undefined> => {
+    const cmd = defineCommand({ name: "app", args: args as never, run: () => {} });
+    try {
+      const result = await runCommand(cmd as never, []);
+      return result.success ? undefined : result.error?.message;
+    } catch (error) {
+      return (error as Error).message;
+    }
+  };
+
+  it("should reject nested objects whose options could not be given", async () => {
+    const effect = () => {};
+    expect(
+      await failure(
+        v.object({ config: v.optional(v.object({ port: v.string() }), { port: "1" }) }),
+      ),
+    ).toMatch(/cannot have a default value/);
+    expect(
+      await failure(
+        v.object({
+          config: v.pipe(
+            v.object({ v: arg(v.boolean(), { effect }) }),
+            v.transform((c) => c.v),
+          ),
+        }),
+      ),
+    ).toMatch(/has a transform/);
+    expect(
+      await failure(
+        v.intersect([
+          v.object({ config: v.object({ port: v.string() }) }),
+          v.object({ config: v.object({ host: v.string() }) }),
+        ]),
+      ),
+    ).toMatch(/more than one intersection member/);
+  });
 });

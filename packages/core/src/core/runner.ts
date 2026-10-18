@@ -1,3 +1,4 @@
+import { allFields, getFieldValue, mergeNestedArgs } from "../adapter/nested-fields.js";
 import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
 import { enableCompileCache } from "../compile-cache.js";
 import { executeLifecycle } from "../executor/command-runner.js";
@@ -1057,12 +1058,16 @@ async function runCommandInternal<TResult = unknown>(
       for (const field of parseResult.extractedFields.fields) {
         const localHasOwnValue =
           Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
+        // A property of an object both schemas expand is read at its path.
+        const globalValue = getFieldValue(validatedGlobalArgs, field);
         if (
           !localHasOwnValue &&
           cliProvidedGlobalFields.has(field.name) &&
-          Object.hasOwn(validatedGlobalArgs, field.name)
+          (field.nested
+            ? globalValue !== undefined
+            : Object.hasOwn(validatedGlobalArgs, field.name))
         ) {
-          argsToValidate = { ...argsToValidate, [field.name]: validatedGlobalArgs[field.name] };
+          argsToValidate = { ...argsToValidate, [field.name]: globalValue };
           globalPrefilledFields.add(field.name);
         }
       }
@@ -1104,10 +1109,13 @@ async function runCommandInternal<TResult = unknown>(
     }
 
     // Merge global args with command args (command args take precedence on collision)
-    const mergedPlainArgs: Record<string, unknown> = {
-      ...proxiedGlobalArgs,
-      ...proxiedCommandArgs,
-    };
+    // Objects both schemas expand into options are merged per property.
+    const mergedPlainArgs = mergeNestedArgs(
+      { ...proxiedGlobalArgs },
+      { ...proxiedCommandArgs },
+      options._globalExtracted ? allFields(options._globalExtracted) : [],
+      parseResult.extractedFields ? allFields(parseResult.extractedFields) : [],
+    );
     const argSourceMap = new Map<string, ArgSource>(globalSourceMap);
     const localEnvFallbackFields = parseResult.envFallbackFields ?? new Set<string>();
     // Local fields take precedence on collision, mirroring the value merge above:

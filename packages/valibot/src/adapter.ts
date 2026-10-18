@@ -9,6 +9,7 @@
  */
 
 import {
+  addIntersectionField,
   resolveFieldMeta as assembleFieldMeta,
   type ExtractedFields,
   type ResolvedFieldMeta,
@@ -390,6 +391,7 @@ export function resolveValibotFieldMeta(name: string, schema: unknown): Resolved
     enumValues: extractEnumValues(node),
     schema,
     objectShape: extractObjectShape(node),
+    objectTransformed: transformsWrapped(node),
   });
 }
 
@@ -400,6 +402,20 @@ const OBJECT_TYPES: ReadonlySet<string> = new Set([
   "loose_object",
   "object_with_rest",
 ]);
+
+/**
+ * Whether a pipe on the schema, or on a wrapper {@link unwrapSchema} reads
+ * through, transforms the value or pipes it into another schema.
+ */
+function transformsWrapped(schema: ValibotNode): boolean {
+  let current: ValibotNode | undefined = schema;
+  while (current) {
+    const pipe = current.pipe?.slice(1) ?? [];
+    if (pipe.some((item) => item.kind === "transformation" || item.kind === "schema")) return true;
+    current = current.type && UNWRAPPABLE.has(current.type) ? current.wrapped : undefined;
+  }
+  return false;
+}
 
 /**
  * Property schemas of an object field (through optional/nullable/etc.
@@ -544,11 +560,7 @@ function extractFromIntersect(schema: ValibotNode): ExtractedFields {
 
   for (const option of schema.options ?? []) {
     const extracted = extractValibotFields(option as ArgsSchema);
-    for (const field of extracted.fields) {
-      if (!allFieldsMap.has(field.name)) {
-        allFieldsMap.set(field.name, field);
-      }
-    }
+    for (const field of extracted.fields) addIntersectionField(allFieldsMap, field);
   }
 
   const description = extractDescription(schema);

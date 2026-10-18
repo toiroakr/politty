@@ -104,6 +104,11 @@ export interface ResolvedFieldMeta {
    * expands such a field into one field per property (see nested-fields.ts).
    */
   objectShape?: Record<string, unknown> | undefined;
+  /**
+   * Whether a transform (or a pipe into another schema) of an object field
+   * may replace its validated value
+   */
+  objectTransformed?: boolean | undefined;
   /** Naming style for the options an object field expands into */
   flatten?: NestedKeyStyle | undefined;
   /** Set on a field expanded from an object field */
@@ -116,8 +121,11 @@ export interface ResolvedFieldMeta {
 export interface NestedFieldInfo {
   /** Property path, starting with the top-level field name */
   path: string[];
-  /** Whether each enclosing object (outermost first) is required */
-  objectRequired: boolean[];
+  /**
+   * Whether each step of `path` is required within its parent: the
+   * enclosing objects (outermost first), then the property itself
+   */
+  required: boolean[];
 }
 
 /**
@@ -224,6 +232,8 @@ export interface FieldIntrospection {
   schema: unknown;
   /** Property schemas, when the field schema is an object */
   objectShape?: Record<string, unknown> | undefined;
+  /** Whether a transform may replace the object's validated value */
+  objectTransformed?: boolean | undefined;
 }
 
 const NESTED_KEY_STYLES: readonly NestedKeyStyle[] = ["dot", "kebab", "camel"];
@@ -400,6 +410,7 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
     effect: argMeta?.effect,
     requiredPackages: argMeta?.requiredPackages,
     objectShape: intro.objectShape,
+    objectTransformed: intro.objectShape ? intro.objectTransformed : undefined,
     flatten: flatten as NestedKeyStyle | undefined,
   };
 
@@ -409,4 +420,25 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
   }
 
   return meta;
+}
+
+/**
+ * Add one intersection member's definition of a field to the fields of the
+ * members before it, keeping the first definition.
+ *
+ * @throws When several members define the field and one of them as an
+ * object: only one definition's properties could become options
+ */
+export function addIntersectionField(
+  fields: Map<string, ResolvedFieldMeta>,
+  field: ResolvedFieldMeta,
+): void {
+  const existing = fields.get(field.name);
+  if (!existing) {
+    fields.set(field.name, field);
+  } else if (existing.objectShape || field.objectShape) {
+    throw new Error(
+      `Object field "${field.name}" is defined by more than one intersection member: define it in one member only.`,
+    );
+  }
 }

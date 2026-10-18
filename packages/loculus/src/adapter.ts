@@ -1,4 +1,5 @@
 import {
+  addIntersectionField,
   resolveFieldMeta,
   type ExtractedFields,
   type ResolvedFieldMeta,
@@ -29,6 +30,7 @@ function resolve(name: string, schema: AnySchema): ResolvedFieldMeta {
     enumValues: (meta.enumValues ?? meta.literalValues)?.map(String),
     schema,
     objectShape: objectShape(schema),
+    objectTransformed: transformsObject(schema),
   });
 }
 // `inner` is a wrapped schema, or an array's element schema: an array of
@@ -37,6 +39,13 @@ function objectShape(schema: AnySchema): Record<string, AnySchema> | undefined {
   const { meta } = schema;
   if (meta.kind === "array") return undefined;
   return meta.shape ?? (meta.inner ? objectShape(meta.inner) : undefined);
+}
+// `transform` wraps a schema as `inner` without keeping the object's own
+// `shape` property, which `refine` keeps along with everything else.
+function transformsObject(schema: AnySchema): boolean {
+  const { meta } = schema;
+  if (meta.kind === "array" || !meta.inner) return false;
+  return !("shape" in schema) || transformsObject(meta.inner);
 }
 function mode(meta: Meta): UnknownKeysMode {
   return meta.unknownKeys ?? "strip";
@@ -60,7 +69,9 @@ export function extractLoculusFields(schema: ArgsSchema): ExtractedFields {
     const unknownKeysMode = options[0]?.unknownKeysMode ?? "strip";
     const fields = new Map<string, ResolvedFieldMeta>();
     for (const option of options)
-      for (const field of option.fields) if (!fields.has(field.name)) fields.set(field.name, field);
+      for (const field of option.fields)
+        if (meta.kind === "intersection") addIntersectionField(fields, field);
+        else if (!fields.has(field.name)) fields.set(field.name, field);
     result = {
       fields: [...fields.values()],
       schema,

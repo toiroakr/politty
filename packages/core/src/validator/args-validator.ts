@@ -9,7 +9,7 @@
  */
 
 import { isInternalArgsSchema, validateInternalArgs } from "../adapter/internal-args.js";
-import { nestArgs } from "../adapter/nested-fields.js";
+import { allFields, nestArgs } from "../adapter/nested-fields.js";
 import { getValidatorAdapter } from "../adapter/registry.js";
 import type { InferSchemaOutput } from "../adapter/standard-schema.js";
 import type { ValidationError, ValidationResult } from "../adapter/types.js";
@@ -47,15 +47,6 @@ export function validateArgs<T extends ArgsSchema>(
   return getValidatorAdapter().validate(args, schema) as ValidationResult<InferSchemaOutput<T>>;
 }
 
-/** Fields of every branch of the schema */
-function allFields(extracted: ExtractedFields): ResolvedFieldMeta[] {
-  return [
-    ...extracted.fields,
-    ...(extracted.variants ?? []).flatMap((variant) => variant.fields),
-    ...(extracted.unionOptions ?? []).flatMap(allFields),
-  ];
-}
-
 /**
  * The fields whose required objects are created even when none of their
  * properties is given: those of an object schema, or of the
@@ -66,8 +57,15 @@ function requiredObjectFields(
   rawArgs: Record<string, unknown>,
   extracted: ExtractedFields,
 ): ResolvedFieldMeta[] {
-  if (extracted.discriminator) {
-    const selected = selectDiscriminatedVariant(extracted, () => rawArgs);
+  const { discriminator } = extracted;
+  if (discriminator) {
+    // A discriminator left out selects the variant it defaults to.
+    const selected = selectDiscriminatedVariant(extracted, ({ fields }) => {
+      const defaultValue = fields.find((field) => field.name === discriminator)?.defaultValue;
+      return rawArgs[discriminator] === undefined && defaultValue !== undefined
+        ? { ...rawArgs, [discriminator]: defaultValue }
+        : rawArgs;
+    });
     return selected === extracted ? [] : selected.fields;
   }
   return extracted.variants || extracted.unionOptions ? [] : extracted.fields;
