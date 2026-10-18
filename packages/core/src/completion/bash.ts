@@ -396,6 +396,7 @@ function availableOptionLines(options: CompletableOption[], fn: string): string[
     }
     const patterns = quotedAvailabilityTokens(opt.cliName, opt.alias, opt.negation, {
       defaultNegation: opt.defaultNegationAccepted,
+      hiddenAliases: opt.hiddenAlias,
       isGlobal: opt.isGlobal === true,
       frameOptions: options,
     });

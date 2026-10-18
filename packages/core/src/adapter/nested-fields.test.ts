@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { generateCompletion } from "../completion/index.js";
 import { collectOptionTokens, quotedAvailabilityTokens } from "../completion/shell-shared.js";
 import { renderArgsTable } from "../docs/render-args.js";
 import { arg, defineCommand, extractFields, generateHelp, runCommand } from "../index.js";
@@ -1113,6 +1114,20 @@ describe("nested object fields", () => {
       // A custom negation spelled like a default one is still custom.
       expect(quotedAvailabilityTokens("tls", undefined, "noTls")).not.toContain('"--no-tls"');
     });
+
+    it.each(["bash", "zsh", "fish"] as const)(
+      "should let %s completion match the kebab-case spelling after a digit-ending key",
+      (shell) => {
+        const cmd = defineCommand({
+          name: "app",
+          args: z.object({
+            s3: arg(z.object({ region: z.enum(["us", "eu"]) }), { flatten: "camel" }),
+          }),
+        });
+        const { script } = generateCompletion(cmd, { shell, programName: "app" });
+        expect(script).toContain("--s3-region");
+      },
+    );
 
     it("should document the options of object fields in an args table", () => {
       const table = renderArgsTable({ config: z.object({ port: z.number() }) });

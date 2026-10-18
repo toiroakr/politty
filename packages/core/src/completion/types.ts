@@ -185,6 +185,11 @@ export interface CompletableOption {
    */
   alias?: string[] | undefined;
   /**
+   * Hidden aliases the parser accepts. Shell matchers recognise them (so a
+   * value after one is completed), but they are never offered.
+   */
+  hiddenAlias?: string[] | undefined;
+  /**
    * Negation name to advertise in shell completions (no `--` prefix),
    * or `undefined` to hide the negation. Mirrors `ResolvedFieldMeta.negationDisplay`.
    */

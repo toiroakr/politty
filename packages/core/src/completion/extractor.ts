@@ -137,6 +137,7 @@ function fieldToOption(
     name: field.name,
     cliName: field.cliName,
     alias: field.alias,
+    hiddenAlias: field.hiddenAlias,
     negation: field.negationDisplay,
     negationDescription: field.negationDescription,
     description: field.description,
@@ -325,7 +326,7 @@ export function walkOptTakesValueRows(
     if (!opt.takesValue) continue;
     const tokens =
       isAncestor && opt.isGlobal === true
-        ? collectOptionTokens(opt.cliName, opt.alias)
+        ? collectOptionTokens(opt.cliName, opt.alias, opt.hiddenAlias)
         : effectiveOptionTokens(opt, sub.options);
     if (tokens.length === 0) continue;
     rows.push({ parentPath, tokens });
@@ -597,7 +598,7 @@ export function effectiveOptionTokens(
   opt: CompletableOption,
   frameOptions: readonly CompletableOption[],
 ): string[] {
-  const all = collectOptionTokens(opt.cliName, opt.alias);
+  const all = collectOptionTokens(opt.cliName, opt.alias, opt.hiddenAlias);
   if (opt.isGlobal === true) {
     // Tokens any local at the frame owns are routed by
     // `separateGlobalArgs` to the local, never to the global. Pull the
@@ -607,7 +608,7 @@ export function effectiveOptionTokens(
     const localClaimed = new Set<string>();
     for (const o of frameOptions) {
       if (o.isGlobal === true) continue;
-      for (const t of localShadowingTokens(o.cliName, o.alias)) localClaimed.add(t);
+      for (const t of localShadowingTokens(o.cliName, o.alias, o.hiddenAlias)) localClaimed.add(t);
     }
     return all.filter((t) => !localClaimed.has(t));
   }
@@ -802,7 +803,7 @@ export function collectTrackedFields(
       const claimed = new Set<string>();
       for (const o of n.options) {
         if (o.isGlobal === true) continue;
-        for (const t of localShadowingTokens(o.cliName, o.alias)) claimed.add(t);
+        for (const t of localShadowingTokens(o.cliName, o.alias, o.hiddenAlias)) claimed.add(t);
       }
       recordLeaf(
         p,
@@ -821,7 +822,7 @@ export function collectTrackedFields(
     opt: CompletableOption,
     spec: ExpandSpecLocation,
   ): void => {
-    const allTokens = collectOptionTokens(opt.cliName, opt.alias);
+    const allTokens = collectOptionTokens(opt.cliName, opt.alias, opt.hiddenAlias);
     const groups = groupGlobalFramesByTokenSet(allTokens, spec.pathStrs, spec.intermediatePathStrs);
     for (const [tokenKey, group] of groups) {
       addPath(

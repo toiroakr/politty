@@ -236,11 +236,12 @@ function pushCaseVariants(tokens: string[], name: string): void {
 export function collectOptionTokens(
   cliName: string,
   aliases: readonly string[] | undefined,
+  hiddenAliases?: readonly string[],
 ): string[] {
   const tokens = [`--${cliName}`];
   if (cliName.length === 1) tokens.push(`-${cliName}`);
   pushCaseVariants(tokens, cliName);
-  for (const a of aliases ?? []) pushAliasTokens(tokens, a);
+  for (const a of [...(aliases ?? []), ...(hiddenAliases ?? [])]) pushAliasTokens(tokens, a);
   return tokens;
 }
 
@@ -286,6 +287,8 @@ export function quotedAvailabilityTokens(
      * accepts in every spelling of the option, unlike a custom one.
      */
     defaultNegation?: boolean | undefined;
+    /** Hidden aliases the parser accepts, which are matched but never offered */
+    hiddenAliases?: readonly string[] | undefined;
   },
 ): string[] {
   // Mirror every spelling the runtime aliasMap accepts so the
@@ -293,7 +296,7 @@ export function quotedAvailabilityTokens(
   // tracker) might consume. Without this, the option-name suggestion
   // path still offers the canonical \`--cliName\` after the user
   // consumed it as \`-x\` / \`--f\` / \`--toBe\`.
-  const tokens = new Set<string>(collectOptionTokens(cliName, aliases));
+  const tokens = new Set<string>(collectOptionTokens(cliName, aliases, options?.hiddenAliases));
   if (negation) {
     tokens.add(`--${negation}`);
     // A default negation (`no-<cliName>`) takes every spelling the option
@@ -314,7 +317,7 @@ export function quotedAvailabilityTokens(
     if (options.isGlobal === true) {
       for (const o of options.frameOptions) {
         if (o.isGlobal === true) continue;
-        for (const t of localShadowingTokens(o.cliName, o.alias)) tokens.delete(t);
+        for (const t of localShadowingTokens(o.cliName, o.alias, o.hiddenAlias)) tokens.delete(t);
       }
     } else {
       const globalShort = globalShortTokens(options.frameOptions);
@@ -348,6 +351,7 @@ export function namedPositionalGuards(
       quotedAvailabilityTokens(opt.cliName, opt.alias, opt.negation, {
         frameOptions: options,
         defaultNegation: opt.defaultNegationAccepted,
+        hiddenAliases: opt.hiddenAlias,
       })
     );
   });
@@ -425,6 +429,7 @@ export function posixTrackPositionalsLines(
 export function localShadowingTokens(
   cliName: string,
   aliases: readonly string[] | undefined,
+  hiddenAliases?: readonly string[],
 ): string[] {
   // Same shape as `collectOptionTokens` minus the auto-derived `-x`
   // short form for a bare 1-char cliName: that short form never
@@ -432,6 +437,6 @@ export function localShadowingTokens(
   // declares it.
   const tokens = [`--${cliName}`];
   pushCaseVariants(tokens, cliName);
-  for (const a of aliases ?? []) pushAliasTokens(tokens, a);
+  for (const a of [...(aliases ?? []), ...(hiddenAliases ?? [])]) pushAliasTokens(tokens, a);
   return tokens;
 }
