@@ -439,17 +439,31 @@ function checkReservedFieldNames(
 ): CommandValidationError[] {
   const errors: CommandValidationError[] = [];
 
-  for (const field of extracted.fields) {
-    if (field.name.startsWith("$")) {
+  // Expanded object fields (even ones without leaves) still become keys of
+  // the final args object, so their top-level names are checked too.
+  const names = new Set(extracted.fields.map((field) => field.name));
+  for (const name of expandedObjectNames(extracted)) names.add(name);
+  for (const name of names) {
+    if (name.startsWith("$")) {
       errors.push({
         commandPath,
         type: "reserved_field_name",
-        message: `Field "${field.name}" starts with "$", which is reserved for framework-injected helpers (e.g. $source).`,
-        field: field.name,
+        message: `Field "${name}" starts with "$", which is reserved for framework-injected helpers (e.g. $source).`,
+        field: name,
       });
     }
   }
   return errors;
+}
+
+/** Top-level names of every object field expanded into options */
+function expandedObjectNames(extracted: ExtractedFields): string[] {
+  return [
+    ...(extracted.nestedObjects ?? []),
+    ...(extracted.variants ?? []).flatMap((variant) => variant.nestedObjects ?? []),
+  ]
+    .map((object) => object.path[0]!)
+    .concat((extracted.unionOptions ?? []).flatMap(expandedObjectNames));
 }
 
 // ============================================================================

@@ -174,6 +174,22 @@ describe("validateCommand", () => {
       }
     });
 
+    it("should detect expanded object fields starting with $, even without properties", async () => {
+      for (const args of [
+        z.object({ $source: z.object({}) }),
+        z.union([
+          z.object({ mode: z.literal("a") }),
+          z.object({ mode: z.literal("b"), $meta: z.object({}) }),
+        ]),
+      ]) {
+        const result = await validateCommand(defineCommand({ name: "test", args }));
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.errors.some((e) => e.type === "reserved_field_name")).toBe(true);
+        }
+      }
+    });
+
     it("should detect positional config errors", async () => {
       const cmd = defineCommand({
         name: "test",

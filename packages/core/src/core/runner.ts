@@ -1059,7 +1059,9 @@ async function runCommandInternal<TResult = unknown>(
           accumulatedGlobalArgs,
         );
       if (selectedGlobal && !isCompletionInvocation) {
-        await runEffects(proxiedGlobalArgs, selectedGlobal, proxiedGlobalArgs);
+        await runEffects(proxiedGlobalArgs, selectedGlobal, proxiedGlobalArgs, (name) =>
+          globalSourceMap.has(name),
+        );
       }
       collector?.stop();
       const mergedArgs = proxiedGlobalArgs as Record<string, never>;
@@ -1178,10 +1180,18 @@ async function runCommandInternal<TResult = unknown>(
         argsToValidate,
       );
     if (selectedGlobal && !isCompletionInvocation) {
-      await runEffects(proxiedGlobalArgs, selectedGlobal, proxiedGlobalArgs);
+      await runEffects(proxiedGlobalArgs, selectedGlobal, proxiedGlobalArgs, (name) =>
+        globalSourceMap.has(name),
+      );
     }
     if (selectedLocal && !isCompletionInvocation) {
-      await runEffects(proxiedCommandArgs, selectedLocal, proxiedGlobalArgs);
+      await runEffects(
+        proxiedCommandArgs,
+        selectedLocal,
+        proxiedGlobalArgs,
+        (name) =>
+          Object.hasOwn(parseResult.rawArgs, name) || !!parseResult.envFallbackFields?.has(name),
+      );
     }
 
     // Merge global args with command args (command args take precedence on collision)

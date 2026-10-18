@@ -1126,6 +1126,47 @@ describe("nested object fields", () => {
     expect(seen).toEqual([{ config: 5 }]);
   });
 
+  it("should not run the effects of leaves an object-to-object transform renamed", async () => {
+    const portEffect = vi.fn((value: number) => {
+      value.toFixed();
+    });
+    const hostEffect = vi.fn((value: string | undefined) => {
+      value!.trim();
+    });
+    const { cmd, seen } = captureArgs(
+      z.object({
+        config: z
+          .object({
+            port: arg(z.coerce.number(), { effect: portEffect }),
+            host: arg(z.string().optional(), { effect: hostEffect }),
+          })
+          .transform((v) => ({ listenPort: v.port, listenHost: v.host })),
+      }),
+    );
+    const result = await runCommand(cmd, ["--config.port", "5", "--config.host", "h"]);
+    expect(result.success).toBe(true);
+    expect(seen).toEqual([{ config: { listenPort: 5, listenHost: "h" } }]);
+    expect(portEffect).not.toHaveBeenCalled();
+    expect(hostEffect).not.toHaveBeenCalled();
+  });
+
+  it("should run the effects of optional leaves that were left out", async () => {
+    const effect = vi.fn();
+    const { cmd } = captureArgs(
+      z.object({
+        config: z.object({
+          port: z.coerce.number(),
+          host: arg(z.string().optional(), { effect }),
+        }),
+      }),
+    );
+    await runCommand(cmd, ["--config.port", "5"]);
+    expect(effect).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ name: "config.host" }),
+    );
+  });
+
   describe("global args", () => {
     it("should merge global and command properties of the same object", async () => {
       const seen: unknown[] = [];
@@ -1142,6 +1183,33 @@ describe("nested object fields", () => {
       });
       expect(result.success).toBe(true);
       expect(seen[0]).toEqual({ log: { level: "debug", file: "f" } });
+    });
+
+    it("should reject values two global union options' spellings give for the same property", async () => {
+      const seen: unknown[] = [];
+      const sub = defineCommand({
+        name: "sub",
+        run: (args) => {
+          seen.push(JSON.parse(JSON.stringify(args)));
+        },
+      });
+      const main = defineCommand({ name: "app", subCommands: { sub } });
+      const option = (flatten: "dot" | "kebab") =>
+        z.object({
+          config: arg(z.object({ port: z.string().optional() }), { flatten }).optional(),
+        });
+      const globalArgs = z.union([option("kebab"), option("dot")]);
+      const result = await runCommand(
+        main,
+        ["--config-port", "first", "--config.port", "second", "sub"],
+        { globalArgs },
+      );
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain("config.port is given by more than one option");
+      }
+      await runCommand(main, ["--config.port", "second", "sub"], { globalArgs });
+      expect(seen).toEqual([{ config: { port: "second" } }]);
     });
 
     it("should keep non-plain values when merging global and command objects", async () => {

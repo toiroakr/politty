@@ -385,6 +385,12 @@ export interface NestingCandidate {
    * values it does not define only as unknown keys
    */
   retention?: Pick<PrecedingBranch, "paths" | "objects" | "passthrough"> | undefined;
+  /**
+   * Paths of another option's given values that a plain union option could
+   * not place, as a value given for the same property took their place: it
+   * would lose them, so it must not accept the args.
+   */
+  unplaced?: string[][] | undefined;
 }
 
 /**
@@ -434,8 +440,9 @@ export function nestingCandidates(
     createRequired: CreateRequired = true,
     foreign: ResolvedFieldMeta[] = [],
   ): NestingCandidate[] => {
-    const args = nestGroup(rawArgs, group, leafNames, { createRequired, foreign });
-    return [{ args, group, branchSchema }];
+    const unplaced: string[][] = [];
+    const args = nestGroup(rawArgs, group, leafNames, { createRequired, foreign, unplaced });
+    return [{ args, group, branchSchema, ...(unplaced.length > 0 && { unplaced }) }];
   };
   if (!extracted.variants && !extracted.unionOptions) return nest(extracted);
 
@@ -535,6 +542,8 @@ export function nestingCandidates(
       ...candidate,
       branchSchemas: branch.schemas,
       retention: branch,
+      // A variant leaves them to its unknown-key policy instead.
+      unplaced: branch.plain ? candidate.unplaced : undefined,
       givenPaths,
       given,
       precedingBranches: preceding.map(({ schemas, group, paths, objects, passthrough }) => ({
@@ -607,7 +616,12 @@ function nestGroup(
   rawArgs: Record<string, unknown>,
   group: NestingGroup,
   leafNames: ReadonlySet<string>,
-  options: { createRequired: CreateRequired; foreign?: ResolvedFieldMeta[] },
+  options: {
+    createRequired: CreateRequired;
+    foreign?: ResolvedFieldMeta[];
+    /** Collects the paths of foreign leaves that could not be placed */
+    unplaced?: string[][];
+  },
 ): Record<string, unknown> {
   const result: Record<string, unknown> = { ...rawArgs };
   // Remove every flat name before building objects: a flat name may equal
@@ -661,8 +675,9 @@ function nestGroup(
   // One that cannot be placed stays under its flat name, for the schema's
   // unknown-key policy to handle rather than vanishing.
   for (const leaf of options.foreign ?? []) {
-    if (!placeAt(result, leaf.nested!.path, rawArgs[leaf.name]))
-      result[leaf.name] = rawArgs[leaf.name];
+    if (placeAt(result, leaf.nested!.path, rawArgs[leaf.name])) continue;
+    result[leaf.name] = rawArgs[leaf.name];
+    options.unplaced?.push(leaf.nested!.path);
   }
   return result;
 }

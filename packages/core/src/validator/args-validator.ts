@@ -79,6 +79,11 @@ export function validateArgsBranch<T extends ArgsSchema>(
         continue;
       }
     }
+    if (own?.success && candidate.unplaced) {
+      const message = `${candidate.unplaced.map((path) => path.join(".")).join(", ")} is given by more than one option.`;
+      reported ??= { success: false, errors: [{ path: [], message, code: "invalid_union" }] };
+      continue;
+    }
     // The branch itself may only keep a given value as an unknown key.
     if (own?.success && candidate.retention) {
       const output = own.data;
