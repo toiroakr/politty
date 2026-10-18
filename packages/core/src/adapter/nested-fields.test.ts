@@ -742,6 +742,17 @@ describe("nested object fields", () => {
       expect(seen).toEqual([{ mode: "a", config: { port: "80" } }]);
     });
 
+    it("should take a union option whose own field holds a given nested value", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ config: z.record(z.string(), z.string()) }),
+          z.object({ config: z.object({ port: z.literal("80") }) }),
+        ]),
+      );
+      await runCommand(cmd, ["--config.port", "90"]);
+      expect(seen).toEqual([{ config: { port: "90" } }]);
+    });
+
     it("should not count an earlier option its enclosing union rejects", async () => {
       const inner = z
         .union([z.object({ name: z.string().optional() }), z.object({ other: z.string() })])
@@ -881,6 +892,16 @@ describe("nested object fields", () => {
       await runCommand(cmd, ["--mode", "a"]);
       await runCommand(cmd, ["--mode", "b", "--config.port", "1"]);
       expect(seen).toEqual([{ mode: "a" }, { mode: "b", config: { port: "1" } }]);
+    });
+
+    it("should list every value of a multi-value discriminator", () => {
+      const { variants } = extractFields(
+        z.discriminatedUnion("mode", [
+          z.object({ mode: z.enum(["a", "b"]), port: z.string().optional() }),
+          z.object({ mode: z.literal("c") }),
+        ]),
+      );
+      expect(variants?.map((variant) => variant.discriminatorValue)).toEqual(["a", "b", "c"]);
     });
 
     it("should select a variant by any value of a union of multi-value literals", async () => {
@@ -1042,6 +1063,19 @@ describe("nested object fields", () => {
       await runCommand(cmd, []);
       expect(seen).toEqual([{ config: { constructor: { port: 80 } } }]);
     });
+  });
+
+  it("should not run the effects of an object that was left out", async () => {
+    const effect = vi.fn((value: number) => {
+      value.toFixed();
+    });
+    const { cmd, seen } = captureArgs(
+      z.object({ config: z.object({ port: arg(z.coerce.number(), { effect }) }).optional() }),
+    );
+    await runCommand(cmd, []);
+    await runCommand(cmd, ["--config.port", "1"]);
+    expect(seen).toEqual([{}, { config: { port: 1 } }]);
+    expect(effect).toHaveBeenCalledTimes(1);
   });
 
   describe("global args", () => {

@@ -485,19 +485,16 @@ function extractFromVariant(schema: ValibotNode): ExtractedFields {
     }
 
     const variantDescription = extractDescription(optionNode);
-    variants.push({
-      discriminatorValue: allowed[0] ?? "",
-      retainsUnknownKeys: getUnknownKeysMode(optionNode) === "passthrough",
-      // A variant allowing several values is selected by any of them.
-      ...(allowed.length > 1
-        ? {
-            normalizeDiscriminator: (value: unknown) =>
-              allowed.includes(String(value)) ? allowed[0] : value,
-          }
-        : {}),
-      fields: variantFields,
-      ...(variantDescription ? { description: variantDescription } : {}),
-    });
+    // A variant allowing several values is listed once per value, so help
+    // and docs show every one.
+    for (const value of allowed.length > 0 ? allowed : [""]) {
+      variants.push({
+        discriminatorValue: value,
+        retainsUnknownKeys: getUnknownKeysMode(optionNode) === "passthrough",
+        fields: variantFields,
+        ...(variantDescription ? { description: variantDescription } : {}),
+      });
+    }
   }
 
   const description = extractDescription(schema);

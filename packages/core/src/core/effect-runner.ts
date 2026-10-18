@@ -1,3 +1,4 @@
+import type { ResolvedFieldMeta } from "../adapter/field-meta.js";
 import { getFieldValue } from "../adapter/nested-fields.js";
 import type { ExtractedFields } from "./schema-extractor.js";
 
@@ -18,10 +19,17 @@ export async function runEffects(
 ): Promise<void> {
   for (const field of extracted.fields) {
     if (!field.effect) continue;
+    // A leaf of an object that was left out has no value of its own type.
+    if (field.nested && getFieldValue(validatedArgs, objectOf(field)) === undefined) continue;
     await field.effect(getFieldValue(validatedArgs, field), {
       name: field.name,
       args: validatedArgs,
       ...(globalArgs != null && { globalArgs }),
     });
   }
+}
+
+/** The object field enclosing a nested leaf, for reading its value */
+function objectOf(field: ResolvedFieldMeta): ResolvedFieldMeta {
+  return { ...field, nested: { path: field.nested!.path.slice(0, -1) } };
 }

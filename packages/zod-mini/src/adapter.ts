@@ -515,19 +515,16 @@ function extractFromDiscriminatedUnion(schema: z.ZodMiniType): ExtractedFields {
     // Extract description from the variant option
     const variantDescription = extractDescription(option as z.ZodMiniType);
 
-    const canonical = discriminatorValue;
-    variants.push({
-      discriminatorValue,
-      retainsUnknownKeys: getObjectUnknownKeys(option as never) === "passthrough",
-      ...(allowed.length > 1
-        ? {
-            normalizeDiscriminator: (value: unknown) =>
-              allowed.includes(String(value)) ? canonical : value,
-          }
-        : {}),
-      fields: variantFields,
-      ...(variantDescription ? { description: variantDescription } : {}),
-    });
+    // A variant allowing several values is listed once per value, so help
+    // and docs show every one.
+    for (const value of allowed.length > 0 ? allowed : [discriminatorValue]) {
+      variants.push({
+        discriminatorValue: value,
+        retainsUnknownKeys: getObjectUnknownKeys(option as never) === "passthrough",
+        fields: variantFields,
+        ...(variantDescription ? { description: variantDescription } : {}),
+      });
+    }
   }
 
   const description = extractDescription(schema);

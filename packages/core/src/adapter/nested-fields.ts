@@ -498,7 +498,7 @@ export function nestingCandidates(
         branch.names.has(field.name) ||
         !branch.plain ||
         (field.nested
-          ? givenValueFate(branch, field.nested.path).fate === "retained"
+          ? givenValueFate(branch, field.nested.path).fate !== "dropped"
           : branch.passthrough),
     ),
   );
