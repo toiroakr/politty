@@ -460,8 +460,10 @@ function extractFromDiscriminatedUnion(schema: z.ZodMiniType): ExtractedFields {
     const variantFields: ResolvedFieldMeta[] = [];
 
     // Get discriminator value from the variant's discriminator schema.
-    // Supports z.literal() and single-value z.enum() discriminators.
+    // Supports z.literal() and z.enum() discriminators; a variant allowing
+    // several values is selected by any of them.
     let discriminatorValue = "";
+    let allowed: string[] = [];
     // Read through wrappers such as `.default()`, which keep the value.
     const discriminatorSchema = shape[discriminator] && unwrapSchema(shape[discriminator]);
     if (discriminatorSchema) {
@@ -472,13 +474,13 @@ function extractFromDiscriminatedUnion(schema: z.ZodMiniType): ExtractedFields {
         const value = (litDef as { value?: unknown; values?: unknown[] })?.value;
         const values = (litDef as { value?: unknown; values?: unknown[] })?.values;
         discriminatorValue = String(value ?? values?.[0] ?? "");
+        allowed = (values ?? [value]).map(String);
       } else if (typeName === "enum") {
-        // Only single-value enums map to one variant. Multi-value enums
-        // (z.enum(['a','b'])) on a single variant are not standard for
-        // discriminatedUnion and are not extracted here.
+        // A multi-value enum (z.enum(['a','b'])) is shown by its first value.
         const enumValues = extractEnumValues(discriminatorSchema);
-        if (enumValues && enumValues.length === 1) {
+        if (enumValues && enumValues.length > 0) {
           discriminatorValue = enumValues[0]!;
+          allowed = enumValues;
         }
       }
     }
@@ -496,8 +498,15 @@ function extractFromDiscriminatedUnion(schema: z.ZodMiniType): ExtractedFields {
     // Extract description from the variant option
     const variantDescription = extractDescription(option as z.ZodMiniType);
 
+    const canonical = discriminatorValue;
     variants.push({
       discriminatorValue,
+      ...(allowed.length > 1
+        ? {
+            normalizeDiscriminator: (value: unknown) =>
+              allowed.includes(String(value)) ? canonical : value,
+          }
+        : {}),
       fields: variantFields,
       ...(variantDescription ? { description: variantDescription } : {}),
     });

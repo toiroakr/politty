@@ -567,6 +567,66 @@ describe("nested object fields", () => {
       expect(result.error?.message).toContain("config.port would be ignored");
       expect(seen).toEqual([]);
     });
+
+    it("should not take a union option for a required object no value named", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ config: z.object({ port: z.string().default("80") }) }),
+          z.object({ name: z.string() }),
+        ]),
+      );
+      await runCommand(cmd, ["--name", "alice"]);
+      await runCommand(cmd, ["--config.port", "1"]);
+      await runCommand(cmd, []);
+      expect(seen).toEqual([
+        { name: "alice" },
+        { config: { port: "1" } },
+        { config: { port: "80" } },
+      ]);
+    });
+
+    it("should not take a union option that drops a given scalar", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({
+            verbose: z.boolean().optional(),
+            config: z.object({ port: z.string().default("80") }),
+          }),
+          z.object({ verbose: z.boolean().optional(), name: z.string() }),
+        ]),
+      );
+      await runCommand(cmd, ["--name", "alice", "--config.port", "1"]);
+      await runCommand(cmd, ["--verbose", "--name", "alice"]);
+      expect(seen).toEqual([{ verbose: true, name: "alice" }]);
+    });
+
+    it("should report a value an earlier option drops before a later option's transform", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({ name: z.string().optional() }),
+          z
+            .object({ config: z.object({ port: z.string() }) })
+            .transform((value) => ({ selected: value.config })),
+        ]),
+      );
+      const result = await runCommand(cmd, ["--config.port", "80"]);
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain("config.port would be ignored");
+      expect(seen).toEqual([]);
+    });
+
+    it("should select a variant by any value of a multi-value discriminator", async () => {
+      for (const mode of [z.literal(["a", "b"]), z.enum(["a", "b"])]) {
+        const { cmd, seen } = captureArgs(
+          z.discriminatedUnion("mode", [
+            z.object({ mode, config: z.object({ port: z.string() }).optional() }),
+            z.object({ mode: z.literal("c") }),
+          ]),
+        );
+        await runCommand(cmd, ["--mode", "b", "--config.port", "1"]);
+        expect(seen).toEqual([{ mode: "b", config: { port: "1" } }]);
+      }
+    });
   });
 
   describe("union and intersection details", () => {
@@ -805,6 +865,55 @@ describe("nested object fields", () => {
         { globalArgs: labels() },
       );
       expect(seen[0]).toEqual({ new: 2 });
+    });
+
+    it("should merge only objects the selected variants expand", async () => {
+      const seen: unknown[] = [];
+      const schema = () =>
+        z.discriminatedUnion("mode", [
+          z.object({
+            mode: z.literal("a"),
+            config: z
+              .object({ labels: z.string().transform((v) => JSON.parse(v) as unknown) })
+              .optional(),
+          }),
+          z.object({
+            mode: z.literal("b"),
+            config: z.object({ labels: z.object({ x: z.string().optional() }) }).optional(),
+          }),
+        ]);
+      const sub = defineCommand({
+        name: "sub",
+        args: schema(),
+        run: (args) => {
+          seen.push(JSON.parse(JSON.stringify(args)));
+        },
+      });
+      const main = defineCommand({ name: "app", subCommands: { sub } });
+      const argv = ["--mode", "a", "--config.labels", '{"old":1}', "sub"];
+      await runCommand(main, [...argv, "--config.labels", '{"new":2}'], { globalArgs: schema() });
+      expect(seen[0]).toEqual({ mode: "a", config: { labels: { new: 2 } } });
+    });
+
+    it("should pre-fill from the global variant that was selected", async () => {
+      const seen: unknown[] = [];
+      const config = () => arg(z.object({ port: z.string() }), { flatten: "kebab" });
+      const sub = defineCommand({
+        name: "sub",
+        args: z.object({ config: config() }),
+        run: (args) => {
+          seen.push(JSON.parse(JSON.stringify(args)));
+        },
+      });
+      const main = defineCommand({ name: "app", subCommands: { sub } });
+      const result = await runCommand(main, ["--mode", "b", "--config-port", "80", "sub"], {
+        globalArgs: z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("a"), configPort: z.string().optional() }),
+          z.object({ mode: z.literal("b"), config: config() }),
+        ]),
+      });
+      expect(result.success).toBe(true);
+      expect(seen[0]).toEqual({ mode: "b", config: { port: "80" } });
     });
 
     it("should pre-fill a nested option from a flat global field of the same name", async () => {

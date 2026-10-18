@@ -281,6 +281,15 @@ interface NestingGroup {
   nestedObjects?: NestedObjectInfo[] | undefined;
 }
 
+/** A union option that precedes the one a candidate nests by */
+export interface PrecedingBranch {
+  schema: ArgsSchema;
+  /** Field names the option defines, nested leaves by their flat name */
+  names: ReadonlySet<string>;
+  /** Whether the option keeps keys it does not define */
+  passthrough: boolean;
+}
+
 /** Args nested by one schema branch, to validate against the whole schema */
 export interface NestingCandidate {
   args: Record<string, unknown>;
@@ -311,9 +320,11 @@ export interface NestingCandidate {
   /**
    * The union options before this one, in schema order. A union takes the
    * first option that accepts its input, so one of these may accept the
-   * args by dropping values this nesting gives.
+   * args by dropping given values it does not define.
    */
-  precedingBranchSchemas?: ArgsSchema[] | undefined;
+  precedingBranches?: PrecedingBranch[] | undefined;
+  /** The given values, by field name and property path */
+  given?: Array<{ name: string; path: string[] }> | undefined;
 }
 
 /**
@@ -359,43 +370,78 @@ export function nestingCandidates(
   collect(extracted);
   if (objects.size === 0) return [{ args: rawArgs }];
 
-  const nest = (group: NestingGroup, branchSchema?: ArgsSchema): NestingCandidate[] => {
-    const seeded = nestGroup(rawArgs, group, leafNames, { createRequired: true, seed: true });
+  const nest = (
+    group: NestingGroup,
+    branchSchema?: ArgsSchema,
+    createRequired: CreateRequired = true,
+  ): NestingCandidate[] => {
+    const seeded = nestGroup(rawArgs, group, leafNames, { createRequired, seed: true });
     const candidates: NestingCandidate[] = [{ ...seeded, branchSchema }];
     if (seeded.defaultedPaths.length > 0) {
-      const empty = nestGroup(rawArgs, group, leafNames, { createRequired: true, seed: false });
+      const empty = nestGroup(rawArgs, group, leafNames, { createRequired, seed: false });
       candidates.push({ ...empty, branchSchema });
     }
     return candidates;
   };
   if (!extracted.variants && !extracted.unionOptions) return nest(extracted);
 
+  interface Branch {
+    group: NestingGroup;
+    schema: ArgsSchema | undefined;
+    names: ReadonlySet<string>;
+    /** An option of a plain union, which takes the first option that fits */
+    plain: boolean;
+    passthrough: boolean;
+  }
   const branches = (
     group: ExtractedFields,
     schema: ArgsSchema | undefined,
-  ): Array<{ group: NestingGroup; schema: ArgsSchema | undefined }> => {
+    plain: boolean,
+  ): Branch[] => {
+    const branch = (fields: NestingGroup): Branch => ({
+      group: fields,
+      schema,
+      names: new Set(fields.fields.map((field) => field.name)),
+      plain,
+      passthrough: group.unknownKeysMode === "passthrough",
+    });
     if (group.variants && group.discriminator) {
       const variant = selectVariant(rawArgs, group.discriminator, group.variants);
-      return variant ? [{ group: variant, schema }] : [];
+      return variant ? [branch(variant)] : [];
     }
     if (group.unionOptions) {
-      return group.unionOptions.flatMap((option) => branches(option, option.schema));
+      return group.unionOptions.flatMap((option) => branches(option, option.schema, true));
     }
-    return [{ group, schema }];
+    return [branch(group)];
   };
-  const all = branches(extracted, undefined);
-  // A branch without one of the given options would drop its value.
-  const given = [...leaves.values()].filter((leaf) => rawArgs[leaf.name] !== undefined);
+  const all = branches(extracted, undefined, false);
+  // The given values of fields some branch defines.
+  const known = new Map<string, ResolvedFieldMeta>();
+  for (const { group } of all) {
+    for (const field of group.fields) if (!known.has(field.name)) known.set(field.name, field);
+  }
+  for (const [name, leaf] of leaves) if (!known.has(name)) known.set(name, leaf);
+  const givenFields = [...known.values()].filter((field) => rawArgs[field.name] !== undefined);
+  const given = givenFields.map((field) => ({
+    name: field.name,
+    path: field.nested?.path ?? [field.name],
+  }));
   const givenPaths = [
     ...Object.keys(rawArgs)
-      .filter((name) => !leafNames.has(name) && rawArgs[name] !== undefined)
+      .filter((name) => !known.has(name) && rawArgs[name] !== undefined)
       .map((name) => [name]),
-    ...given.map((leaf) => leaf.nested!.path),
+    ...given.map(({ path }) => path),
   ];
-  const covering = all.filter(({ group }) => {
-    const names = new Set(group.fields.map((field) => field.name));
-    return given.every((leaf) => names.has(leaf.name));
-  });
+  // A branch without one of the given options would drop its value: a
+  // nested leaf is never placed, and a plain union option strips a value
+  // it does not define (a discriminated union reports it like any other
+  // command does).
+  const covering = all.filter((branch) =>
+    givenFields.every(
+      (field) =>
+        branch.names.has(field.name) || (!field.nested && (!branch.plain || branch.passthrough)),
+    ),
+  );
   // Every branch's leaves and objects, with no branch deciding which
   // required objects exist: reports errors when no branch fits.
   const merged = nestGroup(
@@ -404,18 +450,30 @@ export function nestingCandidates(
     leafNames,
     { createRequired: false, seed: true },
   );
-  const options = given.map((leaf) => `--${leaf.cliName}`).join(", ");
+  const options = givenFields.map((field) => `--${field.cliName}`).join(", ");
+  const nestBranch = (branch: Branch, createRequired: CreateRequired): NestingCandidate[] => {
+    const preceding = all
+      .slice(0, all.indexOf(branch))
+      .filter((earlier) => earlier.schema && earlier.schema !== branch.schema);
+    return nest(branch.group, branch.schema, createRequired).map((candidate) => ({
+      ...candidate,
+      givenPaths,
+      given,
+      precedingBranches: preceding.map(({ schema, names, passthrough }) => ({
+        schema: schema!,
+        names,
+        passthrough,
+      })),
+    }));
+  };
+  // A plain union option is taken as a whole, so first create its required
+  // objects only inside an object a given value opened: otherwise an option
+  // would be chosen for values that never named it. Only when no option
+  // fits that way, create them all, so their defaults apply.
+  const plain = covering.filter((branch) => branch.plain);
   return [
-    ...covering.flatMap((branch) => {
-      const preceding = all
-        .slice(0, all.indexOf(branch))
-        .flatMap(({ schema }) => (schema && schema !== branch.schema ? [schema] : []));
-      return nest(branch.group, branch.schema).map((candidate) => ({
-        ...candidate,
-        givenPaths,
-        precedingBranchSchemas: [...new Set(preceding)],
-      }));
-    }),
+    ...covering.flatMap((branch) => nestBranch(branch, branch.plain ? "opened" : true)),
+    ...plain.flatMap((branch) => nestBranch(branch, true)),
     {
       ...merged,
       diagnosticOnly: {
@@ -424,6 +482,12 @@ export function nestingCandidates(
     },
   ];
 }
+
+/**
+ * Which required objects to create: all of them, only those inside an
+ * object a given value opened (`"opened"`), or none.
+ */
+type CreateRequired = boolean | "opened";
 
 function pathKey(path: string[]): string {
   return path.join("\0");
@@ -460,7 +524,7 @@ function nestGroup(
   rawArgs: Record<string, unknown>,
   group: NestingGroup,
   leafNames: ReadonlySet<string>,
-  options: { createRequired: boolean; seed: boolean },
+  options: { createRequired: CreateRequired; seed: boolean },
 ): { args: Record<string, unknown>; defaultedPaths: string[][] } {
   const result: Record<string, unknown> = { ...rawArgs };
   // Remove every flat name before building objects: a flat name may equal
@@ -483,7 +547,9 @@ function nestGroup(
   if (options.createRequired) {
     for (const object of objects) {
       const parent = object.path.slice(0, -1);
-      if (object.required && (parent.length === 0 || present.has(pathKey(parent)))) {
+      const inside =
+        parent.length === 0 ? options.createRequired === true : present.has(pathKey(parent));
+      if (object.required && inside) {
         present.add(pathKey(object.path));
       }
     }
@@ -555,18 +621,16 @@ export function getFieldValue(args: Record<string, unknown>, field: ResolvedFiel
 }
 
 /**
- * Keys (see {@link nestedPathKey}) of every object expanded into options, in
- * any branch of the given extractions.
+ * Keys (see {@link nestedPathKey}) of the objects the given fields' nested
+ * leaves live in. Pass the fields of the branch actually used, so an object
+ * only another branch expands is not mistaken for one.
  */
-export function nestedObjectPaths(...extractions: Array<ExtractedFields | undefined>): Set<string> {
+export function nestedObjectPaths(fields: readonly ResolvedFieldMeta[]): Set<string> {
   const paths = new Set<string>();
-  const collect = (group: ExtractedFields): void => {
-    for (const g of [group, ...(group.variants ?? [])]) {
-      for (const object of g.nestedObjects ?? []) paths.add(pathKey(object.path));
-    }
-    for (const option of group.unionOptions ?? []) collect(option);
-  };
-  for (const extracted of extractions) if (extracted) collect(extracted);
+  for (const field of fields) {
+    const path = field.nested?.path ?? [];
+    for (let depth = 1; depth < path.length; depth++) paths.add(pathKey(path.slice(0, depth)));
+  }
   return paths;
 }
 

@@ -58,21 +58,21 @@ export function validateArgs<T extends ArgsSchema>(
       }
     }
     const result = adapter.validate(candidate.args, schema);
-    if (result.success && own?.success && candidate.precedingBranchSchemas?.length) {
+    if (result.success && own?.success && candidate.precedingBranches?.length) {
       // The union takes the first option accepting the args; if that is an
-      // earlier option dropping values this branch keeps, never accept it
-      // silently. (Compared per option, before any enclosing transform.)
-      const first = candidate.precedingBranchSchemas
-        .map((option) => adapter.validate(candidate.args, option))
-        .find((earlier) => earlier.success);
-      const dropped = first?.success
-        ? (candidate.givenPaths ?? []).filter(
-            (path) =>
-              valueAt(own.data, path) !== undefined && valueAt(first.data, path) === undefined,
-          )
-        : [];
+      // earlier option without some of the given fields, it drops their
+      // values (before any transform could tell), so never accept it.
+      const first = candidate.precedingBranches.find(
+        (earlier) => adapter.validate(candidate.args, earlier.schema).success,
+      );
+      const dropped =
+        first && !first.passthrough
+          ? (candidate.given ?? []).filter(
+              ({ name, path }) => !first.names.has(name) && !first.names.has(path[0]!),
+            )
+          : [];
       if (dropped.length > 0) {
-        const message = `${dropped.map((path) => path.join(".")).join(", ")} would be ignored: another schema option accepts the arguments without them.`;
+        const message = `${dropped.map(({ path }) => path.join(".")).join(", ")} would be ignored: another schema option accepts the arguments without them.`;
         reported ??= { success: false, errors: [{ path: [], message, code: "invalid_union" }] };
         continue;
       }
@@ -130,15 +130,4 @@ function onlyDefaulted(
   return result.errors.every((error) =>
     paths.some((path) => path.every((key, i) => error.path[i] === key)),
   );
-}
-
-function valueAt(value: unknown, path: readonly string[]): unknown {
-  let current = value;
-  for (const key of path) {
-    current =
-      typeof current === "object" && current !== null
-        ? (current as Record<string, unknown>)[key]
-        : undefined;
-  }
-  return current;
 }

@@ -149,6 +149,17 @@ function resolveAgentHelp(
 }
 
 /**
+ * Reads validated (nested) args by the given fields' names, for selecting
+ * the variant they validated as.
+ */
+function readFieldValues(
+  args: Record<string, unknown>,
+): (fields: ExtractedFields) => Record<string, unknown> {
+  return (fields) =>
+    Object.fromEntries(fields.fields.map((field) => [field.name, getFieldValue(args, field)]));
+}
+
+/**
  * Resolve the `RunInvocation` metadata for the command about to run: the
  * literal CLI token that reached it (canonical name or alias), and the
  * canonical name if that token was an alias.
@@ -1060,13 +1071,18 @@ async function runCommandInternal<TResult = unknown>(
     // local field with no default — otherwise local validation would fail
     // before the merge below ever got a chance to supply the value.
     const globalPrefilledFields = new Set<string>();
+    // The global fields of the variant the global args selected: another
+    // variant may define the same name elsewhere.
+    const selectedGlobal =
+      options._globalExtracted &&
+      selectDiscriminatedVariant(options._globalExtracted, readFieldValues(validatedGlobalArgs));
     if (parseResult.extractedFields) {
       for (const field of parseResult.extractedFields.fields) {
         const localHasOwnValue =
           Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
         // The validated global value lives where the global definition puts
         // it, which for a nested leaf is its property path.
-        const globalField = options._globalExtracted?.fields.find((f) => f.name === field.name);
+        const globalField = selectedGlobal?.fields.find((f) => f.name === field.name);
         const globalValue = globalField && getFieldValue(validatedGlobalArgs, globalField);
         if (
           !localHasOwnValue &&
@@ -1123,9 +1139,22 @@ async function runCommandInternal<TResult = unknown>(
       ...proxiedCommandArgs,
     };
     // Objects expanded into options may carry properties from both schemas:
-    // merge them per property, still letting command values win.
-    const objectPaths = nestedObjectPaths(options._globalExtracted, parseResult.extractedFields);
-    const isObject = (path: string[]) => objectPaths.has(nestedPathKey(path));
+    // merge them per property, still letting command values win. Only an
+    // object both selected branches expand is merged; any other value is
+    // an option's own and replaced whole.
+    const localObjectPaths = parseResult.extractedFields
+      ? nestedObjectPaths(
+          selectDiscriminatedVariant(
+            parseResult.extractedFields,
+            readFieldValues(validationResult.data as Record<string, unknown>),
+          ).fields,
+        )
+      : new Set<string>();
+    const globalObjectPaths = nestedObjectPaths(selectedGlobal?.fields ?? []);
+    const isObject = (path: string[]) => {
+      const key = nestedPathKey(path);
+      return localObjectPaths.has(key) && globalObjectPaths.has(key);
+    };
     for (const key of Object.keys(proxiedCommandArgs)) {
       const globalValue = proxiedGlobalArgs[key];
       const commandValue = proxiedCommandArgs[key];
