@@ -9,7 +9,7 @@
  */
 
 import { isInternalArgsSchema, validateInternalArgs } from "../adapter/internal-args.js";
-import { dropsGivenValue, nestingCandidates, type NestingGroup } from "../adapter/nested-fields.js";
+import { givenValueFate, nestingCandidates, type NestingGroup } from "../adapter/nested-fields.js";
 import { getValidatorAdapter } from "../adapter/registry.js";
 import type { InferSchemaOutput } from "../adapter/standard-schema.js";
 import type { ValidationError, ValidationResult } from "../adapter/types.js";
@@ -79,11 +79,26 @@ export function validateArgsBranch<T extends ArgsSchema>(
       // The union takes the first option accepting the args; if that is an
       // earlier option without some of the given fields, it drops their
       // values (before any transform could tell), so never accept it.
-      const first = candidate.precedingBranches.find((earlier) =>
-        earlier.schemas.every((option) => adapter.validate(candidate.args, option).success),
-      );
+      let firstOutput: unknown;
+      const first = candidate.precedingBranches.find((earlier) => {
+        let output: ValidationResult<unknown> | undefined;
+        for (const option of earlier.schemas) {
+          output = adapter.validate(candidate.args, option);
+          if (!output.success) return false;
+        }
+        firstOutput = output?.success ? output.data : undefined;
+        return true;
+      });
+      // A value kept only as an unknown key may still be dropped below it
+      // (by a typed catchall), so check that the option's output holds it.
       const dropped = first
-        ? (candidate.given ?? []).filter(({ path }) => dropsGivenValue(first, path))
+        ? (candidate.given ?? []).filter(({ path }) => {
+            const fate = givenValueFate(first, path);
+            return (
+              fate === "dropped" ||
+              (fate === "retained" && valueAt(firstOutput, path) === undefined)
+            );
+          })
         : [];
       if (dropped.length > 0) {
         const message = `${dropped.map(({ path }) => path.join(".")).join(", ")} would be ignored: another schema option accepts the arguments without them.`;
@@ -149,4 +164,15 @@ function onlyDefaulted(
   return result.errors.every((error) =>
     paths.some((path) => path.every((key, i) => error.path[i] === key)),
   );
+}
+
+function valueAt(value: unknown, path: readonly string[]): unknown {
+  let current = value;
+  for (const key of path) {
+    current =
+      typeof current === "object" && current !== null
+        ? (current as Record<string, unknown>)[key]
+        : undefined;
+  }
+  return current;
 }

@@ -655,6 +655,19 @@ describe("nested object fields", () => {
       expect(seen).toEqual([{ config: { port: "80" } }]);
     });
 
+    it("should report a value an earlier option's typed catchall strips below it", async () => {
+      const { cmd, seen } = captureArgs(
+        z.union([
+          z.object({}).catchall(z.object({ host: z.string().optional() })),
+          z.object({ config: z.object({ port: z.string() }) }),
+        ]),
+      );
+      const result = await runCommand(cmd, ["--config.port", "80"]);
+      expect(result.success).toBe(false);
+      expect(result.error?.message).toContain("config.port would be ignored");
+      expect(seen).toEqual([]);
+    });
+
     it("should not count an earlier option its enclosing union rejects", async () => {
       const inner = z
         .union([z.object({ name: z.string().optional() }), z.object({ other: z.string() })])
@@ -664,6 +677,35 @@ describe("nested object fields", () => {
       );
       await runCommand(cmd, ["--config.port", "80"]);
       expect(seen).toEqual([{ config: { port: "80" } }]);
+    });
+
+    it("should leave another variant's option it cannot place to the unknown-key policy", async () => {
+      const { cmd, seen } = captureArgs(
+        z.discriminatedUnion("mode", [
+          z.strictObject({ mode: z.literal("a"), config: z.object({ tls: z.string() }) }),
+          z.strictObject({
+            mode: z.literal("b"),
+            config: z.object({ tls: z.object({ enabled: z.string() }) }),
+          }),
+        ]),
+      );
+      const argv = ["--mode", "a", "--config.tls", "text", "--config.tls.enabled", "on"];
+      expect((await runCommand(cmd, argv)).success).toBe(false);
+      expect(seen).toEqual([]);
+    });
+
+    it("should apply the selected variant's default to an object another variant's option opens", async () => {
+      const { cmd, seen } = captureArgs(
+        z.discriminatedUnion("mode", [
+          z.object({
+            mode: z.literal("a"),
+            config: z.looseObject({ host: z.string() }).default({ host: "h" }),
+          }),
+          z.object({ mode: z.literal("b"), config: z.object({ extra: z.string() }).optional() }),
+        ]),
+      );
+      await runCommand(cmd, ["--mode", "a", "--config.extra", "x"]);
+      expect(seen).toEqual([{ mode: "a", config: { host: "h", extra: "x" } }]);
     });
 
     it("should treat another variant's option by the selected variant's unknown-key policy", async () => {
@@ -765,6 +807,20 @@ describe("nested object fields", () => {
       await runCommand(cmd, ["--mode", "a"]);
       await runCommand(cmd, ["--mode", "b", "--config.port", "1"]);
       expect(seen).toEqual([{ mode: "a" }, { mode: "b", config: { port: "1" } }]);
+    });
+
+    it("should select a variant by any value of a union of multi-value literals", async () => {
+      const { cmd, seen } = captureArgs(
+        z.discriminatedUnion("mode", [
+          z.object({
+            mode: z.union([z.literal(["a", "b"]), z.literal("c")]),
+            config: z.object({ port: z.string() }).optional(),
+          }),
+          z.object({ mode: z.literal("d") }),
+        ]),
+      );
+      await runCommand(cmd, ["--mode", "b", "--config.port", "1"]);
+      expect(seen).toEqual([{ mode: "b", config: { port: "1" } }]);
     });
 
     it("should select a variant by any value of a multi-value discriminator", async () => {

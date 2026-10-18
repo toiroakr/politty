@@ -134,6 +134,23 @@ describe("@politty/zod-mini e2e", () => {
     expect(result.result).toEqual({ config: { port: "80" } });
   });
 
+  it("should select a variant by any value of a union of multi-value literals", async () => {
+    const cmd = defineCommand({
+      name: "serve",
+      args: z.discriminatedUnion("mode", [
+        z.object({
+          mode: z.union([z.literal(["a", "b"]), z.literal("c")]),
+          config: z.optional(z.object({ port: z.string() })),
+        }),
+        z.object({ mode: z.literal("d") }),
+      ]),
+      run: (args) => args,
+    });
+
+    const result = await runCommand(cmd, ["--mode", "b", "--config.port", "1"]);
+    expect(result.result).toEqual({ mode: "b", config: { port: "1" } });
+  });
+
   it("should select a variant with nested options by a literal-union discriminator", async () => {
     const cmd = defineCommand({
       name: "serve",

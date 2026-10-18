@@ -316,25 +316,32 @@ export interface PrecedingBranch {
 }
 
 /**
- * Whether a union option drops a given value when it accepts the args: it
- * keeps a value at a path one of its fields holds, and one under a key its
- * enclosing object (or the option itself) does not define only when that
- * object keeps unknown keys.
+ * What a union option does with a given value when it accepts the args: it
+ * keeps a value at a path one of its fields holds, and drops one under a
+ * key its enclosing object (or the option itself) does not define unless
+ * that object keeps unknown keys. A value kept as an unknown key is only
+ * `"retained"`: what the object keeps it as (a typed catchall validates it
+ * in turn) is not known here.
  *
  * @param branch - The option that accepts the args
  * @param path - Property path of the given value
  */
-export function dropsGivenValue(branch: PrecedingBranch, path: string[]): boolean {
+export function givenValueFate(
+  branch: PrecedingBranch,
+  path: string[],
+): "kept" | "dropped" | "retained" {
   for (let depth = 1; depth <= path.length; depth++) {
     const key = pathKey(path.slice(0, depth));
-    if (branch.paths.has(key)) return false;
+    if (branch.paths.has(key)) return "kept";
     if (branch.objects.has(key)) continue;
     const container = path.slice(0, depth - 1);
-    return !(container.length === 0
-      ? branch.passthrough
-      : (branch.objects.get(pathKey(container)) ?? false));
+    const keepsUnknown =
+      container.length === 0
+        ? branch.passthrough
+        : (branch.objects.get(pathKey(container)) ?? false);
+    return keepsUnknown ? "retained" : "dropped";
   }
-  return false;
+  return "kept";
 }
 
 /** Args nested by one schema branch, to validate against the whole schema */
@@ -604,7 +611,9 @@ function nestGroup(
 
   const leaves = group.fields.filter((field) => field.nested && rawArgs[field.name] !== undefined);
   const present = new Set<string>();
-  for (const leaf of leaves) {
+  // Another variant's leaves open this variant's objects along their path
+  // too, so those objects start from their defaults.
+  for (const leaf of [...leaves, ...(options.foreign ?? [])]) {
     const path = leaf.nested!.path;
     for (let depth = 1; depth < path.length; depth++) present.add(pathKey(path.slice(0, depth)));
   }
@@ -672,24 +681,33 @@ function nestGroup(
     for (let depth = 1; depth <= path.length; depth++)
       defaulted.delete(pathKey(path.slice(0, depth)));
   }
-  for (const leaf of options.foreign ?? []) placeAt(result, leaf.nested!.path, rawArgs[leaf.name]);
+  // One that cannot be placed stays under its flat name, for the schema's
+  // unknown-key policy to handle rather than vanishing.
+  for (const leaf of options.foreign ?? []) {
+    if (!placeAt(result, leaf.nested!.path, rawArgs[leaf.name]))
+      result[leaf.name] = rawArgs[leaf.name];
+  }
   return { args: result, defaultedPaths: [...defaulted.values()] };
 }
 
 /**
  * Set a value at a property path, creating the objects along it, unless the
  * path is taken or runs through a value that is no plain object.
+ *
+ * @returns Whether the value was set
  */
-function placeAt(args: Record<string, unknown>, path: string[], value: unknown): void {
+function placeAt(args: Record<string, unknown>, path: string[], value: unknown): boolean {
   let target = args;
   for (const key of path.slice(0, -1)) {
     const next = Object.hasOwn(target, key) ? target[key] : undefined;
     if (next === undefined) target[key] = {};
-    else if (!isPlainObject(next)) return;
+    else if (!isPlainObject(next)) return false;
     target = target[key] as Record<string, unknown>;
   }
   const last = path[path.length - 1]!;
-  if (!Object.hasOwn(target, last)) target[last] = value;
+  if (Object.hasOwn(target, last)) return false;
+  target[last] = value;
+  return true;
 }
 
 function containerAt(

@@ -287,20 +287,24 @@ export function extractEnumValues(schema: z.ZodType): string[] | undefined {
     const options = def?.options;
     if (Array.isArray(options)) {
       const literalValues: string[] = [];
+      let allStringLiterals = options.length > 0;
       for (const option of options) {
         const optionTypeName = getTypeName(option);
         if (optionTypeName === "literal") {
           const optionDef = (option as ZodSchemaWithDef).def ?? (option as ZodSchemaWithDef)._def;
           const value = (optionDef as { value?: unknown; values?: unknown[] })?.value;
           const values = (optionDef as { value?: unknown; values?: unknown[] })?.values;
-          const literalValue = value ?? values?.[0];
-          if (typeof literalValue === "string") {
-            literalValues.push(literalValue);
+          // A multi-value literal (z.literal(["a", "b"])) brings every value.
+          const optionValues = values ?? [value];
+          if (optionValues.every((literal) => typeof literal === "string")) {
+            literalValues.push(...(optionValues as string[]));
+            continue;
           }
         }
+        allStringLiterals = false;
       }
       // Only return if all options are string literals
-      if (literalValues.length === options.length && literalValues.length > 0) {
+      if (allStringLiterals) {
         return literalValues;
       }
     }
