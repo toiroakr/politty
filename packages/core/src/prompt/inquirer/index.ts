@@ -18,13 +18,9 @@ async function wrapCancellation<T>(fn: () => Promise<T>): Promise<T | symbol> {
 
 function createInquirerAdapter(): PromptAdapter {
   return {
-    text: (config) =>
-      wrapCancellation(() =>
-        input({
-          message: config.message,
-          ...(config.placeholder !== undefined && { default: config.placeholder }),
-        }),
-      ),
+    // inquirer has no visual-only placeholder, and `default` would submit
+    // the help placeholder as the value on empty input, so it is dropped.
+    text: (config) => wrapCancellation(() => input({ message: config.message })),
     password: (config) => wrapCancellation(() => password({ message: config.message })),
     confirm: (config) => wrapCancellation(() => confirm({ message: config.message })),
     select: (config) =>
