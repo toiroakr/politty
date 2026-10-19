@@ -105,6 +105,7 @@ export function parseArgs(
   const subCommandNameSet = listSubCommandNamesWithAliases(command);
   const subCommandNames = [...subCommandNameSet];
   const hasSubCommands = subCommandNames.length > 0;
+  const isGroup = hasSubCommands && !command.run;
 
   if (hasSubCommands && argv.length > 0) {
     // When global args schema is provided, use the scanner to skip over global flags
@@ -240,11 +241,22 @@ export function parseArgs(
   }
 
   // If no schema, split on -- manually so that flag-like tokens (e.g. `-x stray`)
-  // are not silently consumed by the parser; everything before -- is a positional.
+  // are not silently consumed by the parser; everything before -- is a positional,
+  // except that a command group takes no positional of its own, so its flag-like
+  // tokens are unknown flags.
   if (!extracted) {
     const ddIdx = commandArgv.indexOf("--");
-    const positionals = ddIdx >= 0 ? commandArgv.slice(0, ddIdx) : commandArgv;
+    const tokens = ddIdx >= 0 ? commandArgv.slice(0, ddIdx) : commandArgv;
     const rest = ddIdx >= 0 ? commandArgv.slice(ddIdx + 1) : [];
+    const isGroupFlag = (token: string): boolean =>
+      isGroup && token.startsWith("-") && token !== "-";
+    const globalNames = new Set(
+      options.globalExtracted?.fields.flatMap((f) => [f.name, f.cliName, ...getAllAliases(f)]),
+    );
+    const unknownFlags = tokens
+      .filter(isGroupFlag)
+      .flatMap((token) => Object.keys(parseArgv([token]).options))
+      .filter((name) => !globalNames.has(name));
     return {
       helpRequested: false,
       helpAllRequested: false,
@@ -253,9 +265,9 @@ export function parseArgs(
       subCommand: undefined,
       remainingArgs: [],
       rawArgs: {},
-      positionals,
+      positionals: tokens.filter((token) => !isGroupFlag(token)),
       rest,
-      unknownFlags: [],
+      unknownFlags,
       unknownGlobalFlags: suppressedGlobalFlags,
       rawGlobalArgs,
     };
@@ -287,8 +299,9 @@ export function parseArgs(
   // Build parser options from extracted fields
   const parserOptions = buildParserOptions(argvFields);
 
-  // Parse argv
-  const parsed = parseArgv(commandArgv, parserOptions);
+  // Parse argv. A group does not read the token after an unknown flag as its
+  // value, so a subcommand name or a typo of one there stays a positional.
+  const parsed = parseArgv(commandArgv, { ...parserOptions, unknownFlagsTakeNoValue: isGroup });
 
   // Merge with positionals
   const rawArgs = mergeWithPositionals(parsed, argvFields);
@@ -394,7 +407,7 @@ function selectArgvFields(
  *
  * @returns Names of the fields filled from an environment variable
  */
-function applyEnvFallbacks(
+export function applyEnvFallbacks(
   rawArgs: Record<string, unknown>,
   extracted: ExtractedFields,
 ): Set<string> {

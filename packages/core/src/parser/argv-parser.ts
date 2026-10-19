@@ -48,6 +48,11 @@ export interface ParserOptions {
    * `booleanFlags` has default negation suppressed.
    */
   defaultNegationDisabledFields?: Set<string>;
+  /**
+   * When true, an option whose resolved name is not in `definedNames` never
+   * takes the next token as its value, so the token stays a positional.
+   */
+  unknownFlagsTakeNoValue?: boolean;
 }
 
 /**
@@ -90,9 +95,12 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     definedNames = new Set(),
     negationMap = new Map(),
     defaultNegationDisabledFields: configuredDefaultNegationDisabledFields,
+    unknownFlagsTakeNoValue = false,
   } = options;
   const defaultNegationDisabledFields =
     configuredDefaultNegationDisabledFields ?? new Set(booleanFlags);
+  const takesNoValue = (resolvedName: string): boolean =>
+    booleanFlags.has(resolvedName) || (unknownFlagsTakeNoValue && !definedNames.has(resolvedName));
 
   const longOptionLookup: LongOptionLookup = {
     aliasMap,
@@ -176,7 +184,7 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         const name = withoutDashes;
         const resolvedName = aliasMap.get(name) ?? name;
 
-        if (booleanFlags.has(resolvedName)) {
+        if (takesNoValue(resolvedName)) {
           // Boolean flag: no value expected
           setOption(name, true);
           i++;
@@ -220,7 +228,7 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         const name = withoutDash;
         const resolvedName = aliasMap.get(name) ?? name;
 
-        if (booleanFlags.has(resolvedName)) {
+        if (takesNoValue(resolvedName)) {
           setOption(name, true);
           i++;
         } else {

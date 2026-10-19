@@ -11,8 +11,7 @@ import {
 } from "../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../lazy.js";
 import { generateHelp, generateHelpData, type CommandContext } from "../output/help-generator.js";
-import { parseArgs } from "../parser/arg-parser.js";
-import { coerceEnvValue } from "../parser/coerce-boolean.js";
+import { applyEnvFallbacks, parseArgs } from "../parser/arg-parser.js";
 import { getLongOptionName } from "../parser/long-option-resolver.js";
 import { findFirstPositional, findFirstPositionalIndex } from "../parser/subcommand-scanner.js";
 import type {
@@ -796,6 +795,55 @@ async function runCommandInternal<TResult = unknown>(
       };
     }
 
+    // Reported before unknown flags, which are likely meant for the mistyped subcommand.
+    const subCmdNames = listSubCommandNamesWithAliases(command);
+    const unknownCmd =
+      subCmdNames.size > 0
+        ? unconsumedRegulars.find((t) => !t.startsWith("-") && !subCmdNames.has(t))
+        : undefined;
+    if (unknownCmd) {
+      const similar = findSimilar(unknownCmd, [...subCmdNames]);
+      const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
+      collector?.stop();
+      return {
+        success: false,
+        error: new Error(`Unknown subcommand: ${unknownCmd}${suggestion ? `.${suggestion}` : ""}`),
+        exitCode: USAGE_ERROR_EXIT_CODE,
+        logs: getCurrentLogs(),
+      };
+    }
+
+    // Handle unknown flags based on schema's unknownKeysMode
+    if (parseResult.unknownFlags.length > 0) {
+      // A group without its own args accepts only global options, so the global schema decides.
+      const unknownKeysMode =
+        parseResult.extractedFields?.unknownKeysMode ??
+        context.globalExtracted?.unknownKeysMode ??
+        "strip";
+      const knownFlags =
+        parseResult.optionFields?.map((f) => f.name) ??
+        context.globalExtracted?.fields.map((f) => f.name) ??
+        [];
+
+      if (unknownKeysMode === "strict") {
+        // strict mode: treat unknown flags as errors
+        collector?.stop();
+        return {
+          success: false,
+          error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
+          exitCode: USAGE_ERROR_EXIT_CODE,
+          logs: getCurrentLogs(),
+        };
+      } else if (unknownKeysMode === "strip") {
+        // strip mode (default): warn about unknown flags but continue
+        for (const flag of parseResult.unknownFlags) {
+          logger.error(formatUnknownFlagWarning(flag, knownFlags));
+        }
+        // Continue execution - don't return error
+      }
+      // passthrough mode: silently ignore unknown flags
+    }
+
     // If command has subcommands but none specified, either route to
     // `defaultSubCommand` (if set) or show help.
     // If there are any unconsumed positionals (including tokens after --), fall
@@ -807,11 +855,7 @@ async function runCommandInternal<TResult = unknown>(
       !command.run &&
       extraPositionals.length === 0
     ) {
-      // Unknown flags at this level (e.g. a typo) still need the normal
-      // unknownKeysMode handling below (strict error / strip warning) —
-      // routing to defaultSubCommand here would silently discard them and
-      // run the default subcommand's action instead of surfacing the typo.
-      if (command.defaultSubCommand && parseResult.unknownFlags.length === 0) {
+      if (command.defaultSubCommand) {
         // Only absent when `defaultSubCommand` names a key that isn't
         // actually in `subCommands` — normally caught above by
         // `validateDefaultSubCommand`, but reachable with
@@ -855,6 +899,27 @@ async function runCommandInternal<TResult = unknown>(
         }
       }
 
+      if (options.globalArgs && options._globalExtracted) {
+        const providedGlobalArgs = { ...accumulatedGlobalArgs };
+        applyEnvFallbacks(providedGlobalArgs, options._globalExtracted);
+        const globalValidation = validateArgs(providedGlobalArgs, options.globalArgs);
+        // A missing required global option must not keep a bare group from showing its help.
+        const valueErrors = globalValidation.success
+          ? []
+          : globalValidation.errors.filter(
+              (e) => e.path[0] && providedGlobalArgs[e.path[0]] !== undefined,
+            );
+        if (valueErrors.length > 0) {
+          collector?.stop();
+          return {
+            success: false,
+            error: new Error(formatPlainValidationErrors(valueErrors)),
+            exitCode: USAGE_ERROR_EXIT_CODE,
+            logs: getCurrentLogs(),
+          };
+        }
+      }
+
       const help = generateHelp(command, {
         showSubcommands: options.showSubcommands ?? true,
         context,
@@ -865,54 +930,10 @@ async function runCommandInternal<TResult = unknown>(
       return { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() };
     }
 
-    // Handle unknown flags based on schema's unknownKeysMode
-    if (parseResult.unknownFlags.length > 0) {
-      const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
-      const knownFlags = parseResult.optionFields?.map((f) => f.name) ?? [];
-
-      if (unknownKeysMode === "strict") {
-        // strict mode: treat unknown flags as errors
-        collector?.stop();
-        return {
-          success: false,
-          error: new Error(`Unknown flags: ${parseResult.unknownFlags.join(", ")}`),
-          exitCode: USAGE_ERROR_EXIT_CODE,
-          logs: getCurrentLogs(),
-        };
-      } else if (unknownKeysMode === "strip") {
-        // strip mode (default): warn about unknown flags but continue
-        for (const flag of parseResult.unknownFlags) {
-          logger.error(formatUnknownFlagWarning(flag, knownFlags));
-        }
-        // Continue execution - don't return error
-      }
-      // passthrough mode: silently ignore unknown flags
-    }
-
     // Handle unexpected positionals (tokens not consumed by positional field definitions).
     // allPositionals combines regular positionals with tokens explicitly passed after --,
     // since mergeWithPositionals already consumes both sources in order.
     if (extraPositionals.length > 0) {
-      const subCmdNames = listSubCommandNamesWithAliases(command);
-      if (subCmdNames.size > 0) {
-        const unknownCmd = unconsumedRegulars.find(
-          (t) => !t.startsWith("-") && !subCmdNames.has(t),
-        );
-        if (unknownCmd) {
-          const similar = findSimilar(unknownCmd, [...subCmdNames]);
-          const suggestion = similar.length > 0 ? ` Did you mean: ${similar.join(", ")}?` : "";
-          collector?.stop();
-          return {
-            success: false,
-            error: new Error(
-              `Unknown subcommand: ${unknownCmd}${suggestion ? `.${suggestion}` : ""}`,
-            ),
-            exitCode: USAGE_ERROR_EXIT_CODE,
-            logs: getCurrentLogs(),
-          };
-        }
-      }
-
       // No subcommands (or all extras are '-'-prefixed / after --): follow schema's unknownKeysMode
       const unknownKeysMode = parseResult.extractedFields?.unknownKeysMode ?? "strip";
       if (unknownKeysMode === "strict") {
@@ -946,22 +967,9 @@ async function runCommandInternal<TResult = unknown>(
     // Snapshot which global fields came from the CLI (this level or an
     // ancestor's) before env fallbacks below mutate accumulatedGlobalArgs.
     const cliProvidedGlobalFields = new Set(Object.keys(accumulatedGlobalArgs));
-    const envFallbackGlobalFields = new Set<string>();
+    let envFallbackGlobalFields = new Set<string>();
     if (options.globalArgs && options._globalExtracted && !isCompletionInvocation) {
-      // Apply env fallbacks for global args
-      for (const field of options._globalExtracted.fields) {
-        if (field.env && accumulatedGlobalArgs[field.name] === undefined) {
-          const envNames = Array.isArray(field.env) ? field.env : [field.env];
-          for (const envName of envNames) {
-            const envValue = process.env[envName];
-            if (envValue !== undefined) {
-              accumulatedGlobalArgs[field.name] = coerceEnvValue(envValue, field.type);
-              envFallbackGlobalFields.add(field.name);
-              break;
-            }
-          }
-        }
-      }
+      envFallbackGlobalFields = applyEnvFallbacks(accumulatedGlobalArgs, options._globalExtracted);
 
       // Prompt for missing global args (if prompt resolver is provided).
       // A resolver may return `{ field: undefined }` for a field it chose
