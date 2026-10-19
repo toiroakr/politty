@@ -368,6 +368,7 @@ function extractDescription(schema: z.ZodType): string | undefined {
  */
 export function resolveZodFieldMeta(name: string, schema: z.ZodType): ResolvedFieldMeta {
   const argMeta = getArgMeta(schema);
+  const object = inspectObjectField(schema);
   return assembleFieldMeta(name, {
     argMeta,
     description: extractDescription(schema),
@@ -376,32 +377,54 @@ export function resolveZodFieldMeta(name: string, schema: z.ZodType): ResolvedFi
     type: detectType(schema),
     enumValues: extractEnumValues(schema),
     schema,
-    objectShape: extractObjectShape(schema),
-    objectTransformed: passesThroughPipe(schema),
+    ...(object.shape && {
+      objectShape: object.shape,
+      objectTransformed: object.transformed,
+      objectDefault: object.replaced,
+    }),
   });
 }
 
-/**
- * Whether the wrappers {@link unwrapSchema} reads through include a pipe (a
- * transform, or a pipe into another schema), which may replace the value
- * of the schema it wraps.
- */
-function passesThroughPipe(schema: z.ZodType): boolean {
-  const typeName = getTypeName(schema);
-  if (typeName === "pipe") return true;
-  const s = schema as ZodSchemaWithDef;
-  const def = s.def ?? s._def;
-  const isWrapper = typeName === "optional" || typeName === "nullable" || typeName === "default";
-  return isWrapper && def?.innerType ? passesThroughPipe(def.innerType) : false;
-}
+/** Wrappers whose input is their inner schema's, keeping an object's options */
+const OBJECT_WRAPPERS: ReadonlySet<string> = new Set([
+  "optional",
+  "nullable",
+  "default",
+  "prefault",
+  "catch",
+  "readonly",
+  "nonoptional",
+]);
 
 /**
- * Property schemas of an object field (through optional/default/pipe
- * wrappers), or `undefined` for any other field.
+ * Read an object field through its wrappers and pipes: its property
+ * schemas, whether a pipe (a transform, or a pipe into another schema) may
+ * replace its value, and whether a default, prefault or catch may replace
+ * it as a whole. `shape` is `undefined` for any other field.
  */
-function extractObjectShape(schema: z.ZodType): Record<string, z.ZodType> | undefined {
-  const inner = unwrapSchema(schema);
-  return getTypeName(inner) === "object" ? getObjectShape(inner) : undefined;
+function inspectObjectField(schema: z.ZodType): {
+  shape?: Record<string, z.ZodType>;
+  transformed: boolean;
+  replaced: boolean;
+} {
+  let current = schema;
+  let transformed = false;
+  let replaced = false;
+  for (;;) {
+    const typeName = getTypeName(current);
+    const s = current as ZodSchemaWithDef;
+    const def = s.def ?? s._def;
+    if (typeName === "object") return { shape: getObjectShape(current), transformed, replaced };
+    if (typeName && OBJECT_WRAPPERS.has(typeName) && def?.innerType) {
+      replaced ||= typeName === "default" || typeName === "prefault" || typeName === "catch";
+      current = def.innerType;
+    } else if (typeName === "pipe" && def?.in) {
+      transformed = true;
+      current = def.in;
+    } else {
+      return { transformed, replaced };
+    }
+  }
 }
 
 /**

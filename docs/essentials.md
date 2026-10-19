@@ -183,7 +183,8 @@ to a `configPort` field) is reported as a duplicate field.
 Schemas whose expanded options could not be given as expected are rejected
 when fields are extracted:
 
-- An object field cannot have a default (`.default(...)`): give its
+- An object field cannot have a default (`.default(...)`, or zod's
+  `.prefault(...)` / `.catch(...)`, valibot's `v.fallback(...)`): give its
   properties defaults instead.
 - A property cannot have an `effect` or `requiredPackages` when an enclosing
   object has a transform (or pipes into another schema), as the transform may

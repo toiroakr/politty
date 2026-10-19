@@ -392,6 +392,7 @@ export function resolveValibotFieldMeta(name: string, schema: unknown): Resolved
     schema,
     objectShape: extractObjectShape(node),
     objectTransformed: transformsWrapped(node),
+    objectDefault: hasFallback(node),
   });
 }
 
@@ -412,6 +413,19 @@ function transformsWrapped(schema: ValibotNode): boolean {
   while (current) {
     const pipe = current.pipe?.slice(1) ?? [];
     if (pipe.some((item) => item.kind === "transformation" || item.kind === "schema")) return true;
+    current = current.type && UNWRAPPABLE.has(current.type) ? current.wrapped : undefined;
+  }
+  return false;
+}
+
+/**
+ * Whether the schema, or a wrapper {@link unwrapSchema} reads through, has
+ * a `v.fallback()` value, which replaces the whole value when it is invalid.
+ */
+function hasFallback(schema: ValibotNode): boolean {
+  let current: ValibotNode | undefined = schema;
+  while (current) {
+    if ("fallback" in current) return true;
     current = current.type && UNWRAPPABLE.has(current.type) ? current.wrapped : undefined;
   }
   return false;

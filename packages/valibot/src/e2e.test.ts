@@ -235,6 +235,11 @@ describe("@politty/valibot e2e", () => {
     ).toMatch(/cannot have a default value/);
     expect(
       await failure(
+        v.object({ config: v.fallback(v.object({ port: v.string() }), { port: "1" }) }),
+      ),
+    ).toMatch(/cannot have a default value/);
+    expect(
+      await failure(
         v.object({
           config: v.pipe(
             v.object({ v: arg(v.boolean(), { effect }) }),

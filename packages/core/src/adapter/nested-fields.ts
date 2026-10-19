@@ -162,10 +162,10 @@ function expandObject(object: ResolvedFieldMeta, context: ObjectContext): Resolv
     );
   }
   // Its properties are given one option at a time; a whole-object default
-  // would be dropped as soon as any of them is.
-  if (object.defaultValue !== undefined) {
+  // (or fallback) would be dropped, or would drop the given ones.
+  if (object.defaultValue !== undefined || object.objectDefault) {
     throw new Error(
-      `Object field "${context.path.join(".")}" cannot have a default value: set defaults on its properties instead. A required object is created from its properties' defaults when none of its options is given.`,
+      `Object field "${context.path.join(".")}" cannot have a default value (or a prefault, catch or fallback): set defaults on its properties instead. A required object is created from its properties' defaults when none of its options is given.`,
     );
   }
   const style = object.flatten ?? context.style;

@@ -58,6 +58,14 @@ describe("nested object fields", () => {
     });
   });
 
+  it("should expand a readonly object", async () => {
+    const { cmd, seen } = captureArgs(
+      z.object({ config: z.object({ port: z.coerce.number() }).readonly() }),
+    );
+    await runCommand(cmd, ["--config.port", "5"]);
+    expect(seen).toEqual([{ config: { port: 5 } }]);
+  });
+
   it("should accept the camelCase form, aliases and negation of an option", async () => {
     const { cmd, seen } = captureArgs(schema);
     await runCommand(cmd, ["--config.serverPort", "1", "--no-config.tls.enabled"]);
@@ -300,6 +308,9 @@ describe("nested object fields", () => {
         z.object({ port: z.number() }).default({ port: 1 }),
         z.object({ port: z.number() }).nullable().default(null),
         z.object({ db: z.object({ port: z.number() }).default({ port: 1 }) }),
+        z.object({ port: z.number().default(1) }).prefault({}),
+        z.object({ port: z.number() }).catch({ port: 1 }),
+        z.object({ port: z.number() }).optional().catch(undefined),
       ]) {
         expect(() => extractFields(z.object({ config }))).toThrow(/cannot have a default value/);
       }

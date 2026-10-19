@@ -109,6 +109,12 @@ export interface ResolvedFieldMeta {
    * may replace its validated value
    */
   objectTransformed?: boolean | undefined;
+  /**
+   * Whether a wrapper may replace an object field's value as a whole, such
+   * as zod's `.prefault()` / `.catch()` or valibot's `v.fallback()` (a plain
+   * default is in `defaultValue`)
+   */
+  objectDefault?: boolean | undefined;
   /** Naming style for the options an object field expands into */
   flatten?: NestedKeyStyle | undefined;
   /** Set on a field expanded from an object field */
@@ -234,6 +240,8 @@ export interface FieldIntrospection {
   objectShape?: Record<string, unknown> | undefined;
   /** Whether a transform may replace the object's validated value */
   objectTransformed?: boolean | undefined;
+  /** Whether a wrapper other than a plain default may replace the object as a whole */
+  objectDefault?: boolean | undefined;
 }
 
 const NESTED_KEY_STYLES: readonly NestedKeyStyle[] = ["dot", "kebab", "camel"];
@@ -411,6 +419,7 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
     requiredPackages: argMeta?.requiredPackages,
     objectShape: intro.objectShape,
     objectTransformed: intro.objectShape ? intro.objectTransformed : undefined,
+    objectDefault: intro.objectShape ? intro.objectDefault : undefined,
     flatten: flatten as NestedKeyStyle | undefined,
   };
 
