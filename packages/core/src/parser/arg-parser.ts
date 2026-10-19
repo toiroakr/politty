@@ -105,6 +105,7 @@ export function parseArgs(
   const subCommandNameSet = listSubCommandNamesWithAliases(command);
   const subCommandNames = [...subCommandNameSet];
   const hasSubCommands = subCommandNames.length > 0;
+  const isGroup = hasSubCommands && !command.run;
 
   if (hasSubCommands && argv.length > 0) {
     // When global args schema is provided, use the scanner to skip over global flags
@@ -248,7 +249,7 @@ export function parseArgs(
     const tokens = ddIdx >= 0 ? commandArgv.slice(0, ddIdx) : commandArgv;
     const rest = ddIdx >= 0 ? commandArgv.slice(ddIdx + 1) : [];
     const isGroupFlag = (token: string): boolean =>
-      hasSubCommands && !command.run && token.startsWith("-") && token !== "-";
+      isGroup && token.startsWith("-") && token !== "-";
     const globalNames = new Set(
       options.globalExtracted?.fields.flatMap((f) => [f.name, f.cliName, ...getAllAliases(f)]),
     );
@@ -298,8 +299,9 @@ export function parseArgs(
   // Build parser options from extracted fields
   const parserOptions = buildParserOptions(argvFields);
 
-  // Parse argv
-  const parsed = parseArgv(commandArgv, parserOptions);
+  // Parse argv. A group does not read the token after an unknown flag as its
+  // value, so a subcommand name or a typo of one there stays a positional.
+  const parsed = parseArgv(commandArgv, { ...parserOptions, unknownFlagsTakeNoValue: isGroup });
 
   // Merge with positionals
   const rawArgs = mergeWithPositionals(parsed, argvFields);

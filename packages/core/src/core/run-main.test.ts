@@ -975,6 +975,56 @@ describe("runCommand", () => {
         expect(result.success).toBe(true);
       });
 
+      it("reports a token after an unknown flag under the group's own schema as an unknown subcommand", async () => {
+        using _consoleSpy = spyOnConsoleError();
+        const root = defineCommand({
+          name: "group",
+          args: z.object({}),
+          subCommands: { sub: defineCommand({ name: "sub", run: () => {} }) },
+        });
+
+        const result = await runCommand(root, ["--typo", "value"]);
+
+        expect(result.exitCode).toBe(2);
+        if (!result.success) {
+          expect(result.error.message).toBe("Unknown subcommand: value");
+        }
+      });
+
+      it("does not route to defaultSubCommand when a subcommand follows an unknown flag under the group's own schema", async () => {
+        using _consoleErrorSpy = spyOnConsoleError();
+        using _consoleWarnSpy = spyOnConsoleWarn();
+        const subFn = vi.fn();
+        const root = defineCommand({
+          name: "group",
+          args: z.object({}),
+          subCommands: {
+            sub: defineCommand({ name: "sub", run: subFn }),
+            deploy: defineCommand({ name: "deploy", run: () => {} }),
+          },
+          defaultSubCommand: "sub",
+        });
+
+        await runCommand(root, ["--dry-rn", "deploy"]);
+
+        expect(subFn).not.toHaveBeenCalled();
+      });
+
+      it("reads the value of a known option under the group's own schema", async () => {
+        const subFn = vi.fn();
+        const root = defineCommand({
+          name: "group",
+          args: z.strictObject({ profile: z.string().optional() }),
+          subCommands: { sub: defineCommand({ name: "sub", run: subFn }) },
+          defaultSubCommand: "sub",
+        });
+
+        const result = await runCommand(root, ["--profile", "dev"]);
+
+        expect(result.success).toBe(true);
+        expect(subFn).toHaveBeenCalled();
+      });
+
       it("resolves a lazy-loaded defaultSubCommand", async () => {
         const subFn = vi.fn();
         const subMeta = defineCommand({ name: "sub" });
