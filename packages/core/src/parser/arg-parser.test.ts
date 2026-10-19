@@ -76,6 +76,50 @@ describe("ArgParser", () => {
       expect(result.options["5"]).toBe(true);
     });
 
+    describe("combined short options with a value-taking option", () => {
+      const clusterOptions = {
+        aliasMap: new Map([
+          ["a", "all"],
+          ["c", "count"],
+        ]),
+        booleanFlags: new Set(["all"]),
+        valueFlags: new Set(["count"]),
+      };
+
+      it("should take the rest of the token as the value", () => {
+        expect(parseArgv(["-c5"], clusterOptions).options).toEqual({ count: "5" });
+        expect(parseArgv(["-ac5"], clusterOptions).options).toEqual({ all: true, count: "5" });
+        expect(parseArgv(["-ca"], clusterOptions).options).toEqual({ count: "a" });
+      });
+
+      it("should take the next token as the value when the option ends the token", () => {
+        const result = parseArgv(["-ac", "5"], clusterOptions);
+
+        expect(result.options).toEqual({ all: true, count: "5" });
+        expect(result.positionals).toEqual([]);
+      });
+
+      it("should keep an unknown short option in a cluster boolean", () => {
+        const result = parseArgv(["-ax", "file.txt"], clusterOptions);
+
+        expect(result.options).toEqual({ all: true, x: true });
+        expect(result.positionals).toEqual(["file.txt"]);
+      });
+
+      it("should read a value-taking option of a command schema in a cluster", () => {
+        const cmd = defineCommand({
+          name: "leaf",
+          args: z.object({
+            all: arg(z.boolean().default(false), { alias: "a" }),
+            count: arg(z.string().optional(), { alias: "c" }),
+          }),
+          run: () => {},
+        });
+
+        expect(parseArgs(["-ac5"], cmd).rawArgs).toMatchObject({ all: true, count: "5" });
+      });
+    });
+
     it("should not swallow a following flag as a value (long option)", () => {
       const result = parseArgv(["--name", "--verbose"], {
         booleanFlags: new Set(["verbose"]),

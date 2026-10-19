@@ -30,6 +30,12 @@ export interface ParserOptions {
   /** Array flags (can be repeated) */
   arrayFlags?: Set<string>;
   /**
+   * Named options that take a value. In combined short options such an
+   * option takes the rest of the token as its value (`-ac5`), or the next
+   * token when it ends the token (`-ac 5`).
+   */
+  valueFlags?: Set<string>;
+  /**
    * All known canonical option names (as defined in the schema).
    * Used to disambiguate negation: when `--no-flag` or `--noFlag` matches
    * a name in this set, it is treated as a regular option rather than
@@ -67,12 +73,36 @@ function looksLikeNegativeNumber(value: string): boolean {
 }
 
 /**
+ * Split combined short options (`abc` of `-abc`) at the first option that
+ * takes a value.
+ *
+ * @param cluster - The token without its leading dash
+ * @param takesValue - Whether a short option name takes a value
+ * @returns The flags before that option, and that option with the rest of the
+ *   token as its value (`undefined` when it ends the token)
+ */
+function splitShortCluster(
+  cluster: string,
+  takesValue: (name: string) => boolean,
+): { flags: string[]; valueOption: { name: string; value: string | undefined } | undefined } {
+  const chars = Array.from(cluster);
+  const index = chars.findIndex(takesValue);
+  if (index === -1) return { flags: chars, valueOption: undefined };
+  const value = chars.slice(index + 1).join("");
+  return {
+    flags: chars.slice(0, index),
+    valueOption: { name: chars[index]!, value: value === "" ? undefined : value },
+  };
+}
+
+/**
  * Parse argv into a flat record
  *
  * Supports:
  * - Long options: --flag, --flag=value, --flag value
  * - Short options: -f, -f=value, -f value
- * - Combined short options: -abc (treated as -a -b -c if all are boolean)
+ * - Combined short options: -abc (treated as -a -b -c, except that an option
+ *   in `valueFlags` takes the rest of the token, or the next token, as its value)
  * - Positional arguments
  * - -- to stop parsing options
  * - Boolean negation: --no-flag, --noFlag (requires `booleanFlags` and `negation: true`)
@@ -92,6 +122,7 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     aliasMap = new Map(),
     booleanFlags = new Set(),
     arrayFlags = new Set(),
+    valueFlags = new Set(),
     definedNames = new Set(),
     negationMap = new Map(),
     defaultNegationDisabledFields: configuredDefaultNegationDisabledFields,
@@ -249,11 +280,29 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         }
       } else {
         // Combined short options: -abc
-        // Treat each character as a boolean flag
-        for (const char of withoutDash) {
+        // Treat each character as a boolean flag up to one that takes a value
+        const { flags, valueOption } = splitShortCluster(withoutDash, (char) =>
+          valueFlags.has(aliasMap.get(char) ?? char),
+        );
+        for (const char of flags) {
           setOption(char, true);
         }
         i++;
+        if (valueOption?.value !== undefined) {
+          setOption(valueOption.name, valueOption.value);
+        } else if (valueOption) {
+          // Same rule as a single short option
+          const nextArg = argv[i];
+          if (
+            nextArg !== undefined &&
+            (!nextArg.startsWith("-") || looksLikeNegativeNumber(nextArg))
+          ) {
+            setOption(valueOption.name, nextArg);
+            i++;
+          } else {
+            setOption(valueOption.name, true);
+          }
+        }
       }
       continue;
     }
@@ -273,6 +322,7 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
   const aliasMap = new Map<string, string>();
   const booleanFlags = new Set<string>();
   const arrayFlags = new Set<string>();
+  const valueFlags = new Set<string>();
   const definedNames = new Set<string>();
   const negationMap = new Map<string, string>();
   const defaultNegationDisabledFields = new Set<string>();
@@ -318,6 +368,8 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
 
     if (field.type === "boolean") {
       booleanFlags.add(field.name);
+    } else {
+      valueFlags.add(field.name);
     }
 
     if (field.type === "array") {
@@ -347,6 +399,7 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
     aliasMap,
     booleanFlags,
     arrayFlags,
+    valueFlags,
     definedNames,
     negationMap,
     defaultNegationDisabledFields,
