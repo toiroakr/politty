@@ -141,6 +141,35 @@ describe("scanForSubcommand", () => {
     expect(result.subCommandIndex).toBe(-1);
   });
 
+  describe("combined short global options", () => {
+    const clusterExtracted = extractFields(
+      z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+        name: arg(z.string().optional(), { alias: "n" }),
+      }),
+    );
+
+    it("skips them when the value is attached", () => {
+      const result = scanForSubcommand(["-vn5", "build"], subCommandNames, clusterExtracted);
+
+      expect(result.subCommandIndex).toBe(1);
+      expect(result.globalTokensBefore).toEqual(["-vn5"]);
+    });
+
+    it("skips them with the next token when the value-taking option ends the token", () => {
+      const result = scanForSubcommand(["-vn", "5", "build"], subCommandNames, clusterExtracted);
+
+      expect(result.subCommandIndex).toBe(2);
+      expect(result.globalTokensBefore).toEqual(["-vn", "5"]);
+    });
+
+    it("stops when an option in them is not global", () => {
+      const result = scanForSubcommand(["-vx", "build"], subCommandNames, clusterExtracted);
+
+      expect(result.subCommandIndex).toBe(-1);
+    });
+  });
+
   it("handles --no-flag negation for boolean global", () => {
     const result = scanForSubcommand(["--no-verbose", "build"], subCommandNames, globalExtracted);
 
@@ -296,6 +325,18 @@ describe("findFirstPositionalIndex", () => {
 
   it("stops at combined short flags", () => {
     expect(findFirstPositionalIndex(["-abc", "plugin"], globalExtracted)).toBe(-1);
+  });
+
+  it("skips combined short global options and their value", () => {
+    const clusterExtracted = extractFields(
+      z.object({
+        verbose: arg(z.boolean().default(false), { alias: "v" }),
+        name: arg(z.string().optional(), { alias: "n" }),
+      }),
+    );
+
+    expect(findFirstPositionalIndex(["-vn5", "plugin"], clusterExtracted)).toBe(1);
+    expect(findFirstPositionalIndex(["-vn", "5", "plugin"], clusterExtracted)).toBe(2);
   });
 
   it("stops at the `--` terminator", () => {

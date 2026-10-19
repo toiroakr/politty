@@ -81,7 +81,7 @@ function looksLikeNegativeNumber(value: string): boolean {
  * @returns The flags before that option, and that option with the rest of the
  *   token as its value (`undefined` when it ends the token)
  */
-function splitShortCluster(
+export function splitShortCluster(
   cluster: string,
   takesValue: (name: string) => boolean,
 ): { flags: string[]; valueOption: { name: string; value: string | undefined } | undefined } {

@@ -1762,6 +1762,57 @@ describe("ArgParser", () => {
       expect(result.rawGlobalArgs?.output).toBeUndefined();
     });
 
+    describe("combined short global options", () => {
+      const clusterExtracted = extractFields(
+        z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+          name: arg(z.string().optional(), { alias: "n" }),
+        }),
+      );
+      const leaf = defineCommand({
+        name: "leaf",
+        args: z.object({ output: arg(z.string().default("dist")) }),
+        run: () => {},
+      });
+
+      it("parses them before a subcommand", () => {
+        const cmd = defineCommand({ name: "root", subCommands: { build: leaf } });
+
+        const result = parseArgs(["-vn5", "build"], cmd, { globalExtracted: clusterExtracted });
+
+        expect(result.subCommand).toBe("build");
+        expect(result.rawGlobalArgs).toEqual({ verbose: true, name: "5" });
+      });
+
+      it("separates them from local args", () => {
+        const attached = parseArgs(["--output", "out", "-vn5"], leaf, {
+          globalExtracted: clusterExtracted,
+        });
+        const separate = parseArgs(["-vn", "5", "--output", "out"], leaf, {
+          globalExtracted: clusterExtracted,
+        });
+
+        for (const result of [attached, separate]) {
+          expect(result.rawArgs.output).toBe("out");
+          expect(result.rawGlobalArgs).toEqual({ verbose: true, name: "5" });
+          expect(result.unknownFlags).toEqual([]);
+        }
+      });
+
+      it("leaves them to the command when a local option shares an alias", () => {
+        const local = defineCommand({
+          name: "leaf",
+          args: z.object({ count: arg(z.string().optional(), { alias: "n" }) }),
+          run: () => {},
+        });
+
+        const result = parseArgs(["-vn5"], local, { globalExtracted: clusterExtracted });
+
+        expect(result.rawArgs.count).toBe("5");
+        expect(result.rawGlobalArgs?.name).toBeUndefined();
+      });
+    });
+
     it("returns empty rawGlobalArgs when no global flags provided", () => {
       const cmd = defineCommand({
         name: "leaf",

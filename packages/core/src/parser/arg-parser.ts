@@ -29,6 +29,7 @@ import { coerceEnvValue } from "./coerce-boolean.js";
 import {
   buildGlobalFlagLookup,
   collectGlobalFlag,
+  globalShortClusterLength,
   resolveGlobalLongOption,
   scanForSubcommand,
 } from "./subcommand-scanner.js";
@@ -480,9 +481,9 @@ function parseGlobalArgs(
  * When a flag is defined in both global and local schemas, the local definition
  * takes precedence (the flag stays in the command tokens).
  *
- * Note: Combined short flags (e.g., `-vq`) are not decomposed here; only
- * single-character short options are recognized as global. The underlying
- * `parseArgv` handles combined shorts for command-local parsing.
+ * Note: Combined short flags (e.g., `-vq`, `-vn5`) are recognized as global
+ * only when every option in them is global; a mix of global and local options
+ * is left to the command-local `parseArgv`.
  */
 function separateGlobalArgs(
   argv: string[],
@@ -571,6 +572,15 @@ function separateGlobalArgs(
             collectGlobalFlag(argv, i, resolvedName, false, lookup.booleanFlags, globalTokens) - 1;
           continue;
         }
+      }
+
+      const clusterLength = globalShortClusterLength(argv, i, lookup, (name) =>
+        localAliasMapKeys.has(name),
+      );
+      if (clusterLength > 0) {
+        globalTokens.push(...argv.slice(i, i + clusterLength));
+        i += clusterLength - 1;
+        continue;
       }
     }
 
