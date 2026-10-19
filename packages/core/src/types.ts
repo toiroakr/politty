@@ -211,11 +211,11 @@ export interface NonRunnableCommand<
    * (the `globalArgs` schema's when this command has no `args`): a strict
    * mode rejects them, and the other modes drop them.
    *
-   * Only fires when this level has zero unconsumed tokens (the same
-   * condition that would otherwise show help), so it only covers a bare
-   * invocation — a local flag meant for the default subcommand still needs
-   * the subcommand named explicitly (`cli group sub --limit 10`, not
-   * `cli group --limit 10`), since this command's own (typically
+   * Only fires when no tokens are left at this level after unknown flags
+   * are dropped (the same condition that would otherwise show help). A
+   * local flag meant for the default subcommand is not passed to it, so it
+   * still needs the subcommand named explicitly (`cli group sub --limit 10`,
+   * not `cli group --limit 10`), since this command's own (typically
    * schema-less) parse level has no way to know `--limit` belongs to `sub`.
    */
   defaultSubCommand?: string | undefined;
