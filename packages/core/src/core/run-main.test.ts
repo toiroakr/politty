@@ -1161,7 +1161,23 @@ describe("runCommand", () => {
         expect(result.success).toBe(true);
       });
 
-      it("reads a short global option with an attached value under a strict globalArgs schema", async () => {
+      it("reports only the unknown flag in combined short options with a global option's attached value", async () => {
+        const cmd = defineCommand({
+          name: "cli",
+          subCommands: { sub: defineCommand({ name: "sub", run: () => {} }) },
+        });
+
+        const result = await runCommand(cmd, ["-xn5"], {
+          globalArgs: z.strictObject({ name: arg(z.string().default("x"), { alias: "n" }) }),
+        });
+
+        expect(result.exitCode).toBe(2);
+        if (!result.success) {
+          expect(result.error.message).toBe("Unknown flags: x");
+        }
+      });
+
+      it("reads short global options with an attached value, alone or combined, under a strict globalArgs schema", async () => {
         using consoleLog = spyOnConsoleLog();
         const subFn = vi.fn();
         const cmd = defineCommand({

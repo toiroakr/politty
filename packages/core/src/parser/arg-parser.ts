@@ -254,9 +254,12 @@ export function parseArgs(
     const globalNames = new Set(
       options.globalExtracted?.fields.flatMap((f) => [f.name, f.cliName, ...getAllAliases(f)]),
     );
+    const globalParserOptions = options.globalExtracted
+      ? buildParserOptions(options.globalExtracted)
+      : {};
     const unknownFlags = tokens
       .filter(isGroupFlag)
-      .flatMap((token) => Object.keys(parseArgv([token]).options))
+      .flatMap((token) => Object.keys(parseArgv([token], globalParserOptions).options))
       .filter((name) => !globalNames.has(name));
     return {
       helpRequested: false,
