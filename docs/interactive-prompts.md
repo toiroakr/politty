@@ -177,6 +177,7 @@ import type { PromptResolver } from "politty";
 const myAdapter: PromptAdapter = {
   text: async ({ message, placeholder }) => {
     // Return user input string, or a symbol to indicate cancellation
+    // `placeholder` is the help-display placeholder: show it only as a hint
   },
   password: async ({ message }) => {
     // Return masked input string
