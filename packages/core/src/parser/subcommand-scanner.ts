@@ -1,5 +1,5 @@
 import { getAllAliases, type ExtractedFields } from "../core/schema-extractor.js";
-import { buildParserOptions, splitShortCluster } from "./argv-parser.js";
+import { buildParserOptions, isShortCluster, splitShortCluster } from "./argv-parser.js";
 import { resolveLongOption } from "./long-option-resolver.js";
 
 /**
@@ -154,9 +154,7 @@ export function globalShortClusterLength(
   isLocal: (name: string) => boolean = () => false,
 ): number {
   const arg = argv[i]!;
-  if (!arg.startsWith("-") || arg.startsWith("--") || arg.length <= 2 || arg.includes("=")) {
-    return 0;
-  }
+  if (!isShortCluster(arg)) return 0;
   const resolve = (name: string): string => lookup.aliasMap.get(name) ?? name;
   const isGlobal = (name: string): boolean =>
     !isLocal(name) && (lookup.aliases.has(name) || lookup.flagNames.has(resolve(name)));
@@ -327,9 +325,9 @@ const BUILTIN_FLAGS = new Set(["--help", "-h", "--help-all", "-H", "--help-json"
  * Mirrors `scanForSubcommand`'s conservative stop conditions: the scan stops
  * (returning -1) on a `--` terminator, a builtin flag (`--help`/`--version`),
  * an unknown long flag, an unknown short flag, or combined short flags that are
- * not all global. Past such tokens we
- * can't tell a flag *value* from a positional, so continuing would misclassify
- * e.g. `--help plugin` or `--unknown value` and wrongly trip plugin dispatch.
+ * not all global. Past such tokens we can't tell a flag *value* from a
+ * positional, so continuing would misclassify e.g. `--help plugin` or
+ * `--unknown value` and wrongly trip plugin dispatch.
  *
  * Without globalExtracted, no flag is global, so any leading flag halts the
  * scan and a positional is only found when it precedes every flag.

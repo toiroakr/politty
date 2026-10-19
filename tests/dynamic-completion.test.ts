@@ -464,8 +464,8 @@ describe("Dynamic completion (in-process resolver)", () => {
       // Runtime's `scanForSubcommand` / `separateGlobalArgs` decompose
       // combined short flags only when every option in them is global;
       // otherwise only the leaf local parser does. So `-ab` with a global
-      // `-a` and local `-b` never actually surfaces the global at runtime. The completion parser must
-      // not record the global as `true` either.
+      // `-a` and local `-b` never actually surfaces the global at runtime.
+      // The completion parser must not record the global as `true` either.
       const globals = z.object({
         alpha: arg(z.boolean().default(false), { alias: "a" }),
       });

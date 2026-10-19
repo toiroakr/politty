@@ -13,7 +13,11 @@ import {
 } from "../../core/schema-extractor.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
-import { positionalSlotFields, splitShortCluster } from "../../parser/argv-parser.js";
+import {
+  isShortCluster,
+  positionalSlotFields,
+  splitShortCluster,
+} from "../../parser/argv-parser.js";
 import { coerceBoolean } from "../../parser/coerce-boolean.js";
 import type { AnyCommand, ArgsSchema } from "../../types.js";
 import { collectOptionTokens } from "../shell-shared.js";
@@ -213,7 +217,7 @@ function parsePreSubGlobals(
     // every option in them is global — mirror that, otherwise pre-pass
     // over-consumes tokens the runtime would have left for the leaf parser.
     if (isShortCluster(word)) {
-      const { isGlobal, flags, valueOption } = splitCompletionCluster(word, globalOptions);
+      const { isGlobal, flags, valueOption } = resolveCompletionCluster(word, globalOptions);
       if (!isGlobal) break;
       for (const { opt } of flags) {
         globalParsedArgs[opt.name] = true;
@@ -466,19 +470,12 @@ function parseOption(word: string): ParsedOption {
 }
 
 /**
- * Check if a word is combined short options (e.g., "-ab", "-ac5")
- */
-function isShortCluster(word: string): boolean {
-  return word.startsWith("-") && !word.startsWith("--") && word.length > 2 && !word.includes("=");
-}
-
-/**
  * Mirror the runtime's reading of combined short options: `separateGlobalArgs`
  * takes them as globals when every option in them is a global that no local
  * shares, and the command's `parseArgv` reads them otherwise. Both split them
  * at the first value-taking option. Unresolved chars are dropped.
  */
-function splitCompletionCluster(
+function resolveCompletionCluster(
   word: string,
   options: readonly CompletableOption[],
 ): {
@@ -524,7 +521,7 @@ function pendingClusterOption(
   word: string,
   options: readonly CompletableOption[],
 ): CompletableOption | undefined {
-  const { valueOption } = splitCompletionCluster(word, options);
+  const { valueOption } = resolveCompletionCluster(word, options);
   return valueOption?.value === undefined ? valueOption?.opt : undefined;
 }
 
@@ -820,7 +817,6 @@ function scanCompletionContext(
       continue;
     }
 
-    // Combined short options such as `-ab` ⇒ `-a -b`, or `-ac5` ⇒ `-a -c 5`.
     // Always consume the whole combined word so the single-option branch
     // below does not misread `-ab` as `-a`.
     if (!afterDoubleDash && isShortCluster(word)) {
@@ -828,7 +824,7 @@ function scanCompletionContext(
       // chars fail to resolve below; see the note on the single-option
       // branch further down for why unresolved tokens still count.
       hasAnyOptionBeenUsed = true;
-      const { flags, valueOption } = splitCompletionCluster(word, options);
+      const { flags, valueOption } = resolveCompletionCluster(word, options);
       for (const { opt, name } of flags) {
         markUsed(opt);
         recordBooleanFlag(opt, { name, isLong: false });

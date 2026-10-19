@@ -73,6 +73,16 @@ function looksLikeNegativeNumber(value: string): boolean {
 }
 
 /**
+ * Check if a token is combined short options (e.g. "-ab", "-ac5"). A token
+ * with `=` is read as `-name=value` instead.
+ */
+export function isShortCluster(token: string): boolean {
+  return (
+    token.startsWith("-") && !token.startsWith("--") && token.length > 2 && !token.includes("=")
+  );
+}
+
+/**
  * Split combined short options (`abc` of `-abc`) at the first option that
  * takes a value.
  *
@@ -169,6 +179,23 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     }
   };
 
+  // Set a value-taking option from the next arg and step past both. A
+  // dash-prefixed next arg is only consumed as the value when it looks like a
+  // negative number (e.g. `--count -5`); other dash-prefixed tokens (`--`,
+  // other flags) are left for the next iteration to parse as their own
+  // option, so they aren't silently swallowed as a literal value.
+  const setOptionFromNextArg = (name: string) => {
+    const nextArg = argv[i + 1];
+    if (nextArg !== undefined && (!nextArg.startsWith("-") || looksLikeNegativeNumber(nextArg))) {
+      setOption(name, nextArg);
+      i += 2;
+    } else {
+      // No value provided, treat as true
+      setOption(name, true);
+      i++;
+    }
+  };
+
   while (i < argv.length) {
     const arg = argv[i]!;
 
@@ -220,23 +247,7 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
           setOption(name, true);
           i++;
         } else {
-          // Check if next arg is a value. A dash-prefixed token is only
-          // consumed as the value when it looks like a negative number
-          // (e.g. `--count -5`); other dash-prefixed tokens (`--`, other
-          // flags) are left for the next iteration to parse as their own
-          // option, so they aren't silently swallowed as a literal value.
-          const nextArg = argv[i + 1];
-          if (
-            nextArg !== undefined &&
-            (!nextArg.startsWith("-") || looksLikeNegativeNumber(nextArg))
-          ) {
-            setOption(name, nextArg);
-            i += 2;
-          } else {
-            // No value provided, treat as true
-            setOption(name, true);
-            i++;
-          }
+          setOptionFromNextArg(name);
         }
       }
       continue;
@@ -263,20 +274,7 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
           setOption(name, true);
           i++;
         } else {
-          // Same rationale as the long-option case above: only consume a
-          // dash-prefixed next token as the value when it looks like a
-          // negative number.
-          const nextArg = argv[i + 1];
-          if (
-            nextArg !== undefined &&
-            (!nextArg.startsWith("-") || looksLikeNegativeNumber(nextArg))
-          ) {
-            setOption(name, nextArg);
-            i += 2;
-          } else {
-            setOption(name, true);
-            i++;
-          }
+          setOptionFromNextArg(name);
         }
       } else {
         // Combined short options: -abc
@@ -287,21 +285,13 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         for (const char of flags) {
           setOption(char, true);
         }
-        i++;
-        if (valueOption?.value !== undefined) {
+        if (!valueOption) {
+          i++;
+        } else if (valueOption.value === undefined) {
+          setOptionFromNextArg(valueOption.name);
+        } else {
           setOption(valueOption.name, valueOption.value);
-        } else if (valueOption) {
-          // Same rule as a single short option
-          const nextArg = argv[i];
-          if (
-            nextArg !== undefined &&
-            (!nextArg.startsWith("-") || looksLikeNegativeNumber(nextArg))
-          ) {
-            setOption(valueOption.name, nextArg);
-            i++;
-          } else {
-            setOption(valueOption.name, true);
-          }
+          i++;
         }
       }
       continue;
