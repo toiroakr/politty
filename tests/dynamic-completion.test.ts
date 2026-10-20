@@ -287,6 +287,78 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.beta).toBe(true);
     });
 
+    describe("combined short options with a value-taking option", () => {
+      const clusterCmd = defineCommand({
+        name: "clustercli",
+        args: z.object({
+          alpha: arg(z.boolean().default(false), { alias: "a" }),
+          count: arg(z.string().optional(), { alias: "c" }),
+          field: arg(z.string().optional()),
+          file: arg(z.string().optional(), { positional: true }),
+        }),
+        run: () => {},
+      });
+
+      it("records the rest of the token or the next token as the value", () => {
+        for (const argv of [
+          ["-ac5", "--field", ""],
+          ["-ac", "5", "--field", ""],
+        ]) {
+          const ctx = parseCompletionContext(argv, clusterCmd);
+          expect(ctx.parsedArgs.alpha).toBe(true);
+          expect(ctx.parsedArgs.count).toBe("5");
+          expect(ctx.parsedArgs.file).toBeUndefined();
+        }
+      });
+
+      it("completes the value when the value-taking option ends the token", () => {
+        const pending = parseCompletionContext(["-ac", ""], clusterCmd);
+        expect(pending.completionType).toBe("option-value");
+        expect(pending.targetOption?.name).toBe("count");
+
+        const attached = parseCompletionContext(["-c5", ""], clusterCmd);
+        expect(attached.completionType).not.toBe("option-value");
+      });
+
+      it("records combined short global options as globals", () => {
+        const globals = z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+          name: arg(z.string().optional(), { alias: "n" }),
+        });
+        const root = defineCommand({ name: "root", subCommands: { leaf: clusterCmd } });
+
+        for (const argv of [
+          ["leaf", "-vn5", "--field", ""],
+          ["-vn5", "leaf", "--field", ""],
+          ["-vn", "5", "leaf", "--field", ""],
+        ]) {
+          const ctx = parseCompletionContext(argv, root, globals);
+          expect(ctx.subcommandPath).toEqual(["leaf"]);
+          expect(ctx.parsedArgs.verbose).toBe(true);
+          expect(ctx.parsedArgs.name).toBe("5");
+        }
+      });
+
+      it("records a negative number as the value, as the runtime does", () => {
+        const globals = z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+          name: arg(z.string().optional(), { alias: "n" }),
+        });
+        const root = defineCommand({ name: "root", subCommands: { leaf: clusterCmd } });
+
+        for (const argv of [
+          ["-vn", "-5", "leaf", "-ac", "-3", "--field", ""],
+          ["-n", "-5", "leaf", "--count", "-3", "--field", ""],
+          ["leaf", "-vn", "-5", "-c", "-3", "--field", ""],
+        ]) {
+          const ctx = parseCompletionContext(argv, root, globals);
+          expect(ctx.subcommandPath).toEqual(["leaf"]);
+          expect(ctx.parsedArgs.name).toBe("-5");
+          expect(ctx.parsedArgs.count).toBe("-3");
+        }
+      });
+    });
+
     it("does not record a negation form given an inline value, which the runtime parser does not treat as negation", () => {
       const negCmd = defineCommand({
         name: "negcli",
@@ -408,11 +480,11 @@ describe("Dynamic completion (in-process resolver)", () => {
     });
 
     it("does not record a global as set when typed inside a combined short flag", () => {
-      // Runtime's `scanForSubcommand` / `separateGlobalArgs` do NOT
-      // decompose combined short flags — only the leaf local parser
-      // does. So `-ab` with a global `-a` and local `-b` never actually
-      // surfaces the global at runtime. The completion parser must
-      // not record the global as `true` either.
+      // Runtime's `scanForSubcommand` / `separateGlobalArgs` decompose
+      // combined short flags only when every option in them is global;
+      // otherwise only the leaf local parser does. So `-ab` with a global
+      // `-a` and local `-b` never actually surfaces the global at runtime.
+      // The completion parser must not record the global as `true` either.
       const globals = z.object({
         alpha: arg(z.boolean().default(false), { alias: "a" }),
       });

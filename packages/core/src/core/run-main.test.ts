@@ -1161,6 +1161,43 @@ describe("runCommand", () => {
         expect(result.success).toBe(true);
       });
 
+      it("reports only the unknown flag in combined short options with a global option's attached value", async () => {
+        const cmd = defineCommand({
+          name: "cli",
+          subCommands: { sub: defineCommand({ name: "sub", run: () => {} }) },
+        });
+
+        const result = await runCommand(cmd, ["-xn5"], {
+          globalArgs: z.strictObject({ name: arg(z.string().default("x"), { alias: "n" }) }),
+        });
+
+        expect(result.exitCode).toBe(2);
+        if (!result.success) {
+          expect(result.error.message).toBe("Unknown flags: x");
+        }
+      });
+
+      it("reads short global options with an attached value, alone or combined, under a strict globalArgs schema", async () => {
+        using consoleLog = spyOnConsoleLog();
+        const subFn = vi.fn();
+        const cmd = defineCommand({
+          name: "cli",
+          subCommands: { sub: defineCommand({ name: "sub", run: subFn }) },
+        });
+        const globalArgs = z.strictObject({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+          name: arg(z.string().default("x"), { alias: "n" }),
+        });
+
+        const groupResult = await runCommand(cmd, ["-n5"], { globalArgs });
+        const subResult = await runCommand(cmd, ["-vn5", "sub"], { globalArgs });
+
+        expect(groupResult.success).toBe(true);
+        expect(consoleLog).toHaveBeenCalledWith(expect.stringContaining("Usage:"));
+        expect(subResult.success).toBe(true);
+        expect(subFn).toHaveBeenCalledWith(expect.objectContaining({ verbose: true, name: "5" }));
+      });
+
       it("rejects an unknown flag given to a nested group under a strict globalArgs schema", async () => {
         const cmd = defineCommand({
           name: "cli",

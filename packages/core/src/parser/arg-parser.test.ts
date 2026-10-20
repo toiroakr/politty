@@ -76,6 +76,50 @@ describe("ArgParser", () => {
       expect(result.options["5"]).toBe(true);
     });
 
+    describe("combined short options with a value-taking option", () => {
+      const clusterOptions = {
+        aliasMap: new Map([
+          ["a", "all"],
+          ["c", "count"],
+        ]),
+        booleanFlags: new Set(["all"]),
+        valueFlags: new Set(["count"]),
+      };
+
+      it("should take the rest of the token as the value", () => {
+        expect(parseArgv(["-c5"], clusterOptions).options).toEqual({ count: "5" });
+        expect(parseArgv(["-ac5"], clusterOptions).options).toEqual({ all: true, count: "5" });
+        expect(parseArgv(["-ca"], clusterOptions).options).toEqual({ count: "a" });
+      });
+
+      it("should take the next token as the value when the option ends the token", () => {
+        const result = parseArgv(["-ac", "5"], clusterOptions);
+
+        expect(result.options).toEqual({ all: true, count: "5" });
+        expect(result.positionals).toEqual([]);
+      });
+
+      it("should keep an unknown short option in a cluster boolean", () => {
+        const result = parseArgv(["-ax", "file.txt"], clusterOptions);
+
+        expect(result.options).toEqual({ all: true, x: true });
+        expect(result.positionals).toEqual(["file.txt"]);
+      });
+
+      it("should read a value-taking option of a command schema in a cluster", () => {
+        const cmd = defineCommand({
+          name: "leaf",
+          args: z.object({
+            all: arg(z.boolean().default(false), { alias: "a" }),
+            count: arg(z.string().optional(), { alias: "c" }),
+          }),
+          run: () => {},
+        });
+
+        expect(parseArgs(["-ac5"], cmd).rawArgs).toMatchObject({ all: true, count: "5" });
+      });
+    });
+
     it("should not swallow a following flag as a value (long option)", () => {
       const result = parseArgv(["--name", "--verbose"], {
         booleanFlags: new Set(["verbose"]),
@@ -1716,6 +1760,79 @@ describe("ArgParser", () => {
       // verbose should be in global args, output should NOT be (local takes precedence)
       expect(result.rawGlobalArgs?.verbose).toBe(true);
       expect(result.rawGlobalArgs?.output).toBeUndefined();
+    });
+
+    describe("combined short global options", () => {
+      const clusterExtracted = extractFields(
+        z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+          name: arg(z.string().optional(), { alias: "n" }),
+        }),
+      );
+      const leaf = defineCommand({
+        name: "leaf",
+        args: z.object({ output: arg(z.string().default("dist")) }),
+        run: () => {},
+      });
+
+      it("parses them before a subcommand", () => {
+        const cmd = defineCommand({ name: "root", subCommands: { build: leaf } });
+
+        const result = parseArgs(["-vn5", "build"], cmd, { globalExtracted: clusterExtracted });
+
+        expect(result.subCommand).toBe("build");
+        expect(result.rawGlobalArgs).toEqual({ verbose: true, name: "5" });
+      });
+
+      it("separates them from local args", () => {
+        const attached = parseArgs(["--output", "out", "-vn5"], leaf, {
+          globalExtracted: clusterExtracted,
+        });
+        const separate = parseArgs(["-vn", "5", "--output", "out"], leaf, {
+          globalExtracted: clusterExtracted,
+        });
+
+        for (const result of [attached, separate]) {
+          expect(result.rawArgs.output).toBe("out");
+          expect(result.rawGlobalArgs).toEqual({ verbose: true, name: "5" });
+          expect(result.unknownFlags).toEqual([]);
+        }
+      });
+
+      it("reads a negative number as the value of a global option, combined or not", () => {
+        const cmd = defineCommand({ name: "root", subCommands: { build: leaf } });
+
+        const beforeSub = parseArgs(["-vn", "-5", "build"], cmd, {
+          globalExtracted: clusterExtracted,
+        });
+
+        expect(beforeSub.subCommand).toBe("build");
+        expect(beforeSub.rawGlobalArgs).toEqual({ verbose: true, name: "-5" });
+        for (const argv of [
+          ["-vn", "-5", "--output", "out"],
+          ["-n", "-5", "--output", "out"],
+          ["--output", "out", "--name", "-5"],
+        ]) {
+          const result = parseArgs(argv, leaf, { globalExtracted: clusterExtracted });
+
+          expect(result.rawArgs.output).toBe("out");
+          expect(result.rawGlobalArgs).toMatchObject({ name: "-5" });
+          expect(result.unknownFlags).toEqual([]);
+        }
+      });
+
+      it("leaves them to the command when a local option shares an alias", () => {
+        const local = defineCommand({
+          name: "leaf",
+          args: z.object({ count: arg(z.string().optional(), { alias: "n" }) }),
+          run: () => {},
+        });
+
+        const result = parseArgs(["-vn5"], local, { globalExtracted: clusterExtracted });
+
+        expect(result.rawArgs.count).toBe("5");
+        expect(result.rawGlobalArgs?.name).toBeUndefined();
+      });
     });
 
     it("returns empty rawGlobalArgs when no global flags provided", () => {

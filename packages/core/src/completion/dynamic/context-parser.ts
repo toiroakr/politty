@@ -13,7 +13,12 @@ import {
 } from "../../core/schema-extractor.js";
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
-import { positionalSlotFields } from "../../parser/argv-parser.js";
+import {
+  isOptionValue,
+  isShortCluster,
+  positionalSlotFields,
+  splitShortCluster,
+} from "../../parser/argv-parser.js";
 import { coerceBoolean } from "../../parser/coerce-boolean.js";
 import type { AnyCommand, ArgsSchema } from "../../types.js";
 import { collectOptionTokens } from "../shell-shared.js";
@@ -209,9 +214,29 @@ function parsePreSubGlobals(
     const word = tokens[i]!;
     if (word === "--") break;
     if (!word.startsWith("-")) break;
-    // Combined short flags (`-fg`) freeze runtime scanForSubcommand —
-    // mirror that, otherwise pre-pass over-consumes tokens the runtime
-    // would have left for the leaf parser.
+    // Combined short flags (`-fg`) freeze runtime scanForSubcommand unless
+    // every option in them is global — mirror that, otherwise pre-pass
+    // over-consumes tokens the runtime would have left for the leaf parser.
+    if (isShortCluster(word)) {
+      const { isGlobal, flags, valueOption } = resolveCompletionCluster(word, globalOptions);
+      if (!isGlobal) break;
+      for (const { opt } of flags) {
+        globalParsedArgs[opt.name] = true;
+        captured.add(opt.name);
+      }
+      if (valueOption?.value !== undefined) {
+        writeGlobal(valueOption.opt, valueOption.value);
+      } else if (valueOption) {
+        const next = tokens[i + 1];
+        if (next === undefined) break;
+        if (isOptionValue(next)) {
+          writeGlobal(valueOption.opt, next);
+          i++;
+        }
+      }
+      i++;
+      continue;
+    }
     if (!word.startsWith("--") && word.length > 2) {
       const eqIdx = word.indexOf("=");
       const withoutDash = eqIdx >= 0 ? word.slice(1, eqIdx) : word.slice(1);
@@ -237,7 +262,7 @@ function parsePreSubGlobals(
         i++;
       } else if (i + 1 < tokens.length) {
         const next = tokens[i + 1]!;
-        if (next.startsWith("-")) {
+        if (!isOptionValue(next)) {
           i++;
           continue;
         }
@@ -443,6 +468,62 @@ function parseOption(word: string): ParsedOption {
     return { name: word.slice(1, 2), isLong: false };
   }
   return { name: word, isLong: true };
+}
+
+/**
+ * Mirror the runtime's reading of combined short options: `separateGlobalArgs`
+ * takes them as globals when every option in them is a global that no local
+ * shares, and the command's `parseArgv` reads them otherwise. Both split them
+ * at the first value-taking option. Unresolved chars are dropped.
+ */
+function resolveCompletionCluster(
+  word: string,
+  options: readonly CompletableOption[],
+): {
+  isGlobal: boolean;
+  flags: { opt: CompletableOption; name: string }[];
+  valueOption: { opt: CompletableOption; value: string | undefined } | undefined;
+} {
+  const findShort = (pool: readonly CompletableOption[], name: string) =>
+    findOption(pool, { name, isLong: false });
+  const localOptions = options.filter((o) => o.isGlobal !== true);
+  const globalOptions = options.filter((o) => o.isGlobal === true);
+  const isGlobalName = (name: string): boolean =>
+    !findShort(localOptions, name) && findShort(globalOptions, name) !== undefined;
+  const asGlobal = splitShortCluster(
+    word.slice(1),
+    (name) => isGlobalName(name) && findShort(globalOptions, name)!.takesValue,
+  );
+  const isGlobal = asGlobal.flags.every(isGlobalName);
+  const pool = isGlobal ? globalOptions : localOptions;
+  const { flags, valueOption } = isGlobal
+    ? asGlobal
+    : splitShortCluster(
+        word.slice(1),
+        (name) => findShort(localOptions, name)?.takesValue === true,
+      );
+  return {
+    isGlobal,
+    flags: flags.flatMap((name) => {
+      const opt = findShort(pool, name);
+      return opt ? [{ opt, name }] : [];
+    }),
+    valueOption: valueOption && {
+      opt: findShort(pool, valueOption.name)!,
+      value: valueOption.value,
+    },
+  };
+}
+
+/**
+ * The option of combined short options that takes the next word as its value
+ */
+function pendingClusterOption(
+  word: string,
+  options: readonly CompletableOption[],
+): CompletableOption | undefined {
+  const { valueOption } = resolveCompletionCluster(word, options);
+  return valueOption?.value === undefined ? valueOption?.opt : undefined;
 }
 
 /**
@@ -737,39 +818,26 @@ function scanCompletionContext(
       continue;
     }
 
-    // Combined short boolean flags such as `-ab` ⇒ `-a -b`. The runtime
-    // parser unpacks these; the completion parser must do the same so a
-    // resolver sees both flags as set. Only attempted when every char in
-    // the group resolves to a value-less option, otherwise the word is
-    // ambiguous (`-cVALUE` syntax) and we fall through to the single-
-    // char path below.
-    if (
-      !afterDoubleDash &&
-      word.startsWith("-") &&
-      !word.startsWith("--") &&
-      word.length > 2 &&
-      !word.includes("=")
-    ) {
+    // Always consume the whole combined word so the single-option branch
+    // below does not misread `-ab` as `-a`.
+    if (!afterDoubleDash && isShortCluster(word)) {
       // This whole word is option-shaped even if some/all of its combined
       // chars fail to resolve below; see the note on the single-option
       // branch further down for why unresolved tokens still count.
       hasAnyOptionBeenUsed = true;
-      const chars: string[] = Array.from(word.slice(1));
-      // Runtime's global separation (`scanForSubcommand` /
-      // `separateGlobalArgs`) does NOT decompose combined short flags
-      // — only the leaf-level local parser does. Mirror that here by
-      // matching each char against LOCAL options only and recording
-      // every resolved boolean. A char that doesn't resolve locally
-      // (or that maps to a value-taking option) is a no-op, just like
-      // the runtime's `setOption` on an unknown short. Always consume
-      // the whole combined word so the single-option branch below
-      // does not misread `-ab` as `-a`.
-      const localOptions = options.filter((o) => o.isGlobal !== true);
-      for (const c of chars) {
-        const o = findOption(localOptions, { name: c, isLong: false });
-        if (!o || o.takesValue) continue;
-        markUsed(o);
-        recordBooleanFlag(o, { name: c, isLong: false });
+      const { flags, valueOption } = resolveCompletionCluster(word, options);
+      for (const { opt, name } of flags) {
+        markUsed(opt);
+        recordBooleanFlag(opt, { name, isLong: false });
+      }
+      if (valueOption) {
+        markUsed(valueOption.opt);
+        if (valueOption.value !== undefined) {
+          recordOptionValue(valueOption.opt, valueOption.value);
+        } else if (i + 1 < argv.length - 1 && isOptionValue(argv[i + 1]!)) {
+          recordOptionValue(valueOption.opt, argv[i + 1]!);
+          i++;
+        }
       }
       i++;
       continue;
@@ -797,11 +865,12 @@ function scanCompletionContext(
           } else if (i + 1 < argv.length - 1) {
             const next = argv[i + 1]!;
             // Mirror the runtime parser (`parseArgv`): a token starting
-            // with `-` is treated as the next option, not as this
-            // option's value. Otherwise `--config --flag --field <TAB>`
-            // records `config === "--flag"` and leaves `flag` unset,
-            // so the resolver sees a state the runtime never produces.
-            if (!isOption(next)) {
+            // with `-` that is not a negative number is treated as the
+            // next option, not as this option's value. Otherwise
+            // `--config --flag --field <TAB>` records `config === "--flag"`
+            // and leaves `flag` unset, so the resolver sees a state the
+            // runtime never produces.
+            if (isOptionValue(next)) {
               recordOptionValue(opt, next);
               i++;
             }
@@ -913,7 +982,9 @@ function scanCompletionContext(
 
   // Case 1: Previous word is an option that takes a value
   if (!afterDoubleDash && previousWord && isOption(previousWord) && !hasInlineValue(previousWord)) {
-    const opt = findOption(options, parseOption(previousWord));
+    const opt = isShortCluster(previousWord)
+      ? pendingClusterOption(previousWord, options)
+      : findOption(options, parseOption(previousWord));
     if (opt && opt.takesValue) {
       completionType = "option-value";
       targetOption = opt;
