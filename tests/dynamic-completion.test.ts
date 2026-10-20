@@ -338,6 +338,25 @@ describe("Dynamic completion (in-process resolver)", () => {
           expect(ctx.parsedArgs.name).toBe("5");
         }
       });
+
+      it("records a negative number as the value, as the runtime does", () => {
+        const globals = z.object({
+          verbose: arg(z.boolean().default(false), { alias: "v" }),
+          name: arg(z.string().optional(), { alias: "n" }),
+        });
+        const root = defineCommand({ name: "root", subCommands: { leaf: clusterCmd } });
+
+        for (const argv of [
+          ["-vn", "-5", "leaf", "-ac", "-3", "--field", ""],
+          ["-n", "-5", "leaf", "--count", "-3", "--field", ""],
+          ["leaf", "-vn", "-5", "-c", "-3", "--field", ""],
+        ]) {
+          const ctx = parseCompletionContext(argv, root, globals);
+          expect(ctx.subcommandPath).toEqual(["leaf"]);
+          expect(ctx.parsedArgs.name).toBe("-5");
+          expect(ctx.parsedArgs.count).toBe("-3");
+        }
+      });
     });
 
     it("does not record a negation form given an inline value, which the runtime parser does not treat as negation", () => {

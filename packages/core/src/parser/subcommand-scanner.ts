@@ -1,5 +1,10 @@
 import { getAllAliases, type ExtractedFields } from "../core/schema-extractor.js";
-import { buildParserOptions, isShortCluster, splitShortCluster } from "./argv-parser.js";
+import {
+  buildParserOptions,
+  isOptionValue,
+  isShortCluster,
+  splitShortCluster,
+} from "./argv-parser.js";
 import { resolveLongOption } from "./long-option-resolver.js";
 
 /**
@@ -97,8 +102,9 @@ export function resolveGlobalLongOption(
 
 /**
  * Check whether a non-boolean flag should consume the next argv token as its value.
- * Returns true when the next token exists, is not a flag, and the current flag
- * is not boolean / negated / using = syntax.
+ * Returns true when the next token exists, is read as a value (not a flag, or a
+ * negative number; see `isOptionValue`), and the current flag is not boolean /
+ * negated / using = syntax.
  */
 function shouldConsumeValue(
   arg: string,
@@ -112,7 +118,7 @@ function shouldConsumeValue(
     !booleanFlags.has(resolvedName) &&
     !isNegated &&
     nextArg !== undefined &&
-    !nextArg.startsWith("-")
+    isOptionValue(nextArg)
   );
 }
 

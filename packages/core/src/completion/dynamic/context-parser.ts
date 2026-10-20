@@ -14,6 +14,7 @@ import {
 import { resolveSubCommandAlias } from "../../executor/subcommand-router.js";
 import { resolveSubCommandMeta } from "../../lazy.js";
 import {
+  isOptionValue,
   isShortCluster,
   positionalSlotFields,
   splitShortCluster,
@@ -228,7 +229,7 @@ function parsePreSubGlobals(
       } else if (valueOption) {
         const next = tokens[i + 1];
         if (next === undefined) break;
-        if (!next.startsWith("-")) {
+        if (isOptionValue(next)) {
           writeGlobal(valueOption.opt, next);
           i++;
         }
@@ -261,7 +262,7 @@ function parsePreSubGlobals(
         i++;
       } else if (i + 1 < tokens.length) {
         const next = tokens[i + 1]!;
-        if (next.startsWith("-")) {
+        if (!isOptionValue(next)) {
           i++;
           continue;
         }
@@ -833,7 +834,7 @@ function scanCompletionContext(
         markUsed(valueOption.opt);
         if (valueOption.value !== undefined) {
           recordOptionValue(valueOption.opt, valueOption.value);
-        } else if (i + 1 < argv.length - 1 && !isOption(argv[i + 1]!)) {
+        } else if (i + 1 < argv.length - 1 && isOptionValue(argv[i + 1]!)) {
           recordOptionValue(valueOption.opt, argv[i + 1]!);
           i++;
         }
@@ -864,11 +865,12 @@ function scanCompletionContext(
           } else if (i + 1 < argv.length - 1) {
             const next = argv[i + 1]!;
             // Mirror the runtime parser (`parseArgv`): a token starting
-            // with `-` is treated as the next option, not as this
-            // option's value. Otherwise `--config --flag --field <TAB>`
-            // records `config === "--flag"` and leaves `flag` unset,
-            // so the resolver sees a state the runtime never produces.
-            if (!isOption(next)) {
+            // with `-` that is not a negative number is treated as the
+            // next option, not as this option's value. Otherwise
+            // `--config --flag --field <TAB>` records `config === "--flag"`
+            // and leaves `flag` unset, so the resolver sees a state the
+            // runtime never produces.
+            if (isOptionValue(next)) {
               recordOptionValue(opt, next);
               i++;
             }

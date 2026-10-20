@@ -1799,6 +1799,28 @@ describe("ArgParser", () => {
         }
       });
 
+      it("reads a negative number as the value of a global option, combined or not", () => {
+        const cmd = defineCommand({ name: "root", subCommands: { build: leaf } });
+
+        const beforeSub = parseArgs(["-vn", "-5", "build"], cmd, {
+          globalExtracted: clusterExtracted,
+        });
+
+        expect(beforeSub.subCommand).toBe("build");
+        expect(beforeSub.rawGlobalArgs).toEqual({ verbose: true, name: "-5" });
+        for (const argv of [
+          ["-vn", "-5", "--output", "out"],
+          ["-n", "-5", "--output", "out"],
+          ["--output", "out", "--name", "-5"],
+        ]) {
+          const result = parseArgs(argv, leaf, { globalExtracted: clusterExtracted });
+
+          expect(result.rawArgs.output).toBe("out");
+          expect(result.rawGlobalArgs).toMatchObject({ name: "-5" });
+          expect(result.unknownFlags).toEqual([]);
+        }
+      });
+
       it("leaves them to the command when a local option shares an alias", () => {
         const local = defineCommand({
           name: "leaf",

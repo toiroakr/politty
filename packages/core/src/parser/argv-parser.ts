@@ -68,8 +68,16 @@ export interface ParserOptions {
  */
 const NEGATIVE_NUMBER_PATTERN = /^-\.?\d/;
 
-function looksLikeNegativeNumber(value: string): boolean {
-  return NEGATIVE_NUMBER_PATTERN.test(value);
+/**
+ * Check whether the token after a value-taking option is read as its value.
+ * A dash-prefixed token is read so only when it looks like a negative number
+ * (e.g. `--count -5`); other dash-prefixed tokens (`--`, other flags) are
+ * options of their own, so they aren't silently swallowed as a literal value.
+ * Argv scanners and the completion context parser share this with
+ * {@link parseArgv} so that they skip the same tokens.
+ */
+export function isOptionValue(token: string): boolean {
+  return !token.startsWith("-") || NEGATIVE_NUMBER_PATTERN.test(token);
 }
 
 /**
@@ -179,14 +187,12 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     }
   };
 
-  // Set a value-taking option from the next arg and step past both. A
-  // dash-prefixed next arg is only consumed as the value when it looks like a
-  // negative number (e.g. `--count -5`); other dash-prefixed tokens (`--`,
-  // other flags) are left for the next iteration to parse as their own
-  // option, so they aren't silently swallowed as a literal value.
+  // Set a value-taking option from the next arg and step past both. A next
+  // arg that is not read as a value (see `isOptionValue`) is left for the
+  // next iteration to parse as its own option.
   const setOptionFromNextArg = (name: string) => {
     const nextArg = argv[i + 1];
-    if (nextArg !== undefined && (!nextArg.startsWith("-") || looksLikeNegativeNumber(nextArg))) {
+    if (nextArg !== undefined && isOptionValue(nextArg)) {
       setOption(name, nextArg);
       i += 2;
     } else {

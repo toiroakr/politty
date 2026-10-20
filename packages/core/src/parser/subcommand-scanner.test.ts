@@ -163,6 +163,19 @@ describe("scanForSubcommand", () => {
       expect(result.globalTokensBefore).toEqual(["-vn", "5"]);
     });
 
+    it("skips a negative number as the value of a global option, combined or not", () => {
+      for (const argv of [
+        ["-vn", "-5", "build"],
+        ["-n", "-5", "build"],
+        ["--name", "-5", "build"],
+      ]) {
+        const result = scanForSubcommand(argv, subCommandNames, clusterExtracted);
+
+        expect(result.subCommandIndex).toBe(argv.length - 1);
+        expect(result.globalTokensBefore).toEqual(argv.slice(0, -1));
+      }
+    });
+
     it("stops when an option in them is not global", () => {
       const result = scanForSubcommand(["-vx", "build"], subCommandNames, clusterExtracted);
 
@@ -337,6 +350,8 @@ describe("findFirstPositionalIndex", () => {
 
     expect(findFirstPositionalIndex(["-vn5", "plugin"], clusterExtracted)).toBe(1);
     expect(findFirstPositionalIndex(["-vn", "5", "plugin"], clusterExtracted)).toBe(2);
+    expect(findFirstPositionalIndex(["-vn", "-5", "plugin"], clusterExtracted)).toBe(2);
+    expect(findFirstPositionalIndex(["-n", "-5", "plugin"], clusterExtracted)).toBe(2);
   });
 
   it("stops at the `--` terminator", () => {
