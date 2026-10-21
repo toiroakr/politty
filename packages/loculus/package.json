@@ -1,6 +1,6 @@
 {
   "name": "@politty/loculus",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Politty CLI framework with flat loculus schemas",
   "keywords": [
     "argument-parser",
