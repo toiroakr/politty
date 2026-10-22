@@ -30,6 +30,12 @@ export interface ParserOptions {
   /** Array flags (can be repeated) */
   arrayFlags?: Set<string>;
   /**
+   * Named options that take a value. In combined short options such an
+   * option takes the rest of the token as its value (`-ac5`), or the next
+   * token when it ends the token (`-ac 5`).
+   */
+  valueFlags?: Set<string>;
+  /**
    * All known canonical option names (as defined in the schema).
    * Used to disambiguate negation: when `--no-flag` or `--noFlag` matches
    * a name in this set, it is treated as a regular option rather than
@@ -48,6 +54,11 @@ export interface ParserOptions {
    * `booleanFlags` has default negation suppressed.
    */
   defaultNegationDisabledFields?: Set<string>;
+  /**
+   * When true, an option whose resolved name is not in `definedNames` never
+   * takes the next token as its value, so the token stays a positional.
+   */
+  unknownFlagsTakeNoValue?: boolean;
 }
 
 /**
@@ -57,8 +68,49 @@ export interface ParserOptions {
  */
 const NEGATIVE_NUMBER_PATTERN = /^-\.?\d/;
 
-function looksLikeNegativeNumber(value: string): boolean {
-  return NEGATIVE_NUMBER_PATTERN.test(value);
+/**
+ * Check whether the token after a value-taking option is read as its value.
+ * A dash-prefixed token is read so only when it looks like a negative number
+ * (e.g. `--count -5`); other dash-prefixed tokens (`--`, other flags) are
+ * options of their own, so they aren't silently swallowed as a literal value.
+ * Argv scanners and the completion context parser share this with
+ * {@link parseArgv} so that they skip the same tokens.
+ */
+export function isOptionValue(token: string): boolean {
+  return !token.startsWith("-") || NEGATIVE_NUMBER_PATTERN.test(token);
+}
+
+/**
+ * Check if a token is combined short options (e.g. "-ab", "-ac5"). A token
+ * with `=` is read as `-name=value` instead.
+ */
+export function isShortCluster(token: string): boolean {
+  return (
+    token.startsWith("-") && !token.startsWith("--") && token.length > 2 && !token.includes("=")
+  );
+}
+
+/**
+ * Split combined short options (`abc` of `-abc`) at the first option that
+ * takes a value.
+ *
+ * @param cluster - The token without its leading dash
+ * @param takesValue - Whether a short option name takes a value
+ * @returns The flags before that option, and that option with the rest of the
+ *   token as its value (`undefined` when it ends the token)
+ */
+export function splitShortCluster(
+  cluster: string,
+  takesValue: (name: string) => boolean,
+): { flags: string[]; valueOption: { name: string; value: string | undefined } | undefined } {
+  const chars = Array.from(cluster);
+  const index = chars.findIndex(takesValue);
+  if (index === -1) return { flags: chars, valueOption: undefined };
+  const value = chars.slice(index + 1).join("");
+  return {
+    flags: chars.slice(0, index),
+    valueOption: { name: chars[index]!, value: value === "" ? undefined : value },
+  };
 }
 
 /**
@@ -67,7 +119,8 @@ function looksLikeNegativeNumber(value: string): boolean {
  * Supports:
  * - Long options: --flag, --flag=value, --flag value
  * - Short options: -f, -f=value, -f value
- * - Combined short options: -abc (treated as -a -b -c if all are boolean)
+ * - Combined short options: -abc (treated as -a -b -c, except that an option
+ *   in `valueFlags` takes the rest of the token, or the next token, as its value)
  * - Positional arguments
  * - -- to stop parsing options
  * - Boolean negation: --no-flag, --noFlag (requires `booleanFlags` and `negation: true`)
@@ -87,12 +140,16 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
     aliasMap = new Map(),
     booleanFlags = new Set(),
     arrayFlags = new Set(),
+    valueFlags = new Set(),
     definedNames = new Set(),
     negationMap = new Map(),
     defaultNegationDisabledFields: configuredDefaultNegationDisabledFields,
+    unknownFlagsTakeNoValue = false,
   } = options;
   const defaultNegationDisabledFields =
     configuredDefaultNegationDisabledFields ?? new Set(booleanFlags);
+  const takesNoValue = (resolvedName: string): boolean =>
+    booleanFlags.has(resolvedName) || (unknownFlagsTakeNoValue && !definedNames.has(resolvedName));
 
   const longOptionLookup: LongOptionLookup = {
     aliasMap,
@@ -127,6 +184,21 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
       }
     } else {
       result.options[resolvedName] = value;
+    }
+  };
+
+  // Set a value-taking option from the next arg and step past both. A next
+  // arg that is not read as a value (see `isOptionValue`) is left for the
+  // next iteration to parse as its own option.
+  const setOptionFromNextArg = (name: string) => {
+    const nextArg = argv[i + 1];
+    if (nextArg !== undefined && isOptionValue(nextArg)) {
+      setOption(name, nextArg);
+      i += 2;
+    } else {
+      // No value provided, treat as true
+      setOption(name, true);
+      i++;
     }
   };
 
@@ -176,28 +248,12 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         const name = withoutDashes;
         const resolvedName = aliasMap.get(name) ?? name;
 
-        if (booleanFlags.has(resolvedName)) {
+        if (takesNoValue(resolvedName)) {
           // Boolean flag: no value expected
           setOption(name, true);
           i++;
         } else {
-          // Check if next arg is a value. A dash-prefixed token is only
-          // consumed as the value when it looks like a negative number
-          // (e.g. `--count -5`); other dash-prefixed tokens (`--`, other
-          // flags) are left for the next iteration to parse as their own
-          // option, so they aren't silently swallowed as a literal value.
-          const nextArg = argv[i + 1];
-          if (
-            nextArg !== undefined &&
-            (!nextArg.startsWith("-") || looksLikeNegativeNumber(nextArg))
-          ) {
-            setOption(name, nextArg);
-            i += 2;
-          } else {
-            // No value provided, treat as true
-            setOption(name, true);
-            i++;
-          }
+          setOptionFromNextArg(name);
         }
       }
       continue;
@@ -220,32 +276,29 @@ export function parseArgv(argv: string[], options: ParserOptions = {}): ParsedAr
         const name = withoutDash;
         const resolvedName = aliasMap.get(name) ?? name;
 
-        if (booleanFlags.has(resolvedName)) {
+        if (takesNoValue(resolvedName)) {
           setOption(name, true);
           i++;
         } else {
-          // Same rationale as the long-option case above: only consume a
-          // dash-prefixed next token as the value when it looks like a
-          // negative number.
-          const nextArg = argv[i + 1];
-          if (
-            nextArg !== undefined &&
-            (!nextArg.startsWith("-") || looksLikeNegativeNumber(nextArg))
-          ) {
-            setOption(name, nextArg);
-            i += 2;
-          } else {
-            setOption(name, true);
-            i++;
-          }
+          setOptionFromNextArg(name);
         }
       } else {
         // Combined short options: -abc
-        // Treat each character as a boolean flag
-        for (const char of withoutDash) {
+        // Treat each character as a boolean flag up to one that takes a value
+        const { flags, valueOption } = splitShortCluster(withoutDash, (char) =>
+          valueFlags.has(aliasMap.get(char) ?? char),
+        );
+        for (const char of flags) {
           setOption(char, true);
         }
-        i++;
+        if (!valueOption) {
+          i++;
+        } else if (valueOption.value === undefined) {
+          setOptionFromNextArg(valueOption.name);
+        } else {
+          setOption(valueOption.name, valueOption.value);
+          i++;
+        }
       }
       continue;
     }
@@ -265,6 +318,7 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
   const aliasMap = new Map<string, string>();
   const booleanFlags = new Set<string>();
   const arrayFlags = new Set<string>();
+  const valueFlags = new Set<string>();
   const definedNames = new Set<string>();
   const negationMap = new Map<string, string>();
   const defaultNegationDisabledFields = new Set<string>();
@@ -310,6 +364,8 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
 
     if (field.type === "boolean") {
       booleanFlags.add(field.name);
+    } else {
+      valueFlags.add(field.name);
     }
 
     if (field.type === "array") {
@@ -339,6 +395,7 @@ export function buildParserOptions(extracted: ExtractedFields): ParserOptions {
     aliasMap,
     booleanFlags,
     arrayFlags,
+    valueFlags,
     definedNames,
     negationMap,
     defaultNegationDisabledFields,

@@ -19,7 +19,11 @@ export interface ResolvedPromptConfig {
  * Implement this to use a custom prompt library instead of the default @clack/prompts.
  */
 export interface PromptAdapter {
-  /** Prompt for free-form text input */
+  /**
+   * Prompt for free-form text input.
+   * `placeholder` is the help-display placeholder (e.g. `FILE`): show it only
+   * as a hint and never return it as the value.
+   */
   text(config: { message: string; placeholder?: string | undefined }): Promise<string | symbol>;
   /** Prompt for masked text input */
   password(config: { message: string }): Promise<string | symbol>;

@@ -36,6 +36,7 @@
     },
     {
       "groupName": "testing",
+      "minimumGroupSize": 2,
       "matchPackageNames": ["vitest", "@vitest/*"]
     },
     {
@@ -48,6 +49,7 @@
     },
     {
       "matchDatasources": ["npm"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
       "minimumReleaseAge": "7 days"
     },
     {
@@ -56,5 +58,8 @@
       "matchPackageNames": ["node"],
       "enabled": false
     }
-  ]
+  ],
+  "vulnerabilityAlerts": {
+    "minimumGroupSize": 1
+  }
 }

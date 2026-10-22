@@ -29,6 +29,7 @@ import { coerceEnvValue } from "./coerce-boolean.js";
 import {
   buildGlobalFlagLookup,
   collectGlobalFlag,
+  globalShortClusterLength,
   resolveGlobalLongOption,
   scanForSubcommand,
 } from "./subcommand-scanner.js";
@@ -105,6 +106,7 @@ export function parseArgs(
   const subCommandNameSet = listSubCommandNamesWithAliases(command);
   const subCommandNames = [...subCommandNameSet];
   const hasSubCommands = subCommandNames.length > 0;
+  const isGroup = hasSubCommands && !command.run;
 
   if (hasSubCommands && argv.length > 0) {
     // When global args schema is provided, use the scanner to skip over global flags
@@ -240,11 +242,25 @@ export function parseArgs(
   }
 
   // If no schema, split on -- manually so that flag-like tokens (e.g. `-x stray`)
-  // are not silently consumed by the parser; everything before -- is a positional.
+  // are not silently consumed by the parser; everything before -- is a positional,
+  // except that a command group takes no positional of its own, so its flag-like
+  // tokens are unknown flags.
   if (!extracted) {
     const ddIdx = commandArgv.indexOf("--");
-    const positionals = ddIdx >= 0 ? commandArgv.slice(0, ddIdx) : commandArgv;
+    const tokens = ddIdx >= 0 ? commandArgv.slice(0, ddIdx) : commandArgv;
     const rest = ddIdx >= 0 ? commandArgv.slice(ddIdx + 1) : [];
+    const isGroupFlag = (token: string): boolean =>
+      isGroup && token.startsWith("-") && token !== "-";
+    const globalNames = new Set(
+      options.globalExtracted?.fields.flatMap((f) => [f.name, f.cliName, ...getAllAliases(f)]),
+    );
+    const globalParserOptions = options.globalExtracted
+      ? buildParserOptions(options.globalExtracted)
+      : {};
+    const unknownFlags = tokens
+      .filter(isGroupFlag)
+      .flatMap((token) => Object.keys(parseArgv([token], globalParserOptions).options))
+      .filter((name) => !globalNames.has(name));
     return {
       helpRequested: false,
       helpAllRequested: false,
@@ -253,9 +269,9 @@ export function parseArgs(
       subCommand: undefined,
       remainingArgs: [],
       rawArgs: {},
-      positionals,
+      positionals: tokens.filter((token) => !isGroupFlag(token)),
       rest,
-      unknownFlags: [],
+      unknownFlags,
       unknownGlobalFlags: suppressedGlobalFlags,
       rawGlobalArgs,
     };
@@ -287,8 +303,9 @@ export function parseArgs(
   // Build parser options from extracted fields
   const parserOptions = buildParserOptions(argvFields);
 
-  // Parse argv
-  const parsed = parseArgv(commandArgv, parserOptions);
+  // Parse argv. A group does not read the token after an unknown flag as its
+  // value, so a subcommand name or a typo of one there stays a positional.
+  const parsed = parseArgv(commandArgv, { ...parserOptions, unknownFlagsTakeNoValue: isGroup });
 
   // Merge with positionals
   const rawArgs = mergeWithPositionals(parsed, argvFields);
@@ -394,7 +411,7 @@ function selectArgvFields(
  *
  * @returns Names of the fields filled from an environment variable
  */
-function applyEnvFallbacks(
+export function applyEnvFallbacks(
   rawArgs: Record<string, unknown>,
   extracted: ExtractedFields,
 ): Set<string> {
@@ -467,9 +484,9 @@ function parseGlobalArgs(
  * When a flag is defined in both global and local schemas, the local definition
  * takes precedence (the flag stays in the command tokens).
  *
- * Note: Combined short flags (e.g., `-vq`) are not decomposed here; only
- * single-character short options are recognized as global. The underlying
- * `parseArgv` handles combined shorts for command-local parsing.
+ * Note: Combined short flags (e.g., `-vq`, `-vn5`) are recognized as global
+ * only when every option in them is global; a mix of global and local options
+ * is left to the command-local `parseArgv`.
  */
 function separateGlobalArgs(
   argv: string[],
@@ -558,6 +575,15 @@ function separateGlobalArgs(
             collectGlobalFlag(argv, i, resolvedName, false, lookup.booleanFlags, globalTokens) - 1;
           continue;
         }
+      }
+
+      const clusterLength = globalShortClusterLength(argv, i, lookup, (name) =>
+        localAliasMapKeys.has(name),
+      );
+      if (clusterLength > 0) {
+        globalTokens.push(...argv.slice(i, i + clusterLength));
+        i += clusterLength - 1;
+        continue;
       }
     }
 

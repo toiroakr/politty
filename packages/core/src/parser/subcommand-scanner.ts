@@ -1,5 +1,10 @@
 import { getAllAliases, type ExtractedFields } from "../core/schema-extractor.js";
-import { buildParserOptions } from "./argv-parser.js";
+import {
+  buildParserOptions,
+  isOptionValue,
+  isShortCluster,
+  splitShortCluster,
+} from "./argv-parser.js";
 import { resolveLongOption } from "./long-option-resolver.js";
 
 /**
@@ -97,8 +102,9 @@ export function resolveGlobalLongOption(
 
 /**
  * Check whether a non-boolean flag should consume the next argv token as its value.
- * Returns true when the next token exists, is not a flag, and the current flag
- * is not boolean / negated / using = syntax.
+ * Returns true when the next token exists, is read as a value (not a flag, or a
+ * negative number; see `isOptionValue`), and the current flag is not boolean /
+ * negated / using = syntax.
  */
 function shouldConsumeValue(
   arg: string,
@@ -112,7 +118,7 @@ function shouldConsumeValue(
     !booleanFlags.has(resolvedName) &&
     !isNegated &&
     nextArg !== undefined &&
-    !nextArg.startsWith("-")
+    isOptionValue(nextArg)
   );
 }
 
@@ -138,6 +144,39 @@ export function collectGlobalFlag(
 }
 
 /**
+ * Count the argv positions taken by combined short options (`-vn5`, or
+ * `-vn 5`) when every option in them is global.
+ *
+ * @param argv - Command line arguments
+ * @param i - Index of the token to check
+ * @param lookup - Global flag lookup
+ * @param isLocal - Whether a short option name belongs to the command instead
+ * @returns 1 or 2, or 0 when the token is not such combined short options
+ */
+export function globalShortClusterLength(
+  argv: string[],
+  i: number,
+  lookup: GlobalFlagLookup,
+  isLocal: (name: string) => boolean = () => false,
+): number {
+  const arg = argv[i]!;
+  if (!isShortCluster(arg)) return 0;
+  const resolve = (name: string): string => lookup.aliasMap.get(name) ?? name;
+  const isGlobal = (name: string): boolean =>
+    !isLocal(name) && (lookup.aliases.has(name) || lookup.flagNames.has(resolve(name)));
+  const { flags, valueOption } = splitShortCluster(
+    arg.slice(1),
+    (name) => isGlobal(name) && !lookup.booleanFlags.has(resolve(name)),
+  );
+  if (!flags.every(isGlobal)) return 0;
+  return valueOption &&
+    valueOption.value === undefined &&
+    shouldConsumeValue(arg, resolve(valueOption.name), false, argv[i + 1], lookup.booleanFlags)
+    ? 2
+    : 1;
+}
+
+/**
  * Result of scanning argv for subcommand position
  */
 export interface ScanResult {
@@ -160,7 +199,7 @@ export interface ScanResult {
 /**
  * Scan argv to find the subcommand position, skipping over global flags.
  *
- * Walks argv and recognizes global flags (long, short, --no-*) so that
+ * Walks argv and recognizes global flags (long, short, combined short, --no-*) so that
  * `my-cli --verbose build --output dist` correctly identifies `build` as
  * the subcommand (index 1) rather than treating `--verbose` as the subcommand.
  *
@@ -259,7 +298,14 @@ export function scanForSubcommand(
         }
       }
 
-      // Unknown short flag or combined flags - stop scanning
+      const clusterLength = globalShortClusterLength(argv, i, lookup);
+      if (clusterLength > 0) {
+        globalTokensBefore.push(...argv.slice(i, i + clusterLength));
+        i += clusterLength;
+        continue;
+      }
+
+      // Unknown short flag, or combined flags that are not all global - stop scanning
       break;
     }
 
@@ -284,9 +330,10 @@ const BUILTIN_FLAGS = new Set(["--help", "-h", "--help-all", "-H", "--help-json"
  *
  * Mirrors `scanForSubcommand`'s conservative stop conditions: the scan stops
  * (returning -1) on a `--` terminator, a builtin flag (`--help`/`--version`),
- * an unknown long flag, or an unknown/combined short flag. Past such tokens we
- * can't tell a flag *value* from a positional, so continuing would misclassify
- * e.g. `--help plugin` or `--unknown value` and wrongly trip plugin dispatch.
+ * an unknown long flag, an unknown short flag, or combined short flags that are
+ * not all global. Past such tokens we can't tell a flag *value* from a
+ * positional, so continuing would misclassify e.g. `--help plugin` or
+ * `--unknown value` and wrongly trip plugin dispatch.
  *
  * Without globalExtracted, no flag is global, so any leading flag halts the
  * scan and a positional is only found when it precedes every flag.
@@ -352,7 +399,12 @@ export function findFirstPositionalIndex(
         continue;
       }
     }
-    // Unknown short flag or combined short flags: stop.
+    const clusterLength = globalShortClusterLength(argv, i, lookup);
+    if (clusterLength > 0) {
+      i += clusterLength - 1;
+      continue;
+    }
+    // Unknown short flag, or combined short flags that are not all global: stop.
     return -1;
   }
   return -1;
