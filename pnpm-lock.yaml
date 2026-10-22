@@ -170,8 +170,8 @@ importers:
         specifier: 3.0.3
         version: 3.0.3
       '@loculus/rolldown':
-        specifier: 0.2.3
-        version: 0.2.3(loculus@0.2.5)(rolldown@1.2.14)
+        specifier: 0.3.0
+        version: 0.3.0(loculus@0.3.0)(rolldown@1.2.14)
       '@quansync/fs':
         specifier: 1.1.0
         version: 1.1.0
@@ -805,11 +805,11 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@loculus/rolldown@0.2.3':
-    resolution: {integrity: sha512-PMIyzNjSyzGjCA8HRLl+LQclTVP832BHVMAfSp64d8ZRVSWmpXUrjkjqtQT2X7msm/OcSZo0WORHPozjXhwBWg==}
+  '@loculus/rolldown@0.3.0':
+    resolution: {integrity: sha512-9MdnZsDuCxrffvFI/AR80oByO4DVTfYYMbqmUHnOhtalv7IrjNdKmWUyE7NZ7D3YeWnt9YwHZMQq/MLpc9Qd3A==}
     engines: {node: '>=22.18.0'}
     peerDependencies:
-      loculus: ^0.2.5
+      loculus: ^0.3.0
       rolldown: '>=1.2.13 <2'
 
   '@manypkg/find-root@3.1.0':
@@ -2102,6 +2102,10 @@ packages:
     resolution: {integrity: sha512-idAO14ke9seznkaPNm4L9l3Ka6DQFJqT8IJZne1W6MtBEfucayu2gmGB+YGP/mgHuvoTteL7iibI6s/ezTDNCA==}
     engines: {node: '>=22.18.0'}
 
+  loculus@0.3.0:
+    resolution: {integrity: sha512-rdnqJQTf7Ub+gEIk4tieoSkVheMyf3kNLZuRYtiaWAtuDIwPyutk+WEn5mDIek7N3ttjV0D86QF+aPARlsslzw==}
+    engines: {node: '>=22.18.0'}
+
   magic-string@1.4.3:
     resolution: {integrity: sha512-z12OxmaPGE0F4xlpGdjuAUckipLpQlTAuAmyGhNoD7ODpYUzvDfvtxUbjM/jwznyP178oju/KDdyi220wNJ0RQ==}
 
@@ -2834,9 +2838,9 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@loculus/rolldown@0.2.3(loculus@0.2.5)(rolldown@1.2.14)':
+  '@loculus/rolldown@0.3.0(loculus@0.3.0)(rolldown@1.2.14)':
     dependencies:
-      loculus: 0.2.5
+      loculus: 0.3.0
       rolldown: 1.2.14
 
   '@manypkg/find-root@3.1.0':
@@ -3639,6 +3643,8 @@ snapshots:
 
   loculus@0.2.5: {}
 
+  loculus@0.3.0: {}
+
   magic-string@1.4.3:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
@@ -3943,7 +3949,7 @@ snapshots:
       lightningcss: 1.33.0
       picomatch: 4.0.7
       postcss: 8.5.29
-      rolldown: 1.2.13
+      rolldown: 1.2.14
       tinyglobby: 0.2.17
     optionalDependencies:
       '@types/node': 25.9.9
