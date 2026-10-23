@@ -411,8 +411,10 @@ const OBJECT_TYPES: ReadonlySet<string> = new Set([
 function transformsWrapped(schema: ValibotNode): boolean {
   let current: ValibotNode | undefined = schema;
   while (current) {
-    const pipe = current.pipe?.slice(1) ?? [];
-    if (pipe.some((item) => item.kind === "transformation" || item.kind === "schema")) return true;
+    const [base, ...items] = current.pipe ?? [];
+    if (items.some((item) => item.kind === "transformation" || item.kind === "schema")) return true;
+    // The first pipe item is the piped schema, which may be a pipe itself.
+    if (base && transformsWrapped(base)) return true;
     current = current.type && UNWRAPPABLE.has(current.type) ? current.wrapped : undefined;
   }
   return false;

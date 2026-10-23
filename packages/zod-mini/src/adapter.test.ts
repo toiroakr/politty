@@ -11,6 +11,35 @@ import {
 } from "./adapter.js";
 
 describe("zod/mini adapter", () => {
+  describe("nested object fields", () => {
+    it("should find arg() metadata through the wrappers an object field can have", () => {
+      const config = arg(z.object({ serverPort: z.optional(z.string()) }), { flatten: "camel" });
+      for (const wrapped of [
+        z.readonly(config),
+        z.prefault(config, {}),
+        z.catch(config, {}),
+        z.nonoptional(config),
+      ]) {
+        expect(
+          extractZodMiniFields(z.object({ config: wrapped })).fields.map((f) => f.flatten),
+        ).toEqual(["camel"]);
+      }
+    });
+
+    it("should read a discriminator value through prefault and catch", () => {
+      for (const mode of [z.prefault(z.literal("a"), "a"), z.catch(z.literal("a"), "a")]) {
+        const schema = z.discriminatedUnion("mode", [
+          z.object({ mode, x: z.optional(z.string()) }),
+          z.object({ mode: z.literal("b") }),
+        ]);
+        expect(extractZodMiniFields(schema).variants?.map((v) => v.discriminatorValue)).toEqual([
+          "a",
+          "b",
+        ]);
+      }
+    });
+  });
+
   describe("getUnknownKeysMode", () => {
     it("should return 'strip' for default z.object()", () => {
       expect(getUnknownKeysMode(z.object({ name: z.string() }))).toBe("strip");

@@ -158,8 +158,9 @@ $ my-cli --config.server-port 8080   # or --config.serverPort 8080
 ```
 
 An optional object stays `undefined` until one of its options is given. A
-required object is always created, so its properties' defaults apply even
-when none of its options is given. Set `arg()` metadata such as `alias`,
+required object is created, so its properties' defaults apply even when none
+of its options is given, as long as every object enclosing it is created too
+(one under an optional object that is left out stays absent). Set `arg()` metadata such as `alias`,
 `env` or `effect` on the properties: on an object field itself, only
 `description` and `flatten` are accepted.
 

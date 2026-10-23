@@ -5,6 +5,33 @@ import { arg } from "@politty/core/core/arg-registry";
 import { extractZodFields } from "./adapter.js";
 
 describe("zod adapter - pipe recursion", () => {
+  it("should find arg() metadata through the wrappers an object field can have", () => {
+    const config = arg(z.object({ serverPort: z.string().optional() }), { flatten: "camel" });
+    for (const wrapped of [
+      config.readonly(),
+      config.prefault({}),
+      config.catch({}),
+      config.nonoptional(),
+    ]) {
+      expect(extractZodFields(z.object({ config: wrapped })).fields.map((f) => f.flatten)).toEqual([
+        "camel",
+      ]);
+    }
+  });
+
+  it("should read a discriminator value through prefault and catch", () => {
+    for (const mode of [z.literal("a").prefault("a"), z.literal("a").catch("a")]) {
+      const schema = z.discriminatedUnion("mode", [
+        z.object({ mode, x: z.string().optional() }),
+        z.object({ mode: z.literal("b") }),
+      ]);
+      expect(extractZodFields(schema).variants?.map((v) => v.discriminatorValue)).toEqual([
+        "a",
+        "b",
+      ]);
+    }
+  });
+
   it("should find a default through a pipe (default declared before a transform)", () => {
     // z.string().default(...).transform(...) becomes a "pipe" node whose
     // def.in is the "default" node — without recursing through def.in,

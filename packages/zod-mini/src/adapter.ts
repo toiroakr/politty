@@ -37,6 +37,17 @@ import {
 import type { ArgsSchema } from "@politty/core/types";
 import { globalRegistry, type z } from "zod/mini";
 
+/** Wrappers whose registered `arg()` metadata applies to the field outside them */
+const ARG_META_WRAPPERS: ReadonlySet<string> = new Set([
+  "optional",
+  "nullable",
+  "default",
+  "prefault",
+  "catch",
+  "readonly",
+  "nonoptional",
+]);
+
 /**
  * Get ArgMeta for a field schema, walking every wrapper layer (not just the
  * schema itself and its fully-unwrapped base).
@@ -70,7 +81,7 @@ function getArgMeta(schema: z.ZodMiniType, seen = new Set<z.ZodMiniType>()): Arg
   const s = schema as ZodSchemaWithDef;
   const def = s.def;
 
-  if (typeName === "optional" || typeName === "nullable" || typeName === "default") {
+  if (typeName && ARG_META_WRAPPERS.has(typeName)) {
     const innerSchema = def?.innerType;
     if (innerSchema) return getArgMeta(innerSchema, seen);
   }
@@ -467,6 +478,20 @@ function extractFromObject(schema: z.ZodMiniType): ResolvedFieldMeta[] {
 }
 
 /**
+ * Peel the wrappers that keep a discriminator's literal value (`.default()`,
+ * `.prefault()`, `.catch()`, ...) off its schema.
+ */
+function unwrapDiscriminator(schema: z.ZodMiniType): z.ZodMiniType {
+  let current = unwrapSchema(schema);
+  for (;;) {
+    const typeName = getTypeName(current);
+    const innerType = (current as ZodSchemaWithDef).def?.innerType;
+    if (!typeName || !ARG_META_WRAPPERS.has(typeName) || !innerType) return current;
+    current = unwrapSchema(innerType);
+  }
+}
+
+/**
  * Extract fields from a discriminated union
  */
 function extractFromDiscriminatedUnion(schema: z.ZodMiniType): ExtractedFields {
@@ -487,7 +512,7 @@ function extractFromDiscriminatedUnion(schema: z.ZodMiniType): ExtractedFields {
     // Supports z.literal() and single-value z.enum() discriminators.
     let discriminatorValue = "";
     // Read through wrappers such as `.default()`, which keep the value.
-    const discriminatorSchema = shape[discriminator] && unwrapSchema(shape[discriminator]);
+    const discriminatorSchema = shape[discriminator] && unwrapDiscriminator(shape[discriminator]);
     if (discriminatorSchema) {
       const typeName = getTypeName(discriminatorSchema);
       if (typeName === "literal") {

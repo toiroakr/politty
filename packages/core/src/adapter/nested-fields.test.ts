@@ -326,6 +326,16 @@ describe("nested object fields", () => {
       }
     });
 
+    it("should check each variant of a discriminated union inside a plain union option", () => {
+      const variants = z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("x"), config: z.object({ a: z.string() }) }),
+        z.object({ kind: z.literal("y"), config: z.object({ b: z.string().default("d") }) }),
+      ]);
+      expect(() => extractFields(z.union([variants, z.object({ other: z.string() })]))).toThrow(
+        /of a union option is required/,
+      );
+    });
+
     it("should reject an effect or requiredPackages under a transformed object", () => {
       const effect = () => {};
       expect(() =>
@@ -520,10 +530,57 @@ describe("nested object fields", () => {
     it("should let the command value of a shared property win", async () => {
       const { result } = await run(
         z.object({ config: z.object({ port: z.coerce.number().optional() }) }),
-        z.object({ config: z.object({ port: z.coerce.number().optional() }) }),
+        z.object({
+          config: z.object({
+            port: z.coerce
+              .number()
+              .transform((port) => port * 10)
+              .optional(),
+          }),
+        }),
         ["--config.port", "1"],
       );
-      expect(result).toEqual({ config: { port: 1 } });
+      expect(result).toEqual({ config: { port: 10 } });
+    });
+
+    const runSub = async (globalArgs: z.ZodType, args: z.ZodType, argv: string[]) => {
+      const sub = defineCommand({
+        name: "sub",
+        args: args as never,
+        run: (a: Record<string, unknown>) => JSON.parse(JSON.stringify(a)),
+      });
+      const cmd = defineCommand({ name: "app", subCommands: { sub: sub as never } });
+      const r = await runCommand(cmd as never, argv, { globalArgs: globalArgs as never });
+      expect(r.success).toBe(true);
+      return r.result;
+    };
+
+    it("should share a property whose option names differ by flatten style", async () => {
+      const result = await runSub(
+        z.object({ config: arg(z.object({ port: z.coerce.number() }), { flatten: "kebab" }) }),
+        z.object({ config: arg(z.object({ port: z.coerce.number() }), { flatten: "dot" }) }),
+        ["--config-port", "5", "sub"],
+      );
+      expect(result).toEqual({ config: { port: 5 } });
+    });
+
+    it("should share a property of an object a transform reshapes", async () => {
+      const schema = () =>
+        z.object({
+          config: z.object({ port: z.coerce.number() }).transform((config) => ({ p: config.port })),
+        });
+      const result = await runSub(schema(), schema(), ["--config.port", "5", "sub"]);
+      expect(result).toEqual({ config: { p: 5 } });
+    });
+
+    it("should report an invalid nested global option before a bare group shows help", async () => {
+      const sub = defineCommand({ name: "sub", run: () => {} });
+      const cmd = defineCommand({ name: "app", subCommands: { sub } });
+      const r = await runCommand(cmd as never, ["--config.port", "nope"], {
+        globalArgs: z.object({ config: z.object({ port: z.coerce.number().optional() }) }) as never,
+      });
+      expect(r.success).toBe(false);
+      expect(r.error?.message).toContain("config.port");
     });
   });
 });

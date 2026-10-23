@@ -1,4 +1,9 @@
-import { allFields, getFieldValue, mergeNestedArgs } from "../adapter/nested-fields.js";
+import {
+  allFields,
+  concernsGivenValue,
+  findFieldAtPath,
+  mergeNestedArgs,
+} from "../adapter/nested-fields.js";
 import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
 import { enableCompileCache } from "../compile-cache.js";
 import { executeLifecycle } from "../executor/command-runner.js";
@@ -907,8 +912,8 @@ async function runCommandInternal<TResult = unknown>(
         // A missing required global option must not keep a bare group from showing its help.
         const valueErrors = globalValidation.success
           ? []
-          : globalValidation.errors.filter(
-              (e) => e.path[0] && providedGlobalArgs[e.path[0]] !== undefined,
+          : globalValidation.errors.filter((e) =>
+              concernsGivenValue(e.path, allFields(options._globalExtracted!), providedGlobalArgs),
             );
         if (valueErrors.length > 0) {
           collector?.stop();
@@ -1063,19 +1068,35 @@ async function runCommandInternal<TResult = unknown>(
     // before the merge below ever got a chance to supply the value.
     const globalPrefilledFields = new Set<string>();
     if (parseResult.extractedFields) {
+      const globalFields = options._globalExtracted ? allFields(options._globalExtracted) : [];
       for (const field of parseResult.extractedFields.fields) {
         const localHasOwnValue =
           Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
-        // A property of an object both schemas expand is read at its path.
-        const globalValue = getFieldValue(validatedGlobalArgs, field);
+        if (field.nested) {
+          // A property of an object both schemas expand: the two may name its
+          // option differently, and a transform of the object may reshape the
+          // validated value, so take the value as parsed.
+          const globalField = findFieldAtPath(globalFields, field);
+          if (
+            !localHasOwnValue &&
+            globalField &&
+            cliProvidedGlobalFields.has(globalField.name) &&
+            accumulatedGlobalArgs[globalField.name] !== undefined
+          ) {
+            argsToValidate = {
+              ...argsToValidate,
+              [field.name]: accumulatedGlobalArgs[globalField.name],
+            };
+            globalPrefilledFields.add(field.name);
+          }
+          continue;
+        }
         if (
           !localHasOwnValue &&
           cliProvidedGlobalFields.has(field.name) &&
-          (field.nested
-            ? globalValue !== undefined
-            : Object.hasOwn(validatedGlobalArgs, field.name))
+          Object.hasOwn(validatedGlobalArgs, field.name)
         ) {
-          argsToValidate = { ...argsToValidate, [field.name]: globalValue };
+          argsToValidate = { ...argsToValidate, [field.name]: validatedGlobalArgs[field.name] };
           globalPrefilledFields.add(field.name);
         }
       }

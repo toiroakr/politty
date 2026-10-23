@@ -52,7 +52,7 @@ export function expandNestedFields(
   }));
   const unionOptions = extracted.unionOptions?.map((option) => {
     const expanded = expandNestedFields(option, resolve);
-    checkUnionOptionObjects(allFields(expanded));
+    for (const group of fieldGroups(expanded)) checkUnionOptionObjects(group);
     return expanded;
   });
   return {
@@ -96,6 +96,16 @@ export function allFields(extracted: ExtractedFields): ResolvedFieldMeta[] {
     ...(extracted.variants ?? []).flatMap((variant) => variant.fields),
     ...(extracted.unionOptions ?? []).flatMap(allFields),
   ];
+}
+
+/**
+ * The field lists a single invocation can select among: one per variant of
+ * a discriminated union, one per option of a union, else the fields alone.
+ */
+function fieldGroups(extracted: ExtractedFields): ResolvedFieldMeta[][] {
+  if (extracted.variants) return extracted.variants.map((variant) => variant.fields);
+  if (extracted.unionOptions) return extracted.unionOptions.flatMap(fieldGroups);
+  return [extracted.fields];
 }
 
 /**
@@ -328,6 +338,46 @@ export function getFieldValue(args: Record<string, unknown>, field: ResolvedFiel
         : undefined;
   }
   return value;
+}
+
+/**
+ * Whether a validation error concerns a value that was given: a top-level
+ * field's, or an expanded property's (or its object's) under the nested path
+ * its error is reported at.
+ *
+ * @param errorPath - Path the validation error is reported at
+ * @param fields - Every field of the validated schema
+ * @param given - Parsed args keyed by field name
+ */
+export function concernsGivenValue(
+  errorPath: readonly string[],
+  fields: readonly ResolvedFieldMeta[],
+  given: Record<string, unknown>,
+): boolean {
+  if (errorPath.length === 0) return false;
+  if (given[errorPath[0]!] !== undefined) return true;
+  return fields.some(({ name, nested }) => {
+    if (!nested || given[name] === undefined) return false;
+    const length = Math.min(errorPath.length, nested.path.length);
+    return errorPath.slice(0, length).every((key, depth) => key === nested.path[depth]);
+  });
+}
+
+/**
+ * The field of `fields` expanded from the same property path as `field`,
+ * whatever option name each expansion gave it.
+ */
+export function findFieldAtPath(
+  fields: readonly ResolvedFieldMeta[],
+  field: ResolvedFieldMeta,
+): ResolvedFieldMeta | undefined {
+  const path = field.nested?.path;
+  if (!path) return undefined;
+  return fields.find(
+    (other) =>
+      other.nested?.path.length === path.length &&
+      other.nested.path.every((key, depth) => key === path[depth]),
+  );
 }
 
 /**

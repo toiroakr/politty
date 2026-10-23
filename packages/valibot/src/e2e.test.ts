@@ -250,6 +250,19 @@ describe("@politty/valibot e2e", () => {
     ).toMatch(/has a transform/);
     expect(
       await failure(
+        v.object({
+          config: v.pipe(
+            v.pipe(
+              v.object({ v: arg(v.boolean(), { effect }) }),
+              v.transform((c) => c.v),
+            ),
+            v.description("Config"),
+          ),
+        }),
+      ),
+    ).toMatch(/has a transform/);
+    expect(
+      await failure(
         v.intersect([
           v.object({ config: v.object({ port: v.string() }) }),
           v.object({ config: v.object({ host: v.string() }) }),
