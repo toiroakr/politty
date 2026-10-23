@@ -316,6 +316,16 @@ describe("nested object fields", () => {
       }
     });
 
+    it("should reject an object field without properties", () => {
+      for (const config of [
+        z.object({}),
+        z.object({}).optional(),
+        z.object({ db: z.object({}) }),
+      ]) {
+        expect(() => extractFields(z.object({ config }))).toThrow(/has no properties/);
+      }
+    });
+
     it("should reject an effect or requiredPackages under a transformed object", () => {
       const effect = () => {};
       expect(() =>
@@ -422,19 +432,31 @@ describe("nested object fields", () => {
     });
   });
 
-  it("should create the required objects of the variant a defaulted discriminator selects", async () => {
-    const { cmd, seen } = captureArgs(
-      z.discriminatedUnion("mode", [
-        z.object({
-          mode: z.literal("server").default("server"),
-          server: z.object({ port: z.coerce.number().default(80) }),
-        }),
-        z.object({ mode: z.literal("client"), client: z.object({ url: z.string() }) }),
-      ]),
-    );
-    await runCommand(cmd, []);
-    expect(seen).toEqual([{ mode: "server", server: { port: 80 } }]);
-  });
+  // zod 4.2.1 (the declared peer floor) cannot select a variant from an
+  // omitted discriminator, so its own parse reports "No matching discriminator".
+  const selectsOmittedDiscriminator = z
+    .discriminatedUnion("mode", [
+      z.object({ mode: z.literal("a").default("a") }),
+      z.object({ mode: z.literal("b") }),
+    ])
+    .safeParse({}).success;
+
+  it.skipIf(!selectsOmittedDiscriminator)(
+    "should create the required objects of the variant a defaulted discriminator selects",
+    async () => {
+      const { cmd, seen } = captureArgs(
+        z.discriminatedUnion("mode", [
+          z.object({
+            mode: z.literal("server").default("server"),
+            server: z.object({ port: z.coerce.number().default(80) }),
+          }),
+          z.object({ mode: z.literal("client"), client: z.object({ url: z.string() }) }),
+        ]),
+      );
+      await runCommand(cmd, []);
+      expect(seen).toEqual([{ mode: "server", server: { port: 80 } }]);
+    },
+  );
 
   describe("global args", () => {
     const run = async (
@@ -463,6 +485,36 @@ describe("nested object fields", () => {
       );
       expect(result).toEqual({ config: { host: "x", port: 80 } });
       expect(source).toBe("cli");
+    });
+
+    describe("a discriminated union whose variants share an object name", () => {
+      const globalArgs = z.discriminatedUnion("mode", [
+        z.object({ mode: z.literal("a"), config: z.object({ host: z.string().optional() }) }),
+        z.object({
+          mode: z.literal("b"),
+          config: z.object({ url: arg(z.string(), { env: "NESTED_TEST_URL" }) }),
+        }),
+      ]);
+
+      it("should read a property only a later variant has from its option", async () => {
+        const { result } = await run(globalArgs, z.object({}), [
+          "--mode",
+          "b",
+          "--config.url",
+          "http://cli",
+        ]);
+        expect(result).toEqual({ mode: "b", config: { url: "http://cli" } });
+      });
+
+      it("should read a property only a later variant has from its env", async () => {
+        vi.stubEnv("NESTED_TEST_URL", "http://env");
+        try {
+          const { result } = await run(globalArgs, z.object({}), ["--mode", "b"]);
+          expect(result).toEqual({ mode: "b", config: { url: "http://env" } });
+        } finally {
+          vi.unstubAllEnvs();
+        }
+      });
     });
 
     it("should let the command value of a shared property win", async () => {

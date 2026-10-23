@@ -46,23 +46,45 @@ export function expandNestedFields(
   resolve: ResolveField,
 ): ExtractedFields {
   if (!hasObjectField(extracted)) return extracted;
+  const variants = extracted.variants?.map((variant) => ({
+    ...variant,
+    fields: expandObjectFields(variant.fields, resolve),
+  }));
+  const unionOptions = extracted.unionOptions?.map((option) => {
+    const expanded = expandNestedFields(option, resolve);
+    checkUnionOptionObjects(allFields(expanded));
+    return expanded;
+  });
   return {
     ...extracted,
-    fields: expandObjectFields(extracted.fields, resolve),
-    ...(extracted.variants && {
-      variants: extracted.variants.map((variant) => ({
-        ...variant,
-        fields: expandObjectFields(variant.fields, resolve),
-      })),
-    }),
-    ...(extracted.unionOptions && {
-      unionOptions: extracted.unionOptions.map((option) => {
-        const expanded = expandNestedFields(option, resolve);
-        checkUnionOptionObjects(allFields(expanded));
-        return expanded;
-      }),
-    }),
+    fields: withBranchFields(
+      expandObjectFields(extracted.fields, resolve),
+      variants?.flatMap((variant) => variant.fields) ?? unionOptions?.flatMap(allFields) ?? [],
+    ),
+    ...(variants && { variants }),
+    ...(unionOptions && { unionOptions }),
   };
+}
+
+/**
+ * The adapter merges the branches' fields by name, so a same-named object
+ * of a later branch is dropped from the top-level fields. Its expanded
+ * properties are added back, as the properties of branches that have no
+ * object of that name already are.
+ */
+function withBranchFields(
+  fields: ResolvedFieldMeta[],
+  branchFields: ResolvedFieldMeta[],
+): ResolvedFieldMeta[] {
+  const names = new Set(fields.map((field) => field.name));
+  const added: ResolvedFieldMeta[] = [];
+  for (const field of branchFields) {
+    if (field.nested && !names.has(field.name)) {
+      names.add(field.name);
+      added.push(field);
+    }
+  }
+  return [...fields, ...added];
 }
 
 /**
@@ -166,6 +188,12 @@ function expandObject(object: ResolvedFieldMeta, context: ObjectContext): Resolv
   if (object.defaultValue !== undefined || object.objectDefault) {
     throw new Error(
       `Object field "${context.path.join(".")}" cannot have a default value (or a prefault, catch or fallback): set defaults on its properties instead. A required object is created from its properties' defaults when none of its options is given.`,
+    );
+  }
+  // With no option to give, a required object could never be created.
+  if (Object.keys(object.objectShape ?? {}).length === 0) {
+    throw new Error(
+      `Object field "${context.path.join(".")}" has no properties: there is no option to give its values.`,
     );
   }
   const style = object.flatten ?? context.style;

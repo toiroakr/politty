@@ -186,6 +186,8 @@ when fields are extracted:
 - An object field cannot have a default (`.default(...)`, or zod's
   `.prefault(...)` / `.catch(...)`, valibot's `v.fallback(...)`): give its
   properties defaults instead.
+- An object field must have at least one property: with no option to give,
+  there is nothing to expand it into.
 - A property cannot have an `effect` or `requiredPackages` when an enclosing
   object has a transform (or pipes into another schema), as the transform may
   change the value they read. Refinements are fine.
