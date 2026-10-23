@@ -189,4 +189,4 @@ runMain(cli, {
 });
 ```
 
-Unknown flags are ignored, and a value that fails its own validation (`--json=yes`) is replaced by its default. `globalArgs.$source("json")` returns `"cli"`, `"env"` or `"default"`. `globalArgs` is `undefined` when the run did not fail before the global effects, or when a required global value is missing.
+Unknown flags are ignored, and a value that fails its own validation (`--json=yes`) is replaced by its default. `globalArgs.$source("json")` returns `"cli"`, `"env"` or `"default"`. A value filled in by the `prompt` resolver is included. `globalArgs` is `undefined` when the run did not fail before the global effects, when a required global value is missing, or when `setup` failed (it runs before any argument is parsed).

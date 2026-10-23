@@ -136,18 +136,23 @@ function bindAgentToCleanup(
  * global value, yields undefined.
  */
 function recoverGlobalArgs(
-  rawGlobalArgs: Record<string, unknown> | undefined,
+  trace: GlobalTrace,
   schema: ArgsSchema,
   extracted: ExtractedFields,
 ): Record<string, unknown> | undefined {
-  if (!rawGlobalArgs) return undefined;
+  if (!trace.rawGlobalArgs) return undefined;
   const known = new Set(extracted.fields.map((field) => field.name));
   const candidate: Record<string, unknown> = {};
-  for (const [name, value] of Object.entries(rawGlobalArgs)) {
+  for (const [name, value] of Object.entries(trace.rawGlobalArgs)) {
     if (known.has(name)) candidate[name] = value;
   }
   const cliProvided = new Set(Object.keys(candidate));
   const envFallbackFields = applyEnvFallbacks(candidate, extracted);
+  for (const [name, value] of Object.entries(trace.promptedGlobalArgs ?? {})) {
+    if (!known.has(name)) continue;
+    candidate[name] = value;
+    envFallbackFields.delete(name);
+  }
   for (let attempt = 0; attempt <= known.size; attempt++) {
     const validation = validateArgs(candidate, schema);
     if (validation.success) {
@@ -175,7 +180,7 @@ function buildCleanupContext(
 ): GlobalCleanupContext {
   const error = !result.success ? result.error : undefined;
   if (result.success || trace.effectsRan || !globalArgs || !extracted) return { error };
-  return { error, globalArgs: recoverGlobalArgs(trace.rawGlobalArgs, globalArgs, extracted) };
+  return { error, globalArgs: recoverGlobalArgs(trace, globalArgs, extracted) };
 }
 
 /**
@@ -232,6 +237,7 @@ interface InternalCommandOptions extends InternalRunOptions {
 
 interface GlobalTrace {
   rawGlobalArgs?: Record<string, unknown> | undefined;
+  promptedGlobalArgs?: Record<string, unknown> | undefined;
   effectsRan?: boolean | undefined;
 }
 
@@ -1048,9 +1054,13 @@ async function runCommandInternal<TResult = unknown>(
       // the identical local-args handling below for the same rationale).
       if (options.prompt) {
         const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted);
+        const prompted: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(resolved)) {
-          if (value !== undefined) accumulatedGlobalArgs[key] = value;
+          if (value === undefined) continue;
+          accumulatedGlobalArgs[key] = value;
+          prompted[key] = value;
         }
+        if (options._globalTrace) options._globalTrace.promptedGlobalArgs = prompted;
       }
 
       // Note: validation only sees recognized global flags. Misspelled globals

@@ -1297,11 +1297,11 @@ interface GlobalCleanupContext {
   /** Error if command execution failed */
   error?: Error;
   /** Validated global values when the run failed before the global effects ran */
-  globalArgs?: Record<string, unknown>;
+  globalArgs?: Readonly<Record<string, unknown>> & { $source?: (name: string) => ArgSource };
 }
 ```
 
-`globalArgs` leaves out unknown flags and replaces a value that fails its own validation with its default. It is `undefined` when the run did not fail before the global effects, when no `globalArgs` schema is set, or when a required global value is missing. See [Reading global options when argument validation fails](./recipes.md#reading-global-options-when-argument-validation-fails).
+`globalArgs` leaves out unknown flags and replaces a value that fails its own validation with its default. It is `undefined` when the run did not fail before the global effects, when no `globalArgs` schema is set, or when a required global value is missing. A failed `setup` runs before any argument is parsed, so it passes none. A value filled in by the `prompt` resolver is included. See [Reading global options when argument validation fails](./recipes.md#reading-global-options-when-argument-validation-fails).
 
 > **Note:** The `run` function receives the parsed arguments `args` directly, not a context object.
 

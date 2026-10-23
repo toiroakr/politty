@@ -96,7 +96,7 @@ describe("cleanup context globalArgs", () => {
       { globalArgs, cleanup },
     ]);
 
-    expect((context.globalArgs as { $source(name: string): string }).$source("json")).toBe("env");
+    expect(context.globalArgs?.$source?.("json")).toBe("env");
   });
 
   it("falls back to the default for a value that fails its own validation", async () => {
@@ -124,6 +124,23 @@ describe("cleanup context globalArgs", () => {
     ]);
 
     expect(context.globalArgs).toMatchObject({ json: false, verbose: true });
+  });
+
+  it("carries a global value filled in by the prompt resolver before a local validation failure", async () => {
+    const required = z.strictObject({ profile: arg(z.string()) });
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({ name: z.string() }),
+      run: () => {},
+    });
+
+    const context = await runAndCaptureCleanup([], (cleanup) => [
+      cmd,
+      { globalArgs: required, cleanup, prompt: async () => ({ profile: "dev" }) },
+    ]);
+
+    expect(context.error).toBeDefined();
+    expect(context.globalArgs?.profile).toBe("dev");
   });
 
   it("is undefined when a required global value is missing", async () => {

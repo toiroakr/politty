@@ -120,9 +120,12 @@ export interface GlobalCleanupContext {
    * validation). A value that fails its own validation is replaced by its
    * default. `$source` reports where each value came from. Undefined when the
    * run did not fail that way, no `globalArgs` schema is set, or a required
-   * global value is missing.
+   * global value is missing. A failed `setup` runs before any argument is
+   * parsed, so it passes none.
    */
-  globalArgs?: Record<string, unknown> | undefined;
+  globalArgs?:
+    | (Readonly<Record<string, unknown>> & { $source?: (name: string) => ArgSource })
+    | undefined;
 }
 
 /**
