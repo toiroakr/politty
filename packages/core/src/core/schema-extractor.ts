@@ -80,17 +80,39 @@ function annotateUnflattened(schema: ArgsSchema, extracted: ExtractedFields): Ex
   if (!options) return extracted;
   let annotated = annotatedFields.get(extracted);
   if (!annotated) {
-    const pathOf = pathResolver(options);
-    annotated = {
-      ...extracted,
-      fields: extracted.fields.map((field) => {
-        const path = pathOf(field.name);
-        return path.length > 1 ? { ...field, nested: { path } } : field;
-      }),
-    };
+    annotated = annotateFields(extracted, pathResolver(options));
     annotatedFields.set(extracted, annotated);
   }
   return annotated;
+}
+
+/**
+ * Give every field of an extraction, including the fields of its variants and
+ * union options that parsing swaps in once a branch is selected, the nested
+ * path of its flat name.
+ */
+function annotateFields(
+  extracted: ExtractedFields,
+  pathOf: (key: string) => string[],
+): ExtractedFields {
+  const annotate = (fields: ResolvedFieldMeta[]) =>
+    fields.map((field) => {
+      const path = pathOf(field.name);
+      return path.length > 1 ? { ...field, nested: { path } } : field;
+    });
+  return {
+    ...extracted,
+    fields: annotate(extracted.fields),
+    ...(extracted.variants && {
+      variants: extracted.variants.map((variant) => ({
+        ...variant,
+        fields: annotate(variant.fields),
+      })),
+    }),
+    ...(extracted.unionOptions && {
+      unionOptions: extracted.unionOptions.map((option) => annotateFields(option, pathOf)),
+    }),
+  };
 }
 
 function validatePackageFields(extracted: ExtractedFields): void {

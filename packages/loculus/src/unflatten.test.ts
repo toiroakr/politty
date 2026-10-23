@@ -67,6 +67,30 @@ describe("unflatten (loculus)", () => {
     expect(() => unflatten(schema)).toThrow(/differ only in case/);
   });
 
+  it("should require the package of a nested flag of the selected variant of an unflattened union", async () => {
+    const schema = unflatten(
+      l.discriminatedUnion("mode", [
+        l.object({
+          mode: l.literal("a"),
+          "ui.enabled": arg(l.boolean({ default: false }), {
+            requiredPackages: [
+              {
+                name: "@politty-test/missing-studio",
+                install: "npm install -D @politty-test/missing-studio",
+              },
+            ],
+          }),
+        }),
+        l.object({ mode: l.literal("b") }),
+      ]),
+    );
+
+    const { result } = await run(schema, ["--mode", "a", "--ui.enabled"]);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toContain("npm install -D @politty-test/missing-studio");
+  });
+
   it("should call an effect with the nested value", async () => {
     const effect = vi.fn();
     const schema = unflatten(l.object({ "config.port": arg(l.number(), { effect }) }));

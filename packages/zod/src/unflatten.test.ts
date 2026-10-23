@@ -173,6 +173,36 @@ describe("unflatten with globalArgs", () => {
     expect(result).toEqual({ config: { host: "gh", port: 1 } });
   });
 
+  it("should reject a command value where the global schema nests a group", async () => {
+    const sub = defineCommand({
+      name: "sub",
+      args: z.object({ db: z.string().default("x") }) as never,
+      run: () => {},
+    });
+    const cmd = defineCommand({ name: "app", subCommands: { sub: sub as never } });
+    const result = await runCommand(cmd, ["sub"], {
+      globalArgs: unflatten(z.object({ "db.host": z.string().default("h") })) as never,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toContain("conflicting output positions");
+  });
+
+  it("should reject group names of the two schemas that differ only in case", async () => {
+    const sub = defineCommand({
+      name: "sub",
+      args: unflatten(z.object({ "serverConfig.port": z.string().default("p") })) as never,
+      run: () => {},
+    });
+    const cmd = defineCommand({ name: "app", subCommands: { sub: sub as never } });
+    const result = await runCommand(cmd, ["sub"], {
+      globalArgs: unflatten(z.object({ "server-config.host": z.string().default("h") })) as never,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toContain("conflicting output positions");
+  });
+
   it("should let the command value of a shared key win", async () => {
     const result = await runSub(
       unflatten(z.object({ "config.port": z.coerce.number().default(1) })),

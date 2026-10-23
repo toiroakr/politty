@@ -158,7 +158,7 @@ $ my-cli --config.serverPort 8080   # or -p 8080, or PORT=8080
 - A group exists only when one of its keys is present in the validated value.
 - A key that is both a value and a group (`db` and `db.host`) throws a `TypeError` when the schema is built. So do group names that differ only in kebab-case versus camelCase (`server-config.host` and `serverConfig.port`).
 - `unflatten` is exported by `@politty/zod`, `@politty/zod-mini`, `@politty/valibot` and `@politty/loculus` (`@politty/loculus` needs `loculus` `^0.4.0`).
-- When `globalArgs` and a command both nest into the same group, the groups are merged key by key and the command's value wins for a key both declare. Use `unflatten` on both schemas in that case.
+- When `globalArgs` and a command both nest into the same group, the groups are merged key by key and the command's value wins for a key both declare. Use `unflatten` on both schemas in that case. A key of one schema that is a value where the other nests a group (`db` and `db.host`), or group names that differ only in case, are rejected before the command runs.
 - Use it on the schema you pass as `args` (or `globalArgs`), and call it last: methods such as `.refine()` return a different schema object that politty does not recognize, so put checks and optionality on the object (or its fields) before passing it to `unflatten`. An `unflatten` schema as an option of a union is rejected when fields are extracted.
 
 Keys written in kebab-case or camelCase are split only after the prefixes you list, so names such as `dry-run` and `dbx` stay whole:
