@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { registerUnflatten } from "../adapter/unflatten.js";
 import {
   extractFields,
   getUnknownKeysMode,
@@ -166,5 +167,54 @@ describe("selectDiscriminatedVariant", () => {
 
   it("should not select a variant for a missing discriminator, even one declared as the string undefined", () => {
     expect(selectDiscriminatedVariant(extracted, () => ({}))).toBe(extracted);
+  });
+});
+
+describe("schemas wrapped by an unflatten helper", () => {
+  const wrapped = (options = {}) => {
+    const schema = z
+      .object({
+        name: z.string().optional(),
+        "db.host": z.string(),
+        "db.pool.max": z.coerce.number(),
+      })
+      .transform((value) => value);
+    registerUnflatten(schema, options);
+    return schema;
+  };
+
+  it("should give each nested field the path of its flat name", () => {
+    const fields = extractFields(wrapped()).fields;
+    expect(fields.map((field) => field.nested?.path)).toEqual([
+      undefined,
+      ["db", "host"],
+      ["db", "pool", "max"],
+    ]);
+  });
+
+  it("should keep the flat field names", () => {
+    expect(extractFields(wrapped()).fields.map((field) => field.name)).toEqual([
+      "name",
+      "db.host",
+      "db.pool.max",
+    ]);
+  });
+
+  it("should return the same extraction on repeated calls", () => {
+    const schema = wrapped();
+    expect(extractFields(schema)).toBe(extractFields(schema));
+  });
+
+  it("should reject a wrapped schema inside a nested union option", () => {
+    const inner = z.union([wrapped(), z.object({ other: z.string() })]);
+    expect(() => extractFields(z.union([inner, z.object({ third: z.string() })]))).toThrow(
+      /unflatten.*union/,
+    );
+  });
+
+  it("should reject a wrapped schema inside a union option", () => {
+    expect(() => extractFields(z.union([wrapped(), z.object({ other: z.string() })]))).toThrow(
+      /unflatten.*union/,
+    );
   });
 });

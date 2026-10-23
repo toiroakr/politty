@@ -1,6 +1,7 @@
 import type { ArgMeta, CompletionMeta, EffectContext, PromptMeta } from "../core/arg-registry.js";
 import type { PackageRequirement } from "../package-requirements.js";
 import type { ArgsSchema } from "../types.js";
+import type { NestedFieldInfo } from "./unflatten.js";
 
 /**
  * Long flag names reserved for built-in handling (parseArgs / scanForSubcommand
@@ -93,6 +94,11 @@ export interface ResolvedFieldMeta {
   negationDescription?: string | undefined;
   /** Side-effect callback from arg() metadata */
   effect?: ((value: unknown, context: EffectContext) => void | PromiseLike<void>) | undefined;
+  /**
+   * Where the validated value sits when the schema was wrapped by an
+   * `unflatten` helper, which nests its output while the field name stays flat.
+   */
+  nested?: NestedFieldInfo | undefined;
 }
 
 /**

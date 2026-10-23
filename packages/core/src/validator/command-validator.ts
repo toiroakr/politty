@@ -1,4 +1,4 @@
-import { RESERVED_BUILTIN_LONG_NAMES } from "../adapter/field-meta.js";
+import { RESERVED_BUILTIN_LONG_NAMES, toKebabCase } from "../adapter/field-meta.js";
 import {
   extractFields,
   getAllAliases,
@@ -651,6 +651,46 @@ function checkCrossSchemaCollisions(
         type: "field_type_conflict",
         message: `Global field "${existing.name}" and command field "${field.name}" share the same name but have different definitions.`,
         field: field.name,
+      });
+    }
+  }
+  errors.push(...checkCrossSchemaOutputPositions(extractedA, extractedB, commandPath));
+  return errors;
+}
+
+/**
+ * Fields of `unflatten` schemas nest into the output: a value at `db` next to
+ * a group `db.host`, or the group spelled `server-config` in one schema and
+ * `serverConfig` in the other, would make the merge drop one side's values.
+ */
+function checkCrossSchemaOutputPositions(
+  extractedA: ExtractedFields,
+  extractedB: ExtractedFields,
+  commandPath: string[],
+): CommandValidationError[] {
+  const positions = (extracted: ExtractedFields) =>
+    extracted.fields.map((field) => ({ field, path: field.nested?.path ?? [field.name] }));
+  const fieldsA = positions(extractedA);
+  const fieldsB = positions(extractedB);
+  if (![...fieldsA, ...fieldsB].some(({ field }) => field.nested)) return [];
+  const errors: CommandValidationError[] = [];
+  for (const a of fieldsA) {
+    for (const b of fieldsB) {
+      if (!a.field.nested && !b.field.nested) continue;
+      const shared = Math.min(a.path.length, b.path.length);
+      const reason =
+        a.path.length !== b.path.length &&
+        a.path.slice(0, shared).every((key, depth) => key === b.path[depth])
+          ? "one is a value where the other nests a group"
+          : a.path[0] !== b.path[0] && toKebabCase(a.path[0]!) === toKebabCase(b.path[0]!)
+            ? "their group names are spellings of the same name"
+            : undefined;
+      if (!reason) continue;
+      errors.push({
+        commandPath,
+        type: "field_type_conflict",
+        message: `Global field "${a.field.name}" and command field "${b.field.name}" nest into conflicting output positions: ${reason}.`,
+        field: b.field.name,
       });
     }
   }

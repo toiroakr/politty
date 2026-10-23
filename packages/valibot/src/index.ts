@@ -26,6 +26,8 @@ import {
 } from "@politty/core";
 import type { GenericSchema } from "valibot";
 
+export { unflatten } from "./unflatten.js";
+
 /**
  * Generate compile-cache bin shims that import the cache helper from
  * `@politty/valibot/compile-cache`.

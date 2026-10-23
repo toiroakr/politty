@@ -29,6 +29,7 @@ import type {
   ValidationResult,
   ValidatorAdapter,
 } from "@politty/core/adapter/types";
+import { rejectUnflattenedOption } from "@politty/core/adapter/unflatten";
 import {
   getArgMeta as getArgMetaFromRegistry,
   type ArgMeta,
@@ -431,6 +432,7 @@ function extractFromDiscriminatedUnion(schema: z.ZodMiniType): ExtractedFields {
   const variants: ExtractedFields["variants"] = [];
 
   for (const option of options) {
+    rejectUnflattenedOption(option);
     const shape = getObjectShape(option as z.ZodMiniType);
     const variantFields: ResolvedFieldMeta[] = [];
 

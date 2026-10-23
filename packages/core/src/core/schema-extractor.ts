@@ -12,6 +12,11 @@
 
 import { extractInternalFields, isInternalArgsSchema } from "../adapter/internal-args.js";
 import { getValidatorAdapter } from "../adapter/registry.js";
+import {
+  getUnflattenOptions,
+  pathResolver,
+  rejectUnflattenedOption,
+} from "../adapter/unflatten.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 
 export {
@@ -38,6 +43,7 @@ export function getUnknownKeysMode(schema: ArgsSchema): UnknownKeysMode {
 }
 
 const validatedPackageFields = new WeakSet<ExtractedFields>();
+const annotatedFields = new WeakMap<ExtractedFields, ExtractedFields>();
 
 /**
  * Extract all fields from a schema
@@ -48,12 +54,65 @@ const validatedPackageFields = new WeakSet<ExtractedFields>();
 export function extractFields(schema: ArgsSchema): ExtractedFields {
   const extracted = isInternalArgsSchema(schema)
     ? extractInternalFields(schema)
-    : getValidatorAdapter().extractFields(schema);
+    : annotateUnflattened(schema, getValidatorAdapter().extractFields(schema));
   if (!validatedPackageFields.has(extracted)) {
     validatePackageFields(extracted);
     validatedPackageFields.add(extracted);
   }
   return extracted;
+}
+
+function rejectUnflattenedOptions(extracted: ExtractedFields): void {
+  for (const option of extracted.unionOptions ?? []) {
+    rejectUnflattenedOption(option.schema);
+    rejectUnflattenedOptions(option);
+  }
+}
+
+/**
+ * Give the fields of a schema wrapped by an `unflatten` helper the nested
+ * path of their flat names, memoized so repeated calls keep returning the
+ * same object.
+ */
+function annotateUnflattened(schema: ArgsSchema, extracted: ExtractedFields): ExtractedFields {
+  rejectUnflattenedOptions(extracted);
+  const options = getUnflattenOptions(schema);
+  if (!options) return extracted;
+  let annotated = annotatedFields.get(extracted);
+  if (!annotated) {
+    annotated = annotateFields(extracted, pathResolver(options));
+    annotatedFields.set(extracted, annotated);
+  }
+  return annotated;
+}
+
+/**
+ * Give every field of an extraction, including the fields of its variants and
+ * union options that parsing swaps in once a branch is selected, the nested
+ * path of its flat name.
+ */
+function annotateFields(
+  extracted: ExtractedFields,
+  pathOf: (key: string) => string[],
+): ExtractedFields {
+  const annotate = (fields: ResolvedFieldMeta[]) =>
+    fields.map((field) => {
+      const path = pathOf(field.name);
+      return path.length > 1 ? { ...field, nested: { path } } : field;
+    });
+  return {
+    ...extracted,
+    fields: annotate(extracted.fields),
+    ...(extracted.variants && {
+      variants: extracted.variants.map((variant) => ({
+        ...variant,
+        fields: annotate(variant.fields),
+      })),
+    }),
+    ...(extracted.unionOptions && {
+      unionOptions: extracted.unionOptions.map((option) => annotateFields(option, pathOf)),
+    }),
+  };
 }
 
 function validatePackageFields(extracted: ExtractedFields): void {
