@@ -117,14 +117,17 @@ export interface GlobalCleanupContext {
   /**
    * Validated global option values recovered when the run failed before the
    * global effects ran (an unknown flag, an invalid value, a failed local
-   * validation). A value that fails its own validation is replaced by its
-   * default. `$source` reports where each value came from. Undefined when the
-   * run did not fail that way, no `globalArgs` schema is set, or a required
-   * global value is missing. A failed `setup` runs before any argument is
+   * validation). A value that fails its own validation is dropped, so the
+   * schema's default applies where it defines one. `$source` reports where
+   * each value came from. Undefined when the run did not fail that way, no
+   * `globalArgs` schema is set, a required global value is missing, or
+   * recovering the values throws. A failed `setup` runs before any argument is
    * parsed, so it passes none.
    */
   globalArgs?:
-    | (Readonly<Record<string, unknown>> & { $source?: (name: string) => ArgSource })
+    | (Readonly<IsEmpty<GlobalArgs> extends true ? Record<string, unknown> : GlobalArgs> & {
+        $source?: (name: string) => ArgSource;
+      })
     | undefined;
 }
 

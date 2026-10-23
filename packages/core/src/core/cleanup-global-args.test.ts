@@ -204,10 +204,12 @@ describe("cleanup context globalArgs", () => {
   });
 
   it("still runs cleanup with the original error when recovering the global values throws", async () => {
+    let calls = 0;
     const throwing = z.strictObject({
       data: arg(
-        z.string().transform((value): string => {
-          throw new Error(`cannot read ${value}`);
+        z.string().transform((): string => {
+          calls += 1;
+          throw new Error(calls === 1 ? "first validation failed" : "recovery failed");
         }),
       ),
     });
@@ -218,8 +220,25 @@ describe("cleanup context globalArgs", () => {
       { globalArgs: throwing, cleanup },
     ]);
 
-    expect(context.error?.message).toContain("cannot read x");
+    expect(calls).toBeGreaterThan(1);
+    expect(context.error?.message).toContain("first validation failed");
     expect(context.globalArgs).toBeUndefined();
+  });
+
+  it("recovers the remaining values when an object union reports the invalid value without a field path", async () => {
+    const union = z.union([
+      z.object({ json: arg(z.boolean().default(false)) }),
+      z.object({ profile: arg(z.string()) }),
+    ]);
+    const cmd = defineCommand({ name: "test", run: () => {} });
+
+    const context = await runAndCaptureCleanup(["--json=yes"], (cleanup) => [
+      cmd,
+      { globalArgs: union, cleanup },
+    ]);
+
+    expect(context.error).toBeDefined();
+    expect(context.globalArgs?.json).toBe(false);
   });
 
   it("is undefined when a required global value is missing", async () => {

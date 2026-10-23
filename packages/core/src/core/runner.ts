@@ -163,10 +163,19 @@ function recoverGlobalArgs(
       attachArgSource(recovered, sourceMap);
       return createDualCaseProxy(recovered);
     }
-    const invalid = validation.errors
+    let invalid = validation.errors
       .map((error) => error.path[0])
       .filter((name): name is string => name !== undefined && Object.hasOwn(candidate, name));
-    if (invalid.length === 0) return undefined;
+    if (invalid.length === 0) {
+      // An error without a field path (a union of objects) names no culprit, so find a
+      // single value whose removal lets the schema accept the rest.
+      const culprit = Object.keys(candidate).find((name) => {
+        const { [name]: _removed, ...rest } = candidate;
+        return validateArgs(rest, schema).success;
+      });
+      if (culprit === undefined) return undefined;
+      invalid = [culprit];
+    }
     for (const name of invalid) delete candidate[name];
   }
   return undefined;
