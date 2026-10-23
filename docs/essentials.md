@@ -195,6 +195,10 @@ when fields are extracted:
 - An object field cannot be defined by more than one intersection member,
   nor by a union (or discriminated union) inside an intersection: put the
   fields the intersection adds into each union option instead.
+- Branches of a union (or the variants of a discriminated union) cannot give
+  one option two meanings: an object that is a single value in another
+  branch, a property that another branch names differently (another
+  `flatten` style), or one option name that is two different properties.
 - In a plain union, a required object needs at least one required property
   (or make it optional, or use a discriminated union): a union cannot tell
   which option's objects to create from their defaults.

@@ -55,7 +55,7 @@ export function expandNestedFields(
     for (const group of fieldGroups(expanded)) checkUnionOptionObjects(group);
     return expanded;
   });
-  return {
+  const result = {
     ...extracted,
     fields: withBranchFields(
       expandObjectFields(extracted.fields, resolve),
@@ -64,6 +64,8 @@ export function expandNestedFields(
     ...(variants && { variants }),
     ...(unionOptions && { unionOptions }),
   };
+  checkBranchOptions(fieldGroups(result));
+  return result;
 }
 
 /**
@@ -106,6 +108,47 @@ function fieldGroups(extracted: ExtractedFields): ResolvedFieldMeta[][] {
   if (extracted.variants) return extracted.variants.map((variant) => variant.fields);
   if (extracted.unionOptions) return extracted.unionOptions.flatMap(fieldGroups);
   return [extracted.fields];
+}
+
+/**
+ * Reject branches (variants or union options) that give one option two
+ * meanings. The top-level fields and the values handed to validation are
+ * built from every branch at once, so an object that is a single value in
+ * another branch, a property named differently, or one option name for two
+ * properties would make a selected branch read or receive the wrong value.
+ */
+function checkBranchOptions(groups: ResolvedFieldMeta[][]): void {
+  if (groups.length < 2) return;
+  const nameAtPath = new Map<string, string>();
+  const pathOfName = new Map<string, string>();
+  const objects = new Set<string>();
+  const values = new Set<string>();
+  for (const field of groups.flat()) {
+    const path = field.nested?.path.join(".") ?? "";
+    if (field.nested) objects.add(field.nested.path[0]!);
+    else values.add(field.name);
+    const known = nameAtPath.get(path);
+    if (field.nested && known !== undefined && known !== field.name) {
+      throw new Error(
+        `Property "${path}" is named differently in another branch ("${known}" and "${field.name}"): give its object the same flatten style in every branch.`,
+      );
+    }
+    nameAtPath.set(path, field.name);
+    const knownPath = pathOfName.get(field.name);
+    if (knownPath !== undefined && knownPath !== path && (field.nested || knownPath !== "")) {
+      throw new Error(
+        `Option "${field.name}" is "${knownPath}" in one branch and "${path}" in another: rename a property or change the flatten style so the options differ.`,
+      );
+    }
+    pathOfName.set(field.name, path);
+  }
+  for (const name of objects) {
+    if (values.has(name)) {
+      throw new Error(
+        `Field "${name}" is an object in one branch and a single value in another: use one kind in every branch.`,
+      );
+    }
+  }
 }
 
 /**

@@ -336,6 +336,55 @@ describe("nested object fields", () => {
       );
     });
 
+    describe("branches of a union that give the same option different meanings", () => {
+      const variants = (a: z.ZodRawShape, b: z.ZodRawShape) =>
+        z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("a"), ...a }),
+          z.object({ mode: z.literal("b"), ...b }),
+        ]);
+
+      it("should reject an object that is a single value in another branch", () => {
+        expect(() =>
+          extractFields(
+            variants({ config: z.object({ x: z.string().optional() }) }, { config: z.string() }),
+          ),
+        ).toThrow(/"config" is an object in one branch and a single value in another/);
+      });
+
+      it("should reject a property named differently in another branch", () => {
+        const config = (flatten: "dot" | "kebab") =>
+          arg(z.object({ port: z.coerce.number() }), { flatten });
+        expect(() =>
+          extractFields(variants({ config: config("dot") }, { config: config("kebab") })),
+        ).toThrow(/"config.port" is named differently in another branch/);
+      });
+
+      it("should reject an option name that is two different properties in two branches", () => {
+        const config = (shape: z.ZodRawShape) => arg(z.object(shape), { flatten: "kebab" });
+        expect(() =>
+          extractFields(
+            variants(
+              { config: config({ dbHost: z.string().optional() }) },
+              { config: config({ db: z.object({ host: z.string().optional() }) }) },
+            ),
+          ),
+        ).toThrow(
+          /"configDbHost" is "config.dbHost" in one branch and "config.db.host" in another/,
+        );
+      });
+
+      it("should accept the same object in every branch", () => {
+        expect(() =>
+          extractFields(
+            variants(
+              { config: z.object({ port: z.coerce.number().optional() }) },
+              { config: z.object({ port: z.coerce.number().optional(), url: z.string() }) },
+            ),
+          ),
+        ).not.toThrow();
+      });
+    });
+
     it("should reject an effect or requiredPackages under a transformed object", () => {
       const effect = () => {};
       expect(() =>
