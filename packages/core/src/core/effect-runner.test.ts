@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { arg, defineCommand, runCommand } from "../index.js";
+import { runEffects } from "./effect-runner.js";
 
 describe("arg effect", () => {
   it("should execute effect after parsing", async () => {
@@ -322,5 +323,16 @@ describe("arg effect", () => {
       expect(result.success).toBe(false);
       expect(globalEffect).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("arg effect on a nested field", () => {
+  it("should receive the value at the field's nested path", async () => {
+    const effect = vi.fn();
+    const field = { name: "config.port", nested: { path: ["config", "port"] }, effect };
+
+    await runEffects({ config: { port: 5 } }, { fields: [field] } as never);
+
+    expect(effect).toHaveBeenCalledWith(5, expect.objectContaining({ name: "config.port" }));
   });
 });

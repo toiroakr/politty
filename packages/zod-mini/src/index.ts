@@ -26,6 +26,8 @@ import {
 } from "@politty/core";
 import type { z } from "zod/mini";
 
+export { unflatten } from "./unflatten.js";
+
 /**
  * Generate compile-cache bin shims that import the cache helper from
  * `@politty/zod-mini/compile-cache`.

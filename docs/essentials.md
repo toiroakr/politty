@@ -134,6 +134,49 @@ $ my-cli --include file1.txt -i file2.txt
 # args.include = ["file1.txt", "file2.txt"]
 ```
 
+### Grouped Options (`unflatten`)
+
+To receive related options as a nested object, declare them with dotted keys and wrap the schema with `unflatten`. Each key stays an ordinary option with its own `arg()` metadata (`alias`, `env`, `effect`, ...); only the validated value handed to `run` is nested.
+
+```typescript
+import { unflatten } from "@politty/zod";
+
+args: unflatten(
+  z.object({
+    "config.serverPort": arg(z.coerce.number(), { alias: "p", env: "PORT" }),
+    "config.host": z.string().default("localhost"),
+  }),
+);
+```
+
+```bash
+$ my-cli --config.serverPort 8080   # or -p 8080, or PORT=8080
+# args.config = { serverPort: 8080, host: "localhost" }
+```
+
+- Help and generated docs list the flat keys (`--config.server-port`); validation errors are reported at the flat key (`config.serverPort: ...`).
+- A group exists only when one of its keys is present in the validated value.
+- A key that is both a value and a group (`db` and `db.host`) throws a `TypeError` when the schema is built.
+- `unflatten` is exported by `@politty/zod`, `@politty/zod-mini`, `@politty/valibot` and `@politty/loculus` (`@politty/loculus` needs `loculus` 0.4.0 or later).
+- Use it on the schema you pass as `args` (or `globalArgs`). An `unflatten` schema as an option of a union is rejected when fields are extracted: put the union inside the flat schema instead.
+
+Keys written in kebab-case or camelCase are split only after the prefixes you list, so names such as `dry-run` and `dbx` stay whole:
+
+```typescript
+unflatten(
+  z.object({
+    "db-host": z.string(),
+    "db-pool-max": z.coerce.number(),
+    "dry-run": z.boolean().default(false),
+  }),
+  {
+    style: "kebab",
+    prefixes: ["db", "db-pool"],
+  },
+);
+// { db: { host, pool: { max } }, "dry-run": false }
+```
+
 ## Validation and Types
 
 Since politty is built on Zod, you get powerful validation features out of the box.

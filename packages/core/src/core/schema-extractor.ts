@@ -12,6 +12,7 @@
 
 import { extractInternalFields, isInternalArgsSchema } from "../adapter/internal-args.js";
 import { getValidatorAdapter } from "../adapter/registry.js";
+import { getUnflattenOptions, pathResolver } from "../adapter/unflatten.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 
 export {
@@ -38,6 +39,7 @@ export function getUnknownKeysMode(schema: ArgsSchema): UnknownKeysMode {
 }
 
 const validatedPackageFields = new WeakSet<ExtractedFields>();
+const annotatedFields = new WeakMap<ExtractedFields, ExtractedFields>();
 
 /**
  * Extract all fields from a schema
@@ -48,12 +50,42 @@ const validatedPackageFields = new WeakSet<ExtractedFields>();
 export function extractFields(schema: ArgsSchema): ExtractedFields {
   const extracted = isInternalArgsSchema(schema)
     ? extractInternalFields(schema)
-    : getValidatorAdapter().extractFields(schema);
+    : annotateUnflattened(schema, getValidatorAdapter().extractFields(schema));
   if (!validatedPackageFields.has(extracted)) {
     validatePackageFields(extracted);
     validatedPackageFields.add(extracted);
   }
   return extracted;
+}
+
+/**
+ * Give the fields of a schema wrapped by an `unflatten` helper the nested
+ * path of their flat names, memoized so repeated calls keep returning the
+ * same object.
+ */
+function annotateUnflattened(schema: ArgsSchema, extracted: ExtractedFields): ExtractedFields {
+  for (const option of extracted.unionOptions ?? []) {
+    if (getUnflattenOptions(option.schema)) {
+      throw new Error(
+        "An unflatten schema cannot be an option of a union: its output cannot tell which option's groups to create. Put the union inside the flat schema, or unflatten each branch's own object.",
+      );
+    }
+  }
+  const options = getUnflattenOptions(schema);
+  if (!options) return extracted;
+  let annotated = annotatedFields.get(extracted);
+  if (!annotated) {
+    const pathOf = pathResolver(options);
+    annotated = {
+      ...extracted,
+      fields: extracted.fields.map((field) => {
+        const path = pathOf(field.name);
+        return path.length > 1 ? { ...field, nested: { path } } : field;
+      }),
+    };
+    annotatedFields.set(extracted, annotated);
+  }
+  return annotated;
 }
 
 function validatePackageFields(extracted: ExtractedFields): void {

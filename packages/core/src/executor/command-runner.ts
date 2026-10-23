@@ -1,3 +1,4 @@
+import { getFieldValue } from "../adapter/unflatten.js";
 import type { ResolvedFieldMeta } from "../core/schema-extractor.js";
 import { loadRequiredPackages } from "../package-requirements.js";
 import type {
@@ -122,14 +123,18 @@ export async function executeLifecycle<TResult = unknown>(
     if (command.requiredPackages?.length) {
       await loadRequiredPackages(command.requiredPackages, args);
     }
+    const packageArgs = (typeof args === "object" && args !== null ? args : {}) as Record<
+      string,
+      unknown
+    >;
     for (const field of _options.packageFields ?? []) {
       if (
         field.requiredPackages?.length &&
-        typeof args === "object" &&
-        args !== null &&
-        field.name in args &&
+        (field.nested
+          ? getFieldValue(packageArgs, field) !== undefined
+          : field.name in packageArgs) &&
         (_options.packageDiscriminators?.includes(field.name) ||
-          (args as Record<string, unknown>)[field.name] === true)
+          getFieldValue(packageArgs, field) === true)
       ) {
         await loadRequiredPackages(field.requiredPackages, args);
       }
