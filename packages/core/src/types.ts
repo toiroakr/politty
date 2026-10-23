@@ -114,6 +114,15 @@ export interface GlobalCleanupContext {
   agent?: AgentInfo | undefined;
   /** Error if command execution failed */
   error?: Error | undefined;
+  /**
+   * Validated global option values recovered when the run failed before the
+   * global effects ran (an unknown flag, an invalid value, a failed local
+   * validation). A value that fails its own validation is replaced by its
+   * default. `$source` reports where each value came from. Undefined when the
+   * run did not fail that way, no `globalArgs` schema is set, or a required
+   * global value is missing.
+   */
+  globalArgs?: Record<string, unknown> | undefined;
 }
 
 /**

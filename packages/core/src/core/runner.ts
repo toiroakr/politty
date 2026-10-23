@@ -129,6 +129,56 @@ function bindAgentToCleanup(
 }
 
 /**
+ * Recover the validated global values after a run failed before the global
+ * effects ran. Unknown flags are left out and a value that fails its own
+ * validation is dropped (so its default applies) until the schema accepts
+ * what remains; a schema that still fails, such as one missing a required
+ * global value, yields undefined.
+ */
+function recoverGlobalArgs(
+  rawGlobalArgs: Record<string, unknown> | undefined,
+  schema: ArgsSchema,
+  extracted: ExtractedFields,
+): Record<string, unknown> | undefined {
+  if (!rawGlobalArgs) return undefined;
+  const known = new Set(extracted.fields.map((field) => field.name));
+  const candidate: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(rawGlobalArgs)) {
+    if (known.has(name)) candidate[name] = value;
+  }
+  const cliProvided = new Set(Object.keys(candidate));
+  const envFallbackFields = applyEnvFallbacks(candidate, extracted);
+  for (let attempt = 0; attempt <= known.size; attempt++) {
+    const validation = validateArgs(candidate, schema);
+    if (validation.success) {
+      const recovered = validation.data as Record<string, unknown>;
+      const sourceMap = new Map<string, ArgSource>();
+      for (const name of cliProvided) if (name in candidate) sourceMap.set(name, "cli");
+      for (const name of envFallbackFields) if (name in candidate) sourceMap.set(name, "env");
+      attachArgSource(recovered, sourceMap);
+      return createDualCaseProxy(recovered);
+    }
+    const invalid = validation.errors
+      .map((error) => error.path[0])
+      .filter((name): name is string => name !== undefined && Object.hasOwn(candidate, name));
+    if (invalid.length === 0) return undefined;
+    for (const name of invalid) delete candidate[name];
+  }
+  return undefined;
+}
+
+function buildCleanupContext(
+  result: { success: boolean; error?: Error | undefined },
+  trace: GlobalTrace,
+  globalArgs: ArgsSchema | undefined,
+  extracted: ExtractedFields | undefined,
+): GlobalCleanupContext {
+  const error = !result.success ? result.error : undefined;
+  if (result.success || trace.effectsRan || !globalArgs || !extracted) return { error };
+  return { error, globalArgs: recoverGlobalArgs(trace.rawGlobalArgs, globalArgs, extracted) };
+}
+
+/**
  * Resolve the agent-only help preamble for the command whose help is shown.
  */
 function resolveAgentHelp(
@@ -176,6 +226,13 @@ interface InternalCommandOptions extends InternalRunOptions {
   _globalCleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
   /** AI coding agent detected once per run */
   _agent?: AgentInfo | undefined;
+  /** Receives the global args of the deepest level reached, for recovery after a failure */
+  _globalTrace?: GlobalTrace | undefined;
+}
+
+interface GlobalTrace {
+  rawGlobalArgs?: Record<string, unknown> | undefined;
+  effectsRan?: boolean | undefined;
 }
 
 /**
@@ -238,6 +295,7 @@ export async function runCommand<TResult = unknown>(
     globalCollector?.stop();
   }
 
+  const globalTrace: GlobalTrace = {};
   const result = await runCommandInternal<TResult>(command, argv, {
     ...options,
     handleSignals: false,
@@ -245,15 +303,19 @@ export async function runCommand<TResult = unknown>(
     _globalCleanup: globalCleanup,
     _existingLogs: globalCollector?.getLogs(),
     _agent: agent,
+    _globalTrace: globalTrace,
   });
 
   // Global cleanup (always)
   if (globalCleanup) {
     const cleanupCollector = shouldCaptureLogs ? createLogCollector() : null;
     cleanupCollector?.start();
-    const cleanupCtx: GlobalCleanupContext = {
-      error: !result.success ? result.error : undefined,
-    };
+    const cleanupCtx = buildCleanupContext(
+      result,
+      globalTrace,
+      options.globalArgs,
+      globalExtracted,
+    );
     try {
       await globalCleanup(cleanupCtx);
     } catch (e) {
@@ -444,6 +506,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     }
   }
 
+  const globalTrace: GlobalTrace = {};
   const result = await runCommandInternal(command, argv, {
     debug: effectiveOptions.debug,
     captureLogs: effectiveOptions.captureLogs,
@@ -457,6 +520,7 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
     _globalExtracted: globalExtracted,
     _globalCleanup: globalCleanup,
     _agent: agent,
+    _globalTrace: globalTrace,
     _context: {
       commandPath: [],
       rootName: command.name,
@@ -473,9 +537,12 @@ export async function runMain(command: AnyCommand, options: MainOptions = {}): P
 
   // Global cleanup (always)
   if (globalCleanup) {
-    const cleanupCtx: GlobalCleanupContext = {
-      error: !result.success ? result.error : undefined,
-    };
+    const cleanupCtx = buildCleanupContext(
+      result,
+      globalTrace,
+      effectiveOptions.globalArgs,
+      globalExtracted,
+    );
     try {
       await globalCleanup(cleanupCtx);
     } catch {
@@ -557,6 +624,7 @@ async function runCommandInternal<TResult = unknown>(
       ...options._parsedGlobalArgs,
       ...parseResult.rawGlobalArgs,
     };
+    if (options._globalTrace) options._globalTrace.rawGlobalArgs = { ...accumulatedGlobalArgs };
 
     // Nested plugin dispatch: an unknown positional under a known parent
     // command (e.g. `cli foo bar` -> `cli-foo-bar`). Runs before --help/--version
@@ -1013,6 +1081,7 @@ async function runCommandInternal<TResult = unknown>(
       attachAgent(validatedGlobalArgs, options._agent);
       const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
       if (options._globalExtracted && !isCompletionInvocation) {
+        if (options._globalTrace) options._globalTrace.effectsRan = true;
         await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
       }
       collector?.stop();
@@ -1118,6 +1187,7 @@ async function runCommandInternal<TResult = unknown>(
 
     // Run effects after all validations succeed (global effects first, then command effects)
     if (options._globalExtracted && !isCompletionInvocation) {
+      if (options._globalTrace) options._globalTrace.effectsRan = true;
       await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
     }
     if (parseResult.extractedFields && !isCompletionInvocation) {
