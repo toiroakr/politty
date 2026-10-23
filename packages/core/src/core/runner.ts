@@ -2,6 +2,7 @@ import {
   allFields,
   concernsGivenValue,
   findFieldAtPath,
+  getFieldValue,
   mergeNestedArgs,
 } from "../adapter/nested-fields.js";
 import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
@@ -1152,6 +1153,9 @@ async function runCommandInternal<TResult = unknown>(
     // rawArgs) so a local field resolved via schema default/prompt correctly
     // overrides a same-named global field's "cli"/"env" classification instead
     // of leaking it through unchanged.
+    const globalFieldsOfSchema = options._globalExtracted
+      ? allFields(options._globalExtracted)
+      : [];
     for (const field of parseResult.extractedFields?.fields ?? []) {
       if (globalPrefilledFields.has(field.name)) {
         // Already resolved from the global CLI value by the pre-fill above;
@@ -1163,6 +1167,19 @@ async function runCommandInternal<TResult = unknown>(
 
       const localHasCliOrEnvValue =
         Object.hasOwn(parseResult.rawArgs, field.name) || localEnvFallbackFields.has(field.name);
+
+      // A property of an object both schemas expand that the command leaves
+      // unset keeps the global value the merge retains, and its source.
+      const globalField = field.nested ? findFieldAtPath(globalFieldsOfSchema, field) : undefined;
+      if (
+        globalField &&
+        !localHasCliOrEnvValue &&
+        getFieldValue(validationResult.data as Record<string, unknown>, field) === undefined &&
+        getFieldValue(validatedGlobalArgs, globalField) !== undefined
+      ) {
+        argSourceMap.set(field.name, globalSourceMap.get(globalField.name) ?? "default");
+        continue;
+      }
 
       argSourceMap.set(
         field.name,

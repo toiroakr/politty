@@ -29,7 +29,7 @@ it("infers loculus outputs and rejects foreign and scalar args schemas", () => {
     };
     // @ts-expect-error Scalar input transforms cannot expose CLI object fields.
     defineCommand(scalarTransform);
-    // @ts-expect-error Argument metadata requires a flat field.
-    arg(l.object({ name: l.string() }), { alias: "n" });
+    // An object field takes `flatten`, which names its expanded options.
+    arg(l.object({ name: l.string() }), { flatten: "kebab" });
   }
 });

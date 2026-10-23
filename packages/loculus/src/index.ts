@@ -14,4 +14,4 @@ export const generateCompileCacheShim = createCompileCacheShimGenerator("@politt
 export type ArgsSchema = Schema<Record<string, unknown>, Record<string, any>>;
 export const defineCommand: DefineCommandFn<ArgsSchema> = coreDefineCommand;
 export const createDefineCommand: CreateDefineCommandFn<ArgsSchema> = coreCreateDefineCommand;
-export const arg: ArgFn<Field<any, any, boolean> & { readonly shape?: never }> = coreArg;
+export const arg: ArgFn<Field<any, any, boolean>> = coreArg;

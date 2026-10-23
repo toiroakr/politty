@@ -622,6 +622,29 @@ describe("nested object fields", () => {
       expect(result).toEqual({ config: { p: 5 } });
     });
 
+    it("should keep the global source of a property the command schema leaves unset", async () => {
+      vi.stubEnv("NESTED_TEST_HOST", "envhost");
+      try {
+        const sub = defineCommand({
+          name: "sub",
+          args: z.object({ config: z.object({ host: z.string().optional() }) }) as never,
+          run: (a: Record<string, unknown> & { $source: (name: string) => unknown }) => ({
+            host: (a.config as { host?: string }).host,
+            source: a.$source("config.host"),
+          }),
+        });
+        const cmd = defineCommand({ name: "app", subCommands: { sub: sub as never } });
+        const r = await runCommand(cmd as never, ["sub"], {
+          globalArgs: z.object({
+            config: z.object({ host: arg(z.string().optional(), { env: "NESTED_TEST_HOST" }) }),
+          }) as never,
+        });
+        expect(r.result).toEqual({ host: "envhost", source: "env" });
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it("should report an invalid nested global option before a bare group shows help", async () => {
       const sub = defineCommand({ name: "sub", run: () => {} });
       const cmd = defineCommand({ name: "app", subCommands: { sub } });
