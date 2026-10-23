@@ -35,6 +35,11 @@
       "rangeStrategy": "widen"
     },
     {
+      "groupName": "loculus",
+      "matchPackageNames": ["loculus", "@loculus/rolldown"],
+      "separateMajorMinor": false
+    },
+    {
       "groupName": "testing",
       "minimumGroupSize": 2,
       "matchPackageNames": ["vitest", "@vitest/*"]
