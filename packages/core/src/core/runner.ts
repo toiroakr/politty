@@ -180,7 +180,11 @@ function buildCleanupContext(
 ): GlobalCleanupContext {
   const error = !result.success ? result.error : undefined;
   if (result.success || trace.effectsRan || !globalArgs || !extracted) return { error };
-  return { error, globalArgs: recoverGlobalArgs(trace, globalArgs, extracted) };
+  try {
+    return { error, globalArgs: recoverGlobalArgs(trace, globalArgs, extracted) };
+  } catch {
+    return { error };
+  }
 }
 
 /**
@@ -1057,8 +1061,8 @@ async function runCommandInternal<TResult = unknown>(
         const prompted: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(resolved)) {
           if (value === undefined) continue;
+          if (accumulatedGlobalArgs[key] !== value) prompted[key] = value;
           accumulatedGlobalArgs[key] = value;
-          prompted[key] = value;
         }
         if (options._globalTrace) options._globalTrace.promptedGlobalArgs = prompted;
       }

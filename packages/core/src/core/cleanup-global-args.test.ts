@@ -143,6 +143,42 @@ describe("cleanup context globalArgs", () => {
     expect(context.globalArgs?.profile).toBe("dev");
   });
 
+  it("keeps the environment source when the prompt resolver echoes an existing value", async () => {
+    process.env.POLITTY_TEST_JSON = "1";
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({ name: z.string() }),
+      run: () => {},
+    });
+
+    const context = await runAndCaptureCleanup([], (cleanup) => [
+      cmd,
+      { globalArgs, cleanup, prompt: async (rawArgs) => ({ ...rawArgs }) },
+    ]);
+
+    expect(context.globalArgs?.json).toBe(true);
+    expect(context.globalArgs?.$source?.("json")).toBe("env");
+  });
+
+  it("still runs cleanup with the original error when recovering the global values throws", async () => {
+    const throwing = z.strictObject({
+      data: arg(
+        z.string().transform((value): string => {
+          throw new Error(`cannot read ${value}`);
+        }),
+      ),
+    });
+    const cmd = defineCommand({ name: "test", run: () => {} });
+
+    const context = await runAndCaptureCleanup(["--data", "x"], (cleanup) => [
+      cmd,
+      { globalArgs: throwing, cleanup },
+    ]);
+
+    expect(context.error?.message).toContain("cannot read x");
+    expect(context.globalArgs).toBeUndefined();
+  });
+
   it("is undefined when a required global value is missing", async () => {
     const required = z.strictObject({ profile: arg(z.string()) });
     const cmd = defineCommand({ name: "test", args: z.strictObject({}), run: () => {} });
