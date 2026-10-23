@@ -1,3 +1,4 @@
+import { getFieldValue, mergeNestedArgs } from "../adapter/unflatten.js";
 import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
 import { enableCompileCache } from "../compile-cache.js";
 import { executeLifecycle } from "../executor/command-runner.js";
@@ -1062,15 +1063,23 @@ async function runCommandInternal<TResult = unknown>(
     // before the merge below ever got a chance to supply the value.
     const globalPrefilledFields = new Set<string>();
     if (parseResult.extractedFields) {
+      const globalFields = options._globalExtracted?.fields ?? [];
       for (const field of parseResult.extractedFields.fields) {
         const localHasOwnValue =
           Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
+        // An `unflatten` global schema nests the value away from its flat name.
+        const globalField = globalFields.find((other) => other.name === field.name);
+        const globalValue = globalField
+          ? getFieldValue(validatedGlobalArgs, globalField)
+          : validatedGlobalArgs[field.name];
         if (
           !localHasOwnValue &&
           cliProvidedGlobalFields.has(field.name) &&
-          Object.hasOwn(validatedGlobalArgs, field.name)
+          (globalField?.nested
+            ? globalValue !== undefined
+            : Object.hasOwn(validatedGlobalArgs, field.name))
         ) {
-          argsToValidate = { ...argsToValidate, [field.name]: validatedGlobalArgs[field.name] };
+          argsToValidate = { ...argsToValidate, [field.name]: globalValue };
           globalPrefilledFields.add(field.name);
         }
       }
@@ -1112,10 +1121,12 @@ async function runCommandInternal<TResult = unknown>(
     }
 
     // Merge global args with command args (command args take precedence on collision)
-    const mergedPlainArgs: Record<string, unknown> = {
-      ...proxiedGlobalArgs,
-      ...proxiedCommandArgs,
-    };
+    const mergedPlainArgs = mergeNestedArgs(
+      { ...proxiedGlobalArgs },
+      { ...proxiedCommandArgs },
+      options._globalExtracted?.fields ?? [],
+      parseResult.extractedFields?.fields ?? [],
+    );
     const argSourceMap = new Map<string, ArgSource>(globalSourceMap);
     const localEnvFallbackFields = parseResult.envFallbackFields ?? new Set<string>();
     // Local fields take precedence on collision, mirroring the value merge above:

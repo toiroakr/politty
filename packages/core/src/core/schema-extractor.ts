@@ -67,7 +67,7 @@ function annotateUnflattened(schema: ArgsSchema, extracted: ExtractedFields): Ex
   for (const option of extracted.unionOptions ?? []) {
     if (getUnflattenOptions(option.schema)) {
       throw new Error(
-        "An unflatten schema cannot be an option of a union: its output cannot tell which option's groups to create. Put the union inside the flat schema, or unflatten each branch's own object.",
+        "An unflatten schema cannot be an option of a union: unflatten wraps one object schema, so the union cannot tell which option's groups its output nests. Unflatten the object that holds the union instead, or use a plain object for the option.",
       );
     }
   }

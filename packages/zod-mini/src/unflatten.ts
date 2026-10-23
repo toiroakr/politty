@@ -1,4 +1,5 @@
 import {
+  assertDeclaredKeys,
   pathResolver,
   registerUnflatten,
   unflattenRecord,
@@ -34,11 +35,7 @@ export function unflatten<S extends z.ZodMiniObject, const O extends UnflattenOp
 ): z.ZodMiniPipe<S, z.ZodMiniTransform<Unflatten<z.output<S>, O>, z.output<S>>>;
 export function unflatten(schema: z.ZodMiniObject, options: UnflattenOptions = {}): z.ZodMiniType {
   const pathOf = pathResolver(options);
-  const declared = unflattenRecord(
-    Object.fromEntries(Object.keys(schema.shape).map((key) => [key, undefined])),
-    pathOf,
-  );
-  if (declared.issues) throw new TypeError(declared.issues[0]!.message);
+  assertDeclaredKeys(Object.keys(schema.shape), options);
   const nested = z.pipe(
     schema,
     z.transform((value: Record<string, unknown>, context) => {

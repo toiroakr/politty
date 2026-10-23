@@ -1,4 +1,5 @@
 import {
+  assertDeclaredKeys,
   pathResolver,
   registerUnflatten,
   unflattenRecord,
@@ -42,11 +43,7 @@ export function unflatten<S extends FlatObject, const O extends UnflattenOptions
 >;
 export function unflatten(schema: FlatObject, options: UnflattenOptions = {}): unknown {
   const pathOf = pathResolver(options);
-  const declared = unflattenRecord(
-    Object.fromEntries(Object.keys(schema.entries).map((key) => [key, undefined])),
-    pathOf,
-  );
-  if (declared.issues) throw new TypeError(declared.issues[0]!.message);
+  assertDeclaredKeys(Object.keys(schema.entries), options);
   const nested = v.pipe(
     schema,
     v.rawTransform<Record<string, unknown>, unknown>(({ dataset, addIssue, NEVER }) => {

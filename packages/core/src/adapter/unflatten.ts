@@ -251,6 +251,21 @@ export function unflattenRecord(
   return { value: output };
 }
 
+/**
+ * Reject declared keys that collide once nested: `db` and `db.host` would
+ * need `db` to be both a value and a group. Checked when a helper builds its
+ * schema, so the mistake surfaces at definition time, not on first run.
+ *
+ * @throws TypeError naming the colliding key
+ */
+export function assertDeclaredKeys(keys: readonly string[], options: UnflattenOptions = {}): void {
+  const result = unflattenRecord(
+    Object.fromEntries(keys.map((key) => [key, undefined])),
+    pathResolver(options),
+  );
+  if (result.issues) throw new TypeError(result.issues[0]!.message);
+}
+
 const registry = new WeakMap<object, UnflattenOptions>();
 
 /**
@@ -284,4 +299,51 @@ export function getFieldValue(
         : undefined;
   }
   return value;
+}
+
+/**
+ * Merge command args over global args, merging the groups both schemas nest
+ * into instead of replacing the global group whole. Command values still win.
+ */
+export function mergeNestedArgs(
+  globalArgs: Record<string, unknown>,
+  commandArgs: Record<string, unknown>,
+  globalFields: readonly { nested?: NestedFieldInfo | undefined }[],
+  commandFields: readonly { nested?: NestedFieldInfo | undefined }[],
+): Record<string, unknown> {
+  const commandGroups = groupPaths(commandFields);
+  const shared = new Set([...groupPaths(globalFields)].filter((key) => commandGroups.has(key)));
+  const merge = (
+    base: Record<string, unknown>,
+    override: Record<string, unknown>,
+    path: readonly string[],
+  ): Record<string, unknown> => {
+    const merged = { ...base };
+    for (const [key, value] of Object.entries(override)) {
+      const childPath = [...path, key];
+      const current = merged[key];
+      merged[key] =
+        shared.has(childPath.join("\0")) && isPlainObject(current) && isPlainObject(value)
+          ? merge(current, value, childPath)
+          : value;
+    }
+    return merged;
+  };
+  return merge(globalArgs, commandArgs, []);
+}
+
+/** Keys of the paths of every group nested into by the fields */
+function groupPaths(fields: readonly { nested?: NestedFieldInfo | undefined }[]): Set<string> {
+  const paths = new Set<string>();
+  for (const { nested } of fields) {
+    const path = nested?.path ?? [];
+    for (let depth = 1; depth < path.length; depth++) paths.add(path.slice(0, depth).join("\0"));
+  }
+  return paths;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object") return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }

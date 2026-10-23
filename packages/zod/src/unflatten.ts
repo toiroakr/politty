@@ -1,4 +1,5 @@
 import {
+  assertDeclaredKeys,
   pathResolver,
   registerUnflatten,
   unflattenRecord,
@@ -34,11 +35,7 @@ export function unflatten<S extends z.ZodObject, const O extends UnflattenOption
 ): z.ZodPipe<S, z.ZodTransform<Unflatten<z.output<S>, O>, z.output<S>>>;
 export function unflatten(schema: z.ZodObject, options: UnflattenOptions = {}): z.ZodType {
   const pathOf = pathResolver(options);
-  const declared = unflattenRecord(
-    Object.fromEntries(Object.keys(schema.shape).map((key) => [key, undefined])),
-    pathOf,
-  );
-  if (declared.issues) throw new TypeError(declared.issues[0]!.message);
+  assertDeclaredKeys(Object.keys(schema.shape), options);
   const nested = schema.transform((value, context) => {
     const result = unflattenRecord(value, pathOf);
     if (!result.issues) return result.value;

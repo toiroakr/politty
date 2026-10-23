@@ -149,3 +149,54 @@ describe("unflatten with requiredPackages", () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe("unflatten with globalArgs", () => {
+  const runSub = async (globalArgs: unknown, args: unknown, argv: string[]) => {
+    const sub = defineCommand({
+      name: "sub",
+      args: args as never,
+      run: (a: Record<string, unknown>) => JSON.parse(JSON.stringify(a)),
+    });
+    const cmd = defineCommand({ name: "app", subCommands: { sub: sub as never } });
+    const result = await runCommand(cmd, argv, { globalArgs: globalArgs as never });
+    expect(result.success).toBe(true);
+    return result.result;
+  };
+
+  it("should merge a group both schemas nest into", async () => {
+    const result = await runSub(
+      unflatten(z.object({ "config.host": z.string().default("gh") })),
+      unflatten(z.object({ "config.port": z.coerce.number().default(1) })),
+      ["sub"],
+    );
+
+    expect(result).toEqual({ config: { host: "gh", port: 1 } });
+  });
+
+  it("should let the command value of a shared key win", async () => {
+    const result = await runSub(
+      unflatten(z.object({ "config.port": z.coerce.number().default(1) })),
+      unflatten(
+        z.object({
+          "config.port": z.coerce
+            .number()
+            .transform((n) => n * 10)
+            .default(1),
+        }),
+      ),
+      ["--config.port", "2", "sub"],
+    );
+
+    expect(result).toEqual({ config: { port: 20 } });
+  });
+
+  it("should hand a global value given before the subcommand to the command's same key", async () => {
+    const result = await runSub(
+      unflatten(z.object({ "config.port": z.coerce.number() })),
+      unflatten(z.object({ "config.port": z.coerce.number() })),
+      ["--config.port", "5", "sub"],
+    );
+
+    expect(result).toEqual({ config: { port: 5 } });
+  });
+});

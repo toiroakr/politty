@@ -1,3 +1,4 @@
+import { getFieldValue, pathResolver } from "@politty/core/adapter/unflatten";
 import * as l from "loculus";
 import { describe, expect, it, vi } from "vitest";
 import { arg, defineCommand, extractFields, runCommand, unflatten } from "./index.js";
@@ -68,4 +69,37 @@ describe("unflatten (loculus)", () => {
 
     expect(effect).toHaveBeenCalledWith(5, expect.objectContaining({ name: "config.port" }));
   });
+});
+
+describe("unflatten (loculus) paths", () => {
+  const cases = [
+    { options: {}, keys: ["db.host", "db.pool.max", "name"] },
+    {
+      options: { style: "kebab", prefixes: ["db", "db-pool"] },
+      keys: ["db-host", "db-pool-max", "dry-run"],
+    },
+    {
+      options: { style: "camel", prefixes: ["db", "dbPool"] },
+      keys: ["dbHostName", "dbPoolMax", "dbx"],
+    },
+  ] as const;
+
+  it.each(cases)(
+    "should find every value where loculus nests it ($options)",
+    ({ options, keys }) => {
+      const input = Object.fromEntries(keys.map((key, index) => [key, String(index)]));
+      const schema = unflatten(
+        l.object(Object.fromEntries(keys.map((key) => [key, l.string()]))),
+        options as never,
+      );
+      const output = l.parse(schema, input) as Record<string, unknown>;
+      const pathOf = pathResolver(options as never);
+
+      for (const key of keys) {
+        expect(getFieldValue(output, { name: key, nested: { path: pathOf(key) } })).toBe(
+          input[key],
+        );
+      }
+    },
+  );
 });

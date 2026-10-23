@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getFieldValue, splitPath, unflattenRecord } from "./unflatten.js";
+import { assertDeclaredKeys, getFieldValue, splitPath, unflattenRecord } from "./unflatten.js";
 
 describe("splitPath", () => {
   it("should split a dotted key at every dot", () => {
@@ -69,5 +69,22 @@ describe("getFieldValue", () => {
   it("should read undefined when a group on the path is absent", () => {
     const field = { name: "db.host", nested: { path: ["db", "host"] } };
     expect(getFieldValue({}, field)).toBeUndefined();
+  });
+});
+
+describe("assertDeclaredKeys", () => {
+  it("should accept keys that do not collide", () => {
+    expect(() => assertDeclaredKeys(["name", "db.host", "db.port"])).not.toThrow();
+  });
+
+  it("should throw a TypeError for a key that is both a value and a group", () => {
+    expect(() => assertDeclaredKeys(["db", "db.host"])).toThrow(TypeError);
+    expect(() => assertDeclaredKeys(["db.host", "db"])).toThrow(/"db" is both a value and a group/);
+  });
+
+  it("should split the keys by the given options", () => {
+    expect(() =>
+      assertDeclaredKeys(["db-host", "db"], { style: "kebab", prefixes: ["db"] }),
+    ).toThrow(/"db" is both a value and a group/);
   });
 });
