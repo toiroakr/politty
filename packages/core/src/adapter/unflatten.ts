@@ -294,7 +294,7 @@ export function getFieldValue(
   let value: unknown = args;
   for (const key of field.nested.path) {
     value =
-      typeof value === "object" && value !== null
+      typeof value === "object" && value !== null && Object.hasOwn(value, key)
         ? (value as Record<string, unknown>)[key]
         : undefined;
   }
@@ -318,14 +318,16 @@ export function mergeNestedArgs(
     override: Record<string, unknown>,
     path: readonly string[],
   ): Record<string, unknown> => {
-    const merged = { ...base };
-    for (const [key, value] of Object.entries(override)) {
+    // Spreading both sides first keeps symbol keys and an own `__proto__`,
+    // which assigning key by key would drop; only shared groups are re-merged.
+    const merged = { ...base, ...override };
+    for (const key of Object.keys(override)) {
       const childPath = [...path, key];
-      const current = merged[key];
-      merged[key] =
-        shared.has(childPath.join("\0")) && isPlainObject(current) && isPlainObject(value)
-          ? merge(current, value, childPath)
-          : value;
+      const current = Object.hasOwn(base, key) ? base[key] : undefined;
+      const value = override[key];
+      if (shared.has(childPath.join("\0")) && isPlainObject(current) && isPlainObject(value)) {
+        assignValue(merged, key, merge(current, value, childPath));
+      }
     }
     return merged;
   };

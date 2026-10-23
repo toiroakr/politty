@@ -53,7 +53,15 @@ export function unflatten(schema: FlatObject, options: UnflattenOptions = {}): u
         const key = issue.path[0]!;
         addIssue({
           message: issue.message,
-          path: [{ type: "object", origin: "value", input: dataset.value, key, value: undefined }],
+          path: [
+            {
+              type: "object",
+              origin: "value",
+              input: dataset.value,
+              key,
+              value: dataset.value[key],
+            },
+          ],
         });
       }
       return NEVER;

@@ -205,6 +205,13 @@ describe("schemas wrapped by an unflatten helper", () => {
     expect(extractFields(schema)).toBe(extractFields(schema));
   });
 
+  it("should reject a wrapped schema inside a nested union option", () => {
+    const inner = z.union([wrapped(), z.object({ other: z.string() })]);
+    expect(() => extractFields(z.union([inner, z.object({ third: z.string() })]))).toThrow(
+      /unflatten.*union/,
+    );
+  });
+
   it("should reject a wrapped schema inside a union option", () => {
     expect(() => extractFields(z.union([wrapped(), z.object({ other: z.string() })]))).toThrow(
       /unflatten.*union/,

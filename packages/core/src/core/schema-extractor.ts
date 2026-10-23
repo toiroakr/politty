@@ -58,19 +58,24 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
   return extracted;
 }
 
-/**
- * Give the fields of a schema wrapped by an `unflatten` helper the nested
- * path of their flat names, memoized so repeated calls keep returning the
- * same object.
- */
-function annotateUnflattened(schema: ArgsSchema, extracted: ExtractedFields): ExtractedFields {
+function rejectUnflattenedOptions(extracted: ExtractedFields): void {
   for (const option of extracted.unionOptions ?? []) {
     if (getUnflattenOptions(option.schema)) {
       throw new Error(
         "An unflatten schema cannot be an option of a union: unflatten wraps one object schema, so the union cannot tell which option's groups its output nests. Unflatten the object that holds the union instead, or use a plain object for the option.",
       );
     }
+    rejectUnflattenedOptions(option);
   }
+}
+
+/**
+ * Give the fields of a schema wrapped by an `unflatten` helper the nested
+ * path of their flat names, memoized so repeated calls keep returning the
+ * same object.
+ */
+function annotateUnflattened(schema: ArgsSchema, extracted: ExtractedFields): ExtractedFields {
+  rejectUnflattenedOptions(extracted);
   const options = getUnflattenOptions(schema);
   if (!options) return extracted;
   let annotated = annotatedFields.get(extracted);

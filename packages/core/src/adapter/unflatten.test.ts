@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { assertDeclaredKeys, getFieldValue, splitPath, unflattenRecord } from "./unflatten.js";
+import {
+  assertDeclaredKeys,
+  getFieldValue,
+  mergeNestedArgs,
+  splitPath,
+  unflattenRecord,
+} from "./unflatten.js";
 
 describe("splitPath", () => {
   it("should split a dotted key at every dot", () => {
@@ -66,6 +72,14 @@ describe("getFieldValue", () => {
     expect(getFieldValue({ db: { host: "localhost" } }, field)).toBe("localhost");
   });
 
+  it("should not follow inherited properties along the path", () => {
+    const field = {
+      name: "__proto__.constructor",
+      nested: { path: ["__proto__", "constructor"] },
+    };
+    expect(getFieldValue({}, field)).toBeUndefined();
+  });
+
   it("should read undefined when a group on the path is absent", () => {
     const field = { name: "db.host", nested: { path: ["db", "host"] } };
     expect(getFieldValue({}, field)).toBeUndefined();
@@ -86,5 +100,44 @@ describe("assertDeclaredKeys", () => {
     expect(() =>
       assertDeclaredKeys(["db-host", "db"], { style: "kebab", prefixes: ["db"] }),
     ).toThrow(/"db" is both a value and a group/);
+  });
+});
+
+describe("mergeNestedArgs", () => {
+  const fields = (...paths: string[][]) => paths.map((path) => ({ nested: { path } }));
+
+  it("should merge a group both schemas nest into and let the command win a shared key", () => {
+    const merged = mergeNestedArgs(
+      { config: { host: "gh", port: 1 } },
+      { config: { port: 2 } },
+      fields(["config", "host"], ["config", "port"]),
+      fields(["config", "port"]),
+    );
+
+    expect(merged).toEqual({ config: { host: "gh", port: 2 } });
+  });
+
+  it("should keep symbol keys of both sides, as a spread merge does", () => {
+    const token = Symbol("token");
+    const other = Symbol("other");
+
+    const merged = mergeNestedArgs({ [other]: 1, a: 1 }, { [token]: 2, b: 2 }, [], []) as Record<
+      PropertyKey,
+      unknown
+    >;
+
+    expect(merged[token]).toBe(2);
+    expect(merged[other]).toBe(1);
+  });
+
+  it("should keep a __proto__ group as an own property", () => {
+    const command = unflattenRecord({ "__proto__.enabled": true }, (key) => key.split("."));
+    if (command.issues) throw new Error("expected a value");
+
+    const merged = mergeNestedArgs({}, command.value, [], []);
+
+    expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
+    expect(Object.hasOwn(merged, "__proto__")).toBe(true);
+    expect(Object.hasOwn(merged, "enabled")).toBe(false);
   });
 });
