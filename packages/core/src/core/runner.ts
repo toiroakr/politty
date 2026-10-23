@@ -167,14 +167,15 @@ function recoverGlobalArgs(
       .map((error) => error.path[0])
       .filter((name): name is string => name !== undefined && Object.hasOwn(candidate, name));
     if (invalid.length === 0) {
-      // An error without a field path (a union of objects) names no culprit, so find a
-      // single value whose removal lets the schema accept the rest.
-      const culprit = Object.keys(candidate).find((name) => {
+      // An error without a field path (a union of objects) names no culprit. Recover only
+      // when exactly one removal lets the schema accept the rest: with several, the choice
+      // would depend on argument order and could switch to another union branch.
+      const culprits = Object.keys(candidate).filter((name) => {
         const { [name]: _removed, ...rest } = candidate;
         return validateArgs(rest, schema).success;
       });
-      if (culprit === undefined) return undefined;
-      invalid = [culprit];
+      if (culprits.length !== 1) return undefined;
+      invalid = culprits;
     }
     for (const name of invalid) delete candidate[name];
   }

@@ -241,6 +241,25 @@ describe("cleanup context globalArgs", () => {
     expect(context.globalArgs?.json).toBe(false);
   });
 
+  it("does not guess when several single removals would let a path-less union accept the rest", async () => {
+    const union = z.union([
+      z.strictObject({
+        json: arg(z.boolean().default(false)),
+        port: arg(z.coerce.number().default(80)),
+      }),
+      z.strictObject({ port: arg(z.string()) }),
+    ]);
+    const cmd = defineCommand({ name: "test", run: () => {} });
+
+    const context = await runAndCaptureCleanup(["--json", "--port", "bad"], (cleanup) => [
+      cmd,
+      { globalArgs: union, cleanup },
+    ]);
+
+    expect(context.error).toBeDefined();
+    expect(context.globalArgs).toBeUndefined();
+  });
+
   it("is undefined when a required global value is missing", async () => {
     const required = z.strictObject({ profile: arg(z.string()) });
     const cmd = defineCommand({ name: "test", args: z.strictObject({}), run: () => {} });
