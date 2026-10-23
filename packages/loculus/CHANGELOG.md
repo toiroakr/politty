@@ -1,5 +1,11 @@
 # @politty/loculus
 
+## 0.2.2
+
+### Patch Changes
+
+- 0631dc0: Support loculus 0.3 alongside 0.2.5 and validate bundled CLIs with the matching 0.3 runtime and Rolldown plugin.
+
 ## 0.2.1
 
 ### Patch Changes
