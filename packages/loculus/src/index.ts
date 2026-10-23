@@ -7,7 +7,11 @@ import {
   type CreateDefineCommandFn,
   type DefineCommandFn,
 } from "@politty/core";
-import { registerUnflatten } from "@politty/core/adapter/unflatten";
+import {
+  assertDeclaredKeys,
+  registerUnflatten,
+  type UnflattenOptions,
+} from "@politty/core/adapter/unflatten";
 import { unflatten as loculusUnflatten, type Field, type Schema } from "loculus";
 import "./register.js";
 export * from "@politty/core";
@@ -23,5 +27,10 @@ export const arg: ArgFn<Field<any, any, boolean> & { readonly shape?: never }> =
  * style and prefixes cannot be read back from the wrapped schema, which is
  * why an `unflatten` imported from `loculus` itself is not enough.
  */
-export const unflatten: typeof loculusUnflatten = ((schema: never, options?: never) =>
-  registerUnflatten(loculusUnflatten(schema, options as never), options ?? {})) as never;
+export const unflatten: typeof loculusUnflatten = ((
+  schema: { meta: { shape?: Record<string, unknown> } },
+  options?: UnflattenOptions,
+) => {
+  if (schema.meta.shape) assertDeclaredKeys(Object.keys(schema.meta.shape), options);
+  return registerUnflatten(loculusUnflatten(schema as never, options as never), options ?? {});
+}) as never;

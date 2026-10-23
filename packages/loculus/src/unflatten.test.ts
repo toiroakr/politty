@@ -61,6 +61,12 @@ describe("unflatten (loculus)", () => {
     expect(seen).toEqual([{ db: { host: "h", pool: { max: 3 } } }]);
   });
 
+  it("should reject group names that differ only in kebab-case versus camelCase", () => {
+    const schema = l.object({ "server-config.host": l.string(), "serverConfig.port": l.string() });
+
+    expect(() => unflatten(schema)).toThrow(/differ only in case/);
+  });
+
   it("should call an effect with the nested value", async () => {
     const effect = vi.fn();
     const schema = unflatten(l.object({ "config.port": arg(l.number(), { effect }) }));

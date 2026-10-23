@@ -7,6 +7,8 @@
  * The key splitting and the conflict rules follow loculus's `unflatten`.
  */
 
+import { toCamelCase } from "./field-meta.js";
+
 export type UnflattenStyle = "dot" | "kebab" | "camel";
 
 export type UnflattenOptions =
@@ -259,11 +261,23 @@ export function unflattenRecord(
  * @throws TypeError naming the colliding key
  */
 export function assertDeclaredKeys(keys: readonly string[], options: UnflattenOptions = {}): void {
-  const result = unflattenRecord(
-    Object.fromEntries(keys.map((key) => [key, undefined])),
-    pathResolver(options),
-  );
+  const pathOf = pathResolver(options);
+  const result = unflattenRecord(Object.fromEntries(keys.map((key) => [key, undefined])), pathOf);
   if (result.issues) throw new TypeError(result.issues[0]!.message);
+  // The dual-case proxy of the args answers by the exact spelling, so two
+  // spellings of one name would be typed as one group but read as two.
+  const spellings = new Map<string, string>();
+  for (const key of keys) {
+    const root = pathOf(key)[0]!;
+    const folded = toCamelCase(root);
+    const known = spellings.get(folded);
+    if (known !== undefined && known !== root) {
+      throw new TypeError(
+        `Cannot unflatten "${key}": "${known}" and "${root}" differ only in case. Spell the name the same way in every key.`,
+      );
+    }
+    spellings.set(folded, root);
+  }
 }
 
 const registry = new WeakMap<object, UnflattenOptions>();

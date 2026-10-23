@@ -96,6 +96,16 @@ describe("assertDeclaredKeys", () => {
     expect(() => assertDeclaredKeys(["db.host", "db"])).toThrow(/"db" is both a value and a group/);
   });
 
+  it("should throw for group names that differ only in kebab-case versus camelCase", () => {
+    expect(() => assertDeclaredKeys(["server-config.host", "serverConfig.port"])).toThrow(
+      /"server-config" and "serverConfig" differ only in case/,
+    );
+  });
+
+  it("should accept the same group spelled the same way in every key", () => {
+    expect(() => assertDeclaredKeys(["server-config.host", "server-config.port"])).not.toThrow();
+  });
+
   it("should split the keys by the given options", () => {
     expect(() =>
       assertDeclaredKeys(["db-host", "db"], { style: "kebab", prefixes: ["db"] }),
