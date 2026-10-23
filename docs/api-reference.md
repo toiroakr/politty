@@ -1286,6 +1286,23 @@ interface CleanupContext<TArgs> {
 }
 ```
 
+### `GlobalCleanupContext`
+
+Type for context passed to the `cleanup` option of `runMain`/`runCommand`.
+
+```typescript
+interface GlobalCleanupContext {
+  /** AI coding agent running the CLI; undefined when none is detected */
+  agent?: AgentInfo;
+  /** Error if command execution failed */
+  error?: Error;
+  /** Validated global values when the run failed before the global effects ran */
+  globalArgs?: Readonly<Record<string, unknown>> & { $source?: (name: string) => ArgSource };
+}
+```
+
+`globalArgs` leaves out unknown flags and drops a value that fails its own validation, so the schema's default applies where it defines one. It is `undefined` when the run did not fail before the global effects, when no `globalArgs` schema is set, when a required global value is missing, or when recovering the values throws. A failed `setup` runs before any argument is parsed, so it passes none. A value filled in by the `prompt` resolver is included. See [Reading global options when argument validation fails](./recipes.md#reading-global-options-when-argument-validation-fails).
+
 > **Note:** The `run` function receives the parsed arguments `args` directly, not a context object.
 
 ---

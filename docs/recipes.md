@@ -172,3 +172,21 @@ const command = defineCommand({
   },
 });
 ```
+
+### Reading global options when argument validation fails
+
+Global `effect`s run only after every argument validates, so an unknown flag or an invalid value ends the run before any of them has run. The global `cleanup` hook receives the validated global values as `globalArgs`, so an error can still be rendered the way the user asked for:
+
+```typescript
+runMain(cli, {
+  displayErrors: false,
+  globalArgs: z.strictObject({ json: arg(z.boolean().default(false), { env: "MY_CLI_JSON" }) }),
+  cleanup: ({ error, globalArgs }) => {
+    if (!error) return;
+    // `my-cli list --json --bogus` => globalArgs.json === true
+    console.error(globalArgs?.json ? JSON.stringify({ error: error.message }) : error.message);
+  },
+});
+```
+
+Unknown flags are ignored, and a value that fails its own validation (`--json=yes`) is dropped, so the schema's default applies where it defines one. `globalArgs?.$source?.("json")` returns `"cli"`, `"env"` or `"default"`. A value filled in by the `prompt` resolver is included. `globalArgs` is `undefined` when the run did not fail before the global effects, when a required global value is missing, when recovering the values throws, or when `setup` failed (it runs before any argument is parsed).
