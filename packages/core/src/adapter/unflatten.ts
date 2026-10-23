@@ -273,7 +273,7 @@ export function assertDeclaredKeys(keys: readonly string[], options: UnflattenOp
     const known = spellings.get(folded);
     if (known !== undefined && known !== root) {
       throw new TypeError(
-        `Cannot unflatten "${key}": "${known}" and "${root}" differ only in case. Spell the name the same way in every key.`,
+        `Cannot unflatten "${key}": "${known}" and "${root}" are spellings of the same name. Spell the name the same way in every key.`,
       );
     }
     spellings.set(folded, root);

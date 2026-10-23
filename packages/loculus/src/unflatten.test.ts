@@ -64,7 +64,7 @@ describe("unflatten (loculus)", () => {
   it("should reject group names that differ only in kebab-case versus camelCase", () => {
     const schema = l.object({ "server-config.host": l.string(), "serverConfig.port": l.string() });
 
-    expect(() => unflatten(schema)).toThrow(/differ only in case/);
+    expect(() => unflatten(schema)).toThrow(/are spellings of the same name/);
   });
 
   it("should require the package of a nested flag of the selected variant of an unflattened union", async () => {

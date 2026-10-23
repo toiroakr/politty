@@ -188,7 +188,7 @@ describe("unflatten with globalArgs", () => {
     expect(result.error?.message).toContain("conflicting output positions");
   });
 
-  it("should reject group names of the two schemas that differ only in case", async () => {
+  it("should reject group names of the two schemas that are spellings of the same name", async () => {
     const sub = defineCommand({
       name: "sub",
       args: unflatten(z.object({ "serverConfig.port": z.string().default("p") })) as never,

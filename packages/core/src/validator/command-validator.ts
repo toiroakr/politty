@@ -683,7 +683,7 @@ function checkCrossSchemaOutputPositions(
         a.path.slice(0, shared).every((key, depth) => key === b.path[depth])
           ? "one is a value where the other nests a group"
           : a.path[0] !== b.path[0] && toKebabCase(a.path[0]!) === toKebabCase(b.path[0]!)
-            ? "their group names differ only in case"
+            ? "their group names are spellings of the same name"
             : undefined;
       if (!reason) continue;
       errors.push({
