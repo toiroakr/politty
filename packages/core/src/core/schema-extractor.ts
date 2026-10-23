@@ -12,7 +12,11 @@
 
 import { extractInternalFields, isInternalArgsSchema } from "../adapter/internal-args.js";
 import { getValidatorAdapter } from "../adapter/registry.js";
-import { getUnflattenOptions, pathResolver } from "../adapter/unflatten.js";
+import {
+  getUnflattenOptions,
+  pathResolver,
+  rejectUnflattenedOption,
+} from "../adapter/unflatten.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 
 export {
@@ -60,11 +64,7 @@ export function extractFields(schema: ArgsSchema): ExtractedFields {
 
 function rejectUnflattenedOptions(extracted: ExtractedFields): void {
   for (const option of extracted.unionOptions ?? []) {
-    if (getUnflattenOptions(option.schema)) {
-      throw new Error(
-        "An unflatten schema cannot be an option of a union: unflatten wraps one object schema, so the union cannot tell which option's groups its output nests. Unflatten the object that holds the union instead, or use a plain object for the option.",
-      );
-    }
+    rejectUnflattenedOption(option.schema);
     rejectUnflattenedOptions(option);
   }
 }

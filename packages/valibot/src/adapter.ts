@@ -19,6 +19,7 @@ import type {
   ValidationResult,
   ValidatorAdapter,
 } from "@politty/core/adapter/types";
+import { rejectUnflattenedOption } from "@politty/core/adapter/unflatten";
 import {
   getArgMeta as getArgMetaFromRegistry,
   type ArgMeta,
@@ -454,6 +455,7 @@ function extractFromVariant(schema: ValibotNode): ExtractedFields {
   const variants: ExtractedFields["variants"] = [];
 
   for (const option of options) {
+    rejectUnflattenedOption(option as object);
     const optionNode = asNode(option);
     const variantFields: ResolvedFieldMeta[] = [];
 

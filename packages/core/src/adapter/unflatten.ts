@@ -283,6 +283,21 @@ export function getUnflattenOptions(schema: object): UnflattenOptions | undefine
 }
 
 /**
+ * Reject an `unflatten` schema used as an option of a union or a
+ * discriminated union: wrapping one object schema, it cannot tell which
+ * option's groups the output nests, so its fields would get no nested path
+ * and effects would read `undefined` without any error.
+ *
+ * @throws Error when the option was produced by an `unflatten` helper
+ */
+export function rejectUnflattenedOption(option: object): void {
+  if (!registry.has(option)) return;
+  throw new Error(
+    "An unflatten schema cannot be an option of a union: unflatten wraps one object schema, so the union cannot tell which option's groups its output nests. Unflatten the object that holds the union instead, or use a plain object for the option.",
+  );
+}
+
+/**
  * Read a field's value from validated args, following its nested path when
  * its schema was wrapped by an `unflatten` helper.
  */

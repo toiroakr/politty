@@ -54,6 +54,7 @@ import {
   toCamelCase,
   toKebabCase,
   type ExtractedFields,
+  type ResolvedFieldMeta,
 } from "./schema-extractor.js";
 
 /**
@@ -1063,12 +1064,15 @@ async function runCommandInternal<TResult = unknown>(
     // before the merge below ever got a chance to supply the value.
     const globalPrefilledFields = new Set<string>();
     if (parseResult.extractedFields) {
-      const globalFields = options._globalExtracted?.fields ?? [];
+      const globalFieldByName = new Map<string, ResolvedFieldMeta>();
+      for (const field of options._globalExtracted?.fields ?? []) {
+        if (!globalFieldByName.has(field.name)) globalFieldByName.set(field.name, field);
+      }
       for (const field of parseResult.extractedFields.fields) {
         const localHasOwnValue =
           Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
         // An `unflatten` global schema nests the value away from its flat name.
-        const globalField = globalFields.find((other) => other.name === field.name);
+        const globalField = globalFieldByName.get(field.name);
         const globalValue = globalField
           ? getFieldValue(validatedGlobalArgs, globalField)
           : validatedGlobalArgs[field.name];

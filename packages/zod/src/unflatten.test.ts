@@ -200,3 +200,12 @@ describe("unflatten with globalArgs", () => {
     expect(result).toEqual({ config: { port: 5 } });
   });
 });
+
+describe("unflatten in a discriminated union (zod)", () => {
+  it("should reject an unflatten schema as an option of a discriminated union", () => {
+    const flat = z.object({ kind: z.literal("a"), "a.b": z.string() });
+    const schema = z.discriminatedUnion("kind", [unflatten(flat) as never]);
+
+    expect(() => extractFields(schema as never)).toThrow(/unflatten.*union/);
+  });
+});

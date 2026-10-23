@@ -75,3 +75,12 @@ describe("unflatten (valibot)", () => {
     expect(effect).toHaveBeenCalledWith(5, expect.objectContaining({ name: "config.port" }));
   });
 });
+
+describe("unflatten in a discriminated union (valibot)", () => {
+  it("should reject an unflatten schema as an option of a variant", () => {
+    const flat = v.object({ kind: v.literal("a"), "a.b": v.string() });
+    const schema = v.variant("kind", [unflatten(flat) as never]);
+
+    expect(() => extractFields(schema as never)).toThrow(/unflatten.*union/);
+  });
+});
