@@ -94,7 +94,12 @@ jobs:
         run: pnpm install --frozen-lockfile
         shell: bash
       - name: Apply changesets
-        run: pnpm changeset version
+        run: |
+          if [ -z "$(find .changeset -maxdepth 1 -name '*.md' ! -name README.md)" ]; then
+            echo "No changesets to validate"
+            exit 0
+          fi
+          pnpm changeset version
         shell: bash
 
   node-floor:
