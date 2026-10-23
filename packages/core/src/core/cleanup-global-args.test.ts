@@ -180,6 +180,29 @@ describe("cleanup context globalArgs", () => {
     expect(context.globalArgs?.profile).toBe("dev");
   });
 
+  it("carries a global value a prompt resolver mutates in place without returning it", async () => {
+    const required = z.strictObject({ profile: arg(z.string()) });
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({ name: z.string() }),
+      run: () => {},
+    });
+
+    const context = await runAndCaptureCleanup([], (cleanup) => [
+      cmd,
+      {
+        globalArgs: required,
+        cleanup,
+        prompt: async (rawArgs) => {
+          rawArgs.profile = "dev";
+          return {};
+        },
+      },
+    ]);
+
+    expect(context.globalArgs?.profile).toBe("dev");
+  });
+
   it("still runs cleanup with the original error when recovering the global values throws", async () => {
     const throwing = z.strictObject({
       data: arg(

@@ -1059,11 +1059,12 @@ async function runCommandInternal<TResult = unknown>(
       if (options.prompt) {
         const beforePrompt = { ...accumulatedGlobalArgs };
         const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted);
-        const prompted: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(resolved)) {
-          if (value === undefined) continue;
+          if (value !== undefined) accumulatedGlobalArgs[key] = value;
+        }
+        const prompted: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(accumulatedGlobalArgs)) {
           if (beforePrompt[key] !== value) prompted[key] = value;
-          accumulatedGlobalArgs[key] = value;
         }
         if (options._globalTrace) options._globalTrace.promptedGlobalArgs = prompted;
       }
