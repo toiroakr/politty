@@ -102,6 +102,12 @@ describe("assertDeclaredKeys", () => {
     );
   });
 
+  it("should throw for a PascalCase group name that collides with a kebab-case one", () => {
+    expect(() => assertDeclaredKeys(["ServerConfig.host", "server-config.port"])).toThrow(
+      /differ only in case/,
+    );
+  });
+
   it("should accept the same group spelled the same way in every key", () => {
     expect(() => assertDeclaredKeys(["server-config.host", "server-config.port"])).not.toThrow();
   });

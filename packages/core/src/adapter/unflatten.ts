@@ -7,7 +7,7 @@
  * The key splitting and the conflict rules follow loculus's `unflatten`.
  */
 
-import { toCamelCase } from "./field-meta.js";
+import { toKebabCase } from "./field-meta.js";
 
 export type UnflattenStyle = "dot" | "kebab" | "camel";
 
@@ -269,7 +269,7 @@ export function assertDeclaredKeys(keys: readonly string[], options: UnflattenOp
   const spellings = new Map<string, string>();
   for (const key of keys) {
     const root = pathOf(key)[0]!;
-    const folded = toCamelCase(root);
+    const folded = toKebabCase(root);
     const known = spellings.get(folded);
     if (known !== undefined && known !== root) {
       throw new TypeError(
