@@ -268,8 +268,8 @@ importers:
         specifier: 7.0.0-dev.20260707.2
         version: 7.0.0-dev.20260707.2
       loculus:
-        specifier: 0.2.5
-        version: 0.2.5
+        specifier: 0.3.0
+        version: 0.3.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(@typescript/native-preview@7.0.0-dev.20260707.2)(oxc-resolver@11.24.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -2098,10 +2098,6 @@ packages:
     resolution: {integrity: sha512-WkUDrojuJs0xkgGf2udWxa3yGBRxPtxUkB79i6aCZLRgc7PM8fZe9TosfPDcvEpQZbuFASnHYmRLBLUbmLOIIA==}
     engines: {node: '>= 12.0.0'}
 
-  loculus@0.2.5:
-    resolution: {integrity: sha512-idAO14ke9seznkaPNm4L9l3Ka6DQFJqT8IJZne1W6MtBEfucayu2gmGB+YGP/mgHuvoTteL7iibI6s/ezTDNCA==}
-    engines: {node: '>=22.18.0'}
-
   loculus@0.3.0:
     resolution: {integrity: sha512-rdnqJQTf7Ub+gEIk4tieoSkVheMyf3kNLZuRYtiaWAtuDIwPyutk+WEn5mDIek7N3ttjV0D86QF+aPARlsslzw==}
     engines: {node: '>=22.18.0'}
@@ -3640,8 +3636,6 @@ snapshots:
       lightningcss-linux-x64-musl: 1.33.0
       lightningcss-win32-arm64-msvc: 1.33.0
       lightningcss-win32-x64-msvc: 1.33.0
-
-  loculus@0.2.5: {}
 
   loculus@0.3.0: {}
 
