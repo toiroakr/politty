@@ -1,5 +1,4 @@
 ---
-"@politty/core": patch
 "@politty/loculus": patch
 "@politty/zod": patch
 "@politty/zod-mini": patch
