@@ -44,6 +44,8 @@ jobs:
           GHALINT_LOG_COLOR: always
       - name: pinact
         run: pinact run
+      - name: Test lint driver
+        run: bash .github/scripts/test-lint-actions.sh
       - name: karinto
         run: bash .github/scripts/lint-actions.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
