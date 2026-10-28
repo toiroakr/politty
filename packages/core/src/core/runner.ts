@@ -73,12 +73,6 @@ const defaultLogger: Logger = {
 const USAGE_ERROR_EXIT_CODE = 2;
 
 /**
- * Attach a non-enumerable `$source` helper to the final args object so it
- * stays invisible to `Object.keys`/`JSON.stringify`/spread (those only ever
- * see real field values) while still being reachable via property access
- * (including through `createDualCaseProxy`).
- */
-/**
  * Copy parser-supplied values before a prompt resolver runs. A resolver may
  * mutate an array/object value in place, which a shallow copy would not
  * notice since both sides share the reference.
@@ -95,6 +89,12 @@ function snapshotArgs(args: Record<string, unknown>): Record<string, unknown> {
   return snapshot;
 }
 
+/**
+ * Attach a non-enumerable `$source` helper to the final args object so it
+ * stays invisible to `Object.keys`/`JSON.stringify`/spread (those only ever
+ * see real field values) while still being reachable via property access
+ * (including through `createDualCaseProxy`).
+ */
 function attachArgSource(target: Record<string, unknown>, sourceMap: Map<string, ArgSource>): void {
   Object.defineProperty(target, "$source", {
     // `sourceMap` is keyed by the field's canonical schema name, which may
@@ -1264,7 +1264,7 @@ async function runCommandInternal<TResult = unknown>(
           ? "prompt"
           : localEnvFallbackFields.has(field.name)
             ? "env"
-            : hasParserValue(field.name)
+            : hasParserValue(field.name) && argsToValidate[field.name] !== undefined
               ? "cli"
               : "default",
       );
