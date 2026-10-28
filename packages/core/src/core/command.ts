@@ -44,8 +44,8 @@ export type MergedArgs<TLocalArgs, TGlobalArgs> =
  * Add the `$source`, `$invocation` and `$agent` run-time metadata helpers.
  *
  * `$source` reports whether a given field's final value came from an
- * explicit CLI token, a `field.env` fallback, or neither (schema default /
- * `prompt` resolution). Its `name` parameter is typed as a plain `string`
+ * explicit CLI token, a `field.env` fallback, a `prompt` resolver answer, or
+ * none of these (e.g. a schema default). Its `name` parameter is typed as a plain `string`
  * (not `keyof T`) since the runtime helper deliberately accepts either
  * camelCase or kebab-case field names (matching `createDualCaseProxy`'s
  * dual-case access) and returns `"default"` for anything it doesn't

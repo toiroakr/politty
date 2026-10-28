@@ -178,6 +178,7 @@ describe("cleanup context globalArgs", () => {
     ]);
 
     expect(context.globalArgs?.profile).toBe("dev");
+    expect(context.globalArgs?.$source?.("profile")).toBe("prompt");
   });
 
   it("carries a global value a prompt resolver mutates in place without returning it", async () => {
@@ -201,6 +202,51 @@ describe("cleanup context globalArgs", () => {
     ]);
 
     expect(context.globalArgs?.profile).toBe("dev");
+    expect(context.globalArgs?.$source?.("profile")).toBe("prompt");
+  });
+
+  it("keeps the prompt source of a global array a resolver extended in place before it threw", async () => {
+    const tagsArgs = z.strictObject({ tags: arg(z.array(z.string())) });
+    const cmd = defineCommand({ name: "test", run: () => {} });
+
+    const context = await runAndCaptureCleanup(["--tags", "a"], (cleanup) => [
+      cmd,
+      {
+        globalArgs: tagsArgs,
+        cleanup,
+        prompt: async (rawArgs) => {
+          (rawArgs.tags as string[]).push("from-prompt");
+          throw new Error("prompt cancelled");
+        },
+      },
+    ]);
+
+    expect(context.globalArgs?.tags).toEqual(["a", "from-prompt"]);
+    expect(context.globalArgs?.$source?.("tags")).toBe("prompt");
+  });
+
+  it("reports a global CLI value a resolver cleared in place as default", async () => {
+    const modeArgs = z.strictObject({ mode: arg(z.string().default("slow")) });
+    const cmd = defineCommand({
+      name: "test",
+      args: z.object({ name: z.string() }),
+      run: () => {},
+    });
+
+    const context = await runAndCaptureCleanup(["--mode", "fast"], (cleanup) => [
+      cmd,
+      {
+        globalArgs: modeArgs,
+        cleanup,
+        prompt: async (rawArgs) => {
+          rawArgs.mode = undefined;
+          return {};
+        },
+      },
+    ]);
+
+    expect(context.globalArgs?.mode).toBe("slow");
+    expect(context.globalArgs?.$source?.("mode")).toBe("default");
   });
 
   it("still runs cleanup with the original error when recovering the global values throws", async () => {

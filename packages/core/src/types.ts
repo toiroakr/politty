@@ -26,10 +26,11 @@ export type IsEmpty<T> = keyof T extends never ? true : false;
  * Where a resolved arg value came from:
  * - `"cli"`: an explicit CLI token (flag or positional)
  * - `"env"`: `field.env` fallback (no CLI token was provided)
- * - `"default"`: neither of the above (e.g. a schema default, or a value
- *   resolved by a `prompt` handler)
+ * - `"prompt"`: answered by a `prompt` resolver, whether returned or written
+ *   into its `rawArgs` in place
+ * - `"default"`: none of the above (e.g. a schema default)
  */
-export type ArgSource = "cli" | "env" | "default";
+export type ArgSource = "cli" | "env" | "prompt" | "default";
 
 /**
  * Identifies the CLI name a command was invoked with in the current run.

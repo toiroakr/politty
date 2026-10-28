@@ -213,11 +213,11 @@ const command = defineCommand({
 });
 ```
 
-Use `args.$source(name)` to check whether a value came from an explicit CLI token, an `env` fallback, or neither (e.g. a schema default). It's typed as optional since directly-constructed args objects (e.g. in unit tests) won't have it:
+Use `args.$source(name)` to check whether a value came from an explicit CLI token, an `env` fallback, a `prompt` resolver answer, or none of these (e.g. a schema default). It's typed as optional since directly-constructed args objects (e.g. in unit tests) won't have it:
 
 ```typescript
 run: (args) => {
-  args.$source?.("apiKey"); // "cli" | "env" | "default"
+  args.$source?.("apiKey"); // "cli" | "env" | "prompt" | "default"
 },
 ```
 

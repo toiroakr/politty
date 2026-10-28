@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { mergeNestedArgs } from "../adapter/unflatten.js";
 import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
 import { enableCompileCache } from "../compile-cache.js";
@@ -72,6 +73,23 @@ const defaultLogger: Logger = {
 const USAGE_ERROR_EXIT_CODE = 2;
 
 /**
+ * Copy parser-supplied values before a prompt resolver runs. A resolver may
+ * mutate an array/object value in place, which a shallow copy would not
+ * notice since both sides share the reference.
+ */
+function snapshotArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const snapshot: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    try {
+      snapshot[key] = structuredClone(value);
+    } catch {
+      snapshot[key] = value;
+    }
+  }
+  return snapshot;
+}
+
+/**
  * Attach a non-enumerable `$source` helper to the final args object so it
  * stays invisible to `Object.keys`/`JSON.stringify`/spread (those only ever
  * see real field values) while still being reachable via property access
@@ -90,6 +108,22 @@ function attachArgSource(target: Record<string, unknown>, sourceMap: Map<string,
       "default",
     enumerable: false,
   });
+}
+
+/**
+ * Classify global fields for `$source`. Later sources win: an env fallback
+ * fills a field the CLI left empty, and a prompt answer overrides both.
+ */
+function buildGlobalSourceMap(
+  cliProvided: Iterable<string>,
+  envFallback: Iterable<string>,
+  prompted: Iterable<string>,
+): Map<string, ArgSource> {
+  const sourceMap = new Map<string, ArgSource>();
+  for (const name of cliProvided) sourceMap.set(name, "cli");
+  for (const name of envFallback) sourceMap.set(name, "env");
+  for (const name of prompted) sourceMap.set(name, "prompt");
+  return sourceMap;
 }
 
 /**
@@ -149,8 +183,13 @@ function recoverGlobalArgs(
   const envFallbackFields = applyEnvFallbacks(candidate, extracted);
   for (const [name, value] of Object.entries(trace.promptedGlobalArgs ?? {})) {
     if (!known.has(name)) continue;
-    candidate[name] = value;
     envFallbackFields.delete(name);
+    if (value === undefined) {
+      delete candidate[name];
+      cliProvided.delete(name);
+      continue;
+    }
+    candidate[name] = value;
   }
   for (let attempt = 0; attempt <= known.size; attempt++) {
     const validation = validateArgs(candidate, schema);
@@ -159,6 +198,9 @@ function recoverGlobalArgs(
       const sourceMap = new Map<string, ArgSource>();
       for (const name of cliProvided) if (name in candidate) sourceMap.set(name, "cli");
       for (const name of envFallbackFields) if (name in candidate) sourceMap.set(name, "env");
+      for (const [name, value] of Object.entries(trace.promptedGlobalArgs ?? {})) {
+        if (value !== undefined && name in candidate) sourceMap.set(name, "prompt");
+      }
       attachArgSource(recovered, sourceMap);
       return createDualCaseProxy(recovered);
     }
@@ -1057,6 +1099,7 @@ async function runCommandInternal<TResult = unknown>(
     // ancestor's) before env fallbacks below mutate accumulatedGlobalArgs.
     const cliProvidedGlobalFields = new Set(Object.keys(accumulatedGlobalArgs));
     let envFallbackGlobalFields = new Set<string>();
+    let promptedGlobalFields = new Set<string>();
     if (options.globalArgs && options._globalExtracted && !isCompletionInvocation) {
       envFallbackGlobalFields = applyEnvFallbacks(accumulatedGlobalArgs, options._globalExtracted);
 
@@ -1066,18 +1109,37 @@ async function runCommandInternal<TResult = unknown>(
       // clobber a real CLI/env value already in accumulatedGlobalArgs (see
       // the identical local-args handling below for the same rationale).
       if (options.prompt) {
-        const beforePrompt = { ...accumulatedGlobalArgs };
-        const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted, {
-          globalArgs: accumulatedGlobalArgs,
-        });
-        for (const [key, value] of Object.entries(resolved)) {
-          if (value !== undefined) accumulatedGlobalArgs[key] = value;
+        const beforePrompt = snapshotArgs(accumulatedGlobalArgs);
+        try {
+          const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted, {
+            globalArgs: accumulatedGlobalArgs,
+          });
+          for (const [key, value] of Object.entries(resolved)) {
+            if (value !== undefined) accumulatedGlobalArgs[key] = value;
+          }
+        } finally {
+          // Also runs when the resolver throws after mutating in place, so
+          // the `globalArgs` recovered for `cleanup` still sees its answers.
+          // A field the resolver cleared is kept as `undefined`: it no longer
+          // came from the CLI or env, and the schema default applies instead.
+          const prompted: Record<string, unknown> = {};
+          for (const key of new Set([
+            ...Object.keys(beforePrompt),
+            ...Object.keys(accumulatedGlobalArgs),
+          ])) {
+            const value = accumulatedGlobalArgs[key];
+            if (isDeepStrictEqual(beforePrompt[key], value)) continue;
+            prompted[key] = value;
+            if (value === undefined) {
+              cliProvidedGlobalFields.delete(key);
+              envFallbackGlobalFields.delete(key);
+            }
+          }
+          promptedGlobalFields = new Set(
+            Object.keys(prompted).filter((key) => prompted[key] !== undefined),
+          );
+          if (options._globalTrace) options._globalTrace.promptedGlobalArgs = prompted;
         }
-        const prompted: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(accumulatedGlobalArgs)) {
-          if (beforePrompt[key] !== value) prompted[key] = value;
-        }
-        if (options._globalTrace) options._globalTrace.promptedGlobalArgs = prompted;
       }
 
       // Note: validation only sees recognized global flags. Misspelled globals
@@ -1100,9 +1162,11 @@ async function runCommandInternal<TResult = unknown>(
     // Validate arguments
     if (!command.args) {
       // No schema, run with global args (or empty args)
-      const globalSourceMap = new Map<string, ArgSource>();
-      for (const name of cliProvidedGlobalFields) globalSourceMap.set(name, "cli");
-      for (const name of envFallbackGlobalFields) globalSourceMap.set(name, "env");
+      const globalSourceMap = buildGlobalSourceMap(
+        cliProvidedGlobalFields,
+        envFallbackGlobalFields,
+        promptedGlobalFields,
+      );
       attachArgSource(validatedGlobalArgs, globalSourceMap);
       attachInvocation(validatedGlobalArgs, resolveInvocation(command, context));
       attachAgent(validatedGlobalArgs, options._agent);
@@ -1131,6 +1195,14 @@ async function runCommandInternal<TResult = unknown>(
     }
 
     let argsToValidate = parseResult.rawArgs;
+    // Snapshot the keys the parser supplied (CLI or env) before a prompt
+    // resolver runs: a resolver may answer by mutating `rawArgs` in place,
+    // and such answers must be classified like returned ones, not as CLI.
+    const parserRawArgs = options.prompt ? snapshotArgs(parseResult.rawArgs) : parseResult.rawArgs;
+    const hasParserValue = (name: string): boolean => Object.hasOwn(parserRawArgs, name);
+
+    // Prompt for missing command args (if prompt resolver is provided)
+    const promptResolvedFields = new Set<string>();
     if (options.prompt && parseResult.extractedFields) {
       const resolved = await options.prompt(argsToValidate, parseResult.extractedFields, {
         globalArgs: validatedGlobalArgs,
@@ -1144,6 +1216,16 @@ async function runCommandInternal<TResult = unknown>(
         if (value !== undefined) nextArgsToValidate[key] = value;
       }
       argsToValidate = nextArgsToValidate;
+      // Built-in resolvers echo parser values back, so only a value the
+      // parser did not supply (or a changed one) counts as a prompt answer.
+      for (const [key, value] of Object.entries(argsToValidate)) {
+        if (
+          value !== undefined &&
+          (!hasParserValue(key) || !isDeepStrictEqual(parserRawArgs[key], value))
+        ) {
+          promptResolvedFields.add(key);
+        }
+      }
     }
 
     const validationResult = validateArgs(argsToValidate, command.args);
@@ -1165,9 +1247,11 @@ async function runCommandInternal<TResult = unknown>(
     // Global effects run before the merged args exist, so attach the global
     // run metadata here: a global effect must see the same `$source` whether
     // or not the invoked command declares args of its own.
-    const globalSourceMap = new Map<string, ArgSource>();
-    for (const name of cliProvidedGlobalFields) globalSourceMap.set(name, "cli");
-    for (const name of envFallbackGlobalFields) globalSourceMap.set(name, "env");
+    const globalSourceMap = buildGlobalSourceMap(
+      cliProvidedGlobalFields,
+      envFallbackGlobalFields,
+      promptedGlobalFields,
+    );
     attachArgSource(validatedGlobalArgs, globalSourceMap);
     attachInvocation(validatedGlobalArgs, resolveInvocation(command, context));
     attachAgent(validatedGlobalArgs, options._agent);
@@ -1197,16 +1281,18 @@ async function runCommandInternal<TResult = unknown>(
     // overrides a same-named global field's "cli"/"env" classification instead
     // of leaking it through unchanged (reachable only with `skipValidation`).
     for (const field of parseResult.extractedFields?.fields ?? []) {
-      const localHasCliOrEnvValue =
-        Object.hasOwn(parseResult.rawArgs, field.name) || localEnvFallbackFields.has(field.name);
-
+      // A resolver may have deleted the parser's value, leaving the schema
+      // default to fill it in.
+      const parserValueKept = argsToValidate[field.name] !== undefined;
       argSourceMap.set(
         field.name,
-        localHasCliOrEnvValue
-          ? localEnvFallbackFields.has(field.name)
+        promptResolvedFields.has(field.name)
+          ? "prompt"
+          : parserValueKept && localEnvFallbackFields.has(field.name)
             ? "env"
-            : "cli"
-          : "default",
+            : parserValueKept && hasParserValue(field.name)
+              ? "cli"
+              : "default",
       );
     }
     attachArgSource(mergedPlainArgs, argSourceMap);
