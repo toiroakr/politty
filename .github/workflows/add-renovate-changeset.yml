@@ -64,8 +64,9 @@ jobs:
 
       - name: Install Node.js
         if: steps.existing.outputs.found == 'false'
-        run: pnpm env use --global 24
-        shell: bash
+        uses: ./.github/actions/install-node
+        with:
+          version: "24"
 
       - name: Snapshot base lockfile
         if: steps.existing.outputs.found == 'false'

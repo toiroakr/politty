@@ -26,7 +26,9 @@ jobs:
           standalone: true
           run_install: false
       - name: Install Node.js
-        run: pnpm env use --global 24
+        uses: ./.github/actions/install-node
+        with:
+          version: "24"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build

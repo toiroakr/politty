@@ -37,8 +37,9 @@ jobs:
           standalone: true
           run_install: false
       - name: Install Node.js
-        run: pnpm env use --global 24
-        shell: bash
+        uses: ./.github/actions/install-node
+        with:
+          version: "24"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         shell: bash
@@ -88,8 +89,9 @@ jobs:
           standalone: true
           run_install: false
       - name: Install Node.js
-        run: pnpm env use --global 24
-        shell: bash
+        uses: ./.github/actions/install-node
+        with:
+          version: "24"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         shell: bash
@@ -117,8 +119,9 @@ jobs:
           standalone: true
           run_install: false
       - name: Install Node.js
-        run: pnpm env use --global 22.18.0
-        shell: bash
+        uses: ./.github/actions/install-node
+        with:
+          version: "22.18.0"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         shell: bash
@@ -161,8 +164,9 @@ jobs:
           standalone: true
           run_install: false
       - name: Install Node.js
-        run: pnpm env use --global 24
-        shell: bash
+        uses: ./.github/actions/install-node
+        with:
+          version: "24"
       - name: Pin ${{ matrix.dep }} to its declared peer floor
         run: node .github/scripts/pin-peer-floor.mjs "${{ matrix.dep }}" "${{ matrix.version }}"
         shell: bash
@@ -225,8 +229,9 @@ jobs:
           standalone: true
           run_install: false
       - name: Install Node.js
-        run: pnpm env use --global 24
-        shell: bash
+        uses: ./.github/actions/install-node
+        with:
+          version: "24"
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Run shell completion tests

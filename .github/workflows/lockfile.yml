@@ -29,8 +29,9 @@ jobs:
           standalone: true
           run_install: false
       - name: Install Node.js
-        run: pnpm env use --global 24
-        shell: bash
+        uses: ./.github/actions/install-node
+        with:
+          version: "24"
       - name: Update lockfile
         run: pnpm install --no-frozen-lockfile
       - uses: autofix-ci/action@c5b2d67aa2274e7b5a18224e8171550871fc7e4a # v1.3.4
