@@ -336,3 +336,24 @@ describe("arg effect on a nested field", () => {
     expect(effect).toHaveBeenCalledWith(5, expect.objectContaining({ name: "config.port" }));
   });
 });
+
+describe("effect of a plain union", () => {
+  it("runs the effect of the option that accepted the args, not the first option defining the field", async () => {
+    const effectA = vi.fn();
+    const effectB = vi.fn();
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.object({ mode: z.literal("a"), port: arg(z.string(), { effect: effectA }) }),
+        z.object({ mode: z.literal("b"), port: arg(z.string(), { effect: effectB }) }),
+      ]),
+      run: () => {},
+    });
+
+    await runCommand(cmd, ["--mode", "b", "--port", "80"]);
+
+    expect(effectA).not.toHaveBeenCalled();
+    expect(effectB).toHaveBeenCalledOnce();
+  });
+});

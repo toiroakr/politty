@@ -258,6 +258,56 @@ function firstFieldsInAnyVariant(
   return [...byName.values()];
 }
 
+function sameFieldMetadata(left: ResolvedFieldMeta, right: ResolvedFieldMeta): boolean {
+  return (
+    left.effect === right.effect &&
+    samePackageRequirements(left.requiredPackages, right.requiredPackages) &&
+    (left.nested?.path ?? []).join("\0") === (right.nested?.path ?? []).join("\0")
+  );
+}
+
+function optionsDefineFieldsDifferently(options: readonly ExtractedFields[]): boolean {
+  const first = new Map<string, ResolvedFieldMeta>();
+  for (const option of options) {
+    if (option.unionOptions && optionsDefineFieldsDifferently(option.unionOptions)) return true;
+    for (const field of option.fields) {
+      const previous = first.get(field.name);
+      if (!previous) first.set(field.name, field);
+      else if (!sameFieldMetadata(previous, field)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * The fields of the plain-union option that accepts the arguments, so that
+ * `effect`, `requiredPackages` and nested paths come from the option that
+ * actually validated rather than from the first option defining the name.
+ * Options are tried in order, like the union itself. Options are only
+ * re-validated when they define a same-named field with different metadata,
+ * which keeps transforms from running again for every other union.
+ *
+ * @param extracted - Extracted fields
+ * @param accepts - Whether an option's schema accepts the arguments
+ * @returns Extracted fields narrowed to the accepting option, or the input
+ *   when it is not a plain union, its options agree, or none accepts
+ */
+export function selectAcceptingUnionOption(
+  extracted: ExtractedFields,
+  accepts: (schema: ExtractedFields["schema"]) => boolean,
+): ExtractedFields {
+  const options = extracted.unionOptions;
+  if (extracted.discriminator || !options || !optionsDefineFieldsDifferently(options)) {
+    return extracted;
+  }
+  for (const option of options) {
+    if (!accepts(option.schema)) continue;
+    const selected = selectAcceptingUnionOption(option, accepts);
+    return { ...extracted, fields: selected.fields };
+  }
+  return extracted;
+}
+
 /**
  * The fields of the discriminated-union variant whose own definitions read
  * its discriminator value, or all extracted fields when the schema has no

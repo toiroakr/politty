@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import type { ResolvedFieldMeta } from "../adapter/field-meta.js";
 import { mergeNestedArgs } from "../adapter/unflatten.js";
 import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
 import { enableCompileCache } from "../compile-cache.js";
@@ -51,6 +52,7 @@ import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import {
   extractFields,
+  selectAcceptingUnionOption,
   selectDiscriminatedVariant,
   toCamelCase,
   toKebabCase,
@@ -1262,9 +1264,19 @@ async function runCommandInternal<TResult = unknown>(
       if (options._globalTrace) options._globalTrace.effectsRan = true;
       await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
     }
-    if (parseResult.extractedFields && !isCompletionInvocation) {
-      await runEffects(proxiedCommandArgs, parseResult.extractedFields, proxiedGlobalArgs);
+    const acceptedFields = parseResult.extractedFields
+      ? selectAcceptingUnionOption(
+          parseResult.extractedFields,
+          (schema) => validateArgs(argsToValidate, schema).success,
+        )
+      : undefined;
+    if (acceptedFields && !isCompletionInvocation) {
+      await runEffects(proxiedCommandArgs, acceptedFields, proxiedGlobalArgs);
     }
+    const acceptedField = (field: ResolvedFieldMeta): ResolvedFieldMeta =>
+      (acceptedFields !== parseResult.extractedFields
+        ? acceptedFields?.fields.find((f) => f.name === field.name)
+        : undefined) ?? field;
 
     // Merge global args with command args. A same-named field is rejected by
     // validation, so command args only win here when `skipValidation` is set.
@@ -1319,8 +1331,8 @@ async function runCommandInternal<TResult = unknown>(
               ? selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs)
                   .fields
               : []),
-            ...(parseResult.optionFields ?? []),
-            ...(parseResult.positionalSlotFields ?? []),
+            ...(parseResult.optionFields ?? []).map(acceptedField),
+            ...(parseResult.positionalSlotFields ?? []).map(acceptedField),
           ],
     });
 
