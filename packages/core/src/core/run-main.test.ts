@@ -406,6 +406,28 @@ describe("runCommand", () => {
       expect(args.$source?.("level")).toBe("default");
     });
 
+    it("preserves shared local answers set in place by a prompt resolver", async () => {
+      const runFn = vi.fn();
+      const level = arg(z.string().default("local-default"));
+      const root = defineCommand({
+        name: "cli",
+        subCommands: {
+          sub: defineCommand({ name: "sub", args: z.object({ level }), run: runFn }),
+        },
+      });
+      const result = await runCommand(root, ["--level", "cli-global", "sub"], {
+        globalArgs: z.object({ level }),
+        prompt: async (rawArgs) => {
+          if (rawArgs.level === undefined) rawArgs.level = "from-prompt";
+          return {};
+        },
+      });
+      expect(result.success).toBe(true);
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.level).toBe("from-prompt");
+      expect(args.$source?.("level")).toBe("cli");
+    });
+
     it("still resolves the global's CLI value when the prompt resolver explicitly returns undefined for the local field", async () => {
       const runFn = vi.fn();
       const globalArgs = z.object({ level: arg(z.string().default("global-default")) });

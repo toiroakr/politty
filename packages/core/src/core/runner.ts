@@ -1185,7 +1185,7 @@ async function runCommandInternal<TResult = unknown>(
     }
 
     for (const [name, value] of Object.entries(globalPrefillArgs)) {
-      if (!promptResolvedFields.has(name)) {
+      if (!promptResolvedFields.has(name) && !Object.hasOwn(parseResult.rawArgs, name)) {
         argsToValidate = { ...argsToValidate, [name]: value };
         globalPrefilledFields.add(name);
       }
