@@ -183,8 +183,13 @@ function recoverGlobalArgs(
   const envFallbackFields = applyEnvFallbacks(candidate, extracted);
   for (const [name, value] of Object.entries(trace.promptedGlobalArgs ?? {})) {
     if (!known.has(name)) continue;
-    candidate[name] = value;
     envFallbackFields.delete(name);
+    if (value === undefined) {
+      delete candidate[name];
+      cliProvided.delete(name);
+      continue;
+    }
+    candidate[name] = value;
   }
   for (let attempt = 0; attempt <= known.size; attempt++) {
     const validation = validateArgs(candidate, schema);
@@ -193,8 +198,8 @@ function recoverGlobalArgs(
       const sourceMap = new Map<string, ArgSource>();
       for (const name of cliProvided) if (name in candidate) sourceMap.set(name, "cli");
       for (const name of envFallbackFields) if (name in candidate) sourceMap.set(name, "env");
-      for (const name of Object.keys(trace.promptedGlobalArgs ?? {})) {
-        if (name in candidate) sourceMap.set(name, "prompt");
+      for (const [name, value] of Object.entries(trace.promptedGlobalArgs ?? {})) {
+        if (value !== undefined && name in candidate) sourceMap.set(name, "prompt");
       }
       attachArgSource(recovered, sourceMap);
       return createDualCaseProxy(recovered);
@@ -1105,18 +1110,36 @@ async function runCommandInternal<TResult = unknown>(
       // the identical local-args handling below for the same rationale).
       if (options.prompt) {
         const beforePrompt = snapshotArgs(accumulatedGlobalArgs);
-        const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted, {
-          globalArgs: accumulatedGlobalArgs,
-        });
-        for (const [key, value] of Object.entries(resolved)) {
-          if (value !== undefined) accumulatedGlobalArgs[key] = value;
+        try {
+          const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted, {
+            globalArgs: accumulatedGlobalArgs,
+          });
+          for (const [key, value] of Object.entries(resolved)) {
+            if (value !== undefined) accumulatedGlobalArgs[key] = value;
+          }
+        } finally {
+          // Also runs when the resolver throws after mutating in place, so
+          // the `globalArgs` recovered for `cleanup` still sees its answers.
+          // A field the resolver cleared is kept as `undefined`: it no longer
+          // came from the CLI or env, and the schema default applies instead.
+          const prompted: Record<string, unknown> = {};
+          for (const key of new Set([
+            ...Object.keys(beforePrompt),
+            ...Object.keys(accumulatedGlobalArgs),
+          ])) {
+            const value = accumulatedGlobalArgs[key];
+            if (isDeepStrictEqual(beforePrompt[key], value)) continue;
+            prompted[key] = value;
+            if (value === undefined) {
+              cliProvidedGlobalFields.delete(key);
+              envFallbackGlobalFields.delete(key);
+            }
+          }
+          promptedGlobalFields = new Set(
+            Object.keys(prompted).filter((key) => prompted[key] !== undefined),
+          );
+          if (options._globalTrace) options._globalTrace.promptedGlobalArgs = prompted;
         }
-        const prompted: Record<string, unknown> = {};
-        for (const [key, value] of Object.entries(accumulatedGlobalArgs)) {
-          if (!isDeepStrictEqual(beforePrompt[key], value)) prompted[key] = value;
-        }
-        promptedGlobalFields = new Set(Object.keys(prompted));
-        if (options._globalTrace) options._globalTrace.promptedGlobalArgs = prompted;
       }
 
       // Note: validation only sees recognized global flags. Misspelled globals

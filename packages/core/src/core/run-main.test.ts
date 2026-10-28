@@ -393,6 +393,22 @@ describe("runCommand", () => {
       expect(args.$source?.("mode")).toBe("default");
     });
 
+    it("classifies a global CLI value a prompt resolver clears in place as default", async () => {
+      const runFn = vi.fn();
+      const cmd = defineCommand({ name: "cmd", run: runFn });
+      const result = await runCommand(cmd, ["--mode", "fast"], {
+        globalArgs: z.object({ mode: arg(z.string().default("slow")) }),
+        prompt: async (rawArgs) => {
+          rawArgs.mode = undefined;
+          return {};
+        },
+      });
+      expect(result.success).toBe(true);
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.mode).toBe("slow");
+      expect(args.$source?.("mode")).toBe("default");
+    });
+
     it("keeps CLI and env sources when a prompt resolver echoes parser values back", async () => {
       process.env.MODE_ENV = "from-env";
       const runFn = vi.fn();
