@@ -229,15 +229,10 @@ export interface SkillCommandOptions {
    * `json` field must rename or remove that global field (or make it a
    * plain boolean) instead.
    *
-   * (Historical note: this omission used to also be required to work around
-   * a politty core bug where a global flag typed *before* the subcommand
-   * resolved correctly as a global value, but a same-named local field's
-   * own default would then overwrite it during the merge. That bug is
-   * fixed in politty core independently of this option — a same-named
-   * local and global field with *identical* definitions now resolves
-   * correctly regardless of position. This option still omits the local
-   * flag by default for simplicity: hosts don't need to duplicate the
-   * flag's definition on both schemas to get the expected behavior.)
+   * (This omission is required: politty rejects a field declared in both
+   * `globalArgs` and a command's own schema, even when the definitions are
+   * identical. Omitting the local flag leaves the host's global field as the
+   * only declaration.)
    *
    * @example
    * ```ts

@@ -84,8 +84,9 @@ export class DefaultSubCommandError extends Error {
 }
 
 /**
- * Error thrown when a global field and a local field share a name. A field
- * name can only be declared in one of the two schemas, even when the
+ * Error thrown when a global field and a local field collide: they share a
+ * name, or nest into conflicting output positions (`db` against `db.host`).
+ * A field name can only be declared in one of the two schemas, even when the
  * definitions are identical: with the name in both, a value (or prompt
  * answer) for it has no single owner. Rejected at validation time rather
  * than letting a value from one schema silently flow into the other.

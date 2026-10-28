@@ -671,14 +671,14 @@ function checkCrossSchemaOutputPositions(
 /**
  * Validate that no cross-schema collisions exist between two schemas
  * (e.g., global args and command args): neither a case-variant collision
- * (same canonical name, different spelling) nor a same-named field with a
- * different definition (same spelling, but the two schemas don't agree on
- * what values are valid).
+ * (same canonical name, different spelling) nor a same-named field (same
+ * spelling, even when the two definitions are identical), nor fields that nest
+ * into conflicting output positions.
  *
  * @param extractedA - Extracted fields from first schema (e.g., global args)
  * @param extractedB - Extracted fields from second schema (e.g., command args)
  * @throws {CaseVariantCollisionError} If cross-schema case-variant collisions are found
- * @throws {FieldTypeConflictError} If a field with the same name is declared on both schemas
+ * @throws {FieldTypeConflictError} If a field with the same name is declared on both schemas, or fields nest into conflicting output positions
  */
 export function validateCrossSchemaCollisions(
   extractedA: ExtractedFields,
