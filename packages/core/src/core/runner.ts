@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { getFieldValue, mergeNestedArgs } from "../adapter/unflatten.js";
 import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
 import { enableCompileCache } from "../compile-cache.js";
@@ -78,6 +79,23 @@ const USAGE_ERROR_EXIT_CODE = 2;
  * see real field values) while still being reachable via property access
  * (including through `createDualCaseProxy`).
  */
+/**
+ * Copy parser-supplied values before a prompt resolver runs. A resolver may
+ * mutate an array/object value in place, which a shallow copy would not
+ * notice since both sides share the reference.
+ */
+function snapshotArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const snapshot: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    try {
+      snapshot[key] = structuredClone(value);
+    } catch {
+      snapshot[key] = value;
+    }
+  }
+  return snapshot;
+}
+
 function attachArgSource(target: Record<string, unknown>, sourceMap: Map<string, ArgSource>): void {
   Object.defineProperty(target, "$source", {
     // `sourceMap` is keyed by the field's canonical schema name, which may
@@ -1087,7 +1105,7 @@ async function runCommandInternal<TResult = unknown>(
       // clobber a real CLI/env value already in accumulatedGlobalArgs (see
       // the identical local-args handling below for the same rationale).
       if (options.prompt) {
-        const beforePrompt = { ...accumulatedGlobalArgs };
+        const beforePrompt = snapshotArgs(accumulatedGlobalArgs);
         const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted, {
           globalArgs: accumulatedGlobalArgs,
         });
@@ -1096,7 +1114,7 @@ async function runCommandInternal<TResult = unknown>(
         }
         const prompted: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(accumulatedGlobalArgs)) {
-          if (beforePrompt[key] !== value) prompted[key] = value;
+          if (!isDeepStrictEqual(beforePrompt[key], value)) prompted[key] = value;
         }
         promptedGlobalFields = new Set(Object.keys(prompted));
         if (options._globalTrace) options._globalTrace.promptedGlobalArgs = prompted;
@@ -1193,7 +1211,7 @@ async function runCommandInternal<TResult = unknown>(
     // Snapshot the keys the parser supplied (CLI or env) before a prompt
     // resolver runs: a resolver may answer by mutating `rawArgs` in place,
     // and such answers must be classified like returned ones, not as CLI.
-    const parserRawArgs = { ...parseResult.rawArgs };
+    const parserRawArgs = snapshotArgs(parseResult.rawArgs);
     const hasParserValue = (name: string): boolean => Object.hasOwn(parserRawArgs, name);
 
     // Prompt for missing command args (if prompt resolver is provided)
@@ -1213,7 +1231,7 @@ async function runCommandInternal<TResult = unknown>(
       for (const [key, value] of Object.entries(argsToValidate)) {
         if (
           value !== undefined &&
-          (!hasParserValue(key) || !Object.is(parserRawArgs[key], value))
+          (!hasParserValue(key) || !isDeepStrictEqual(parserRawArgs[key], value))
         ) {
           promptResolvedFields.add(key);
         }

@@ -448,6 +448,42 @@ describe("runCommand", () => {
       expect(args.$source?.("mode")).toBe("cli");
     });
 
+    it("classifies a local array extended in place by a prompt resolver as prompt", async () => {
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({ tags: arg(z.array(z.string())), mode: arg(z.array(z.string())) }),
+        run: runFn,
+      });
+      const result = await runCommand(cmd, ["--tags", "a", "--mode", "fast"], {
+        prompt: async (rawArgs) => {
+          (rawArgs.tags as string[]).push("from-prompt");
+          return {};
+        },
+      });
+      expect(result.success).toBe(true);
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.tags).toEqual(["a", "from-prompt"]);
+      expect(args.$source?.("tags")).toBe("prompt");
+      expect(args.$source?.("mode")).toBe("cli");
+    });
+
+    it("classifies a global array extended in place by a prompt resolver as prompt", async () => {
+      const runFn = vi.fn();
+      const cmd = defineCommand({ name: "cmd", run: runFn });
+      const result = await runCommand(cmd, ["--tags", "a"], {
+        globalArgs: z.object({ tags: arg(z.array(z.string())) }),
+        prompt: async (rawArgs) => {
+          (rawArgs.tags as string[]).push("from-prompt");
+          return {};
+        },
+      });
+      expect(result.success).toBe(true);
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.tags).toEqual(["a", "from-prompt"]);
+      expect(args.$source?.("tags")).toBe("prompt");
+    });
+
     it("keeps CLI and env sources when a prompt resolver echoes parser values back", async () => {
       process.env.MODE_ENV = "from-env";
       const runFn = vi.fn();

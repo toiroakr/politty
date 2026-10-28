@@ -1,4 +1,8 @@
 ---
+"@politty/loculus": minor
+"@politty/valibot": minor
+"@politty/zod": minor
+"@politty/zod-mini": minor
 "politty": minor
 ---
 
