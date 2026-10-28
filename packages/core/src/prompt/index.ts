@@ -66,7 +66,9 @@ export async function promptMissingArgs(
   }
 
   for (const name of Object.keys(options.providedArgs ?? {})) {
-    if (!Object.hasOwn(rawArgs, name)) delete result[name];
+    if (!Object.hasOwn(rawArgs, name) && Object.is(result[name], options.providedArgs?.[name])) {
+      delete result[name];
+    }
   }
   return result;
 }

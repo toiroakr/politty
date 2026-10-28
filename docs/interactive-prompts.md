@@ -119,7 +119,8 @@ CLI values, environment fallbacks, and answers to earlier prompts in schema fiel
 order. These values have not yet been validated or transformed. For command
 prompts, `globalArgs` contains the validated global arguments, including defaults.
 During global prompts, it contains global values resolved so far, before validation.
-Both records are snapshots; changing their properties does not replace argument values.
+Both records are shallow snapshots. Top-level assignments do not replace argument
+values, but nested objects are shared.
 
 The function is skipped when the argument already has a value, prompting is
 disabled, the environment is non-interactive, or the field belongs to an inactive

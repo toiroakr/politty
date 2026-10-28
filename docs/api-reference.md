@@ -1985,8 +1985,18 @@ Async callback to resolve missing argument values interactively. Provided by ada
 type PromptResolver = (
   rawArgs: Record<string, unknown>,
   extracted: ExtractedFields,
+  context?: {
+    globalArgs: Record<string, unknown>;
+    providedArgs?: Record<string, unknown>;
+  },
 ) => Promise<Record<string, unknown>>;
 ```
+
+`context.globalArgs` contains validated global arguments for command prompts, or
+values resolved so far for global prompts. `context.providedArgs` contains raw
+shared global CLI values supplied before the subcommand. Custom resolvers wrapping
+`promptMissingArgs` should forward both records in its options to avoid prompting
+again for shared options. See [Interactive Prompts](./interactive-prompts.md).
 
 ---
 

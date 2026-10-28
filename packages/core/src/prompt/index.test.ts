@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { PromptChoicesContext } from "../core/arg-registry.js";
+import { extractFields } from "../core/schema-extractor.js";
 import { arg, defineCommand, runCommand } from "../index.js";
 import type { PromptResolver } from "../types.js";
 import { promptMissingArgs } from "./index.js";
@@ -598,6 +599,50 @@ describe("dynamic prompt choices", () => {
     }
   });
 
+  it("preserves an answer when the inherited value is undefined", async () => {
+    const adapter = createMockAdapter({ org: "acme" });
+    const schema = z.object({
+      org: arg(z.string(), { prompt: { choices: async () => ["acme"] } }),
+    });
+    const result = await promptMissingArgs({}, extractFields(schema), {
+      adapter,
+      interactive: true,
+      providedArgs: { org: undefined },
+    });
+    expect(result).toEqual({ org: "acme" });
+  });
+
+  it("keeps shared CLI values raw for choices and validated for local prefill", async () => {
+    const choices = vi.fn(async ({ rawArgs, globalArgs }: PromptChoicesContext) => {
+      expect(rawArgs.retries).toBe("3");
+      expect(globalArgs.retries).toBe(3);
+      return ["acme"];
+    });
+    const retries = z.coerce.number();
+    const adapter = createMockAdapter({ org: "acme" });
+    const cmd = defineCommand({
+      name: "cli",
+      subCommands: {
+        deploy: defineCommand({
+          name: "deploy",
+          args: z.object({ retries, org: arg(z.string(), { prompt: { choices } }) }),
+          run: (args) => ({
+            retries: args.retries,
+            org: args.org,
+            source: args.$source("retries"),
+          }),
+        }),
+      },
+    });
+    const result = await runCommand(cmd, ["--retries", "3", "deploy"], {
+      globalArgs: z.object({ retries }),
+      prompt: createTestResolver(adapter),
+    });
+    expect(result.success).toBe(true);
+    expect(choices).toHaveBeenCalledOnce();
+    if (result.success) expect(result.result).toEqual({ retries: 3, org: "acme", source: "cli" });
+  });
+
   it("skips choices for a shared global option provided before the subcommand", async () => {
     const choices = vi.fn(async () => ["other"]);
     const org = arg(z.string(), { prompt: { choices } });
@@ -681,6 +726,30 @@ describe("dynamic prompt choices", () => {
       expect(adapter.select).not.toHaveBeenCalled();
     },
   );
+
+  it("uses all schema variant values without resolving discriminator choices", async () => {
+    const choices = vi.fn(async () => ["a"]);
+    const adapter = createMockAdapter({ mode: "b" });
+    const cmd = defineCommand({
+      name: "pick",
+      args: z.discriminatedUnion("mode", [
+        z.object({ mode: arg(z.literal("a"), { prompt: { choices } }) }),
+        z.object({ mode: z.literal("b") }),
+      ]),
+      run: (args) => args.mode,
+    });
+    const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.result).toBe("b");
+    expect(choices).not.toHaveBeenCalled();
+    expect(adapter.select).toHaveBeenCalledWith({
+      message: "mode",
+      options: [
+        { label: "a", value: "a" },
+        { label: "b", value: "b" },
+      ],
+    });
+  });
 
   it("only resolves the selected discriminated variant's choices", async () => {
     const unused = vi.fn(async () => ["unused"]);

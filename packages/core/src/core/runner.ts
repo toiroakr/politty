@@ -1141,6 +1141,7 @@ async function runCommandInternal<TResult = unknown>(
     // before the merge below ever got a chance to supply the value.
     const globalPrefilledFields = new Set<string>();
     const providedArgs: Record<string, unknown> = {};
+    const globalPrefillArgs: Record<string, unknown> = {};
     if (parseResult.extractedFields) {
       const globalFieldByName = new Map<string, ResolvedFieldMeta>();
       for (const field of options._globalExtracted?.fields ?? []) {
@@ -1160,7 +1161,8 @@ async function runCommandInternal<TResult = unknown>(
             ? globalValue !== undefined
             : Object.hasOwn(validatedGlobalArgs, field.name))
         ) {
-          providedArgs[field.name] = globalValue;
+          providedArgs[field.name] = accumulatedGlobalArgs[field.name];
+          globalPrefillArgs[field.name] = globalValue;
         }
       }
     }
@@ -1182,7 +1184,7 @@ async function runCommandInternal<TResult = unknown>(
       argsToValidate = nextArgsToValidate;
     }
 
-    for (const [name, value] of Object.entries(providedArgs)) {
+    for (const [name, value] of Object.entries(globalPrefillArgs)) {
       if (!promptResolvedFields.has(name)) {
         argsToValidate = { ...argsToValidate, [name]: value };
         globalPrefilledFields.add(name);
