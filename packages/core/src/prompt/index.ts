@@ -19,6 +19,8 @@ export interface PromptOptions {
   adapter: PromptAdapter;
   /** Override interactive detection (force enable/disable prompts) */
   interactive?: boolean;
+  globalArgs?: Record<string, unknown>;
+  providedArgs?: Record<string, unknown>;
 }
 
 /**
@@ -37,7 +39,8 @@ export async function promptMissingArgs(
   if (!interactive) return rawArgs;
 
   const adapter = options.adapter;
-  const result = { ...rawArgs };
+  const result = { ...options.providedArgs, ...rawArgs };
+  const globalArgs = options.globalArgs === rawArgs ? result : (options.globalArgs ?? {});
 
   // For discriminatedUnion schemas, prompt the discriminator first then
   // narrow to the active variant to avoid prompting irrelevant fields.
@@ -46,7 +49,7 @@ export async function promptMissingArgs(
     extracted.discriminator &&
     extracted.variants
   ) {
-    await promptDiscriminatedUnion(adapter, result, extracted);
+    await promptDiscriminatedUnion(adapter, result, extracted, globalArgs);
   } else if (extracted.schemaType === "union" || extracted.schemaType === "xor") {
     // Plain unions have no discriminator to narrow by. Prompting the merged
     // field set would collect answers for incompatible branches, causing
@@ -59,9 +62,12 @@ export async function promptMissingArgs(
     // structure here because extractFields flattens both operands. Variant-
     // aware prompting for intersections requires architectural changes to
     // preserve sub-schema structure through extraction.
-    await promptAllFields(adapter, result, extracted.fields);
+    await promptAllFields(adapter, result, extracted.fields, globalArgs);
   }
 
+  for (const name of Object.keys(options.providedArgs ?? {})) {
+    if (!Object.hasOwn(rawArgs, name)) delete result[name];
+  }
   return result;
 }
 
@@ -69,6 +75,7 @@ async function promptDiscriminatedUnion(
   adapter: PromptAdapter,
   result: Record<string, unknown>,
   extracted: ExtractedFields,
+  globalArgs: Record<string, unknown>,
 ): Promise<void> {
   const { discriminator, variants } = extracted;
   if (!discriminator || !variants) return;
@@ -86,7 +93,7 @@ async function promptDiscriminatedUnion(
         discConfig.type = "select";
         discConfig.choices = allValues.map((v) => ({ label: v, value: v }));
       }
-      await promptAndCollect(adapter, result, discConfig);
+      await promptAndCollect(adapter, result, discConfig, globalArgs);
     }
   }
 
@@ -96,7 +103,7 @@ async function promptDiscriminatedUnion(
   if (activeVariant !== extracted) {
     // Prompt only the active variant's fields (excluding discriminator)
     const variantFields = activeVariant.fields.filter((f) => f.name !== discriminator);
-    await promptAllFields(adapter, result, variantFields);
+    await promptAllFields(adapter, result, variantFields, globalArgs);
   }
   // When no variant matches (invalid value or unextracted discriminator),
   // skip prompting and let Zod validation surface the error.
@@ -124,10 +131,11 @@ async function promptAllFields(
   adapter: PromptAdapter,
   result: Record<string, unknown>,
   fields: ResolvedFieldMeta[],
+  globalArgs: Record<string, unknown>,
 ): Promise<void> {
   const fieldsToPrompt = getFieldsToPrompt(fields, result);
   for (const config of fieldsToPrompt) {
-    await promptAndCollect(adapter, result, config);
+    await promptAndCollect(adapter, result, config, globalArgs);
   }
 }
 
@@ -135,7 +143,21 @@ async function promptAndCollect(
   adapter: PromptAdapter,
   result: Record<string, unknown>,
   config: ResolvedPromptConfig,
+  globalArgs: Record<string, unknown>,
 ): Promise<void> {
+  const resolveChoices = config.field.prompt?.choices;
+  if (config.type === "select" && !config.choices && typeof resolveChoices === "function") {
+    const choices = await resolveChoices({ rawArgs: { ...result }, globalArgs: { ...globalArgs } });
+    if (choices.length === 0) {
+      throw new Error(`No prompt choices available for "${config.field.name}"`);
+    }
+    config = {
+      ...config,
+      choices: choices.map((choice) =>
+        typeof choice === "string" ? { label: choice, value: choice } : choice,
+      ),
+    };
+  }
   const { message } = config;
   let value: unknown;
   switch (config.type) {

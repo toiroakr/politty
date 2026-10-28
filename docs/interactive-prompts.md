@@ -90,12 +90,43 @@ args: z.object({
 
 ### `PromptMeta` Options
 
-| Property  | Type                                                | Description                                                                |
-| --------- | --------------------------------------------------- | -------------------------------------------------------------------------- |
-| `message` | `string`                                            | Message shown to the user. Defaults to the field's `description` or name   |
-| `type`    | `PromptType`                                        | Explicit prompt type. Overrides auto-detection                             |
-| `choices` | `Array<string \| { label: string; value: string }>` | Choices for select prompts. Overrides enum values from schema              |
-| `enabled` | `boolean`                                           | Set to `false` to disable prompting (default: `true` when `prompt` is set) |
+| Property  | Type                                     | Description                                                                |
+| --------- | ---------------------------------------- | -------------------------------------------------------------------------- |
+| `message` | `string`                                 | Message shown to the user. Defaults to the field's `description` or name   |
+| `type`    | `PromptType`                             | Explicit prompt type. Overrides auto-detection                             |
+| `choices` | `PromptChoices \| PromptChoicesResolver` | Choices for select prompts. Overrides enum values from schema              |
+| `enabled` | `boolean`                                | Set to `false` to disable prompting (default: `true` when `prompt` is set) |
+
+### Dynamic Choices
+
+`choices` also accepts a function returning choices, synchronously or asynchronously:
+
+```typescript
+org: arg(z.string(), {
+  prompt: {
+    message: "Organization",
+    choices: async ({ rawArgs, globalArgs }) => {
+      const client = await createClient(globalArgs);
+      const organizations = await client.listOrganizations(rawArgs.profile);
+      return organizations.map((org) => ({ label: org.name, value: org.id }));
+    },
+  },
+}),
+```
+
+The function runs immediately before a select prompt is displayed. `rawArgs` contains
+CLI values, environment fallbacks, and answers to earlier prompts in schema field
+order. These values have not yet been validated or transformed. For command
+prompts, `globalArgs` contains the validated global arguments, including defaults.
+During global prompts, it contains global values resolved so far, before validation.
+Both records are snapshots; changing their properties does not replace argument values.
+
+The function is skipped when the argument already has a value, prompting is
+disabled, the environment is non-interactive, or the field belongs to an inactive
+variant. An explicit non-select prompt type also takes precedence over choices.
+Discriminator prompts always use the schema's variant values.
+If the function throws or returns an empty array, argument resolution fails
+without falling back to a text prompt. Dynamic choices override schema enum values.
 
 ### Prompt Type Auto-Detection
 
@@ -194,9 +225,17 @@ const myAdapter: PromptAdapter = {
   },
 };
 
-export const prompt: PromptResolver = (rawArgs, extracted) =>
-  promptMissingArgs(rawArgs, extracted, { adapter: myAdapter });
+export const prompt: PromptResolver = (rawArgs, extracted, context) =>
+  promptMissingArgs(rawArgs, extracted, {
+    adapter: myAdapter,
+    globalArgs: context?.globalArgs ?? {},
+    providedArgs: context?.providedArgs ?? {},
+  });
 ```
+
+Forward `context.providedArgs` as well as `context.globalArgs` when wrapping
+`promptMissingArgs`. `providedArgs` contains shared global CLI values supplied
+before the subcommand, so those fields do not prompt again.
 
 Then pass it to `runMain` as usual:
 

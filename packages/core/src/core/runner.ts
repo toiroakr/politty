@@ -1068,7 +1068,9 @@ async function runCommandInternal<TResult = unknown>(
       // the identical local-args handling below for the same rationale).
       if (options.prompt) {
         const beforePrompt = { ...accumulatedGlobalArgs };
-        const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted);
+        const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted, {
+          globalArgs: accumulatedGlobalArgs,
+        });
         for (const [key, value] of Object.entries(resolved)) {
           if (value !== undefined) accumulatedGlobalArgs[key] = value;
         }
@@ -1129,27 +1131,7 @@ async function runCommandInternal<TResult = unknown>(
       return result as RunResult<TResult>;
     }
 
-    // Prompt for missing command args (if prompt resolver is provided)
     let argsToValidate = parseResult.rawArgs;
-    const promptResolvedFields = new Set<string>();
-    if (options.prompt && parseResult.extractedFields) {
-      const resolved = await options.prompt(argsToValidate, parseResult.extractedFields);
-      // A resolver may return `{ field: undefined }` for a field it chose
-      // not to prompt for; that isn't an explicit value, so skip it here
-      // instead of spreading it in verbatim -- otherwise it would either
-      // clobber a real CLI/env value already in argsToValidate, or (if
-      // tracked anyway) block the global-value pre-fill below for a
-      // resolver that legitimately skips a field.
-      const nextArgsToValidate = { ...argsToValidate };
-      for (const [key, value] of Object.entries(resolved)) {
-        if (value !== undefined) {
-          nextArgsToValidate[key] = value;
-          promptResolvedFields.add(key);
-        }
-      }
-      argsToValidate = nextArgsToValidate;
-    }
-
     // Same-named field on both schemas (validateCrossSchemaCollisions has
     // already guaranteed the two definitions are identical): a flag typed
     // before the subcommand is captured as global before the local schema
@@ -1158,14 +1140,14 @@ async function runCommandInternal<TResult = unknown>(
     // local field with no default — otherwise local validation would fail
     // before the merge below ever got a chance to supply the value.
     const globalPrefilledFields = new Set<string>();
+    const providedArgs: Record<string, unknown> = {};
     if (parseResult.extractedFields) {
       const globalFieldByName = new Map<string, ResolvedFieldMeta>();
       for (const field of options._globalExtracted?.fields ?? []) {
         if (!globalFieldByName.has(field.name)) globalFieldByName.set(field.name, field);
       }
       for (const field of parseResult.extractedFields.fields) {
-        const localHasOwnValue =
-          Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
+        const localHasOwnValue = Object.hasOwn(parseResult.rawArgs, field.name);
         // An `unflatten` global schema nests the value away from its flat name.
         const globalField = globalFieldByName.get(field.name);
         const globalValue = globalField
@@ -1178,9 +1160,32 @@ async function runCommandInternal<TResult = unknown>(
             ? globalValue !== undefined
             : Object.hasOwn(validatedGlobalArgs, field.name))
         ) {
-          argsToValidate = { ...argsToValidate, [field.name]: globalValue };
-          globalPrefilledFields.add(field.name);
+          providedArgs[field.name] = globalValue;
         }
+      }
+    }
+
+    // Prompt for missing command args (if prompt resolver is provided)
+    const promptResolvedFields = new Set<string>();
+    if (options.prompt && parseResult.extractedFields) {
+      const resolved = await options.prompt(argsToValidate, parseResult.extractedFields, {
+        globalArgs: validatedGlobalArgs,
+        providedArgs,
+      });
+      const nextArgsToValidate = { ...argsToValidate };
+      for (const [key, value] of Object.entries(resolved)) {
+        if (value !== undefined) {
+          nextArgsToValidate[key] = value;
+          promptResolvedFields.add(key);
+        }
+      }
+      argsToValidate = nextArgsToValidate;
+    }
+
+    for (const [name, value] of Object.entries(providedArgs)) {
+      if (!promptResolvedFields.has(name)) {
+        argsToValidate = { ...argsToValidate, [name]: value };
+        globalPrefilledFields.add(name);
       }
     }
 

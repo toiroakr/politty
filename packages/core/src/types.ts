@@ -285,6 +285,10 @@ export type SubCommandsRecord = Record<string, SubCommandValue>;
 export type PromptResolver = (
   rawArgs: Record<string, unknown>,
   extracted: ExtractedFields,
+  context?: {
+    globalArgs: Record<string, unknown>;
+    providedArgs?: Record<string, unknown>;
+  },
 ) => Promise<Record<string, unknown>>;
 
 /**

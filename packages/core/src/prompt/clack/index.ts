@@ -28,5 +28,9 @@ function createClackAdapter(): PromptAdapter {
  * runMain(cmd, { version: "1.0.0", prompt });
  * ```
  */
-export const prompt: PromptResolver = (rawArgs, extracted) =>
-  promptMissingArgs(rawArgs, extracted, { adapter: createClackAdapter() });
+export const prompt: PromptResolver = (rawArgs, extracted, context) =>
+  promptMissingArgs(rawArgs, extracted, {
+    adapter: createClackAdapter(),
+    globalArgs: context?.globalArgs ?? {},
+    providedArgs: context?.providedArgs ?? {},
+  });

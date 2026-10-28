@@ -45,5 +45,9 @@ function createInquirerAdapter(): PromptAdapter {
  * runMain(cmd, { version: "1.0.0", prompt });
  * ```
  */
-export const prompt: PromptResolver = (rawArgs, extracted) =>
-  promptMissingArgs(rawArgs, extracted, { adapter: createInquirerAdapter() });
+export const prompt: PromptResolver = (rawArgs, extracted, context) =>
+  promptMissingArgs(rawArgs, extracted, {
+    adapter: createInquirerAdapter(),
+    globalArgs: context?.globalArgs ?? {},
+    providedArgs: context?.providedArgs ?? {},
+  });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import type { PromptChoicesContext } from "../core/arg-registry.js";
 import { arg, defineCommand, runCommand } from "../index.js";
 import type { PromptResolver } from "../types.js";
 import { promptMissingArgs } from "./index.js";
@@ -31,7 +32,13 @@ function createCancelAdapter(): PromptAdapter {
 
 /** Create a PromptResolver from a mock adapter for testing */
 function createTestResolver(adapter: PromptAdapter, interactive = true): PromptResolver {
-  return (rawArgs, extracted) => promptMissingArgs(rawArgs, extracted, { adapter, interactive });
+  return (rawArgs, extracted, context) =>
+    promptMissingArgs(rawArgs, extracted, {
+      adapter,
+      interactive,
+      globalArgs: context?.globalArgs ?? {},
+      providedArgs: context?.providedArgs ?? {},
+    });
 }
 
 describe("promptMissingArgs", () => {
@@ -553,5 +560,152 @@ describe("prompt integration", () => {
     expect(adapter.select).not.toHaveBeenCalled();
     // Only foo should be prompted
     expect(adapter.text).toHaveBeenCalledOnce();
+  });
+});
+
+describe("dynamic prompt choices", () => {
+  it("resolves choices sequentially with CLI, env, earlier answers and validated globals", async () => {
+    vi.stubEnv("POLITTY_CHOICES_TOKEN", "env-token");
+    try {
+      const choices = vi.fn(async ({ rawArgs, globalArgs }: PromptChoicesContext) => {
+        expect(rawArgs).toMatchObject({ token: "env-token", profile: "work", org: "acme" });
+        expect(globalArgs).toEqual({ retries: 3 });
+        return [{ label: "Production", value: "prod" }];
+      });
+      const adapter = createMockAdapter({ org: "acme", environment: "prod" });
+      const cmd = defineCommand({
+        name: "deploy",
+        args: z.object({
+          token: arg(z.string(), { env: "POLITTY_CHOICES_TOKEN" }),
+          profile: z.string(),
+          org: arg(z.string(), { prompt: { choices: async () => ["acme"] } }),
+          environment: arg(z.enum(["prod", "dev"]), { prompt: { choices } }),
+        }),
+        run: (args) => args.environment,
+      });
+      const result = await runCommand(cmd, ["--profile", "work"], {
+        globalArgs: z.object({ retries: z.coerce.number().default(3) }),
+        prompt: createTestResolver(adapter),
+      });
+      expect(result.success).toBe(true);
+      expect(choices).toHaveBeenCalledOnce();
+      expect(adapter.select).toHaveBeenLastCalledWith({
+        message: "environment",
+        options: [{ label: "Production", value: "prod" }],
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("skips choices for a shared global option provided before the subcommand", async () => {
+    const choices = vi.fn(async () => ["other"]);
+    const org = arg(z.string(), { prompt: { choices } });
+    const adapter = createMockAdapter({ org: "other" });
+    const cmd = defineCommand({
+      name: "cli",
+      subCommands: {
+        deploy: defineCommand({
+          name: "deploy",
+          args: z.object({ org }),
+          run: (args) => ({ org: args.org, source: args.$source("org") }),
+        }),
+      },
+    });
+    const result = await runCommand(cmd, ["--org", "acme", "deploy"], {
+      globalArgs: z.object({ org }),
+      prompt: createTestResolver(adapter),
+    });
+    expect(choices).not.toHaveBeenCalled();
+    expect(adapter.select).not.toHaveBeenCalled();
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.result).toEqual({ org: "acme", source: "cli" });
+  });
+
+  it.each(["cli", "env", "noninteractive", "disabled"])(
+    "does not resolve choices for %s",
+    async (source) => {
+      const choices = vi.fn(async () => ["acme"]);
+      const adapter = createMockAdapter({});
+      vi.stubEnv("POLITTY_CHOICES_ORG", source === "env" ? "acme" : undefined);
+      try {
+        const cmd = defineCommand({
+          name: "deploy",
+          args: z.object({
+            org: arg(z.string(), {
+              env: "POLITTY_CHOICES_ORG",
+              prompt: { choices, enabled: source !== "disabled" },
+            }),
+          }),
+          run: (args) => args,
+        });
+        await runCommand(cmd, source === "cli" ? ["--org", "acme"] : [], {
+          prompt: createTestResolver(adapter, source !== "noninteractive"),
+        });
+        expect(choices).not.toHaveBeenCalled();
+        expect(adapter.select).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  it.each(["throw", "empty"])(
+    "reports %s choices as an error without prompting",
+    async (failure) => {
+      const adapter = createMockAdapter({});
+      const run = vi.fn();
+      const cmd = defineCommand({
+        name: "deploy",
+        args: z.object({
+          org: arg(z.string(), {
+            prompt: {
+              choices: async () => {
+                if (failure === "throw") throw new Error("Organization lookup failed");
+                return [];
+              },
+            },
+          }),
+        }),
+        run,
+      });
+      const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain(
+          failure === "throw" ? "Organization lookup failed" : "No prompt choices available",
+        );
+      }
+      expect(run).not.toHaveBeenCalled();
+      expect(adapter.text).not.toHaveBeenCalled();
+      expect(adapter.select).not.toHaveBeenCalled();
+    },
+  );
+
+  it("only resolves the selected discriminated variant's choices", async () => {
+    const unused = vi.fn(async () => ["unused"]);
+    const selected = vi.fn(({ rawArgs }: PromptChoicesContext) => {
+      expect(rawArgs.mode).toBe("b");
+      return ["selected"];
+    });
+    const adapter = createMockAdapter({ mode: "b", item: "selected" });
+    const cmd = defineCommand({
+      name: "pick",
+      args: z.discriminatedUnion("mode", [
+        z.object({
+          mode: arg(z.literal("a"), { prompt: {} }),
+          item: arg(z.string(), { prompt: { choices: unused } }),
+        }),
+        z.object({
+          mode: arg(z.literal("b"), { prompt: {} }),
+          item: arg(z.string(), { prompt: { choices: selected } }),
+        }),
+      ]),
+      run: (args) => args.item,
+    });
+    const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
+    expect(result.success).toBe(true);
+    expect(selected).toHaveBeenCalledOnce();
+    expect(unused).not.toHaveBeenCalled();
   });
 });
