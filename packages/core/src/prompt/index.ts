@@ -38,7 +38,7 @@ export async function promptMissingArgs(
   if (!interactive) return rawArgs;
 
   const adapter = options.adapter;
-  const result = { ...options.providedArgs, ...rawArgs };
+  const result = { ...rawArgs };
   const globalArgs = options.globalArgs === rawArgs ? result : (options.globalArgs ?? {});
 
   // For discriminatedUnion schemas, prompt the discriminator first then
@@ -64,11 +64,6 @@ export async function promptMissingArgs(
     await promptAllFields(adapter, result, extracted.fields, globalArgs);
   }
 
-  for (const name of Object.keys(options.providedArgs ?? {})) {
-    if (!Object.hasOwn(rawArgs, name) && Object.is(result[name], options.providedArgs?.[name])) {
-      delete result[name];
-    }
-  }
   return result;
 }
 

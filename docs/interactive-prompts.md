@@ -234,8 +234,7 @@ export const prompt: PromptResolver = (rawArgs, extracted, context) =>
 ```
 
 Spread `context` into the `promptMissingArgs` options when wrapping it, so
-`context.providedArgs` and `context.globalArgs` are both forwarded. `providedArgs` contains shared global CLI values supplied
-before the subcommand, so those fields do not prompt again.
+`context.globalArgs` is forwarded to choice resolvers.
 
 Then pass it to `runMain` as usual:
 

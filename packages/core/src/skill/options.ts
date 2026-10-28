@@ -255,8 +255,8 @@ function resolveVerbose(
  *
  * Note: politty itself independently rejects this same situation. When
  * `globalArgs` and a command's own schema both declare a same-named field
- * with different definitions (as happens here — global non-boolean vs.
- * local boolean), `runMain`/`runCommand` throws `FieldTypeConflictError` at
+ * (as happens here — global non-boolean vs. local boolean),
+ * `runMain`/`runCommand` throws `FieldTypeConflictError` at
  * parse time, regardless of what this function decides. This function
  * keeping the local flag "declared" doesn't make the combination usable —
  * it just means the failure surfaces as politty's own clear error instead
