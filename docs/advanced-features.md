@@ -368,6 +368,8 @@ $ my-cli --action deploy --target prod # rejected: deploy does not accept --targ
 
 Help and generated docs list such an argument under each variant with that variant's role. For a `z.union` without a discriminator, the command line is read with the first option whose definitions fit the given tokens: every option is one it accepts, no positional token is left over, and its required arguments are present. When no option fits, the command fails with `Arguments match none of the accepted forms. See --help for the accepted forms.` A discriminated union fails with the same error when the discriminator is given in a role that only another variant uses (for example `--action rollback` while `rollback` takes `action` as a positional), instead of reading the rest of the line with a mix of both variants' definitions.
 
+After validation, a `z.union` runs `effect` callbacks, loads `requiredPackages` and merges nested object values with the fields of the option that accepted the arguments. When options define a same-named field with different `effect`, `requiredPackages` or nested paths (or only some options define a field with an `effect` or `requiredPackages`), politty validates each option on its own, in order, to find that option, so transforms and refinements of those options run again.
+
 ### Intersection (Schema Composition)
 
 Use `.and()` or `z.intersection()` to combine schemas and reuse common options.
