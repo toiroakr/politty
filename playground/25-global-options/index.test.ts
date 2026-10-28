@@ -166,84 +166,29 @@ describe("25-global-options", () => {
   });
 
   describe("global/local flag collision", () => {
-    it("local flag takes precedence over global when both define same name", async () => {
-      using console = spyOnConsoleLog();
-      // Both global and local define --output
+    it("rejects a command that declares a flag with the same name as a global flag", async () => {
+      using _console = spyOnConsoleLog();
       const globalSchema = z.object({
-        output: arg(z.string().default("global-default"), {
-          description: "Global output",
-        }),
-        verbose: arg(z.boolean().default(false), {
-          alias: "v",
-          description: "Verbose",
-        }),
+        output: arg(z.string().default("global-default"), { description: "Global output" }),
       });
-
       const cmd = defineCommand({
         name: "cmd",
-        description: "Test command",
         args: z.object({
-          output: arg(z.string().default("local-default"), {
-            alias: "o",
-            description: "Local output",
-          }),
+          output: arg(z.string().default("local-default"), { description: "Local output" }),
         }),
-        run: (args) => {
-          console.log(`output=${args.output}`);
-        },
+        run: () => {},
       });
-
-      const root = defineCommand({
-        name: "test-cli",
-        subCommands: { cmd },
-      });
+      const root = defineCommand({ name: "test-cli", subCommands: { cmd } });
 
       const result = await runCommand(root, ["cmd", "--output", "mine"], {
         globalArgs: globalSchema,
       });
 
-      expect(result.exitCode).toBe(0);
-      expect(console).toHaveBeenCalledWith("output=mine");
-    });
-
-    it("resolves the global value when the same-named flag is typed before the subcommand instead", async () => {
-      using console = spyOnConsoleLog();
-      // Same schemas as above, but --output is typed before "cmd" this time.
-      const globalSchema = z.object({
-        output: arg(z.string().default("global-default"), {
-          description: "Global output",
-        }),
-        verbose: arg(z.boolean().default(false), {
-          alias: "v",
-          description: "Verbose",
-        }),
-      });
-
-      const cmd = defineCommand({
-        name: "cmd",
-        description: "Test command",
-        args: z.object({
-          output: arg(z.string().default("local-default"), {
-            alias: "o",
-            description: "Local output",
-          }),
-        }),
-        run: (args) => {
-          console.log(`output=${args.output}`);
-        },
-      });
-
-      const root = defineCommand({
-        name: "test-cli",
-        subCommands: { cmd },
-      });
-
-      const result = await runCommand(root, ["--output", "mine", "cmd"], {
-        globalArgs: globalSchema,
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(console).toHaveBeenCalledWith("output=mine");
+      expect(result.exitCode).toBe(1);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain("can only be declared in one schema");
+      }
     });
   });
 

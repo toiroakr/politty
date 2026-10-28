@@ -172,8 +172,8 @@ This auto-detection only kicks in when the global field is a
 _non-positional boolean_ — matching `--verbose`/`--json`'s own type. A
 same-named field of another type (e.g. a string verbosity level) doesn't
 trigger it, so the local boolean flag stays declared. That combination
-still isn't usable, though: politty itself rejects a same-named field with
-conflicting definitions between `globalArgs` and a command's own schema,
+still isn't usable, though: politty itself rejects any same-named field
+between `globalArgs` and a command's own schema,
 throwing `FieldTypeConflictError` at parse time. `flags.verbose.alias`
 can't fix this — it only renames the short `-v`/`-x` alias, not the
 conflicting `--verbose`/`--json` field name. If your host CLI's global

@@ -237,23 +237,6 @@ describe("package loading", () => {
     expect(output.join("\n")).toContain("@politty-test/missing-ui");
   });
 
-  it("preserves global package requirements when a local field has the same name", async () => {
-    const command = defineCommand({
-      name: "test",
-      args: z.object({ ui: z.boolean().default(false) }),
-      run: () => "tests",
-    });
-    const globalArgs = z.object({
-      ui: arg(z.boolean().default(false), {
-        requiredPackages: [{ name: "@politty-test/missing-ui" }],
-      }),
-    });
-    expect((await runCommand(command, [], { globalArgs })).result).toBe("tests");
-    const result = await runCommand(command, ["--ui"], { globalArgs });
-    expect(result.success).toBe(false);
-    expect(result.error?.message).toContain("@politty-test/missing-ui");
-  });
-
   it("only requires the UI package when --ui is enabled", async () => {
     const command = defineCommand({
       name: "vitest",

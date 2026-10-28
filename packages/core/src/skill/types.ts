@@ -220,8 +220,8 @@ export interface SkillCommandOptions {
    * A same-named field of another type (e.g. a string verbosity level)
    * doesn't trigger this — the local boolean flag stays declared. However,
    * politty itself independently rejects that combination: when
-   * `globalArgs` and a command's own schema declare a same-named field
-   * with different definitions, `runMain`/`runCommand` throws
+   * `globalArgs` and a command's own schema declare a same-named field,
+   * `runMain`/`runCommand` throws
    * `FieldTypeConflictError` at parse time. {@link SkillFlagOverrides} can't
    * help here — it only renames the short alias (`-v`/`-x`), not the long
    * `--verbose`/`--json` field name itself, so the conflicting name stays

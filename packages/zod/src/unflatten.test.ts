@@ -203,31 +203,19 @@ describe("unflatten with globalArgs", () => {
     expect(result.error?.message).toContain("conflicting output positions");
   });
 
-  it("should let the command value of a shared key win", async () => {
-    const result = await runSub(
-      unflatten(z.object({ "config.port": z.coerce.number().default(1) })),
-      unflatten(
-        z.object({
-          "config.port": z.coerce
-            .number()
-            .transform((n) => n * 10)
-            .default(1),
-        }),
-      ),
-      ["--config.port", "2", "sub"],
-    );
+  it("should reject a key both schemas declare", async () => {
+    const sub = defineCommand({
+      name: "sub",
+      args: unflatten(z.object({ "config.port": z.coerce.number() })) as never,
+      run: () => {},
+    });
+    const cmd = defineCommand({ name: "app", subCommands: { sub: sub as never } });
+    const result = await runCommand(cmd, ["--config.port", "5", "sub"], {
+      globalArgs: unflatten(z.object({ "config.port": z.coerce.number() })) as never,
+    });
 
-    expect(result).toEqual({ config: { port: 20 } });
-  });
-
-  it("should hand a global value given before the subcommand to the command's same key", async () => {
-    const result = await runSub(
-      unflatten(z.object({ "config.port": z.coerce.number() })),
-      unflatten(z.object({ "config.port": z.coerce.number() })),
-      ["--config.port", "5", "sub"],
-    );
-
-    expect(result).toEqual({ config: { port: 5 } });
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toContain("can only be declared in one schema");
   });
 });
 

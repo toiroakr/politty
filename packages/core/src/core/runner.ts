@@ -1,4 +1,4 @@
-import { getFieldValue, mergeNestedArgs } from "../adapter/unflatten.js";
+import { mergeNestedArgs } from "../adapter/unflatten.js";
 import { detectAgent, type AgentInfo } from "../agent/detect-agent.js";
 import { enableCompileCache } from "../compile-cache.js";
 import { executeLifecycle } from "../executor/command-runner.js";
@@ -54,7 +54,6 @@ import {
   toCamelCase,
   toKebabCase,
   type ExtractedFields,
-  type ResolvedFieldMeta,
 } from "./schema-extractor.js";
 
 /**
@@ -1131,57 +1130,17 @@ async function runCommandInternal<TResult = unknown>(
 
     // Prompt for missing command args (if prompt resolver is provided)
     let argsToValidate = parseResult.rawArgs;
-    const promptResolvedFields = new Set<string>();
     if (options.prompt && parseResult.extractedFields) {
       const resolved = await options.prompt(argsToValidate, parseResult.extractedFields);
       // A resolver may return `{ field: undefined }` for a field it chose
       // not to prompt for; that isn't an explicit value, so skip it here
-      // instead of spreading it in verbatim -- otherwise it would either
-      // clobber a real CLI/env value already in argsToValidate, or (if
-      // tracked anyway) block the global-value pre-fill below for a
-      // resolver that legitimately skips a field.
+      // instead of spreading it in verbatim -- otherwise it would clobber a
+      // real CLI/env value already in argsToValidate.
       const nextArgsToValidate = { ...argsToValidate };
       for (const [key, value] of Object.entries(resolved)) {
-        if (value !== undefined) {
-          nextArgsToValidate[key] = value;
-          promptResolvedFields.add(key);
-        }
+        if (value !== undefined) nextArgsToValidate[key] = value;
       }
       argsToValidate = nextArgsToValidate;
-    }
-
-    // Same-named field on both schemas (validateCrossSchemaCollisions has
-    // already guaranteed the two definitions are identical): a flag typed
-    // before the subcommand is captured as global before the local schema
-    // is known, so the local field's own argv never receives it. Pre-fill
-    // it here, before local validation, so this also works for a required
-    // local field with no default — otherwise local validation would fail
-    // before the merge below ever got a chance to supply the value.
-    const globalPrefilledFields = new Set<string>();
-    if (parseResult.extractedFields) {
-      const globalFieldByName = new Map<string, ResolvedFieldMeta>();
-      for (const field of options._globalExtracted?.fields ?? []) {
-        if (!globalFieldByName.has(field.name)) globalFieldByName.set(field.name, field);
-      }
-      for (const field of parseResult.extractedFields.fields) {
-        const localHasOwnValue =
-          Object.hasOwn(parseResult.rawArgs, field.name) || promptResolvedFields.has(field.name);
-        // An `unflatten` global schema nests the value away from its flat name.
-        const globalField = globalFieldByName.get(field.name);
-        const globalValue = globalField
-          ? getFieldValue(validatedGlobalArgs, globalField)
-          : validatedGlobalArgs[field.name];
-        if (
-          !localHasOwnValue &&
-          cliProvidedGlobalFields.has(field.name) &&
-          (globalField?.nested
-            ? globalValue !== undefined
-            : Object.hasOwn(validatedGlobalArgs, field.name))
-        ) {
-          argsToValidate = { ...argsToValidate, [field.name]: globalValue };
-          globalPrefilledFields.add(field.name);
-        }
-      }
     }
 
     const validationResult = validateArgs(argsToValidate, command.args);
@@ -1235,14 +1194,6 @@ async function runCommandInternal<TResult = unknown>(
     // overrides a same-named global field's "cli"/"env" classification instead
     // of leaking it through unchanged.
     for (const field of parseResult.extractedFields?.fields ?? []) {
-      if (globalPrefilledFields.has(field.name)) {
-        // Already resolved from the global CLI value by the pre-fill above;
-        // `proxiedCommandArgs` already holds it (validated through the
-        // local schema), so the merge above already picked it up correctly.
-        argSourceMap.set(field.name, "cli");
-        continue;
-      }
-
       const localHasCliOrEnvValue =
         Object.hasOwn(parseResult.rawArgs, field.name) || localEnvFallbackFields.has(field.name);
 

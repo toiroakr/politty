@@ -587,38 +587,11 @@ export function validateCaseVariantCollisions(extracted: ExtractedFields): void 
 }
 
 /**
- * Check whether two same-named fields from different schemas (e.g. global
- * args and command args) have identical definitions. Only the facts
- * `extractFields()` already exposes are compared: the coarse type bucket,
- * whether the field is positional, and, for enum-like fields, the exact
- * set of allowed values. Anything `extractFields()` can't see (e.g. a
- * `.refine()`) is intentionally not compared — this is a coarse, cheap
- * equality check, not a full schema comparison.
- */
-function fieldsAreIdentical(a: ResolvedFieldMeta, b: ResolvedFieldMeta): boolean {
-  if (a.type !== b.type) return false;
-  if (a.positional !== b.positional) return false;
-  const aEnum = a.enumValues;
-  const bEnum = b.enumValues;
-  if (!aEnum && !bEnum) return true;
-  if (!aEnum || !bEnum) return false;
-  // Compare as sets, not arrays: extractEnumValues() can return duplicate
-  // entries for literal-union-style enums, which would otherwise make two
-  // schemas with an identical *set* of allowed values compare unequal.
-  const aSet = new Set(aEnum);
-  const bSet = new Set(bEnum);
-  if (aSet.size !== bSet.size) return false;
-  for (const value of aSet) {
-    if (!bSet.has(value)) return false;
-  }
-  return true;
-}
-
-/**
  * Check for cross-schema collisions between two schemas (e.g., global args
  * and command args): neither a case-variant collision (same canonical name,
- * different spelling) nor a same-named field with a different definition
- * (same spelling, but the two schemas don't agree on what values are valid).
+ * different spelling) nor a same-named field (same spelling). A same-named
+ * field is rejected even when both definitions are identical: with one name
+ * in two schemas, a value or prompt answer for it has no single owner.
  */
 function checkCrossSchemaCollisions(
   extractedA: ExtractedFields,
@@ -645,14 +618,12 @@ function checkCrossSchemaCollisions(
       });
       continue;
     }
-    if (!fieldsAreIdentical(existing, field)) {
-      errors.push({
-        commandPath,
-        type: "field_type_conflict",
-        message: `Global field "${existing.name}" and command field "${field.name}" share the same name but have different definitions.`,
-        field: field.name,
-      });
-    }
+    errors.push({
+      commandPath,
+      type: "field_type_conflict",
+      message: `Global field "${existing.name}" and command field "${field.name}" share the same name. A field name can only be declared in one schema, even when the definitions are identical.`,
+      field: field.name,
+    });
   }
   errors.push(...checkCrossSchemaOutputPositions(extractedA, extractedB, commandPath));
   return errors;
@@ -707,7 +678,7 @@ function checkCrossSchemaOutputPositions(
  * @param extractedA - Extracted fields from first schema (e.g., global args)
  * @param extractedB - Extracted fields from second schema (e.g., command args)
  * @throws {CaseVariantCollisionError} If cross-schema case-variant collisions are found
- * @throws {FieldTypeConflictError} If a same-named field has a different definition on each schema
+ * @throws {FieldTypeConflictError} If a field with the same name is declared on both schemas
  */
 export function validateCrossSchemaCollisions(
   extractedA: ExtractedFields,
