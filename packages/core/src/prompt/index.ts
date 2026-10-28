@@ -3,6 +3,7 @@ import {
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
+import type { PromptResolverContext } from "../types.js";
 import { getFieldsToPrompt, resolvePromptConfig } from "./prompt-resolver.js";
 import { isInteractive } from "./tty-detector.js";
 import type { PromptAdapter, ResolvedPromptConfig } from "./types.js";
@@ -14,13 +15,11 @@ export type { PromptAdapter, ResolvedPromptConfig } from "./types.js";
 /**
  * Options for promptMissingArgs behavior
  */
-export interface PromptOptions {
+export interface PromptOptions extends Partial<PromptResolverContext> {
   /** Prompt adapter to use for rendering prompts */
   adapter: PromptAdapter;
   /** Override interactive detection (force enable/disable prompts) */
   interactive?: boolean;
-  globalArgs?: Record<string, unknown>;
-  providedArgs?: Record<string, unknown>;
 }
 
 /**
@@ -149,8 +148,16 @@ async function promptAndCollect(
 ): Promise<void> {
   const resolveChoices = config.field.prompt?.choices;
   if (config.type === "select" && !config.choices && typeof resolveChoices === "function") {
-    const choices = await resolveChoices({ rawArgs: { ...result }, globalArgs: { ...globalArgs } });
-    if (choices.length === 0) {
+    let choices;
+    try {
+      choices = await resolveChoices({ rawArgs: { ...result }, globalArgs: { ...globalArgs } });
+    } catch (error) {
+      throw new Error(
+        `Failed to resolve prompt choices for "${config.field.name}": ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      );
+    }
+    if (!Array.isArray(choices) || choices.length === 0) {
       throw new Error(`No prompt choices available for "${config.field.name}"`);
     }
     config = {

@@ -229,13 +229,12 @@ const myAdapter: PromptAdapter = {
 export const prompt: PromptResolver = (rawArgs, extracted, context) =>
   promptMissingArgs(rawArgs, extracted, {
     adapter: myAdapter,
-    globalArgs: context?.globalArgs ?? {},
-    providedArgs: context?.providedArgs ?? {},
+    ...context,
   });
 ```
 
-Forward `context.providedArgs` as well as `context.globalArgs` when wrapping
-`promptMissingArgs`. `providedArgs` contains shared global CLI values supplied
+Spread `context` into the `promptMissingArgs` options when wrapping it, so
+`context.providedArgs` and `context.globalArgs` are both forwarded. `providedArgs` contains shared global CLI values supplied
 before the subcommand, so those fields do not prompt again.
 
 Then pass it to `runMain` as usual:

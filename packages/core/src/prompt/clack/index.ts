@@ -31,6 +31,5 @@ function createClackAdapter(): PromptAdapter {
 export const prompt: PromptResolver = (rawArgs, extracted, context) =>
   promptMissingArgs(rawArgs, extracted, {
     adapter: createClackAdapter(),
-    globalArgs: context?.globalArgs ?? {},
-    providedArgs: context?.providedArgs ?? {},
+    ...context,
   });

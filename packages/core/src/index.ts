@@ -130,6 +130,7 @@ export type {
   MainOptions,
   NonRunnableCommand,
   PromptResolver,
+  PromptResolverContext,
   RunCommandOptions,
   RunInvocation,
   RunResult,

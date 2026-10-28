@@ -48,6 +48,5 @@ function createInquirerAdapter(): PromptAdapter {
 export const prompt: PromptResolver = (rawArgs, extracted, context) =>
   promptMissingArgs(rawArgs, extracted, {
     adapter: createInquirerAdapter(),
-    globalArgs: context?.globalArgs ?? {},
-    providedArgs: context?.providedArgs ?? {},
+    ...context,
   });

@@ -718,7 +718,7 @@ describe("dynamic prompt choices", () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         expect(result.error.message).toContain(
-          failure === "throw" ? "Organization lookup failed" : "No prompt choices available",
+          failure === "throw" ? "Failed to resolve prompt choices" : "No prompt choices available",
         );
       }
       expect(run).not.toHaveBeenCalled();
@@ -726,6 +726,52 @@ describe("dynamic prompt choices", () => {
       expect(adapter.select).not.toHaveBeenCalled();
     },
   );
+
+  it("names the argument and keeps the original error as cause when choices throws", async () => {
+    const original = new Error("Organization lookup failed");
+    const cmd = defineCommand({
+      name: "deploy",
+      args: z.object({
+        org: arg(z.string(), {
+          prompt: {
+            choices: async () => {
+              throw original;
+            },
+          },
+        }),
+      }),
+      run: vi.fn(),
+    });
+    const result = await runCommand(cmd, [], {
+      prompt: createTestResolver(createMockAdapter({})),
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.message).toBe(
+        'Failed to resolve prompt choices for "org": Organization lookup failed',
+      );
+      expect(result.error.cause).toBe(original);
+    }
+  });
+
+  it("reports a non-array choices return value as unavailable choices for the argument", async () => {
+    const cmd = defineCommand({
+      name: "deploy",
+      args: z.object({
+        org: arg(z.string(), {
+          prompt: { choices: (async () => undefined) as unknown as () => string[] },
+        }),
+      }),
+      run: vi.fn(),
+    });
+    const result = await runCommand(cmd, [], {
+      prompt: createTestResolver(createMockAdapter({})),
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.message).toContain('No prompt choices available for "org"');
+    }
+  });
 
   it("uses all schema variant values without resolving discriminator choices", async () => {
     const choices = vi.fn(async () => ["a"]);
