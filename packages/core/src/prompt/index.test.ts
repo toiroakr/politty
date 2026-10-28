@@ -773,6 +773,28 @@ describe("dynamic prompt choices", () => {
     }
   });
 
+  it.each([[null], [{ label: "Acme" }], [42]])(
+    "rejects a malformed choice entry %j before reaching the adapter",
+    async (entry) => {
+      const adapter = createMockAdapter({});
+      const cmd = defineCommand({
+        name: "deploy",
+        args: z.object({
+          org: arg(z.string(), {
+            prompt: { choices: (async () => [entry]) as unknown as () => string[] },
+          }),
+        }),
+        run: vi.fn(),
+      });
+      const result = await runCommand(cmd, [], { prompt: createTestResolver(adapter) });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.message).toContain('Invalid prompt choice for "org"');
+      }
+      expect(adapter.select).not.toHaveBeenCalled();
+    },
+  );
+
   it("uses all schema variant values without resolving discriminator choices", async () => {
     const choices = vi.fn(async () => ["a"]);
     const adapter = createMockAdapter({ mode: "b" });

@@ -162,9 +162,18 @@ async function promptAndCollect(
     }
     config = {
       ...config,
-      choices: choices.map((choice) =>
-        typeof choice === "string" ? { label: choice, value: choice } : choice,
-      ),
+      choices: choices.map((choice: unknown) => {
+        if (typeof choice === "string") return { label: choice, value: choice };
+        if (
+          typeof choice === "object" &&
+          choice !== null &&
+          typeof (choice as { label?: unknown }).label === "string" &&
+          typeof (choice as { value?: unknown }).value === "string"
+        ) {
+          return choice as { label: string; value: string };
+        }
+        throw new Error(`Invalid prompt choice for "${config.field.name}"`);
+      }),
     };
   }
   const { message } = config;
