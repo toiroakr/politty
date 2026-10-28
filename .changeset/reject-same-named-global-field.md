@@ -17,4 +17,4 @@ runMain(defineCommand({ name: "build", args: z.object({ output }) }), {
 });
 ```
 
-Now it throws `FieldTypeConflictError` ("can only be declared in one schema"). Declare the field in only one of the two schemas. A same-named `verbose`/`json` on the built-in skills commands is still handled by passing `globalArgs` to `withSkillCommand`.
+Now it throws `FieldTypeConflictError` ("can only be declared in one schema"). The error class name is unchanged, but it is now thrown for identical definitions too. Declare the field in only one of the two schemas. A same-named `verbose`/`json` on the built-in skills commands is still handled by passing `globalArgs` to `withSkillCommand`.

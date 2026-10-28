@@ -1179,7 +1179,8 @@ async function runCommandInternal<TResult = unknown>(
       await runEffects(proxiedCommandArgs, parseResult.extractedFields, proxiedGlobalArgs);
     }
 
-    // Merge global args with command args (command args take precedence on collision)
+    // Merge global args with command args. A same-named field is rejected by
+    // validation, so command args only win here when `skipValidation` is set.
     const mergedPlainArgs = mergeNestedArgs(
       { ...proxiedGlobalArgs },
       { ...proxiedCommandArgs },
@@ -1188,11 +1189,10 @@ async function runCommandInternal<TResult = unknown>(
     );
     const argSourceMap = new Map<string, ArgSource>(globalSourceMap);
     const localEnvFallbackFields = parseResult.envFallbackFields ?? new Set<string>();
-    // Local fields take precedence on collision, mirroring the value merge above:
-    // classify every declared local field explicitly (not just ones present in
+    // Classify every declared local field explicitly (not just ones present in
     // rawArgs) so a local field resolved via schema default/prompt correctly
     // overrides a same-named global field's "cli"/"env" classification instead
-    // of leaking it through unchanged.
+    // of leaking it through unchanged (reachable only with `skipValidation`).
     for (const field of parseResult.extractedFields?.fields ?? []) {
       const localHasCliOrEnvValue =
         Object.hasOwn(parseResult.rawArgs, field.name) || localEnvFallbackFields.has(field.name);

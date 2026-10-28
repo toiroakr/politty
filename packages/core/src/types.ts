@@ -297,7 +297,11 @@ export interface MainOptions {
   debug?: boolean;
   /** Capture console and process.stdout/stderr output during execution (default: false) */
   captureLogs?: boolean;
-  /** Skip command definition validation (useful in production where tests already verified) */
+  /**
+   * Skip command definition validation (useful in production where tests already verified).
+   * A field declared in both `globalArgs` and a command's `args` is then not rejected, and
+   * the command's value wins.
+   */
   skipValidation?: boolean;
   /** Custom logger for output (default: console) */
   logger?: Logger;
@@ -382,7 +386,11 @@ export interface RunCommandOptions {
   debug?: boolean;
   /** Capture console and process.stdout/stderr output during execution (default: false) */
   captureLogs?: boolean;
-  /** Skip command definition validation (useful in production where tests already verified) */
+  /**
+   * Skip command definition validation (useful in production where tests already verified).
+   * A field declared in both `globalArgs` and a command's `args` is then not rejected, and
+   * the command's value wins.
+   */
   skipValidation?: boolean;
   /** Custom logger for output (default: console) */
   logger?: Logger;
