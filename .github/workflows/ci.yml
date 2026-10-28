@@ -31,15 +31,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        name: Install pnpm
+      - name: Install pnpm and Node.js
+        uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
         with:
-          standalone: true
-          run_install: false
-      - name: Install Node.js
-        uses: ./.github/actions/install-node
-        with:
-          version: "24"
+          runtime: node@24
+          install: false
+          cache: true
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         shell: bash
@@ -84,14 +81,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Install pnpm and Node.js
+        uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
         with:
-          standalone: true
-          run_install: false
-      - name: Install Node.js
-        uses: ./.github/actions/install-node
-        with:
-          version: "24"
+          runtime: node@24
+          install: false
+          cache: true
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         shell: bash
@@ -114,14 +109,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - name: Install pnpm and Node.js
+        uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
         with:
-          standalone: true
-          run_install: false
-      - name: Install Node.js
-        uses: ./.github/actions/install-node
-        with:
-          version: "22.18.0"
+          runtime: node@22.18.0
+          install: false
+          cache: true
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
         shell: bash
@@ -158,15 +151,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        name: Install pnpm
+      - name: Install pnpm and Node.js
+        uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
         with:
-          standalone: true
-          run_install: false
-      - name: Install Node.js
-        uses: ./.github/actions/install-node
-        with:
-          version: "24"
+          runtime: node@24
+          install: false
+          cache: true
       - name: Pin ${{ matrix.dep }} to its declared peer floor
         run: node .github/scripts/pin-peer-floor.mjs "${{ matrix.dep }}" "${{ matrix.version }}"
         shell: bash
@@ -223,15 +213,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        name: Install pnpm
+      - name: Install pnpm and Node.js
+        uses: pnpm/setup@a0881977cd8ea73b1ed212236c99ca10dcc80cf4 # v3.1.1
         with:
-          standalone: true
-          run_install: false
-      - name: Install Node.js
-        uses: ./.github/actions/install-node
-        with:
-          version: "24"
+          runtime: node@24
+          install: false
+          cache: true
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Run shell completion tests
