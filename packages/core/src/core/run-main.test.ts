@@ -425,7 +425,66 @@ describe("runCommand", () => {
       expect(result.success).toBe(true);
       const args = runFn.mock.calls[0]?.[0];
       expect(args.level).toBe("from-prompt");
-      expect(args.$source?.("level")).toBe("cli");
+      expect(args.$source?.("level")).toBe("default");
+    });
+
+    it("classifies a local-only answer set in place by a prompt resolver as default", async () => {
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({ name: arg(z.string()), mode: arg(z.string()) }),
+        run: runFn,
+      });
+      const result = await runCommand(cmd, ["--mode", "fast"], {
+        prompt: async (rawArgs) => {
+          rawArgs.name ??= "from-prompt";
+          return {};
+        },
+      });
+      expect(result.success).toBe(true);
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.name).toBe("from-prompt");
+      expect(args.$source?.("name")).toBe("default");
+      expect(args.$source?.("mode")).toBe("cli");
+    });
+
+    it("keeps CLI and env sources when a prompt resolver echoes parser values back", async () => {
+      process.env.MODE_ENV = "from-env";
+      const runFn = vi.fn();
+      const cmd = defineCommand({
+        name: "cmd",
+        args: z.object({
+          name: arg(z.string()),
+          mode: arg(z.string(), { env: "MODE_ENV" }),
+          extra: arg(z.string()),
+        }),
+        run: runFn,
+      });
+      const result = await runCommand(cmd, ["--name", "cli-name"], {
+        prompt: async (rawArgs) => ({ ...rawArgs, extra: "from-prompt" }),
+      });
+      expect(result.success).toBe(true);
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.$source?.("name")).toBe("cli");
+      expect(args.$source?.("mode")).toBe("env");
+      expect(args.extra).toBe("from-prompt");
+      expect(args.$source?.("extra")).toBe("default");
+    });
+
+    it("classifies a global answer set in place by a prompt resolver as default", async () => {
+      const runFn = vi.fn();
+      const cmd = defineCommand({ name: "cmd", run: runFn });
+      const result = await runCommand(cmd, [], {
+        globalArgs: z.object({ token: arg(z.string()) }),
+        prompt: async (rawArgs) => {
+          rawArgs.token ??= "from-prompt";
+          return {};
+        },
+      });
+      expect(result.success).toBe(true);
+      const args = runFn.mock.calls[0]?.[0];
+      expect(args.token).toBe("from-prompt");
+      expect(args.$source?.("token")).toBe("default");
     });
 
     it("still resolves the global's CLI value when the prompt resolver explicitly returns undefined for the local field", async () => {

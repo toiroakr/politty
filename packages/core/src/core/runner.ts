@@ -1167,6 +1167,12 @@ async function runCommandInternal<TResult = unknown>(
       }
     }
 
+    // Snapshot the keys the parser supplied (CLI or env) before a prompt
+    // resolver runs: a resolver may answer by mutating `rawArgs` in place,
+    // and such answers must be classified like returned ones, not as CLI.
+    const parserRawArgs = { ...parseResult.rawArgs };
+    const hasParserValue = (name: string): boolean => Object.hasOwn(parserRawArgs, name);
+
     // Prompt for missing command args (if prompt resolver is provided)
     const promptResolvedFields = new Set<string>();
     if (options.prompt && parseResult.extractedFields) {
@@ -1176,16 +1182,23 @@ async function runCommandInternal<TResult = unknown>(
       });
       const nextArgsToValidate = { ...argsToValidate };
       for (const [key, value] of Object.entries(resolved)) {
-        if (value !== undefined) {
-          nextArgsToValidate[key] = value;
+        if (value !== undefined) nextArgsToValidate[key] = value;
+      }
+      argsToValidate = nextArgsToValidate;
+      // Built-in resolvers echo parser values back, so only a value the
+      // parser did not supply (or a changed one) counts as a prompt answer.
+      for (const [key, value] of Object.entries(argsToValidate)) {
+        if (
+          value !== undefined &&
+          (!hasParserValue(key) || !Object.is(parserRawArgs[key], value))
+        ) {
           promptResolvedFields.add(key);
         }
       }
-      argsToValidate = nextArgsToValidate;
     }
 
     for (const [name, value] of Object.entries(globalPrefillArgs)) {
-      if (!promptResolvedFields.has(name) && !Object.hasOwn(parseResult.rawArgs, name)) {
+      if (!promptResolvedFields.has(name) && !hasParserValue(name)) {
         argsToValidate = { ...argsToValidate, [name]: value };
         globalPrefilledFields.add(name);
       }
@@ -1251,7 +1264,8 @@ async function runCommandInternal<TResult = unknown>(
       }
 
       const localHasCliOrEnvValue =
-        Object.hasOwn(parseResult.rawArgs, field.name) || localEnvFallbackFields.has(field.name);
+        !promptResolvedFields.has(field.name) &&
+        (hasParserValue(field.name) || localEnvFallbackFields.has(field.name));
 
       argSourceMap.set(
         field.name,
