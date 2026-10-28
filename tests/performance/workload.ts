@@ -50,7 +50,7 @@ export async function createScenarios(
     rest: [],
   });
   const result = await api.runCommand<string>(root, ["build", ...argv]);
-  assert.ok(result.success, result.error?.message);
+  assert.ok(result.success, result.error?.message ?? "Benchmark command failed");
   assert.equal(result.result, "input.ts:3");
   assert.ok(api.generateHelp(root, { showSubcommandOptions: true }).includes("--count"));
 

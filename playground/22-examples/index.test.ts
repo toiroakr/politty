@@ -72,9 +72,7 @@ describe("22-examples", () => {
 
     // By default, delegate to real fs for doc-comparator operations
     vi.mocked(fs.existsSync).mockImplementation((path) => realFs.existsSync(path));
-    vi.mocked(fs.readFileSync).mockImplementation((path, options) =>
-      realFs.readFileSync(path, options as fs.EncodingOption),
-    );
+    vi.mocked(fs.readFileSync).mockImplementation(realFs.readFileSync);
     vi.mocked(fs.writeFileSync).mockImplementation((path, data, options) =>
       realFs.writeFileSync(path, data, options),
     );
@@ -139,9 +137,7 @@ describe("22-examples", () => {
               });
             },
             cleanup: () => {
-              readFileSyncSpy.mockImplementation((path, options) =>
-                realFs.readFileSync(path, options as fs.EncodingOption),
-              );
+              readFileSyncSpy.mockImplementation(realFs.readFileSync);
             },
           },
         },
