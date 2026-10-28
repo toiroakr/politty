@@ -1961,17 +1961,32 @@ For full usage details, see [Interactive Prompts](./interactive-prompts.md).
 Prompt metadata for interactive input when a value is missing.
 
 ```typescript
+interface PromptChoicesContext {
+  rawArgs: Readonly<Record<string, unknown>>;
+  globalArgs: Readonly<Record<string, unknown>>;
+}
+
+type PromptChoices = Array<string | { label: string; value: string }>;
+
+type PromptChoicesResolver = (
+  context: PromptChoicesContext,
+) => PromptChoices | Promise<PromptChoices>;
+
 interface PromptMeta {
   /** Prompt message shown to the user. Defaults to the field's description or name. */
   message?: string;
   /** Explicit prompt type. Overrides auto-detection from schema/completion. */
   type?: PromptType;
   /** Choices for select prompt. Overrides enum values from schema. */
-  choices?: Array<string | { label: string; value: string }>;
+  choices?: PromptChoices | PromptChoicesResolver;
   /** Whether to enable prompting for this field (default: true when prompt is set) */
   enabled?: boolean;
 }
 ```
+
+Choice resolvers run only when a missing value needs a select prompt. They receive
+arguments resolved so far and global arguments. Errors and empty results fail
+argument resolution. See [Dynamic Choices](./interactive-prompts.md#dynamic-choices).
 
 ---
 
@@ -1993,8 +2008,18 @@ Async callback to resolve missing argument values interactively. Provided by ada
 type PromptResolver = (
   rawArgs: Record<string, unknown>,
   extracted: ExtractedFields,
+  context?: PromptResolverContext,
 ) => Promise<Record<string, unknown>>;
+
+interface PromptResolverContext {
+  globalArgs: Record<string, unknown>;
+}
 ```
+
+`context.globalArgs` contains validated global arguments for command prompts, or
+values resolved so far for global prompts. Custom resolvers wrapping
+`promptMissingArgs` should spread `context` into its options so choice resolvers
+receive `globalArgs`. See [Interactive Prompts](./interactive-prompts.md).
 
 ---
 
@@ -2065,6 +2090,7 @@ export type {
   MainOptions,
   NonRunnableCommand,
   PromptResolver,
+  PromptResolverContext,
   RunCommandOptions,
   RunnableCommand,
   RunResult,

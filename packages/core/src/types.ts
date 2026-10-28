@@ -278,6 +278,14 @@ export type SubCommandValue = AnyCommand | (() => Promise<AnyCommand>) | LazyCom
 export type SubCommandsRecord = Record<string, SubCommandValue>;
 
 /**
+ * Shared-argument context passed from the runner to a {@link PromptResolver}.
+ */
+export interface PromptResolverContext {
+  /** Validated global args for command prompts, or values resolved so far for global prompts */
+  globalArgs: Record<string, unknown>;
+}
+
+/**
  * Async callback to resolve missing argument values interactively.
  * Called after env fallback, before schema validation.
  * Provided by adapter subpath modules (e.g. `politty/prompt/clack`).
@@ -285,6 +293,7 @@ export type SubCommandsRecord = Record<string, SubCommandValue>;
 export type PromptResolver = (
   rawArgs: Record<string, unknown>,
   extracted: ExtractedFields,
+  context?: PromptResolverContext,
 ) => Promise<Record<string, unknown>>;
 
 /**

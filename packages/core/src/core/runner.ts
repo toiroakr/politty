@@ -1067,7 +1067,9 @@ async function runCommandInternal<TResult = unknown>(
       // the identical local-args handling below for the same rationale).
       if (options.prompt) {
         const beforePrompt = { ...accumulatedGlobalArgs };
-        const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted);
+        const resolved = await options.prompt(accumulatedGlobalArgs, options._globalExtracted, {
+          globalArgs: accumulatedGlobalArgs,
+        });
         for (const [key, value] of Object.entries(resolved)) {
           if (value !== undefined) accumulatedGlobalArgs[key] = value;
         }
@@ -1128,10 +1130,11 @@ async function runCommandInternal<TResult = unknown>(
       return result as RunResult<TResult>;
     }
 
-    // Prompt for missing command args (if prompt resolver is provided)
     let argsToValidate = parseResult.rawArgs;
     if (options.prompt && parseResult.extractedFields) {
-      const resolved = await options.prompt(argsToValidate, parseResult.extractedFields);
+      const resolved = await options.prompt(argsToValidate, parseResult.extractedFields, {
+        globalArgs: validatedGlobalArgs,
+      });
       // A resolver may return `{ field: undefined }` for a field it chose
       // not to prompt for; that isn't an explicit value, so skip it here
       // instead of spreading it in verbatim -- otherwise it would clobber a

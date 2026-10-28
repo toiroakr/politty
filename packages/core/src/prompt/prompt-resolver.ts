@@ -23,7 +23,8 @@ export function resolvePromptConfig(field: ResolvedFieldMeta): ResolvedPromptCon
   const rawType = resolvePromptType(field, promptMeta);
   const choices = resolveChoices(field, promptMeta, rawType);
   // Fall back to text when select has no choices to avoid adapter crash
-  const type = rawType === "select" && !choices ? "text" : rawType;
+  const type =
+    rawType === "select" && !choices && typeof promptMeta.choices !== "function" ? "text" : rawType;
 
   return { field, type, message, ...(choices && { choices }) };
 }
@@ -41,7 +42,7 @@ function resolvePromptType(
     return promptMeta.type === "file" || promptMeta.type === "directory" ? "text" : promptMeta.type;
   }
   // Priority 2: Explicit choices
-  if (hasChoices(promptMeta.choices)) return "select";
+  if (typeof promptMeta.choices === "function" || hasChoices(promptMeta.choices)) return "select";
   // Priority 3: Inherited from completion type
   if (field.completion?.type === "file" || field.completion?.type === "directory") {
     return "text";
@@ -57,6 +58,7 @@ function resolveChoices(
   promptMeta: NonNullable<ResolvedFieldMeta["prompt"]>,
   type: ResolvedPromptConfig["type"],
 ): ResolvedPromptConfig["choices"] | undefined {
+  if (typeof promptMeta.choices === "function") return undefined;
   // Explicit choices always win
   if (hasChoices(promptMeta.choices)) {
     return promptMeta.choices.map((c) => (typeof c === "string" ? { label: c, value: c } : c));
