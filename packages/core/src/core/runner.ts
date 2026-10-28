@@ -1198,7 +1198,7 @@ async function runCommandInternal<TResult = unknown>(
     // Snapshot the keys the parser supplied (CLI or env) before a prompt
     // resolver runs: a resolver may answer by mutating `rawArgs` in place,
     // and such answers must be classified like returned ones, not as CLI.
-    const parserRawArgs = snapshotArgs(parseResult.rawArgs);
+    const parserRawArgs = options.prompt ? snapshotArgs(parseResult.rawArgs) : parseResult.rawArgs;
     const hasParserValue = (name: string): boolean => Object.hasOwn(parserRawArgs, name);
 
     // Prompt for missing command args (if prompt resolver is provided)
@@ -1281,13 +1281,16 @@ async function runCommandInternal<TResult = unknown>(
     // overrides a same-named global field's "cli"/"env" classification instead
     // of leaking it through unchanged (reachable only with `skipValidation`).
     for (const field of parseResult.extractedFields?.fields ?? []) {
+      // A resolver may have deleted the parser's value, leaving the schema
+      // default to fill it in.
+      const parserValueKept = argsToValidate[field.name] !== undefined;
       argSourceMap.set(
         field.name,
         promptResolvedFields.has(field.name)
           ? "prompt"
-          : localEnvFallbackFields.has(field.name)
+          : parserValueKept && localEnvFallbackFields.has(field.name)
             ? "env"
-            : hasParserValue(field.name) && argsToValidate[field.name] !== undefined
+            : parserValueKept && hasParserValue(field.name)
               ? "cli"
               : "default",
       );
