@@ -157,6 +157,49 @@ describe("package loading", () => {
     expect((await runCommand(command, ["--mode", "ui"])).success).toBe(false);
   });
 
+  it("loads packages of a field only the accepting plain-union option defines", async () => {
+    const command = defineCommand({
+      name: "test",
+      args: z.union([
+        z.object({ mode: z.literal("a") }),
+        z.object({
+          mode: z.literal("b"),
+          ui: arg(z.boolean().default(true), {
+            requiredPackages: [{ name: "@politty-test/missing-ui" }],
+          }),
+        }),
+      ]),
+      run: () => "ran",
+    });
+    expect((await runCommand(command, ["--mode", "a"])).result).toBe("ran");
+    expect((await runCommand(command, ["--mode", "b"])).success).toBe(false);
+  });
+
+  it("loads packages of the selected variant when the accepting union option is a discriminated union", async () => {
+    const installed = await fixture("export const ready = true;");
+    const command = defineCommand({
+      name: "test",
+      args: z.union([
+        z.discriminatedUnion("mode", [
+          z.object({
+            mode: z.literal("a"),
+            ui: arg(z.boolean().default(true), { requiredPackages: [installed] }),
+          }),
+          z.object({
+            mode: z.literal("b"),
+            ui: arg(z.boolean().default(true), {
+              requiredPackages: [{ name: "@politty-test/missing-ui" }],
+            }),
+          }),
+        ]),
+        z.object({ other: z.literal("c") }),
+      ]),
+      run: () => "ran",
+    });
+    expect((await runCommand(command, ["--mode", "a"])).result).toBe("ran");
+    expect((await runCommand(command, ["--mode", "b"])).success).toBe(false);
+  });
+
   it("loads packages declared on the selected discriminator without loading other branches", async () => {
     const command = defineCommand({
       name: "test",

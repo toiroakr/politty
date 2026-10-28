@@ -295,12 +295,15 @@ function optionsDefineFieldsDifferently(options: readonly ExtractedFields[]): bo
  *
  * @param extracted - Extracted fields
  * @param accepts - Whether an option's schema accepts the arguments
+ * @param readValues - Reads argument values with the given fields, to select
+ *   the variant of an accepting discriminated-union option
  * @returns Extracted fields narrowed to the accepting option, or the input
  *   when it is not a plain union, its options agree, or none accepts
  */
 export function selectAcceptingUnionOption(
   extracted: ExtractedFields,
   accepts: (schema: ExtractedFields["schema"]) => boolean,
+  readValues: (fields: ExtractedFields) => Record<string, unknown>,
 ): ExtractedFields {
   const options = extracted.unionOptions;
   if (extracted.discriminator || !options || !optionsDefineFieldsDifferently(options)) {
@@ -308,7 +311,10 @@ export function selectAcceptingUnionOption(
   }
   for (const option of options) {
     if (!accepts(option.schema)) continue;
-    const selected = selectAcceptingUnionOption(option, accepts);
+    const selected =
+      option.discriminator && option.variants
+        ? selectDiscriminatedVariant(option, readValues)
+        : selectAcceptingUnionOption(option, accepts, readValues);
     return { ...extracted, fields: selected.fields };
   }
   return extracted;
