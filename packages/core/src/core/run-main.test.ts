@@ -403,7 +403,7 @@ describe("runCommand", () => {
 
       const args = runFn.mock.calls[0]?.[0];
       expect(args.level).toBe("from-prompt");
-      expect(args.$source?.("level")).toBe("default");
+      expect(args.$source?.("level")).toBe("prompt");
     });
 
     it("preserves shared local answers set in place by a prompt resolver", async () => {
@@ -425,10 +425,10 @@ describe("runCommand", () => {
       expect(result.success).toBe(true);
       const args = runFn.mock.calls[0]?.[0];
       expect(args.level).toBe("from-prompt");
-      expect(args.$source?.("level")).toBe("default");
+      expect(args.$source?.("level")).toBe("prompt");
     });
 
-    it("classifies a local-only answer set in place by a prompt resolver as default", async () => {
+    it("classifies a local-only answer set in place by a prompt resolver as prompt", async () => {
       const runFn = vi.fn();
       const cmd = defineCommand({
         name: "cmd",
@@ -444,7 +444,7 @@ describe("runCommand", () => {
       expect(result.success).toBe(true);
       const args = runFn.mock.calls[0]?.[0];
       expect(args.name).toBe("from-prompt");
-      expect(args.$source?.("name")).toBe("default");
+      expect(args.$source?.("name")).toBe("prompt");
       expect(args.$source?.("mode")).toBe("cli");
     });
 
@@ -468,10 +468,10 @@ describe("runCommand", () => {
       expect(args.$source?.("name")).toBe("cli");
       expect(args.$source?.("mode")).toBe("env");
       expect(args.extra).toBe("from-prompt");
-      expect(args.$source?.("extra")).toBe("default");
+      expect(args.$source?.("extra")).toBe("prompt");
     });
 
-    it("classifies a global answer set in place by a prompt resolver as default", async () => {
+    it("classifies a global answer set in place by a prompt resolver as prompt", async () => {
       const runFn = vi.fn();
       const cmd = defineCommand({ name: "cmd", run: runFn });
       const result = await runCommand(cmd, [], {
@@ -484,7 +484,7 @@ describe("runCommand", () => {
       expect(result.success).toBe(true);
       const args = runFn.mock.calls[0]?.[0];
       expect(args.token).toBe("from-prompt");
-      expect(args.$source?.("token")).toBe("default");
+      expect(args.$source?.("token")).toBe("prompt");
     });
 
     it("still resolves the global's CLI value when the prompt resolver explicitly returns undefined for the local field", async () => {

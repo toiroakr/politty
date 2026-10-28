@@ -178,6 +178,7 @@ describe("cleanup context globalArgs", () => {
     ]);
 
     expect(context.globalArgs?.profile).toBe("dev");
+    expect(context.globalArgs?.$source?.("profile")).toBe("prompt");
   });
 
   it("carries a global value a prompt resolver mutates in place without returning it", async () => {
@@ -201,6 +202,7 @@ describe("cleanup context globalArgs", () => {
     ]);
 
     expect(context.globalArgs?.profile).toBe("dev");
+    expect(context.globalArgs?.$source?.("profile")).toBe("prompt");
   });
 
   it("still runs cleanup with the original error when recovering the global values throws", async () => {

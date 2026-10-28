@@ -94,6 +94,22 @@ function attachArgSource(target: Record<string, unknown>, sourceMap: Map<string,
 }
 
 /**
+ * Classify global fields for `$source`. Later sources win: an env fallback
+ * fills a field the CLI left empty, and a prompt answer overrides both.
+ */
+function buildGlobalSourceMap(
+  cliProvided: Iterable<string>,
+  envFallback: Iterable<string>,
+  prompted: Iterable<string>,
+): Map<string, ArgSource> {
+  const sourceMap = new Map<string, ArgSource>();
+  for (const name of cliProvided) sourceMap.set(name, "cli");
+  for (const name of envFallback) sourceMap.set(name, "env");
+  for (const name of prompted) sourceMap.set(name, "prompt");
+  return sourceMap;
+}
+
+/**
  * Attach a non-enumerable `$invocation` helper to the final args object,
  * mirroring `attachArgSource`'s visibility (invisible to `Object.keys`/
  * `JSON.stringify`/spread, reachable via property access through
@@ -160,6 +176,9 @@ function recoverGlobalArgs(
       const sourceMap = new Map<string, ArgSource>();
       for (const name of cliProvided) if (name in candidate) sourceMap.set(name, "cli");
       for (const name of envFallbackFields) if (name in candidate) sourceMap.set(name, "env");
+      for (const name of Object.keys(trace.promptedGlobalArgs ?? {})) {
+        if (name in candidate) sourceMap.set(name, "prompt");
+      }
       attachArgSource(recovered, sourceMap);
       return createDualCaseProxy(recovered);
     }
@@ -1058,6 +1077,7 @@ async function runCommandInternal<TResult = unknown>(
     // ancestor's) before env fallbacks below mutate accumulatedGlobalArgs.
     const cliProvidedGlobalFields = new Set(Object.keys(accumulatedGlobalArgs));
     let envFallbackGlobalFields = new Set<string>();
+    let promptedGlobalFields = new Set<string>();
     if (options.globalArgs && options._globalExtracted && !isCompletionInvocation) {
       envFallbackGlobalFields = applyEnvFallbacks(accumulatedGlobalArgs, options._globalExtracted);
 
@@ -1078,6 +1098,7 @@ async function runCommandInternal<TResult = unknown>(
         for (const [key, value] of Object.entries(accumulatedGlobalArgs)) {
           if (beforePrompt[key] !== value) prompted[key] = value;
         }
+        promptedGlobalFields = new Set(Object.keys(prompted));
         if (options._globalTrace) options._globalTrace.promptedGlobalArgs = prompted;
       }
 
@@ -1101,9 +1122,11 @@ async function runCommandInternal<TResult = unknown>(
     // Validate arguments
     if (!command.args) {
       // No schema, run with global args (or empty args)
-      const globalSourceMap = new Map<string, ArgSource>();
-      for (const name of cliProvidedGlobalFields) globalSourceMap.set(name, "cli");
-      for (const name of envFallbackGlobalFields) globalSourceMap.set(name, "env");
+      const globalSourceMap = buildGlobalSourceMap(
+        cliProvidedGlobalFields,
+        envFallbackGlobalFields,
+        promptedGlobalFields,
+      );
       attachArgSource(validatedGlobalArgs, globalSourceMap);
       attachInvocation(validatedGlobalArgs, resolveInvocation(command, context));
       attachAgent(validatedGlobalArgs, options._agent);
@@ -1223,9 +1246,11 @@ async function runCommandInternal<TResult = unknown>(
     // Global effects run before the merged args exist, so attach the global
     // run metadata here: a global effect must see the same `$source` whether
     // or not the invoked command declares args of its own.
-    const globalSourceMap = new Map<string, ArgSource>();
-    for (const name of cliProvidedGlobalFields) globalSourceMap.set(name, "cli");
-    for (const name of envFallbackGlobalFields) globalSourceMap.set(name, "env");
+    const globalSourceMap = buildGlobalSourceMap(
+      cliProvidedGlobalFields,
+      envFallbackGlobalFields,
+      promptedGlobalFields,
+    );
     attachArgSource(validatedGlobalArgs, globalSourceMap);
     attachInvocation(validatedGlobalArgs, resolveInvocation(command, context));
     attachAgent(validatedGlobalArgs, options._agent);
@@ -1259,21 +1284,19 @@ async function runCommandInternal<TResult = unknown>(
         // Already resolved from the global CLI value by the pre-fill above;
         // `proxiedCommandArgs` already holds it (validated through the
         // local schema), so the merge above already picked it up correctly.
-        argSourceMap.set(field.name, "cli");
+        argSourceMap.set(field.name, globalSourceMap.get(field.name) ?? "cli");
         continue;
       }
 
-      const localHasCliOrEnvValue =
-        !promptResolvedFields.has(field.name) &&
-        (hasParserValue(field.name) || localEnvFallbackFields.has(field.name));
-
       argSourceMap.set(
         field.name,
-        localHasCliOrEnvValue
-          ? localEnvFallbackFields.has(field.name)
+        promptResolvedFields.has(field.name)
+          ? "prompt"
+          : localEnvFallbackFields.has(field.name)
             ? "env"
-            : "cli"
-          : "default",
+            : hasParserValue(field.name)
+              ? "cli"
+              : "default",
       );
     }
     attachArgSource(mergedPlainArgs, argSourceMap);

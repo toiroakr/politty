@@ -189,4 +189,4 @@ runMain(cli, {
 });
 ```
 
-Unknown flags are ignored, and a value that fails its own validation (`--json=yes`) is dropped, so the schema's default applies where it defines one. `globalArgs?.$source?.("json")` returns `"cli"`, `"env"` or `"default"`. A value filled in by the `prompt` resolver is included. `globalArgs` is `undefined` when the run did not fail before the global effects, when a required global value is missing, when recovering the values throws, or when `setup` failed (it runs before any argument is parsed).
+Unknown flags are ignored, and a value that fails its own validation (`--json=yes`) is dropped, so the schema's default applies where it defines one. `globalArgs?.$source?.("json")` returns `"cli"`, `"env"`, `"prompt"` or `"default"`. A value filled in by the `prompt` resolver is included and reports `"prompt"`. `globalArgs` is `undefined` when the run did not fail before the global effects, when a required global value is missing, when recovering the values throws, or when `setup` failed (it runs before any argument is parsed).

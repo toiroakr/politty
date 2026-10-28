@@ -874,12 +874,13 @@ interface LazyCommand {
 The return type of `args.$source(name)` — where a resolved arg value came from. See [Defining Arguments](../README.md#defining-arguments) for usage.
 
 ```typescript
-type ArgSource = "cli" | "env" | "default";
+type ArgSource = "cli" | "env" | "prompt" | "default";
 ```
 
 - `"cli"`: an explicit CLI token (flag or positional)
 - `"env"`: a `field.env` fallback (no CLI token was provided)
-- `"default"`: neither of the above (e.g. a schema default, or a value resolved by a `prompt` handler)
+- `"prompt"`: answered by a `prompt` resolver, whether returned or written into its `rawArgs` in place
+- `"default"`: none of the above (e.g. a schema default)
 
 ---
 
