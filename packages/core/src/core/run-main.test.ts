@@ -318,6 +318,16 @@ describe("runCommand", () => {
   });
 
   describe("$source for prompt answers", () => {
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    afterEach(() => {
+      process.env = originalEnv;
+    });
+
     it("classifies a local-only answer set in place by a prompt resolver as prompt", async () => {
       const runFn = vi.fn();
       const cmd = defineCommand({
