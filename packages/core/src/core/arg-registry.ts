@@ -97,6 +97,17 @@ export type CompletionMeta = {
  */
 export type PromptType = "text" | "password" | "confirm" | "select" | "file" | "directory";
 
+export interface PromptChoicesContext {
+  rawArgs: Readonly<Record<string, unknown>>;
+  globalArgs: Readonly<Record<string, unknown>>;
+}
+
+export type PromptChoices = Array<string | { label: string; value: string }>;
+
+export type PromptChoicesResolver = (
+  context: PromptChoicesContext,
+) => PromptChoices | Promise<PromptChoices>;
+
 /**
  * Prompt metadata for interactive input when a value is missing.
  * Used by the `politty/prompt` module to request user input for unresolved arguments.
@@ -125,7 +136,7 @@ export interface PromptMeta {
   /** Explicit prompt type. Overrides auto-detection from schema/completion. */
   type?: PromptType;
   /** Choices for select prompt. Overrides enum values from schema. */
-  choices?: Array<string | { label: string; value: string }>;
+  choices?: PromptChoices | PromptChoicesResolver;
   /** Whether to enable prompting for this field (default: true when prompt is set) */
   enabled?: boolean;
 }
