@@ -135,6 +135,28 @@ describe("package loading", () => {
     expect((await runCommand(command, ["--mode", "ui"])).success).toBe(false);
   });
 
+  it("loads argument packages from the plain-union option that accepted the args", async () => {
+    const installed = await fixture("export const ready = true;");
+    const command = defineCommand({
+      name: "test",
+      args: z.union([
+        z.object({
+          mode: z.literal("tests"),
+          ui: arg(z.boolean().default(true), { requiredPackages: [installed] }),
+        }),
+        z.object({
+          mode: z.literal("ui"),
+          ui: arg(z.boolean().default(true), {
+            requiredPackages: [{ name: "@politty-test/missing-ui" }],
+          }),
+        }),
+      ]),
+      run: () => "tests",
+    });
+    expect((await runCommand(command, ["--mode", "tests"])).result).toBe("tests");
+    expect((await runCommand(command, ["--mode", "ui"])).success).toBe(false);
+  });
+
   it("loads packages declared on the selected discriminator without loading other branches", async () => {
     const command = defineCommand({
       name: "test",

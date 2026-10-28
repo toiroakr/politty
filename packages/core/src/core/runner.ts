@@ -1265,10 +1265,12 @@ async function runCommandInternal<TResult = unknown>(
       await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
     }
     const acceptedFields = parseResult.extractedFields
-      ? selectAcceptingUnionOption(
-          parseResult.extractedFields,
-          (schema) => validateArgs(argsToValidate, schema).success,
-        )
+      ? isCompletionInvocation
+        ? parseResult.extractedFields
+        : selectAcceptingUnionOption(
+            parseResult.extractedFields,
+            (schema) => validateArgs(argsToValidate, schema).success,
+          )
       : undefined;
     if (acceptedFields && !isCompletionInvocation) {
       await runEffects(proxiedCommandArgs, acceptedFields, proxiedGlobalArgs);
@@ -1284,7 +1286,7 @@ async function runCommandInternal<TResult = unknown>(
       { ...proxiedGlobalArgs },
       { ...proxiedCommandArgs },
       options._globalExtracted?.fields ?? [],
-      parseResult.extractedFields?.fields ?? [],
+      acceptedFields?.fields ?? [],
     );
     const argSourceMap = new Map<string, ArgSource>(globalSourceMap);
     const localEnvFallbackFields = parseResult.envFallbackFields ?? new Set<string>();

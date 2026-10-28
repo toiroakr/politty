@@ -356,4 +356,43 @@ describe("effect of a plain union", () => {
     expect(effectA).not.toHaveBeenCalled();
     expect(effectB).toHaveBeenCalledOnce();
   });
+
+  it("does not run the effect of a field the accepted option does not define", async () => {
+    const effectA = vi.fn();
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.object({ mode: z.literal("a"), port: arg(z.string().optional(), { effect: effectA }) }),
+        z.object({ mode: z.literal("b") }),
+      ]),
+      run: () => {},
+    });
+
+    await runCommand(cmd, ["--mode", "b"]);
+
+    expect(effectA).not.toHaveBeenCalled();
+  });
+
+  it("runs the effect of a nested union option that accepted the args", async () => {
+    const effectA = vi.fn();
+    const effectB = vi.fn();
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.union([
+          z.object({ mode: z.literal("a"), port: arg(z.string(), { effect: effectA }) }),
+          z.object({ mode: z.literal("b"), port: arg(z.string(), { effect: effectB }) }),
+        ]),
+        z.object({ mode: z.literal("c") }),
+      ]),
+      run: () => {},
+    });
+
+    await runCommand(cmd, ["--mode", "b", "--port", "80"]);
+
+    expect(effectA).not.toHaveBeenCalled();
+    expect(effectB).toHaveBeenCalledOnce();
+  });
 });

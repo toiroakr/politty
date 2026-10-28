@@ -268,15 +268,21 @@ function sameFieldMetadata(left: ResolvedFieldMeta, right: ResolvedFieldMeta): b
 
 function optionsDefineFieldsDifferently(options: readonly ExtractedFields[]): boolean {
   const first = new Map<string, ResolvedFieldMeta>();
+  const definingOptions = new Map<string, number>();
   for (const option of options) {
     if (option.unionOptions && optionsDefineFieldsDifferently(option.unionOptions)) return true;
     for (const field of option.fields) {
       const previous = first.get(field.name);
       if (!previous) first.set(field.name, field);
       else if (!sameFieldMetadata(previous, field)) return true;
+      definingOptions.set(field.name, (definingOptions.get(field.name) ?? 0) + 1);
     }
   }
-  return false;
+  return [...first].some(
+    ([name, field]) =>
+      definingOptions.get(name)! < options.length &&
+      (field.effect !== undefined || !!field.requiredPackages?.length),
+  );
 }
 
 /**
