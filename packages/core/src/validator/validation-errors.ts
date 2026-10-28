@@ -84,12 +84,12 @@ export class DefaultSubCommandError extends Error {
 }
 
 /**
- * Error thrown when a global field and a same-named local field have
- * different definitions (per `extractFields()`'s type bucket, whether the
- * field is positional, and enum values). Only exactly-matching definitions
- * are allowed to share a name across global/local schemas — anything else
- * is rejected at validation time rather than risking a value from one
- * schema silently flowing into the other.
+ * Error thrown when a global field and a local field collide: they share a
+ * name, or nest into conflicting output positions (`db` against `db.host`).
+ * A field name can only be declared in one of the two schemas, even when the
+ * definitions are identical: with the name in both, a value (or prompt
+ * answer) for it has no single owner. Rejected at validation time rather
+ * than letting a value from one schema silently flow into the other.
  */
 export class FieldTypeConflictError extends Error {
   constructor(message: string) {

@@ -6,6 +6,7 @@ import { extractFields } from "../core/schema-extractor.js";
 import {
   DuplicateAliasError,
   DuplicateNegationError,
+  FieldTypeConflictError,
   PositionalConfigError,
 } from "../validator/command-validator.js";
 import { parseArgs } from "./arg-parser.js";
@@ -1737,29 +1738,20 @@ describe("ArgParser", () => {
       expect(result.rawGlobalArgs?.tag).toBeUndefined();
     });
 
-    it("local flag takes precedence over global on collision", () => {
-      const collisionGlobal = z.object({
-        output: arg(z.string().default("global-default"), { description: "Global output" }),
-        verbose: arg(z.boolean().default(false), { alias: "v", description: "Verbose" }),
-      });
-      const collisionExtracted = extractFields(collisionGlobal);
-
+    it("rejects a local field that has the same name as a global field", () => {
       const cmd = defineCommand({
         name: "leaf",
-        args: z.object({
-          output: arg(z.string().default("local-default"), { description: "Local output" }),
-        }),
+        args: z.object({ output: arg(z.string().default("local-default")) }),
         run: () => {},
       });
 
-      const result = parseArgs(["--output", "mine", "--verbose"], cmd, {
-        globalExtracted: collisionExtracted,
-      });
-
-      expect(result.rawArgs.output).toBe("mine");
-      // verbose should be in global args, output should NOT be (local takes precedence)
-      expect(result.rawGlobalArgs?.verbose).toBe(true);
-      expect(result.rawGlobalArgs?.output).toBeUndefined();
+      expect(() =>
+        parseArgs(["--output", "mine"], cmd, {
+          globalExtracted: extractFields(
+            z.object({ output: arg(z.string().default("global-default")) }),
+          ),
+        }),
+      ).toThrow(FieldTypeConflictError);
     });
 
     describe("combined short global options", () => {
