@@ -258,6 +258,71 @@ function firstFieldsInAnyVariant(
   return [...byName.values()];
 }
 
+function sameFieldMetadata(left: ResolvedFieldMeta, right: ResolvedFieldMeta): boolean {
+  return (
+    left.effect === right.effect &&
+    samePackageRequirements(left.requiredPackages, right.requiredPackages) &&
+    (left.nested?.path ?? []).join("\0") === (right.nested?.path ?? []).join("\0")
+  );
+}
+
+function optionsDefineFieldsDifferently(
+  options: readonly Pick<ExtractedFields, "fields" | "unionOptions" | "variants">[],
+): boolean {
+  const first = new Map<string, ResolvedFieldMeta>();
+  const definingOptions = new Map<string, number>();
+  for (const option of options) {
+    if (option.unionOptions && optionsDefineFieldsDifferently(option.unionOptions)) return true;
+    if (option.variants && optionsDefineFieldsDifferently(option.variants)) return true;
+    for (const field of option.fields) {
+      const previous = first.get(field.name);
+      if (!previous) first.set(field.name, field);
+      else if (!sameFieldMetadata(previous, field)) return true;
+      definingOptions.set(field.name, (definingOptions.get(field.name) ?? 0) + 1);
+    }
+  }
+  return [...first].some(
+    ([name, field]) =>
+      definingOptions.get(name)! < options.length &&
+      (field.effect !== undefined || !!field.requiredPackages?.length),
+  );
+}
+
+/**
+ * The fields of the plain-union option that accepts the arguments, so that
+ * `effect`, `requiredPackages` and nested paths come from the option that
+ * actually validated rather than from the first option defining the name.
+ * Options are tried in order, like the union itself. Options are only
+ * re-validated when they define a same-named field with different metadata,
+ * which keeps transforms from running again for every other union.
+ *
+ * @param extracted - Extracted fields
+ * @param accepts - Whether an option's schema accepts the arguments
+ * @param readValues - Reads argument values with the given fields, to select
+ *   the variant of an accepting discriminated-union option
+ * @returns Extracted fields narrowed to the accepting option, or the input
+ *   when it is not a plain union, its options agree, or none accepts
+ */
+export function selectAcceptingUnionOption(
+  extracted: ExtractedFields,
+  accepts: (schema: ExtractedFields["schema"]) => boolean,
+  readValues: (fields: ExtractedFields) => Record<string, unknown>,
+): ExtractedFields {
+  const options = extracted.unionOptions;
+  if (extracted.discriminator || !options || !optionsDefineFieldsDifferently(options)) {
+    return extracted;
+  }
+  for (const option of options) {
+    if (!accepts(option.schema)) continue;
+    const selected =
+      option.discriminator && option.variants
+        ? selectDiscriminatedVariant(option, readValues)
+        : selectAcceptingUnionOption(option, accepts, readValues);
+    return { ...extracted, fields: selected.fields };
+  }
+  return extracted;
+}
+
 /**
  * The fields of the discriminated-union variant whose own definitions read
  * its discriminator value, or all extracted fields when the schema has no

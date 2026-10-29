@@ -192,6 +192,26 @@ describe("arg effect", () => {
       });
     });
 
+    it("runs the effect of the global union option that accepted the args, not the first option defining the field", async () => {
+      const effectA = vi.fn();
+      const effectB = vi.fn();
+
+      const globalSchema = z.union([
+        z.object({ mode: z.literal("a"), port: arg(z.string(), { effect: effectA }) }),
+        z.object({ mode: z.literal("b"), port: arg(z.string(), { effect: effectB }) }),
+      ]);
+
+      const cmd = defineCommand({ name: "test", args: z.object({}), run: () => {} });
+
+      const result = await runCommand(cmd, ["--mode", "b", "--port", "80"], {
+        globalArgs: globalSchema,
+      });
+
+      expect(result.success).toBe(true);
+      expect(effectA).not.toHaveBeenCalled();
+      expect(effectB).toHaveBeenCalledOnce();
+    });
+
     it("should execute global effects before command effects", async () => {
       const order: string[] = [];
 
@@ -334,5 +354,123 @@ describe("arg effect on a nested field", () => {
     await runEffects({ config: { port: 5 } }, { fields: [field] } as never);
 
     expect(effect).toHaveBeenCalledWith(5, expect.objectContaining({ name: "config.port" }));
+  });
+});
+
+describe("effect of a plain union", () => {
+  it("runs the effect of the option that accepted the args, not the first option defining the field", async () => {
+    const effectA = vi.fn();
+    const effectB = vi.fn();
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.object({ mode: z.literal("a"), port: arg(z.string(), { effect: effectA }) }),
+        z.object({ mode: z.literal("b"), port: arg(z.string(), { effect: effectB }) }),
+      ]),
+      run: () => {},
+    });
+
+    await runCommand(cmd, ["--mode", "b", "--port", "80"]);
+
+    expect(effectA).not.toHaveBeenCalled();
+    expect(effectB).toHaveBeenCalledOnce();
+  });
+
+  it("does not run the effect of a field the accepted option does not define", async () => {
+    const effectA = vi.fn();
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.object({ mode: z.literal("a"), port: arg(z.string().optional(), { effect: effectA }) }),
+        z.object({ mode: z.literal("b") }),
+      ]),
+      run: () => {},
+    });
+
+    const result = await runCommand(cmd, ["--mode", "b"]);
+
+    expect(result.success).toBe(true);
+    expect(effectA).not.toHaveBeenCalled();
+  });
+
+  it("runs the effect of the variant that accepted the args when a union option is a discriminated union", async () => {
+    const shared = vi.fn();
+    const effectB = vi.fn();
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("a"), port: arg(z.string(), { effect: shared }) }),
+          z.object({ mode: z.literal("b"), port: arg(z.string(), { effect: effectB }) }),
+        ]),
+        z.object({ other: z.literal("c"), port: arg(z.string(), { effect: shared }) }),
+      ]),
+      run: () => {},
+    });
+
+    await runCommand(cmd, ["--mode", "b", "--port", "80"]);
+
+    expect(shared).not.toHaveBeenCalled();
+    expect(effectB).toHaveBeenCalledOnce();
+  });
+
+  it("does not validate an option again when the options define their fields with the same metadata", async () => {
+    const transform = vi.fn((value: string) => value);
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.object({ mode: z.literal("a"), port: z.string() }),
+        z.object({ mode: z.literal("b"), port: arg(z.string().transform(transform)) }),
+      ]),
+      run: () => {},
+    });
+
+    const result = await runCommand(cmd, ["--mode", "b", "--port", "80"]);
+
+    expect(result.success).toBe(true);
+    expect(transform).toHaveBeenCalledOnce();
+  });
+
+  it("validates the accepting option again when the options define a field with different metadata", async () => {
+    const transform = vi.fn((value: string) => value);
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.object({ mode: z.literal("a"), port: arg(z.string(), { effect: vi.fn() }) }),
+        z.object({ mode: z.literal("b"), port: arg(z.string().transform(transform)) }),
+      ]),
+      run: () => {},
+    });
+
+    await runCommand(cmd, ["--mode", "b", "--port", "80"]);
+
+    expect(transform).toHaveBeenCalledTimes(2);
+  });
+
+  it("runs the effect of a nested union option that accepted the args", async () => {
+    const effectA = vi.fn();
+    const effectB = vi.fn();
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.union([
+          z.object({ mode: z.literal("a"), port: arg(z.string(), { effect: effectA }) }),
+          z.object({ mode: z.literal("b"), port: arg(z.string(), { effect: effectB }) }),
+        ]),
+        z.object({ mode: z.literal("c") }),
+      ]),
+      run: () => {},
+    });
+
+    await runCommand(cmd, ["--mode", "b", "--port", "80"]);
+
+    expect(effectA).not.toHaveBeenCalled();
+    expect(effectB).toHaveBeenCalledOnce();
   });
 });

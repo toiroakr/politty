@@ -51,6 +51,7 @@ import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import {
   extractFields,
+  selectAcceptingUnionOption,
   selectDiscriminatedVariant,
   toCamelCase,
   toKebabCase,
@@ -1159,6 +1160,21 @@ async function runCommandInternal<TResult = unknown>(
       validatedGlobalArgs = globalValidation.data as Record<string, unknown>;
     }
 
+    const acceptedGlobalExtracted =
+      options.globalArgs && options._globalExtracted && !isCompletionInvocation
+        ? selectAcceptingUnionOption(
+            options._globalExtracted,
+            (schema) => validateArgs(accumulatedGlobalArgs, schema).success,
+            () => accumulatedGlobalArgs,
+          )
+        : options._globalExtracted;
+    const globalPackageFields =
+      isCompletionInvocation || !options._globalExtracted
+        ? undefined
+        : acceptedGlobalExtracted !== options._globalExtracted
+          ? acceptedGlobalExtracted?.fields
+          : selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs).fields;
+
     // Validate arguments
     if (!command.args) {
       // No schema, run with global args (or empty args)
@@ -1173,7 +1189,7 @@ async function runCommandInternal<TResult = unknown>(
       const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
       if (options._globalExtracted && !isCompletionInvocation) {
         if (options._globalTrace) options._globalTrace.effectsRan = true;
-        await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
+        await runEffects(proxiedGlobalArgs, acceptedGlobalExtracted!, proxiedGlobalArgs);
       }
       collector?.stop();
       const mergedArgs = proxiedGlobalArgs as Record<string, never>;
@@ -1185,11 +1201,7 @@ async function runCommandInternal<TResult = unknown>(
         packageDiscriminators: options._globalExtracted?.discriminator
           ? [options._globalExtracted.discriminator]
           : [],
-        packageFields:
-          isCompletionInvocation || !options._globalExtracted
-            ? undefined
-            : selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs)
-                .fields,
+        packageFields: globalPackageFields,
       });
       return result as RunResult<TResult>;
     }
@@ -1260,10 +1272,19 @@ async function runCommandInternal<TResult = unknown>(
     // Run effects after all validations succeed (global effects first, then command effects)
     if (options._globalExtracted && !isCompletionInvocation) {
       if (options._globalTrace) options._globalTrace.effectsRan = true;
-      await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
+      await runEffects(proxiedGlobalArgs, acceptedGlobalExtracted!, proxiedGlobalArgs);
     }
-    if (parseResult.extractedFields && !isCompletionInvocation) {
-      await runEffects(proxiedCommandArgs, parseResult.extractedFields, proxiedGlobalArgs);
+    const acceptedFields = parseResult.extractedFields
+      ? isCompletionInvocation
+        ? parseResult.extractedFields
+        : selectAcceptingUnionOption(
+            parseResult.extractedFields,
+            (schema) => validateArgs(argsToValidate, schema).success,
+            () => argsToValidate,
+          )
+      : undefined;
+    if (acceptedFields && !isCompletionInvocation) {
+      await runEffects(proxiedCommandArgs, acceptedFields, proxiedGlobalArgs);
     }
 
     // Merge global args with command args. A same-named field is rejected by
@@ -1271,8 +1292,8 @@ async function runCommandInternal<TResult = unknown>(
     const mergedPlainArgs = mergeNestedArgs(
       { ...proxiedGlobalArgs },
       { ...proxiedCommandArgs },
-      options._globalExtracted?.fields ?? [],
-      parseResult.extractedFields?.fields ?? [],
+      acceptedGlobalExtracted?.fields ?? [],
+      acceptedFields?.fields ?? [],
     );
     const argSourceMap = new Map<string, ArgSource>(globalSourceMap);
     const localEnvFallbackFields = parseResult.envFallbackFields ?? new Set<string>();
@@ -1315,12 +1336,10 @@ async function runCommandInternal<TResult = unknown>(
       packageFields: isCompletionInvocation
         ? undefined
         : [
-            ...(options._globalExtracted
-              ? selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs)
-                  .fields
-              : []),
-            ...(parseResult.optionFields ?? []),
-            ...(parseResult.positionalSlotFields ?? []),
+            ...(globalPackageFields ?? []),
+            ...(acceptedFields !== parseResult.extractedFields && acceptedFields
+              ? acceptedFields.fields
+              : [...(parseResult.optionFields ?? []), ...(parseResult.positionalSlotFields ?? [])]),
           ],
     });
 
