@@ -1,5 +1,30 @@
 # @politty/loculus
 
+## 0.4.0
+
+### Minor Changes
+
+- f4cda35: Add `"prompt"` to `ArgSource`: `$source` now reports `"prompt"` for a value answered by a `prompt` resolver instead of `"default"`, whether the resolver returns the answer or writes it into `rawArgs` in place (in-place answers were previously reported as `"cli"`). Code that checks `$source(name) === "default"` to detect prompted values, or exhaustively matches `ArgSource`, needs updating.
+- 4dbc2ea: Reject a field that is declared with the same name in both `globalArgs` and a command's own `args`, even when the two definitions are identical. Previously identical definitions were allowed and a flag typed before the subcommand pre-filled the command's field, but a prompt on such a field asked twice and the second answer overwrote the first.
+
+  Before, this was accepted:
+
+  ```ts
+  const output = arg(z.string().default("dist"));
+  runMain(defineCommand({ name: "build", args: z.object({ output }) }), {
+    globalArgs: z.object({ output }),
+  });
+  ```
+
+  Now it throws `FieldTypeConflictError` ("can only be declared in one schema"). The error class name is unchanged, but it is now thrown for identical definitions too. Declare the field in only one of the two schemas. A same-named `verbose`/`json` on the built-in skills commands is still handled by passing `globalArgs` to `withSkillCommand`.
+
+### Patch Changes
+
+- e3cceb9: Support synchronous and asynchronous prompt choice resolvers with access to arguments resolved so far and global arguments. Resolve choices only when a select prompt is needed, and report lookup failures or empty results as argument resolution errors.
+- 656d739: Use the field metadata (`effect`, `requiredPackages`, nested paths for merging global and command values) of the plain-union option that accepted the args instead of the first option defining the field name. Options are only re-validated when they define a same-named field with different metadata, or when only some options define a field with an `effect` or `requiredPackages`; in those cases, transforms and refinements may run again.
+- d460bfc: chore(deps): update dependency @inquirer/prompts to v8.7.4
+- 2f22d82: chore(deps): update dependency @types/node to v26
+
 ## 0.3.1
 
 ### Patch Changes
