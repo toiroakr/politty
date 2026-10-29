@@ -369,9 +369,32 @@ describe("effect of a plain union", () => {
       run: () => {},
     });
 
-    await runCommand(cmd, ["--mode", "b"]);
+    const result = await runCommand(cmd, ["--mode", "b"]);
 
+    expect(result.success).toBe(true);
     expect(effectA).not.toHaveBeenCalled();
+  });
+
+  it("runs the effect of the variant that accepted the args when a union option is a discriminated union", async () => {
+    const shared = vi.fn();
+    const effectB = vi.fn();
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.discriminatedUnion("mode", [
+          z.object({ mode: z.literal("a"), port: arg(z.string(), { effect: shared }) }),
+          z.object({ mode: z.literal("b"), port: arg(z.string(), { effect: effectB }) }),
+        ]),
+        z.object({ other: z.literal("c"), port: arg(z.string(), { effect: shared }) }),
+      ]),
+      run: () => {},
+    });
+
+    await runCommand(cmd, ["--mode", "b", "--port", "80"]);
+
+    expect(shared).not.toHaveBeenCalled();
+    expect(effectB).toHaveBeenCalledOnce();
   });
 
   it("runs the effect of a nested union option that accepted the args", async () => {

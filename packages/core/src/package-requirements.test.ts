@@ -154,7 +154,9 @@ describe("package loading", () => {
       run: () => "tests",
     });
     expect((await runCommand(command, ["--mode", "tests"])).result).toBe("tests");
-    expect((await runCommand(command, ["--mode", "ui"])).success).toBe(false);
+    const result = await runCommand(command, ["--mode", "ui"]);
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toContain("@politty-test/missing-ui");
   });
 
   it("loads packages of a field only the accepting plain-union option defines", async () => {
@@ -172,7 +174,9 @@ describe("package loading", () => {
       run: () => "ran",
     });
     expect((await runCommand(command, ["--mode", "a"])).result).toBe("ran");
-    expect((await runCommand(command, ["--mode", "b"])).success).toBe(false);
+    const result = await runCommand(command, ["--mode", "b"]);
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toContain("@politty-test/missing-ui");
   });
 
   it("loads packages of the selected variant when the accepting union option is a discriminated union", async () => {
@@ -197,7 +201,9 @@ describe("package loading", () => {
       run: () => "ran",
     });
     expect((await runCommand(command, ["--mode", "a"])).result).toBe("ran");
-    expect((await runCommand(command, ["--mode", "b"])).success).toBe(false);
+    const result = await runCommand(command, ["--mode", "b"]);
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toContain("@politty-test/missing-ui");
   });
 
   it("loads packages declared on the selected discriminator without loading other branches", async () => {
