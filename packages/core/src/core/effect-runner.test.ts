@@ -192,6 +192,26 @@ describe("arg effect", () => {
       });
     });
 
+    it("runs the effect of the global union option that accepted the args, not the first option defining the field", async () => {
+      const effectA = vi.fn();
+      const effectB = vi.fn();
+
+      const globalSchema = z.union([
+        z.object({ mode: z.literal("a"), port: arg(z.string(), { effect: effectA }) }),
+        z.object({ mode: z.literal("b"), port: arg(z.string(), { effect: effectB }) }),
+      ]);
+
+      const cmd = defineCommand({ name: "test", args: z.object({}), run: () => {} });
+
+      const result = await runCommand(cmd, ["--mode", "b", "--port", "80"], {
+        globalArgs: globalSchema,
+      });
+
+      expect(result.success).toBe(true);
+      expect(effectA).not.toHaveBeenCalled();
+      expect(effectB).toHaveBeenCalledOnce();
+    });
+
     it("should execute global effects before command effects", async () => {
       const order: string[] = [];
 

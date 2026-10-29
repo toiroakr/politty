@@ -206,6 +206,31 @@ describe("package loading", () => {
     expect(result.error?.message).toContain("@politty-test/missing-ui");
   });
 
+  it("loads global argument packages from the plain-union option that accepted the args", async () => {
+    const installed = await fixture("export const ready = true;");
+    const globalArgs = z.union([
+      z.object({
+        mode: z.literal("a"),
+        ui: arg(z.boolean().default(true), {
+          requiredPackages: [{ name: "@politty-test/missing-ui" }],
+        }),
+      }),
+      z.object({
+        mode: z.literal("b"),
+        ui: arg(z.boolean().default(true), { requiredPackages: [installed] }),
+      }),
+    ]);
+    const command = defineCommand({
+      name: "test",
+      args: z.object({}),
+      run: () => "ran",
+    });
+    expect((await runCommand(command, ["--mode", "b"], { globalArgs })).result).toBe("ran");
+    const rejected = await runCommand(command, ["--mode", "a"], { globalArgs });
+    expect(rejected.success).toBe(false);
+    expect(rejected.error?.message).toContain("@politty-test/missing-ui");
+  });
+
   it("loads packages declared on the selected discriminator without loading other branches", async () => {
     const command = defineCommand({
       name: "test",

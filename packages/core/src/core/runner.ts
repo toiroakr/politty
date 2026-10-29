@@ -1160,6 +1160,21 @@ async function runCommandInternal<TResult = unknown>(
       validatedGlobalArgs = globalValidation.data as Record<string, unknown>;
     }
 
+    const acceptedGlobalExtracted =
+      options.globalArgs && options._globalExtracted && !isCompletionInvocation
+        ? selectAcceptingUnionOption(
+            options._globalExtracted,
+            (schema) => validateArgs(accumulatedGlobalArgs, schema).success,
+            () => accumulatedGlobalArgs,
+          )
+        : options._globalExtracted;
+    const globalPackageFields =
+      isCompletionInvocation || !options._globalExtracted
+        ? undefined
+        : acceptedGlobalExtracted !== options._globalExtracted
+          ? acceptedGlobalExtracted?.fields
+          : selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs).fields;
+
     // Validate arguments
     if (!command.args) {
       // No schema, run with global args (or empty args)
@@ -1174,7 +1189,7 @@ async function runCommandInternal<TResult = unknown>(
       const proxiedGlobalArgs = createDualCaseProxy(validatedGlobalArgs);
       if (options._globalExtracted && !isCompletionInvocation) {
         if (options._globalTrace) options._globalTrace.effectsRan = true;
-        await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
+        await runEffects(proxiedGlobalArgs, acceptedGlobalExtracted!, proxiedGlobalArgs);
       }
       collector?.stop();
       const mergedArgs = proxiedGlobalArgs as Record<string, never>;
@@ -1186,11 +1201,7 @@ async function runCommandInternal<TResult = unknown>(
         packageDiscriminators: options._globalExtracted?.discriminator
           ? [options._globalExtracted.discriminator]
           : [],
-        packageFields:
-          isCompletionInvocation || !options._globalExtracted
-            ? undefined
-            : selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs)
-                .fields,
+        packageFields: globalPackageFields,
       });
       return result as RunResult<TResult>;
     }
@@ -1261,7 +1272,7 @@ async function runCommandInternal<TResult = unknown>(
     // Run effects after all validations succeed (global effects first, then command effects)
     if (options._globalExtracted && !isCompletionInvocation) {
       if (options._globalTrace) options._globalTrace.effectsRan = true;
-      await runEffects(proxiedGlobalArgs, options._globalExtracted, proxiedGlobalArgs);
+      await runEffects(proxiedGlobalArgs, acceptedGlobalExtracted!, proxiedGlobalArgs);
     }
     const acceptedFields = parseResult.extractedFields
       ? isCompletionInvocation
@@ -1281,7 +1292,7 @@ async function runCommandInternal<TResult = unknown>(
     const mergedPlainArgs = mergeNestedArgs(
       { ...proxiedGlobalArgs },
       { ...proxiedCommandArgs },
-      options._globalExtracted?.fields ?? [],
+      acceptedGlobalExtracted?.fields ?? [],
       acceptedFields?.fields ?? [],
     );
     const argSourceMap = new Map<string, ArgSource>(globalSourceMap);
@@ -1325,10 +1336,7 @@ async function runCommandInternal<TResult = unknown>(
       packageFields: isCompletionInvocation
         ? undefined
         : [
-            ...(options._globalExtracted
-              ? selectDiscriminatedVariant(options._globalExtracted, () => validatedGlobalArgs)
-                  .fields
-              : []),
+            ...(globalPackageFields ?? []),
             ...(acceptedFields !== parseResult.extractedFields && acceptedFields
               ? acceptedFields.fields
               : [...(parseResult.optionFields ?? []), ...(parseResult.positionalSlotFields ?? [])]),
