@@ -417,6 +417,41 @@ describe("effect of a plain union", () => {
     expect(effectB).toHaveBeenCalledOnce();
   });
 
+  it("does not validate an option again when the options define their fields with the same metadata", async () => {
+    const transform = vi.fn((value: string) => value);
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.object({ mode: z.literal("a"), port: z.string() }),
+        z.object({ mode: z.literal("b"), port: arg(z.string().transform(transform)) }),
+      ]),
+      run: () => {},
+    });
+
+    const result = await runCommand(cmd, ["--mode", "b", "--port", "80"]);
+
+    expect(result.success).toBe(true);
+    expect(transform).toHaveBeenCalledOnce();
+  });
+
+  it("validates the accepting option again when the options define a field with different metadata", async () => {
+    const transform = vi.fn((value: string) => value);
+
+    const cmd = defineCommand({
+      name: "test",
+      args: z.union([
+        z.object({ mode: z.literal("a"), port: arg(z.string(), { effect: vi.fn() }) }),
+        z.object({ mode: z.literal("b"), port: arg(z.string().transform(transform)) }),
+      ]),
+      run: () => {},
+    });
+
+    await runCommand(cmd, ["--mode", "b", "--port", "80"]);
+
+    expect(transform).toHaveBeenCalledTimes(2);
+  });
+
   it("runs the effect of a nested union option that accepted the args", async () => {
     const effectA = vi.fn();
     const effectB = vi.fn();
