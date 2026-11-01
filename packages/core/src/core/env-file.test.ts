@@ -394,4 +394,30 @@ describe("envFile global option", () => {
 
     expect(run.mock.calls[0]?.[0].organizationId).toBe("from-nested");
   });
+
+  it("keeps a variable the environment already has under another letter case, as on Windows", async () => {
+    const run = vi.fn();
+    const file = write("org.env", "test_ef_org=from-file\n");
+    const store = new Map<string, string>([["TEST_EF_ORG", "from-shell"]]);
+    const insensitive = new Proxy({} as NodeJS.ProcessEnv, {
+      get: (_, key) => store.get(String(key).toUpperCase()),
+      set: (_, key, value) => store.set(String(key).toUpperCase(), String(value)) && true,
+      has: (_, key) => store.has(String(key).toUpperCase()),
+      ownKeys: () => [...store.keys()],
+      getOwnPropertyDescriptor: (_, key) =>
+        store.has(String(key).toUpperCase())
+          ? { value: store.get(String(key).toUpperCase()), enumerable: true, configurable: true }
+          : undefined,
+      deleteProperty: (_, key) => store.delete(String(key).toUpperCase()),
+    });
+    const realEnv = process.env;
+    process.env = insensitive;
+    try {
+      await runCommand(orgCommand(run), ["-e", file], { globalArgs });
+    } finally {
+      process.env = realEnv;
+    }
+
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("from-shell");
+  });
 });

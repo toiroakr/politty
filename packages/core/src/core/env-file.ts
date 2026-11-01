@@ -41,7 +41,6 @@ export function collectEnvFileRequests(
  * already set before the first file was read is left alone.
  */
 export function loadEnvFiles(requests: readonly EnvFileRequest[]): void {
-  const originalKeys = new Set(Object.keys(process.env));
   // Read every file before applying any, so a missing file leaves process.env untouched.
   const parsedFiles = requests.flatMap((request) => {
     const envPath = path.resolve(process.cwd(), request.path);
@@ -51,9 +50,15 @@ export function loadEnvFiles(requests: readonly EnvFileRequest[]): void {
     }
     return [parseEnv(fs.readFileSync(envPath, "utf-8"))];
   });
+  // Ask process.env itself rather than compare names, which a case-insensitive
+  // environment (Windows) resolves differently: `PATH` in a file must not
+  // override an existing `Path`.
+  const preset = new Set(
+    parsedFiles.flatMap((parsed) => Object.keys(parsed)).filter((key) => key in process.env),
+  );
   for (const parsed of parsedFiles) {
     for (const [key, value] of Object.entries(parsed)) {
-      if (!originalKeys.has(key)) process.env[key] = value;
+      if (!preset.has(key)) process.env[key] = value;
     }
   }
 }
