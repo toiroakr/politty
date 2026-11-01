@@ -346,4 +346,52 @@ describe("envFile global option", () => {
 
     expect(cleanup.mock.calls[0]?.[0].globalArgs?.json).toBe(true);
   });
+
+  it("reads the env file of an option declared in only one variant of a union", async () => {
+    const run = vi.fn();
+    const file = write("org.env", "TEST_EF_ORG=from-variant\n");
+    const variants = z.discriminatedUnion("mode", [
+      z.object({ mode: z.literal("a") }),
+      z.object({
+        mode: z.literal("b"),
+        envFile: arg(z.string().array().optional(), { alias: "e", envFile: true }),
+      }),
+    ]);
+
+    await runCommand(orgCommand(run), ["--mode", "b", "-e", file], { globalArgs: variants });
+
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("from-variant");
+  });
+
+  it("reads the env file of an option declared in only one option of a plain union", async () => {
+    const run = vi.fn();
+    const file = write("org.env", "TEST_EF_ORG=from-union\n");
+    const union = z.union([
+      z.object({ other: arg(z.string(), {}) }),
+      z.object({ envFile: arg(z.string().array().optional(), { alias: "e", envFile: true }) }),
+    ]);
+
+    await runCommand(orgCommand(run), ["-e", file], { globalArgs: union });
+
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("from-union");
+  });
+
+  it("reads the env file of an option in a discriminated union nested inside a union", async () => {
+    const run = vi.fn();
+    const file = write("org.env", "TEST_EF_ORG=from-nested\n");
+    const nested = z.union([
+      z.discriminatedUnion("mode", [
+        z.object({ mode: z.literal("a") }),
+        z.object({
+          mode: z.literal("b"),
+          envFile: arg(z.string().array().optional(), { alias: "e", envFile: true }),
+        }),
+      ]),
+      z.object({ other: arg(z.string(), {}) }),
+    ]);
+
+    await runCommand(orgCommand(run), ["--mode", "b", "-e", file], { globalArgs: nested });
+
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("from-nested");
+  });
 });
