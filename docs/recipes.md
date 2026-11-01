@@ -99,6 +99,26 @@ runMain(command, {
 });
 ```
 
+### Loading Env Files (`--env-file`)
+
+Mark a global option with `envFile` and politty loads the files it names into `process.env` before any `env` fallback is applied, like Node.js `--env-file` and `--env-file-if-exists`:
+
+```typescript
+runMain(cli, {
+  globalArgs: z.object({
+    "env-file": arg(z.string().array().optional(), { alias: "e", envFile: true }),
+    "env-file-if-exists": arg(z.string().array().optional(), { envFile: "if-exists" }),
+    json: arg(z.boolean().default(false), { alias: "j", env: "MY_CLI_JSON" }),
+  }),
+});
+```
+
+- `envFile: true` fails with `Environment file not found: <absolute path>` (exit code 2) when a file does not exist. `envFile: "if-exists"` skips a missing file.
+- Files are read after `--help` and `--version` are recognized, so `my-cli deploy --help -e missing.env` still prints the help. They are read before every `env` fallback, so a value in `org.env` reaches an option declared with `env: "ORG_ID"`, and `MY_CLI_JSON` in an env file turns `json` on. `-je org.env` is split correctly because politty knows which options are boolean.
+- Files load in option declaration order, then in the order given on the command line. `my-cli -e a.env deploy -e b.env` reads `a.env` and then `b.env`: a later file overrides an earlier one, and a variable that was already set in the environment is never overridden.
+- When an unknown subcommand is forwarded to a plugin (`onUnknownSubcommand`), the host does not read the files; the plugin reads them itself and reports a missing one.
+- `envFile` only has an effect on a `globalArgs` option whose value is a string or an array of strings. Use an array so that the option can be repeated.
+
 ### Faster Startup (Compile Cache)
 
 Node.js (>= 22.8.0) can persist compiled V8 bytecode to disk so warm starts skip recompilation. `runMain` enables this automatically: the cache lives in `${XDG_CACHE_HOME:-$HOME/.cache}/<command name>/node-compile-cache` (shared with the shell-completion workers), the `NODE_COMPILE_CACHE` environment variable takes precedence (Node.js honors it at process startup, so it applies even with `compileCache: false`), and older runtimes are a silent no-op.

@@ -1,0 +1,196 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
+import { arg } from "./arg-registry.js";
+import { defineCommand } from "./command.js";
+import { runCommand, runMain } from "./runner.js";
+
+const useArgv = (argv: string[]) => {
+  const originalArgv = process.argv;
+  process.argv = argv;
+  return {
+    [Symbol.dispose]() {
+      process.argv = originalArgv;
+    },
+  };
+};
+
+const ENV_KEYS = ["TEST_EF_ORG", "TEST_EF_JSON", "TEST_EF_A", "TEST_EF_B"];
+
+describe("envFile global option", () => {
+  let dir: string;
+  const write = (name: string, content: string): string => {
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, content);
+    return file;
+  };
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "politty-env-file-"));
+  });
+
+  afterEach(() => {
+    for (const key of ENV_KEYS) delete process.env[key];
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  const globalArgs = z.object({
+    envFile: arg(z.string().array().optional(), { alias: "e", envFile: true }),
+    envFileIfExists: arg(z.string().array().optional(), { envFile: "if-exists" }),
+    json: arg(z.boolean().default(false), { alias: "j", env: "TEST_EF_JSON" }),
+  });
+
+  const orgCommand = (run = vi.fn()) =>
+    defineCommand({
+      name: "get",
+      args: z.object({ organizationId: arg(z.string(), { env: "TEST_EF_ORG" }) }),
+      run,
+    });
+
+  it("fills a command option's env fallback from the env file given by -e", async () => {
+    const run = vi.fn();
+    const file = write("org.env", "TEST_EF_ORG=from-file\n");
+
+    const result = await runCommand(orgCommand(run), ["-e", file], { globalArgs });
+
+    expect(result.exitCode).toBe(0);
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("from-file");
+  });
+
+  it("fills a global option's env fallback from the env file", async () => {
+    const run = vi.fn();
+    const file = write("json.env", "TEST_EF_JSON=true\nTEST_EF_ORG=x\n");
+
+    await runCommand(orgCommand(run), ["-e", file], { globalArgs });
+
+    expect(run.mock.calls[0]?.[0].json).toBe(true);
+  });
+
+  it("does not read the env file when --help is requested, even if the file is missing", async () => {
+    const result = await runCommand(orgCommand(), ["--help", "-e", path.join(dir, "missing.env")], {
+      globalArgs,
+      logger: { log: vi.fn(), error: vi.fn() },
+    });
+
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("does not read the env file when --version is requested, even if the file is missing", async () => {
+    const result = await runCommand(
+      orgCommand(),
+      ["--version", "-e", path.join(dir, "missing.env")],
+      {
+        globalArgs,
+        logger: { log: vi.fn(), error: vi.fn() },
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("fails with a usage error naming the resolved path when a required env file is missing", async () => {
+    const missing = path.join(dir, "missing.env");
+
+    const result = await runCommand(orgCommand(), ["-e", missing], { globalArgs });
+
+    expect(result.exitCode).toBe(2);
+    expect(result.success === false && result.error.message).toBe(
+      `Environment file not found: ${missing}`,
+    );
+  });
+
+  it("skips a missing env file given to an if-exists option", async () => {
+    const run = vi.fn();
+    process.env.TEST_EF_ORG = "from-env";
+
+    const result = await runCommand(
+      orgCommand(run),
+      ["--env-file-if-exists", path.join(dir, "missing.env")],
+      { globalArgs },
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("from-env");
+  });
+
+  it("lets a later env file override an earlier one", async () => {
+    const run = vi.fn();
+    const first = write("1.env", "TEST_EF_ORG=first\n");
+    const second = write("2.env", "TEST_EF_ORG=second\n");
+
+    await runCommand(orgCommand(run), ["-e", first, "-e", second], { globalArgs });
+
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("second");
+  });
+
+  it("keeps a variable that was already set in the environment", async () => {
+    const run = vi.fn();
+    process.env.TEST_EF_ORG = "from-shell";
+    const file = write("org.env", "TEST_EF_ORG=from-file\n");
+
+    await runCommand(orgCommand(run), ["-e", file], { globalArgs });
+
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("from-shell");
+  });
+
+  it("reads the env file of a boolean flag bundle such as -je", async () => {
+    const run = vi.fn();
+    const file = write("org.env", "TEST_EF_ORG=from-bundle\n");
+
+    await runCommand(orgCommand(run), ["-je", file], { globalArgs });
+
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("from-bundle");
+    expect(run.mock.calls[0]?.[0].json).toBe(true);
+  });
+
+  it("loads env files given before and after the subcommand, outer first", async () => {
+    const run = vi.fn();
+    const outer = write("outer.env", "TEST_EF_ORG=outer\nTEST_EF_A=a\n");
+    const inner = write("inner.env", "TEST_EF_ORG=inner\n");
+    const root = defineCommand({ name: "root", subCommands: { get: orgCommand(run) } });
+
+    await runCommand(root, ["-e", outer, "get", "-e", inner], { globalArgs });
+
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("inner");
+    expect(process.env.TEST_EF_A).toBe("a");
+  });
+
+  it("loads the required option's files before the if-exists option's, whatever the argv order", async () => {
+    const run = vi.fn();
+    const required = write("required.env", "TEST_EF_ORG=required\n");
+    const optional = write("optional.env", "TEST_EF_ORG=optional\n");
+
+    await runCommand(orgCommand(run), ["--env-file-if-exists", optional, "-e", required], {
+      globalArgs,
+    });
+
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("optional");
+  });
+
+  it("leaves a missing env file to the plugin when a nested unknown subcommand is dispatched to one", async () => {
+    using _argv = useArgv([
+      "node",
+      "root",
+      "tailordb",
+      "erd",
+      "export",
+      "-e",
+      path.join(dir, "missing.env"),
+    ]);
+    using exitSpy = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const onUnknownSubcommand = vi.fn().mockResolvedValue(0);
+    const root = defineCommand({
+      name: "root",
+      subCommands: {
+        tailordb: defineCommand({ name: "tailordb", subCommands: { ls: orgCommand() } }),
+      },
+    });
+
+    await runMain(root, { globalArgs, onUnknownSubcommand });
+
+    expect(onUnknownSubcommand).toHaveBeenCalledWith(expect.objectContaining({ name: "erd" }));
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+});
