@@ -193,4 +193,88 @@ describe("envFile global option", () => {
     expect(onUnknownSubcommand).toHaveBeenCalledWith(expect.objectContaining({ name: "erd" }));
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
+
+  describe("command groups", () => {
+    const group = (run = vi.fn()) =>
+      defineCommand({ name: "root", subCommands: { get: orgCommand(run) } });
+
+    it("shows the group's help instead of failing on a missing env file when no subcommand is given", async () => {
+      const log = vi.fn();
+
+      const result = await runCommand(group(), ["-e", path.join(dir, "missing.env")], {
+        globalArgs,
+        logger: { log, error: vi.fn() },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(log).toHaveBeenCalled();
+    });
+
+    it("reports a mistyped subcommand instead of a missing env file", async () => {
+      const result = await runCommand(group(), ["gett", "-e", path.join(dir, "missing.env")], {
+        globalArgs,
+        logger: { log: vi.fn(), error: vi.fn() },
+      });
+
+      expect(result.success === false && result.error.message).toMatch(/Unknown subcommand: gett/);
+    });
+
+    it("reads the env file for the default subcommand's leaf", async () => {
+      const run = vi.fn();
+      const file = write("org.env", "TEST_EF_ORG=from-default\n");
+      const withDefault = defineCommand({
+        name: "root",
+        defaultSubCommand: "get",
+        subCommands: { get: orgCommand(run) },
+      });
+
+      await runCommand(withDefault, ["-e", file], { globalArgs });
+
+      expect(run.mock.calls[0]?.[0].organizationId).toBe("from-default");
+    });
+  });
+
+  it("does not read a path given after --", async () => {
+    const run = vi.fn();
+    process.env.TEST_EF_ORG = "from-env";
+    const file = write("org.env", "TEST_EF_ORG=from-file\n");
+    const cmd = defineCommand({
+      name: "get",
+      args: z.object({
+        rest: arg(z.string().array().optional(), { positional: true }),
+        organizationId: arg(z.string(), { env: "TEST_EF_ORG" }),
+      }),
+      run,
+    });
+
+    await runCommand(cmd, ["--", "-e", file], { globalArgs });
+
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("from-env");
+  });
+
+  it("reads an env file given to a single-string option", async () => {
+    const run = vi.fn();
+    const file = write("org.env", "TEST_EF_ORG=from-string\n");
+
+    await runCommand(orgCommand(run), ["-e", file], {
+      globalArgs: z.object({ envFile: arg(z.string().optional(), { alias: "e", envFile: true }) }),
+    });
+
+    expect(run.mock.calls[0]?.[0].organizationId).toBe("from-string");
+  });
+
+  it("applies no variable of an earlier file when a later required file is missing", async () => {
+    const first = write("1.env", "TEST_EF_A=leaked\n");
+
+    const result = await runCommand(
+      orgCommand(),
+      ["-e", first, "-e", path.join(dir, "missing.env")],
+      {
+        globalArgs,
+      },
+    );
+
+    expect(result.exitCode).toBe(2);
+    expect(process.env.TEST_EF_A).toBeUndefined();
+  });
 });

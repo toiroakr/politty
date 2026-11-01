@@ -42,13 +42,17 @@ export function collectEnvFileRequests(
  */
 export function loadEnvFiles(requests: readonly EnvFileRequest[]): void {
   const originalKeys = new Set(Object.keys(process.env));
-  for (const request of requests) {
+  // Read every file before applying any, so a missing file leaves process.env untouched.
+  const parsedFiles = requests.flatMap((request) => {
     const envPath = path.resolve(process.cwd(), request.path);
     if (!fs.existsSync(envPath)) {
-      if (request.ifExists) continue;
+      if (request.ifExists) return [];
       throw new EnvFileNotFoundError(envPath);
     }
-    for (const [key, value] of Object.entries(parseEnv(fs.readFileSync(envPath, "utf-8")))) {
+    return [parseEnv(fs.readFileSync(envPath, "utf-8"))];
+  });
+  for (const parsed of parsedFiles) {
+    for (const [key, value] of Object.entries(parsed)) {
       if (!originalKeys.has(key)) process.env[key] = value;
     }
   }

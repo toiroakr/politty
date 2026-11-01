@@ -689,6 +689,8 @@ async function runCommandInternal<TResult = unknown>(
       return name && !knownSubCommands.has(name) ? { positionalIndex, name } : undefined;
     };
 
+    const nestedPlugin = nestedPluginTarget();
+
     // Parse arguments
     let parseResult: ReturnType<typeof parseArgs>;
     try {
@@ -699,7 +701,7 @@ async function runCommandInternal<TResult = unknown>(
         inheritedNames: new Set(Object.keys(options._parsedGlobalArgs ?? {})),
         beforeEnvFallback: (rawGlobalArgs) => {
           // The plugin reads its own env files, and reports a missing one itself.
-          if (!options._globalExtracted || nestedPluginTarget()) return;
+          if (!options._globalExtracted || nestedPlugin) return;
           loadEnvFiles(
             collectEnvFileRequests(
               [...(options._globalArgLevels ?? []), rawGlobalArgs ?? {}],
@@ -736,49 +738,46 @@ async function runCommandInternal<TResult = unknown>(
     // Commands with their own `run` are excluded so a plugin on PATH can never
     // shadow a real positional argument (see the root-level dispatch above).
     const nestedCommandPath = context.commandPath ?? [];
-    {
-      const unknown = nestedPluginTarget();
-      const onUnknownSubcommand = options.onUnknownSubcommand;
-      if (unknown && onUnknownSubcommand) {
-        const { positionalIndex, name } = unknown;
-        {
-          const forwardArgs = argv.slice(positionalIndex + 1);
-          const exitCode = await onUnknownSubcommand({
-            commandPath: nestedCommandPath,
-            name,
-            args: forwardArgs,
-            precedingArgs: [...(options._precedingArgs ?? []), ...argv.slice(0, positionalIndex)],
-          });
-          if (typeof exitCode === "number") {
-            collector?.stop();
-            // Real CLI run: exit with the plugin's code. Programmatic callers
-            // fall through to the typed result and run cleanup themselves.
-            if (options.handleSignals) {
-              // Direct exit bypasses runMain's cleanup, and global setup has
-              // already run at this nested level, so run cleanup here too.
-              if (options._globalCleanup) {
-                try {
-                  await options._globalCleanup({ error: undefined });
-                } catch {
-                  // Swallow - we're about to exit anyway.
-                }
+    const onUnknownSubcommand = options.onUnknownSubcommand;
+    if (nestedPlugin && onUnknownSubcommand) {
+      const { positionalIndex, name } = nestedPlugin;
+      {
+        const forwardArgs = argv.slice(positionalIndex + 1);
+        const exitCode = await onUnknownSubcommand({
+          commandPath: nestedCommandPath,
+          name,
+          args: forwardArgs,
+          precedingArgs: [...(options._precedingArgs ?? []), ...argv.slice(0, positionalIndex)],
+        });
+        if (typeof exitCode === "number") {
+          collector?.stop();
+          // Real CLI run: exit with the plugin's code. Programmatic callers
+          // fall through to the typed result and run cleanup themselves.
+          if (options.handleSignals) {
+            // Direct exit bypasses runMain's cleanup, and global setup has
+            // already run at this nested level, so run cleanup here too.
+            if (options._globalCleanup) {
+              try {
+                await options._globalCleanup({ error: undefined });
+              } catch {
+                // Swallow - we're about to exit anyway.
               }
-              await flushStandardStreams();
-              // No `return`: a mocked process.exit (tests) must fall through to
-              // the typed result so the recursion returns a valid RunResult.
-              process.exit(exitCode);
             }
-            return exitCode === 0
-              ? { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() }
-              : {
-                  success: false,
-                  error: new Error(
-                    `Plugin "${[...nestedCommandPath, name].join(" ")}" exited with code ${exitCode}`,
-                  ),
-                  exitCode,
-                  logs: getCurrentLogs(),
-                };
+            await flushStandardStreams();
+            // No `return`: a mocked process.exit (tests) must fall through to
+            // the typed result so the recursion returns a valid RunResult.
+            process.exit(exitCode);
           }
+          return exitCode === 0
+            ? { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() }
+            : {
+                success: false,
+                error: new Error(
+                  `Plugin "${[...nestedCommandPath, name].join(" ")}" exited with code ${exitCode}`,
+                ),
+                exitCode,
+                logs: getCurrentLogs(),
+              };
         }
       }
     }
