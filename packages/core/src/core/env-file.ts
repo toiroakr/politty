@@ -1,8 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseEnv } from "node:util";
-import type { ExtractedFields } from "../adapter/field-meta.js";
-import { definitionsInAnyVariant } from "./schema-extractor.js";
+import type { ExtractedFields, ResolvedFieldMeta } from "../adapter/field-meta.js";
 
 export interface EnvFileRequest {
   path: string;
@@ -59,6 +58,14 @@ export function loadEnvFiles(requests: readonly EnvFileRequest[]): void {
   }
 }
 
+function allDefinitions(extracted: ExtractedFields): ResolvedFieldMeta[] {
+  return [
+    ...extracted.fields,
+    ...(extracted.variants ?? []).flatMap((variant) => variant.fields),
+    ...(extracted.unionOptions ?? []).flatMap(allDefinitions),
+  ];
+}
+
 /**
  * Reject a union whose variants declare one option with different `envFile`
  * settings: the files are read before the variant is chosen, so a single
@@ -66,7 +73,7 @@ export function loadEnvFiles(requests: readonly EnvFileRequest[]): void {
  */
 export function validateEnvFileDefinitions(extracted: ExtractedFields): void {
   const settings = new Map<string, Set<boolean | "if-exists">>();
-  for (const field of definitionsInAnyVariant(extracted)) {
+  for (const field of allDefinitions(extracted)) {
     const set = settings.get(field.name) ?? new Set();
     set.add(field.envFile ?? false);
     settings.set(field.name, set);

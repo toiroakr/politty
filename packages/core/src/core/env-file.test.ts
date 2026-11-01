@@ -301,6 +301,18 @@ describe("envFile global option", () => {
       );
     });
 
+    it("rejects conflicting envFile settings in a discriminated union nested inside a union", async () => {
+      const cmd = defineCommand({ name: "get", run: vi.fn() });
+      const nested = z.union([
+        unionWith(true, "if-exists"),
+        z.object({ other: arg(z.string().optional(), {}) }),
+      ]);
+
+      await expect(runCommand(cmd, [], { globalArgs: nested })).rejects.toThrow(
+        'Global option "envFile" has different envFile settings across union variants',
+      );
+    });
+
     it("accepts a union whose variants declare the same envFile setting", async () => {
       const cmd = defineCommand({ name: "get", run: vi.fn() });
 
@@ -310,5 +322,16 @@ describe("envFile global option", () => {
 
       expect(result.exitCode).toBe(0);
     });
+  });
+
+  it("hands the current level's globals to cleanup when a required env file is missing", async () => {
+    const cleanup = vi.fn();
+
+    await runCommand(orgCommand(), ["--json", "-e", path.join(dir, "missing.env")], {
+      globalArgs,
+      cleanup,
+    });
+
+    expect(cleanup.mock.calls[0]?.[0].globalArgs?.json).toBe(true);
   });
 });

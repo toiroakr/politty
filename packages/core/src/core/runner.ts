@@ -707,6 +707,14 @@ async function runCommandInternal<TResult = unknown>(
         beforeEnvFallback: (rawGlobalArgs) => {
           // The plugin reads its own env files, and reports a missing one itself.
           if (!options._globalExtracted || nestedPlugin) return;
+          // A missing file ends the run before the globals below are saved, and
+          // `cleanup` still needs this level's (e.g. `--json`).
+          if (options._globalTrace) {
+            options._globalTrace.rawGlobalArgs = {
+              ...options._parsedGlobalArgs,
+              ...rawGlobalArgs,
+            };
+          }
           loadEnvFiles(
             collectEnvFileRequests(
               [...(options._globalArgLevels ?? []), rawGlobalArgs ?? {}],
