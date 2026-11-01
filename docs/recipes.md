@@ -118,6 +118,8 @@ runMain(cli, {
 - Files load in option declaration order, then in the order given on the command line. `my-cli -e a.env deploy -e b.env` reads `a.env` and then `b.env`: a later file overrides an earlier one, and a variable that was already set in the environment is never overridden.
 - When an unknown subcommand is forwarded to a plugin (`onUnknownSubcommand`), the host does not read the files; the plugin reads them itself and reports a missing one.
 - `envFile` only has an effect on a `globalArgs` option whose value is a string or an array of strings. Use an array so that the option can be repeated.
+- A command group (subcommands without a `run`) does not read the files; only the leaf command that runs does, so a mistyped subcommand is reported as such. If a `globalArgs` union declares the same option in several variants, every variant must use the same `envFile` setting, otherwise `runMain` / `runCommand` throws when the schema is read.
+- The variables stay in `process.env` even if the run then fails validation, as with Node.js `--env-file`. When one of the files is missing, none of them is applied.
 
 ### Faster Startup (Compile Cache)
 

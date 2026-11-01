@@ -242,7 +242,7 @@ export function optionFieldsInAnyVariant(extracted: ExtractedFields): ResolvedFi
   return firstFieldsInAnyVariant(extracted, (field) => !field.positional);
 }
 
-function definitionsInAnyVariant(extracted: ExtractedFields): ResolvedFieldMeta[] {
+export function definitionsInAnyVariant(extracted: ExtractedFields): ResolvedFieldMeta[] {
   const groups = extracted.variants ?? extracted.unionOptions ?? [];
   return [extracted.fields, ...groups.map((g) => g.fields)].flat();
 }

@@ -49,7 +49,12 @@ import {
 } from "../validator/error-formatter.js";
 import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
-import { collectEnvFileRequests, EnvFileNotFoundError, loadEnvFiles } from "./env-file.js";
+import {
+  collectEnvFileRequests,
+  EnvFileNotFoundError,
+  loadEnvFiles,
+  validateEnvFileDefinitions,
+} from "./env-file.js";
 import {
   extractFields,
   selectAcceptingUnionOption,
@@ -1416,6 +1421,7 @@ function extractAndValidateGlobal(options: {
     validateDuplicateNegations(extracted);
     validateReservedAliases(extracted, true);
     validateReservedFieldNames(extracted);
+    validateEnvFileDefinitions(extracted);
     const positionalNames = extracted.fields.filter((f) => f.positional).map((f) => f.name);
     if (positionalNames.length > 0) {
       throw new Error(

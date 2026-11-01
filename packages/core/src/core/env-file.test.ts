@@ -277,4 +277,38 @@ describe("envFile global option", () => {
     expect(result.exitCode).toBe(2);
     expect(process.env.TEST_EF_A).toBeUndefined();
   });
+
+  describe("definition", () => {
+    const unionWith = (a: boolean | "if-exists", b: boolean | "if-exists") =>
+      z.discriminatedUnion("mode", [
+        z.object({
+          mode: z.literal("a"),
+          envFile: arg(z.string().array().optional(), { envFile: a }),
+        }),
+        z.object({
+          mode: z.literal("b"),
+          envFile: arg(z.string().array().optional(), { envFile: b }),
+        }),
+      ]);
+
+    it("rejects a union whose variants declare the same option with different envFile settings", async () => {
+      const cmd = defineCommand({ name: "get", run: vi.fn() });
+
+      await expect(
+        runCommand(cmd, ["--mode", "a"], { globalArgs: unionWith(true, "if-exists") }),
+      ).rejects.toThrow(
+        'Global option "envFile" has different envFile settings across union variants (true, "if-exists")',
+      );
+    });
+
+    it("accepts a union whose variants declare the same envFile setting", async () => {
+      const cmd = defineCommand({ name: "get", run: vi.fn() });
+
+      const result = await runCommand(cmd, ["--mode", "a"], {
+        globalArgs: unionWith("if-exists", "if-exists"),
+      });
+
+      expect(result.exitCode).toBe(0);
+    });
+  });
 });

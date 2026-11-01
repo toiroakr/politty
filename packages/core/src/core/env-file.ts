@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseEnv } from "node:util";
 import type { ExtractedFields } from "../adapter/field-meta.js";
+import { definitionsInAnyVariant } from "./schema-extractor.js";
 
 export interface EnvFileRequest {
   path: string;
@@ -54,6 +55,29 @@ export function loadEnvFiles(requests: readonly EnvFileRequest[]): void {
   for (const parsed of parsedFiles) {
     for (const [key, value] of Object.entries(parsed)) {
       if (!originalKeys.has(key)) process.env[key] = value;
+    }
+  }
+}
+
+/**
+ * Reject a union whose variants declare one option with different `envFile`
+ * settings: the files are read before the variant is chosen, so a single
+ * setting has to apply to every variant.
+ */
+export function validateEnvFileDefinitions(extracted: ExtractedFields): void {
+  const settings = new Map<string, Set<boolean | "if-exists">>();
+  for (const field of definitionsInAnyVariant(extracted)) {
+    const set = settings.get(field.name) ?? new Set();
+    set.add(field.envFile ?? false);
+    settings.set(field.name, set);
+  }
+  for (const [name, set] of settings) {
+    if (set.size > 1) {
+      throw new Error(
+        `Global option "${name}" has different envFile settings across union variants (${[...set]
+          .map((value) => JSON.stringify(value))
+          .join(", ")}); use the same setting in every variant`,
+      );
     }
   }
 }
