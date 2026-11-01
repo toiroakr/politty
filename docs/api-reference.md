@@ -964,6 +964,12 @@ interface BaseArgMeta {
    * CLI arguments always take priority over environment variables.
    */
   env?: string | string[];
+  /**
+   * Global options only: load the value(s) as env file path(s) before `env` fallbacks.
+   * `true` fails on a missing file, `"if-exists"` skips it. See
+   * [Loading Env Files](./recipes.md#loading-env-files---env-file).
+   */
+  envFile?: boolean | "if-exists";
   /** Shell completion configuration */
   completion?: CompletionMeta;
   /** Interactive prompt configuration (see [Interactive Prompts](./interactive-prompts.md)) */
@@ -1587,6 +1593,8 @@ interface ResolvedFieldMeta {
   placeholder?: string;
   /** Environment variable name (single or array) */
   env?: string | string[];
+  /** Load the value(s) as env file path(s); `"if-exists"` skips a missing file */
+  envFile?: boolean | "if-exists";
   /** Whether required */
   required: boolean;
   /** Default value */

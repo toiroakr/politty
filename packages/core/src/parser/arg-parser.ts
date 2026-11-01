@@ -86,6 +86,13 @@ export interface ParseArgsOptions {
   promptAvailable?: boolean | undefined;
   /** Names of arguments already given as global flags before this command */
   inheritedNames?: ReadonlySet<string> | undefined;
+  /**
+   * Called once argv reads as a leaf command's own (no help, version or
+   * subcommand to descend into, and the command is not a group), before any
+   * environment variable fallback.
+   * Receives the global option values this level's argv carries.
+   */
+  beforeEnvFallback?: ((rawGlobalArgs: Record<string, unknown> | undefined) => void) | undefined;
 }
 
 /**
@@ -240,6 +247,8 @@ export function parseArgs(
       rawGlobalArgs,
     };
   }
+
+  if (!isGroup) options.beforeEnvFallback?.(rawGlobalArgs);
 
   // If no schema, split on -- manually so that flag-like tokens (e.g. `-x stray`)
   // are not silently consumed by the parser; everything before -- is a positional,

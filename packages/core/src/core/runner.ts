@@ -50,6 +50,12 @@ import {
 import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import {
+  collectEnvFileRequests,
+  EnvFileNotFoundError,
+  loadEnvFiles,
+  validateEnvFileDefinitions,
+} from "./env-file.js";
+import {
   extractFields,
   selectAcceptingUnionOption,
   selectDiscriminatedVariant,
@@ -289,6 +295,8 @@ interface InternalCommandOptions extends InternalRunOptions {
   _agent?: AgentInfo | undefined;
   /** Receives the global args of the deepest level reached, for recovery after a failure */
   _globalTrace?: GlobalTrace | undefined;
+  /** Raw global option values given at each command level above this one, outermost first */
+  _globalArgLevels?: readonly Record<string, unknown>[] | undefined;
 }
 
 interface GlobalTrace {
@@ -671,13 +679,60 @@ async function runCommandInternal<TResult = unknown>(
       validateDefaultSubCommand(command);
     }
 
+    // Nested plugin dispatch: an unknown positional under a known parent
+    // command (e.g. `cli foo bar` -> `cli-foo-bar`), see below.
+    const nestedPluginTarget = (): { positionalIndex: number; name: string } | undefined => {
+      if (!options.onUnknownSubcommand || command.run || (context.commandPath ?? []).length === 0) {
+        return undefined;
+      }
+      const knownSubCommands = listSubCommandNamesWithAliases(command);
+      if (knownSubCommands.size === 0) return undefined;
+      const positionalIndex = findFirstPositionalIndex(argv, options._globalExtracted, {
+        stopOnSuppressedNegation: options._globalExtracted?.unknownKeysMode !== "passthrough",
+      });
+      const name = positionalIndex >= 0 ? argv[positionalIndex] : undefined;
+      return name && !knownSubCommands.has(name) ? { positionalIndex, name } : undefined;
+    };
+
+    const nestedPlugin = nestedPluginTarget();
+
     // Parse arguments
-    const parseResult = parseArgs(argv, command, {
-      skipValidation: options.skipValidation,
-      globalExtracted: options._globalExtracted,
-      promptAvailable: options.prompt !== undefined,
-      inheritedNames: new Set(Object.keys(options._parsedGlobalArgs ?? {})),
-    });
+    let parseResult: ReturnType<typeof parseArgs>;
+    try {
+      parseResult = parseArgs(argv, command, {
+        skipValidation: options.skipValidation,
+        globalExtracted: options._globalExtracted,
+        promptAvailable: options.prompt !== undefined,
+        inheritedNames: new Set(Object.keys(options._parsedGlobalArgs ?? {})),
+        beforeEnvFallback: (rawGlobalArgs) => {
+          // The plugin reads its own env files, and reports a missing one itself.
+          if (!options._globalExtracted || nestedPlugin) return;
+          // A missing file ends the run before the globals below are saved, and
+          // `cleanup` still needs this level's (e.g. `--json`).
+          if (options._globalTrace) {
+            options._globalTrace.rawGlobalArgs = {
+              ...options._parsedGlobalArgs,
+              ...rawGlobalArgs,
+            };
+          }
+          loadEnvFiles(
+            collectEnvFileRequests(
+              [...(options._globalArgLevels ?? []), rawGlobalArgs ?? {}],
+              options._globalExtracted,
+            ),
+          );
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof EnvFileNotFoundError)) throw error;
+      collector?.stop();
+      return {
+        success: false,
+        error,
+        exitCode: USAGE_ERROR_EXIT_CODE,
+        logs: getCurrentLogs(),
+      };
+    }
 
     // Accumulate global args from this parse level.
     // Note: uses shallow spread, so array-valued globals split across a subcommand
@@ -696,51 +751,46 @@ async function runCommandInternal<TResult = unknown>(
     // Commands with their own `run` are excluded so a plugin on PATH can never
     // shadow a real positional argument (see the root-level dispatch above).
     const nestedCommandPath = context.commandPath ?? [];
-    if (options.onUnknownSubcommand && !command.run && nestedCommandPath.length > 0) {
-      const knownSubCommands = listSubCommandNamesWithAliases(command);
-      if (knownSubCommands.size > 0) {
-        const positionalIndex = findFirstPositionalIndex(argv, options._globalExtracted, {
-          stopOnSuppressedNegation: options._globalExtracted?.unknownKeysMode !== "passthrough",
+    const onUnknownSubcommand = options.onUnknownSubcommand;
+    if (nestedPlugin && onUnknownSubcommand) {
+      const { positionalIndex, name } = nestedPlugin;
+      {
+        const forwardArgs = argv.slice(positionalIndex + 1);
+        const exitCode = await onUnknownSubcommand({
+          commandPath: nestedCommandPath,
+          name,
+          args: forwardArgs,
+          precedingArgs: [...(options._precedingArgs ?? []), ...argv.slice(0, positionalIndex)],
         });
-        const name = positionalIndex >= 0 ? argv[positionalIndex] : undefined;
-        if (name && !knownSubCommands.has(name)) {
-          const forwardArgs = argv.slice(positionalIndex + 1);
-          const exitCode = await options.onUnknownSubcommand({
-            commandPath: nestedCommandPath,
-            name,
-            args: forwardArgs,
-            precedingArgs: [...(options._precedingArgs ?? []), ...argv.slice(0, positionalIndex)],
-          });
-          if (typeof exitCode === "number") {
-            collector?.stop();
-            // Real CLI run: exit with the plugin's code. Programmatic callers
-            // fall through to the typed result and run cleanup themselves.
-            if (options.handleSignals) {
-              // Direct exit bypasses runMain's cleanup, and global setup has
-              // already run at this nested level, so run cleanup here too.
-              if (options._globalCleanup) {
-                try {
-                  await options._globalCleanup({ error: undefined });
-                } catch {
-                  // Swallow - we're about to exit anyway.
-                }
+        if (typeof exitCode === "number") {
+          collector?.stop();
+          // Real CLI run: exit with the plugin's code. Programmatic callers
+          // fall through to the typed result and run cleanup themselves.
+          if (options.handleSignals) {
+            // Direct exit bypasses runMain's cleanup, and global setup has
+            // already run at this nested level, so run cleanup here too.
+            if (options._globalCleanup) {
+              try {
+                await options._globalCleanup({ error: undefined });
+              } catch {
+                // Swallow - we're about to exit anyway.
               }
-              await flushStandardStreams();
-              // No `return`: a mocked process.exit (tests) must fall through to
-              // the typed result so the recursion returns a valid RunResult.
-              process.exit(exitCode);
             }
-            return exitCode === 0
-              ? { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() }
-              : {
-                  success: false,
-                  error: new Error(
-                    `Plugin "${[...nestedCommandPath, name].join(" ")}" exited with code ${exitCode}`,
-                  ),
-                  exitCode,
-                  logs: getCurrentLogs(),
-                };
+            await flushStandardStreams();
+            // No `return`: a mocked process.exit (tests) must fall through to
+            // the typed result so the recursion returns a valid RunResult.
+            process.exit(exitCode);
           }
+          return exitCode === 0
+            ? { success: true, result: undefined, exitCode: 0, logs: getCurrentLogs() }
+            : {
+                success: false,
+                error: new Error(
+                  `Plugin "${[...nestedCommandPath, name].join(" ")}" exited with code ${exitCode}`,
+                ),
+                exitCode,
+                logs: getCurrentLogs(),
+              };
         }
       }
     }
@@ -895,6 +945,7 @@ async function runCommandInternal<TResult = unknown>(
           _context: subContext,
           _existingLogs: getCurrentLogs(),
           _parsedGlobalArgs: accumulatedGlobalArgs,
+          _globalArgLevels: [...(options._globalArgLevels ?? []), parseResult.rawGlobalArgs ?? {}],
           _precedingArgs: [...(options._precedingArgs ?? []), ...levelPrecedingArgs],
         });
       }
@@ -1026,6 +1077,10 @@ async function runCommandInternal<TResult = unknown>(
             _context: subContext,
             _existingLogs: getCurrentLogs(),
             _parsedGlobalArgs: accumulatedGlobalArgs,
+            _globalArgLevels: [
+              ...(options._globalArgLevels ?? []),
+              parseResult.rawGlobalArgs ?? {},
+            ],
             _precedingArgs: [...(options._precedingArgs ?? []), ...levelPrecedingArgs],
           });
         }
@@ -1374,6 +1429,7 @@ function extractAndValidateGlobal(options: {
     validateDuplicateNegations(extracted);
     validateReservedAliases(extracted, true);
     validateReservedFieldNames(extracted);
+    validateEnvFileDefinitions(extracted);
     const positionalNames = extracted.fields.filter((f) => f.positional).map((f) => f.name);
     if (positionalNames.length > 0) {
       throw new Error(
