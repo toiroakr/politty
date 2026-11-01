@@ -1451,8 +1451,6 @@ interface HelpFieldData {
   placeholder?: string;
   /** Environment variable name(s) to read value from */
   env?: string | string[];
-  /** Load the value(s) as env file path(s); `"if-exists"` skips a missing file */
-  envFile?: boolean | "if-exists";
   /** Default value, if any */
   defaultValue?: unknown;
   /** Enum values, if detected from schema */

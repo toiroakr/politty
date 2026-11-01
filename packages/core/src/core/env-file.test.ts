@@ -291,6 +291,18 @@ describe("envFile global option", () => {
         }),
       ]);
 
+    it("rejects envFile on an option whose value is not a string or an array of strings", async () => {
+      const cmd = defineCommand({ name: "get", run: vi.fn() });
+
+      await expect(
+        runCommand(cmd, [], {
+          globalArgs: z.object({ flag: arg(z.boolean().default(false), { envFile: true }) }),
+        }),
+      ).rejects.toThrow(
+        'Global option "flag" sets envFile but its value is not a string or an array of strings',
+      );
+    });
+
     it("rejects a union whose variants declare the same option with different envFile settings", async () => {
       const cmd = defineCommand({ name: "get", run: vi.fn() });
 

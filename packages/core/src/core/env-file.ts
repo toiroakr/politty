@@ -67,13 +67,19 @@ function allDefinitions(extracted: ExtractedFields): ResolvedFieldMeta[] {
 }
 
 /**
- * Reject a union whose variants declare one option with different `envFile`
- * settings: the files are read before the variant is chosen, so a single
- * setting has to apply to every variant.
+ * Reject `envFile` on an option that cannot hold a path, and a union whose
+ * variants declare one option with different `envFile` settings: the files are
+ * read before the variant is chosen, so a single setting has to apply to every
+ * variant.
  */
 export function validateEnvFileDefinitions(extracted: ExtractedFields): void {
   const settings = new Map<string, Set<boolean | "if-exists">>();
   for (const field of allDefinitions(extracted)) {
+    if (field.envFile && field.type !== "string" && field.type !== "array") {
+      throw new Error(
+        `Global option "${field.name}" sets envFile but its value is not a string or an array of strings`,
+      );
+    }
     const set = settings.get(field.name) ?? new Set();
     set.add(field.envFile ?? false);
     settings.set(field.name, set);
