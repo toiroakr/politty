@@ -15,6 +15,7 @@
  */
 
 import type { ArgMeta, BuiltinOverrideArgMeta, RegularArgMeta } from "../core/arg-registry.js";
+import { setOwn } from "../set-own.js";
 import type { ArgsSchema } from "../types.js";
 import {
   resolveFieldMeta,
@@ -290,14 +291,7 @@ export function validateInternalArgs(
       });
     } else if (schema.unknownKeys === "passthrough") {
       for (const key of unknownKeys) {
-        // defineProperty, not assignment: a "__proto__" key must become an
-        // own property of the result instead of hitting the prototype setter.
-        Object.defineProperty(data, key, {
-          value: rawArgs[key],
-          enumerable: true,
-          writable: true,
-          configurable: true,
-        });
+        setOwn(data, key, rawArgs[key]);
       }
     }
     // strip: drop silently

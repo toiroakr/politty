@@ -7,6 +7,7 @@
  * The key splitting and the conflict rules follow loculus's `unflatten`.
  */
 
+import { setOwn } from "../set-own.js";
 import { toKebabCase } from "./field-meta.js";
 
 export type UnflattenStyle = "dot" | "kebab" | "camel";
@@ -195,21 +196,6 @@ export function pathResolver(options: UnflattenOptions = {}): (key: string) => s
   return (key) => splitPath(key, style, prefixes);
 }
 
-// `target[key] = value` on `__proto__` would set the prototype instead of
-// adding a property, so a schema key named `__proto__` could not be kept.
-function assignValue(target: Record<string, unknown>, key: string, value: unknown): void {
-  if (key === "__proto__") {
-    Object.defineProperty(target, key, {
-      value,
-      enumerable: true,
-      writable: true,
-      configurable: true,
-    });
-  } else {
-    target[key] = value;
-  }
-}
-
 /**
  * Nest the keys of a flat record by their paths. A group exists only when one
  * of its keys is present. A key that is both a value and a group (`db` and
@@ -242,13 +228,13 @@ export function unflattenRecord(
       } else {
         const group: Record<string, unknown> = {};
         groups.add(group);
-        assignValue(target, name, group);
+        setOwn(target, name, group);
         target = group;
       }
     }
     const leaf = path[last]!;
     if (Object.hasOwn(target, leaf)) return conflict(source, leaf);
-    assignValue(target, leaf, value[source]);
+    setOwn(target, leaf, value[source]);
   }
   return { value: output };
 }
@@ -355,7 +341,7 @@ export function mergeNestedArgs(
       const current = Object.hasOwn(base, key) ? base[key] : undefined;
       const value = override[key];
       if (shared.has(childPath.join("\0")) && isPlainObject(current) && isPlainObject(value)) {
-        assignValue(merged, key, merge(current, value, childPath));
+        setOwn(merged, key, merge(current, value, childPath));
       }
     }
     return merged;

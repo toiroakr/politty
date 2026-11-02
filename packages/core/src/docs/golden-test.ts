@@ -6,6 +6,7 @@ import {
   type ExtractedFields,
   type ResolvedFieldMeta,
 } from "../core/schema-extractor.js";
+import { setOwn } from "../set-own.js";
 import type { AnyCommand, ArgsSchema } from "../types.js";
 import { createCommandRenderer } from "./default-renderers.js";
 import {
@@ -345,19 +346,6 @@ function createTemplateExclusions(rawKeys: Set<string>): TemplateExclusions {
     globalOptions: false,
     index: false,
   };
-}
-
-function setFileMapEntry(
-  fileMap: Record<string, string>,
-  commandPath: string,
-  filePath: string,
-): void {
-  Object.defineProperty(fileMap, commandPath, {
-    value: filePath,
-    enumerable: true,
-    configurable: true,
-    writable: true,
-  });
 }
 
 /**
@@ -2249,7 +2237,7 @@ function buildFileMap(
     const { commandPaths } = resolveConfiguredCommandPaths(fileConfigRaw, allCommands, ignores);
 
     for (const cmdPath of commandPaths) {
-      setFileMapEntry(fileMap, cmdPath, filePath);
+      setOwn(fileMap, cmdPath, filePath);
     }
   }
 
@@ -2766,7 +2754,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
   // a scope wins (see below), giving a stable, order-independent link target.
   const templateFileMap: Record<string, string> = {};
   for (const [scope, outputPath] of Object.entries(fileMap)) {
-    setFileMapEntry(templateFileMap, scope, outputPath);
+    setOwn(templateFileMap, scope, outputPath);
   }
   // Resolve each template-rendered scope to the output that renders it most specifically: the
   // output whose nearest (longest) command-tree root is an ancestor-or-equal of the scope wins.
@@ -2796,7 +2784,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
     }
   }
   for (const [scope, { outputPath }] of templateOwners) {
-    setFileMapEntry(templateFileMap, scope, outputPath);
+    setOwn(templateFileMap, scope, outputPath);
   }
 
   const results: GenerateDocResult["files"] = [];
