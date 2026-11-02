@@ -43,15 +43,15 @@ export function concatEnvFileValues(
   levels: readonly Record<string, unknown>[],
   extracted: ExtractedFields | undefined,
 ): Record<string, string[]> {
-  const joined: Record<string, string[]> = {};
-  for (const field of extracted?.fields ?? []) {
-    if (!field.envFile || field.type !== "array") continue;
-    const values = levels.flatMap((level) => [level[field.name]].flat());
-    if (values.every((value) => typeof value === "string") && values.length > 0) {
-      joined[field.name] = values as string[];
-    }
-  }
-  return joined;
+  return Object.fromEntries(
+    (extracted?.fields ?? []).flatMap((field) => {
+      if (!field.envFile || field.type !== "array") return [];
+      const values = levels.flatMap((level) => [level[field.name]].flat());
+      return values.length > 0 && values.every((value) => typeof value === "string")
+        ? [[field.name, values as string[]]]
+        : [];
+    }),
+  );
 }
 
 /**

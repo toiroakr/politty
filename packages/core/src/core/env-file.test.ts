@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { arg } from "./arg-registry.js";
 import { defineCommand } from "./command.js";
+import { concatEnvFileValues } from "./env-file.js";
 import { runCommand, runMain } from "./runner.js";
 
 const useArgv = (argv: string[]) => {
@@ -382,6 +383,25 @@ describe("envFile global option", () => {
     });
 
     expect(cleanup.mock.calls[0]?.[0].globalArgs?.json).toBe(true);
+  });
+
+  it("hands cleanup every env file path given before and after the subcommand when the inner file is missing", async () => {
+    const cleanup = vi.fn();
+    const outer = write("outer.env", "TEST_EF_A=a\n");
+    const missing = path.join(dir, "missing.env");
+    const root = defineCommand({ name: "root", subCommands: { get: orgCommand() } });
+
+    await runCommand(root, ["-e", outer, "get", "-e", missing], { globalArgs, cleanup });
+
+    expect(cleanup.mock.calls[0]?.[0].globalArgs?.envFile).toEqual([outer, missing]);
+  });
+
+  it("copies an envFile option named __proto__ as an own property", () => {
+    const joined = concatEnvFileValues([{ ["__proto__"]: ["a"] }, { ["__proto__"]: ["b"] }], {
+      fields: [{ name: "__proto__", type: "array", envFile: true }],
+    } as never);
+
+    expect(Object.getOwnPropertyDescriptor(joined, "__proto__")?.value).toEqual(["a", "b"]);
   });
 
   it("reads the env file of an option declared in only one variant of a union", async () => {

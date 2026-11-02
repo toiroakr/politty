@@ -714,6 +714,10 @@ async function runCommandInternal<TResult = unknown>(
             options._globalTrace.rawGlobalArgs = {
               ...options._parsedGlobalArgs,
               ...rawGlobalArgs,
+              ...concatEnvFileValues(
+                [options._parsedGlobalArgs ?? {}, rawGlobalArgs ?? {}],
+                options._globalExtracted,
+              ),
             };
           }
           loadEnvFiles(
