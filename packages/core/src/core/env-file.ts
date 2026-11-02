@@ -71,9 +71,12 @@ export function loadEnvFiles(requests: readonly EnvFileRequest[]): void {
   });
   // Ask process.env itself rather than compare names, which a case-insensitive
   // environment (Windows) resolves differently: `PATH` in a file must not
-  // override an existing `Path`.
+  // override an existing `Path`. `in` is not used because it also matches
+  // inherited properties such as `constructor`.
   const preset = new Set(
-    parsedFiles.flatMap((parsed) => Object.keys(parsed)).filter((key) => key in process.env),
+    parsedFiles
+      .flatMap((parsed) => Object.keys(parsed))
+      .filter((key) => typeof process.env[key] === "string"),
   );
   for (const parsed of parsedFiles) {
     for (const [key, value] of Object.entries(parsed)) {

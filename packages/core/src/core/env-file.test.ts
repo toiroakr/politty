@@ -457,4 +457,16 @@ describe("envFile global option", () => {
 
     expect(run.mock.calls[0]?.[0].organizationId).toBe("from-shell");
   });
+
+  it("loads a variable whose name is also an inherited property of process.env", async () => {
+    const file = write("inherited.env", "constructor=from-file\n");
+
+    try {
+      await runCommand(orgCommand(), ["-e", file], { globalArgs });
+
+      expect(process.env["constructor"]).toBe("from-file");
+    } finally {
+      delete process.env["constructor"];
+    }
+  });
 });
