@@ -157,6 +157,43 @@ describe("envFile global option", () => {
     expect(process.env.TEST_EF_A).toBe("a");
   });
 
+  describe("values given on both sides of the subcommand", () => {
+    const captureGlobals = async (argv: string[]) => {
+      let captured: Record<string, unknown> = {};
+      const get = defineCommand({
+        name: "get",
+        run: (args) => {
+          captured = args as Record<string, unknown>;
+        },
+      });
+      const root = defineCommand({ name: "root", subCommands: { get } });
+      await runCommand(root, argv, {
+        globalArgs: z.object({
+          envFile: arg(z.string().array().optional(), { alias: "e", envFile: true }),
+          tag: arg(z.string().array().optional()),
+        }),
+      });
+      return captured;
+    };
+
+    it("hands the command every env file path, outer first, in the option's value", async () => {
+      const outer = write("outer.env", "TEST_EF_ORG=outer\n");
+      const inner = write("inner.env", "TEST_EF_ORG=inner\n");
+
+      const globals = await captureGlobals(["-e", outer, "get", "-e", inner]);
+
+      expect(globals.envFile).toEqual([outer, inner]);
+    });
+
+    it("keeps only the later value of an array option that has no envFile", async () => {
+      const outer = write("outer.env", "TEST_EF_ORG=outer\n");
+
+      const globals = await captureGlobals(["-e", outer, "--tag", "a", "get", "--tag", "b"]);
+
+      expect(globals.tag).toEqual(["b"]);
+    });
+  });
+
   it("loads the required option's files before the if-exists option's, whatever the argv order", async () => {
     const run = vi.fn();
     const required = write("required.env", "TEST_EF_ORG=required\n");

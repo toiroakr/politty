@@ -51,6 +51,7 @@ import { createDualCaseProxy } from "./case-proxy.js";
 import { runEffects } from "./effect-runner.js";
 import {
   collectEnvFileRequests,
+  concatEnvFileValues,
   EnvFileNotFoundError,
   loadEnvFiles,
   validateEnvFileDefinitions,
@@ -737,9 +738,15 @@ async function runCommandInternal<TResult = unknown>(
     // Accumulate global args from this parse level.
     // Note: uses shallow spread, so array-valued globals split across a subcommand
     // boundary (e.g., `cli --tag a sub --tag b`) will only keep the later value.
+    // `envFile` options are the exception: every file is read, so the value must
+    // list all of them for callers that rebuild the command line from it.
     const accumulatedGlobalArgs = {
       ...options._parsedGlobalArgs,
       ...parseResult.rawGlobalArgs,
+      ...concatEnvFileValues(
+        [options._parsedGlobalArgs ?? {}, parseResult.rawGlobalArgs ?? {}],
+        options._globalExtracted,
+      ),
     };
     if (options._globalTrace) options._globalTrace.rawGlobalArgs = { ...accumulatedGlobalArgs };
 

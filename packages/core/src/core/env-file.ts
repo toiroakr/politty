@@ -36,6 +36,25 @@ export function collectEnvFileRequests(
 }
 
 /**
+ * Values of array-typed `envFile` options joined across command levels, outer
+ * first. Only options given at more than one level need an entry.
+ */
+export function concatEnvFileValues(
+  levels: readonly Record<string, unknown>[],
+  extracted: ExtractedFields | undefined,
+): Record<string, string[]> {
+  const joined: Record<string, string[]> = {};
+  for (const field of extracted?.fields ?? []) {
+    if (!field.envFile || field.type !== "array") continue;
+    const values = levels.flatMap((level) => [level[field.name]].flat());
+    if (values.every((value) => typeof value === "string") && values.length > 0) {
+      joined[field.name] = values as string[];
+    }
+  }
+  return joined;
+}
+
+/**
  * Load env files into `process.env` with the semantics of Node.js
  * `--env-file`: a later file overrides an earlier one, and a variable that was
  * already set before the first file was read is left alone.
