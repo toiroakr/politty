@@ -49,6 +49,8 @@ export interface ResolvedFieldMeta {
    * If an array, earlier entries take priority.
    */
   env?: string | string[] | undefined;
+  /** Load the value(s) as env file path(s); `"if-exists"` skips a missing file */
+  envFile?: boolean | "if-exists" | undefined;
   /** Whether this argument is required */
   required: boolean;
   /** Default value if any */
@@ -350,6 +352,7 @@ export function resolveFieldMeta(name: string, intro: FieldIntrospection): Resol
     named: typeof positional === "object" ? positional.named === true : positional !== true,
     placeholder: argMeta?.placeholder,
     env: argMeta?.env,
+    envFile: argMeta?.envFile,
     required: intro.required,
     defaultValue: intro.defaultValue,
     type: fieldType,

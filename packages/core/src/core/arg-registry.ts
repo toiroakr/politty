@@ -187,6 +187,24 @@ export interface BaseArgMeta<TValue = unknown> {
    * ```
    */
   env?: string | string[];
+  /**
+   * Treat this global option's value(s) as env file path(s) and load them into
+   * `process.env` before any `env` fallback is applied, like Node.js
+   * `--env-file`. `true` fails when a file does not exist; `"if-exists"`
+   * skips a missing file, like `--env-file-if-exists`.
+   *
+   * Only meaningful on a `globalArgs` option whose value is a string or an array of
+   * strings. Files load in option declaration order, then in the order given on
+   * the command line (outer command first); a later file overrides an earlier
+   * one, and variables already set in the environment are never overridden.
+   *
+   * @example
+   * ```ts
+   * "env-file": arg(z.string().array().optional(), { alias: "e", envFile: true }),
+   * "env-file-if-exists": arg(z.string().array().optional(), { envFile: "if-exists" }),
+   * ```
+   */
+  envFile?: boolean | "if-exists";
   /** Completion configuration for shell tab-completion */
   completion?: CompletionMeta;
   /**
