@@ -1,5 +1,15 @@
 # politty
 
+## 0.17.2
+
+### Patch Changes
+
+- 6c805c7: chore(deps): update dependency @types/node to v26.6.6
+- 79ec66d: chore(deps): update dependency @inquirer/prompts to v8.7.5
+- Updated dependencies [6c805c7]
+- Updated dependencies [79ec66d]
+  - @politty/zod@0.7.2
+
 ## 0.17.1
 
 ### Patch Changes
