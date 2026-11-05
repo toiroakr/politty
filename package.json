@@ -45,7 +45,7 @@
     "quansync": "1.0.0",
     "rolldown": "1.2.15",
     "tsx": "4.23.15",
-    "typescript": "7.1.0-dev.20261028.1",
+    "typescript": "7.1.0-dev.20261029.1",
     "valibot": "1.5.0",
     "vitest": "5.0.5",
     "zod": "4.6.7"

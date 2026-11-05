@@ -81,7 +81,7 @@
     "@types/node": "26.6.6",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "tsdown": "0.23.3",
-    "typescript": "7.1.0-dev.20261028.1",
+    "typescript": "7.1.0-dev.20261029.1",
     "zod": "4.6.7"
   },
   "peerDependencies": {
