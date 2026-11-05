@@ -1,5 +1,12 @@
 # @politty/loculus
 
+## 0.4.2
+
+### Patch Changes
+
+- 6c805c7: chore(deps): update dependency @types/node to v26.6.6
+- 79ec66d: chore(deps): update dependency @inquirer/prompts to v8.7.5
+
 ## 0.4.1
 
 ### Patch Changes
