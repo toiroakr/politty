@@ -94,7 +94,9 @@ function requestsFromArgv(globalArgs: ArgsSchema, argv: readonly string[]): EnvF
   const extracted = extractFields(globalArgs);
   validateEnvFileDefinitions(extracted);
   // A run that only prints help or the version reads no env file, as in runMain.
-  if (Object.values(scanInformationalFlags(argv, extracted)).some(Boolean)) return [];
+  // No schema is passed: only a command's own alias override frees -h/-H, and a
+  // global option's does not.
+  if (Object.values(scanInformationalFlags(argv)).some(Boolean)) return [];
   // Every file counts: a single-string option given twice keeps both values.
   const readAll: ExtractedFields = {
     ...extracted,

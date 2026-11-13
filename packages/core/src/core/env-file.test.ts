@@ -600,6 +600,25 @@ describe("loadEnvFiles", () => {
       },
     );
 
+    it.each(["-h", "-H"])(
+      "treats %s as help even when a global option takes it as an alias, as a command does",
+      (flag) => {
+        const overriding = z.object({
+          envFile: arg(z.string().array().optional(), { envFile: true }),
+          host: arg(z.boolean().default(false), {
+            alias: flag.slice(1),
+            overrideBuiltinAlias: true,
+          }),
+        });
+
+        expect(() =>
+          loadEnvFiles(overriding, {
+            argv: ["plugin", flag, "--env-file", path.join(dir, "missing.env")],
+          }),
+        ).not.toThrow();
+      },
+    );
+
     it("reads every file of a single-string option given on both sides of the plugin name", () => {
       const single = z.object({
         envFile: arg(z.string().optional(), { alias: "e", envFile: true }),
