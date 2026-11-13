@@ -112,6 +112,27 @@ function missingApi(preferred: ApiPackage | undefined): string {
 /** The `ModuleKind` values the API takes as a resolution mode. */
 const RESOLUTION_MODES: Record<ModuleFormat, ResolutionMode> = { commonjs: 1, esm: 99 };
 
+/** `ModuleResolutionKind.Node16` and `ModuleResolutionKind.NodeNext`. */
+const NODE_RESOLUTION_KINDS = new Set([3, 99]);
+/** `ModuleKind` values from `Node16` to `NodeNext`, which imply Node16/NodeNext resolution. */
+const NODE_MODULE_KINDS = new Set([100, 101, 102, 199]);
+
+/**
+ * Whether module resolution picks `import` or `require` conditions by the
+ * importing file's format, as Node16/NodeNext resolution does. Other modes,
+ * such as `bundler`, pick them by the import syntax, which the resolver
+ * already does when given no mode.
+ */
+function picksConditionsByFormat(options: {
+  moduleResolution?: unknown;
+  module?: unknown;
+}): boolean {
+  const { moduleResolution, module } = options;
+  return typeof moduleResolution === "number"
+    ? NODE_RESOLUTION_KINDS.has(moduleResolution)
+    : typeof module === "number" && NODE_MODULE_KINDS.has(module);
+}
+
 /** How Node loads a module: by its extension, else by the `type` of the package that owns it. */
 function moduleFormatOf(file: string): ModuleFormat {
   if (/\.m[jt]sx?$/.test(file)) return "esm";
@@ -139,9 +160,9 @@ function readEntry(
   source: string,
 ): Project {
   const { api, ast } = corsa;
-  const resolver = api.createModuleResolver(
-    compilerOptions ?? api.parseConfigFile(tsconfigPath).options,
-  );
+  const options = compilerOptions ?? api.parseConfigFile(tsconfigPath).options;
+  const byFormat = picksConditionsByFormat(options);
+  const resolver = api.createModuleResolver(options);
   const lease = api.createSourceFile(entry, source);
   try {
     const reference = readGlobalArgs(ast, lease.sourceFile);
@@ -158,8 +179,8 @@ function readEntry(
       moduleFormatOf(entry),
       GENERATED_DIR,
       (specifier, dir, format) =>
-        resolver.resolveModuleName(specifier, dir, RESOLUTION_MODES[format]).resolvedModule ??
-        undefined,
+        resolver.resolveModuleName(specifier, dir, byFormat ? RESOLUTION_MODES[format] : undefined)
+          .resolvedModule ?? undefined,
     );
     return { text, problem: undefined, watchedFiles: [entry] };
   } finally {

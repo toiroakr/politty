@@ -164,6 +164,25 @@ runMain(cli, { globalArgs: (await import("@shared/args")).a as Mode });
     );
   });
 
+  it("resolves static imports with import conditions under bundler resolution", async () => {
+    const dir = project();
+    write(
+      dir,
+      "package.json",
+      JSON.stringify({
+        imports: { "#schema": { import: "./src/esm.ts", require: "./src/cjs.ts" } },
+      }),
+    );
+    write(dir, "src/esm.ts", "export const schema = {};\n");
+    write(dir, "src/cjs.ts", "export const schema = {};\n");
+    write(
+      dir,
+      "src/main.ts",
+      `import { runMain } from "politty";\nimport { schema } from "#schema";\nrunMain(cli, { globalArgs: schema });\n`,
+    );
+    expect((await load(dir)).text).toContain(`import { schema } from "${posix(dir)}/src/esm.js";`);
+  });
+
   it("resolves the way Node loads the entry under NodeNext", async () => {
     const dir = project();
     write(
