@@ -273,7 +273,7 @@ Each politty package (`politty`, `@politty/zod`, `@politty/valibot`, `@politty/z
 }
 ```
 
-Run `tsc` with `--runExternalCode`; without the flag TypeScript reports error TS18068. Editors start the mapper only after you trust the folder. TypeScript older than 7.1 ignores `contentMappers`, and then the global options are not part of `args`' type. 7.1 is in beta, so install it with `npm i -D typescript@beta`.
+Run `tsc` with `--runExternalCode`; without the flag TypeScript reports error TS18068. Editors start the mapper only after you trust the folder. TypeScript older than 7.1 ignores `contentMappers`, and then the global options are not part of `args`' type. 7.1 is not released yet: install the beta (`npm i -D typescript@beta`) or a nightly build (`npm i -D typescript@next`).
 
 The mapper does not run your code. It reads the source statically:
 
