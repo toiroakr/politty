@@ -31,9 +31,9 @@ const PACKAGES = {
 type PackageName = keyof typeof PACKAGES;
 
 const GLOBAL_ARGS: Record<string, string> = {
-  zod: `z.object({ verbose: z.boolean().default(false), profile: z.string().optional() })`,
-  valibot: `v.object({ verbose: v.optional(v.boolean(), false), profile: v.optional(v.string()) })`,
-  "zod-mini": `z.object({ verbose: z._default(z.boolean(), false), profile: z.optional(z.string()) })`,
+  zod: `z.object({ verbose: arg(z.boolean().default(false), { alias: "v" }), profile: z.string().optional() })`,
+  valibot: `v.object({ verbose: arg(v.optional(v.boolean(), false), { alias: "v" }), profile: v.optional(v.string()) })`,
+  "zod-mini": `z.object({ verbose: arg(z._default(z.boolean(), false), { alias: "v" }), profile: z.optional(z.string()) })`,
 };
 
 const SCHEMA_IMPORT: Record<string, string> = {
@@ -98,7 +98,7 @@ function createProject(
     dir,
     "src/main.ts",
     `${SCHEMA_IMPORT[schemas]}
-import { defineCommand, runMain } from "${packageName}";
+import { arg, defineCommand, runMain } from "${packageName}";
 import { build } from "./commands/build.js";
 
 const cli = defineCommand({ name: "app", subCommands: { build } });
@@ -183,6 +183,29 @@ export const build = defineCommand({
     const modeIsRequired: {} extends Pick<typeof args, "mode"> ? false : true = true;
     return [mode, location, profileIsOptional, modeIsRequired];
   },
+});
+`,
+      );
+      expect(typeCheck(compiler, dir)).toEqual({ status: 0, output: "" });
+    });
+
+    it("copies a partly used destructuring without unused locals", () => {
+      const dir = createProject("@politty/zod", { entry: "./src/main.ts" });
+      write(
+        dir,
+        "src/main.ts",
+        `import { z } from "zod";
+import { defineCommand, runMain } from "@politty/zod";
+import { build } from "./commands/build.js";
+
+const { object, boolean, string } = z;
+const cli = defineCommand({
+  name: "app",
+  args: object({ name: string().optional() }),
+  subCommands: { build },
+});
+void runMain(cli, {
+  globalArgs: object({ verbose: boolean().default(false), profile: z.string().optional() }),
 });
 `,
       );

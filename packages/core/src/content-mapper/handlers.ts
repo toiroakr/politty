@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { ResolutionMode } from "typescript/sync";
 import { API_PACKAGES, loadCorsa, type ApiPackage, type Corsa } from "./corsa.js";
 import { readGlobalArgs } from "./entry-analysis.js";
-import { buildGlobalArgsModule, EMPTY_MODULE } from "./global-args-module.js";
+import { buildGlobalArgsModule, EMPTY_MODULE, type ModuleFormat } from "./global-args-module.js";
 import type { JsonRpcHandler } from "./rpc.js";
 
 export type ContentMapperHandlers = Record<
@@ -108,6 +109,28 @@ function missingApi(preferred: ApiPackage | undefined): string {
   return `politty's content mapper reads the entry with the TypeScript 7.1 JavaScript API; install ${packages.join(" or ")} in the project (${packages.map((name) => `${name}/sync`).join(", ")} was not found)`;
 }
 
+/** The `ModuleKind` values the API takes as a resolution mode. */
+const RESOLUTION_MODES: Record<ModuleFormat, ResolutionMode> = { commonjs: 1, esm: 99 };
+
+/** How Node loads a module: by its extension, else by the `type` of the package that owns it. */
+function moduleFormatOf(file: string): ModuleFormat {
+  if (/\.m[jt]sx?$/.test(file)) return "esm";
+  if (/\.c[jt]sx?$/.test(file)) return "commonjs";
+  for (let dir = path.dirname(file); ; dir = path.dirname(dir)) {
+    const packageJson = readSource(path.join(dir, "package.json"));
+    if (packageJson !== undefined) {
+      try {
+        return (JSON.parse(packageJson) as { type?: unknown }).type === "module"
+          ? "esm"
+          : "commonjs";
+      } catch {
+        return "commonjs";
+      }
+    }
+    if (path.dirname(dir) === dir) return "commonjs";
+  }
+}
+
 function readEntry(
   corsa: Corsa,
   tsconfigPath: string,
@@ -129,14 +152,16 @@ function readEntry(
         watchedFiles: [entry],
       };
     }
-    const built = buildGlobalArgsModule(reference, entry, GENERATED_DIR, (specifier, dir) => {
-      return resolver.resolveModuleName(specifier, dir).resolvedModule ?? undefined;
-    });
-    return {
-      text: built.text,
-      problem: built.problems.length > 0 ? built.problems.join("\n") : undefined,
-      watchedFiles: [entry],
-    };
+    const text = buildGlobalArgsModule(
+      reference,
+      entry,
+      moduleFormatOf(entry),
+      GENERATED_DIR,
+      (specifier, dir, format) =>
+        resolver.resolveModuleName(specifier, dir, RESOLUTION_MODES[format]).resolvedModule ??
+        undefined,
+    );
+    return { text, problem: undefined, watchedFiles: [entry] };
   } finally {
     lease.dispose();
     resolver.dispose();

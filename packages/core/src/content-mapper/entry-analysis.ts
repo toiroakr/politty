@@ -15,6 +15,8 @@ export interface ImportBinding {
 /** A module specifier inside copied code, written in the entry's terms. */
 export interface SpecifierPiece {
   specifier: string;
+  /** Whether it is the argument of an `import()` call, which Node resolves as ESM in any module */
+  dynamic: boolean;
 }
 
 /** Copied source: text, with the module specifiers it contains kept apart to rewrite. */
@@ -67,31 +69,32 @@ class EntryReader {
   /** Source of `node`, split around the module specifiers of `import()` calls and types in it. */
   code(node: Ast.Node): CodeFragment {
     const { ast, sourceFile } = this;
-    const literals: Ast.Node[] = [];
+    const literals: { literal: Ast.Node; dynamic: boolean }[] = [];
     const visit = (child: Ast.Node): void => {
       if (
         ast.isImportTypeNode(child) &&
         ast.isLiteralTypeNode(child.argument) &&
         ast.isStringLiteral(child.argument.literal)
       ) {
-        literals.push(child.argument.literal);
+        literals.push({ literal: child.argument.literal, dynamic: false });
       } else if (
         ast.isCallExpression(child) &&
         child.expression.kind === ast.SyntaxKind.ImportKeyword &&
         child.arguments[0] !== undefined &&
         ast.isStringLiteral(child.arguments[0])
       ) {
-        literals.push(child.arguments[0]);
+        literals.push({ literal: child.arguments[0], dynamic: true });
       }
       child.forEachChild(visit);
     };
     visit(node);
     const code: CodeFragment = [];
     let position = node.getStart(sourceFile);
-    for (const literal of literals.sort((a, b) => a.pos - b.pos)) {
+    for (const { literal, dynamic } of literals.sort((a, b) => a.literal.pos - b.literal.pos)) {
       const start = literal.getStart(sourceFile);
       code.push(sourceFile.text.slice(position, start), {
         specifier: (literal as Ast.StringLiteral).text,
+        dynamic,
       });
       position = literal.end;
     }
@@ -122,7 +125,7 @@ class EntryReader {
       for (const declaration of list.declarations) {
         this.addDeclaration(bindingNames(ast, declaration.name), {
           start: declaration.getStart(sourceFile),
-          code: [`${declare ? "declare " : ""}${keyword} `, ...this.code(declaration), ";"],
+          code: [`export ${declare ? "declare " : ""}${keyword} `, ...this.code(declaration), ";"],
           references: [declaration.name, declaration.type, declaration.initializer].filter(
             (node) => node !== undefined,
           ),
@@ -141,7 +144,10 @@ class EntryReader {
       const [head, ...rest] = this.code(statement);
       this.addDeclaration([name.text], {
         start: statement.getStart(sourceFile),
-        code: [typeof head === "string" ? head.replace(EXPORT_PREFIX, "") : head!, ...rest],
+        code: [
+          typeof head === "string" ? `export ${head.replace(EXPORT_PREFIX, "")}` : head!,
+          ...rest,
+        ],
         references: [statement],
         initializer: undefined,
       });
@@ -311,6 +317,17 @@ function unwrap(ast: AstModule, node: Ast.Expression): Ast.Expression {
   return current;
 }
 
+/**
+ * Whether a property the mapper cannot read may still set `globalArgs`: one
+ * with a computed key, or a method or accessor named `globalArgs`.
+ */
+function mayDefineGlobalArgs(ast: AstModule, property: Ast.ObjectLiteralElementLike): boolean {
+  const name = (property as { name?: Ast.Node }).name;
+  if (!name) return false;
+  if (ast.isComputedPropertyName(name)) return true;
+  return (ast.isIdentifier(name) || ast.isStringLiteral(name)) && name.text === GLOBAL_ARGS;
+}
+
 function globalArgsOfOptions(
   reader: EntryReader,
   options: Ast.Expression,
@@ -341,6 +358,8 @@ function globalArgsOfOptions(
       property.name.text === GLOBAL_ARGS
     ) {
       found = property.initializer;
+    } else if (mayDefineGlobalArgs(ast, property)) {
+      found = undefined;
     }
   }
   return found;

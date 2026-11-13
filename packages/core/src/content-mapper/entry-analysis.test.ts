@@ -3,7 +3,11 @@ import { API_PACKAGES, closeCorsa, loadCorsa } from "./corsa.js";
 import { readGlobalArgs, type CodeFragment } from "./entry-analysis.js";
 
 const render = (code: CodeFragment): string =>
-  code.map((piece) => (typeof piece === "string" ? piece : `<${piece.specifier}>`)).join("");
+  code
+    .map((piece) =>
+      typeof piece === "string" ? piece : `<${piece.dynamic ? "dynamic " : ""}${piece.specifier}>`,
+    )
+    .join("");
 
 afterAll(() => closeCorsa());
 
@@ -45,7 +49,7 @@ runMain(cli, { version: "1.0.0", globalArgs: globalArgsSchema });
       expression: "globalArgsSchema",
       imports: ["arg", "z"],
       declarations: [
-        `const globalArgsSchema = z.object({
+        `export const globalArgsSchema = z.object({
   verbose: arg(z.boolean().default(false), { alias: "v" }),
 });`,
       ],
@@ -88,12 +92,12 @@ runMain(cli, { globalArgs: schema });
 `)
       ).declarations,
     ).toEqual([
-      `type Level = "debug" | "info";`,
-      "const verbose = z.boolean();",
-      `function shape() {
+      `export type Level = "debug" | "info";`,
+      "export const verbose = z.boolean();",
+      `export function shape() {
   return { verbose, level: z.custom<Level>() };
 }`,
-      "const schema = z.object(shape());",
+      "export const schema = z.object(shape());",
     ]);
   });
 
@@ -134,7 +138,7 @@ runMain(cli, { globalArgs: schemaOf<Unbox<Box<string>>>() });
 `),
     ).toMatchObject({
       imports: ["Box", "Mode"],
-      declarations: ["type Unbox<T> = T extends Box<infer Mode> ? Mode : Mode;"],
+      declarations: ["export type Unbox<T> = T extends Box<infer Mode> ? Mode : Mode;"],
     });
   });
 
@@ -149,9 +153,9 @@ runMain(cli, { globalArgs: schema });
 `)
       ).declarations,
     ).toEqual([
-      "const { boolean, object } = z;",
-      "const base = z.string();",
-      "const schema = object({ base, verbose: boolean() });",
+      "export const { boolean, object } = z;",
+      "export const base = z.string();",
+      "export const schema = object({ base, verbose: boolean() });",
     ]);
   });
 
@@ -162,8 +166,8 @@ type Mode = import("./types.js").Mode;
 runMain(cli, { globalArgs: schemaFor<Mode>(await import("./schema.js")) });
 `),
     ).toMatchObject({
-      expression: "schemaFor<Mode>(await import(<./schema.js>))",
-      declarations: ["type Mode = import(<./types.js>).Mode;"],
+      expression: "schemaFor<Mode>(await import(<dynamic ./schema.js>))",
+      declarations: ["export type Mode = import(<./types.js>).Mode;"],
     });
   });
 
@@ -224,6 +228,24 @@ if (import.meta.main) {
         attributes: 'with { type: "json" }',
       }),
     ]);
+  });
+
+  it("ignores a globalArgs a later computed key or accessor may override", async () => {
+    expect(
+      await read(`import { runMain } from "politty";\nrunMain(cli, { globalArgs: a, [key]: b });`),
+    ).toBeUndefined();
+    expect(
+      await read(
+        `import { runMain } from "politty";\nrunMain(cli, { globalArgs: a, get globalArgs() { return b; } });`,
+      ),
+    ).toBeUndefined();
+    expect(
+      (
+        await referenced(
+          `import { runMain } from "politty";\nrunMain(cli, { [key]: b, globalArgs: a });`,
+        )
+      ).expression,
+    ).toBe("a");
   });
 
   it("ignores a globalArgs a later spread may override, and calls it cannot attribute to runMain", async () => {

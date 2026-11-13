@@ -143,7 +143,7 @@ runMain(cli, { globalArgs: (await import("@shared/args")).a as Mode });
     expect(text).toContain(`(await import("${posix(dir)}/src/shared/args.js")).a as Mode;`);
   });
 
-  it("reports a package the generated module cannot resolve as the entry does", async () => {
+  it("keeps a package name politty resolves the same way, and reaches any other package by path", async () => {
     const dir = project();
     write(
       dir,
@@ -154,11 +154,43 @@ runMain(cli, { globalArgs: (await import("@shared/args")).a as Mode });
     write(
       dir,
       "src/main.ts",
-      `import { runMain } from "politty";\nimport { schema } from "local-schema";\nrunMain(cli, { globalArgs: schema });\n`,
+      `import { z } from "zod";\nimport { runMain } from "politty";\nimport { schema } from "local-schema";\nrunMain(cli, { globalArgs: z.object({ schema }) });\n`,
     );
-    expect((await load(dir)).problem).toMatch(
-      /"local-schema" resolves to .*local-schema\/index\.d\.ts from .* but to nothing from politty's package/,
+    const { text, problem } = await load(dir);
+    expect(problem).toBeUndefined();
+    expect(text).toContain(`import { z } from "zod";`);
+    expect(text).toContain(
+      `import { schema } from "${posix(dir)}/node_modules/local-schema/index.js";`,
     );
+  });
+
+  it("resolves the way Node loads the entry under NodeNext", async () => {
+    const dir = project();
+    write(
+      dir,
+      "tsconfig.json",
+      JSON.stringify({ compilerOptions: { module: "nodenext", moduleResolution: "nodenext" } }),
+    );
+    write(
+      dir,
+      "package.json",
+      JSON.stringify({
+        type: "module",
+        imports: { "#schema": { import: "./src/esm.ts", require: "./src/cjs.ts" } },
+      }),
+    );
+    write(dir, "src/esm.ts", "export const schema = {};\n");
+    write(dir, "src/cjs.ts", "export const schema = {};\n");
+    const source = `import { runMain } from "politty";\nimport { schema } from "#schema";\nrunMain(cli, { globalArgs: [schema, import("#schema")] });\n`;
+    write(dir, "src/main.ts", source);
+    write(dir, "src/main.cts", source);
+
+    expect((await load(dir, "src/main.ts")).text).toContain(
+      `import { schema } from "${posix(dir)}/src/esm.js";`,
+    );
+    const commonjs = (await load(dir, "src/main.cts")).text;
+    expect(commonjs).toContain(`import { schema } from "${posix(dir)}/src/cjs.js";`);
+    expect(commonjs).toContain(`import("${posix(dir)}/src/esm.js")`);
   });
 
   it("reports an entry that is missing or passes no globalArgs", async () => {

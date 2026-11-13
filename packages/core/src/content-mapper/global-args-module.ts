@@ -32,16 +32,15 @@ export interface ResolvedModule {
   isExternalLibraryImport?: boolean | undefined;
 }
 
+/** How Node resolves a specifier: as `require` (CommonJS) or as `import` (ESM). */
+export type ModuleFormat = "commonjs" | "esm";
+
 /** Resolves a specifier as TypeScript does for a file in `containingDirectory`. */
 export type ResolveModule = (
   specifier: string,
   containingDirectory: string,
+  format: ModuleFormat,
 ) => ResolvedModule | undefined;
-
-export interface GlobalArgsModule {
-  text: string;
-  problems: string[];
-}
 
 /** The specifier that reaches a resolved project file from anywhere: its absolute path, as a `.js` path. */
 function absoluteSpecifier(resolvedFileName: string): string {
@@ -56,26 +55,24 @@ function absoluteSpecifier(resolvedFileName: string): string {
 
 /**
  * Rewrite a specifier written in the entry so it reaches the same module
- * from the generated file. Project files get their absolute path; a package
- * keeps its name, which must resolve to the same file from `generatedDir`.
+ * from the generated file, which is ESM. A project file gets its absolute
+ * path. A package keeps its name when it resolves to the same file from
+ * `generatedDir`, and otherwise gets the absolute path of that file too.
  */
 function rewriteSpecifier(
   specifier: string,
+  format: ModuleFormat,
   entry: string,
   generatedDir: string,
   resolve: ResolveModule,
-  problems: string[],
 ): string {
-  const fromEntry = resolve(specifier, path.dirname(entry));
+  const fromEntry = resolve(specifier, path.dirname(entry), format);
   if (!fromEntry) return specifier;
   if (!fromEntry.isExternalLibraryImport) return absoluteSpecifier(fromEntry.resolvedFileName);
-  const fromGenerated = resolve(specifier, generatedDir);
-  if (fromGenerated?.resolvedFileName !== fromEntry.resolvedFileName) {
-    problems.push(
-      `"${specifier}" resolves to ${fromEntry.resolvedFileName} from ${entry} but to ${fromGenerated?.resolvedFileName ?? "nothing"} from politty's package, so the globalArgs type cannot be read from it; install it where politty can resolve it as well`,
-    );
-  }
-  return specifier;
+  const fromGenerated = resolve(specifier, generatedDir, "esm");
+  return fromGenerated?.resolvedFileName === fromEntry.resolvedFileName
+    ? specifier
+    : absoluteSpecifier(fromEntry.resolvedFileName);
 }
 
 function importStatements(
@@ -125,33 +122,38 @@ function importStatements(
  * TypeScript infers its type exactly as it does in the entry.
  * @param reference - What the entry passes as `globalArgs`
  * @param entry - Absolute path of the entry module
+ * @param entryFormat - How Node resolves the entry's static imports
  * @param generatedDir - Directory of the `.politty` file the module is served for
  * @param resolve - Resolves specifiers with the project's compiler options
+ * @returns The module's source text
  */
 export function buildGlobalArgsModule(
   reference: GlobalArgsReference,
   entry: string,
+  entryFormat: ModuleFormat,
   generatedDir: string,
   resolve: ResolveModule,
-): GlobalArgsModule {
-  const problems: string[] = [];
+): string {
   const rewritten = new Map<string, string>();
-  const rewrite = (specifier: string): string => {
-    let result = rewritten.get(specifier);
+  const rewrite = (specifier: string, format: ModuleFormat = entryFormat): string => {
+    const key = `${format}\0${specifier}`;
+    let result = rewritten.get(key);
     if (result === undefined) {
-      result = rewriteSpecifier(specifier, entry, generatedDir, resolve, problems);
-      rewritten.set(specifier, result);
+      result = rewriteSpecifier(specifier, format, entry, generatedDir, resolve);
+      rewritten.set(key, result);
     }
     return result;
   };
   const render = (code: CodeFragment): string =>
     code
       .map((piece) =>
-        typeof piece === "string" ? piece : JSON.stringify(rewrite(piece.specifier)),
+        typeof piece === "string"
+          ? piece
+          : JSON.stringify(rewrite(piece.specifier, piece.dynamic ? "esm" : entryFormat)),
       )
       .join("");
-  const text = [
-    ...importStatements(reference.imports, rewrite),
+  return [
+    ...importStatements(reference.imports, (specifier) => rewrite(specifier)),
     ...reference.declarations.map(render),
     `const ${SCHEMA_NAME} = ${render(reference.expression)};`,
     ...EXTENDABLE_HELPERS,
@@ -161,5 +163,4 @@ export function buildGlobalArgsModule(
     "}",
     EMPTY_MODULE,
   ].join("\n");
-  return { text, problems };
 }
