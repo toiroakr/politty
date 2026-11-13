@@ -211,25 +211,8 @@ export function parseArgs(
   // Tokens after `--` are pure positionals, so help/version flags appearing
   // there (e.g. `mycli __complete --shell bash -- foo --help`) must not
   // trigger the help/version branch.
-  const ddIdx = argv.indexOf("--");
-  const flagScanArgv = ddIdx >= 0 ? argv.slice(0, ddIdx) : argv;
-  const hasUserDefinedH =
-    extracted?.fields.some(
-      (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("H"),
-    ) ?? false;
-  const hasUserDefinedh =
-    extracted?.fields.some(
-      (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("h"),
-    ) ?? false;
-  const helpAllRequested =
-    flagScanArgv.includes("--help-all") || (!hasUserDefinedH && flagScanArgv.includes("-H"));
-  // --help-json has no short alias, so it needs no overrideBuiltinAlias check.
-  const helpJsonRequested = flagScanArgv.includes("--help-json");
-  const helpRequested =
-    !helpAllRequested &&
-    !helpJsonRequested &&
-    (flagScanArgv.includes("--help") || (!hasUserDefinedh && flagScanArgv.includes("-h")));
-  const versionRequested = flagScanArgv.includes("--version");
+  const { helpRequested, helpAllRequested, helpJsonRequested, versionRequested } =
+    scanInformationalFlags(argv, extracted);
 
   if (helpRequested || helpAllRequested || helpJsonRequested || versionRequested) {
     return {
@@ -484,6 +467,43 @@ function parseGlobalArgs(
   const parserOptions = buildParserOptions(globalExtracted);
   const parsed = parseArgv(tokens, parserOptions);
   return mergeWithPositionals(parsed, globalExtracted);
+}
+
+/**
+ * Find the help and version flags in argv. -h/-H are treated as --help/--help-all
+ * unless an option of `extracted` overrides them. Tokens after `--` are pure
+ * positionals, so help/version flags appearing there (e.g.
+ * `mycli __complete --shell bash -- foo --help`) are ignored.
+ */
+export function scanInformationalFlags(
+  argv: readonly string[],
+  extracted?: ExtractedFields,
+): {
+  helpRequested: boolean;
+  helpAllRequested: boolean;
+  helpJsonRequested: boolean;
+  versionRequested: boolean;
+} {
+  const ddIdx = argv.indexOf("--");
+  const flagScanArgv = ddIdx >= 0 ? argv.slice(0, ddIdx) : argv;
+  const hasUserDefinedH =
+    extracted?.fields.some(
+      (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("H"),
+    ) ?? false;
+  const hasUserDefinedh =
+    extracted?.fields.some(
+      (f) => f.overrideBuiltinAlias === true && getAllAliases(f).includes("h"),
+    ) ?? false;
+  const helpAllRequested =
+    flagScanArgv.includes("--help-all") || (!hasUserDefinedH && flagScanArgv.includes("-H"));
+  // --help-json has no short alias, so it needs no overrideBuiltinAlias check.
+  const helpJsonRequested = flagScanArgv.includes("--help-json");
+  const helpRequested =
+    !helpAllRequested &&
+    !helpJsonRequested &&
+    (flagScanArgv.includes("--help") || (!hasUserDefinedh && flagScanArgv.includes("-h")));
+  const versionRequested = flagScanArgv.includes("--version");
+  return { helpRequested, helpAllRequested, helpJsonRequested, versionRequested };
 }
 
 /**

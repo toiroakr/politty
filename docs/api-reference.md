@@ -197,7 +197,11 @@ interface EnvFileRequest {
 }
 ```
 
-The second form takes the `globalArgs` schema you pass to `runMain` and loads the files its [`envFile`](./recipes.md#loading-env-files---env-file) options name on the command line (`argv` defaults to `process.argv.slice(2)`). Use it when your CLI forwards an unknown subcommand to a plugin through `onUnknownSubcommand`, which politty does not read env files for, and the plugin's environment must already reflect them:
+The second form takes the `globalArgs` schema you pass to `runMain` and loads the files its [`envFile`](./recipes.md#loading-env-files---env-file) options name on the command line (`argv` defaults to `process.argv.slice(2)`). Use it when your CLI forwards an unknown subcommand to a plugin through `onUnknownSubcommand`, which politty does not read env files for, and the plugin's environment must already reflect them. It reads the same way a command does:
+
+- An `envFile` option is read wherever it sits in `argv`, including after the plugin name, and a single-string option given twice loads both files. Files load in option declaration order, then in the order given. Nothing after `--` is read.
+- No file is read when `--help`, `-h`, `--help-all`, `-H`, `--help-json`, or `--version` is given, so `my-cli plugin --help -e missing.env` still reaches the plugin.
+- A flag that matches an `envFile` option's name or alias is read as an env file path even when the plugin defines the same flag for another purpose, because politty cannot see the plugin's options.
 
 ```typescript
 const globalArgs = z.object({
@@ -207,7 +211,13 @@ const globalArgs = z.object({
 runMain(cli, {
   globalArgs,
   onUnknownSubcommand: ({ name, precedingArgs, args }) => {
-    loadEnvFiles(globalArgs); // throws EnvFileNotFoundError for a missing required file
+    try {
+      loadEnvFiles(globalArgs);
+    } catch (error) {
+      if (!(error instanceof EnvFileNotFoundError)) throw error;
+      console.error(`Error: ${error.message}`);
+      return 2; // the exit code runMain uses for a missing env file
+    }
     return runPlugin(name, [...precedingArgs, ...args]);
   },
 });

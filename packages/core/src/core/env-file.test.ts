@@ -591,6 +591,35 @@ describe("loadEnvFiles", () => {
       expect(process.env["TEST_EF_A"]).toBe("optional");
     });
 
+    it.each(["--help", "-h", "--help-all", "-H", "--help-json", "--version"])(
+      "reads no file when %s is given, even if a required file is missing",
+      (flag) => {
+        expect(() =>
+          loadEnvFiles(globalArgs, { argv: ["plugin", flag, "-e", path.join(dir, "missing.env")] }),
+        ).not.toThrow();
+      },
+    );
+
+    it("reads every file of a single-string option given on both sides of the plugin name", () => {
+      const single = z.object({
+        envFile: arg(z.string().optional(), { alias: "e", envFile: true }),
+      });
+      const before = write("before.env", "TEST_EF_A=before\n");
+      const after = write("after.env", "TEST_EF_B=after\n");
+
+      loadEnvFiles(single, { argv: ["-e", before, "plugin", "-e", after] });
+
+      expect([process.env["TEST_EF_A"], process.env["TEST_EF_B"]]).toEqual(["before", "after"]);
+    });
+
+    it("rejects envFile on an option whose value is not a string or an array of strings", () => {
+      const numeric = z.object({ envFile: arg(z.number().optional(), { envFile: true }) });
+
+      expect(() => loadEnvFiles(numeric, { argv: [] })).toThrow(
+        'Global option "envFile" sets envFile but its value is not a string or an array of strings',
+      );
+    });
+
     it("reads process.argv when no argv is given", () => {
       const file = write("a.env", "TEST_EF_A=from-file\n");
       using _argv = useArgv(["node", "cli", "plugin", "-e", file]);

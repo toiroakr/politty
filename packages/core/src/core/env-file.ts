@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseEnv } from "node:util";
 import type { ExtractedFields, ResolvedFieldMeta } from "../adapter/field-meta.js";
-import { extractGlobalArgs } from "../parser/arg-parser.js";
+import { extractGlobalArgs, scanInformationalFlags } from "../parser/arg-parser.js";
 import type { ArgsSchema } from "../types.js";
 import { extractFields } from "./schema-extractor.js";
 
@@ -72,7 +72,8 @@ export interface LoadEnvFilesFromArgsOptions {
  * `envFile` option wherever it sits in `argv`, so a CLI can load the files
  * before it hands the arguments to a plugin that politty does not parse. Files
  * load in option declaration order, then in the order given on the command
- * line. Nothing after `--` is read.
+ * line. Nothing after `--` is read, and no file is read when help or the
+ * version is requested.
  *
  * A missing required file throws {@link EnvFileNotFoundError} and applies no
  * file.
@@ -92,7 +93,16 @@ export function loadEnvFiles(
 function requestsFromArgv(globalArgs: ArgsSchema, argv: readonly string[]): EnvFileRequest[] {
   const extracted = extractFields(globalArgs);
   validateEnvFileDefinitions(extracted);
-  return collectEnvFileRequests([extractGlobalArgs(argv, extracted)], extracted);
+  // A run that only prints help or the version reads no env file, as in runMain.
+  if (Object.values(scanInformationalFlags(argv, extracted)).some(Boolean)) return [];
+  // Every file counts: a single-string option given twice keeps both values.
+  const readAll: ExtractedFields = {
+    ...extracted,
+    fields: extracted.fields.map((field) =>
+      field.envFile && field.type === "string" ? { ...field, type: "array" } : field,
+    ),
+  };
+  return collectEnvFileRequests([extractGlobalArgs(argv, readAll)], extracted);
 }
 
 function applyEnvFileRequests(requests: readonly EnvFileRequest[]): void {
