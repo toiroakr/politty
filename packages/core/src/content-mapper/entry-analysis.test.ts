@@ -125,6 +125,19 @@ runMain(cli, {
     ).toMatchObject({ imports: ["level", "z"] });
   });
 
+  it("scopes infer type parameters to the extends clause and true branch", async () => {
+    expect(
+      await referenced(`import { runMain } from "politty";
+import type { Mode, Box } from "./types";
+type Unbox<T> = T extends Box<infer Mode> ? Mode : Mode;
+runMain(cli, { globalArgs: schemaOf<Unbox<Box<string>>>() });
+`),
+    ).toMatchObject({
+      imports: ["Box", "Mode"],
+      declarations: ["type Unbox<T> = T extends Box<infer Mode> ? Mode : Mode;"],
+    });
+  });
+
   it("copies destructuring declarations once, in declarator order", async () => {
     expect(
       (

@@ -258,14 +258,18 @@ function scopeOf(ast: AstModule, node: Ast.Node): Set<string> {
       bindingNames(ast, declaration.name, names);
     }
   }
-  if (ast.isConditionalTypeNode(node)) {
-    const collectInfer = (child: Ast.Node): void => {
-      if (ast.isInferTypeNode(child)) names.push(child.typeParameter.name.text);
-      child.forEachChild(collectInfer);
-    };
-    collectInfer(node.extendsType);
-  }
   return new Set(names);
+}
+
+/** The `infer` type parameters a conditional type's `extends` clause declares, nested conditionals aside. */
+function inferredNames(ast: AstModule, extendsType: Ast.Node): Set<string> {
+  const names = new Set<string>();
+  const collect = (child: Ast.Node): void => {
+    if (ast.isInferTypeNode(child)) names.add(child.typeParameter.name.text);
+    if (!ast.isConditionalTypeNode(child)) child.forEachChild(collect);
+  };
+  collect(extendsType);
+  return names;
 }
 
 /** Names the given code reads from the enclosing module, following lexical scopes. */
@@ -276,6 +280,14 @@ function freeNames(ast: AstModule, roots: Ast.Node[]): Set<string> {
       if (isReference(ast, node) && !scopes.some((scope) => scope.has(node.text))) {
         referenced.add(node.text);
       }
+      return;
+    }
+    if (ast.isConditionalTypeNode(node)) {
+      const inferred = [...scopes, inferredNames(ast, node.extendsType)];
+      visit(node.checkType, scopes);
+      visit(node.extendsType, inferred);
+      visit(node.trueType, inferred);
+      visit(node.falseType, scopes);
       return;
     }
     const own = scopeOf(ast, node);

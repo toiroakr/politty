@@ -8,15 +8,17 @@ const TYPE_NAME = "__PolittyGlobalArgs";
 /**
  * Type helpers that turn the schema output into a type an interface can
  * extend. A union output (a schema built with `z.union`, `z.discriminatedUnion`,
- * ...) becomes one object type: keys every member has stay required, the rest
- * become optional, and each value is the union of the members' values.
+ * ...) becomes one object type: keys every member has and none marks optional
+ * stay required, the rest become optional, and each value is the union of the members' values.
  */
 const EXTENDABLE_HELPERS = [
   "type __PolittyKeys<U> = U extends unknown ? keyof U : never;",
   "type __PolittyValue<U, K extends PropertyKey> = U extends unknown ? (K extends keyof U ? U[K] : never) : never;",
   "type __PolittyIsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;",
+  "type __PolittyOptionalKeys<U> = U extends unknown ? { [K in keyof U]-?: {} extends Pick<U, K> ? K : never }[keyof U] : never;",
+  "type __PolittyRequiredKeys<T> = Exclude<keyof T, __PolittyOptionalKeys<T>>;",
   "type __PolittyExtendable<T> = true extends __PolittyIsUnion<T>",
-  "  ? { [K in Extract<keyof T, PropertyKey>]: __PolittyValue<T, K> } & { [K in Exclude<__PolittyKeys<T>, keyof T>]?: __PolittyValue<T, K> }",
+  "  ? { [K in Extract<__PolittyRequiredKeys<T>, PropertyKey>]: __PolittyValue<T, K> } & { [K in Exclude<__PolittyKeys<T>, __PolittyRequiredKeys<T>>]?: __PolittyValue<T, K> }",
   "  : T;",
 ];
 const IDENTIFIER = /^[\p{ID_Start}$_][\p{ID_Continue}$]*$/u;

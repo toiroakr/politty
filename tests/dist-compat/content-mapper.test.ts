@@ -163,8 +163,8 @@ import { build } from "./commands/build.js";
 const cli = defineCommand({ name: "app", subCommands: { build } });
 void runMain(cli, {
   globalArgs: z.discriminatedUnion("mode", [
-    z.object({ mode: z.literal("local"), path: z.string() }),
-    z.object({ mode: z.literal("remote"), url: z.string() }),
+    z.object({ mode: z.literal("local"), path: z.string(), profile: z.string().optional() }),
+    z.object({ mode: z.literal("remote"), url: z.string(), profile: z.string().optional() }),
   ]),
 });
 `,
@@ -179,7 +179,9 @@ export const build = defineCommand({
   run: (args) => {
     const mode: "local" | "remote" = args.mode;
     const location: string | undefined = args.path ?? args.url;
-    return [mode, location];
+    const profileIsOptional: {} extends Pick<typeof args, "profile"> ? true : false = true;
+    const modeIsRequired: {} extends Pick<typeof args, "mode"> ? false : true = true;
+    return [mode, location, profileIsOptional, modeIsRequired];
   },
 });
 `,
