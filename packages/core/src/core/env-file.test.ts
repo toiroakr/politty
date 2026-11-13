@@ -558,6 +558,23 @@ describe("loadEnvFiles", () => {
       expect(process.env["TEST_EF_A"]).toBe("from-file");
     });
 
+    it("skips an occurrence of an envFile option that has no path after it, and still loads the others", () => {
+      const file = write("a.env", "TEST_EF_A=from-file\n");
+
+      expect(() => loadEnvFiles(globalArgs, { argv: ["plugin", "-e"] })).not.toThrow();
+      loadEnvFiles(globalArgs, { argv: ["plugin", "-e", file, "-e"] });
+
+      expect(process.env["TEST_EF_A"]).toBe("from-file");
+    });
+
+    it("does not read a bundle that holds an option the global schema does not define, such as -fe", () => {
+      const file = write("a.env", "TEST_EF_A=from-file\n");
+
+      loadEnvFiles(globalArgs, { argv: ["plugin", "-fe", file] });
+
+      expect(process.env["TEST_EF_A"]).toBeUndefined();
+    });
+
     it("does not read a path given after --", () => {
       const file = write("a.env", "TEST_EF_A=from-file\n");
 

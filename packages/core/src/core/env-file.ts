@@ -73,7 +73,9 @@ export interface LoadEnvFilesFromArgsOptions {
  * before it hands the arguments to a plugin that politty does not parse. Files
  * load in option declaration order, then in the order given on the command
  * line. Nothing after `--` is read, and no file is read when help or the
- * version is requested.
+ * version is requested. A bundle of short flags counts only when every option
+ * in it is defined in `globalArgs`, so `-fe file` is skipped when `-f` is a
+ * plugin's own flag.
  *
  * A missing required file throws {@link EnvFileNotFoundError} and applies no
  * file.

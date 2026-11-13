@@ -202,6 +202,8 @@ The second form takes the `globalArgs` schema you pass to `runMain` and loads th
 - An `envFile` option is read wherever it sits in `argv`, including after the plugin name, and a single-string option given twice loads both files. Files load in option declaration order, then in the order given. Nothing after `--` is read.
 - No file is read when `--help`, `-h`, `--help-all`, `-H`, `--help-json`, or `--version` is given, so `my-cli plugin --help -e missing.env` still reaches the plugin.
 - A flag that matches an `envFile` option's name or alias is read as an env file path even when the plugin defines the same flag for another purpose, because politty cannot see the plugin's options.
+- An `envFile` flag with no path after it is skipped without an error, because the plugin may use the same flag without a value. A command validates its own arguments and rejects such a flag; `loadEnvFiles` does not.
+- A bundle of short flags counts only when every option in it is defined in `globalArgs`: `-je file` loads `file`, but `-fe file` does not when `-f` is a plugin's own flag, because politty cannot tell whether `-f` takes a value. Type `-f -e file` instead.
 
 ```typescript
 const globalArgs = z.object({
