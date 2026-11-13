@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { EMPTY_MODULE, globalArgsSourceOf, type GlobalArgsSource } from "./global-args-module.js";
+import { EMPTY_MODULE, globalArgsSourceOf } from "./global-args-module.js";
 import type { JsonRpcHandler } from "./rpc.js";
 
 export type ContentMapperHandlers = Record<
@@ -44,31 +44,7 @@ const PROJECT_DIAGNOSTIC_CODE = 1;
 const OPTION_DIAGNOSTIC_CODE = 2;
 const ATOM_SPAN = 1;
 const DEFINITION_FEATURES = (1 << 3) | (1 << 4);
-const SOURCE_EXTENSIONS = [".ts", ".mts", ".cts", ".tsx"];
-const SKIPPED_DIRECTORIES = new Set(["node_modules"]);
 const PROJECT_NOT_OPENED = "The project was not opened; restart the TypeScript server";
-
-function isSourceFile(name: string): boolean {
-  return SOURCE_EXTENSIONS.some((ext) => name.endsWith(ext)) && !/\.d\.[cm]?tsx?$/.test(name);
-}
-
-function* sourceFilesUnder(dir: string): Generator<string> {
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return;
-  }
-  for (const entry of entries) {
-    if (entry.name.startsWith(".")) continue;
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (!SKIPPED_DIRECTORIES.has(entry.name)) yield* sourceFilesUnder(full);
-    } else if (entry.isFile() && isSourceFile(entry.name)) {
-      yield full;
-    }
-  }
-}
 
 function readSource(file: string): string | undefined {
   try {
@@ -76,11 +52,6 @@ function readSource(file: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function sourceOf(file: string): GlobalArgsSource | undefined {
-  const source = readSource(file);
-  return source?.includes("runMain") ? globalArgsSourceOf(file, source) : undefined;
 }
 
 function optionDiagnostics(options: Record<string, unknown> | undefined): OptionDiagnostic[] {
@@ -106,15 +77,29 @@ function optionDiagnostics(options: Record<string, unknown> | undefined): Option
   });
 }
 
-function projectFromEntry(entry: string): Project {
-  if (!fs.existsSync(entry)) {
+const ENTRY_REQUIRED = `politty's content mapper needs the "entry" option in tsconfig.json: the path of the module that calls runMain, relative to tsconfig.json`;
+
+/**
+ * Read the `globalArgs` schema the entry passes to `runMain` and build the
+ * module that augments `GlobalArgs` with its output type.
+ * @param tsconfigPath - Path of the project's tsconfig.json
+ * @param options - The `options` of politty's `contentMappers` entry
+ */
+export function loadProject(tsconfigPath: string, options?: Record<string, unknown>): Project {
+  const entryOption = options?.["entry"];
+  if (typeof entryOption !== "string") {
+    return { text: EMPTY_MODULE, problem: ENTRY_REQUIRED, watchedFiles: [] };
+  }
+  const entry = path.resolve(path.dirname(tsconfigPath), entryOption);
+  const source = readSource(entry);
+  if (source === undefined) {
     return {
       text: EMPTY_MODULE,
-      problem: `The entry ${entry} does not exist`,
+      problem: `The entry ${entry} cannot be read`,
       watchedFiles: [entry],
     };
   }
-  const found = sourceOf(entry);
+  const found = globalArgsSourceOf(entry, source);
   return found
     ? { text: found.text, watchedFiles: [entry] }
     : {
@@ -122,38 +107,6 @@ function projectFromEntry(entry: string): Project {
         problem: `${entry} does not call runMain with a globalArgs option`,
         watchedFiles: [entry],
       };
-}
-
-function projectFromScan(root: string): Project {
-  const found: GlobalArgsSource[] = [];
-  for (const file of sourceFilesUnder(root)) {
-    const source = sourceOf(file);
-    if (source) found.push(source);
-  }
-  const watchedFiles = found.map((source) => source.entry);
-  if (found.length === 0) return { text: EMPTY_MODULE, watchedFiles };
-  if (found.length > 1) {
-    return {
-      text: EMPTY_MODULE,
-      problem: `runMain receives globalArgs in more than one file (${watchedFiles.join(", ")}); name the one to use with the "entry" option of politty's content mapper in tsconfig.json`,
-      watchedFiles,
-    };
-  }
-  return { text: found[0]!.text, watchedFiles };
-}
-
-/**
- * Find the `globalArgs` schema the project passes to `runMain` and build the
- * module that augments `GlobalArgs` with its output type.
- * @param tsconfigPath - Path of the project's tsconfig.json
- * @param options - The `options` of politty's `contentMappers` entry
- */
-export function loadProject(tsconfigPath: string, options?: Record<string, unknown>): Project {
-  const root = path.dirname(tsconfigPath);
-  const entry = options?.["entry"];
-  return typeof entry === "string"
-    ? projectFromEntry(path.resolve(root, entry))
-    : projectFromScan(root);
 }
 
 /**

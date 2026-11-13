@@ -71,41 +71,29 @@ runMain(cli, { globalArgs: z.object({ ...a, ...b, ...c }) });
 describe("loadProject", () => {
   const tsconfig = () => path.join(dir, "tsconfig.json");
 
-  it("finds the only entry that passes globalArgs to runMain", () => {
-    const entry = write("src/main.ts", ENTRY);
-    write("src/other.ts", `export const runMainLater = 1;\n`);
-    write("node_modules/dep/main.ts", ENTRY);
-    write("src/types.d.ts", ENTRY);
-    const project = loadProject(tsconfig());
-    expect(project.problem).toBeUndefined();
-    expect(project.watchedFiles).toEqual([entry]);
-    expect(project.text).toContain("interface GlobalArgs extends");
-  });
-
-  it("leaves GlobalArgs alone when no file passes globalArgs", () => {
-    write("src/main.ts", `import { runMain } from "politty";\nrunMain(cli);\n`);
-    expect(loadProject(tsconfig())).toEqual({ text: "export {};\n", watchedFiles: [] });
-  });
-
-  it("asks for the entry option when several files pass globalArgs", () => {
-    write("src/a.ts", ENTRY);
-    write("src/b.ts", ENTRY);
-    const project = loadProject(tsconfig());
-    expect(project.text).toBe("export {};\n");
-    expect(project.problem).toMatch(/more than one file .*"entry" option/);
-  });
-
-  it("uses the entry option when given", () => {
+  it("reads the entry named by the entry option", () => {
     write("src/a.ts", ENTRY);
     const b = write("src/b.ts", ENTRY.replace("z.object", "z.strictObject"));
     const project = loadProject(tsconfig(), { entry: "./src/b.ts" });
+    expect(project.problem).toBeUndefined();
     expect(project.watchedFiles).toEqual([b]);
     expect(project.text).toContain("z.strictObject(commonArgs)");
   });
 
+  it("requires the entry option", () => {
+    write("src/main.ts", ENTRY);
+    for (const options of [undefined, {}, { entry: 1 }]) {
+      expect(loadProject(tsconfig(), options)).toEqual({
+        text: "export {};\n",
+        problem: expect.stringMatching(/needs the "entry" option/),
+        watchedFiles: [],
+      });
+    }
+  });
+
   it("reports an entry that is missing or passes no globalArgs", () => {
-    expect(loadProject(tsconfig(), { entry: "missing.ts" }).problem).toMatch(/does not exist/);
-    write("src/main.ts", `export {};\n`);
+    expect(loadProject(tsconfig(), { entry: "missing.ts" }).problem).toMatch(/cannot be read/);
+    write("src/main.ts", `import { runMain } from "politty";\nrunMain(cli);\n`);
     expect(loadProject(tsconfig(), { entry: "src/main.ts" }).problem).toMatch(
       /does not call runMain with a globalArgs option/,
     );

@@ -264,12 +264,14 @@ runMain(cli, {
 
 ### Deriving `GlobalArgs` from `runMain` (content mapper)
 
-Each politty package (`politty`, `@politty/zod`, `@politty/valibot`, `@politty/zod-mini`) ships a TypeScript content mapper. It finds the `runMain(command, { globalArgs })` call in your project and augments `GlobalArgs` with the schema's output type, so every `defineCommand` sees the global options without `createDefineCommand` or a hand-written `declare module`. Enable it in `tsconfig.json` for the package you import from:
+Each politty package (`politty`, `@politty/zod`, `@politty/valibot`, `@politty/zod-mini`) ships a TypeScript content mapper. It reads the `runMain(command, { globalArgs })` call in your CLI's entry module and augments `GlobalArgs` with the schema's output type, so every `defineCommand` sees the global options without `createDefineCommand` or a hand-written `declare module`. Enable it in `tsconfig.json` for the package you import from, and name the module that calls `runMain` with the `entry` option, relative to `tsconfig.json`:
 
 ```jsonc
 {
   "compilerOptions": {/* ... */},
-  "contentMappers": [{ "package": "politty", "extensions": [".politty"] }],
+  "contentMappers": [
+    { "package": "politty", "extensions": [".politty"], "options": { "entry": "./src/cli.ts" } },
+  ],
 }
 ```
 
@@ -277,17 +279,10 @@ Run `tsc` with `--runExternalCode`; without the flag TypeScript reports error TS
 
 The mapper does not run your code. It reads the source statically:
 
-- It looks for `runMain` imported from any module and called with an options object (inline, or a `const` declared in the same file) whose `globalArgs` property it can see. A `globalArgs` followed by a spread (`...rest`) is ignored, since the spread may replace it. Within one file, the first such call counts.
+- It looks for `runMain` imported from any module and called with an options object (inline, or a `const` declared in the same file) whose `globalArgs` property it can see. A `globalArgs` followed by a spread (`...rest`) is ignored, since the spread may replace it. When the entry calls `runMain` more than once, the first such call counts.
 - It copies the `globalArgs` expression, along with the top-level imports and declarations it references, into the `global-args.politty` file inside the politty package, and lets TypeScript infer the type there. Relative imports and `#` imports (through your `package.json` `imports` field) are rewritten to absolute paths. Package imports such as `zod` are copied as written, so they must also resolve from the politty package; your schema library does, as a peer dependency of politty.
-- Without options it scans the `.ts`/`.mts`/`.cts`/`.tsx` files under the directory of `tsconfig.json`, skipping `node_modules`, dot-directories and declaration files. When more than one file passes `globalArgs` to `runMain`, it reports an error asking you to choose one. Name the file with the `entry` option, relative to `tsconfig.json`:
 
-```jsonc
-"contentMappers": [
-  { "package": "politty", "extensions": [".politty"], "options": { "entry": "./src/cli.ts" } }
-]
-```
-
-Problems the mapper finds, and type errors in the copied code, are reported against `global-args.politty`.
+Problems the mapper finds (a missing `entry` option, an entry it cannot read or whose `runMain` call has no `globalArgs` it can see), and type errors in the copied code, are reported against `global-args.politty`.
 
 ## AI Coding Agents
 
