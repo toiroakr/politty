@@ -487,6 +487,17 @@ function parseGlobalArgs(
 }
 
 /**
+ * Read the global options from argv without a command, wherever they sit
+ * relative to a subcommand name. Nothing after `--` is read.
+ */
+export function extractGlobalArgs(
+  argv: readonly string[],
+  globalExtracted: ExtractedFields,
+): Record<string, unknown> {
+  return separateGlobalArgs([...argv], globalExtracted).globalParsed;
+}
+
+/**
  * Separate global flags from command-local args in argv.
  * Global flags mixed with command args (e.g., `build --verbose --output dist`)
  * are extracted and returned separately.
