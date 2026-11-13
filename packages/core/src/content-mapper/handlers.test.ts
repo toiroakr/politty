@@ -33,6 +33,11 @@ function project(parent = import.meta.dirname): string {
   return dir;
 }
 
+/** How the generated module writes a path: with forward slashes on every platform. */
+function posix(file: string): string {
+  return file.split(path.sep).join("/");
+}
+
 function write(dir: string, relative: string, content: string): string {
   const file = path.join(dir, relative);
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -59,9 +64,15 @@ describe.each(API_PACKAGES)("loadProject with %s", (compiler) => {
 
     expect(await load(dir)).toEqual({
       text: `import { z } from "zod";
-import { commonArgs } from "${dir}/src/shared/args.js";
+import { commonArgs } from "${posix(dir)}/src/shared/args.js";
 const __polittyGlobalArgsSchema = z.object(commonArgs);
-type __PolittyGlobalArgs = NonNullable<(typeof __polittyGlobalArgsSchema)["~standard"]["types"]>["output"];
+type __PolittyKeys<U> = U extends unknown ? keyof U : never;
+type __PolittyValue<U, K extends PropertyKey> = U extends unknown ? (K extends keyof U ? U[K] : never) : never;
+type __PolittyIsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;
+type __PolittyExtendable<T> = true extends __PolittyIsUnion<T>
+  ? { [K in Extract<keyof T, PropertyKey>]: __PolittyValue<T, K> } & { [K in Exclude<__PolittyKeys<T>, keyof T>]?: __PolittyValue<T, K> }
+  : T;
+type __PolittyGlobalArgs = __PolittyExtendable<NonNullable<(typeof __polittyGlobalArgsSchema)["~standard"]["types"]>["output"]>;
 declare module "./index.js" {
   interface GlobalArgs extends __PolittyGlobalArgs {}
 }
@@ -99,8 +110,35 @@ runMain(cli, { globalArgs: z.object(a as B) });
     );
     const { text, problem } = await load(dir);
     expect(problem).toBeUndefined();
-    expect(text).toContain(`import { a } from "${dir}/src/shared/args.js";`);
-    expect(text).toContain(`import type { B } from "${dir}/lib/types.js";`);
+    expect(text).toContain(`import { a } from "${posix(dir)}/src/shared/args.js";`);
+    expect(text).toContain(`import type { B } from "${posix(dir)}/lib/types.js";`);
+  });
+
+  it("resolves with the compiler options TypeScript passes, and rewrites import() specifiers", async () => {
+    const dir = project();
+    write(dir, "src/shared/args.ts", "export const a = {};\n");
+    write(dir, "src/shared/types.ts", "export type Mode = {};\n");
+    write(
+      dir,
+      "src/main.ts",
+      `import { runMain } from "politty";
+type Mode = import("@shared/types").Mode;
+runMain(cli, { globalArgs: (await import("@shared/args")).a as Mode });
+`,
+    );
+    const { text, problem } = await loadProject(
+      path.join(dir, "tsconfig.json"),
+      { entry: "src/main.ts", compiler },
+      {
+        module: 99,
+        moduleResolution: 100,
+        paths: { "@shared/*": ["./src/shared/*"] },
+        pathsBasePath: dir,
+      },
+    );
+    expect(problem).toBeUndefined();
+    expect(text).toContain(`type Mode = import("${posix(dir)}/src/shared/types.js").Mode;`);
+    expect(text).toContain(`(await import("${posix(dir)}/src/shared/args.js")).a as Mode;`);
   });
 
   it("reports a package the generated module cannot resolve as the entry does", async () => {
@@ -220,12 +258,13 @@ describe("serveJsonRpc", () => {
     return Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`), body]);
   }
 
-  it("answers framed requests in order, split across chunks, and skips notifications", async () => {
+  it("answers framed requests in order, split across chunks, keeps null results and skips notifications", async () => {
     const input = new PassThrough();
     const written: Buffer[] = [];
     const serving = serveJsonRpc(
       {
         echo: (params) => params,
+        nothing: () => null,
         fail: () => {
           throw new Error("nope");
         },
@@ -236,6 +275,7 @@ describe("serveJsonRpc", () => {
     const requests = Buffer.concat([
       frame({ jsonrpc: "2.0", id: 1, method: "echo", params: { a: "é" } }),
       frame({ jsonrpc: "2.0", method: "echo", params: {} }),
+      frame({ jsonrpc: "2.0", id: 4, method: "nothing" }),
       frame({ jsonrpc: "2.0", id: 2, method: "fail" }),
       frame({ jsonrpc: "2.0", id: 3, method: "missing" }),
     ]);
@@ -250,6 +290,7 @@ describe("serveJsonRpc", () => {
       .map((body) => JSON.parse(body));
     expect(responses).toEqual([
       { jsonrpc: "2.0", id: 1, result: { a: "é" } },
+      { jsonrpc: "2.0", id: 4, result: null },
       { jsonrpc: "2.0", id: 2, error: { code: -32603, message: "nope" } },
       { jsonrpc: "2.0", id: 3, error: { code: -32601, message: "Unknown method: missing" } },
     ]);

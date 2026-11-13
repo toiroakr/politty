@@ -28,12 +28,13 @@ async function load(packageName: ApiPackage, projectDir: string): Promise<Corsa 
   const syncPath = resolveFrom(projectDir, `${packageName}/sync`);
   const astPath = resolveFrom(projectDir, `${packageName}/ast`);
   if (!syncPath || !astPath) return undefined;
-  const cached = loaded.get(syncPath);
+  const key = `${syncPath}\0${projectDir}`;
+  const cached = loaded.get(key);
   if (cached) return cached;
   const sync = (await import(syncPath)) as typeof Sync;
   const ast = (await import(astPath)) as typeof Ast;
   const corsa = { packageName, api: new sync.API({ cwd: projectDir }), ast };
-  loaded.set(syncPath, corsa);
+  loaded.set(key, corsa);
   return corsa;
 }
 

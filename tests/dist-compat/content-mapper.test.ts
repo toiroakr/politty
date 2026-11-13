@@ -22,9 +22,10 @@ const COMPILERS = {
 } as const;
 
 const PACKAGES = {
-  "@politty/zod": { dir: "packages/zod", schemaLibrary: "zod" },
-  politty: { dir: "packages/politty", schemaLibrary: "zod" },
-  "@politty/valibot": { dir: "packages/valibot", schemaLibrary: "valibot" },
+  "@politty/zod": { dir: "packages/zod", schemaLibrary: "zod", schemas: "zod" },
+  politty: { dir: "packages/politty", schemaLibrary: "zod", schemas: "zod" },
+  "@politty/valibot": { dir: "packages/valibot", schemaLibrary: "valibot", schemas: "valibot" },
+  "@politty/zod-mini": { dir: "packages/zod-mini", schemaLibrary: "zod", schemas: "zod-mini" },
 } as const;
 
 type PackageName = keyof typeof PACKAGES;
@@ -32,11 +33,13 @@ type PackageName = keyof typeof PACKAGES;
 const GLOBAL_ARGS: Record<string, string> = {
   zod: `z.object({ verbose: z.boolean().default(false), profile: z.string().optional() })`,
   valibot: `v.object({ verbose: v.optional(v.boolean(), false), profile: v.optional(v.string()) })`,
+  "zod-mini": `z.object({ verbose: z._default(z.boolean(), false), profile: z.optional(z.string()) })`,
 };
 
 const SCHEMA_IMPORT: Record<string, string> = {
   zod: `import { z } from "zod";`,
   valibot: `import * as v from "valibot";`,
+  "zod-mini": `import * as z from "zod/mini";`,
 };
 
 const fixtures: string[] = [];
@@ -64,7 +67,7 @@ function createProject(
 ): string {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "politty-content-mapper-")));
   fixtures.push(dir);
-  const { dir: packageDir, schemaLibrary } = PACKAGES[packageName];
+  const { dir: packageDir, schemaLibrary, schemas } = PACKAGES[packageName];
   link(dir, packageName, path.join(rootDir, packageDir));
   link(dir, schemaLibrary, path.join(rootDir, packageDir, "node_modules", schemaLibrary));
   for (const compiler of Object.keys(COMPILERS)) {
@@ -94,12 +97,12 @@ function createProject(
   write(
     dir,
     "src/main.ts",
-    `${SCHEMA_IMPORT[schemaLibrary]}
+    `${SCHEMA_IMPORT[schemas]}
 import { defineCommand, runMain } from "${packageName}";
 import { build } from "./commands/build.js";
 
 const cli = defineCommand({ name: "app", subCommands: { build } });
-void runMain(cli, { globalArgs: ${GLOBAL_ARGS[schemaLibrary]} });
+void runMain(cli, { globalArgs: ${GLOBAL_ARGS[schemas]} });
 `,
   );
   write(
@@ -147,6 +150,42 @@ describe.each(Object.keys(COMPILERS) as (keyof typeof COMPILERS)[])(
         expect(wrong.output).toMatch(/Type 'boolean' is not assignable to type 'string'/);
       },
     );
+
+    it("types a union of global option shapes as one object", () => {
+      const dir = createProject("@politty/zod", { entry: "./src/main.ts" });
+      write(
+        dir,
+        "src/main.ts",
+        `import { z } from "zod";
+import { defineCommand, runMain } from "@politty/zod";
+import { build } from "./commands/build.js";
+
+const cli = defineCommand({ name: "app", subCommands: { build } });
+void runMain(cli, {
+  globalArgs: z.discriminatedUnion("mode", [
+    z.object({ mode: z.literal("local"), path: z.string() }),
+    z.object({ mode: z.literal("remote"), url: z.string() }),
+  ]),
+});
+`,
+      );
+      write(
+        dir,
+        "src/commands/build.ts",
+        `import { defineCommand } from "@politty/zod";
+
+export const build = defineCommand({
+  name: "build",
+  run: (args) => {
+    const mode: "local" | "remote" = args.mode;
+    const location: string | undefined = args.path ?? args.url;
+    return [mode, location];
+  },
+});
+`,
+      );
+      expect(typeCheck(compiler, dir)).toEqual({ status: 0, output: "" });
+    });
 
     it("reads the entry with the API package named by the compiler option", () => {
       const other = compiler === "typescript" ? "tsrs" : "typescript";

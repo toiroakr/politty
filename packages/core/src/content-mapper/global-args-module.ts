@@ -1,10 +1,24 @@
 import * as path from "node:path";
-import type { GlobalArgsReference, ImportBinding } from "./entry-analysis.js";
+import type { CodeFragment, GlobalArgsReference, ImportBinding } from "./entry-analysis.js";
 
 /** The module the generated text augments: the package entry next to the `.politty` file. */
 const AUGMENTED_MODULE = "./index.js";
 const SCHEMA_NAME = "__polittyGlobalArgsSchema";
 const TYPE_NAME = "__PolittyGlobalArgs";
+/**
+ * Type helpers that turn the schema output into a type an interface can
+ * extend. A union output (a schema built with `z.union`, `z.discriminatedUnion`,
+ * ...) becomes one object type: keys every member has stay required, the rest
+ * become optional, and each value is the union of the members' values.
+ */
+const EXTENDABLE_HELPERS = [
+  "type __PolittyKeys<U> = U extends unknown ? keyof U : never;",
+  "type __PolittyValue<U, K extends PropertyKey> = U extends unknown ? (K extends keyof U ? U[K] : never) : never;",
+  "type __PolittyIsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;",
+  "type __PolittyExtendable<T> = true extends __PolittyIsUnion<T>",
+  "  ? { [K in Extract<keyof T, PropertyKey>]: __PolittyValue<T, K> } & { [K in Exclude<__PolittyKeys<T>, keyof T>]?: __PolittyValue<T, K> }",
+  "  : T;",
+];
 const IDENTIFIER = /^[\p{ID_Start}$_][\p{ID_Continue}$]*$/u;
 const DECLARATION_EXTENSION = /\.d(\.[^.]+)?\.([cm]?)ts$/;
 const SOURCE_EXTENSION = /\.([cm]?)tsx?$/;
@@ -128,11 +142,18 @@ export function buildGlobalArgsModule(
     }
     return result;
   };
+  const render = (code: CodeFragment): string =>
+    code
+      .map((piece) =>
+        typeof piece === "string" ? piece : JSON.stringify(rewrite(piece.specifier)),
+      )
+      .join("");
   const text = [
     ...importStatements(reference.imports, rewrite),
-    ...reference.declarations,
-    `const ${SCHEMA_NAME} = ${reference.expression};`,
-    `type ${TYPE_NAME} = NonNullable<(typeof ${SCHEMA_NAME})["~standard"]["types"]>["output"];`,
+    ...reference.declarations.map(render),
+    `const ${SCHEMA_NAME} = ${render(reference.expression)};`,
+    ...EXTENDABLE_HELPERS,
+    `type ${TYPE_NAME} = __PolittyExtendable<NonNullable<(typeof ${SCHEMA_NAME})["~standard"]["types"]>["output"]>;`,
     `declare module ${JSON.stringify(AUGMENTED_MODULE)} {`,
     `  interface GlobalArgs extends ${TYPE_NAME} {}`,
     "}",

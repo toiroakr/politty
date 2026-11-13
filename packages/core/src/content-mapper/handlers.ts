@@ -23,6 +23,7 @@ interface OpenProjectParams {
   configFileName: string;
   projectHandle: string;
   options?: Record<string, unknown>;
+  compilerOptions?: Record<string, unknown>;
 }
 
 interface TransformParams {
@@ -107,10 +108,17 @@ function missingApi(preferred: ApiPackage | undefined): string {
   return `politty's content mapper reads the entry with the TypeScript 7.1 JavaScript API; install ${packages.join(" or ")} in the project (${packages.map((name) => `${name}/sync`).join(", ")} was not found)`;
 }
 
-function readEntry(corsa: Corsa, tsconfigPath: string, entry: string, source: string): Project {
+function readEntry(
+  corsa: Corsa,
+  tsconfigPath: string,
+  compilerOptions: Record<string, unknown> | undefined,
+  entry: string,
+  source: string,
+): Project {
   const { api, ast } = corsa;
-  const { options } = api.parseConfigFile(tsconfigPath);
-  const resolver = api.createModuleResolver(options);
+  const resolver = api.createModuleResolver(
+    compilerOptions ?? api.parseConfigFile(tsconfigPath).options,
+  );
   const lease = api.createSourceFile(entry, source);
   try {
     const reference = readGlobalArgs(ast, lease.sourceFile);
@@ -140,10 +148,12 @@ function readEntry(corsa: Corsa, tsconfigPath: string, entry: string, source: st
  * module that augments `GlobalArgs` with its output type.
  * @param tsconfigPath - Path of the project's tsconfig.json
  * @param options - The `options` of politty's `contentMappers` entry
+ * @param compilerOptions - The project's compiler options, as TypeScript passes them to the mapper; read from tsconfig.json when omitted
  */
 export async function loadProject(
   tsconfigPath: string,
   options?: Record<string, unknown>,
+  compilerOptions?: Record<string, unknown>,
 ): Promise<Project> {
   const entryOption = options?.[ENTRY_OPTION];
   if (typeof entryOption !== "string") {
@@ -163,7 +173,7 @@ export async function loadProject(
   const preferred = isApiPackage(compiler) ? compiler : undefined;
   const corsa = await loadCorsa(projectDir, preferred);
   if (!corsa) return { text: EMPTY_MODULE, problem: missingApi(preferred), watchedFiles: [entry] };
-  return readEntry(corsa, tsconfigPath, entry, source);
+  return readEntry(corsa, tsconfigPath, compilerOptions, entry, source);
 }
 
 /**
@@ -176,6 +186,7 @@ export function createContentMapperHandlers(
   load: (
     tsconfigPath: string,
     options?: Record<string, unknown>,
+    compilerOptions?: Record<string, unknown>,
   ) => Project | Promise<Project> = loadProject,
 ): ContentMapperHandlers {
   let encoding: PositionEncoding = "utf-16";
@@ -195,8 +206,9 @@ export function createContentMapperHandlers(
     },
 
     async openProject(params) {
-      const { configFileName, projectHandle, options } = params as OpenProjectParams;
-      const project = await load(configFileName, options);
+      const { configFileName, projectHandle, options, compilerOptions } =
+        params as OpenProjectParams;
+      const project = await load(configFileName, options, compilerOptions);
       projects.set(projectHandle, project);
       return {
         configIdentity: createHash("sha256")

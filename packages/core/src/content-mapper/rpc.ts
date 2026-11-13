@@ -18,7 +18,8 @@ async function dispatch(
   const handler = Object.hasOwn(handlers, message.method) ? handlers[message.method] : undefined;
   if (!handler) return { error: { code: -32601, message: `Unknown method: ${message.method}` } };
   try {
-    return { result: (await handler(message.params)) ?? {} };
+    const result = await handler(message.params);
+    return { result: result === undefined ? {} : result };
   } catch (error) {
     return {
       error: { code: -32603, message: error instanceof Error ? error.message : String(error) },

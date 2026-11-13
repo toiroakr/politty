@@ -1,6 +1,9 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { API_PACKAGES, closeCorsa, loadCorsa } from "./corsa.js";
-import { readGlobalArgs } from "./entry-analysis.js";
+import { readGlobalArgs, type CodeFragment } from "./entry-analysis.js";
+
+const render = (code: CodeFragment): string =>
+  code.map((piece) => (typeof piece === "string" ? piece : `<${piece.specifier}>`)).join("");
 
 afterAll(() => closeCorsa());
 
@@ -20,9 +23,9 @@ describe.each(API_PACKAGES)("readGlobalArgs with %s", (packageName) => {
     const reference = await read(source);
     if (!reference) throw new Error("no globalArgs found");
     return {
-      expression: reference.expression,
+      expression: render(reference.expression),
       imports: reference.imports.map((binding) => binding.local).sort(),
-      declarations: reference.declarations,
+      declarations: reference.declarations.map(render),
     };
   }
 
@@ -105,6 +108,65 @@ runMain(cli, {
 });
 `),
     ).toMatchObject({ imports: ["other", "verbose", "z"], declarations: [] });
+  });
+
+  it("keeps a name bound in one nested scope free everywhere else", async () => {
+    expect(
+      await referenced(`import { z } from "zod";
+import { runMain } from "politty";
+import { level } from "./level";
+runMain(cli, {
+  globalArgs: z.object({
+    value: z.string().transform((z) => z.trim()),
+    level: z.custom((value) => { const level = value; return level; }).default(level),
+  }),
+});
+`),
+    ).toMatchObject({ imports: ["level", "z"] });
+  });
+
+  it("copies destructuring declarations once, in declarator order", async () => {
+    expect(
+      (
+        await referenced(`import { z } from "zod";
+import { runMain } from "politty";
+const { boolean, object } = z, unrelated = 1;
+const base = z.string(), schema = object({ base, verbose: boolean() });
+runMain(cli, { globalArgs: schema });
+`)
+      ).declarations,
+    ).toEqual([
+      "const { boolean, object } = z;",
+      "const base = z.string();",
+      "const schema = object({ base, verbose: boolean() });",
+    ]);
+  });
+
+  it("keeps the module specifiers of import types and dynamic imports apart", async () => {
+    expect(
+      await referenced(`import { runMain } from "politty";
+type Mode = import("./types.js").Mode;
+runMain(cli, { globalArgs: schemaFor<Mode>(await import("./schema.js")) });
+`),
+    ).toMatchObject({
+      expression: "schemaFor<Mode>(await import(<./schema.js>))",
+      declarations: ["type Mode = import(<./types.js>).Mode;"],
+    });
+  });
+
+  it("follows a chain of options aliases without a fixed limit", async () => {
+    expect(
+      (
+        await referenced(`import { runMain } from "politty";
+const a = { globalArgs: schema };
+const b = a, c = b, d = c, e = d, f = e;
+runMain(cli, f);
+`)
+      ).expression,
+    ).toBe("schema");
+    expect(
+      await read(`import { runMain } from "politty";\nconst a = b, b = a;\nrunMain(cli, a);`),
+    ).toBeUndefined();
   });
 
   it("reads globalArgs from an options object held in a variable", async () => {
