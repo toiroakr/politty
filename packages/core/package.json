@@ -20,6 +20,7 @@
     "./prompt/clack": "./src/prompt/clack/index.ts",
     "./prompt/inquirer": "./src/prompt/inquirer/index.ts",
     "./agent": "./src/agent/index.ts",
+    "./content-mapper": "./src/content-mapper/index.ts",
     "./*": "./src/*.ts"
   },
   "scripts": {

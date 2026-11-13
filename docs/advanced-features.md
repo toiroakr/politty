@@ -236,6 +236,59 @@ const install = defineCommand({
 
 See `playground/26-command-alias` for a complete example.
 
+## Global Options
+
+Options every subcommand accepts go in the `globalArgs` schema you pass to `runMain`. They can appear before or after the subcommand name, show up under "Global Options" in help, and are merged into the `args` each command's `run` receives:
+
+```typescript
+import { arg, defineCommand, runMain } from "politty";
+import { z } from "zod";
+import { buildCommand } from "./commands/build.js";
+
+const cli = defineCommand({ name: "my-app", subCommands: { build: buildCommand } });
+
+runMain(cli, {
+  globalArgs: z.object({
+    verbose: arg(z.boolean().default(false), { alias: "v" }),
+  }),
+});
+```
+
+### Typing global options in commands
+
+`args.verbose` exists at run time, but TypeScript only knows about it if one of the following tells it:
+
+- **The content mapper (TypeScript 7.1+)** derives the type from the `runMain` call itself, so commands use plain `defineCommand` and nothing restates the schema. See below.
+- **`createDefineCommand<T>()`** returns a `defineCommand` bound to the global args type `T`, such as `createDefineCommand<z.infer<typeof globalArgsSchema>>()`. Commands must be defined with that function.
+- **Declaration merging** extends the `GlobalArgs` interface for every `defineCommand`: `declare module "politty" { interface GlobalArgs { verbose: boolean } }`.
+
+### Deriving `GlobalArgs` from `runMain` (content mapper)
+
+Each politty package (`politty`, `@politty/zod`, `@politty/valibot`, `@politty/zod-mini`) ships a TypeScript content mapper. It finds the `runMain(command, { globalArgs })` call in your project and augments `GlobalArgs` with the schema's output type, so every `defineCommand` sees the global options without `createDefineCommand` or a hand-written `declare module`. Enable it in `tsconfig.json` for the package you import from:
+
+```jsonc
+{
+  "compilerOptions": {/* ... */},
+  "contentMappers": [{ "package": "politty", "extensions": [".politty"] }],
+}
+```
+
+Run `tsc` with `--runExternalCode`; without the flag TypeScript reports error TS18068. Editors start the mapper only after you trust the folder. TypeScript older than 7.1 ignores `contentMappers`, and then the global options are not part of `args`' type. 7.1 is in beta, so install it with `npm i -D typescript@beta`.
+
+The mapper does not run your code. It reads the source statically:
+
+- It looks for `runMain` imported from any module and called with an options object (inline, or a `const` declared in the same file) whose `globalArgs` property it can see. A `globalArgs` followed by a spread (`...rest`) is ignored, since the spread may replace it. Within one file, the first such call counts.
+- It copies the `globalArgs` expression, along with the top-level imports and declarations it references, into the `global-args.politty` file inside the politty package, and lets TypeScript infer the type there. Relative imports and `#` imports (through your `package.json` `imports` field) are rewritten to absolute paths. Package imports such as `zod` are copied as written, so they must also resolve from the politty package; your schema library does, as a peer dependency of politty.
+- Without options it scans the `.ts`/`.mts`/`.cts`/`.tsx` files under the directory of `tsconfig.json`, skipping `node_modules`, dot-directories and declaration files. When more than one file passes `globalArgs` to `runMain`, it reports an error asking you to choose one. Name the file with the `entry` option, relative to `tsconfig.json`:
+
+```jsonc
+"contentMappers": [
+  { "package": "politty", "extensions": [".politty"], "options": { "entry": "./src/cli.ts" } }
+]
+```
+
+Problems the mapper finds, and type errors in the copied code, are reported against `global-args.politty`.
+
 ## AI Coding Agents
 
 Coding agents (Claude Code, Codex, Cursor, Gemini CLI, ...) run CLIs as often as humans do, but want different things from them. politty detects them from the environment so a CLI can tell agents things humans don't need, and switch defaults for them.
