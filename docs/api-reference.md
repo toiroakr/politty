@@ -182,6 +182,51 @@ console.log(result.result);
 
 ---
 
+### `loadEnvFiles`
+
+Loads env files into `process.env` with the semantics of Node.js `--env-file`: a later file overrides an earlier one, and a variable that was already set in the environment is never overridden. A missing required file throws `EnvFileNotFoundError` (`Environment file not found: <absolute path>`) and no file is applied.
+
+```typescript
+function loadEnvFiles(requests: readonly EnvFileRequest[]): void;
+function loadEnvFiles(globalArgs: ArgsSchema, options?: { argv?: readonly string[] }): void;
+
+interface EnvFileRequest {
+  path: string;
+  /** Skip the file when it does not exist. */
+  ifExists: boolean;
+}
+```
+
+The second form takes the `globalArgs` schema you pass to `runMain` and loads the files its [`envFile`](./recipes.md#loading-env-files---env-file) options name on the command line (`argv` defaults to `process.argv.slice(2)`). Use it when your CLI forwards an unknown subcommand to a plugin through `onUnknownSubcommand`, which politty does not read env files for, and the plugin's environment must already reflect them. It reads the same way a command does:
+
+- An `envFile` option is read wherever it sits in `argv`, including after the plugin name, and a single-string option given twice loads both files. Files load in option declaration order, then in the order given. Nothing after `--` is read.
+- No file is read when `--help`, `-h`, `--help-all`, `-H`, `--help-json`, or `--version` is given, so `my-cli plugin --help -e missing.env` still reaches the plugin.
+- A flag that matches an `envFile` option's name or alias is read as an env file path even when the plugin defines the same flag for another purpose, because politty cannot see the plugin's options.
+- An `envFile` flag with no path after it is skipped without an error, because the plugin may use the same flag without a value. A command validates its own arguments and rejects such a flag; `loadEnvFiles` does not.
+- A bundle of short flags counts only when every option in it is defined in `globalArgs`: `-je file` loads `file`, but `-fe file` does not when `-f` is a plugin's own flag, because politty cannot tell whether `-f` takes a value. Type `-f -e file` instead.
+
+```typescript
+const globalArgs = z.object({
+  "env-file": arg(z.string().array().optional(), { alias: "e", envFile: true }),
+});
+
+runMain(cli, {
+  globalArgs,
+  onUnknownSubcommand: ({ name, precedingArgs, args }) => {
+    try {
+      loadEnvFiles(globalArgs);
+    } catch (error) {
+      if (!(error instanceof EnvFileNotFoundError)) throw error;
+      console.error(`Error: ${error.message}`);
+      return 2; // the exit code runMain uses for a missing env file
+    }
+    return runPlugin(name, [...precedingArgs, ...args]);
+  },
+});
+```
+
+---
+
 ### `arg`
 
 Attaches metadata to a Zod schema.

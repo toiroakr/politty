@@ -66,6 +66,12 @@ export type {
   DynamicCompletionResolver,
   DynamicCompletionResult,
 } from "./core/dynamic-completion-types.js";
+export {
+  EnvFileNotFoundError,
+  loadEnvFiles,
+  type EnvFileRequest,
+  type LoadEnvFilesFromArgsOptions,
+} from "./core/env-file.js";
 export type {
   ExpandCandidate,
   ExpandCompletion,

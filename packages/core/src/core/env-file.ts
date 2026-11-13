@@ -2,6 +2,9 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseEnv } from "node:util";
 import type { ExtractedFields, ResolvedFieldMeta } from "../adapter/field-meta.js";
+import { extractGlobalArgs, scanInformationalFlags } from "../parser/arg-parser.js";
+import type { ArgsSchema } from "../types.js";
+import { extractFields } from "./schema-extractor.js";
 
 export interface EnvFileRequest {
   path: string;
@@ -54,12 +57,59 @@ export function concatEnvFileValues(
   );
 }
 
+export interface LoadEnvFilesFromArgsOptions {
+  /** Command-line arguments to read. Defaults to `process.argv.slice(2)`. */
+  argv?: readonly string[];
+}
+
 /**
  * Load env files into `process.env` with the semantics of Node.js
  * `--env-file`: a later file overrides an earlier one, and a variable that was
  * already set before the first file was read is left alone.
+ *
+ * Pass the requests to load, or the `globalArgs` schema to load the files its
+ * `envFile` options name on the command line. The second form reads every
+ * `envFile` option wherever it sits in `argv`, so a CLI can load the files
+ * before it hands the arguments to a plugin that politty does not parse. Files
+ * load in option declaration order, then in the order given on the command
+ * line. Nothing after `--` is read, and no file is read when help or the
+ * version is requested. A bundle of short flags counts only when every option
+ * in it is defined in `globalArgs`, so `-fe file` is skipped when `-f` is a
+ * plugin's own flag.
+ *
+ * A missing required file throws {@link EnvFileNotFoundError} and applies no
+ * file.
  */
-export function loadEnvFiles(requests: readonly EnvFileRequest[]): void {
+export function loadEnvFiles(requests: readonly EnvFileRequest[]): void;
+export function loadEnvFiles(globalArgs: ArgsSchema, options?: LoadEnvFilesFromArgsOptions): void;
+export function loadEnvFiles(
+  source: readonly EnvFileRequest[] | ArgsSchema,
+  options: LoadEnvFilesFromArgsOptions = {},
+): void {
+  const requests = Array.isArray(source)
+    ? (source as readonly EnvFileRequest[])
+    : requestsFromArgv(source as ArgsSchema, options.argv ?? process.argv.slice(2));
+  applyEnvFileRequests(requests);
+}
+
+function requestsFromArgv(globalArgs: ArgsSchema, argv: readonly string[]): EnvFileRequest[] {
+  const extracted = extractFields(globalArgs);
+  validateEnvFileDefinitions(extracted);
+  // A run that only prints help or the version reads no env file, as in runMain.
+  // No schema is passed: only a command's own alias override frees -h/-H, and a
+  // global option's does not.
+  if (Object.values(scanInformationalFlags(argv)).some(Boolean)) return [];
+  // Every file counts: a single-string option given twice keeps both values.
+  const readAll: ExtractedFields = {
+    ...extracted,
+    fields: extracted.fields.map((field) =>
+      field.envFile && field.type === "string" ? { ...field, type: "array" } : field,
+    ),
+  };
+  return collectEnvFileRequests([extractGlobalArgs(argv, readAll)], extracted);
+}
+
+function applyEnvFileRequests(requests: readonly EnvFileRequest[]): void {
   // Read every file before applying any, so a missing file leaves process.env untouched.
   const parsedFiles = requests.flatMap((request) => {
     const envPath = path.resolve(process.cwd(), request.path);

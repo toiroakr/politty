@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { arg } from "./arg-registry.js";
 import { defineCommand } from "./command.js";
-import { concatEnvFileValues } from "./env-file.js";
+import { concatEnvFileValues, EnvFileNotFoundError, loadEnvFiles } from "./env-file.js";
 import { runCommand, runMain } from "./runner.js";
 
 const useArgv = (argv: string[]) => {
@@ -488,5 +488,181 @@ describe("envFile global option", () => {
     } finally {
       delete process.env["constructor"];
     }
+  });
+});
+
+describe("loadEnvFiles", () => {
+  let dir: string;
+  const write = (name: string, content: string): string => {
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, content);
+    return file;
+  };
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "politty-load-env-files-"));
+  });
+
+  afterEach(() => {
+    for (const key of ENV_KEYS) delete process.env[key];
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  describe("given a list of requests", () => {
+    it("loads a required file and skips a missing if-exists file", () => {
+      const file = write("a.env", "TEST_EF_A=from-file\n");
+
+      loadEnvFiles([
+        { path: file, ifExists: false },
+        { path: path.join(dir, "missing.env"), ifExists: true },
+      ]);
+
+      expect(process.env["TEST_EF_A"]).toBe("from-file");
+    });
+
+    it("throws EnvFileNotFoundError for a missing required file", () => {
+      expect(() =>
+        loadEnvFiles([{ path: path.join(dir, "missing.env"), ifExists: false }]),
+      ).toThrow(EnvFileNotFoundError);
+    });
+  });
+
+  describe("given the global options and the command line", () => {
+    const globalArgs = z.object({
+      envFile: arg(z.string().array().optional(), { alias: "e", envFile: true }),
+      envFileIfExists: arg(z.string().array().optional(), { envFile: "if-exists" }),
+      json: arg(z.boolean().default(false), { alias: "j" }),
+    });
+
+    it("loads the file named by an alias, wherever the plugin name sits in argv", () => {
+      const file = write("a.env", "TEST_EF_A=from-file\n");
+
+      loadEnvFiles(globalArgs, { argv: ["plugin", "-e", file, "deploy"] });
+
+      expect(process.env["TEST_EF_A"]).toBe("from-file");
+    });
+
+    it("loads the file named by the kebab-case long option with =", () => {
+      const file = write("a.env", "TEST_EF_A=from-file\n");
+
+      loadEnvFiles(globalArgs, { argv: [`--env-file=${file}`] });
+
+      expect(process.env["TEST_EF_A"]).toBe("from-file");
+    });
+
+    it("loads the file of -e bundled after a boolean flag, as in -je", () => {
+      const file = write("a.env", "TEST_EF_A=from-file\n");
+
+      loadEnvFiles(globalArgs, { argv: ["-je", file] });
+
+      expect(process.env["TEST_EF_A"]).toBe("from-file");
+    });
+
+    it("skips an occurrence of an envFile option that has no path after it, and still loads the others", () => {
+      const file = write("a.env", "TEST_EF_A=from-file\n");
+
+      expect(() => loadEnvFiles(globalArgs, { argv: ["plugin", "-e"] })).not.toThrow();
+      loadEnvFiles(globalArgs, { argv: ["plugin", "-e", file, "-e"] });
+
+      expect(process.env["TEST_EF_A"]).toBe("from-file");
+    });
+
+    it("does not read a bundle that holds an option the global schema does not define, such as -fe", () => {
+      const file = write("a.env", "TEST_EF_A=from-file\n");
+
+      loadEnvFiles(globalArgs, { argv: ["plugin", "-fe", file] });
+
+      expect(process.env["TEST_EF_A"]).toBeUndefined();
+    });
+
+    it("does not read a path given after --", () => {
+      const file = write("a.env", "TEST_EF_A=from-file\n");
+
+      loadEnvFiles(globalArgs, { argv: ["--", "-e", file] });
+
+      expect(process.env["TEST_EF_A"]).toBeUndefined();
+    });
+
+    it("skips a missing file named by an if-exists option", () => {
+      expect(() =>
+        loadEnvFiles(globalArgs, { argv: ["--env-file-if-exists", path.join(dir, "missing.env")] }),
+      ).not.toThrow();
+    });
+
+    it("throws EnvFileNotFoundError naming the resolved path and applies no file when a required one is missing", () => {
+      const file = write("a.env", "TEST_EF_A=from-file\n");
+      const missing = path.join(dir, "missing.env");
+
+      expect(() => loadEnvFiles(globalArgs, { argv: ["-e", file, "-e", missing] })).toThrow(
+        `Environment file not found: ${missing}`,
+      );
+      expect(process.env["TEST_EF_A"]).toBeUndefined();
+    });
+
+    it("loads the required option's files before the if-exists option's, whatever the argv order", () => {
+      const required = write("required.env", "TEST_EF_A=required\n");
+      const optional = write("optional.env", "TEST_EF_A=optional\n");
+
+      loadEnvFiles(globalArgs, { argv: ["--env-file-if-exists", optional, "-e", required] });
+
+      expect(process.env["TEST_EF_A"]).toBe("optional");
+    });
+
+    it.each(["--help", "-h", "--help-all", "-H", "--help-json", "--version"])(
+      "reads no file when %s is given, even if a required file is missing",
+      (flag) => {
+        expect(() =>
+          loadEnvFiles(globalArgs, { argv: ["plugin", flag, "-e", path.join(dir, "missing.env")] }),
+        ).not.toThrow();
+      },
+    );
+
+    it.each(["-h", "-H"])(
+      "treats %s as help even when a global option takes it as an alias, as a command does",
+      (flag) => {
+        const overriding = z.object({
+          envFile: arg(z.string().array().optional(), { envFile: true }),
+          host: arg(z.boolean().default(false), {
+            alias: flag.slice(1),
+            overrideBuiltinAlias: true,
+          }),
+        });
+
+        expect(() =>
+          loadEnvFiles(overriding, {
+            argv: ["plugin", flag, "--env-file", path.join(dir, "missing.env")],
+          }),
+        ).not.toThrow();
+      },
+    );
+
+    it("reads every file of a single-string option given on both sides of the plugin name", () => {
+      const single = z.object({
+        envFile: arg(z.string().optional(), { alias: "e", envFile: true }),
+      });
+      const before = write("before.env", "TEST_EF_A=before\n");
+      const after = write("after.env", "TEST_EF_B=after\n");
+
+      loadEnvFiles(single, { argv: ["-e", before, "plugin", "-e", after] });
+
+      expect([process.env["TEST_EF_A"], process.env["TEST_EF_B"]]).toEqual(["before", "after"]);
+    });
+
+    it("rejects envFile on an option whose value is not a string or an array of strings", () => {
+      const numeric = z.object({ envFile: arg(z.number().optional(), { envFile: true }) });
+
+      expect(() => loadEnvFiles(numeric, { argv: [] })).toThrow(
+        'Global option "envFile" sets envFile but its value is not a string or an array of strings',
+      );
+    });
+
+    it("reads process.argv when no argv is given", () => {
+      const file = write("a.env", "TEST_EF_A=from-file\n");
+      using _argv = useArgv(["node", "cli", "plugin", "-e", file]);
+
+      loadEnvFiles(globalArgs);
+
+      expect(process.env["TEST_EF_A"]).toBe("from-file");
+    });
   });
 });
