@@ -1,3 +1,4 @@
+import { closeCorsa } from "./corsa.js";
 import { createContentMapperHandlers } from "./handlers.js";
 import { serveJsonRpc } from "./rpc.js";
 
@@ -6,7 +7,11 @@ import { serveJsonRpc } from "./rpc.js";
  * from the `typescript.contentMapper` field of a politty package.
  */
 export async function serveContentMapper(): Promise<void> {
-  await serveJsonRpc(createContentMapperHandlers(), process.stdin, (chunk) =>
-    process.stdout.write(chunk),
-  );
+  try {
+    await serveJsonRpc(createContentMapperHandlers(), process.stdin, (chunk) =>
+      process.stdout.write(chunk),
+    );
+  } finally {
+    closeCorsa();
+  }
 }

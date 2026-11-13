@@ -275,14 +275,16 @@ Each politty package (`politty`, `@politty/zod`, `@politty/valibot`, `@politty/z
 }
 ```
 
-Run `tsc` with `--runExternalCode`; without the flag TypeScript reports error TS18068. Editors start the mapper only after you trust the folder. TypeScript older than 7.1 ignores `contentMappers`, and then the global options are not part of `args`' type. 7.1 is not released yet: install the beta (`npm i -D typescript@beta`) or a nightly build (`npm i -D typescript@next`).
+Type-check with `--runExternalCode`, using TypeScript 7.1 or later (`tsc`) or [tsrs](https://github.com/oxc-project/tsrs), its Rust port (`tsrs`); both run content mappers. Without the flag they report error TS18068. Editors start the mapper only after you trust the folder. TypeScript older than 7.1 ignores `contentMappers`, and then the global options are not part of `args`' type. 7.1 is not released yet: install the beta (`npm i -D typescript@beta`) or a nightly build (`npm i -D typescript@next`).
 
-The mapper does not run your code. It reads the source statically:
+The mapper reads the entry with the TypeScript 7.1 JavaScript API, from the `typescript` or `tsrs` package installed in the project, whichever it finds first. Name one with the `compiler` option (`"typescript"` or `"tsrs"`) to use it even when both are installed.
 
-- It looks for `runMain` imported from any module and called with an options object (inline, or a `const` declared in the same file) whose `globalArgs` property it can see. A `globalArgs` followed by a spread (`...rest`) is ignored, since the spread may replace it. When the entry calls `runMain` more than once, the first such call counts.
-- It copies the `globalArgs` expression, along with the top-level imports and declarations it references, into the `global-args.politty` file inside the politty package, and lets TypeScript infer the type there. Relative imports and `#` imports (through your `package.json` `imports` field) are rewritten to absolute paths. Package imports such as `zod` are copied as written, so they must also resolve from the politty package; your schema library does, as a peer dependency of politty.
+The mapper does not run your code. It parses the entry and copies what the type needs:
 
-Problems the mapper finds (a missing `entry` option, an entry it cannot read or whose `runMain` call has no `globalArgs` it can see), and type errors in the copied code, are reported against `global-args.politty`.
+- It looks for `runMain` imported from any module and called with an options object (inline, or a `const` declared at the top level of the entry) whose `globalArgs` property it can see. A `globalArgs` followed by a spread (`...rest`) is ignored, since the spread may replace it. When the entry calls `runMain` more than once, the first such call counts.
+- It copies the `globalArgs` expression, along with the top-level imports and declarations it references, into the `global-args.politty` file inside the politty package, and lets TypeScript infer the type there. Imports of your project's files, however you write them (relative, `#` imports, tsconfig `paths`), are resolved with your compiler options and rewritten to absolute paths. Package imports such as `zod` are copied as written, so they must resolve to the same file from the politty package; your schema library does, as a peer dependency of politty. The mapper reports any that do not.
+
+Problems the mapper finds (a missing `entry` option, no `typescript` or `tsrs` to read the entry with, an entry it cannot read or whose `runMain` call has no `globalArgs` it can see, a package import politty cannot resolve), and type errors in the copied code, are reported against `global-args.politty`.
 
 ## AI Coding Agents
 

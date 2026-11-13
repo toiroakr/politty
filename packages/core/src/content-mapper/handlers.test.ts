@@ -2,8 +2,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { PassThrough } from "node:stream";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { globalArgsSourceOf } from "./global-args-module.js";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { API_PACKAGES, closeCorsa, loadCorsa } from "./corsa.js";
 import { createContentMapperHandlers, loadProject } from "./handlers.js";
 import { serveJsonRpc } from "./rpc.js";
 
@@ -13,28 +13,52 @@ import { commonArgs } from "./shared/args.js";
 runMain(cli, { globalArgs: z.object(commonArgs) });
 `;
 
-let dir: string;
-
-beforeEach(() => {
-  dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "politty-content-mapper-")));
-  fs.writeFileSync(path.join(dir, "tsconfig.json"), "{}");
-});
+const fixtures: string[] = [];
 
 afterEach(() => {
-  fs.rmSync(dir, { recursive: true, force: true });
+  for (const dir of fixtures.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function write(relative: string, content: string): string {
+afterAll(() => closeCorsa());
+
+/** A project directory inside this package, so it resolves the package's typescript, tsrs and zod. */
+function project(parent = import.meta.dirname): string {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(parent, ".content-mapper-fixture-")));
+  fixtures.push(dir);
+  write(
+    dir,
+    "tsconfig.json",
+    JSON.stringify({ compilerOptions: { module: "esnext", moduleResolution: "bundler" } }),
+  );
+  return dir;
+}
+
+function write(dir: string, relative: string, content: string): string {
   const file = path.join(dir, relative);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, content);
   return file;
 }
 
-describe("globalArgsSourceOf", () => {
-  it("augments GlobalArgs from the schema, resolving relative imports from the entry", () => {
-    const entry = write("src/main.ts", ENTRY);
-    expect(globalArgsSourceOf(entry, ENTRY)?.text).toBe(`import { z } from "zod";
+describe("loadCorsa", () => {
+  it("loads the package named, or the first installed one", async () => {
+    expect((await loadCorsa(import.meta.dirname))?.packageName).toBe("typescript");
+    expect((await loadCorsa(import.meta.dirname, "tsrs"))?.packageName).toBe("tsrs");
+    expect(await loadCorsa(os.tmpdir())).toBeUndefined();
+  });
+});
+
+describe.each(API_PACKAGES)("loadProject with %s", (compiler) => {
+  const load = (dir: string, entry = "src/main.ts") =>
+    loadProject(path.join(dir, "tsconfig.json"), { entry, compiler });
+
+  it("augments GlobalArgs from the schema, reaching project files by absolute path", async () => {
+    const dir = project();
+    const entry = write(dir, "src/main.ts", ENTRY);
+    write(dir, "src/shared/args.ts", "export const commonArgs = {};\n");
+
+    expect(await load(dir)).toEqual({
+      text: `import { z } from "zod";
 import { commonArgs } from "${dir}/src/shared/args.js";
 const __polittyGlobalArgsSchema = z.object(commonArgs);
 type __PolittyGlobalArgs = NonNullable<(typeof __polittyGlobalArgsSchema)["~standard"]["types"]>["output"];
@@ -42,48 +66,74 @@ declare module "./index.js" {
   interface GlobalArgs extends __PolittyGlobalArgs {}
 }
 export {};
-`);
+`,
+      problem: undefined,
+      watchedFiles: [entry],
+    });
   });
 
-  it("resolves # specifiers through the package's imports field", () => {
+  it("resolves # imports and tsconfig paths the way the project does", async () => {
+    const dir = project();
+    write(dir, "package.json", JSON.stringify({ imports: { "#/*": "./src/*.ts" } }));
     write(
-      "package.json",
-      JSON.stringify({ imports: { "#/*": "./src/*.ts", "#args": { types: "./src/args.ts" } } }),
+      dir,
+      "tsconfig.json",
+      JSON.stringify({
+        compilerOptions: {
+          module: "esnext",
+          moduleResolution: "bundler",
+          paths: { "@lib/*": ["./lib/*"] },
+        },
+      }),
     );
-    const source = `import { runMain } from "politty";
+    write(dir, "src/shared/args.ts", "export const a = {};\n");
+    write(dir, "lib/types.d.ts", "export type B = {};\n");
+    write(
+      dir,
+      "src/main.ts",
+      `import { runMain } from "politty";
 import { a } from "#/shared/args";
-import { b } from "#args";
-import { c } from "#missing";
-runMain(cli, { globalArgs: z.object({ ...a, ...b, ...c }) });
-`;
-    const text = globalArgsSourceOf(write("src/main.ts", source), source)?.text;
-    expect(text).toContain(`import { a } from "${dir}/src/shared/args.ts";`);
-    expect(text).toContain(`import { b } from "${dir}/src/args.ts";`);
-    expect(text).toContain(`import { c } from "#missing";`);
+import type { B } from "@lib/types";
+runMain(cli, { globalArgs: z.object(a as B) });
+`,
+    );
+    const { text, problem } = await load(dir);
+    expect(problem).toBeUndefined();
+    expect(text).toContain(`import { a } from "${dir}/src/shared/args.js";`);
+    expect(text).toContain(`import type { B } from "${dir}/lib/types.js";`);
   });
 
-  it("returns undefined when runMain gets no globalArgs", () => {
-    const source = `import { runMain } from "politty";\nrunMain(cli);\n`;
-    expect(globalArgsSourceOf(write("src/main.ts", source), source)).toBeUndefined();
+  it("reports a package the generated module cannot resolve as the entry does", async () => {
+    const dir = project();
+    write(
+      dir,
+      "node_modules/local-schema/package.json",
+      JSON.stringify({ name: "local-schema", types: "index.d.ts" }),
+    );
+    write(dir, "node_modules/local-schema/index.d.ts", "export declare const schema: unknown;\n");
+    write(
+      dir,
+      "src/main.ts",
+      `import { runMain } from "politty";\nimport { schema } from "local-schema";\nrunMain(cli, { globalArgs: schema });\n`,
+    );
+    expect((await load(dir)).problem).toMatch(
+      /"local-schema" resolves to .*local-schema\/index\.d\.ts from .* but to nothing from politty's package/,
+    );
+  });
+
+  it("reports an entry that is missing or passes no globalArgs", async () => {
+    const dir = project();
+    expect((await load(dir, "missing.ts")).problem).toMatch(/cannot be read/);
+    write(dir, "src/main.ts", `import { runMain } from "politty";\nrunMain(cli);\n`);
+    expect((await load(dir)).problem).toMatch(/does not call runMain with a globalArgs option/);
   });
 });
 
-describe("loadProject", () => {
-  const tsconfig = () => path.join(dir, "tsconfig.json");
-
-  it("reads the entry named by the entry option", () => {
-    write("src/a.ts", ENTRY);
-    const b = write("src/b.ts", ENTRY.replace("z.object", "z.strictObject"));
-    const project = loadProject(tsconfig(), { entry: "./src/b.ts" });
-    expect(project.problem).toBeUndefined();
-    expect(project.watchedFiles).toEqual([b]);
-    expect(project.text).toContain("z.strictObject(commonArgs)");
-  });
-
-  it("requires the entry option", () => {
-    write("src/main.ts", ENTRY);
+describe("loadProject options", () => {
+  it("requires the entry option", async () => {
+    const dir = project();
     for (const options of [undefined, {}, { entry: 1 }]) {
-      expect(loadProject(tsconfig(), options)).toEqual({
+      expect(await loadProject(path.join(dir, "tsconfig.json"), options)).toEqual({
         text: "export {};\n",
         problem: expect.stringMatching(/needs the "entry" option/),
         watchedFiles: [],
@@ -91,12 +141,22 @@ describe("loadProject", () => {
     }
   });
 
-  it("reports an entry that is missing or passes no globalArgs", () => {
-    expect(loadProject(tsconfig(), { entry: "missing.ts" }).problem).toMatch(/cannot be read/);
-    write("src/main.ts", `import { runMain } from "politty";\nrunMain(cli);\n`);
-    expect(loadProject(tsconfig(), { entry: "src/main.ts" }).problem).toMatch(
-      /does not call runMain with a globalArgs option/,
-    );
+  it("asks for typescript or tsrs when the project has neither", async () => {
+    const dir = project(os.tmpdir());
+    const entry = write(dir, "src/main.ts", ENTRY);
+    expect(await loadProject(path.join(dir, "tsconfig.json"), { entry: "src/main.ts" })).toEqual({
+      text: "export {};\n",
+      problem: expect.stringMatching(/install typescript or tsrs in the project/),
+      watchedFiles: [entry],
+    });
+    expect(
+      (
+        await loadProject(path.join(dir, "tsconfig.json"), {
+          entry: "src/main.ts",
+          compiler: "tsrs",
+        })
+      ).problem,
+    ).toMatch(/install tsrs in the project \(tsrs\/sync was not found\)/);
   });
 });
 
@@ -115,18 +175,22 @@ describe("createContentMapperHandlers", () => {
     });
   });
 
-  it("answers transform with the project's module and its problem", () => {
+  it("answers transform with the project's module and its problem", async () => {
     const handlers = createContentMapperHandlers(() => project);
     handlers.initialize({ positionEncodings: ["utf-8"] });
-    const opened = handlers.openProject({
+    const opened = (await handlers.openProject({
       configFileName: "/p/tsconfig.json",
       projectHandle: "p1",
-      options: { entry: 1, other: true },
-    }) as { configIdentity: string; watchedFiles: string[]; optionDiagnostics: unknown[] };
+      options: { entry: 1, compiler: "tsc", other: true },
+    })) as { configIdentity: string; watchedFiles: string[]; optionDiagnostics: unknown[] };
     expect(opened.watchedFiles).toEqual(["/a.ts"]);
     expect(opened.configIdentity).toMatch(/^[0-9a-f]{64}$/);
     expect(opened.optionDiagnostics).toEqual([
       expect.objectContaining({ path: ["entry"] }),
+      expect.objectContaining({
+        path: ["compiler"],
+        messageText: expect.stringMatching(/"typescript", "tsrs"/),
+      }),
       expect.objectContaining({ path: ["other"] }),
     ]);
 

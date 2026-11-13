@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { EMPTY_MODULE, globalArgsSourceOf } from "./global-args-module.js";
+import { fileURLToPath } from "node:url";
+import { API_PACKAGES, loadCorsa, type ApiPackage, type Corsa } from "./corsa.js";
+import { readGlobalArgs } from "./entry-analysis.js";
+import { buildGlobalArgsModule, EMPTY_MODULE } from "./global-args-module.js";
 import type { JsonRpcHandler } from "./rpc.js";
 
 export type ContentMapperHandlers = Record<
@@ -54,30 +57,83 @@ function readSource(file: string): string | undefined {
   }
 }
 
+const ENTRY_OPTION = "entry";
+const COMPILER_OPTION = "compiler";
+const ENTRY_REQUIRED = `politty's content mapper needs the "${ENTRY_OPTION}" option in tsconfig.json: the path of the module that calls runMain, relative to tsconfig.json`;
+const GENERATED_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+function isApiPackage(value: unknown): value is ApiPackage {
+  return (API_PACKAGES as readonly unknown[]).includes(value);
+}
+
 function optionDiagnostics(options: Record<string, unknown> | undefined): OptionDiagnostic[] {
+  const diagnostic = (key: string, messageText: string): OptionDiagnostic => ({
+    path: [key],
+    messageText,
+    code: OPTION_DIAGNOSTIC_CODE,
+  });
   return Object.entries(options ?? {}).flatMap(([key, value]): OptionDiagnostic[] => {
-    if (key !== "entry") {
-      return [
-        {
-          path: [key],
-          messageText: `politty's content mapper takes only the "entry" option`,
-          code: OPTION_DIAGNOSTIC_CODE,
-        },
-      ];
+    if (key === ENTRY_OPTION) {
+      return typeof value === "string"
+        ? []
+        : [
+            diagnostic(
+              key,
+              `"${ENTRY_OPTION}" must be the path of the module that calls runMain, relative to tsconfig.json`,
+            ),
+          ];
     }
-    return typeof value === "string"
-      ? []
-      : [
-          {
-            path: [key],
-            messageText: `"entry" must be the path of the module that calls runMain, relative to tsconfig.json`,
-            code: OPTION_DIAGNOSTIC_CODE,
-          },
-        ];
+    if (key === COMPILER_OPTION) {
+      return isApiPackage(value)
+        ? []
+        : [
+            diagnostic(
+              key,
+              `"${COMPILER_OPTION}" must be one of ${API_PACKAGES.map((name) => `"${name}"`).join(", ")}`,
+            ),
+          ];
+    }
+    return [
+      diagnostic(
+        key,
+        `politty's content mapper takes only the "${ENTRY_OPTION}" and "${COMPILER_OPTION}" options`,
+      ),
+    ];
   });
 }
 
-const ENTRY_REQUIRED = `politty's content mapper needs the "entry" option in tsconfig.json: the path of the module that calls runMain, relative to tsconfig.json`;
+function missingApi(preferred: ApiPackage | undefined): string {
+  const packages = preferred ? [preferred] : API_PACKAGES;
+  return `politty's content mapper reads the entry with the TypeScript 7.1 JavaScript API; install ${packages.join(" or ")} in the project (${packages.map((name) => `${name}/sync`).join(", ")} was not found)`;
+}
+
+function readEntry(corsa: Corsa, tsconfigPath: string, entry: string, source: string): Project {
+  const { api, ast } = corsa;
+  const { options } = api.parseConfigFile(tsconfigPath);
+  const resolver = api.createModuleResolver(options);
+  const lease = api.createSourceFile(entry, source);
+  try {
+    const reference = readGlobalArgs(ast, lease.sourceFile);
+    if (!reference) {
+      return {
+        text: EMPTY_MODULE,
+        problem: `${entry} does not call runMain with a globalArgs option`,
+        watchedFiles: [entry],
+      };
+    }
+    const built = buildGlobalArgsModule(reference, entry, GENERATED_DIR, (specifier, dir) => {
+      return resolver.resolveModuleName(specifier, dir).resolvedModule ?? undefined;
+    });
+    return {
+      text: built.text,
+      problem: built.problems.length > 0 ? built.problems.join("\n") : undefined,
+      watchedFiles: [entry],
+    };
+  } finally {
+    lease.dispose();
+    resolver.dispose();
+  }
+}
 
 /**
  * Read the `globalArgs` schema the entry passes to `runMain` and build the
@@ -85,12 +141,16 @@ const ENTRY_REQUIRED = `politty's content mapper needs the "entry" option in tsc
  * @param tsconfigPath - Path of the project's tsconfig.json
  * @param options - The `options` of politty's `contentMappers` entry
  */
-export function loadProject(tsconfigPath: string, options?: Record<string, unknown>): Project {
-  const entryOption = options?.["entry"];
+export async function loadProject(
+  tsconfigPath: string,
+  options?: Record<string, unknown>,
+): Promise<Project> {
+  const entryOption = options?.[ENTRY_OPTION];
   if (typeof entryOption !== "string") {
     return { text: EMPTY_MODULE, problem: ENTRY_REQUIRED, watchedFiles: [] };
   }
-  const entry = path.resolve(path.dirname(tsconfigPath), entryOption);
+  const projectDir = path.dirname(tsconfigPath);
+  const entry = path.resolve(projectDir, entryOption);
   const source = readSource(entry);
   if (source === undefined) {
     return {
@@ -99,14 +159,11 @@ export function loadProject(tsconfigPath: string, options?: Record<string, unkno
       watchedFiles: [entry],
     };
   }
-  const found = globalArgsSourceOf(entry, source);
-  return found
-    ? { text: found.text, watchedFiles: [entry] }
-    : {
-        text: EMPTY_MODULE,
-        problem: `${entry} does not call runMain with a globalArgs option`,
-        watchedFiles: [entry],
-      };
+  const compiler = options?.[COMPILER_OPTION];
+  const preferred = isApiPackage(compiler) ? compiler : undefined;
+  const corsa = await loadCorsa(projectDir, preferred);
+  if (!corsa) return { text: EMPTY_MODULE, problem: missingApi(preferred), watchedFiles: [entry] };
+  return readEntry(corsa, tsconfigPath, entry, source);
 }
 
 /**
@@ -115,7 +172,12 @@ export function loadProject(tsconfigPath: string, options?: Record<string, unkno
  * @param load - Loads a project; replaceable for tests
  * @returns A handler for each method of the content mapper protocol
  */
-export function createContentMapperHandlers(load = loadProject): ContentMapperHandlers {
+export function createContentMapperHandlers(
+  load: (
+    tsconfigPath: string,
+    options?: Record<string, unknown>,
+  ) => Project | Promise<Project> = loadProject,
+): ContentMapperHandlers {
   let encoding: PositionEncoding = "utf-16";
   const projects = new Map<string, Project>();
   const position = (content: string, offset: number): number =>
@@ -132,9 +194,9 @@ export function createContentMapperHandlers(load = loadProject): ContentMapperHa
       };
     },
 
-    openProject(params) {
+    async openProject(params) {
       const { configFileName, projectHandle, options } = params as OpenProjectParams;
-      const project = load(configFileName, options);
+      const project = await load(configFileName, options);
       projects.set(projectHandle, project);
       return {
         configIdentity: createHash("sha256")

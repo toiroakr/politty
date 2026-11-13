@@ -1,67 +1,38 @@
-import { describe, expect, it } from "vitest";
-import { analyzeEntry, referencedBindings } from "./entry-analysis.js";
-import { tokenize } from "./lexer.js";
+import { afterAll, describe, expect, it } from "vitest";
+import { API_PACKAGES, closeCorsa, loadCorsa } from "./corsa.js";
+import { readGlobalArgs } from "./entry-analysis.js";
 
-function referenced(source: string) {
-  const analysis = analyzeEntry(source);
-  const call = analysis.calls[0];
-  if (!call) throw new Error("no globalArgs call found");
-  const { imports, declarations } = referencedBindings(analysis, call.tokens);
-  return {
-    expression: call.expression,
-    imports: imports.map((binding) => binding.local).sort(),
-    declarations: declarations.map((declaration) => declaration.text),
-  };
-}
+afterAll(() => closeCorsa());
 
-describe("tokenize", () => {
-  it("drops comments and keeps strings, templates and regexes whole", () => {
-    const tokens = tokenize(
-      'const a = "x // y"; // comment\n/* block */ const b = `t ${a + `n ${1}`} e`; const r = /[/]x/g;',
-    );
-    expect(tokens.map((token) => token.value)).toEqual([
-      "const",
-      "a",
-      "=",
-      '"x // y"',
-      ";",
-      "const",
-      "b",
-      "=",
-      "`t ${",
-      "a",
-      "+",
-      "`n ${",
-      "1",
-      "}`",
-      "} e`",
-      ";",
-      "const",
-      "r",
-      "=",
-      "/[/]x/g",
-      ";",
-    ]);
-  });
+describe.each(API_PACKAGES)("readGlobalArgs with %s", (packageName) => {
+  async function read(source: string) {
+    const corsa = await loadCorsa(import.meta.dirname, packageName);
+    if (!corsa) throw new Error(`${packageName} is not installed`);
+    const lease = corsa.api.createSourceFile("/project/src/main.ts", source);
+    try {
+      return readGlobalArgs(corsa.ast, lease.sourceFile);
+    } finally {
+      lease.dispose();
+    }
+  }
 
-  it("reads a slash after an expression as division", () => {
-    expect(tokenize("a / b / c").map((token) => token.kind)).toEqual([
-      "identifier",
-      "punctuator",
-      "identifier",
-      "punctuator",
-      "identifier",
-    ]);
-  });
-});
+  async function referenced(source: string) {
+    const reference = await read(source);
+    if (!reference) throw new Error("no globalArgs found");
+    return {
+      expression: reference.expression,
+      imports: reference.imports.map((binding) => binding.local).sort(),
+      declarations: reference.declarations,
+    };
+  }
 
-describe("analyzeEntry", () => {
-  it("finds a schema declared in the entry", () => {
+  it("copies a schema declared in the entry and the imports it uses", async () => {
     expect(
-      referenced(`import { z } from "zod";
+      await referenced(`import { z } from "zod";
 import { arg, defineCommand, runMain } from "politty";
 
-const globalArgsSchema = z.object({
+/** The global options */
+export const globalArgsSchema = z.object({
   verbose: arg(z.boolean().default(false), { alias: "v" }),
 });
 const cli = defineCommand({ name: "app" });
@@ -78,9 +49,9 @@ runMain(cli, { version: "1.0.0", globalArgs: globalArgsSchema });
     });
   });
 
-  it("copies an inline expression and the imports it uses", () => {
+  it("copies an inline expression and only the imports it references", async () => {
     expect(
-      referenced(`import { defineCommand, runMain } from "@politty/zod";
+      await referenced(`import { defineCommand, runMain } from "@politty/zod";
 import { z } from "zod";
 import { commonArgs } from "./shared/args";
 
@@ -99,107 +70,101 @@ void runMain(main, {
     });
   });
 
-  it("follows declarations transitively and copies only the declarator used", () => {
+  it("follows declarations transitively and copies only the declarator used", async () => {
     expect(
-      referenced(`import { z } from "zod";
+      (
+        await referenced(`import { z } from "zod";
 import { runMain } from "politty";
+type Level = "debug" | "info";
 export const verbose = z.boolean(), unused = 1;
-function shape() {
-  return { verbose };
+export function shape() {
+  return { verbose, level: z.custom<Level>() };
 }
 const schema = z.object(shape());
 runMain(cli, { globalArgs: schema });
-`).declarations,
+`)
+      ).declarations,
     ).toEqual([
+      `type Level = "debug" | "info";`,
       "const verbose = z.boolean();",
       `function shape() {
-  return { verbose };
+  return { verbose, level: z.custom<Level>() };
 }`,
       "const schema = z.object(shape());",
     ]);
   });
 
-  it("reads globalArgs from an options object held in a variable", () => {
+  it("leaves out names the expression binds itself, members and object keys", async () => {
     expect(
-      referenced(`import { runMain } from "politty";
-const options = { version: "1", globalArgs: schema } as const;
+      await referenced(`import { z } from "zod";
+import { runMain } from "politty";
+import { verbose, config, other } from "./names";
+const value = 1;
+runMain(cli, {
+  globalArgs: z.object({ verbose, config: z.string(), other: [1].map((value) => value)[0] && z.number() }).describe(other.name),
+});
+`),
+    ).toMatchObject({ imports: ["other", "verbose", "z"], declarations: [] });
+  });
+
+  it("reads globalArgs from an options object held in a variable", async () => {
+    expect(
+      (
+        await referenced(`import { runMain } from "politty";
+const options = { version: "1", globalArgs: schema } satisfies object;
 runMain(cli, options);
-`).expression,
+`)
+      ).expression,
     ).toBe("schema");
   });
 
-  it("accepts shorthand properties, renamed imports and namespace imports", () => {
+  it("accepts shorthand properties, renamed imports and namespace imports", async () => {
     expect(
-      referenced(`import { runMain as run } from "politty";
-run(cli, { globalArgs });`).expression,
+      (await referenced(`import { runMain as run } from "politty";\nrun(cli, { globalArgs });`))
+        .expression,
     ).toBe("globalArgs");
     expect(
-      referenced(`import * as politty from "politty";
-await politty.runMain(cli, { globalArgs: schema });`).expression,
+      (
+        await referenced(
+          `import * as politty from "politty";\nawait politty.runMain(cli, { "globalArgs": schema });`,
+        )
+      ).expression,
     ).toBe("schema");
   });
 
-  it("ignores a globalArgs a later spread may override", () => {
-    expect(
-      analyzeEntry(`import { runMain } from "politty";
-runMain(cli, { globalArgs: schema, ...rest });`).calls,
-    ).toEqual([]);
-  });
-
-  it("ignores runMain calls it cannot attribute to an import", () => {
-    expect(analyzeEntry(`runMain(cli, { globalArgs: schema });`).calls).toEqual([]);
-    expect(
-      analyzeEntry(`import { runMain } from "politty";
-other.runMain(cli, { globalArgs: schema });
-runMain(cli);`).calls,
-    ).toEqual([]);
-  });
-
-  it("parses default, namespace, type-only and attributed imports", () => {
-    const { imports } = analyzeEntry(`import pkg, * as ns from "./pkg.js";
-import type { A, B as C } from "./types";
-import { type D, E } from "./mixed";
-import data from "./data.json" with { type: "json" };
-import "./side-effect";
+  it("finds the call inside blocks and copies type-only and attributed imports", async () => {
+    const reference = await read(`import type { Shape } from "./types";
+import { type Mode, runMain } from "politty";
+import defaults from "./defaults.json" with { type: "json" };
+if (import.meta.main) {
+  runMain(cli, { globalArgs: z.object(defaults as Shape) as unknown as Mode });
+}
 `);
-    expect([...imports.values()]).toEqual([
-      {
-        local: "pkg",
+    expect(reference?.imports).toEqual([
+      expect.objectContaining({ local: "Shape", typeOnly: true, specifier: "./types" }),
+      expect.objectContaining({ local: "Mode", typeOnly: true, specifier: "politty" }),
+      expect.objectContaining({
+        local: "defaults",
         imported: "default",
-        typeOnly: false,
-        specifier: "./pkg.js",
-        attributes: undefined,
-      },
-      { local: "ns", imported: "*", typeOnly: false, specifier: "./pkg.js", attributes: undefined },
-      { local: "A", imported: "A", typeOnly: true, specifier: "./types", attributes: undefined },
-      { local: "C", imported: "B", typeOnly: true, specifier: "./types", attributes: undefined },
-      { local: "D", imported: "D", typeOnly: true, specifier: "./mixed", attributes: undefined },
-      { local: "E", imported: "E", typeOnly: false, specifier: "./mixed", attributes: undefined },
-      {
-        local: "data",
-        imported: "default",
-        typeOnly: false,
-        specifier: "./data.json",
         attributes: 'with { type: "json" }',
-      },
+      }),
     ]);
   });
 
-  it("ends declarations without semicolons where a new statement starts", () => {
-    const { declarations } = analyzeEntry(`const a = z
-  .string()
-  .optional()
-const b: Record<string, number> = {}
-export class Box<T> { value?: T }
-enum Mode { A, B }
-`);
-    expect([...declarations.values()].map((declaration) => declaration.text)).toEqual([
-      `const a = z
-  .string()
-  .optional();`,
-      "const b: Record<string, number> = {};",
-      "class Box<T> { value?: T }",
-      "enum Mode { A, B }",
-    ]);
+  it("ignores a globalArgs a later spread may override, and calls it cannot attribute to runMain", async () => {
+    expect(
+      await read(
+        `import { runMain } from "politty";\nrunMain(cli, { globalArgs: schema, ...rest });`,
+      ),
+    ).toBeUndefined();
+    expect(await read(`runMain(cli, { globalArgs: schema });`)).toBeUndefined();
+    expect(
+      await read(`import type { runMain } from "politty";\nrunMain(cli, { globalArgs: schema });`),
+    ).toBeUndefined();
+    expect(
+      await read(
+        `import { runMain } from "politty";\nother.runMain(cli, { globalArgs: schema });\nrunMain(cli);`,
+      ),
+    ).toBeUndefined();
   });
 });
