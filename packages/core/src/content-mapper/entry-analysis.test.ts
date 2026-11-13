@@ -184,6 +184,11 @@ runMain(cli, f);
     expect(
       await read(`import { runMain } from "politty";\nconst a = b, b = a;\nrunMain(cli, a);`),
     ).toBeUndefined();
+    expect(
+      await read(
+        `import { runMain } from "politty";\nconst { options } = { globalArgs: wrong, options: {} };\nrunMain(cli, options);`,
+      ),
+    ).toBeUndefined();
   });
 
   it("reads globalArgs from an options object held in a variable", async () => {

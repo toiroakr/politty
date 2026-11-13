@@ -129,7 +129,7 @@ class EntryReader {
           references: [declaration.name, declaration.type, declaration.initializer].filter(
             (node) => node !== undefined,
           ),
-          initializer: declaration.initializer,
+          initializer: ast.isIdentifier(declaration.name) ? declaration.initializer : undefined,
         });
       }
     } else if (
