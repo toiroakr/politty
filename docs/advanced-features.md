@@ -236,6 +236,56 @@ const install = defineCommand({
 
 See `playground/26-command-alias` for a complete example.
 
+## Global Options
+
+Options every subcommand accepts go in the `globalArgs` schema you pass to `runMain`. They can appear before or after the subcommand name, show up under "Global Options" in help, and are merged into the `args` each command's `run` receives:
+
+```typescript
+import { arg, defineCommand, runMain } from "politty";
+import { z } from "zod";
+import { buildCommand } from "./commands/build.js";
+
+const cli = defineCommand({ name: "my-app", subCommands: { build: buildCommand } });
+
+runMain(cli, {
+  globalArgs: z.object({
+    verbose: arg(z.boolean().default(false), { alias: "v" }),
+  }),
+});
+```
+
+### Typing global options in commands
+
+`args.verbose` exists at run time, but TypeScript only knows about it if one of the following tells it:
+
+- **The content mapper (TypeScript 7.1+)** derives the type from the `runMain` call itself, so commands use plain `defineCommand` and nothing restates the schema. See below.
+- **`createDefineCommand<T>()`** returns a `defineCommand` bound to the global args type `T`, such as `createDefineCommand<z.infer<typeof globalArgsSchema>>()`. Commands must be defined with that function.
+- **Declaration merging** extends the `GlobalArgs` interface for every `defineCommand`: `declare module "politty" { interface GlobalArgs { verbose: boolean } }`.
+
+### Deriving `GlobalArgs` from `runMain` (content mapper)
+
+Each politty package (`politty`, `@politty/zod`, `@politty/valibot`, `@politty/zod-mini`) ships a TypeScript content mapper. It reads the `runMain(command, { globalArgs })` call in your CLI's entry module and augments `GlobalArgs` with the schema's output type, so every `defineCommand` sees the global options without `createDefineCommand` or a hand-written `declare module`. Enable it in `tsconfig.json` for the package you import from, and name the module that calls `runMain` with the `entry` option, relative to `tsconfig.json`:
+
+```jsonc
+{
+  "compilerOptions": {/* ... */},
+  "contentMappers": [
+    { "package": "politty", "extensions": [".politty"], "options": { "entry": "./src/cli.ts" } },
+  ],
+}
+```
+
+Type-check with `--runExternalCode`, using TypeScript 7.1 or later (`tsc`) or [tsrs](https://github.com/oxc-project/tsrs), its Rust port (`tsrs`); both run content mappers. Without the flag they report error TS18068. Editors start the mapper only after you trust the folder. TypeScript older than 7.1 ignores `contentMappers`, and then the global options are not part of `args`' type. 7.1 is not released yet: install the beta (`npm i -D typescript@beta`) or a nightly build (`npm i -D typescript@next`).
+
+The mapper reads the entry with the TypeScript 7.1 JavaScript API, from the `typescript` or `tsrs` package installed in the project, whichever it finds first. Name one with the `compiler` option (`"typescript"` or `"tsrs"`) to use it even when both are installed.
+
+The mapper does not run your code. It parses the entry and copies what the type needs:
+
+- It looks for `runMain` imported from any module and called with an options object (inline, or a `const` declared at the top level of the entry) whose `globalArgs` property it can see. A `globalArgs` followed by a spread (`...rest`) is ignored, since the spread may replace it. When the entry calls `runMain` more than once, the first such call counts.
+- It copies the `globalArgs` expression, along with the top-level imports and declarations it references, into the `global-args.politty` file inside the politty package, and lets TypeScript infer the type there. When the schema's output is a union (`z.union`, `z.discriminatedUnion`, ...), `GlobalArgs` gets one object type in its place, since an interface cannot extend a union: keys every member has, and none marks optional, stay required, the others become optional, and each value is the union of the members' values, so `args` does not narrow by a discriminant. Imports of your project's files, however you write them (relative, `#` imports, tsconfig `paths`), are resolved with your compiler options and rewritten to absolute paths. Package imports such as `zod` are copied as written when they resolve to the same file from the politty package, and are otherwise rewritten to the absolute path of the file your entry resolves them to. Static imports resolve the way Node loads the entry (ESM or CommonJS, by its extension or its package's `type`), so `import` and `require` conditions of `#` imports and package `exports` pick the same target as in the entry.
+
+Problems the mapper finds (a missing `entry` option, no `typescript` or `tsrs` to read the entry with, an entry it cannot read or whose `runMain` call has no `globalArgs` it can see), and type errors in the copied code, are reported against `global-args.politty`.
+
 ## AI Coding Agents
 
 Coding agents (Claude Code, Codex, Cursor, Gemini CLI, ...) run CLIs as often as humans do, but want different things from them. politty detects them from the environment so a CLI can tell agents things humans don't need, and switch defaults for them.
