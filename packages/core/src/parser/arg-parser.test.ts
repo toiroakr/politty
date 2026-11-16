@@ -67,6 +67,32 @@ describe("ArgParser", () => {
       expect(result.options.c).toBe("-5");
     });
 
+    it("should accept a lone dash as a long option's value", () => {
+      const result = parseArgv(["--out", "-"], {
+        booleanFlags: new Set(),
+      });
+
+      expect(result.options.out).toBe("-");
+      expect(result.positionals).toEqual([]);
+    });
+
+    it("should accept a lone dash as a short option's value", () => {
+      const result = parseArgv(["-o", "-"], {
+        booleanFlags: new Set(),
+      });
+
+      expect(result.options.o).toBe("-");
+    });
+
+    it("should not read a double dash as an option's value", () => {
+      const result = parseArgv(["--out", "--", "rest"], {
+        booleanFlags: new Set(),
+      });
+
+      expect(result.options.out).toBe(true);
+      expect(result.rest).toEqual(["rest"]);
+    });
+
     it("should still treat the next token as absent when the option is a boolean flag", () => {
       const result = parseArgv(["--verbose", "-5"], {
         booleanFlags: new Set(["verbose"]),
