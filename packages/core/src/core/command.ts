@@ -60,7 +60,7 @@ export type MergedArgs<TLocalArgs, TGlobalArgs> =
  * or `undefined` when none is detected.
  *
  * `$signal` is aborted when `runMain` receives SIGINT or SIGTERM before `run`
- * settles (see `gracefulShutdown`). `runCommand` never aborts it.
+ * settles, with or without `gracefulShutdown`. `runCommand` never aborts it.
  */
 type WithRunMeta<T> = T & {
   $source?: (name: string) => ArgSource;
