@@ -37,6 +37,8 @@ export interface GlobalArgsReference {
   imports: ImportBinding[];
   /** Copied top-level declarations, in source order */
   declarations: CodeFragment[];
+  /** Names the expression takes from a function or block around the call, which cannot be copied */
+  unresolved: string[];
 }
 
 const RUN_MAIN = "runMain";
@@ -296,6 +298,11 @@ function freeNames(ast: AstModule, roots: Ast.Node[]): Set<string> {
       visit(node.falseType, scopes);
       return;
     }
+    if (ast.isImportTypeNode(node)) {
+      visit(node.argument, scopes);
+      node.typeArguments?.forEach((typeArgument) => visit(typeArgument, scopes));
+      return;
+    }
     const own = scopeOf(ast, node);
     const inner = own.size > 0 ? [...scopes, own] : scopes;
     node.forEachChild((child) => visit(child, inner));
@@ -365,7 +372,13 @@ function globalArgsOfOptions(
   return found;
 }
 
-function findGlobalArgs(reader: EntryReader): Ast.Expression | undefined {
+interface FoundGlobalArgs {
+  expression: Ast.Expression;
+  /** The scopes of the functions and blocks around the call, outermost first */
+  scopes: Set<string>[];
+}
+
+function findGlobalArgs(reader: EntryReader): FoundGlobalArgs | undefined {
   const { ast } = reader;
   const names = new Set<string>();
   const namespaces = new Set<string>();
@@ -374,8 +387,8 @@ function findGlobalArgs(reader: EntryReader): Ast.Expression | undefined {
     if (binding.imported === RUN_MAIN) names.add(binding.local);
     if (binding.imported === "*") namespaces.add(binding.local);
   }
-  let found: Ast.Expression | undefined;
-  const visit = (node: Ast.Node): void => {
+  let found: FoundGlobalArgs | undefined;
+  const visit = (node: Ast.Node, scopes: Set<string>[]): void => {
     if (found) return;
     if (ast.isCallExpression(node)) {
       const callee = node.expression;
@@ -386,12 +399,17 @@ function findGlobalArgs(reader: EntryReader): Ast.Expression | undefined {
           namespaces.has(callee.expression.text) &&
           callee.name.text === RUN_MAIN);
       const options = node.arguments[1];
-      if (isRunMain && options) found = globalArgsOfOptions(reader, options);
-      if (found) return;
+      const expression = isRunMain && options && globalArgsOfOptions(reader, options);
+      if (expression) {
+        found = { expression, scopes };
+        return;
+      }
     }
-    node.forEachChild(visit);
+    const own = scopeOf(ast, node);
+    const inner = own.size > 0 ? [...scopes, own] : scopes;
+    node.forEachChild((child) => visit(child, inner));
   };
-  reader.sourceFile.forEachChild(visit);
+  reader.sourceFile.forEachChild((child) => visit(child, []));
   return found;
 }
 
@@ -408,13 +426,16 @@ export function readGlobalArgs(
   sourceFile: Ast.SourceFile,
 ): GlobalArgsReference | undefined {
   const reader = new EntryReader(ast, sourceFile);
-  const expression = findGlobalArgs(reader);
-  if (!expression) return undefined;
+  const found = findGlobalArgs(reader);
+  if (!found) return undefined;
+  const { expression, scopes } = found;
 
   const imports = new Set<string>();
   const declarations = new Set<TopLevelDeclaration>();
   const visited = new Set<string>();
-  const pending = [...freeNames(ast, [expression])];
+  const used = [...freeNames(ast, [expression])];
+  const unresolved = used.filter((name) => scopes.some((scope) => scope.has(name))).sort();
+  const pending = used.filter((name) => !unresolved.includes(name));
   while (pending.length > 0) {
     const name = pending.pop()!;
     if (visited.has(name)) continue;
@@ -433,5 +454,6 @@ export function readGlobalArgs(
     expression: reader.code(expression),
     imports: [...reader.imports.values()].filter((binding) => imports.has(binding.local)),
     declarations: [...declarations].sort((a, b) => a.start - b.start).map(({ code }) => code),
+    unresolved,
   };
 }

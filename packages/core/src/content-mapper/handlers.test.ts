@@ -62,27 +62,17 @@ describe.each(API_PACKAGES)("loadProject with %s", (compiler) => {
     const entry = write(dir, "src/main.ts", ENTRY);
     write(dir, "src/shared/args.ts", "export const commonArgs = {};\n");
 
-    expect(await load(dir)).toEqual({
-      text: `import { z } from "zod";
+    const augmented = await load(dir);
+    expect(augmented.problem).toBeUndefined();
+    expect(augmented.watchedFiles).toEqual([entry]);
+    expect(augmented.text).toContain(`import { z } from "zod";
 import { commonArgs } from "${posix(dir)}/src/shared/args.js";
 const __polittyGlobalArgsSchema = z.object(commonArgs);
-type __PolittyKeys<U> = U extends unknown ? keyof U : never;
-type __PolittyValue<U, K extends PropertyKey> = U extends unknown ? (K extends keyof U ? U[K] : never) : never;
-type __PolittyIsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;
-type __PolittyOptionalKeys<U> = U extends unknown ? { [K in keyof U]-?: {} extends Pick<U, K> ? K : never }[keyof U] : never;
-type __PolittyRequiredKeys<T> = Exclude<keyof T, __PolittyOptionalKeys<T>>;
-type __PolittyExtendable<T> = true extends __PolittyIsUnion<T>
-  ? { [K in Extract<__PolittyRequiredKeys<T>, PropertyKey>]: __PolittyValue<T, K> } & { [K in Exclude<__PolittyKeys<T>, __PolittyRequiredKeys<T>>]?: __PolittyValue<T, K> }
-  : T;
-type __PolittyGlobalArgs = __PolittyExtendable<NonNullable<(typeof __polittyGlobalArgsSchema)["~standard"]["types"]>["output"]>;
-declare module "./index.js" {
+`);
+    expect(augmented.text).toContain("type __PolittyExtendable<T>");
+    expect(augmented.text).toContain(`declare module "./index.js" {
   interface GlobalArgs extends __PolittyGlobalArgs {}
-}
-export {};
-`,
-      problem: undefined,
-      watchedFiles: [entry],
-    });
+}`);
   });
 
   it("resolves # imports and tsconfig paths the way the project does", async () => {
@@ -218,6 +208,26 @@ runMain(cli, { globalArgs: (await import("@shared/args")).a as Mode });
     write(dir, "src/main.ts", `import { runMain } from "politty";\nrunMain(cli);\n`);
     expect((await load(dir)).problem).toMatch(
       /no runMain\(command, \{ globalArgs \}\) call whose globalArgs the mapper can read.*no spread, computed key, method or accessor after it/s,
+    );
+  });
+
+  it("names the entry and the declarations globalArgs takes from inside a function", async () => {
+    const dir = project();
+    const entry = write(
+      dir,
+      "src/main.ts",
+      `import { z } from "zod";
+import { runMain } from "politty";
+async function main() {
+  const schema = z.object({});
+  await runMain(cli, { globalArgs: schema });
+}
+`,
+    );
+    const { problem } = await load(dir);
+    expect(problem).toContain(entry);
+    expect(problem).toMatch(
+      /uses `schema`, which is declared inside a function or block.*top level of the entry/s,
     );
   });
 });

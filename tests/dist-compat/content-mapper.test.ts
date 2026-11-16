@@ -218,6 +218,29 @@ void runMain(cli, {
       expect(typeCheck(compiler, dir)).toEqual({ status: 0, output: "" });
     });
 
+    it("reports a globalArgs that uses a declaration from inside a function", () => {
+      const dir = createProject("@politty/zod", { entry: "./src/main.ts" });
+      write(
+        dir,
+        "src/main.ts",
+        `import { z } from "zod";
+import { defineCommand, runMain } from "@politty/zod";
+
+const cli = defineCommand({ name: "app" });
+async function main() {
+  const schema = z.object({ verbose: z.boolean().default(false) });
+  await runMain(cli, { globalArgs: schema });
+}
+void main();
+`,
+      );
+      const result = typeCheck(compiler, dir);
+      expect(result.status).not.toBe(0);
+      expect(result.output).toContain("which is declared inside a function or block");
+      expect(result.output).toContain("src/main.ts");
+      expect(result.output).not.toContain("Cannot find name 'schema'");
+    });
+
     it("reports a missing entry option", () => {
       const result = typeCheck(compiler, createProject("@politty/zod", undefined));
       expect(result.status).not.toBe(0);

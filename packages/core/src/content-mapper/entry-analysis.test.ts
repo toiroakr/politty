@@ -235,6 +235,41 @@ if (import.meta.main) {
     ]);
   });
 
+  it("returns the names globalArgs takes from an enclosing function or block, which cannot be copied", async () => {
+    const reference = await read(`import { z } from "zod";
+import { runMain } from "politty";
+async function main(prefix: string) {
+  const schema = z.object({ verbose: z.boolean() });
+  await runMain(cli, { globalArgs: z.object({ ...schema.shape, prefix }) });
+}
+`);
+    expect(reference?.unresolved).toEqual(["prefix", "schema"]);
+    expect(reference?.declarations).toEqual([]);
+  });
+
+  it("reports no unresolved name for top-level declarations and global types", async () => {
+    const reference = await read(`import { z } from "zod";
+import { runMain } from "politty";
+const shape = { verbose: z.boolean() };
+async function main() {
+  await runMain(cli, { globalArgs: z.object(shape) as unknown as Record<string, string> });
+}
+`);
+    expect(reference?.unresolved).toEqual([]);
+  });
+
+  it("does not count the qualifier of an import type as a reference to an entry name", async () => {
+    const reference = await read(`import type { Mode } from "./types";
+import { runMain } from "politty";
+type Other = import("./other.js").Mode;
+runMain(cli, { globalArgs: schemaOf<Other>() });
+`);
+    expect(reference?.imports).toEqual([]);
+    expect(reference?.declarations.map(render)).toEqual([
+      "export type Other = import(<./other.js>).Mode;",
+    ]);
+  });
+
   it("ignores a globalArgs a later computed key or accessor may override", async () => {
     expect(
       await read(`import { runMain } from "politty";\nrunMain(cli, { globalArgs: a, [key]: b });`),

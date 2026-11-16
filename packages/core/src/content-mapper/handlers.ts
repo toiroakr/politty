@@ -173,6 +173,14 @@ function readEntry(
         watchedFiles: [entry],
       };
     }
+    if (reference.unresolved.length > 0) {
+      const names = reference.unresolved.map((name) => `\`${name}\``).join(", ");
+      return {
+        text: EMPTY_MODULE,
+        problem: `${entry} passes a globalArgs that uses ${names}, which is declared inside a function or block; the mapper copies only top-level declarations, so declare ${reference.unresolved.length === 1 ? "it" : "them"} at the top level of the entry (or in a module the entry imports)`,
+        watchedFiles: [entry],
+      };
+    }
     const text = buildGlobalArgsModule(
       reference,
       entry,
