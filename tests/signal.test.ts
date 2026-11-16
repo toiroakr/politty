@@ -114,6 +114,37 @@ runMain(command);
 ${SIGNAL_BRIDGE}
 `;
 
+const GRACEFUL_SLOW_CLEANUP_APP_CODE = `
+import { defineCommand, runMain } from "../packages/zod/src/index.js";
+
+const command = defineCommand({
+  name: "signal-test",
+  gracefulShutdown: true,
+  run: async (args) => {
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, 5000);
+      args.$signal?.addEventListener("abort", () => {
+        clearTimeout(timer);
+        resolve(undefined);
+      });
+      console.log("READY");
+    });
+  },
+  cleanup: async () => {
+    console.log("CLEANUP_STARTED");
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    console.log("CLEANUP_DONE");
+  },
+});
+
+runMain(command, {
+  cleanup: () => {
+    console.log("GLOBAL_CLEANUP");
+  },
+});
+${SIGNAL_BRIDGE}
+`;
+
 function runSignalApp(
   code: string,
   signalAfter: readonly string[] = ["READY"],
@@ -214,4 +245,21 @@ describe("Signal Handling", () => {
     expect(output).toMatch(/STOP_REQUESTED[\s\S]*COMMAND_CLEANUP:Process interrupted/);
     expect(code).toBe(1);
   }, 10000);
+
+  // The Windows bridge emits signals as events, which cannot reproduce the default termination
+  it.skipIf(process.platform === "win32")(
+    "should end the process at once on a signal after a gracefulShutdown run returns",
+    async () => {
+      const { output, code, signal } = await runSignalApp(GRACEFUL_SLOW_CLEANUP_APP_CODE, [
+        "READY",
+        "CLEANUP_STARTED",
+      ]);
+
+      expect(output).toContain("CLEANUP_STARTED");
+      expect(output).not.toContain("CLEANUP_DONE");
+      expect(output).not.toContain("GLOBAL_CLEANUP");
+      expect({ code, signal }).toEqual({ code: null, signal: "SIGINT" });
+    },
+    10000,
+  );
 });

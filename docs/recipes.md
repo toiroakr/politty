@@ -107,7 +107,7 @@ const serve = defineCommand({
 
 - Add the `abort` listener before the first `await` in `run`: a signal can arrive while `startServer()` is pending, and a listener added after the abort never fires.
 - If `run` throws after the stop request, for example an `AbortError` from an API that was given `args.$signal`, the command fails with that error as usual.
-- A second signal while `run` is still executing interrupts the command, so a shutdown that hangs can still be stopped. A signal before `run` starts (during `setup`) also interrupts it.
+- A second signal while `run` is still executing interrupts the command, so a shutdown that hangs can still be stopped. A signal before `run` starts (during `setup`) also interrupts it. Once `run` has returned, `runMain` no longer handles signals: another one terminates the process at once, without finishing `cleanup` or running the global `cleanup`, as it does during an interrupted command's `cleanup`.
 - `args.$signal` is also aborted when a command without `gracefulShutdown` is interrupted, so `run` can stop in-flight work while `cleanup` runs. `runCommand` never aborts it; to test a `gracefulShutdown` command, call its `run` with your own signal, e.g. `serve.run({ port: 3000, $signal: controller.signal })`.
 - For a [`lazy()`](./advanced-features.md#lazy-loading) subcommand, set `gracefulShutdown` on the loaded command.
 
