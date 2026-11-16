@@ -398,10 +398,12 @@ function findGlobalArgs(reader: EntryReader): FoundGlobalArgs | undefined {
           ast.isIdentifier(callee.expression) &&
           namespaces.has(callee.expression.text) &&
           callee.name.text === RUN_MAIN);
-      const options = node.arguments[1];
-      const expression = isRunMain && options && globalArgsOfOptions(reader, options);
+      const options = node.arguments[1] && unwrap(ast, node.arguments[1]);
+      const alias = options && ast.isIdentifier(options) ? options.text : undefined;
+      const shadowed = alias !== undefined && scopes.some((scope) => scope.has(alias));
+      const expression = isRunMain && options && !shadowed && globalArgsOfOptions(reader, options);
       if (expression) {
-        found = { expression, scopes };
+        found = { expression, scopes: alias === undefined ? scopes : [] };
         return;
       }
     }

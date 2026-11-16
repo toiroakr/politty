@@ -258,6 +258,29 @@ async function main() {
     expect(reference?.unresolved).toEqual([]);
   });
 
+  it("reads a top-level options alias in its own scope, not the scope of the call", async () => {
+    const reference = await read(`import { z } from "zod";
+import { runMain } from "politty";
+const options = { globalArgs: z.object({ verbose: z.boolean() }) };
+function main(z: string) {
+  runMain(cli, options);
+}
+`);
+    expect(reference?.unresolved).toEqual([]);
+    expect(reference?.imports.map((binding) => binding.local)).toEqual(["z"]);
+  });
+
+  it("does not follow an options name a function binds to the top-level declaration of the same name", async () => {
+    expect(
+      await read(`import { runMain } from "politty";
+const options = { globalArgs: wrong };
+function main(options: object) {
+  runMain(cli, options);
+}
+`),
+    ).toBeUndefined();
+  });
+
   it("does not count the qualifier of an import type as a reference to an entry name", async () => {
     const reference = await read(`import type { Mode } from "./types";
 import { runMain } from "politty";
