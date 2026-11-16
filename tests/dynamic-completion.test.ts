@@ -245,6 +245,21 @@ describe("Dynamic completion (in-process resolver)", () => {
       expect(ctx.parsedArgs.verbose).toBe(true);
     });
 
+    it("records a lone dash as an option's value, as the runtime does", () => {
+      for (const argv of [
+        ["foo", "--config", "-", "--field", ""],
+        ["foo", "-c", "-", "--field", ""],
+      ]) {
+        const ctx = parseCompletionContext(argv, cmd);
+        expect(ctx.parsedArgs.config).toBe("-");
+      }
+    });
+
+    it("does not record a double dash as an option's value", () => {
+      const ctx = parseCompletionContext(["foo", "--config", "--", "--field", ""], cmd);
+      expect(ctx.parsedArgs.config).toBeUndefined();
+    });
+
     it("does not consume the trailing currentWord as an option value", () => {
       // The last argv element is the word being completed. It must not be
       // recorded as `--config`'s value, otherwise resolvers see a value the

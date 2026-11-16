@@ -176,6 +176,18 @@ describe("scanForSubcommand", () => {
       }
     });
 
+    it("skips a lone dash as the value of a global option", () => {
+      for (const argv of [
+        ["-n", "-", "build"],
+        ["--name", "-", "build"],
+      ]) {
+        const result = scanForSubcommand(argv, subCommandNames, clusterExtracted);
+
+        expect(result.subCommandIndex).toBe(2);
+        expect(result.globalTokensBefore).toEqual(argv.slice(0, -1));
+      }
+    });
+
     it("stops when an option in them is not global", () => {
       const result = scanForSubcommand(["-vx", "build"], subCommandNames, clusterExtracted);
 

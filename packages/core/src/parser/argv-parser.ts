@@ -70,14 +70,15 @@ const NEGATIVE_NUMBER_PATTERN = /^-\.?\d/;
 
 /**
  * Check whether the token after a value-taking option is read as its value.
- * A dash-prefixed token is read so only when it looks like a negative number
- * (e.g. `--count -5`); other dash-prefixed tokens (`--`, other flags) are
+ * A dash-prefixed token is read so only when it is a lone `-` (the
+ * conventional stdin/stdout name, e.g. `--out -`) or looks like a negative
+ * number (e.g. `--count -5`); other dash-prefixed tokens (`--`, other flags) are
  * options of their own, so they aren't silently swallowed as a literal value.
  * Argv scanners and the completion context parser share this with
  * {@link parseArgv} so that they skip the same tokens.
  */
 export function isOptionValue(token: string): boolean {
-  return !token.startsWith("-") || NEGATIVE_NUMBER_PATTERN.test(token);
+  return !token.startsWith("-") || token === "-" || NEGATIVE_NUMBER_PATTERN.test(token);
 }
 
 /**
