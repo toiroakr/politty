@@ -94,10 +94,11 @@ An interrupted command exits with code 1, and `cleanup` receives an `Error("Proc
 ```typescript
 const serve = defineCommand({
   name: "serve",
+  args: z.object({ port: arg(z.coerce.number().default(3000)) }),
   gracefulShutdown: true,
   run: async (args) => {
     const stopped = new Promise((resolve) => args.$signal?.addEventListener("abort", resolve));
-    const server = await startServer();
+    const server = await startServer(args.port);
     await stopped;
     await server.close();
   },
@@ -107,7 +108,7 @@ const serve = defineCommand({
 - Add the `abort` listener before the first `await` in `run`: a signal can arrive while `startServer()` is pending, and a listener added after the abort never fires.
 - If `run` throws after the stop request, for example an `AbortError` from an API that was given `args.$signal`, the command fails with that error as usual.
 - A second signal while `run` is still executing interrupts the command, so a shutdown that hangs can still be stopped. A signal before `run` starts (during `setup`) also interrupts it.
-- `args.$signal` is also aborted when a command without `gracefulShutdown` is interrupted, so `run` can stop in-flight work while `cleanup` runs. `runCommand` never aborts it; to test a `gracefulShutdown` command, call its `run` with your own signal, e.g. `serve.run({ $signal: controller.signal })`.
+- `args.$signal` is also aborted when a command without `gracefulShutdown` is interrupted, so `run` can stop in-flight work while `cleanup` runs. `runCommand` never aborts it; to test a `gracefulShutdown` command, call its `run` with your own signal, e.g. `serve.run({ port: 3000, $signal: controller.signal })`.
 - For a [`lazy()`](./advanced-features.md#lazy-loading) subcommand, set `gracefulShutdown` on the loaded command.
 
 ### Debug Mode
