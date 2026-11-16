@@ -199,6 +199,13 @@ export interface RunnableCommand<
 > extends CommandBase<TArgsSchema, TArgs> {
   /** Main run function */
   run: (args: TArgs) => TResult;
+  /**
+   * Under `runMain`, end the command normally when SIGINT or SIGTERM arrives
+   * while `run` is executing: the first signal only aborts `args.$signal`, and
+   * the exit code, error and cleanup follow how `run` settles. A second signal
+   * interrupts as usual. A signal before `run` starts always interrupts.
+   */
+  gracefulShutdown?: boolean | undefined;
   /** Not settable alongside `run` (see `NonRunnableCommand.defaultSubCommand`) */
   defaultSubCommand?: undefined;
 }
@@ -214,6 +221,8 @@ export interface NonRunnableCommand<
 > extends CommandBase<TArgsSchema, TArgs> {
   /** No run function */
   run?: undefined;
+  /** Not settable without `run` (see `RunnableCommand.gracefulShutdown`) */
+  gracefulShutdown?: undefined;
   /**
    * Name of a `subCommands` entry to run when this command is invoked with
    * no subcommand specified, instead of showing help. Used for CLI plugin

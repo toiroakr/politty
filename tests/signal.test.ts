@@ -62,8 +62,92 @@ runMain(command, {
 ${SIGNAL_BRIDGE}
 `;
 
+const GRACEFUL_APP_CODE = `
+import { defineCommand, runMain } from "../packages/zod/src/index.js";
+
+const command = defineCommand({
+  name: "signal-test",
+  gracefulShutdown: true,
+  run: async (args) => {
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, 5000);
+      args.$signal?.addEventListener("abort", () => {
+        clearTimeout(timer);
+        console.log("STOPPING");
+        resolve(undefined);
+      });
+      console.log("READY");
+    });
+  },
+  cleanup: async ({ error }) => {
+    console.log("COMMAND_CLEANUP:" + (error ? error.message : "no-error"));
+  },
+});
+
+runMain(command, {
+  cleanup: ({ error }) => {
+    console.log("GLOBAL_CLEANUP:" + (error ? error.message : "no-error"));
+  },
+});
+${SIGNAL_BRIDGE}
+`;
+
+const GRACEFUL_STUCK_APP_CODE = `
+import { defineCommand, runMain } from "../packages/zod/src/index.js";
+
+const command = defineCommand({
+  name: "signal-test",
+  gracefulShutdown: true,
+  run: async (args) => {
+    args.$signal?.addEventListener("abort", () => {
+      console.log("STOP_REQUESTED");
+    });
+    console.log("READY");
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  },
+  cleanup: async ({ error }) => {
+    console.log("COMMAND_CLEANUP:" + (error ? error.message : "no-error"));
+  },
+});
+
+runMain(command);
+${SIGNAL_BRIDGE}
+`;
+
+const GRACEFUL_SLOW_CLEANUP_APP_CODE = `
+import { defineCommand, runMain } from "../packages/zod/src/index.js";
+
+const command = defineCommand({
+  name: "signal-test",
+  gracefulShutdown: true,
+  run: async (args) => {
+    await new Promise((resolve) => {
+      const timer = setTimeout(resolve, 5000);
+      args.$signal?.addEventListener("abort", () => {
+        clearTimeout(timer);
+        resolve(undefined);
+      });
+      console.log("READY");
+    });
+  },
+  cleanup: async () => {
+    console.log("CLEANUP_STARTED");
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    console.log("CLEANUP_DONE");
+  },
+});
+
+runMain(command, {
+  cleanup: () => {
+    console.log("GLOBAL_CLEANUP");
+  },
+});
+${SIGNAL_BRIDGE}
+`;
+
 function runSignalApp(
   code: string,
+  signalAfter: readonly string[] = ["READY"],
 ): Promise<{ output: string; errorOutput: string; code: number | null; signal: string | null }> {
   const tempPath = TEMP_APP_PATH;
   writeFileSync(tempPath, code);
@@ -81,17 +165,18 @@ function runSignalApp(
 
     let output = "";
     let errorOutput = "";
-    let ready = false;
+    let signalsSent = 0;
 
     child.stdout!.on("data", (data) => {
-      const str = data.toString();
-      output += str;
-      if (str.includes("READY") && !ready) {
-        ready = true;
+      output += data.toString();
+      while (signalsSent < signalAfter.length && output.includes(signalAfter[signalsSent]!)) {
+        signalsSent++;
         if (isWindows) {
-          child.send({ type: "signal", name: "SIGINT" });
+          if (child.connected) child.send({ type: "signal", name: "SIGINT" });
         } else {
-          process.kill(-child.pid!, "SIGINT");
+          try {
+            process.kill(-child.pid!, "SIGINT");
+          } catch {}
         }
       }
     });
@@ -140,4 +225,41 @@ describe("Signal Handling", () => {
       expect(signal).toBe("SIGINT");
     }
   }, 10000);
+
+  it("should exit 0 when a gracefulShutdown run returns after a stop signal", async () => {
+    const { output, errorOutput, code } = await runSignalApp(GRACEFUL_APP_CODE);
+
+    expect(output).toContain("STOPPING");
+    expect(output).toContain("COMMAND_CLEANUP:no-error");
+    expect(output).toContain("GLOBAL_CLEANUP:no-error");
+    expect(errorOutput).not.toContain("Process interrupted");
+    expect(code).toBe(0);
+  }, 10000);
+
+  it("should interrupt a gracefulShutdown run on the second stop signal", async () => {
+    const { output, code } = await runSignalApp(GRACEFUL_STUCK_APP_CODE, [
+      "READY",
+      "STOP_REQUESTED",
+    ]);
+
+    expect(output).toMatch(/STOP_REQUESTED[\s\S]*COMMAND_CLEANUP:Process interrupted/);
+    expect(code).toBe(1);
+  }, 10000);
+
+  // The Windows bridge emits signals as events, which cannot reproduce the default termination
+  it.skipIf(process.platform === "win32")(
+    "should end the process at once on a signal after a gracefulShutdown run returns",
+    async () => {
+      const { output, code, signal } = await runSignalApp(GRACEFUL_SLOW_CLEANUP_APP_CODE, [
+        "READY",
+        "CLEANUP_STARTED",
+      ]);
+
+      expect(output).toContain("CLEANUP_STARTED");
+      expect(output).not.toContain("CLEANUP_DONE");
+      expect(output).not.toContain("GLOBAL_CLEANUP");
+      expect({ code, signal }).toEqual({ code: null, signal: "SIGINT" });
+    },
+    10000,
+  );
 });

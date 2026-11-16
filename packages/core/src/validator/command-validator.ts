@@ -53,7 +53,8 @@ export interface CommandValidationError {
     | "field_type_conflict"
     | "subcommand_key_name_mismatch"
     | "default_subcommand_conflict"
-    | "default_subcommand_not_found";
+    | "default_subcommand_not_found"
+    | "graceful_shutdown_without_run";
   /** Error message */
   message: string;
   /** Related field name (if applicable) */
@@ -757,6 +758,26 @@ function checkDefaultSubCommand(
 }
 
 /**
+ * Check that `gracefulShutdown` is only set on a command with `run`. Like
+ * `checkDefaultSubCommand`, this catches JS callers and hand-built command
+ * objects that bypass `defineCommand`'s types.
+ */
+function checkGracefulShutdown(
+  command: AnyCommand,
+  commandPath: string[],
+): CommandValidationError[] {
+  const loose = command as { name: string; run?: unknown; gracefulShutdown?: boolean };
+  if (!loose.gracefulShutdown || loose.run) return [];
+  return [
+    {
+      commandPath,
+      type: "graceful_shutdown_without_run",
+      message: `Command "${loose.name}" sets "gracefulShutdown" without "run". Set it on the command that runs.`,
+    },
+  ];
+}
+
+/**
  * Validate that a command's `defaultSubCommand` (if set) is not combined
  * with `run` and points at a registered `subCommands` key.
  *
@@ -936,6 +957,7 @@ async function validateCommandInternal(
 
   // Validate defaultSubCommand configuration
   errors.push(...checkDefaultSubCommand(command, commandPath));
+  errors.push(...checkGracefulShutdown(command, commandPath));
 
   // Recursively validate subcommands
   if (command.subCommands) {

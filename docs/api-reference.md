@@ -20,6 +20,7 @@ function defineCommand<TArgsSchema, TResult>(config: {
   subCommands?: SubCommandsRecord;
   setup?: (context: SetupContext) => void | Promise<void>;
   run?: (args: unknown) => TResult;
+  gracefulShutdown?: boolean;
   cleanup?: (context: CleanupContext) => void | Promise<void>;
   notes?: string;
 }): Command<TArgsSchema, unknown, TResult>;
@@ -43,6 +44,7 @@ function defineCommand<TArgsSchema, TResult>(config: {
 | `subCommands?`      | `SubCommandsRecord`                                  | Subcommands (supports lazy loading)       |
 | `setup?`            | `(context: SetupContext) => void \| Promise<void>`   | Initialization hook                       |
 | `run?`              | `(args: unknown) => TResult`                         | Main process                              |
+| `gracefulShutdown?` | `boolean`                                            | End normally on the first stop signal     |
 | `cleanup?`          | `(context: CleanupContext) => void \| Promise<void>` | Cleanup hook                              |
 | `notes?`            | `string`                                             | Additional notes (shown in help and docs) |
 | `examples?`         | `Example[]`                                          | Usage examples (shown in help and docs)   |
@@ -884,6 +886,12 @@ interface Command<TArgsSchema, TArgs, TResult> {
   setup?: (context: SetupContext<TArgs>) => void | Promise<void>;
   /** A function when the command is runnable; `undefined` for subcommand-only parents */
   run?: (args: TArgs) => TResult;
+  /**
+   * End normally when `runMain` receives the first SIGINT/SIGTERM during `run`, which
+   * then only aborts `args.$signal` (an `AbortSignal`). A second signal interrupts, and
+   * a signal before `run` starts always interrupts; runnable commands only
+   */
+  gracefulShutdown?: boolean;
   cleanup?: (context: CleanupContext<TArgs>) => void | Promise<void>;
   /** Additional notes */
   notes?: string;

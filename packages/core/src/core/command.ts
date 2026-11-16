@@ -41,7 +41,7 @@ export type MergedArgs<TLocalArgs, TGlobalArgs> =
   IsEmpty<TGlobalArgs> extends true ? TLocalArgs : TLocalArgs & WithCaseVariants<TGlobalArgs>;
 
 /**
- * Add the `$source`, `$invocation` and `$agent` run-time metadata helpers.
+ * Add the `$source`, `$invocation`, `$agent` and `$signal` run-time metadata helpers.
  *
  * `$source` reports whether a given field's final value came from an
  * explicit CLI token, a `field.env` fallback, a `prompt` resolver answer, or
@@ -58,11 +58,15 @@ export type MergedArgs<TLocalArgs, TGlobalArgs> =
  *
  * `$agent` reports the AI coding agent running the CLI (see `detectAgent`),
  * or `undefined` when none is detected.
+ *
+ * `$signal` is aborted when `runMain` receives SIGINT or SIGTERM before `run`
+ * settles, with or without `gracefulShutdown`. `runCommand` never aborts it.
  */
 type WithRunMeta<T> = T & {
   $source?: (name: string) => ArgSource;
   $invocation?: RunInvocation;
   $agent?: AgentInfo | undefined;
+  $signal?: AbortSignal;
 };
 
 /**
@@ -176,6 +180,8 @@ export interface RunnableConfig<
   TSubCommands extends SubCommandsRecord | undefined = undefined,
 > extends DefineCommandConfig<TArgsSchema, TResult, TGlobalArgs, TSubCommands> {
   run: (args: ResolvedArgs<TArgsSchema, TGlobalArgs>) => TResult;
+  /** See `RunnableCommand.gracefulShutdown` */
+  gracefulShutdown?: boolean;
   /** Not settable alongside `run` (see `NonRunnableConfig.defaultSubCommand`) */
   defaultSubCommand?: undefined;
 }
@@ -189,6 +195,8 @@ export interface NonRunnableConfig<
   TSubCommands extends SubCommandsRecord | undefined = undefined,
 > extends Omit<DefineCommandConfig<TArgsSchema, void, TGlobalArgs, TSubCommands>, "run"> {
   run?: undefined;
+  /** Not settable without `run` (see `RunnableConfig.gracefulShutdown`) */
+  gracefulShutdown?: undefined;
   /**
    * Name of a `subCommands` entry to run when this command is invoked with
    * no subcommand specified, instead of showing help. Must be a key of
@@ -290,6 +298,7 @@ export function defineCommand<
     defaultSubCommand: config.defaultSubCommand,
     setup: config.setup,
     run: config.run,
+    gracefulShutdown: config.gracefulShutdown,
     cleanup: config.cleanup,
     notes: config.notes,
     examples: config.examples,
