@@ -247,6 +247,36 @@ async function main(prefix: string) {
     expect(reference?.declarations).toEqual([]);
   });
 
+  it("treats a switch's case clauses as one scope and var as function-scoped", async () => {
+    const fromCase = await read(`import { z } from "zod";
+import { runMain } from "politty";
+const schema = z.object({});
+function main(mode: string) {
+  switch (mode) {
+    case "a":
+      const schema = z.object({ a: z.string() });
+      break;
+    default:
+      runMain(cli, { globalArgs: schema });
+  }
+}
+`);
+    expect(fromCase?.unresolved).toEqual(["schema"]);
+
+    const fromVar = await read(`import { z } from "zod";
+import { runMain } from "politty";
+const schema = z.object({});
+function main(flag: boolean) {
+  if (flag) {
+    var schema = z.object({ a: z.string() });
+  }
+  runMain(cli, { globalArgs: schema });
+}
+`);
+    expect(fromVar?.unresolved).toEqual(["schema"]);
+    expect(fromVar?.declarations).toEqual([]);
+  });
+
   it("reports no unresolved name for top-level declarations and global types", async () => {
     const reference = await read(`import { z } from "zod";
 import { runMain } from "politty";
