@@ -397,7 +397,7 @@ function findGlobalArgs(reader: EntryReader): Ast.Expression | undefined {
 
 /**
  * Find the `globalArgs` value of the first `runMain(command, options)` call in
- * an entry module, with the top-level imports and declarations it references,
+ * an entry module whose `globalArgs` can be read, with the top-level imports and declarations it references,
  * followed transitively through those declarations.
  * @param ast - The `typescript/ast` (or `tsrs/ast`) module the source file was parsed with
  * @param sourceFile - The parsed entry module
