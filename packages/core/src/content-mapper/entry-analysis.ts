@@ -228,9 +228,30 @@ interface ScopeFields {
 }
 
 /** Names a node declares for the code inside it: its parameters, type parameters and block-level declarations. */
+/** `var` names a function body declares anywhere inside it, outside nested functions. */
+function varNames(ast: AstModule, body: Ast.Node, into: string[]): void {
+  const visit = (node: Ast.Node): void => {
+    if (
+      ast.isFunctionLikeDeclaration(node) ||
+      ast.isClassDeclaration(node) ||
+      ast.isClassExpression(node)
+    )
+      return;
+    if (ast.isVariableDeclarationList(node) && (node.flags & ast.NodeFlags.BlockScoped) === 0) {
+      for (const declaration of node.declarations) bindingNames(ast, declaration.name, into);
+    }
+    node.forEachChild(visit);
+  };
+  body.forEachChild(visit);
+}
+
 function scopeOf(ast: AstModule, node: Ast.Node): Set<string> {
   const names: string[] = [];
-  const { statements, parameters, typeParameters } = node as Ast.Node & ScopeFields;
+  const { statements: own, parameters, typeParameters } = node as Ast.Node & ScopeFields;
+  const statements = ast.isCaseBlock(node)
+    ? node.clauses.flatMap((clause) => [...clause.statements])
+    : own;
+  if (ast.isFunctionLikeDeclaration(node) && node.body) varNames(ast, node.body, names);
   for (const statement of statements ?? []) {
     if (ast.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
@@ -398,10 +419,12 @@ function findGlobalArgs(reader: EntryReader): FoundGlobalArgs | undefined {
           ast.isIdentifier(callee.expression) &&
           namespaces.has(callee.expression.text) &&
           callee.name.text === RUN_MAIN);
-      const options = node.arguments[1];
-      const expression = isRunMain && options && globalArgsOfOptions(reader, options);
+      const options = node.arguments[1] && unwrap(ast, node.arguments[1]);
+      const alias = options && ast.isIdentifier(options) ? options.text : undefined;
+      const shadowed = alias !== undefined && scopes.some((scope) => scope.has(alias));
+      const expression = isRunMain && options && !shadowed && globalArgsOfOptions(reader, options);
       if (expression) {
-        found = { expression, scopes };
+        found = { expression, scopes: alias === undefined ? scopes : [] };
         return;
       }
     }

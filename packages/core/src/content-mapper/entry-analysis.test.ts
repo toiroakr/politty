@@ -247,6 +247,36 @@ async function main(prefix: string) {
     expect(reference?.declarations).toEqual([]);
   });
 
+  it("treats a switch's case clauses as one scope and var as function-scoped", async () => {
+    const fromCase = await read(`import { z } from "zod";
+import { runMain } from "politty";
+const schema = z.object({});
+function main(mode: string) {
+  switch (mode) {
+    case "a":
+      const schema = z.object({ a: z.string() });
+      break;
+    default:
+      runMain(cli, { globalArgs: schema });
+  }
+}
+`);
+    expect(fromCase?.unresolved).toEqual(["schema"]);
+
+    const fromVar = await read(`import { z } from "zod";
+import { runMain } from "politty";
+const schema = z.object({});
+function main(flag: boolean) {
+  if (flag) {
+    var schema = z.object({ a: z.string() });
+  }
+  runMain(cli, { globalArgs: schema });
+}
+`);
+    expect(fromVar?.unresolved).toEqual(["schema"]);
+    expect(fromVar?.declarations).toEqual([]);
+  });
+
   it("reports no unresolved name for top-level declarations and global types", async () => {
     const reference = await read(`import { z } from "zod";
 import { runMain } from "politty";
@@ -256,6 +286,29 @@ async function main() {
 }
 `);
     expect(reference?.unresolved).toEqual([]);
+  });
+
+  it("reads a top-level options alias in its own scope, not the scope of the call", async () => {
+    const reference = await read(`import { z } from "zod";
+import { runMain } from "politty";
+const options = { globalArgs: z.object({ verbose: z.boolean() }) };
+function main(z: string) {
+  runMain(cli, options);
+}
+`);
+    expect(reference?.unresolved).toEqual([]);
+    expect(reference?.imports.map((binding) => binding.local)).toEqual(["z"]);
+  });
+
+  it("does not follow an options name a function binds to the top-level declaration of the same name", async () => {
+    expect(
+      await read(`import { runMain } from "politty";
+const options = { globalArgs: wrong };
+function main(options: object) {
+  runMain(cli, options);
+}
+`),
+    ).toBeUndefined();
   });
 
   it("does not count the qualifier of an import type as a reference to an entry name", async () => {
