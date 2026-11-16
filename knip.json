@@ -6,7 +6,8 @@
   "workspaces": {
     ".": {},
     "packages/core": {
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["tsrs"]
     },
     "packages/zod": {
       "project": ["src/**/*.ts"],

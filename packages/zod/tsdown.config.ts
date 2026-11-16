@@ -13,6 +13,7 @@ export default defineConfig({
     "src/prompt.ts",
     "src/prompt-clack.ts",
     "src/prompt-inquirer.ts",
+    "src/content-mapper.ts",
   ],
   format: ["es"],
   // TypeScript 7 (tsgo) has no JS compiler API, which breaks the plugin's

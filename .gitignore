@@ -24,3 +24,6 @@ packages/zod/LICENSE
 packages/valibot/LICENSE
 packages/politty/LICENSE
 packages/zod-mini/LICENSE
+
+# Test fixtures of the content mapper, left behind when a run is interrupted
+.content-mapper-fixture-*/

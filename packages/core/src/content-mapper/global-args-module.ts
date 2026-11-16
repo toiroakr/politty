@@ -1,0 +1,166 @@
+import * as path from "node:path";
+import type { CodeFragment, GlobalArgsReference, ImportBinding } from "./entry-analysis.js";
+
+/** The module the generated text augments: the package entry next to the `.politty` file. */
+const AUGMENTED_MODULE = "./index.js";
+const SCHEMA_NAME = "__polittyGlobalArgsSchema";
+const TYPE_NAME = "__PolittyGlobalArgs";
+/**
+ * Type helpers that turn the schema output into a type an interface can
+ * extend. A union output (a schema built with `z.union`, `z.discriminatedUnion`,
+ * ...) becomes one object type: keys every member has and none marks optional
+ * stay required, the rest become optional, and each value is the union of the members' values.
+ */
+const EXTENDABLE_HELPERS = [
+  "type __PolittyKeys<U> = U extends unknown ? keyof U : never;",
+  "type __PolittyValue<U, K extends PropertyKey> = U extends unknown ? (K extends keyof U ? U[K] : never) : never;",
+  "type __PolittyIsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;",
+  "type __PolittyOptionalKeys<U> = U extends unknown ? { [K in keyof U]-?: {} extends Pick<U, K> ? K : never }[keyof U] : never;",
+  "type __PolittyRequiredKeys<T> = Exclude<keyof T, __PolittyOptionalKeys<T>>;",
+  "type __PolittyExtendable<T> = true extends __PolittyIsUnion<T>",
+  "  ? { [K in Extract<__PolittyRequiredKeys<T>, PropertyKey>]: __PolittyValue<T, K> } & { [K in Exclude<__PolittyKeys<T>, __PolittyRequiredKeys<T>>]?: __PolittyValue<T, K> }",
+  "  : T;",
+];
+const IDENTIFIER = /^[\p{ID_Start}$_][\p{ID_Continue}$]*$/u;
+const DECLARATION_EXTENSION = /\.d(\.[^.]+)?\.([cm]?)ts$/;
+const SOURCE_EXTENSION = /\.([cm]?)tsx?$/;
+
+export const EMPTY_MODULE = "export {};\n";
+
+export interface ResolvedModule {
+  resolvedFileName: string;
+  isExternalLibraryImport?: boolean | undefined;
+}
+
+/** How Node resolves a specifier: as `require` (CommonJS) or as `import` (ESM). */
+export type ModuleFormat = "commonjs" | "esm";
+
+/** Resolves a specifier as TypeScript does for a file in `containingDirectory`. */
+export type ResolveModule = (
+  specifier: string,
+  containingDirectory: string,
+  format: ModuleFormat,
+) => ResolvedModule | undefined;
+
+/** The specifier that reaches a resolved project file from anywhere: its absolute path, as a `.js` path. */
+function absoluteSpecifier(resolvedFileName: string): string {
+  const posix = resolvedFileName.split(path.sep).join("/");
+  if (DECLARATION_EXTENSION.test(posix)) {
+    return posix.replace(DECLARATION_EXTENSION, (_, arbitrary: string | undefined, kind: string) =>
+      arbitrary ? arbitrary : `.${kind}js`,
+    );
+  }
+  return posix.replace(SOURCE_EXTENSION, (_, kind: string) => `.${kind}js`);
+}
+
+/**
+ * Rewrite a specifier written in the entry so it reaches the same module
+ * from the generated file, which is ESM. A project file gets its absolute
+ * path. A package keeps its name when it resolves to the same file from
+ * `generatedDir`, and otherwise gets the absolute path of that file too.
+ */
+function rewriteSpecifier(
+  specifier: string,
+  format: ModuleFormat,
+  entry: string,
+  generatedDir: string,
+  resolve: ResolveModule,
+): string {
+  const fromEntry = resolve(specifier, path.dirname(entry), format);
+  if (!fromEntry) return specifier;
+  if (!fromEntry.isExternalLibraryImport) return absoluteSpecifier(fromEntry.resolvedFileName);
+  const fromGenerated = resolve(specifier, generatedDir, "esm");
+  return fromGenerated?.resolvedFileName === fromEntry.resolvedFileName
+    ? specifier
+    : absoluteSpecifier(fromEntry.resolvedFileName);
+}
+
+function importStatements(
+  bindings: ImportBinding[],
+  rewrite: (specifier: string) => string,
+): string[] {
+  const groups = new Map<string, ImportBinding[]>();
+  for (const binding of bindings) {
+    const key = `${binding.specifier}\0${binding.attributes ?? ""}`;
+    groups.set(key, [...(groups.get(key) ?? []), binding]);
+  }
+  const statements: string[] = [];
+  for (const group of groups.values()) {
+    const { specifier, attributes } = group[0]!;
+    const from = `from ${JSON.stringify(rewrite(specifier))}${attributes ? ` ${attributes}` : ""};`;
+    const named: string[] = [];
+    const namedOnly = group.filter(
+      (binding) => binding.imported !== "*" && binding.imported !== "default",
+    );
+    const allTypes = namedOnly.length > 0 && namedOnly.every((binding) => binding.typeOnly);
+    for (const binding of group) {
+      const type = binding.typeOnly && !(allTypes && namedOnly.includes(binding)) ? "type " : "";
+      if (binding.imported === "*") {
+        statements.push(`import ${type}* as ${binding.local} ${from}`);
+      } else if (binding.imported === "default") {
+        statements.push(`import ${type}${binding.local} ${from}`);
+      } else {
+        const imported = IDENTIFIER.test(binding.imported)
+          ? binding.imported
+          : JSON.stringify(binding.imported);
+        named.push(
+          `${type}${imported === binding.local ? imported : `${imported} as ${binding.local}`}`,
+        );
+      }
+    }
+    if (named.length > 0) {
+      statements.push(`import ${allTypes ? "type " : ""}{ ${named.join(", ")} } ${from}`);
+    }
+  }
+  return statements;
+}
+
+/**
+ * Build the module that augments `GlobalArgs` with the output type of the
+ * `globalArgs` schema an entry passes to `runMain`. The schema expression is
+ * copied along with the imports and declarations it references, so
+ * TypeScript infers its type exactly as it does in the entry.
+ * @param reference - What the entry passes as `globalArgs`
+ * @param entry - Absolute path of the entry module
+ * @param entryFormat - How Node resolves the entry's static imports
+ * @param generatedDir - Directory of the `.politty` file the module is served for
+ * @param resolve - Resolves specifiers with the project's compiler options
+ * @returns The module's source text
+ */
+export function buildGlobalArgsModule(
+  reference: GlobalArgsReference,
+  entry: string,
+  entryFormat: ModuleFormat,
+  generatedDir: string,
+  resolve: ResolveModule,
+): string {
+  const rewritten = new Map<string, string>();
+  const rewrite = (specifier: string, format: ModuleFormat = entryFormat): string => {
+    const key = `${format}\0${specifier}`;
+    let result = rewritten.get(key);
+    if (result === undefined) {
+      result = rewriteSpecifier(specifier, format, entry, generatedDir, resolve);
+      rewritten.set(key, result);
+    }
+    return result;
+  };
+  const render = (code: CodeFragment): string =>
+    code
+      .map((piece) =>
+        typeof piece === "string"
+          ? piece
+          : JSON.stringify(rewrite(piece.specifier, piece.dynamic ? "esm" : entryFormat)),
+      )
+      .join("");
+  return [
+    ...importStatements(reference.imports, (specifier) => rewrite(specifier)),
+    ...reference.declarations.map(render),
+    `const ${SCHEMA_NAME} = ${render(reference.expression)};`,
+    ...EXTENDABLE_HELPERS,
+    `type ${TYPE_NAME} = __PolittyExtendable<NonNullable<(typeof ${SCHEMA_NAME})["~standard"]["types"]>["output"]>;`,
+    `declare module ${JSON.stringify(AUGMENTED_MODULE)} {`,
+    `  interface GlobalArgs extends ${TYPE_NAME} {}`,
+    "}",
+    EMPTY_MODULE,
+  ].join("\n");
+}

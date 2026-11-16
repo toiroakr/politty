@@ -23,7 +23,8 @@
   "files": [
     "bin/cli.mjs",
     "dist/**/*.js",
-    "dist/**/*.d.ts"
+    "dist/**/*.d.ts",
+    "dist/**/*.politty"
   ],
   "type": "module",
   "main": "./dist/index.js",
@@ -71,7 +72,7 @@
     }
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && node ../core/scripts/ship-global-args.mjs dist",
     "prepublishOnly": "pnpm run build && node -e \"const{copyFileSync}=require('node:fs');for(const f of ['README.md','LICENSE'])copyFileSync('../../'+f,f)\""
   },
   "dependencies": {
@@ -96,6 +97,16 @@
     },
     "@inquirer/prompts": {
       "optional": true
+    }
+  },
+  "typescript": {
+    "contentMapper": {
+      "compilerOptions": [],
+      "dynamicConfig": true,
+      "exec": [
+        "node",
+        "dist/content-mapper.js"
+      ]
     }
   },
   "engines": {

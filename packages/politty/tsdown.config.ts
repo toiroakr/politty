@@ -13,6 +13,7 @@ export default defineConfig({
     "src/prompt.ts",
     "src/prompt-clack.ts",
     "src/prompt-inquirer.ts",
+    "src/content-mapper.ts",
   ],
   format: ["es"],
   // `declare module "politty"` augmentation (the GlobalArgs pattern) merges
