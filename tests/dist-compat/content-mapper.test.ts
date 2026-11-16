@@ -237,7 +237,7 @@ void main();
       const result = typeCheck(compiler, dir);
       expect(result.status).not.toBe(0);
       expect(result.output).toContain("which is declared inside a function or block");
-      expect(result.output).toContain("src/main.ts");
+      expect(result.output).toContain(path.join("src", "main.ts"));
       expect(result.output).not.toContain("Cannot find name 'schema'");
     });
 
