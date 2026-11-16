@@ -60,11 +60,21 @@ export async function executeLifecycle<TResult = unknown>(
     error,
   };
 
+  const stopController = new AbortController();
+  if (typeof args === "object" && args !== null) {
+    Object.defineProperty(args, "$signal", {
+      value: stopController.signal,
+      enumerable: false,
+    });
+  }
+  let running = false;
+  let interruption: Promise<void> | undefined;
+
   // Signal handler
   let signalHandler: ((signal: NodeJS.Signals) => Promise<void>) | undefined;
 
   if (_options.handleSignals) {
-    signalHandler = async (_signal: NodeJS.Signals) => {
+    const interrupt = async () => {
       // Remove listeners to prevent multiple calls
       if (signalHandler) {
         process.off("SIGINT", signalHandler);
@@ -115,6 +125,16 @@ export async function executeLifecycle<TResult = unknown>(
       process.exit(1);
     };
 
+    signalHandler = (_signal: NodeJS.Signals) => {
+      const alreadyStopping = stopController.signal.aborted;
+      stopController.abort();
+      if (command.gracefulShutdown && running && !alreadyStopping) {
+        return Promise.resolve();
+      }
+      interruption = interrupt();
+      return interruption;
+    };
+
     process.on("SIGINT", signalHandler);
     process.on("SIGTERM", signalHandler);
   }
@@ -140,17 +160,19 @@ export async function executeLifecycle<TResult = unknown>(
       }
     }
     // Execute setup
-    if (command.setup) {
+    if (command.setup && !interruption) {
       await command.setup(setupContext);
     }
 
     // Execute run
-    if (command.run) {
+    if (command.run && !interruption) {
+      running = true;
       result = await command.run(args);
     }
   } catch (e) {
     error = e instanceof Error ? e : new Error(String(e));
   } finally {
+    running = false;
     // Remove signal listeners
     if (signalHandler) {
       process.off("SIGINT", signalHandler);
@@ -158,8 +180,11 @@ export async function executeLifecycle<TResult = unknown>(
     }
   }
 
-  // Always execute cleanup
-  if (command.cleanup) {
+  if (interruption) {
+    // The interrupt runs cleanup itself and then exits the process
+    await interruption;
+    error = cleanupContext.error;
+  } else if (command.cleanup) {
     // Update error in context
     cleanupContext.error = error;
 

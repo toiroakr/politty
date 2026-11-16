@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { defineCommand } from "../core/command.js";
+import type * as PackageRequirements from "../package-requirements.js";
+import { loadRequiredPackages } from "../package-requirements.js";
 import { executeLifecycle } from "./command-runner.js";
+
+vi.mock("../package-requirements.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof PackageRequirements>();
+  return { ...actual, loadRequiredPackages: vi.fn(actual.loadRequiredPackages) };
+});
 
 /**
  * Task 7.2: Command lifecycle tests
@@ -175,5 +182,122 @@ describe("executeLifecycle", () => {
     const result = await executeLifecycle(cmd, {});
 
     expect(result.exitCode).toBe(0);
+  });
+});
+
+describe("executeLifecycle stop signals", () => {
+  function deferred() {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  async function sendStopSignal(): Promise<void> {
+    const listener = process.listeners("SIGINT").at(-1);
+    await listener?.("SIGINT");
+  }
+
+  it("aborts args.$signal when a stop signal interrupts run", async () => {
+    using exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const started = deferred();
+    const finish = deferred();
+    let signal: AbortSignal | undefined;
+    const cmd = defineCommand({
+      name: "test",
+      run: async (args) => {
+        signal = args.$signal;
+        started.resolve();
+        await finish.promise;
+      },
+    });
+
+    const lifecycle = executeLifecycle(cmd, {}, { handleSignals: true });
+    await started.promise;
+    await sendStopSignal();
+    finish.resolve();
+    await lifecycle;
+
+    expect(signal?.aborted).toBe(true);
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it("does not run cleanup again when run settles after an interrupt", async () => {
+    using exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const started = deferred();
+    const finish = deferred();
+    const cleanup = vi.fn();
+    const cmd = defineCommand({
+      name: "test",
+      run: async () => {
+        started.resolve();
+        await finish.promise;
+      },
+      cleanup,
+    });
+
+    const lifecycle = executeLifecycle(cmd, {}, { handleSignals: true });
+    await started.promise;
+    await sendStopSignal();
+    finish.resolve();
+    const result = await lifecycle;
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(cleanup.mock.calls[0]?.[0].error?.message).toBe("Process interrupted");
+    expect(result.exitCode).toBe(1);
+    expect(exit).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start setup after an interrupt during package loading", async () => {
+    using exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const loading = deferred();
+    const finishLoading = deferred();
+    vi.mocked(loadRequiredPackages).mockImplementationOnce(async () => {
+      loading.resolve();
+      await finishLoading.promise;
+    });
+    const setup = vi.fn();
+    const cmd = defineCommand({
+      name: "test",
+      requiredPackages: [{ name: "some-package" }],
+      setup,
+      run: () => {},
+    });
+
+    const lifecycle = executeLifecycle(cmd, {}, { handleSignals: true });
+    await loading.promise;
+    await sendStopSignal();
+    finishLoading.resolve();
+    await lifecycle;
+
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(setup).not.toHaveBeenCalled();
+  });
+
+  it("interrupts a gracefulShutdown command stopped before run starts", async () => {
+    using exit = vi.spyOn(process, "exit").mockImplementation(() => undefined as never);
+    const setupStarted = deferred();
+    const finishSetup = deferred();
+    const run = vi.fn();
+    const cmd = defineCommand({
+      name: "test",
+      gracefulShutdown: true,
+      setup: async () => {
+        setupStarted.resolve();
+        await finishSetup.promise;
+      },
+      run,
+    });
+
+    const lifecycle = executeLifecycle(cmd, {}, { handleSignals: true });
+    await setupStarted.promise;
+    await sendStopSignal();
+    finishSetup.resolve();
+    const result = await lifecycle;
+
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(run).not.toHaveBeenCalled();
+    expect(result.exitCode).toBe(1);
   });
 });

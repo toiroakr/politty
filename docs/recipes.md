@@ -89,6 +89,27 @@ When using `runMain`, exit signals (SIGINT, SIGTERM) are automatically handled a
 
 > **Note:** `runCommand` is intended for testing purposes and does not handle signals. Use `runMain` in production environments.
 
+An interrupted command exits with code 1, and `cleanup` receives an `Error("Process interrupted")`. A command that runs until it is stopped, such as a dev server or a file watcher, can set `gracefulShutdown: true` to treat a stop signal as the normal way to end. The first SIGINT or SIGTERM received while `run` is executing then only aborts `args.$signal`: `run` shuts down and returns, and the command finishes like any other run, with exit code 0 and no error passed to `cleanup`.
+
+```typescript
+const serve = defineCommand({
+  name: "serve",
+  gracefulShutdown: true,
+  run: async (args) => {
+    const stopped = new Promise((resolve) => args.$signal?.addEventListener("abort", resolve));
+    const server = await startServer();
+    await stopped;
+    await server.close();
+  },
+});
+```
+
+- Add the `abort` listener before the first `await` in `run`: a signal can arrive while `startServer()` is pending, and a listener added after the abort never fires.
+- If `run` throws after the stop request, for example an `AbortError` from an API that was given `args.$signal`, the command fails with that error as usual.
+- A second signal while `run` is still executing interrupts the command, so a shutdown that hangs can still be stopped. A signal before `run` starts (during `setup`) also interrupts it.
+- `args.$signal` is also aborted when a command without `gracefulShutdown` is interrupted, so `run` can stop in-flight work while `cleanup` runs. `runCommand` never aborts it; to test a `gracefulShutdown` command, call its `run` with your own signal, e.g. `serve.run({ $signal: controller.signal })`.
+- For a [`lazy()`](./advanced-features.md#lazy-loading) subcommand, set `gracefulShutdown` on the loaded command.
+
 ### Debug Mode
 
 Enable debug mode to display complete stack traces instead of just error messages when errors occur.
