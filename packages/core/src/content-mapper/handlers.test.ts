@@ -207,7 +207,7 @@ runMain(cli, { globalArgs: (await import("@shared/args")).a as Mode });
     expect((await load(dir, "missing.ts")).problem).toMatch(/cannot be read/);
     write(dir, "src/main.ts", `import { runMain } from "politty";\nrunMain(cli);\n`);
     expect((await load(dir)).problem).toMatch(
-      /no runMain\(command, \{ globalArgs \}\) call whose globalArgs the mapper can read.*no spread, computed key, method or accessor after it/s,
+      /no runMain\(command, \{ globalArgs \}\) call whose globalArgs the mapper can read.*no spread, computed key, or method or accessor named globalArgs after it/s,
     );
   });
 

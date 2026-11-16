@@ -169,7 +169,7 @@ function readEntry(
     if (!reference) {
       return {
         text: EMPTY_MODULE,
-        problem: `${entry} has no runMain(command, { globalArgs }) call whose globalArgs the mapper can read; write globalArgs in the options object (or in a top-level const passed as options), with no spread, computed key, method or accessor after it`,
+        problem: `${entry} has no runMain(command, { globalArgs }) call whose globalArgs the mapper can read; write globalArgs in the options object (or in a top-level const passed as options), with no spread, computed key, or method or accessor named globalArgs after it`,
         watchedFiles: [entry],
       };
     }

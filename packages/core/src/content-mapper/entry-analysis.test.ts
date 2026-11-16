@@ -270,6 +270,16 @@ runMain(cli, { globalArgs: schemaOf<Other>() });
     ]);
   });
 
+  it("reads a globalArgs followed by a method or accessor that has another name", async () => {
+    expect(
+      (
+        await referenced(
+          `import { runMain } from "politty";\nrunMain(cli, { globalArgs: a, verbose() {}, get quiet() { return 1; } });`,
+        )
+      ).expression,
+    ).toBe("a");
+  });
+
   it("ignores a globalArgs a later computed key or accessor may override", async () => {
     expect(
       await read(`import { runMain } from "politty";\nrunMain(cli, { globalArgs: a, [key]: b });`),
