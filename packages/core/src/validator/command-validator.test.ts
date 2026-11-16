@@ -501,6 +501,25 @@ describe("validateCommand", () => {
   });
 });
 
+describe("gracefulShutdown validation", () => {
+  it("should detect gracefulShutdown on a command without run", async () => {
+    const sub = defineCommand({ name: "sub", run: () => {} });
+    const parent = defineCommand({
+      name: "group",
+      subCommands: { sub },
+      // @ts-expect-error - gracefulShutdown requires run
+      gracefulShutdown: true,
+    });
+
+    const result = await validateCommand(parent);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors[0]?.type).toBe("graceful_shutdown_without_run");
+      expect(result.errors[0]?.message).toContain('sets "gracefulShutdown" without "run"');
+    }
+  });
+});
+
 describe("defaultSubCommand validation", () => {
   it("should detect run and defaultSubCommand defined together", async () => {
     // `run` and `defaultSubCommand` are mutually exclusive at the type level
