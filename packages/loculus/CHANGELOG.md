@@ -1,5 +1,11 @@
 # @politty/loculus
 
+## 0.4.4
+
+### Patch Changes
+
+- 9619467: Fix a lone `-` after a value-taking option (`--out -`, `-o -`) not being read as its value. The option became `true` and failed type validation, and a global option such as `--out - sub` never reached the subcommand. `--out=-` and `--out -5` already worked; `--` is still not read as a value.
+
 ## 0.4.3
 
 ### Patch Changes
