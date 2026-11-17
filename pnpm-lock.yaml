@@ -172,7 +172,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  editorconfig>minimatch: ^11.0.5
+  editorconfig>minimatch: ^11.0.6
 
 importers:
 
