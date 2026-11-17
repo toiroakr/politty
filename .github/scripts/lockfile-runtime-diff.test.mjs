@@ -176,3 +176,38 @@ importers:
   const after = before.replace("specifier: ^1.0.0", "specifier: ^1.1.0");
   assert.match(runDiff(before, after), /Runtime dependency changes detected in: example/);
 });
+
+test("resolves catalogs for dependency objects without explicit versions", () => {
+  const before = v13({ example: { specifier: "catalog:", with: { peer: "3.0.0" } } }).replace(
+    '"projects": {',
+    '"settings": { "catalogs": { "default": { "example": { "specifier": "^1.0.0", "version": "1.2.0" } } } }, "projects": {',
+  );
+  const after = before.replace('"version": "1.2.0"', '"version": "1.3.0"');
+  assert.match(runDiff(before, after), /Runtime dependency changes detected in: example/);
+});
+
+test("keeps named catalog metadata after a YAML comment", () => {
+  const before = `lockfileVersion: '9.0'
+catalogs:
+  default:
+    other:
+      specifier: ^1.0.0
+      version: 1.2.0
+# Named catalog
+  named:
+    example:
+      specifier: ^1.0.0
+      version: 1.2.0
+importers:
+  lib:
+    dependencies:
+      example:
+        specifier: catalog:named
+        version: 1.2.0
+`;
+  const after = before.replace(
+    "named:\n    example:\n      specifier: ^1.0.0",
+    "named:\n    example:\n      specifier: ^1.1.0",
+  );
+  assert.match(runDiff(before, after), /Runtime dependency changes detected in: example/);
+});
