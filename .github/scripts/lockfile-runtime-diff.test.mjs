@@ -97,3 +97,23 @@ test("detects runtime updates when lockfiles have CRLF line endings", () => {
     /Runtime dependency changes detected in: example/,
   );
 });
+
+test("detects resolved catalog updates across lockfile formats", () => {
+  const before = `lockfileVersion: '9.0'
+importers:
+  lib:
+    dependencies:
+      example:
+        specifier: catalog:
+        version: 1.0.0
+`;
+  const after = v13({ example: "catalog:" }).replace(
+    '"projects": {',
+    '"settings": { "catalogs": { "default": { "example": "2.0.0" } } }, "projects": {',
+  );
+  assert.match(
+    runDiff(before, after.replace('"example": "2.0.0"', '"example": "1.0.0"')),
+    /No runtime dependency changes/,
+  );
+  assert.match(runDiff(before, after), /Runtime dependency changes detected in: example/);
+});

@@ -28,15 +28,24 @@ function mainDocumentLines(text) {
   return second === -1 ? lines : lines.slice(second + 1);
 }
 
-function normalizeDependencies(dependencies) {
+function normalizeDependencies(dependencies, catalogs = {}) {
   const normalized = {};
   for (const name of Object.keys(dependencies).sort()) {
     const dependency = dependencies[name];
     const specifier = typeof dependency === "string" ? dependency : dependency.specifier;
-    const version = typeof dependency === "string" ? undefined : dependency.version?.split("(")[0];
+    const catalog = specifier?.startsWith("catalog:")
+      ? catalogs[specifier.slice(8) || "default"]?.[name]
+      : undefined;
+    const resolved =
+      typeof dependency === "string"
+        ? typeof catalog === "string"
+          ? catalog
+          : (catalog?.version ?? catalog?.specifier)
+        : dependency.version;
+    const version = resolved?.split("(")[0];
     normalized[name] = {
       specifier,
-      ...(version && version !== specifier && !/^(workspace:|catalog:)/.test(specifier)
+      ...(version && version !== specifier && !specifier.startsWith("workspace:")
         ? { version }
         : {}),
     };
@@ -48,7 +57,7 @@ function normalizeYamlDependencies(lines) {
   const dependencies = {};
   let name;
   for (const line of lines) {
-    const entry = line.match(/^ {6}(.+):\s*$/);
+    const entry = line.match(/^ {6}(\S.*):\s*$/);
     if (entry) {
       name = entry[1].replace(/^["']|["']$/g, "");
       dependencies[name] = {};
@@ -70,7 +79,7 @@ function parseImporters(text, normalize = false) {
       Object.entries(lockfile.projects ?? {}).map(([path, project]) => [
         path,
         normalize
-          ? normalizeDependencies(project.dependencies ?? {})
+          ? normalizeDependencies(project.dependencies ?? {}, lockfile.settings?.catalogs)
           : Object.keys(project.dependencies ?? {}).length
             ? JSON.stringify(project.dependencies)
             : undefined,
