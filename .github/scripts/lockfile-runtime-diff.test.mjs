@@ -56,7 +56,13 @@ test("detects runtime dependency updates in v13 project documents", () => {
 });
 
 test("does not report unchanged dependencies when migrating from v9 to v13", () => {
-  const before = `lockfileVersion: '9.0'
+  const before = `---
+lockfileVersion: '9.0'
+importers:
+  .:
+    packageManagerDependencies: {}
+---
+lockfileVersion: '9.0'
 importers:
   lib:
     dependencies:
