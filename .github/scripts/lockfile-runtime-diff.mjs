@@ -56,7 +56,35 @@ function normalizeDependencies(dependencies, catalogs = {}, includeCatalogSpecif
   return Object.keys(normalized).length ? JSON.stringify(normalized) : undefined;
 }
 
-function normalizeYamlDependencies(lines) {
+function parseYamlCatalogs(lines) {
+  const catalogs = {};
+  let active = false;
+  let catalog;
+  let dependency;
+  for (const line of lines) {
+    if (!active) {
+      if (/^catalogs:\s*$/.test(line)) active = true;
+      continue;
+    }
+    if (!line.trim()) continue;
+    if (/^\S/.test(line)) break;
+    const catalogEntry = line.match(/^ {2}(\S.*):\s*$/);
+    const dependencyEntry = line.match(/^ {4}(\S.*):\s*$/);
+    const field = line.match(/^ {6}(specifier|version):\s*(.+)$/);
+    if (catalogEntry) {
+      catalog = catalogEntry[1].replace(/^["']|["']$/g, "");
+      catalogs[catalog] = {};
+    } else if (dependencyEntry && catalog) {
+      dependency = dependencyEntry[1].replace(/^["']|["']$/g, "");
+      catalogs[catalog][dependency] = {};
+    } else if (field && catalog && dependency) {
+      catalogs[catalog][dependency][field[1]] = field[2].replace(/^["']|["']$/g, "");
+    }
+  }
+  return catalogs;
+}
+
+function normalizeYamlDependencies(lines, catalogs) {
   const dependencies = {};
   let name;
   for (const line of lines) {
@@ -69,7 +97,7 @@ function normalizeYamlDependencies(lines) {
       if (name && field) dependencies[name][field[1]] = field[2].replace(/^["']|["']$/g, "");
     }
   }
-  return normalizeDependencies(dependencies);
+  return normalizeDependencies(dependencies, catalogs, true);
 }
 
 function parseImporters(text, normalize = false) {
@@ -82,7 +110,7 @@ function parseImporters(text, normalize = false) {
       Object.entries(lockfile.projects ?? {}).map(([path, project]) => [
         path,
         normalize
-          ? normalizeDependencies(project.dependencies ?? {}, lockfile.settings?.catalogs)
+          ? normalizeDependencies(project.dependencies ?? {}, lockfile.settings?.catalogs, true)
           : Object.keys(project.dependencies ?? {}).length
             ? JSON.stringify({
                 dependencies: project.dependencies,
@@ -97,6 +125,7 @@ function parseImporters(text, normalize = false) {
     );
   }
   const lines = mainDocumentLines(text);
+  const catalogs = parseYamlCatalogs(lines);
   const importersIdx = lines.findIndex((l) => /^importers:\s*$/.test(l));
   if (importersIdx === -1) return {};
 
@@ -108,7 +137,7 @@ function parseImporters(text, normalize = false) {
   const flush = () => {
     if (currentImporter && currentSection === "dependencies") {
       importers[currentImporter] = normalize
-        ? normalizeYamlDependencies(sectionLines)
+        ? normalizeYamlDependencies(sectionLines, catalogs)
         : sectionLines.join("\n");
     }
     sectionLines = [];

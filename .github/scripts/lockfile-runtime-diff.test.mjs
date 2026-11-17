@@ -135,3 +135,26 @@ test("detects catalog range updates when the resolved version stays unchanged", 
   const after = before.replace('"specifier": "^1.0.0"', '"specifier": "^1.1.0"');
   assert.match(runDiff(before, after), /Runtime dependency changes detected in: example/);
 });
+
+test("detects catalog range changes during a v9 to v13 migration", () => {
+  const before = `lockfileVersion: '9.0'
+catalogs:
+  default:
+    example:
+      specifier: ^1.0.0
+      version: 1.2.0
+importers:
+  lib:
+    dependencies:
+      example:
+        specifier: catalog:
+        version: 1.2.0
+`;
+  const same = v13({ example: "catalog:" }).replace(
+    '"projects": {',
+    '"settings": { "catalogs": { "default": { "example": { "specifier": "^1.0.0", "version": "1.2.0" } } } }, "projects": {',
+  );
+  assert.match(runDiff(before, same), /No runtime dependency changes/);
+  const changed = same.replace('"specifier": "^1.0.0"', '"specifier": "^1.1.0"');
+  assert.match(runDiff(before, changed), /Runtime dependency changes detected in: example/);
+});
