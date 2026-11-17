@@ -36,17 +36,19 @@ function normalizeDependencies(dependencies, catalogs = {}, includeCatalogSpecif
     const catalog = specifier?.startsWith("catalog:")
       ? catalogs[specifier.slice(8) || "default"]?.[name]
       : undefined;
+    const catalogSpecifier = typeof catalog === "string" ? catalog : catalog?.specifier;
     const catalogVersion =
       typeof catalog === "string" ? catalog : (catalog?.version ?? catalog?.specifier);
     const resolved =
       typeof dependency === "string" ? catalogVersion : (dependency.version ?? catalogVersion);
-    const version = resolved?.split("(")[0];
+    const version = resolved?.replace(/^npm:/, "").split("(")[0];
     normalized[name] = {
       specifier,
-      ...(includeCatalogSpecifiers && catalog?.specifier
-        ? { catalogSpecifier: catalog.specifier }
-        : {}),
-      ...(version && version !== specifier && !specifier.startsWith("workspace:")
+      ...(includeCatalogSpecifiers && catalogSpecifier ? { catalogSpecifier } : {}),
+      ...(version &&
+      version !== specifier.replace(/^npm:/, "") &&
+      !specifier.startsWith("workspace:") &&
+      !catalogSpecifier?.startsWith("workspace:")
         ? { version }
         : {}),
     };

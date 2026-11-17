@@ -100,6 +100,11 @@ test("detects runtime updates when lockfiles have CRLF line endings", () => {
 
 test("detects resolved catalog updates across lockfile formats", () => {
   const before = `lockfileVersion: '9.0'
+catalogs:
+  default:
+    example:
+      specifier: 1.0.0
+      version: 1.0.0
 importers:
   lib:
     dependencies:
@@ -211,3 +216,30 @@ importers:
   );
   assert.match(runDiff(before, after), /Runtime dependency changes detected in: example/);
 });
+
+for (const [specifier, version] of [
+  ["1.2.0", "1.2.0"],
+  ["npm:target@1.2.0", "target@1.2.0"],
+  ["workspace:*", "link:../other"],
+]) {
+  test(`preserves unchanged compact catalog entries during migration: ${specifier}`, () => {
+    const before = `lockfileVersion: '9.0'
+catalogs:
+  default:
+    other:
+      specifier: ${specifier}
+      version: ${version}
+importers:
+  lib:
+    dependencies:
+      other:
+        specifier: catalog:
+        version: ${version}
+`;
+    const after = v13({ other: "catalog:" }).replace(
+      '"projects": {',
+      `"settings": { "catalogs": { "default": { "other": ${JSON.stringify(specifier)} } } }, "projects": {`,
+    );
+    assert.match(runDiff(before, after), /No runtime dependency changes/);
+  });
+}
