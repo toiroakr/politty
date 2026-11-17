@@ -36,7 +36,7 @@
     "@types/node": "26.6.6",
     "detect-agent": "1.2.0",
     "tsrs": "0.22.0-ts7.1.0-beta",
-    "typescript": "7.1.0-dev.20261109.1",
+    "typescript": "7.1.0-dev.20261110.1",
     "zod": "4.6.7"
   },
   "engines": {
