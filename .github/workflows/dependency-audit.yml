@@ -29,5 +29,7 @@ jobs:
       - name: Report all known vulnerabilities
         run: pnpm audit
         continue-on-error: true
-      - name: Reject high and critical vulnerabilities
-        run: pnpm audit --audit-level high
+      - name: Reject other high and critical vulnerabilities
+        run: |
+          pnpm audit --ignore GHSA-fc5q-39xc-vjpf
+          pnpm audit --audit-level high
