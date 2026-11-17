@@ -17,4 +17,4 @@ lockfile:
   format: v13
 
 overrides:
-  "editorconfig>minimatch": "^11.0.5"
+  "editorconfig>minimatch": "^11.0.6"
