@@ -7,7 +7,7 @@
 // floor). `pnpm install` after this pin re-resolves the lockfile onto the
 // override, including transitive occurrences (e.g. via `knip`).
 
-import { appendFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 
 const [dep, version] = process.argv.slice(2);
 if (!dep || !version) {
@@ -15,8 +15,20 @@ if (!dep || !version) {
   process.exit(1);
 }
 
-appendFileSync(
-  "pnpm-workspace.yaml",
-  `\noverrides:\n  ${JSON.stringify(dep)}: ${JSON.stringify(version)}\n`,
-);
+const overrides =
+  JSON.parse(
+    execFileSync("pnpm", ["config", "get", "overrides", "--json", "--location", "project"], {
+      encoding: "utf8",
+    }),
+  ) ?? {};
+overrides[dep] = version;
+execFileSync("pnpm", [
+  "config",
+  "set",
+  "--location",
+  "project",
+  "--json",
+  "overrides",
+  JSON.stringify(overrides),
+]);
 console.log(`pinned ${dep}@${version} via pnpm-workspace.yaml overrides`);
