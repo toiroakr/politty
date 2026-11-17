@@ -243,3 +243,24 @@ importers:
     assert.match(runDiff(before, after), /No runtime dependency changes/);
   });
 }
+
+test("treats default catalog aliases as equivalent during migration", () => {
+  const before = `lockfileVersion: '9.0'
+catalogs:
+  default:
+    other:
+      specifier: 1.2.0
+      version: 1.2.0
+importers:
+  lib:
+    dependencies:
+      other:
+        specifier: catalog:default
+        version: 1.2.0
+`;
+  const after = v13({ other: "catalog:" }).replace(
+    '"projects": {',
+    '"settings": { "catalogs": { "default": { "other": "1.2.0" } } }, "projects": {',
+  );
+  assert.match(runDiff(before, after), /No runtime dependency changes/);
+});

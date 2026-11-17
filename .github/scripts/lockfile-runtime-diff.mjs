@@ -43,7 +43,7 @@ function normalizeDependencies(dependencies, catalogs = {}, includeCatalogSpecif
       typeof dependency === "string" ? catalogVersion : (dependency.version ?? catalogVersion);
     const version = resolved?.replace(/^npm:/, "").split("(")[0];
     normalized[name] = {
-      specifier,
+      specifier: specifier === "catalog:default" ? "catalog:" : specifier,
       ...(includeCatalogSpecifiers && catalogSpecifier ? { catalogSpecifier } : {}),
       ...(version &&
       version !== specifier.replace(/^npm:/, "") &&
