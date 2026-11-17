@@ -157,6 +157,9 @@ jobs:
           runtime: node@26.13.1
           install: false
           cache: true
+      - name: Install dependencies for peer-floor configuration
+        run: pnpm install --frozen-lockfile
+        shell: bash
       - name: Pin ${{ matrix.dep }} to its declared peer floor
         run: node .github/scripts/pin-peer-floor.mjs "${{ matrix.dep }}" "${{ matrix.version }}"
         shell: bash
