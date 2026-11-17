@@ -34,7 +34,7 @@ jobs:
       - name: Install pnpm and Node.js
         uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         with:
-          runtime: node@26.13.0
+          runtime: node@26.13.1
           install: false
           cache: true
       - name: Install dependencies
@@ -86,7 +86,7 @@ jobs:
       - name: Install pnpm and Node.js
         uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         with:
-          runtime: node@26.13.0
+          runtime: node@26.13.1
           install: false
           cache: true
       - name: Install dependencies
@@ -114,7 +114,7 @@ jobs:
       - name: Install pnpm and Node.js
         uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         with:
-          runtime: node@26.13.0
+          runtime: node@26.13.1
           install: false
           cache: true
       - name: Install dependencies
@@ -156,7 +156,7 @@ jobs:
       - name: Install pnpm and Node.js
         uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         with:
-          runtime: node@26.13.0
+          runtime: node@26.13.1
           install: false
           cache: true
       - name: Pin ${{ matrix.dep }} to its declared peer floor
@@ -218,7 +218,7 @@ jobs:
       - name: Install pnpm and Node.js
         uses: pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e # v3.1.2
         with:
-          runtime: node@26.13.0
+          runtime: node@26.13.1
           install: false
           cache: true
       - name: Install dependencies
