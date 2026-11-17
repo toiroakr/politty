@@ -362,3 +362,39 @@ test("resolves named catalogs used by project peer providers", () => {
     /Runtime dependency changes detected in: example/,
   );
 });
+
+test("preserves ranged catalog aliases across lockfile formats", () => {
+  for (const target of ["target", "@scope/target"]) {
+    const before = `lockfileVersion: '9.0'
+catalogs:
+  default:
+    alias:
+      specifier: 'npm:${target}@^1.0.0'
+      version: '${target}@1.2.0'
+importers:
+  lib:
+    dependencies:
+      alias:
+        specifier: 'catalog:'
+        version: '${target}@1.2.0'
+`;
+    const after = JSON.stringify({
+      lockfileVersion: "13.0",
+      settings: {
+        catalogs: { default: { alias: { specifier: `npm:${target}@^1.0.0`, version: "1.2.0" } } },
+      },
+      projects: { lib: { dependencies: { alias: "catalog:" } } },
+    });
+    assert.match(runDiff(before, after), /No runtime dependency changes/);
+  }
+});
+
+test("treats default catalog spellings as equivalent between v13 lockfiles", () => {
+  const lock = (specifier) =>
+    JSON.stringify({
+      lockfileVersion: "13.0",
+      settings: { catalogs: { default: { example: "1.2.0" } } },
+      projects: { lib: { dependencies: { example: specifier } } },
+    });
+  assert.match(runDiff(lock("catalog:"), lock("catalog:default")), /No runtime dependency changes/);
+});
