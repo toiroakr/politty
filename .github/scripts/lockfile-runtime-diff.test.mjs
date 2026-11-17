@@ -291,8 +291,12 @@ test("preserves equivalent resolved peers when migrating lockfile formats", () =
 });
 
 test("detects resolved peer updates in v13 package entries", () => {
+  const before = JSON.parse(v13Peer("18.2.0"));
+  const after = JSON.parse(v13Peer("18.3.1"));
+  delete before.projects.lib.devDependencies;
+  delete after.projects.lib.devDependencies;
   assert.match(
-    runDiff(v13Peer("18.2.0"), v13Peer("18.3.1")),
+    runDiff(JSON.stringify(before), JSON.stringify(after)),
     /Runtime dependency changes detected in: example/,
   );
 });
@@ -427,5 +431,60 @@ importers:
       },
     });
     assert.match(runDiff(before, after), /No runtime dependency changes/);
+  }
+});
+
+test("resolves optional project and root peer providers", () => {
+  for (const path of ["lib", "."]) {
+    const lock = (version) => {
+      const result = JSON.parse(v13Peer("18.2.0"));
+      delete result.projects.lib.devDependencies;
+      result.projects[path] ??= {};
+      result.projects[path].optionalDependencies = { react: version };
+      const entry = result.packages["react-dom@18.2.0"];
+      entry.peerDependencies = { react: "^18.2.0" };
+      entry.snapshots = [
+        { peerDependencies: { react: { version: "18.2.0" } } },
+        { peerDependencies: { react: { version: "18.3.1" } } },
+      ];
+      return JSON.stringify(result);
+    };
+    assert.match(
+      runDiff(lock("18.2.0"), lock("18.3.1")),
+      /Runtime dependency changes detected in: example/,
+    );
+  }
+});
+
+test("resolves catalog object peer providers without redundant versions", () => {
+  const lock = (version) => {
+    const result = JSON.parse(v13Peer("18.2.0"));
+    result.projects.lib.devDependencies.react = { specifier: "catalog:peers" };
+    result.settings = { catalogs: { peers: { react: version } } };
+    const entry = result.packages["react-dom@18.2.0"];
+    entry.peerDependencies = { react: "^18.2.0" };
+    entry.snapshots = [
+      { peerDependencies: { react: { version: "18.2.0" } } },
+      { peerDependencies: { react: { version: "18.3.1" } } },
+    ];
+    return JSON.stringify(result);
+  };
+  assert.match(
+    runDiff(lock("18.2.0"), lock("18.3.1")),
+    /Runtime dependency changes detected in: example/,
+  );
+});
+
+test("honors explicit peer bindings on v13 references", () => {
+  for (const binding of ["18.3.1", { version: "18.3.1", with: { scheduler: "0.23.2" } }]) {
+    const after = JSON.parse(v13Peer("18.2.0"));
+    after.projects.lib.dependencies["react-dom"] = {
+      specifier: "18.2.0",
+      with: { react: binding },
+    };
+    after.packages["react-dom@18.2.0"].peerDependencies.react = "^18.2.0";
+    const nested = typeof binding === "string" ? "" : "(scheduler@0.23.2)";
+    const before = v9Peer.replace("(react@18.2.0)", `(react@18.3.1${nested})`);
+    assert.match(runDiff(before, JSON.stringify(after)), /No runtime dependency changes/);
   }
 });

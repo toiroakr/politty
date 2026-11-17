@@ -35,6 +35,13 @@ function bareVersion(reference) {
     .replace(/^(?:@[^/]+\/)?[^@/]+@(?=\d)/, "");
 }
 
+function peerReferences(bindings) {
+  return Object.entries(bindings).flatMap(([name, binding]) => {
+    const version = typeof binding === "string" ? binding : binding?.version;
+    return [...(version ? [`${name}@${version}`] : []), ...peerReferences(binding?.with ?? {})];
+  });
+}
+
 function normalizeDependencies(
   dependencies,
   catalogs = {},
@@ -61,23 +68,40 @@ function normalizeDependencies(
     const separator = alias?.lastIndexOf("@") ?? -1;
     const packageName = alias ? (separator > 0 ? alias.slice(0, separator) : alias) : name;
     const entry = packages[`${packageName}@${reference}`] ?? packages[reference];
+    const explicitPeers = typeof dependency === "string" ? {} : (dependency.with ?? {});
     const peers = [
       ...Array.from((resolved ?? "").matchAll(/\(([^()]+)/g), (match) => match[1]),
-      ...Object.entries(entry?.peerDependencies ?? {}).flatMap(([peerName, peer]) => {
-        const provider = providers[peerName];
-        let providerVersion = typeof provider === "string" ? provider : provider?.version;
-        if (providerVersion?.startsWith("catalog:")) {
-          const binding = catalogs[providerVersion.slice(8) || "default"]?.[peerName];
-          providerVersion = typeof binding === "string" ? binding : binding?.version;
-        }
-        const peerVersion =
-          (typeof peer === "string"
-            ? /^\d/.test(peer) && !entry.snapshots
-              ? peer
-              : undefined
-            : peer?.version) ?? providerVersion;
-        return peerVersion ? [`${peerName}@${peerVersion}`] : [];
-      }),
+      ...Object.entries({ ...entry?.peerDependencies, ...explicitPeers }).flatMap(
+        ([peerName, peer]) => {
+          const provider = providers[peerName];
+          let providerVersion = typeof provider === "string" ? provider : provider?.version;
+          if (!providerVersion && provider?.specifier?.startsWith("catalog:")) {
+            providerVersion = provider.specifier;
+          }
+          if (providerVersion?.startsWith("catalog:")) {
+            const binding = catalogs[providerVersion.slice(8) || "default"]?.[peerName];
+            providerVersion = typeof binding === "string" ? binding : binding?.version;
+          }
+          const explicit = explicitPeers[peerName];
+          const explicitVersion = typeof explicit === "string" ? explicit : explicit?.version;
+          const peerVersion =
+            explicitVersion ??
+            (typeof peer === "string"
+              ? /^\d/.test(peer) && !entry.snapshots
+                ? peer
+                : undefined
+              : peer?.version) ??
+            providerVersion;
+          return peerVersion
+            ? peerReferences({
+                [peerName]: {
+                  version: peerVersion,
+                  with: explicit?.with ?? peer?.with ?? provider?.with,
+                },
+              })
+            : [];
+        },
+      ),
     ];
     normalized[name] = {
       specifier: specifier === "catalog:default" ? "catalog:" : specifier,
@@ -148,8 +172,10 @@ function parseImporters(text, normalize = false) {
       Object.entries(lockfile.projects ?? {}).map(([path, project]) => {
         const root = lockfile.projects["."] ?? {};
         const providers = {
+          ...root.optionalDependencies,
           ...root.devDependencies,
           ...root.dependencies,
+          ...project.optionalDependencies,
           ...project.devDependencies,
           ...project.dependencies,
         };
