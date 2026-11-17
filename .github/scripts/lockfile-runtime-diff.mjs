@@ -81,7 +81,13 @@ function parseImporters(text, normalize = false) {
         normalize
           ? normalizeDependencies(project.dependencies ?? {}, lockfile.settings?.catalogs)
           : Object.keys(project.dependencies ?? {}).length
-            ? JSON.stringify(project.dependencies)
+            ? JSON.stringify({
+                dependencies: project.dependencies,
+                resolvedDependencies: normalizeDependencies(
+                  project.dependencies,
+                  lockfile.settings?.catalogs,
+                ),
+              })
             : undefined,
       ]),
     );

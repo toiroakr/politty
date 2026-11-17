@@ -117,3 +117,12 @@ importers:
   );
   assert.match(runDiff(before, after), /Runtime dependency changes detected in: example/);
 });
+
+test("detects resolved catalog updates between v13 lockfiles", () => {
+  const after = v13({ example: "catalog:" }).replace(
+    '"projects": {',
+    '"settings": { "catalogs": { "default": { "example": "2.0.0" } } }, "projects": {',
+  );
+  const before = after.replace('"example": "2.0.0"', '"example": "1.0.0"');
+  assert.match(runDiff(before, after), /Runtime dependency changes detected in: example/);
+});
