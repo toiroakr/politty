@@ -29,6 +29,18 @@ function mainDocumentLines(text) {
 }
 
 function parseImporters(text) {
+  const document = mainDocumentLines(text).join("\n").trimStart();
+  if (document.startsWith("{")) {
+    const lockfile = JSON.parse(
+      document.replace(/("(?:[^"\\]|\\.)*")|,\s*(?=[}\]])/g, (match, string) => string ?? ""),
+    );
+    return Object.fromEntries(
+      Object.entries(lockfile.projects ?? {}).map(([path, project]) => [
+        path,
+        JSON.stringify(project.dependencies ?? {}),
+      ]),
+    );
+  }
   const lines = mainDocumentLines(text);
   const importersIdx = lines.findIndex((l) => /^importers:\s*$/.test(l));
   if (importersIdx === -1) return {};

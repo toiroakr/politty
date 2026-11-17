@@ -12,3 +12,6 @@ minimumReleaseAgeExclude:
 allowBuilds:
   esbuild: true
   lefthook: true
+
+lockfile:
+  format: v13
