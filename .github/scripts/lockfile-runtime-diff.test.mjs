@@ -264,3 +264,74 @@ importers:
   );
   assert.match(runDiff(before, after), /No runtime dependency changes/);
 });
+
+const v13Peer = (version) =>
+  JSON.stringify({
+    lockfileVersion: "13.0",
+    projects: {
+      lib: { dependencies: { "react-dom": "18.2.0" }, devDependencies: { react: version } },
+    },
+    packages: {
+      "react-dom@18.2.0": {
+        peerDependencies: { react: { specifier: "^18.2.0", version } },
+      },
+    },
+  });
+const v9Peer = `lockfileVersion: '9.0'
+importers:
+  lib:
+    dependencies:
+      react-dom:
+        specifier: 18.2.0
+        version: 18.2.0(react@18.2.0)
+`;
+
+test("preserves equivalent resolved peers when migrating lockfile formats", () => {
+  assert.match(runDiff(v9Peer, v13Peer("18.2.0")), /No runtime dependency changes/);
+});
+
+test("detects resolved peer updates in v13 package entries", () => {
+  assert.match(
+    runDiff(v13Peer("18.2.0"), v13Peer("18.3.1")),
+    /Runtime dependency changes detected in: example/,
+  );
+});
+
+test("detects resolved peer updates across lockfile formats", () => {
+  assert.match(
+    runDiff(v9Peer, v13Peer("18.3.1")),
+    /Runtime dependency changes detected in: example/,
+  );
+  assert.match(
+    runDiff(v13Peer("18.3.1"), v9Peer),
+    /Runtime dependency changes detected in: example/,
+  );
+});
+
+test("detects project peer changes when shared package snapshots stay unchanged", () => {
+  const lock = (react) =>
+    JSON.stringify({
+      lockfileVersion: "13.0",
+      projects: {
+        lib: { dependencies: { "react-dom": "18.2.0" }, devDependencies: { react } },
+        alt: {
+          dependencies: { "react-dom": "18.2.0" },
+          devDependencies: { react: react === "18.2.0" ? "18.3.1" : "18.2.0" },
+        },
+      },
+      packages: {
+        "react-dom@18.2.0": {
+          peerDependencies: { react: "^18.2.0" },
+          snapshots: [
+            { peerDependencies: { react: { version: "18.2.0" } } },
+            { peerDependencies: { react: { version: "18.3.1" } } },
+          ],
+        },
+      },
+    });
+  assert.match(runDiff(v9Peer, lock("18.2.0")), /No runtime dependency changes/);
+  assert.match(
+    runDiff(lock("18.2.0"), lock("18.3.1")),
+    /Runtime dependency changes detected in: example/,
+  );
+});

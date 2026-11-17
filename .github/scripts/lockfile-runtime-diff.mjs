@@ -28,7 +28,13 @@ function mainDocumentLines(text) {
   return second === -1 ? lines : lines.slice(second + 1);
 }
 
-function normalizeDependencies(dependencies, catalogs = {}, includeCatalogSpecifiers = false) {
+function normalizeDependencies(
+  dependencies,
+  catalogs = {},
+  includeCatalogSpecifiers = false,
+  packages = {},
+  providers = {},
+) {
   const normalized = {};
   for (const name of Object.keys(dependencies).sort()) {
     const dependency = dependencies[name];
@@ -42,9 +48,26 @@ function normalizeDependencies(dependencies, catalogs = {}, includeCatalogSpecif
     const resolved =
       typeof dependency === "string" ? catalogVersion : (dependency.version ?? catalogVersion);
     const version = resolved?.replace(/^npm:/, "").split("(")[0];
+    const reference = (resolved ?? specifier)?.replace(/^npm:/, "").split("(")[0];
+    const entry = packages[`${name}@${reference}`] ?? packages[reference];
+    const peers = [
+      ...Array.from((resolved ?? "").matchAll(/\(([^()]+)/g), (match) => match[1]),
+      ...Object.entries(entry?.peerDependencies ?? {}).flatMap(([peerName, peer]) => {
+        const provider = providers[peerName];
+        const providerVersion = typeof provider === "string" ? provider : provider?.version;
+        const peerVersion =
+          (typeof peer === "string"
+            ? /^\d/.test(peer) && !entry.snapshots
+              ? peer
+              : undefined
+            : peer?.version) ?? providerVersion;
+        return peerVersion ? [`${peerName}@${peerVersion}`] : [];
+      }),
+    ];
     normalized[name] = {
       specifier: specifier === "catalog:default" ? "catalog:" : specifier,
       ...(includeCatalogSpecifiers && catalogSpecifier ? { catalogSpecifier } : {}),
+      ...(peers.length ? { peers: [...new Set(peers)].sort() } : {}),
       ...(version &&
       version !== specifier.replace(/^npm:/, "") &&
       !specifier.startsWith("workspace:") &&
@@ -107,21 +130,30 @@ function parseImporters(text, normalize = false) {
       document.replace(/("(?:[^"\\]|\\.)*")|,\s*(?=[}\]])/g, (match, string) => string ?? ""),
     );
     return Object.fromEntries(
-      Object.entries(lockfile.projects ?? {}).map(([path, project]) => [
-        path,
-        normalize
-          ? normalizeDependencies(project.dependencies ?? {}, lockfile.settings?.catalogs, true)
-          : Object.keys(project.dependencies ?? {}).length
-            ? JSON.stringify({
-                dependencies: project.dependencies,
-                resolvedDependencies: normalizeDependencies(
-                  project.dependencies,
-                  lockfile.settings?.catalogs,
-                  true,
-                ),
-              })
-            : undefined,
-      ]),
+      Object.entries(lockfile.projects ?? {}).map(([path, project]) => {
+        const root = lockfile.projects["."] ?? {};
+        const providers = {
+          ...root.devDependencies,
+          ...root.dependencies,
+          ...project.devDependencies,
+          ...project.dependencies,
+        };
+        const resolvedDependencies = normalizeDependencies(
+          project.dependencies ?? {},
+          lockfile.settings?.catalogs,
+          true,
+          lockfile.packages,
+          providers,
+        );
+        return [
+          path,
+          normalize
+            ? resolvedDependencies
+            : Object.keys(project.dependencies ?? {}).length
+              ? JSON.stringify({ dependencies: project.dependencies, resolvedDependencies })
+              : undefined,
+        ];
+      }),
     );
   }
   const lines = mainDocumentLines(text);
