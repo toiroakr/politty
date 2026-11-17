@@ -138,7 +138,12 @@ function parseImporters(text, normalize = false) {
     if (currentImporter && currentSection === "dependencies") {
       importers[currentImporter] = normalize
         ? normalizeYamlDependencies(sectionLines, catalogs)
-        : sectionLines.join("\n");
+        : sectionLines.length
+          ? JSON.stringify({
+              dependencies: sectionLines.join("\n"),
+              resolvedDependencies: normalizeYamlDependencies(sectionLines, catalogs),
+            })
+          : undefined;
     }
     sectionLines = [];
   };

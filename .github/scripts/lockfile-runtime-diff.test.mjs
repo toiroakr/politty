@@ -158,3 +158,21 @@ importers:
   const changed = same.replace('"specifier": "^1.0.0"', '"specifier": "^1.1.0"');
   assert.match(runDiff(before, changed), /Runtime dependency changes detected in: example/);
 });
+
+test("detects catalog range changes between v9 lockfiles", () => {
+  const before = `lockfileVersion: '9.0'
+catalogs:
+  default:
+    example:
+      specifier: ^1.0.0
+      version: 1.2.0
+importers:
+  lib:
+    dependencies:
+      example:
+        specifier: catalog:
+        version: 1.2.0
+`;
+  const after = before.replace("specifier: ^1.0.0", "specifier: ^1.1.0");
+  assert.match(runDiff(before, after), /Runtime dependency changes detected in: example/);
+});
