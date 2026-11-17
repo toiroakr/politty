@@ -22,13 +22,45 @@ function parseArgs(argv) {
 // pnpm >=11.1 prepends an "env document" (packageManagerDependencies) before the
 // real lockfile; only the document after the second `---` holds project importers.
 function mainDocumentLines(text) {
-  const lines = text.split("\n");
+  const lines = text.split(/\r?\n/);
   if (lines[0] !== "---") return lines;
   const second = lines.indexOf("---", 1);
   return second === -1 ? lines : lines.slice(second + 1);
 }
 
-function parseImporters(text) {
+function normalizeDependencies(dependencies) {
+  const normalized = {};
+  for (const name of Object.keys(dependencies).sort()) {
+    const dependency = dependencies[name];
+    const specifier = typeof dependency === "string" ? dependency : dependency.specifier;
+    const version = typeof dependency === "string" ? undefined : dependency.version?.split("(")[0];
+    normalized[name] = {
+      specifier,
+      ...(version && version !== specifier && !/^(workspace:|catalog:)/.test(specifier)
+        ? { version }
+        : {}),
+    };
+  }
+  return Object.keys(normalized).length ? JSON.stringify(normalized) : undefined;
+}
+
+function normalizeYamlDependencies(lines) {
+  const dependencies = {};
+  let name;
+  for (const line of lines) {
+    const entry = line.match(/^ {6}(.+):\s*$/);
+    if (entry) {
+      name = entry[1].replace(/^["']|["']$/g, "");
+      dependencies[name] = {};
+    } else {
+      const field = line.match(/^ {8}(specifier|version):\s*(.+)$/);
+      if (name && field) dependencies[name][field[1]] = field[2].replace(/^["']|["']$/g, "");
+    }
+  }
+  return normalizeDependencies(dependencies);
+}
+
+function parseImporters(text, normalize = false) {
   const document = mainDocumentLines(text).join("\n").trimStart();
   if (document.startsWith("{")) {
     const lockfile = JSON.parse(
@@ -37,7 +69,11 @@ function parseImporters(text) {
     return Object.fromEntries(
       Object.entries(lockfile.projects ?? {}).map(([path, project]) => [
         path,
-        JSON.stringify(project.dependencies ?? {}),
+        normalize
+          ? normalizeDependencies(project.dependencies ?? {})
+          : Object.keys(project.dependencies ?? {}).length
+            ? JSON.stringify(project.dependencies)
+            : undefined,
       ]),
     );
   }
@@ -52,7 +88,9 @@ function parseImporters(text) {
 
   const flush = () => {
     if (currentImporter && currentSection === "dependencies") {
-      importers[currentImporter] = sectionLines.join("\n");
+      importers[currentImporter] = normalize
+        ? normalizeYamlDependencies(sectionLines)
+        : sectionLines.join("\n");
     }
     sectionLines = [];
   };
@@ -116,8 +154,12 @@ function loadFixedGroupNormalizer() {
 function main() {
   const { before, after } = parseArgs(process.argv.slice(2));
 
-  const beforeImporters = parseImporters(readFileSync(before, "utf8"));
-  const afterImporters = parseImporters(readFileSync(after, "utf8"));
+  const beforeText = readFileSync(before, "utf8");
+  const afterText = readFileSync(after, "utf8");
+  const isJson = (text) => mainDocumentLines(text).join("\n").trimStart().startsWith("{");
+  const mixedFormat = isJson(beforeText) !== isJson(afterText);
+  const beforeImporters = parseImporters(beforeText, mixedFormat);
+  const afterImporters = parseImporters(afterText, mixedFormat);
 
   const paths = new Set([...Object.keys(beforeImporters), ...Object.keys(afterImporters)]);
   const normalize = loadFixedGroupNormalizer();

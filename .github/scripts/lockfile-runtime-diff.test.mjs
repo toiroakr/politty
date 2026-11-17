@@ -7,13 +7,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 const script = fileURLToPath(new URL("./lockfile-runtime-diff.mjs", import.meta.url));
-
-test("detects runtime dependency updates in v13 project documents", () => {
-  const dir = mkdtempSync(join(tmpdir(), "lockfile-runtime-diff-"));
-  try {
-    mkdirSync(join(dir, "lib"));
-    writeFileSync(join(dir, "lib/package.json"), JSON.stringify({ name: "example" }));
-    const lockfile = (version, devVersion) => `---
+const v13 = (dependencies, devDependencies = {}) => `---
 lockfileVersion: '9.0'
 importers: {}
 ---
@@ -21,27 +15,79 @@ importers: {}
   "lockfileVersion": "13.0",
   "projects": {
     "lib": {
-      "dependencies": { "example": "${version}", },
-      "devDependencies": { "test-tool": "${devVersion}", },
+      "dependencies": ${JSON.stringify(dependencies)},
+      "devDependencies": ${JSON.stringify(devDependencies)},
     },
   },
 }
 `;
-    writeFileSync(join(dir, "before.yaml"), lockfile("1.0.0", "1.0.0"));
-    writeFileSync(join(dir, "after.yaml"), lockfile("2.0.0", "1.0.0"));
-    const run = () =>
-      spawnSync(process.execPath, [script, "--before", "before.yaml", "--after", "after.yaml"], {
-        cwd: dir,
-        encoding: "utf8",
-      });
-    const changed = run();
-    assert.equal(changed.status, 0, changed.stderr);
-    assert.match(changed.stdout, /Runtime dependency changes detected in: example/);
-    writeFileSync(join(dir, "after.yaml"), lockfile("1.0.0", "2.0.0"));
-    const devOnly = run();
-    assert.equal(devOnly.status, 0, devOnly.stderr);
-    assert.match(devOnly.stdout, /No runtime dependency changes/);
+
+function runDiff(before, after) {
+  const dir = mkdtempSync(join(tmpdir(), "lockfile-runtime-diff-"));
+  try {
+    mkdirSync(join(dir, "lib"));
+    writeFileSync(join(dir, "lib/package.json"), JSON.stringify({ name: "example" }));
+    writeFileSync(join(dir, "before.yaml"), before);
+    writeFileSync(join(dir, "after.yaml"), after);
+    const result = spawnSync(
+      process.execPath,
+      [script, "--before", "before.yaml", "--after", "after.yaml"],
+      { cwd: dir, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+test("detects runtime dependency updates in v13 project documents", () => {
+  assert.match(
+    runDiff(v13({ example: "1.0.0" }), v13({ example: "2.0.0" })),
+    /Runtime dependency changes detected in: example/,
+  );
+  assert.match(
+    runDiff(
+      v13({ example: "1.0.0" }, { tool: "1.0.0" }),
+      v13({ example: "1.0.0" }, { tool: "2.0.0" }),
+    ),
+    /No runtime dependency changes/,
+  );
+});
+
+test("does not report unchanged dependencies when migrating from v9 to v13", () => {
+  const before = `lockfileVersion: '9.0'
+importers:
+  lib:
+    dependencies:
+      example:
+        specifier: ^1.0.0
+        version: 1.2.0
+`;
+  assert.match(
+    runDiff(before, v13({ example: { specifier: "^1.0.0", version: "1.2.0" } })),
+    /No runtime dependency changes/,
+  );
+  assert.match(
+    runDiff(before, v13({ example: { specifier: "^1.0.0", version: "1.3.0" } })),
+    /Runtime dependency changes detected in: example/,
+  );
+});
+
+test("ignores added projects without runtime dependencies", () => {
+  const before = `{"lockfileVersion":"13.0","projects":{}}`;
+  assert.match(
+    runDiff(before, v13(undefined, { tool: "1.0.0" }).replace('"dependencies": undefined,', "")),
+    /No runtime dependency changes/,
+  );
+});
+
+test("detects runtime updates when lockfiles have CRLF line endings", () => {
+  assert.match(
+    runDiff(
+      v13({ example: "1.0.0" }).replaceAll("\n", "\r\n"),
+      v13({ example: "2.0.0" }).replaceAll("\n", "\r\n"),
+    ),
+    /Runtime dependency changes detected in: example/,
+  );
 });

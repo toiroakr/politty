@@ -13,7 +13,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "dev": "pnpm --filter @politty/zod build --watch",
-    "test": "vitest run",
+    "test": "node --test .github/scripts/lockfile-runtime-diff.test.mjs && vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "bench": "pnpm build && tsx tests/performance/run.ts",
