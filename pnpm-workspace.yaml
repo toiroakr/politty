@@ -12,3 +12,6 @@ minimumReleaseAgeExclude:
 allowBuilds:
   esbuild: true
   lefthook: true
+
+overrides:
+  "editorconfig>minimatch": "^11.0.5"
