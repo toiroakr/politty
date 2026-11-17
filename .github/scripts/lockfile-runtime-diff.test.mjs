@@ -126,3 +126,12 @@ test("detects resolved catalog updates between v13 lockfiles", () => {
   const before = after.replace('"example": "2.0.0"', '"example": "1.0.0"');
   assert.match(runDiff(before, after), /Runtime dependency changes detected in: example/);
 });
+
+test("detects catalog range updates when the resolved version stays unchanged", () => {
+  const before = v13({ example: "catalog:" }).replace(
+    '"projects": {',
+    '"settings": { "catalogs": { "default": { "example": { "specifier": "^1.0.0", "version": "1.2.0" } } } }, "projects": {',
+  );
+  const after = before.replace('"specifier": "^1.0.0"', '"specifier": "^1.1.0"');
+  assert.match(runDiff(before, after), /Runtime dependency changes detected in: example/);
+});
