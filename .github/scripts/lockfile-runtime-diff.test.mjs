@@ -370,7 +370,7 @@ catalogs:
   default:
     alias:
       specifier: 'npm:${target}@^1.0.0'
-      version: '${target}@1.2.0'
+      version: 1.2.0
 importers:
   lib:
     dependencies:
@@ -397,4 +397,35 @@ test("treats default catalog spellings as equivalent between v13 lockfiles", () 
       projects: { lib: { dependencies: { example: specifier } } },
     });
   assert.match(runDiff(lock("catalog:"), lock("catalog:default")), /No runtime dependency changes/);
+});
+
+test("preserves peers of ranged catalog aliases during format migration", () => {
+  for (const target of ["target", "@scope/target"]) {
+    const before = `lockfileVersion: '9.0'
+catalogs:
+  default:
+    alias:
+      specifier: 'npm:${target}@^1.0.0'
+      version: 1.2.0
+importers:
+  lib:
+    dependencies:
+      alias:
+        specifier: 'catalog:'
+        version: '${target}@1.2.0(peer@2.0.0)'
+`;
+    const after = JSON.stringify({
+      lockfileVersion: "13.0",
+      settings: {
+        catalogs: { default: { alias: { specifier: `npm:${target}@^1.0.0`, version: "1.2.0" } } },
+      },
+      projects: { lib: { dependencies: { alias: "catalog:" } } },
+      packages: {
+        [`${target}@1.2.0`]: {
+          peerDependencies: { peer: { specifier: "^2.0.0", version: "2.0.0" } },
+        },
+      },
+    });
+    assert.match(runDiff(before, after), /No runtime dependency changes/);
+  }
 });

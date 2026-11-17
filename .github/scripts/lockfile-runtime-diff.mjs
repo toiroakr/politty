@@ -56,7 +56,11 @@ function normalizeDependencies(
       typeof dependency === "string" ? catalogVersion : (dependency.version ?? catalogVersion);
     const version = bareVersion(resolved);
     const reference = (resolved ?? specifier)?.replace(/^npm:/, "").split("(")[0];
-    const entry = packages[`${name}@${reference}`] ?? packages[reference];
+    const aliasSpecifier = catalogSpecifier ?? specifier;
+    const alias = aliasSpecifier?.startsWith("npm:") ? aliasSpecifier.slice(4) : undefined;
+    const separator = alias?.lastIndexOf("@") ?? -1;
+    const packageName = alias ? (separator > 0 ? alias.slice(0, separator) : alias) : name;
+    const entry = packages[`${packageName}@${reference}`] ?? packages[reference];
     const peers = [
       ...Array.from((resolved ?? "").matchAll(/\(([^()]+)/g), (match) => match[1]),
       ...Object.entries(entry?.peerDependencies ?? {}).flatMap(([peerName, peer]) => {
