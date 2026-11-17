@@ -54,7 +54,11 @@ function normalizeDependencies(
       ...Array.from((resolved ?? "").matchAll(/\(([^()]+)/g), (match) => match[1]),
       ...Object.entries(entry?.peerDependencies ?? {}).flatMap(([peerName, peer]) => {
         const provider = providers[peerName];
-        const providerVersion = typeof provider === "string" ? provider : provider?.version;
+        let providerVersion = typeof provider === "string" ? provider : provider?.version;
+        if (providerVersion?.startsWith("catalog:")) {
+          const binding = catalogs[providerVersion.slice(8) || "default"]?.[peerName];
+          providerVersion = typeof binding === "string" ? binding : binding?.version;
+        }
         const peerVersion =
           (typeof peer === "string"
             ? /^\d/.test(peer) && !entry.snapshots

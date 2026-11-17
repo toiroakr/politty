@@ -335,3 +335,30 @@ test("detects project peer changes when shared package snapshots stay unchanged"
     /Runtime dependency changes detected in: example/,
   );
 });
+
+test("resolves named catalogs used by project peer providers", () => {
+  const lock = (version) =>
+    JSON.stringify({
+      lockfileVersion: "13.0",
+      settings: { catalogs: { lib: { react: version } } },
+      projects: {
+        lib: {
+          dependencies: { "react-dom": "18.2.0" },
+          devDependencies: { react: "catalog:lib" },
+        },
+      },
+      packages: {
+        "react-dom@18.2.0": {
+          peerDependencies: { react: "^18.2.0" },
+          snapshots: [
+            { peerDependencies: { react: { version: "18.2.0" } } },
+            { peerDependencies: { react: { version: "18.3.1" } } },
+          ],
+        },
+      },
+    });
+  assert.match(
+    runDiff(lock("18.2.0"), lock("18.3.1")),
+    /Runtime dependency changes detected in: example/,
+  );
+});
