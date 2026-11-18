@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { lazy } from "../lazy.js";
 import type { AnyCommand } from "../types.js";
 import { findCommandPath } from "./command-path.js";
@@ -120,5 +120,53 @@ describe("findCommandPath", () => {
     const root = defineCommand({ name: "cli", subCommands: { loop } });
 
     expect(await findCommandPath(root, leaf("deploy"))).toBeUndefined();
+  });
+});
+
+describe("findCommandPath loading", () => {
+  it("does not load a lazy sibling when the target is a registered command", async () => {
+    const load = vi.fn(async () => leaf("heavy"));
+    const deploy = leaf("deploy");
+    const root = defineCommand({
+      name: "cli",
+      subCommands: { heavy: lazy(leaf("heavy"), load), deploy },
+    });
+
+    expect(await findCommandPath(root, deploy)).toEqual(["deploy"]);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("finds the metadata command of a lazy subcommand without loading it", async () => {
+    const load = vi.fn(async () => leaf("deploy"));
+    const meta = leaf("deploy");
+    const root = defineCommand({ name: "cli", subCommands: { deploy: lazy(meta, load) } });
+
+    expect(await findCommandPath(root, meta)).toEqual(["deploy"]);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("finds a command in the metadata of a lazy group without loading the group", async () => {
+    const load = vi.fn(async () => defineCommand({ name: "ops" }));
+    const deploy = leaf("deploy");
+    const group = defineCommand({ name: "ops", subCommands: { deploy } });
+    const root = defineCommand({ name: "cli", subCommands: { ops: lazy(group, load) } });
+
+    expect(await findCommandPath(root, deploy)).toEqual(["ops", "deploy"]);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("loads the lazy subcommand named like the target before the others", async () => {
+    const loadOther = vi.fn(async () => leaf("other"));
+    const deploy = leaf("deploy");
+    const root = defineCommand({
+      name: "cli",
+      subCommands: {
+        other: lazy(leaf("other"), loadOther),
+        deploy: lazy(leaf("deploy"), async () => deploy),
+      },
+    });
+
+    expect(await findCommandPath(root, deploy)).toEqual(["deploy"]);
+    expect(loadOther).not.toHaveBeenCalled();
   });
 });

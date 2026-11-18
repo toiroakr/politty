@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { RECORDED_CLI_KEY } from "../core/recorded-cli.js";
@@ -26,13 +25,15 @@ interface ContentMapperEntry {
 }
 
 export function readRecordingEntry(tsconfigPath: string): string {
-  let text: string;
+  let config: { contentMappers?: ContentMapperEntry[] };
   try {
-    text = readFileSync(tsconfigPath, "utf8");
-  } catch {
-    throw new Error(`politty: cannot read the tsconfig at ${tsconfigPath}`);
+    config = parseJsonc(readFileSync(tsconfigPath, "utf8")) as typeof config;
+  } catch (error) {
+    throw new Error(
+      `politty: cannot read the tsconfig at ${tsconfigPath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
-  const mappers = (parseJsonc(text) as { contentMappers?: ContentMapperEntry[] }).contentMappers;
+  const mappers = config.contentMappers;
   const entry = (mappers ?? [])
     .filter((mapper) => typeof mapper.package === "string" && POLITTY_PACKAGE.test(mapper.package))
     .map((mapper) => mapper.options?.entry)
@@ -46,37 +47,42 @@ export function readRecordingEntry(tsconfigPath: string): string {
 }
 
 export function renderRecordingSetup(entry: string): string {
-  return `const slot = (globalThis[Symbol.for(${JSON.stringify(RECORDED_CLI_KEY)})] ??= {});
-delete slot.recorded;
-slot.capturing = true;
-const recorded = new Promise((resolve) => {
-  slot.onRecord = resolve;
-});
-const loaded = import(${JSON.stringify(entry)}).then(
-  () => undefined,
-  (error) => {
-    if (!slot.recorded) throw error;
-  },
-);
-try {
-  await Promise.race([loaded, recorded]);
-} finally {
-  slot.capturing = false;
-  delete slot.onRecord;
+  return `const entry = ${JSON.stringify(entry)};
+const slot = (globalThis[Symbol.for(${JSON.stringify(RECORDED_CLI_KEY)})] ??= {});
+if (!slot.recorded || slot.entry !== entry) {
+  slot.capturing = true;
+  const recorded = new Promise((resolve) => {
+    slot.onRecord = resolve;
+  });
+  const loaded = import(entry).then(
+    () => undefined,
+    (error) => {
+      if (!slot.recorded) throw error;
+    },
+  );
+  try {
+    await Promise.race([loaded, recorded]);
+  } finally {
+    slot.capturing = false;
+    delete slot.onRecord;
+  }
+  if (slot.recorded) slot.entry = entry;
 }
 `;
 }
 
+const setupDirectories = new Set<string>();
+
+function removeSetupDirectories(): void {
+  for (const directory of setupDirectories) rmSync(directory, { recursive: true, force: true });
+}
+
 export function writeRecordingSetup(entry: string): string {
-  const portable = entry.split(sep).join("/");
-  const directory = join(
-    tmpdir(),
-    "politty-vitest",
-    createHash("sha1").update(portable).digest("hex").slice(0, 12),
-  );
-  mkdirSync(directory, { recursive: true });
+  const directory = mkdtempSync(join(tmpdir(), "politty-vitest-"));
+  if (setupDirectories.size === 0) process.once("exit", removeSetupDirectories);
+  setupDirectories.add(directory);
   const file = join(directory, "setup.mjs");
-  writeFileSync(file, renderRecordingSetup(portable));
+  writeFileSync(file, renderRecordingSetup(entry.split(sep).join("/")), { mode: 0o600 });
   return file;
 }
 

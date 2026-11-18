@@ -120,7 +120,7 @@ it("deploys with the global options of the CLI", async () => {
 });
 ```
 
-- `runCommand` looks `deploy` up by reference in the recorded command tree, loading `lazy()` subcommands on the way, and runs it from the root through its real path, as `mycli ops deploy --verbose prod`. Renaming `deploy` or moving it under another parent does not change the test. When a command is registered under several parents, the first registration wins.
+- `runCommand` looks `deploy` up by reference in the recorded command tree, and runs it from the root through its real path, as `mycli ops deploy --verbose prod`. Renaming `deploy` or moving it under another parent does not change the test. When a command is registered under several parents, the first registration wins. Commands declared in the tree, including the metadata of `lazy()` subcommands, are matched first without loading anything; `lazy()` and async subcommands are loaded only when that finds nothing, starting with the ones named like the command.
 - The recorded `globalArgs`, `setup` and `cleanup` apply as in the real CLI. The help of the subcommand shows its full path.
 - Options you pass to `runCommand` win, key by key. Pass `{ setup: undefined }` to run without the recorded `setup`. Only these three options are taken from the recorded call; `prompt` and the others are not.
 - A command that is not in the recorded tree runs as it does without the plugin.

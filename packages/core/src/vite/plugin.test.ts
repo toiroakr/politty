@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,6 +76,21 @@ describe("readRecordingEntry", () => {
     expect(() => readRecordingEntry(missing)).toThrow(missing);
   });
 
+  it("names the tsconfig in the error when it is not valid JSON", () => {
+    const tsconfig = write("tsconfig.json", "{ not json");
+
+    expect(() => readRecordingEntry(tsconfig)).toThrow(tsconfig);
+  });
+
+  it("reads a tsconfig that starts with a byte order mark", () => {
+    const tsconfig = write(
+      "tsconfig.json",
+      `\uFEFF${JSON.stringify({ contentMappers: [{ package: "politty", options: { entry: "./cli.ts" } }] })}`,
+    );
+
+    expect(readRecordingEntry(tsconfig)).toBe(join(project, "cli.ts"));
+  });
+
   it("explains the content mapper entry option when no mapper declares one", () => {
     const tsconfig = tsconfigWith([{ package: "politty" }]);
 
@@ -133,18 +148,41 @@ describe("recording setup module", () => {
     expect(getRecordedCli()?.command).toEqual({ name: "cli" });
   });
 
-  it("drops a CLI recorded by an earlier run", async () => {
-    await runSetup(entryCalling('runMain({ name: "first" });'));
+  it("keeps the recorded CLI when the entry module is already loaded", async () => {
+    const entry = entryCalling('runMain({ name: "cli" });');
+    await runSetup(entry);
 
-    await runSetup(entryCalling("export const noop = 1;"));
+    await runSetup(entry);
 
-    expect(getRecordedCli()).toBeUndefined();
+    expect(getRecordedCli()?.command).toEqual({ name: "cli" });
+  });
+
+  it("finishes without loading again an entry that awaits runMain and is already recorded", async () => {
+    const entry = entryCalling('await runMain({ name: "cli" });');
+    await runSetup(entry);
+
+    await runSetup(entry);
+
+    expect(getRecordedCli()?.command).toEqual({ name: "cli" });
   });
 
   it("stops recording once the entry has loaded", async () => {
     await runSetup(entryCalling('runMain({ name: "cli" });'));
 
     expect(isRecordingCli()).toBe(false);
+  });
+
+  it("writes the setup file into a directory that only the current user can use", () => {
+    const file = writeRecordingSetup("/tmp/cli.ts");
+
+    expect(statSync(dirname(file)).mode & 0o077).toBe(0);
+    expect(statSync(file).mode & 0o077).toBe(0);
+  });
+
+  it("writes each setup file into a new directory", () => {
+    expect(dirname(writeRecordingSetup("/tmp/cli.ts"))).not.toBe(
+      dirname(writeRecordingSetup("/tmp/cli.ts")),
+    );
   });
 
   it("embeds the entry path as a string literal", () => {

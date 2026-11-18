@@ -50,5 +50,5 @@ function dropTrailingCommas(text: string): string {
 }
 
 export function parseJsonc(text: string): unknown {
-  return JSON.parse(dropTrailingCommas(stripComments(text)));
+  return JSON.parse(dropTrailingCommas(stripComments(text.replace(/^\uFEFF/, ""))));
 }

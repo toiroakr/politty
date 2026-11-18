@@ -33,6 +33,10 @@ describe("parseJsonc", () => {
     expect(parseJsonc(String.raw`{ "a": "say \"//hi\"" }`)).toEqual({ a: 'say "//hi"' });
   });
 
+  it("ignores a byte order mark at the start", () => {
+    expect(parseJsonc('\uFEFF{ "a": 1 }')).toEqual({ a: 1 });
+  });
+
   it("throws on invalid JSON", () => {
     expect(() => parseJsonc("{ a: 1 }")).toThrow();
   });

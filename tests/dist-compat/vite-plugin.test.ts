@@ -69,7 +69,7 @@ function write(dir: string, relative: string, content: string): void {
 function createProject(
   packageName: keyof typeof PACKAGES,
   testBody: string,
-  withPlugin = true,
+  { withPlugin = true, shareModules = false } = {},
 ): string {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "politty-vite-plugin-")));
   fixtures.push(dir);
@@ -89,7 +89,7 @@ function createProject(
     "vitest.config.ts",
     `import { defineConfig } from "vitest/config";
 ${withPlugin ? `import { politty } from "${packageName}/vite";\n` : ""}
-export default defineConfig({ plugins: [${withPlugin ? "politty()" : ""}], test: { include: ["src/**/*.test.ts"] } });
+export default defineConfig({ plugins: [${withPlugin ? "politty()" : ""}], test: { include: ["src/**/*.test.ts"], isolate: ${!shareModules}, fileParallelism: false } });
 `,
   );
   write(
@@ -119,7 +119,7 @@ const cli = defineCommand({
   subCommands: { ops: defineCommand({ name: "ops", subCommands: { deploy } }) },
 });
 
-runMain(cli, {
+await runMain(cli, {
   globalArgs,
   setup: () => {
     globalThis.__events = ["setup"];
@@ -130,17 +130,18 @@ runMain(cli, {
 });
 `,
   );
-  write(
-    dir,
-    "src/deploy.test.ts",
-    `import { expect, it } from "vitest";
+  write(dir, "src/deploy.test.ts", testSource(packageName, testBody));
+  if (shareModules) write(dir, "src/second.test.ts", testSource(packageName, testBody));
+  return dir;
+}
+
+function testSource(packageName: string, testBody: string): string {
+  return `import { expect, it } from "vitest";
 import { runCommand } from "${packageName}";
 import { deploy } from "./deploy.js";
 
 ${testBody}
-`,
-  );
-  return dir;
+`;
 }
 
 function runVitest(dir: string): { status: number | null; output: string } {
@@ -184,13 +185,30 @@ describe.each(Object.keys(PACKAGES) as (keyof typeof PACKAGES)[])("%s/vite", (pa
 
   expect(result).toMatchObject({ success: true });
 });`,
-      false,
+      { withPlugin: false },
     );
 
     const { status, output } = runVitest(dir);
 
     expect(output).toContain("1 failed");
     expect(status).not.toBe(0);
+  });
+
+  it("applies the CLI options in every test file when the files share modules", () => {
+    const dir = createProject(
+      packageName,
+      `it("applies the CLI's global options", async () => {
+  const result = await runCommand(deploy, ["--verbose", "prod"]);
+
+  expect(result).toMatchObject({ success: true, result: { target: "prod", verbose: true } });
+});`,
+      { shareModules: true },
+    );
+
+    const { status, output } = runVitest(dir);
+
+    expect(output).toContain("2 passed");
+    expect(status).toBe(0);
   });
 
   it("keeps a test that passes its own options working", () => {
