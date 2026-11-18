@@ -198,7 +198,7 @@ describe("runCommand with a recorded CLI", () => {
     const result = await runCommand(internal, []);
 
     expect(result.success).toBe(true);
-    expect(run).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledExactlyOnceWith({});
     expect(setup).not.toHaveBeenCalled();
   });
 

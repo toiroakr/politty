@@ -126,13 +126,13 @@ describe("recording setup module", () => {
       `import { runMain } from ${JSON.stringify(pathToFileURL(runnerPath).href)};\n${body}\n`,
     );
 
-  const runSetup = async (entry: string): Promise<void> => {
-    await registerSetup(entry);
+  const runSetup = async (entry: string, graceMs?: number): Promise<void> => {
+    await registerSetup(entry, graceMs);
     await ensureRecordedCli();
   };
 
-  const registerSetup = async (entry: string): Promise<void> => {
-    const file = writeRecordingSetup(entry, 100);
+  const registerSetup = async (entry: string, graceMs?: number): Promise<void> => {
+    const file = writeRecordingSetup(entry, graceMs);
     await import(/* @vite-ignore */ `${pathToFileURL(file).href}?run=${Math.random()}`);
   };
 
@@ -161,7 +161,7 @@ describe("recording setup module", () => {
   it("waits for a runMain call that the entry makes after its module has been evaluated", async () => {
     const entry = entryCalling('setTimeout(() => runMain({ name: "late" }), 20);');
 
-    await runSetup(entry);
+    await runSetup(entry, 100);
 
     expect(getRecordedCli()?.command).toEqual({ name: "late" });
   });
