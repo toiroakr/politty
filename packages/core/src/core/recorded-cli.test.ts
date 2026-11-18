@@ -296,10 +296,13 @@ describe("runCommand while the entry is being recorded", () => {
       delete slotOf()["capturing"];
     };
 
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const result = await Promise.race([
       runCommand(other, []),
-      new Promise<string>((resolve) => setTimeout(() => resolve("deadlock"), 1000)),
-    ]);
+      new Promise<string>((resolve) => {
+        timer = setTimeout(() => resolve("deadlock"), 1000);
+      }),
+    ]).finally(() => clearTimeout(timer));
 
     expect(result).not.toBe("deadlock");
   });
