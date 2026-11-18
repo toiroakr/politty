@@ -287,6 +287,28 @@ describe("runCommand with a registered loader", () => {
   });
 });
 
+describe("runCommand calls that arrive while the entry is being loaded", () => {
+  it("make independent callers wait for the recording", async () => {
+    const run = vi.fn();
+    const deploy = deployWith(run);
+    slotOf()["loader"] = async () => {
+      slotOf()["capturing"] = true;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      recordCli(nested(deploy), { globalArgs });
+      delete slotOf()["capturing"];
+    };
+
+    await Promise.all([
+      runCommand(deploy, ["--verbose", "a"]),
+      runCommand(deploy, ["--verbose", "b"]),
+    ]);
+
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenNthCalledWith(1, expect.objectContaining({ verbose: true }));
+    expect(run).toHaveBeenNthCalledWith(2, expect.objectContaining({ verbose: true }));
+  });
+});
+
 describe("runCommand while the entry is being recorded", () => {
   it("does not wait for the loader that is waiting for the entry", async () => {
     const other = defineCommand({ name: "other", run: () => {} });

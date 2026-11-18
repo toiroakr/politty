@@ -36,10 +36,22 @@ export function getRecordedCli(): RecordedCli | undefined {
   return slot().recorded;
 }
 
+const RECORDING_SCOPE_KEY = "politty.recordingScope";
+
+const recordingScope = (() => {
+  const holder = globalThis as unknown as Record<symbol, AsyncLocalStorage<true> | undefined>;
+  return (holder[Symbol.for(RECORDING_SCOPE_KEY)] ??= new AsyncLocalStorage<true>());
+})();
+
+export function isInRecordingScope(): boolean {
+  return recordingScope.getStore() === true;
+}
+
 export function ensureRecordedCli(): Promise<void> {
   const current = slot();
-  if (current.recorded || !current.loader) return Promise.resolve();
-  current.loading ??= current.loader().catch((error: unknown) => {
+  const loader = current.loader;
+  if (current.recorded || !loader) return Promise.resolve();
+  current.loading ??= recordingScope.run(true, loader).catch((error: unknown) => {
     delete current.loading;
     throw error;
   });

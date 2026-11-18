@@ -166,6 +166,24 @@ describe("recording setup module", () => {
     expect(getRecordedCli()?.command).toEqual({ name: "late" });
   });
 
+  it("finishes when the entry calls runCommand before runMain", async () => {
+    const runnerUrl = JSON.stringify(pathToFileURL(runnerPath).href);
+    const entry = write(
+      "entry-with-run-command.mjs",
+      `import { runCommand, runMain } from ${runnerUrl};
+await runCommand({ name: "x", run() {} }, []);
+runMain({ name: "cli" });
+`,
+    );
+
+    await Promise.race([
+      runSetup(entry),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("setup deadlocked")), 3000)),
+    ]);
+
+    expect(getRecordedCli()?.command).toEqual({ name: "cli" });
+  });
+
   it("finishes when the entry awaits runMain at the top level", async () => {
     const entry = entryCalling('await runMain({ name: "cli" });');
 

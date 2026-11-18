@@ -62,6 +62,7 @@ import {
   getRecordedCli,
   inheritableRunOptions,
   isInRecordedHook,
+  isInRecordingScope,
   isRecordingCli,
   recordCli,
 } from "./recorded-cli.js";
@@ -347,7 +348,7 @@ export async function runCommand<TResult = unknown>(
   options: RunCommandOptions = {},
 ): Promise<RunResult<TResult>> {
   const inHook = isInRecordedHook();
-  if (!inHook && !isRecordingCli()) await ensureRecordedCli();
+  if (!inHook && !isInRecordingScope()) await ensureRecordedCli();
   const recorded = inHook ? undefined : getRecordedCli();
   const path = recorded ? await findCommandPath(recorded.command, command) : undefined;
   if (recorded && path) {
