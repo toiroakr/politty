@@ -176,10 +176,13 @@ runMain({ name: "cli" });
 `,
     );
 
+    let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
       runSetup(entry),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("setup deadlocked")), 3000)),
-    ]);
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("setup deadlocked")), 3000);
+      }),
+    ]).finally(() => clearTimeout(timer));
 
     expect(getRecordedCli()?.command).toEqual({ name: "cli" });
   });
