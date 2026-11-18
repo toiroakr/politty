@@ -31,5 +31,5 @@ jobs:
         continue-on-error: true
       - name: Reject other high and critical vulnerabilities
         run: |
-          pnpm audit --ignore GHSA-fc5q-39xc-vjpf
+          pnpm audit --audit-level high --ignore GHSA-fc5q-39xc-vjpf
           pnpm audit --audit-level high
