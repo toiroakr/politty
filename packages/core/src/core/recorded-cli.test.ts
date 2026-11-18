@@ -149,6 +149,54 @@ describe("runCommand with a recorded CLI", () => {
     expect(prompt).not.toHaveBeenCalled();
   });
 
+  it("does not apply the recorded hooks again to a runCommand call made inside them", async () => {
+    const other = defineCommand({ name: "other", run: () => {} });
+    const deploy = deployWith(() => {});
+    const setup = vi.fn(async () => {
+      await runCommand(other, []);
+    });
+    const cleanup = vi.fn(async () => {
+      await runCommand(other, []);
+    });
+    recordCli(defineCommand({ name: "cli", subCommands: { other, deploy } }), {
+      globalArgs,
+      setup,
+      cleanup,
+    });
+
+    const result = await runCommand(deploy, ["prod"]);
+
+    expect(result.success).toBe(true);
+    expect(setup).toHaveBeenCalledTimes(1);
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies the recorded hooks to runs that start independently at the same time", async () => {
+    const deploy = deployWith(() => {});
+    const setup = vi.fn();
+    recordCli(nested(deploy), { globalArgs, setup });
+
+    await Promise.all([runCommand(deploy, ["a"]), runCommand(deploy, ["b"])]);
+
+    expect(setup).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not inherit the recorded options for an internal command, as the real CLI does not", async () => {
+    const setup = vi.fn();
+    const run = vi.fn();
+    const internal = defineCommand({ name: "__refresh-completion", run });
+    recordCli(defineCommand({ name: "cli", subCommands: { "__refresh-completion": internal } }), {
+      globalArgs,
+      setup,
+    });
+
+    const result = await runCommand(internal, []);
+
+    expect(result.success).toBe(true);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(setup).not.toHaveBeenCalled();
+  });
+
   it("runs a command outside the recorded tree as it would without a recorded CLI", async () => {
     const setup = vi.fn();
     const run = vi.fn();
@@ -173,6 +221,17 @@ describe("runCommand with a recorded CLI", () => {
     await runCommand(deploy, ["prod"]);
 
     expect(run).toHaveBeenCalledWith({ target: "prod" });
+  });
+});
+
+describe("clearRecordedCli", () => {
+  it("forgets which entry was recorded", () => {
+    const slotKey = Symbol.for(RECORDED_CLI_KEY);
+    Object.assign(globalThis, { [slotKey]: { entry: "file:///cli.ts" } });
+
+    clearRecordedCli();
+
+    expect((globalThis as unknown as Record<symbol, object>)[slotKey]).not.toHaveProperty("entry");
   });
 });
 

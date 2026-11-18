@@ -1237,6 +1237,12 @@ interface RunCommandOptions {
   skipValidation?: boolean;
   /** Custom logger (default: console) */
   logger?: Logger;
+  /** Global args schema. Defaults to the one of the CLI that the Vite plugin recorded. */
+  globalArgs?: ArgsSchema;
+  /** Global setup hook. Defaults to the one of the recorded CLI; pass `undefined` to run without it. */
+  setup?: ((context: GlobalSetupContext) => void | Promise<void>) | undefined;
+  /** Global cleanup hook. Defaults to the one of the recorded CLI; pass `undefined` to run without it. */
+  cleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
   /** Same as `MainOptions.agentHelp` */
   agentHelp?: MainOptions["agentHelp"];
 }

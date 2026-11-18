@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { RECORDED_CLI_KEY } from "../core/recorded-cli.js";
 import { parseJsonc } from "./jsonc.js";
 
+const REGISTRATION_GRACE_MS = 1000;
 const POLITTY_PACKAGE = /^(politty|@politty\/.+)$/;
 
 export interface PolittyVitePluginOptions {
@@ -20,24 +21,25 @@ export interface PolittyVitePlugin {
   ) => { test: { setupFiles: string[] } } | undefined;
 }
 
-interface ContentMapperEntry {
-  package?: unknown;
-  options?: { entry?: unknown };
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export function readRecordingEntry(tsconfigPath: string): string {
-  let config: { contentMappers?: ContentMapperEntry[] };
+  let config: unknown;
   try {
-    config = parseJsonc(readFileSync(tsconfigPath, "utf8")) as typeof config;
+    config = parseJsonc(readFileSync(tsconfigPath, "utf8"));
   } catch (error) {
     throw new Error(
       `politty: cannot read the tsconfig at ${tsconfigPath}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  const mappers = config.contentMappers;
-  const entry = (mappers ?? [])
+  const mappers =
+    isObject(config) && Array.isArray(config.contentMappers) ? config.contentMappers : [];
+  const entry = mappers
+    .filter(isObject)
     .filter((mapper) => typeof mapper.package === "string" && POLITTY_PACKAGE.test(mapper.package))
-    .map((mapper) => mapper.options?.entry)
+    .map((mapper) => (isObject(mapper.options) ? mapper.options.entry : undefined))
     .find((value): value is string => typeof value === "string");
   if (entry === undefined) {
     throw new Error(
@@ -47,7 +49,7 @@ export function readRecordingEntry(tsconfigPath: string): string {
   return resolve(dirname(tsconfigPath), entry);
 }
 
-export function renderRecordingSetup(entryUrl: string): string {
+export function renderRecordingSetup(entryUrl: string, graceMs: number): string {
   return `const entry = ${JSON.stringify(entryUrl)};
 const slot = (globalThis[Symbol.for(${JSON.stringify(RECORDED_CLI_KEY)})] ??= {});
 if (!slot.recorded || slot.entry !== entry) {
@@ -64,6 +66,14 @@ if (!slot.recorded || slot.entry !== entry) {
   );
   try {
     await Promise.race([loaded, recorded]);
+    if (!slot.recorded) {
+      let timer;
+      const expired = new Promise((resolve) => {
+        timer = setTimeout(resolve, ${graceMs});
+      });
+      await Promise.race([recorded, expired]);
+      clearTimeout(timer);
+    }
   } finally {
     slot.capturing = false;
     delete slot.onRecord;
@@ -79,12 +89,12 @@ function removeSetupDirectories(): void {
   for (const directory of setupDirectories) rmSync(directory, { recursive: true, force: true });
 }
 
-export function writeRecordingSetup(entry: string): string {
+export function writeRecordingSetup(entry: string, graceMs = REGISTRATION_GRACE_MS): string {
   const directory = mkdtempSync(join(tmpdir(), "politty-vitest-"));
   if (setupDirectories.size === 0) process.once("exit", removeSetupDirectories);
   setupDirectories.add(directory);
   const file = join(directory, "setup.mjs");
-  writeFileSync(file, renderRecordingSetup(pathToFileURL(entry).href), { mode: 0o600 });
+  writeFileSync(file, renderRecordingSetup(pathToFileURL(entry).href, graceMs), { mode: 0o600 });
   return file;
 }
 
@@ -97,8 +107,8 @@ export function writeRecordingSetup(entry: string): string {
 export function politty(options: PolittyVitePluginOptions = {}): PolittyVitePlugin {
   return {
     name: "politty",
-    config(userConfig, env) {
-      if (env?.mode !== "test" && !process.env["VITEST"]) return undefined;
+    config(userConfig) {
+      if (!process.env["VITEST"]) return undefined;
       const root = resolve(userConfig.root ?? process.cwd());
       const entry = readRecordingEntry(resolve(root, options.tsconfig ?? "tsconfig.json"));
       return { test: { setupFiles: [writeRecordingSetup(entry)] } };

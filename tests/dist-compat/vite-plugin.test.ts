@@ -57,7 +57,7 @@ afterEach(() => {
 function link(dir: string, name: string, target: string): void {
   const linkPath = path.join(dir, "node_modules", name);
   fs.mkdirSync(path.dirname(linkPath), { recursive: true });
-  fs.symlinkSync(fs.realpathSync(target), linkPath, "dir");
+  fs.symlinkSync(fs.realpathSync(target), linkPath, "junction");
 }
 
 function write(dir: string, relative: string, content: string): void {
@@ -148,6 +148,7 @@ function runVitest(dir: string): { status: number | null; output: string } {
   const result = spawnSync(process.execPath, [vitestBin, "run"], {
     cwd: dir,
     encoding: "utf8",
+    timeout: 120_000,
     env: {
       ...process.env,
       POLITTY_NO_AGENT: "1",
@@ -156,6 +157,7 @@ function runVitest(dir: string): { status: number | null; output: string } {
       NO_COLOR: "1",
     },
   });
+  if (result.error) throw result.error;
   return { status: result.status, output: `${result.stdout}\n${result.stderr}` };
 }
 
@@ -177,21 +179,22 @@ describe.each(Object.keys(PACKAGES) as (keyof typeof PACKAGES)[])("%s/vite", (pa
     expect(status).toBe(0);
   });
 
-  it("fails the same test when the plugin is not installed", () => {
+  it("runs the same test without the CLI options when the plugin is not installed", () => {
     const dir = createProject(
       packageName,
       `it("needs the plugin", async () => {
   const result = await runCommand(deploy, ["--verbose", "prod"]);
 
-  expect(result).toMatchObject({ success: true });
+  expect(result.success).toBe(false);
+  expect(globalThis.__events).toBeUndefined();
 });`,
       { withPlugin: false },
     );
 
     const { status, output } = runVitest(dir);
 
-    expect(output).toContain("1 failed");
-    expect(status).not.toBe(0);
+    expect(output).toContain("1 passed");
+    expect(status).toBe(0);
   });
 
   it("applies the CLI options in every test file when the files share modules", () => {

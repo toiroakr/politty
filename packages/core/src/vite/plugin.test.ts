@@ -76,6 +76,22 @@ describe("readRecordingEntry", () => {
     expect(() => readRecordingEntry(missing)).toThrow(missing);
   });
 
+  it("skips entries of contentMappers that are not objects", () => {
+    const tsconfig = tsconfigWith([
+      null,
+      1,
+      { package: "politty", options: { entry: "./cli.ts" } },
+    ]);
+
+    expect(readRecordingEntry(tsconfig)).toBe(join(project, "cli.ts"));
+  });
+
+  it("names the tsconfig in the error when the file does not hold an object", () => {
+    const tsconfig = write("tsconfig.json", "null");
+
+    expect(() => readRecordingEntry(tsconfig)).toThrow(tsconfig);
+  });
+
   it("names the tsconfig in the error when it is not valid JSON", () => {
     const tsconfig = write("tsconfig.json", "{ not json");
 
@@ -106,7 +122,7 @@ describe("recording setup module", () => {
     );
 
   const runSetup = async (entry: string): Promise<void> => {
-    const file = writeRecordingSetup(entry);
+    const file = writeRecordingSetup(entry, 100);
     await import(/* @vite-ignore */ `${pathToFileURL(file).href}?run=${Math.random()}`);
   };
 
@@ -116,6 +132,14 @@ describe("recording setup module", () => {
     await runSetup(entry);
 
     expect(getRecordedCli()).toEqual({ command: { name: "cli" }, options: { version: "1.2.3" } });
+  });
+
+  it("waits for a runMain call that the entry makes after its module has been evaluated", async () => {
+    const entry = entryCalling('setTimeout(() => runMain({ name: "late" }), 20);');
+
+    await runSetup(entry);
+
+    expect(getRecordedCli()?.command).toEqual({ name: "late" });
   });
 
   it("finishes when the entry awaits runMain at the top level", async () => {
@@ -201,7 +225,7 @@ describe("recording setup module", () => {
   });
 
   it("embeds the entry URL as a string literal", () => {
-    const source = renderRecordingSetup('file:///tmp/with "quotes"/cli.ts');
+    const source = renderRecordingSetup('file:///tmp/with "quotes"/cli.ts', 100);
 
     expect(source).toContain(JSON.stringify('file:///tmp/with "quotes"/cli.ts'));
   });
@@ -247,10 +271,11 @@ describe("politty vite plugin", () => {
     );
   });
 
-  it("does nothing outside a test run", () => {
+  it("does nothing outside a Vitest run, even in test mode", () => {
     vi.stubEnv("VITEST", "");
 
     expect(politty().config({ root: project }, { mode: "production" })).toBeUndefined();
+    expect(politty().config({ root: project }, { mode: "test" })).toBeUndefined();
   });
 
   it("is accepted as a plugin by the vitest config", () => {

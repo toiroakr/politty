@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { AnyCommand, MainOptions, RunCommandOptions } from "../types.js";
 
 export const RECORDED_CLI_KEY = "politty.recordedCli";
@@ -10,6 +11,7 @@ export interface RecordedCli {
 interface RecordedCliSlot {
   capturing?: boolean;
   recorded?: RecordedCli;
+  entry?: string;
   onRecord?: () => void;
 }
 
@@ -35,15 +37,22 @@ export function getRecordedCli(): RecordedCli | undefined {
 export function clearRecordedCli(): void {
   const current = slot();
   delete current.recorded;
+  delete current.entry;
   delete current.capturing;
   delete current.onRecord;
+}
+
+const hookScope = new AsyncLocalStorage<true>();
+
+export function isInRecordedHook(): boolean {
+  return hookScope.getStore() === true;
 }
 
 export function inheritableRunOptions(recorded: RecordedCli): RunCommandOptions {
   const { globalArgs, setup, cleanup } = recorded.options;
   return {
     ...(globalArgs ? { globalArgs } : {}),
-    ...(setup ? { setup } : {}),
-    ...(cleanup ? { cleanup } : {}),
+    ...(setup ? { setup: (context) => hookScope.run(true, () => setup(context)) } : {}),
+    ...(cleanup ? { cleanup: (context) => hookScope.run(true, () => cleanup(context)) } : {}),
   };
 }

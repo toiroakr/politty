@@ -60,6 +60,7 @@ import {
 import {
   getRecordedCli,
   inheritableRunOptions,
+  isInRecordedHook,
   isRecordingCli,
   recordCli,
 } from "./recorded-cli.js";
@@ -344,11 +345,12 @@ export async function runCommand<TResult = unknown>(
   argv: string[],
   options: RunCommandOptions = {},
 ): Promise<RunResult<TResult>> {
-  const recorded = getRecordedCli();
+  const recorded = isInRecordedHook() ? undefined : getRecordedCli();
   const path = recorded ? await findCommandPath(recorded.command, command) : undefined;
   if (recorded && path) {
+    const inherited = path[0]?.startsWith("__") ? {} : inheritableRunOptions(recorded);
     return runCommandWithOptions<TResult>(recorded.command, [...path, ...argv], {
-      ...inheritableRunOptions(recorded),
+      ...inherited,
       ...options,
     });
   }
