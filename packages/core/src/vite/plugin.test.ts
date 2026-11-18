@@ -1,13 +1,11 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "vitest/config";
 import { clearRecordedCli, getRecordedCli, isRecordingCli } from "../core/recorded-cli.js";
 import { politty, readRecordingEntry, renderRecordingSetup, writeRecordingSetup } from "./index.js";
-
-const portable = (file: string): string => file.split(sep).join("/");
 
 const runnerPath = fileURLToPath(new URL("../core/runner.ts", import.meta.url));
 
@@ -102,11 +100,14 @@ describe("readRecordingEntry", () => {
 
 describe("recording setup module", () => {
   const entryCalling = (body: string): string =>
-    write("entry.mjs", `import { runMain } from ${JSON.stringify(runnerPath)};\n${body}\n`);
+    write(
+      "entry.mjs",
+      `import { runMain } from ${JSON.stringify(pathToFileURL(runnerPath).href)};\n${body}\n`,
+    );
 
   const runSetup = async (entry: string): Promise<void> => {
     const file = writeRecordingSetup(entry);
-    await import(/* @vite-ignore */ `${file}?run=${Math.random()}`);
+    await import(/* @vite-ignore */ `${pathToFileURL(file).href}?run=${Math.random()}`);
   };
 
   it("records the command and options that the entry passes to runMain", async () => {
@@ -199,10 +200,16 @@ describe("recording setup module", () => {
     );
   });
 
-  it("embeds the entry path as a string literal", () => {
-    const source = renderRecordingSetup('/tmp/with "quotes"/cli.ts');
+  it("embeds the entry URL as a string literal", () => {
+    const source = renderRecordingSetup('file:///tmp/with "quotes"/cli.ts');
 
-    expect(source).toContain(JSON.stringify('/tmp/with "quotes"/cli.ts'));
+    expect(source).toContain(JSON.stringify('file:///tmp/with "quotes"/cli.ts'));
+  });
+
+  it("imports the entry through a file URL so that no path character changes its meaning", () => {
+    const source = readFileSync(writeRecordingSetup("/tmp/dir #1?/cli.ts"), "utf8");
+
+    expect(source).toContain(JSON.stringify(pathToFileURL("/tmp/dir #1?/cli.ts").href));
   });
 });
 
@@ -222,7 +229,7 @@ describe("politty vite plugin", () => {
     const [setupFile] = setupFilesOf(politty(), { root: project }) ?? [];
 
     expect(readFileSync(setupFile!, "utf8")).toContain(
-      JSON.stringify(portable(join(project, "src/cli.ts"))),
+      JSON.stringify(pathToFileURL(join(project, "src/cli.ts")).href),
     );
   });
 
@@ -236,7 +243,7 @@ describe("politty vite plugin", () => {
       setupFilesOf(politty({ tsconfig: "config/tsconfig.test.json" }), { root: project }) ?? [];
 
     expect(readFileSync(setupFile!, "utf8")).toContain(
-      JSON.stringify(portable(join(project, "cli.ts"))),
+      JSON.stringify(pathToFileURL(join(project, "cli.ts")).href),
     );
   });
 

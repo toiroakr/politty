@@ -93,7 +93,7 @@ The type of `args.verbose` needs no import in the subcommand (see [Typing global
 
 #### Reusing the options of the CLI (Vite plugin)
 
-`politty/vite` (also `@politty/zod/vite`, `@politty/valibot/vite` and `@politty/zod-mini/vite`) is a Vite plugin for Vitest. It loads your CLI entry before each test file, with `runMain` only recording its command and options instead of running. `runCommand` then uses what was recorded.
+`politty/vite` (also `@politty/zod/vite`, `@politty/valibot/vite` and `@politty/zod-mini/vite`) is a Vite plugin for Vitest. It records your CLI for every test file: it loads your CLI entry, with `runMain` only recording its command and options instead of running, and `runCommand` then uses what was recorded. With `isolate: false`, Vitest shares modules between test files, so the entry is loaded once and the recording is reused.
 
 ```typescript
 // vitest.config.ts
@@ -110,6 +110,7 @@ export default defineConfig({
 A test then needs no import for the global options:
 
 ```typescript
+import { expect, it } from "vitest";
 import { runCommand } from "politty";
 import { deploy } from "./deploy";
 
@@ -120,11 +121,13 @@ it("deploys with the global options of the CLI", async () => {
 });
 ```
 
-- `runCommand` looks `deploy` up by reference in the recorded command tree, and runs it from the root through its real path, as `mycli ops deploy --verbose prod`. Renaming `deploy` or moving it under another parent does not change the test. When a command is registered under several parents, the first registration wins. Commands declared in the tree, including the metadata of `lazy()` subcommands, are matched first without loading anything; `lazy()` and async subcommands are loaded only when that finds nothing, starting with the ones named like the command. The lookup runs before `setup`, and the loader that it called is called again when the command runs, so a loader that needs state from `setup`, or that returns a different command each time, is skipped by the lookup and the command then runs as if it were outside the recorded tree.
+- `runCommand` looks `deploy` up by reference in the recorded command tree and runs it from the root through its real path, as `mycli ops deploy --verbose prod`. Renaming `deploy` or moving it under another parent does not change the test. When a command is registered under several parents, the first matching declared path wins; paths that need loading are considered only afterwards.
+- Commands declared in the tree, including the metadata of `lazy()` subcommands, are matched without loading anything. Only when that finds nothing, for a command that a `lazy()` or async subcommand returns or for a command outside the tree, the `lazy()` and async subcommands are loaded, starting with the ones named like the command. A loader that uses `import()` loads each module once.
+- The lookup runs before `setup`, and a loader that it called is called again when the command runs. A loader that needs state from `setup`, that throws (a missing `requiredPackages` prerequisite, for example), or that returns a different command each time is skipped by the lookup, and the command then runs as if it were outside the recorded tree.
 - The recorded `globalArgs`, `setup` and `cleanup` apply as in the real CLI. The help of the subcommand shows its full path.
-- Options you pass to `runCommand` win, key by key. Pass `{ setup: undefined }` to run without the recorded `setup`. Only these three options are taken from the recorded call; `prompt` and the others are not.
+- Options you pass to `runCommand` win, key by key. Pass `{ setup: undefined }` to run without the recorded `setup`. Only these three options are taken from the recorded call; `prompt` and the others are not. A `runCommand` call inside the recorded `setup` or `cleanup` inherits the same hooks, so pass `{ setup: undefined, cleanup: undefined }` there.
 - A command that is not in the recorded tree runs as it does without the plugin.
-- The entry is loaded before every test file, so keep it free of work that must not happen in a test run, and do not import it from a test. When it throws before it calls `runMain`, every test file fails with that error.
+- The entry has to call `runMain` while its module is evaluated; a top-level `await runMain(...)` is fine, but a call that comes after the import has finished runs the real CLI. The entry runs in the test process before the tests, so keep it free of work that must not happen in a test run, and do not import it from a test. When it throws before it calls `runMain`, every test file fails with that error.
 
 ## Runtime Configuration
 

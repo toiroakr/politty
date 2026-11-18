@@ -37,6 +37,22 @@ describe("parseJsonc", () => {
     expect(parseJsonc('\uFEFF{ "a": 1 }')).toEqual({ a: 1 });
   });
 
+  it("does not join two tokens that a block comment separates", () => {
+    expect(() => parseJsonc('{ "x": 1/* c */2 }')).toThrow();
+  });
+
+  it("throws on a block comment that is never closed", () => {
+    expect(() => parseJsonc('{ "x": 1 /* c }')).toThrow();
+  });
+
+  it("ends a line comment at a carriage return", () => {
+    expect(parseJsonc('{ "x": 1, // c\r"y": 2 }')).toEqual({ x: 1, y: 2 });
+  });
+
+  it.each(["{,}", "[,]", '{ "a": [1,,] }'])("throws on the stray comma in %s", (text) => {
+    expect(() => parseJsonc(text)).toThrow();
+  });
+
   it("throws on invalid JSON", () => {
     expect(() => parseJsonc("{ a: 1 }")).toThrow();
   });

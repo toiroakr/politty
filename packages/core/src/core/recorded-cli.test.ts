@@ -132,8 +132,9 @@ describe("runCommand with a recorded CLI", () => {
     const deploy = deployWith(() => {});
     recordCli(nested(deploy), { globalArgs, setup });
 
-    await runCommand(deploy, ["prod"], { setup: undefined });
+    const result = await runCommand(deploy, ["prod"], { setup: undefined });
 
+    expect(result.success).toBe(true);
     expect(setup).not.toHaveBeenCalled();
   });
 
@@ -142,8 +143,9 @@ describe("runCommand with a recorded CLI", () => {
     const deploy = deployWith(() => {});
     recordCli(nested(deploy), { globalArgs, prompt });
 
-    await runCommand(deploy, ["prod"]);
+    const result = await runCommand(deploy, ["prod"]);
 
+    expect(result.success).toBe(true);
     expect(prompt).not.toHaveBeenCalled();
   });
 

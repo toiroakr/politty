@@ -191,7 +191,7 @@ When the [Vite plugin](./recipes.md#reusing-the-options-of-the-cli-vite-plugin) 
 ```typescript
 import { politty } from "politty/vite";
 
-function politty(options?: { tsconfig?: string }): Plugin;
+function politty(options?: { tsconfig?: string }): PolittyVitePlugin;
 ```
 
 A Vite plugin for Vitest, exported from the `vite` subpath of every politty package that ships the content mapper (`politty/vite`, `@politty/zod/vite`, `@politty/valibot/vite`, `@politty/zod-mini/vite`). Outside a test run it does nothing.

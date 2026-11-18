@@ -90,19 +90,21 @@ describe("findCommandPath", () => {
     expect(await findCommandPath(root, deploy)).toEqual(["deploy"]);
   });
 
-  it("skips a lazy subcommand whose loader throws", async () => {
+  it("skips a lazy subcommand whose loader throws and keeps looking", async () => {
+    const load = vi.fn(async (): Promise<AnyCommand> => {
+      throw new Error("load failed");
+    });
     const deploy = leaf("deploy");
     const root = defineCommand({
       name: "cli",
       subCommands: {
-        broken: lazy(leaf("broken"), async () => {
-          throw new Error("load failed");
-        }),
-        deploy,
+        broken: lazy(leaf("broken"), load),
+        ship: lazy(leaf("ship"), async () => deploy),
       },
     });
 
-    expect(await findCommandPath(root, deploy)).toEqual(["deploy"]);
+    expect(await findCommandPath(root, deploy)).toEqual(["ship"]);
+    expect(load).toHaveBeenCalledTimes(1);
   });
 
   it("returns the first registered path when a command has several parents", async () => {

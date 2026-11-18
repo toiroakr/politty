@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { RECORDED_CLI_KEY } from "../core/recorded-cli.js";
 import { parseJsonc } from "./jsonc.js";
 
@@ -46,8 +47,8 @@ export function readRecordingEntry(tsconfigPath: string): string {
   return resolve(dirname(tsconfigPath), entry);
 }
 
-export function renderRecordingSetup(entry: string): string {
-  return `const entry = ${JSON.stringify(entry)};
+export function renderRecordingSetup(entryUrl: string): string {
+  return `const entry = ${JSON.stringify(entryUrl)};
 const slot = (globalThis[Symbol.for(${JSON.stringify(RECORDED_CLI_KEY)})] ??= {});
 if (!slot.recorded || slot.entry !== entry) {
   if (slot.entry !== entry) delete slot.recorded;
@@ -83,7 +84,7 @@ export function writeRecordingSetup(entry: string): string {
   if (setupDirectories.size === 0) process.once("exit", removeSetupDirectories);
   setupDirectories.add(directory);
   const file = join(directory, "setup.mjs");
-  writeFileSync(file, renderRecordingSetup(entry.split(sep).join("/")), { mode: 0o600 });
+  writeFileSync(file, renderRecordingSetup(pathToFileURL(entry).href), { mode: 0o600 });
   return file;
 }
 

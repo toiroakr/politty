@@ -1,14 +1,9 @@
-import { isLazyCommand } from "../lazy.js";
+import { isLazyCommand, resolveSubCommandMeta } from "../lazy.js";
 import type { AnyCommand, SubCommandValue } from "../types.js";
 
 interface Resolved {
   command: AnyCommand;
   meta?: AnyCommand;
-}
-
-function declared(value: SubCommandValue): AnyCommand | undefined {
-  if (isLazyCommand(value)) return value.meta;
-  return typeof value === "function" ? undefined : value;
 }
 
 function searchWithoutLoading(
@@ -17,7 +12,7 @@ function searchWithoutLoading(
   visited: Set<AnyCommand>,
 ): string[] | undefined {
   for (const [name, value] of Object.entries(parent.subCommands ?? {})) {
-    const command = declared(value);
+    const command = resolveSubCommandMeta(value);
     if (!command) continue;
     if (command === target) return [name];
     if (visited.has(command)) continue;
@@ -48,7 +43,7 @@ async function resolve(value: SubCommandValue): Promise<Resolved | undefined> {
 
 function namedLikeTarget(target: AnyCommand) {
   return ([name, value]: [string, SubCommandValue]): boolean =>
-    name === target.name || declared(value)?.name === target.name;
+    name === target.name || resolveSubCommandMeta(value)?.name === target.name;
 }
 
 async function searchByLoading(
