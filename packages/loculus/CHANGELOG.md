@@ -1,5 +1,11 @@
 # @politty/loculus
 
+## 0.4.6
+
+### Patch Changes
+
+- 6b6deed: chore(deps): update dependency @inquirer/prompts to v8.8.0
+
 ## 0.4.5
 
 ### Patch Changes
