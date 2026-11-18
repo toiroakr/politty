@@ -172,7 +172,7 @@ snapshots:
 		"autoInstallPeers": true,
 		"excludeLinksFromLockfile": false,
 		"overrides": {
-			"editorconfig>minimatch": "^11.0.6",
+			"editorconfig>minimatch": "^11.0.7",
 		},
 	},
 
@@ -2681,7 +2681,7 @@ snapshots:
 			"dependencies": {
 				"@one-ini/wasm": "0.2.1",
 				"commander": "14.0.3",
-				"minimatch": "11.0.6",
+				"minimatch": "11.0.7",
 				"semver": "7.8.5",
 			},
 		},
@@ -3127,8 +3127,8 @@ snapshots:
 			},
 		},
 
-		"minimatch@11.0.6": {
-			"integrity": "sha512-6NZbDPQIRnsJFjJ9wbd5659OKaTHCqpPHdldE3WwArjxr5wLxHIwnx4eTGcPebpVBZZQbITvQQIx8K0VGXoT3Q==",
+		"minimatch@11.0.7": {
+			"integrity": "sha512-Tnk+M9mPjqKDZlUd77eMSjPjhnlBIa1mABOwetMryIshUwi1YmOBdGFfQnHgn4Z8A66eLT8ENzJrxwYmKfqrZg==",
 			"engines": {"node": "20 || >=22"},
 			"dependencies": {
 				"@isaacs/nonrecursive-glob-match": "1.1.0",
