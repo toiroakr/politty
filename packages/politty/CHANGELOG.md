@@ -1,5 +1,13 @@
 # politty
 
+## 0.17.6
+
+### Patch Changes
+
+- 6b6deed: chore(deps): update dependency @inquirer/prompts to v8.8.0
+- Updated dependencies [6b6deed]
+  - @politty/zod@0.7.6
+
 ## 0.17.5
 
 ### Patch Changes
