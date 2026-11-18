@@ -81,6 +81,51 @@ it("should mock setup", async () => {
 });
 ```
 
+### Testing a Subcommand on Its Own
+
+Pass a subcommand straight to `runCommand` to test it without naming the parents it sits under. The global args, `setup` and `cleanup` of your CLI belong to `runMain`, so a bare `runCommand(deploy, argv)` runs without them. Pass them in `options` to get the same run as the real CLI:
+
+```typescript
+await runCommand(deploy, ["--verbose", "prod"], { globalArgs, setup, cleanup });
+```
+
+The type of `args.verbose` needs no import in the subcommand (see [Typing global options in commands](./advanced-features.md#typing-global-options-in-commands)), but the schema itself has to be passed this way at run time. With Vitest, the Vite plugin below removes that repetition.
+
+#### Reusing the options of the CLI (Vite plugin)
+
+`politty/vite` (also `@politty/zod/vite`, `@politty/valibot/vite` and `@politty/zod-mini/vite`) is a Vite plugin for Vitest. It loads your CLI entry before each test file, with `runMain` only recording its command and options instead of running. `runCommand` then uses what was recorded.
+
+```typescript
+// vitest.config.ts
+import { defineConfig } from "vitest/config";
+import { politty } from "politty/vite";
+
+export default defineConfig({
+  plugins: [politty({ tsconfig: "./tsconfig.json" })],
+});
+```
+
+`tsconfig` is the file that configures the [politty content mapper](./advanced-features.md#deriving-globalargs-from-runmain-content-mapper), relative to the Vite root (default `./tsconfig.json`). The plugin reads the `entry` option there, so the entry is written once for the type checker and for the tests. The file is read as written: `extends` is not followed.
+
+A test then needs no import for the global options:
+
+```typescript
+import { runCommand } from "politty";
+import { deploy } from "./deploy";
+
+it("deploys with the global options of the CLI", async () => {
+  const result = await runCommand(deploy, ["--verbose", "prod"]);
+
+  expect(result.success).toBe(true);
+});
+```
+
+- `runCommand` looks `deploy` up by reference in the recorded command tree, loading `lazy()` subcommands on the way, and runs it from the root through its real path, as `mycli ops deploy --verbose prod`. Renaming `deploy` or moving it under another parent does not change the test. When a command is registered under several parents, the first registration wins.
+- The recorded `globalArgs`, `setup` and `cleanup` apply as in the real CLI. The help of the subcommand shows its full path.
+- Options you pass to `runCommand` win, key by key. Pass `{ setup: undefined }` to run without the recorded `setup`. Only these three options are taken from the recorded call; `prompt` and the others are not.
+- A command that is not in the recorded tree runs as it does without the plugin.
+- The entry is loaded before every test file, so keep it free of work that must not happen in a test run, and do not import it from a test. When it throws before it calls `runMain`, every test file fails with that error.
+
 ## Runtime Configuration
 
 ### Signal Handling (Ctrl+C)

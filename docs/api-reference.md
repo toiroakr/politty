@@ -182,6 +182,26 @@ console.log(result.exitCode);
 console.log(result.result);
 ```
 
+When the [Vite plugin](./recipes.md#reusing-the-options-of-the-cli-vite-plugin) has recorded the CLI entry and `command` is in its command tree, `runCommand` runs the command through its path from the recorded root and takes `globalArgs`, `setup` and `cleanup` from the recorded `runMain` call unless `options` sets them.
+
+---
+
+### `politty` (Vite plugin)
+
+```typescript
+import { politty } from "politty/vite";
+
+function politty(options?: { tsconfig?: string }): Plugin;
+```
+
+A Vite plugin for Vitest, exported from the `vite` subpath of every politty package that ships the content mapper (`politty/vite`, `@politty/zod/vite`, `@politty/valibot/vite`, `@politty/zod-mini/vite`). Outside a test run it does nothing.
+
+| Option     | Type     | Description                                                                                                                                                                            |
+| ---------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tsconfig` | `string` | tsconfig whose `contentMappers` configure the politty content mapper, relative to the Vite root (default `./tsconfig.json`). Its `entry` option names the module that calls `runMain`. |
+
+See [Reusing the options of the CLI](./recipes.md#reusing-the-options-of-the-cli-vite-plugin) for how it works.
+
 ---
 
 ### `loadEnvFiles`
