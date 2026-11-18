@@ -48,6 +48,7 @@ import {
   formatUnknownFlagWarning,
 } from "../validator/error-formatter.js";
 import { createDualCaseProxy } from "./case-proxy.js";
+import { findCommandPath } from "./command-path.js";
 import { runEffects } from "./effect-runner.js";
 import {
   collectEnvFileRequests,
@@ -56,6 +57,12 @@ import {
   loadEnvFiles,
   validateEnvFileDefinitions,
 } from "./env-file.js";
+import {
+  getRecordedCli,
+  inheritableRunOptions,
+  isRecordingCli,
+  recordCli,
+} from "./recorded-cli.js";
 import {
   extractFields,
   selectAcceptingUnionOption,
@@ -337,6 +344,22 @@ export async function runCommand<TResult = unknown>(
   argv: string[],
   options: RunCommandOptions = {},
 ): Promise<RunResult<TResult>> {
+  const recorded = getRecordedCli();
+  const path = recorded ? await findCommandPath(recorded.command, command) : undefined;
+  if (recorded && path) {
+    return runCommandWithOptions<TResult>(recorded.command, [...path, ...argv], {
+      ...inheritableRunOptions(recorded),
+      ...options,
+    });
+  }
+  return runCommandWithOptions<TResult>(command, argv, options);
+}
+
+async function runCommandWithOptions<TResult = unknown>(
+  command: AnyCommand,
+  argv: string[],
+  options: RunCommandOptions,
+): Promise<RunResult<TResult>> {
   const globalExtracted = extractAndValidateGlobal(options);
   const agent = detectAgent();
   const globalCleanup = bindAgentToCleanup(options.cleanup, agent);
@@ -460,6 +483,11 @@ function isInternalSubcommandInvocation(
  * ```
  */
 export async function runMain(command: AnyCommand, options: MainOptions = {}): Promise<never> {
+  if (isRecordingCli()) {
+    recordCli(command, options);
+    return new Promise<never>(() => {});
+  }
+
   // Enable the on-disk V8 compile cache before anything is dynamically
   // imported so `lazy()` subcommands and adapter modules skip recompilation
   // on warm starts. The entry's static import graph is compiled before user
