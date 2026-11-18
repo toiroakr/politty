@@ -166,6 +166,15 @@ describe("recording setup module", () => {
     expect(getRecordedCli()?.command).toEqual({ name: "cli" });
   });
 
+  it("does not keep the CLI of another entry when the new entry fails before runMain", async () => {
+    await runSetup(entryCalling('runMain({ name: "first" });'));
+    const second = write("second.mjs", 'throw new Error("second exploded");');
+
+    await expect(runSetup(second)).rejects.toThrow("second exploded");
+
+    expect(getRecordedCli()).toBeUndefined();
+  });
+
   it("stops recording once the entry has loaded", async () => {
     await runSetup(entryCalling('runMain({ name: "cli" });'));
 

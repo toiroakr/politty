@@ -50,6 +50,7 @@ export function renderRecordingSetup(entry: string): string {
   return `const entry = ${JSON.stringify(entry)};
 const slot = (globalThis[Symbol.for(${JSON.stringify(RECORDED_CLI_KEY)})] ??= {});
 if (!slot.recorded || slot.entry !== entry) {
+  if (slot.entry !== entry) delete slot.recorded;
   slot.capturing = true;
   const recorded = new Promise((resolve) => {
     slot.onRecord = resolve;
