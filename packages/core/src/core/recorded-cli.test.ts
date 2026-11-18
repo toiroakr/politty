@@ -304,6 +304,24 @@ describe("runCommand with a registered loader", () => {
   });
 });
 
+describe("hook scope across copies of the core", () => {
+  it("is visible to another copy of the module inside a recorded hook", async () => {
+    let seenByOtherCopy: boolean | undefined;
+    const root = defineCommand({ name: "cli", run: () => {} });
+    recordCli(root, {
+      setup: async () => {
+        vi.resetModules();
+        const other = await import("./recorded-cli.js");
+        seenByOtherCopy = other.isInRecordedHook();
+      },
+    });
+
+    await runCommand(root, []);
+
+    expect(seenByOtherCopy).toBe(true);
+  });
+});
+
 describe("clearRecordedCli", () => {
   it("forgets which entry was recorded", () => {
     const slotKey = Symbol.for(RECORDED_CLI_KEY);

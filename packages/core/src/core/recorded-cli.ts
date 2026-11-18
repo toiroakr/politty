@@ -56,7 +56,12 @@ export function clearRecordedCli(): void {
   delete current.onRecord;
 }
 
-const hookScope = new AsyncLocalStorage<true>();
+const HOOK_SCOPE_KEY = "politty.recordedHookScope";
+
+const hookScope = (() => {
+  const holder = globalThis as unknown as Record<symbol, AsyncLocalStorage<true> | undefined>;
+  return (holder[Symbol.for(HOOK_SCOPE_KEY)] ??= new AsyncLocalStorage<true>());
+})();
 
 export function isInRecordedHook(): boolean {
   return hookScope.getStore() === true;
