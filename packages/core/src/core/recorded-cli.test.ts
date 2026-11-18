@@ -285,22 +285,23 @@ describe("runCommand with a registered loader", () => {
 
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ verbose: true }));
   });
+});
 
-  it("does not load the CLI for a run inside a recorded hook", async () => {
-    const loader = vi.fn(async () => {});
-    const deploy = deployWith(() => {});
+describe("runCommand while the entry is being recorded", () => {
+  it("does not wait for the loader that is waiting for the entry", async () => {
     const other = defineCommand({ name: "other", run: () => {} });
-    recordCli(defineCommand({ name: "cli", subCommands: { other, deploy } }), {
-      globalArgs,
-      setup: async () => {
-        slotOf()["loader"] = loader;
-        await runCommand(other, []);
-      },
-    });
+    slotOf()["loader"] = async () => {
+      slotOf()["capturing"] = true;
+      await runCommand(other, []);
+      delete slotOf()["capturing"];
+    };
 
-    await runCommand(deploy, ["prod"]);
+    const result = await Promise.race([
+      runCommand(other, []),
+      new Promise<string>((resolve) => setTimeout(() => resolve("deadlock"), 1000)),
+    ]);
 
-    expect(loader).not.toHaveBeenCalled();
+    expect(result).not.toBe("deadlock");
   });
 });
 

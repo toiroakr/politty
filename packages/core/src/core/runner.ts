@@ -347,7 +347,7 @@ export async function runCommand<TResult = unknown>(
   options: RunCommandOptions = {},
 ): Promise<RunResult<TResult>> {
   const inHook = isInRecordedHook();
-  if (!inHook) await ensureRecordedCli();
+  if (!inHook && !isRecordingCli()) await ensureRecordedCli();
   const recorded = inHook ? undefined : getRecordedCli();
   const path = recorded ? await findCommandPath(recorded.command, command) : undefined;
   if (recorded && path) {
