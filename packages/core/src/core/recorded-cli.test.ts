@@ -4,7 +4,12 @@ import { spyOnConsoleLog } from "../../../../tests/utils/console.js";
 import type { AnyCommand } from "../types.js";
 import { arg } from "./arg-registry.js";
 import { defineCommand } from "./command.js";
-import { clearRecordedCli, recordCli, RECORDED_CLI_KEY } from "./recorded-cli.js";
+import {
+  clearRecordedCli,
+  ensureRecordedCli,
+  recordCli,
+  RECORDED_CLI_KEY,
+} from "./recorded-cli.js";
 import { runCommand, runMain } from "./runner.js";
 
 const globalArgs = z.object({ verbose: arg(z.boolean().default(false)) });
@@ -221,6 +226,81 @@ describe("runCommand with a recorded CLI", () => {
     await runCommand(deploy, ["prod"]);
 
     expect(run).toHaveBeenCalledWith({ target: "prod" });
+  });
+});
+
+const slotOf = (): Record<string, unknown> =>
+  ((globalThis as unknown as Record<symbol, Record<string, unknown>>)[
+    Symbol.for(RECORDED_CLI_KEY)
+  ] ??= {});
+
+describe("ensureRecordedCli", () => {
+  it("runs the registered loader once for callers that arrive together", async () => {
+    const loader = vi.fn(async () => {});
+    slotOf()["loader"] = loader;
+
+    await Promise.all([ensureRecordedCli(), ensureRecordedCli()]);
+    await ensureRecordedCli();
+
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not run the loader when a CLI is already recorded", async () => {
+    const loader = vi.fn(async () => {});
+    slotOf()["loader"] = loader;
+    recordCli(defineCommand({ name: "cli" }), {});
+
+    await ensureRecordedCli();
+
+    expect(loader).not.toHaveBeenCalled();
+  });
+
+  it("runs the loader again after it failed", async () => {
+    const loader = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error("entry exploded"))
+      .mockResolvedValueOnce(undefined);
+    slotOf()["loader"] = loader;
+
+    await expect(ensureRecordedCli()).rejects.toThrow("entry exploded");
+    await ensureRecordedCli();
+
+    expect(loader).toHaveBeenCalledTimes(2);
+  });
+
+  it("does nothing when no loader is registered", async () => {
+    await expect(ensureRecordedCli()).resolves.toBeUndefined();
+  });
+});
+
+describe("runCommand with a registered loader", () => {
+  it("loads the CLI before it looks the command up", async () => {
+    const run = vi.fn();
+    const deploy = deployWith(run);
+    slotOf()["loader"] = async () => {
+      recordCli(nested(deploy), { globalArgs });
+    };
+
+    await runCommand(deploy, ["--verbose", "prod"]);
+
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({ verbose: true }));
+  });
+
+  it("does not load the CLI for a run inside a recorded hook", async () => {
+    const loader = vi.fn(async () => {});
+    const deploy = deployWith(() => {});
+    const other = defineCommand({ name: "other", run: () => {} });
+    recordCli(defineCommand({ name: "cli", subCommands: { other, deploy } }), {
+      globalArgs,
+      setup: async () => {
+        slotOf()["loader"] = loader;
+        await runCommand(other, []);
+      },
+    });
+
+    await runCommand(deploy, ["prod"]);
+
+    expect(loader).not.toHaveBeenCalled();
   });
 });
 

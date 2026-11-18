@@ -58,6 +58,7 @@ import {
   validateEnvFileDefinitions,
 } from "./env-file.js";
 import {
+  ensureRecordedCli,
   getRecordedCli,
   inheritableRunOptions,
   isInRecordedHook,
@@ -345,7 +346,9 @@ export async function runCommand<TResult = unknown>(
   argv: string[],
   options: RunCommandOptions = {},
 ): Promise<RunResult<TResult>> {
-  const recorded = isInRecordedHook() ? undefined : getRecordedCli();
+  const inHook = isInRecordedHook();
+  if (!inHook) await ensureRecordedCli();
+  const recorded = inHook ? undefined : getRecordedCli();
   const path = recorded ? await findCommandPath(recorded.command, command) : undefined;
   if (recorded && path) {
     const inherited = path[0]?.startsWith("__") ? {} : inheritableRunOptions(recorded);

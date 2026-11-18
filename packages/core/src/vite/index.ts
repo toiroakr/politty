@@ -52,8 +52,11 @@ export function readRecordingEntry(tsconfigPath: string): string {
 export function renderRecordingSetup(entryUrl: string, graceMs: number): string {
   return `const entry = ${JSON.stringify(entryUrl)};
 const slot = (globalThis[Symbol.for(${JSON.stringify(RECORDED_CLI_KEY)})] ??= {});
-if (!slot.recorded || slot.entry !== entry) {
-  if (slot.entry !== entry) delete slot.recorded;
+if (slot.entry !== entry) {
+  delete slot.recorded;
+  delete slot.loading;
+}
+slot.loader = async () => {
   slot.capturing = true;
   const recorded = new Promise((resolve) => {
     slot.onRecord = resolve;
@@ -79,7 +82,7 @@ if (!slot.recorded || slot.entry !== entry) {
     delete slot.onRecord;
   }
   if (slot.recorded) slot.entry = entry;
-}
+};
 `;
 }
 

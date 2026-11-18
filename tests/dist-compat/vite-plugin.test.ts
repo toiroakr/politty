@@ -197,6 +197,42 @@ describe.each(Object.keys(PACKAGES) as (keyof typeof PACKAGES)[])("%s/vite", (pa
     expect(status).toBe(0);
   });
 
+  it("keeps the mocks of the test file for the modules that the entry imports", () => {
+    const dir = createProject(
+      packageName,
+      `import { vi } from "vitest";
+
+vi.mock("./client.js", () => ({ client: { call: () => "mocked" } }));
+
+it("uses the mocked client", async () => {
+  const result = await runCommand(deploy, ["--verbose", "prod"]);
+
+  expect(result).toMatchObject({ success: true, result: { via: "mocked", verbose: true } });
+});`,
+    );
+    const { schemas } = PACKAGES[packageName];
+    write(dir, "src/client.ts", `export const client = { call: () => "real" };\n`);
+    write(
+      dir,
+      "src/deploy.ts",
+      `import { arg, defineCommand } from "${packageName}";
+${SCHEMA_IMPORT[schemas]}
+import { client } from "./client.js";
+
+export const deploy = defineCommand({
+  name: "deploy",
+  args: ${SCHEMAS[schemas]!.positional},
+  run: (args) => ({ target: args.target, verbose: args.verbose, via: client.call() }),
+});
+`,
+    );
+
+    const { status, output } = runVitest(dir);
+
+    expect(output).toContain("1 passed");
+    expect(status).toBe(0);
+  });
+
   it("applies the CLI options in every test file when the files share modules", () => {
     const dir = createProject(
       packageName,

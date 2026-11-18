@@ -4,7 +4,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "vitest/config";
-import { clearRecordedCli, getRecordedCli, isRecordingCli } from "../core/recorded-cli.js";
+import {
+  clearRecordedCli,
+  ensureRecordedCli,
+  getRecordedCli,
+  isRecordingCli,
+} from "../core/recorded-cli.js";
 import { politty, readRecordingEntry, renderRecordingSetup, writeRecordingSetup } from "./index.js";
 
 const runnerPath = fileURLToPath(new URL("../core/runner.ts", import.meta.url));
@@ -122,9 +127,28 @@ describe("recording setup module", () => {
     );
 
   const runSetup = async (entry: string): Promise<void> => {
+    await registerSetup(entry);
+    await ensureRecordedCli();
+  };
+
+  const registerSetup = async (entry: string): Promise<void> => {
     const file = writeRecordingSetup(entry, 100);
     await import(/* @vite-ignore */ `${pathToFileURL(file).href}?run=${Math.random()}`);
   };
+
+  it("does not load the entry until the CLI is first needed", async () => {
+    const entry = entryCalling(
+      'globalThis.__politty_entry_loaded = true;\nrunMain({ name: "cli" });',
+    );
+
+    await registerSetup(entry);
+    const loadedBefore = (globalThis as Record<string, unknown>)["__politty_entry_loaded"];
+    await ensureRecordedCli();
+
+    expect(loadedBefore).toBeUndefined();
+    expect((globalThis as Record<string, unknown>)["__politty_entry_loaded"]).toBe(true);
+    delete (globalThis as Record<string, unknown>)["__politty_entry_loaded"];
+  });
 
   it("records the command and options that the entry passes to runMain", async () => {
     const entry = entryCalling('runMain({ name: "cli" }, { version: "1.2.3" });');

@@ -12,6 +12,8 @@ interface RecordedCliSlot {
   capturing?: boolean;
   recorded?: RecordedCli;
   entry?: string;
+  loader?: () => Promise<void>;
+  loading?: Promise<void>;
   onRecord?: () => void;
 }
 
@@ -34,10 +36,22 @@ export function getRecordedCli(): RecordedCli | undefined {
   return slot().recorded;
 }
 
+export function ensureRecordedCli(): Promise<void> {
+  const current = slot();
+  if (current.recorded || !current.loader) return Promise.resolve();
+  current.loading ??= current.loader().catch((error: unknown) => {
+    delete current.loading;
+    throw error;
+  });
+  return current.loading;
+}
+
 export function clearRecordedCli(): void {
   const current = slot();
   delete current.recorded;
   delete current.entry;
+  delete current.loader;
+  delete current.loading;
   delete current.capturing;
   delete current.onRecord;
 }
