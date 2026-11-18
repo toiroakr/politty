@@ -1,11 +1,13 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineConfig } from "vitest/config";
 import { clearRecordedCli, getRecordedCli, isRecordingCli } from "../core/recorded-cli.js";
 import { politty, readRecordingEntry, renderRecordingSetup, writeRecordingSetup } from "./index.js";
+
+const portable = (file: string): string => file.split(sep).join("/");
 
 const runnerPath = fileURLToPath(new URL("../core/runner.ts", import.meta.url));
 
@@ -181,12 +183,15 @@ describe("recording setup module", () => {
     expect(isRecordingCli()).toBe(false);
   });
 
-  it("writes the setup file into a directory that only the current user can use", () => {
-    const file = writeRecordingSetup("/tmp/cli.ts");
+  it.skipIf(process.platform === "win32")(
+    "writes the setup file into a directory that only the current user can use",
+    () => {
+      const file = writeRecordingSetup("/tmp/cli.ts");
 
-    expect(statSync(dirname(file)).mode & 0o077).toBe(0);
-    expect(statSync(file).mode & 0o077).toBe(0);
-  });
+      expect(statSync(dirname(file)).mode & 0o077).toBe(0);
+      expect(statSync(file).mode & 0o077).toBe(0);
+    },
+  );
 
   it("writes each setup file into a new directory", () => {
     expect(dirname(writeRecordingSetup("/tmp/cli.ts"))).not.toBe(
@@ -216,7 +221,9 @@ describe("politty vite plugin", () => {
 
     const [setupFile] = setupFilesOf(politty(), { root: project }) ?? [];
 
-    expect(readFileSync(setupFile!, "utf8")).toContain(JSON.stringify(join(project, "src/cli.ts")));
+    expect(readFileSync(setupFile!, "utf8")).toContain(
+      JSON.stringify(portable(join(project, "src/cli.ts"))),
+    );
   });
 
   it("reads the tsconfig given by the tsconfig option, relative to the root", () => {
@@ -228,7 +235,9 @@ describe("politty vite plugin", () => {
     const [setupFile] =
       setupFilesOf(politty({ tsconfig: "config/tsconfig.test.json" }), { root: project }) ?? [];
 
-    expect(readFileSync(setupFile!, "utf8")).toContain(JSON.stringify(join(project, "cli.ts")));
+    expect(readFileSync(setupFile!, "utf8")).toContain(
+      JSON.stringify(portable(join(project, "cli.ts"))),
+    );
   });
 
   it("does nothing outside a test run", () => {
