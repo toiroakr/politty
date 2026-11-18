@@ -13,5 +13,8 @@ allowBuilds:
   esbuild: true
   lefthook: true
 
+lockfile:
+  format: v13
+
 overrides:
   "editorconfig>minimatch": "^11.0.6"

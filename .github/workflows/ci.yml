@@ -56,6 +56,8 @@ jobs:
             wait "$pid" || FAIL=1
           done
           exit $FAIL
+      - name: Test lockfile dependency detection
+        run: node --test .github/scripts/lockfile-runtime-diff.test.mjs
       - name: Test with coverage
         shell: bash
         run: npx vitest run --coverage --project unit --project dist-compat
