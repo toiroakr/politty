@@ -355,7 +355,8 @@ export async function runCommand<TResult = unknown>(
     const routed = [...path, ...argv];
     let globalExtracted: ExtractedFields | undefined;
     try {
-      if (recorded.options.globalArgs) globalExtracted = extractFields(recorded.options.globalArgs);
+      const scanSchema = "globalArgs" in options ? options.globalArgs : recorded.options.globalArgs;
+      if (scanSchema) globalExtracted = extractFields(scanSchema);
     } catch {
       // A malformed schema is reported when the command runs.
     }

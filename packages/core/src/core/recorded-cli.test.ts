@@ -218,6 +218,25 @@ describe("runCommand with a recorded CLI", () => {
     expect(setup).not.toHaveBeenCalled();
   });
 
+  it("finds the internal command with the global args schema that the test passes instead of the recorded one", async () => {
+    const setup = vi.fn();
+    const run = vi.fn();
+    const root = defineCommand({
+      name: "cli",
+      subCommands: { "__refresh-completion": defineCommand({ name: "__refresh-completion", run }) },
+    });
+    recordCli(root, { globalArgs, setup });
+    const region = z.object({ region: arg(z.string()) });
+
+    const result = await runCommand(root, ["--region", "eu", "__refresh-completion"], {
+      globalArgs: region,
+    });
+
+    expect(result.success).toBe(true);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(setup).not.toHaveBeenCalled();
+  });
+
   it("runs a command outside the recorded tree as it would without a recorded CLI", async () => {
     const setup = vi.fn();
     const run = vi.fn();
