@@ -1,8 +1,0 @@
----
-"@politty/valibot": patch
-"@politty/zod": patch
-"@politty/zod-mini": patch
-"politty": patch
----
-
-Add a Vite plugin for Vitest (`politty/vite`, also `@politty/zod/vite`, `@politty/valibot/vite` and `@politty/zod-mini/vite`) so a command, the root or any subcommand, can be tested on its own with the global args, `setup` and `cleanup` of the real CLI. Enable it with `plugins: [politty({ tsconfig: "./tsconfig.json" })]` in `vitest.config.ts`. It loads the entry named by the `entry` option of the plugin, or by the `entry` option of the politty content mapper in the tsconfig when the plugin has none, in a `beforeAll` hook of each test file, with `runMain` recording its command and options instead of running. The hook runs after the test file is evaluated, so the `vi.mock` calls of the test file apply to the modules that the entry imports. `runCommand(command, argv)` then finds the command in the recorded tree, runs it through its real path, and applies the recorded `globalArgs`, `setup` and `cleanup` unless the test passes its own, so renaming or moving the command does not change the test.
