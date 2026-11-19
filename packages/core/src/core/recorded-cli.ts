@@ -15,6 +15,7 @@ interface RecordedCliSlot {
   loader?: () => Promise<void>;
   loading?: Promise<void>;
   onRecord?: () => void;
+  ensure?: () => Promise<void>;
 }
 
 const slot = (): RecordedCliSlot => {
@@ -57,6 +58,8 @@ export function ensureRecordedCli(): Promise<void> {
   });
   return current.loading;
 }
+
+slot().ensure = ensureRecordedCli;
 
 export function clearRecordedCli(): void {
   const current = slot();

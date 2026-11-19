@@ -197,6 +197,26 @@ describe.each(Object.keys(PACKAGES) as (keyof typeof PACKAGES)[])("%s/vite", (pa
     expect(status).toBe(0);
   });
 
+  it("loads the entry before the tests of the file run", () => {
+    const dir = createProject(
+      packageName,
+      `it("has the entry loaded before the first runCommand call", async () => {
+  const loadedBefore = (globalThis as Record<string, unknown>)["__entry_loaded"];
+
+  await runCommand(deploy, ["prod"]);
+
+  expect(loadedBefore).toBe(true);
+});`,
+    );
+    const entry = fs.readFileSync(path.join(dir, "src/cli.ts"), "utf8");
+    write(dir, "src/cli.ts", `globalThis.__entry_loaded = true;\n${entry}`);
+
+    const { status, output } = runVitest(dir);
+
+    expect(output).toContain("1 passed");
+    expect(status).toBe(0);
+  });
+
   it("keeps the mocks of the test file for the modules that the entry imports", () => {
     const dir = createProject(
       packageName,

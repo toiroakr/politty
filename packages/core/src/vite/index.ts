@@ -52,7 +52,8 @@ export function readRecordingEntry(tsconfigPath: string): string {
 }
 
 export function renderRecordingSetup(entryUrl: string, graceMs: number): string {
-  return `const entry = ${JSON.stringify(entryUrl)};
+  return `import { beforeAll } from "vitest";
+const entry = ${JSON.stringify(entryUrl)};
 const slot = (globalThis[Symbol.for(${JSON.stringify(RECORDED_CLI_KEY)})] ??= {});
 if (slot.entry !== entry) {
   delete slot.recorded;
@@ -85,6 +86,11 @@ slot.loader = async () => {
   }
   if (slot.recorded) slot.entry = entry;
 };
+try {
+  beforeAll(async () => {
+    await slot.ensure?.().catch(() => {});
+  });
+} catch {}
 `;
 }
 
