@@ -352,8 +352,17 @@ export async function runCommand<TResult = unknown>(
   const recorded = inHook ? undefined : getRecordedCli();
   const path = recorded ? await findCommandPath(recorded.command, command) : undefined;
   if (recorded && path) {
-    const inherited = path[0]?.startsWith("__") ? {} : inheritableRunOptions(recorded);
-    return runCommandWithOptions<TResult>(recorded.command, [...path, ...argv], {
+    const routed = [...path, ...argv];
+    let globalExtracted: ExtractedFields | undefined;
+    try {
+      if (recorded.options.globalArgs) globalExtracted = extractFields(recorded.options.globalArgs);
+    } catch {
+      // A malformed schema is reported when the command runs.
+    }
+    const inherited = isInternalSubcommandInvocation(recorded.command, routed, globalExtracted)
+      ? {}
+      : inheritableRunOptions(recorded);
+    return runCommandWithOptions<TResult>(recorded.command, routed, {
       ...inherited,
       ...options,
     });

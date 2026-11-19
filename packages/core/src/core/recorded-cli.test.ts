@@ -202,6 +202,22 @@ describe("runCommand with a recorded CLI", () => {
     expect(setup).not.toHaveBeenCalled();
   });
 
+  it("does not inherit the recorded options when the recorded root is given an internal command", async () => {
+    const setup = vi.fn();
+    const run = vi.fn();
+    const root = defineCommand({
+      name: "cli",
+      subCommands: { "__refresh-completion": defineCommand({ name: "__refresh-completion", run }) },
+    });
+    recordCli(root, { globalArgs, setup });
+
+    const result = await runCommand(root, ["__refresh-completion"]);
+
+    expect(result.success).toBe(true);
+    expect(run).toHaveBeenCalledExactlyOnceWith({});
+    expect(setup).not.toHaveBeenCalled();
+  });
+
   it("runs a command outside the recorded tree as it would without a recorded CLI", async () => {
     const setup = vi.fn();
     const run = vi.fn();

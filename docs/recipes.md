@@ -105,7 +105,7 @@ export default defineConfig({
 });
 ```
 
-If you do not use the content mapper, name the entry directly with `politty({ entry: "./src/cli.ts" })`, relative to the Vite root; no tsconfig is read then, and the types of the global options come from [declaration merging](./advanced-features.md#typing-global-options-in-commands) instead.
+If you do not use the content mapper, name the entry directly with `politty({ entry: "./src/cli.ts" })`, relative to the Vite root; no tsconfig is read then, and you type the global options with [declaration merging](./advanced-features.md#typing-global-options-in-commands) or `createDefineCommand<T>()` instead.
 
 `tsconfig` is the file that configures the [politty content mapper](./advanced-features.md#deriving-globalargs-from-runmain-content-mapper), relative to the Vite root (default `./tsconfig.json`). The plugin reads the `entry` option there, so the entry is written once for the type checker and for the tests. The file is read as written: `extends` is not followed.
 
