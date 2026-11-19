@@ -81,15 +81,15 @@ it("should mock setup", async () => {
 });
 ```
 
-### Testing a Subcommand on Its Own
+### Testing a Command with the Options of Your CLI
 
-Pass a subcommand straight to `runCommand` to test it without naming the parents it sits under. The global args, `setup` and `cleanup` of your CLI belong to `runMain`, so a bare `runCommand(deploy, argv)` runs without them. Pass them in `options` to get the same run as the real CLI:
+Pass the command you want to test straight to `runCommand`, whether it is the root command or a subcommand, without naming the parents it sits under. The global args, `setup` and `cleanup` of your CLI belong to `runMain`, so a bare `runCommand(deploy, argv)` runs without them. Pass them in `options` to get the same run as the real CLI:
 
 ```typescript
 await runCommand(deploy, ["--verbose", "prod"], { globalArgs, setup, cleanup });
 ```
 
-The type of `args.verbose` needs no import in the subcommand (see [Typing global options in commands](./advanced-features.md#typing-global-options-in-commands)), but the schema itself has to be passed this way at run time. With Vitest, the Vite plugin below removes that repetition.
+The type of `args.verbose` needs no import in the command (see [Typing global options in commands](./advanced-features.md#typing-global-options-in-commands)), but the schema itself has to be passed this way at run time. With Vitest, the Vite plugin below removes that repetition, so a test does not change when the command is renamed or moved under another parent.
 
 #### Reusing the options of the CLI (Vite plugin)
 
@@ -121,7 +121,7 @@ it("deploys with the global options of the CLI", async () => {
 });
 ```
 
-- `runCommand` looks `deploy` up by reference in the recorded command tree and runs it from the root through its real path, as `mycli ops deploy --verbose prod`. Renaming `deploy` or moving it under another parent does not change the test. When a command is registered under several parents, the first matching declared path wins; paths that need loading are considered only afterwards.
+- `runCommand` looks `deploy` up by reference in the recorded command tree and runs it from the root through its real path, as `mycli ops deploy --verbose prod`. The root command itself is found as well and runs with the recorded options. Renaming `deploy` or moving it under another parent does not change the test. When a command is registered under several parents, the first matching declared path wins; paths that need loading are considered only afterwards.
 - Commands declared in the tree, including the metadata of `lazy()` subcommands, are matched without loading anything. Only when that finds nothing, for a command that a `lazy()` or async subcommand returns or for a command outside the tree, the `lazy()` and async subcommands are loaded, starting with the ones named like the command. A loader that uses `import()` loads each module once.
 - The lookup runs before `setup`, and a loader that it called is called again when the command runs. A loader that needs state from `setup`, that throws (a missing `requiredPackages` prerequisite, for example), or that returns a different command each time is skipped by the lookup, and the command then runs as if it were outside the recorded tree. A loader that waits for `setup` to finish never settles, and the lookup waits for it as well.
 - The recorded `globalArgs`, `setup` and `cleanup` apply as in the real CLI. The help of the subcommand shows its full path.
