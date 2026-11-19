@@ -191,13 +191,14 @@ When the [Vite plugin](./recipes.md#reusing-the-options-of-the-cli-vite-plugin) 
 ```typescript
 import { politty } from "politty/vite";
 
-function politty(options?: { tsconfig?: string }): PolittyVitePlugin;
+function politty(options?: { entry?: string; tsconfig?: string }): PolittyVitePlugin;
 ```
 
 A Vite plugin for Vitest, exported from the `vite` subpath of every politty package that ships the content mapper (`politty/vite`, `@politty/zod/vite`, `@politty/valibot/vite`, `@politty/zod-mini/vite`). Outside a test run it does nothing.
 
 | Option     | Type     | Description                                                                                                                                                                            |
 | ---------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entry`    | `string` | The module that calls `runMain`, relative to the Vite root. When set, no tsconfig is read.                                                                                             |
 | `tsconfig` | `string` | tsconfig whose `contentMappers` configure the politty content mapper, relative to the Vite root (default `./tsconfig.json`). Its `entry` option names the module that calls `runMain`. |
 
 See [Reusing the options of the CLI](./recipes.md#reusing-the-options-of-the-cli-vite-plugin) for how it works.

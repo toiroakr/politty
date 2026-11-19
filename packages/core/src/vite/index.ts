@@ -9,6 +9,8 @@ const REGISTRATION_GRACE_MS = 1000;
 const POLITTY_PACKAGE = /^(politty|@politty\/.+)$/;
 
 export interface PolittyVitePluginOptions {
+  /** The module that calls `runMain`, relative to the Vite root. Takes precedence over `tsconfig`. */
+  entry?: string;
   /** Path to the tsconfig that configures the politty content mapper, relative to the Vite root. */
   tsconfig?: string;
 }
@@ -113,7 +115,10 @@ export function politty(options: PolittyVitePluginOptions = {}): PolittyVitePlug
     config(userConfig) {
       if (!process.env["VITEST"]) return undefined;
       const root = resolve(userConfig.root ?? process.cwd());
-      const entry = readRecordingEntry(resolve(root, options.tsconfig ?? "tsconfig.json"));
+      const entry =
+        options.entry === undefined
+          ? readRecordingEntry(resolve(root, options.tsconfig ?? "tsconfig.json"))
+          : resolve(root, options.entry);
       return { test: { setupFiles: [writeRecordingSetup(entry)] } };
     },
   };

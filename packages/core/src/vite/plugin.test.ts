@@ -316,6 +316,25 @@ describe("politty vite plugin", () => {
     );
   });
 
+  it("loads the entry given by the entry option, relative to the root, without reading a tsconfig", () => {
+    const [setupFile] = setupFilesOf(politty({ entry: "./src/cli.ts" }), { root: project }) ?? [];
+
+    expect(readFileSync(setupFile!, "utf8")).toContain(
+      JSON.stringify(pathToFileURL(join(project, "src/cli.ts")).href),
+    );
+  });
+
+  it("prefers the entry option over the entry of the tsconfig", () => {
+    tsconfigWith([{ package: "politty", options: { entry: "./from-tsconfig.ts" } }]);
+
+    const [setupFile] =
+      setupFilesOf(politty({ entry: "./from-option.ts" }), { root: project }) ?? [];
+
+    expect(readFileSync(setupFile!, "utf8")).toContain(
+      JSON.stringify(pathToFileURL(join(project, "from-option.ts")).href),
+    );
+  });
+
   it("does nothing outside a Vitest run, even in test mode", () => {
     vi.stubEnv("VITEST", "");
 
