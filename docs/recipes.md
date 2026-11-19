@@ -81,6 +81,59 @@ it("should mock setup", async () => {
 });
 ```
 
+### Testing a Command with the Options of Your CLI
+
+Pass the command you want to test straight to `runCommand`, whether it is the root command or a subcommand, without naming the parents it sits under. The global args, `setup` and `cleanup` of your CLI belong to `runMain`, so a bare `runCommand(deploy, argv)` runs without them. Pass them in `options` to get the same run as the real CLI:
+
+```typescript
+await runCommand(deploy, ["--verbose", "prod"], { globalArgs, setup, cleanup });
+```
+
+The type of `args.verbose` needs no import in the command (see [Typing global options in commands](./advanced-features.md#typing-global-options-in-commands)), but the schema itself has to be passed this way at run time. With Vitest, the Vite plugin below removes that repetition, so a test does not change when the command is renamed or moved under another parent.
+
+#### Reusing the options of the CLI (Vite plugin)
+
+`politty/vite` (also `@politty/zod/vite`, `@politty/valibot/vite` and `@politty/zod-mini/vite`) is a Vite plugin for Vitest. It adds a setup file that loads your CLI entry in a `beforeAll` hook, with `runMain` only recording its command and options instead of running, and `runCommand` then uses what was recorded. The hook runs after the test file has been evaluated and before its tests, so the `vi.mock` calls of the test file apply to the modules that the entry imports, and nothing else of the test file runs while the entry is loaded. A test file that loads no politty module, directly or through a helper it imports, does not load the entry. If the hook did not load it, the first `runCommand` call does. With `isolate: false`, Vitest shares modules between test files, so the entry is loaded once and the recording is reused.
+
+```typescript
+// vitest.config.ts
+import { defineConfig } from "vitest/config";
+import { politty } from "politty/vite";
+
+export default defineConfig({
+  plugins: [politty({ tsconfig: "./tsconfig.json" })],
+});
+```
+
+If you do not use the content mapper, name the entry directly with `politty({ entry: "./src/cli.ts" })`, relative to the Vite root (the `--root` of Vitest takes precedence over the root of the Vite config); no tsconfig is read then, and you type the global options with [declaration merging](./advanced-features.md#typing-global-options-in-commands) or `createDefineCommand<T>()` instead.
+
+`tsconfig` is the file that configures the [politty content mapper](./advanced-features.md#deriving-globalargs-from-runmain-content-mapper), relative to the Vite root (default `./tsconfig.json`). The plugin reads the `entry` option there, so the entry is written once for the type checker and for the tests. The file is read as written: `extends` is not followed.
+
+A test then needs no import for the global options:
+
+```typescript
+import { expect, it } from "vitest";
+import { runCommand } from "politty";
+import { deploy } from "./deploy";
+
+it("deploys with the global options of the CLI", async () => {
+  const result = await runCommand(deploy, ["--verbose", "prod"]);
+
+  expect(result.success).toBe(true);
+});
+```
+
+- `runCommand` looks `deploy` up by reference in the recorded command tree and runs it from the root through its real path, as `mycli ops deploy --verbose prod`. The root command itself is found as well and runs with the recorded options. Renaming `deploy` or moving it under another parent does not change the test. When a command is registered under several parents, the first matching declared path wins; paths that need loading are considered only afterwards.
+- Commands declared in the tree, including the metadata of `lazy()` subcommands, are matched without loading anything. Only when that finds nothing, for a command that a `lazy()` or async subcommand returns or for a command outside the tree, the `lazy()` and async subcommands are loaded, starting with the ones named like the command. A loader that uses `import()` loads each module once.
+- The lookup runs before `setup`, and a loader that it called is called again when the command runs. A loader that needs state from `setup`, that throws (a missing `requiredPackages` prerequisite, for example), or that returns a different command each time is skipped by the lookup, and the command then runs as if it were outside the recorded tree. A loader that waits for `setup` to finish never settles, and the lookup waits for it as well.
+- The recorded `globalArgs`, `setup` and `cleanup` apply as in the real CLI. The help of the subcommand shows its full path.
+- Options you pass to `runCommand` win, key by key. Pass `{ setup: undefined }` to run without the recorded `setup`. Only these three options are taken from the recorded call; `prompt` and the others are not. A `runCommand` call made inside the recorded `setup` or `cleanup`, or inside the `run` of a command that `runCommand` is running through the recorded CLI, does not use the recorded CLI at all: it runs as it does without the plugin, so it neither inherits the hooks again nor looks the command up in the recorded tree.
+- A command that is not in the recorded tree runs without the recorded options, as it does without the plugin. The lookup that found nothing may have loaded `lazy()` subcommands.
+- The real CLI runs an internal command (a command registered under a top-level key that starts with `__`) without the global args, `setup` and `cleanup`, and so does `runCommand` here.
+- The entry has to call `runMain` while its module is evaluated, or within one second after: a top-level `await runMain(...)` is fine, and so is a call that an asynchronous start-up makes shortly after the import. A later call runs the real CLI. The entry runs in the test process before the tests of each test file that loads politty, directly or through another module, so keep it free of work that must not happen in a test run, and do not import it from a test. When it throws before it calls `runMain`, the first `runCommand` call rejects with the error.
+- With `isolate: false`, the recording is reused for the same entry for the lifetime of the worker. It is not refreshed when Vitest resets or invalidates the modules (`vi.resetModules()`, or a rerun in watch mode); `runCommand` then no longer finds your command in the recorded tree and runs it without the recorded options. Restart the run, or keep the default `isolate: true`.
+- Put `politty()` in the `plugins` of the project that runs the tests. An inline project that only shares the root Vite config does not receive the setup file that the root plugin adds, so its tests run without the recorded options.
+
 ## Runtime Configuration
 
 ### Signal Handling (Ctrl+C)

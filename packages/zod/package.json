@@ -76,6 +76,10 @@
     },
     "./content-mapper": {
       "default": "./dist/content-mapper.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
     }
   },
   "scripts": {

@@ -48,6 +48,7 @@ import {
   formatUnknownFlagWarning,
 } from "../validator/error-formatter.js";
 import { createDualCaseProxy } from "./case-proxy.js";
+import { findCommandPath } from "./command-path.js";
 import { runEffects } from "./effect-runner.js";
 import {
   collectEnvFileRequests,
@@ -56,6 +57,16 @@ import {
   loadEnvFiles,
   validateEnvFileDefinitions,
 } from "./env-file.js";
+import {
+  ensureRecordedCli,
+  getRecordedCli,
+  inheritableRunOptions,
+  isInRecordedHook,
+  isInRecordingScope,
+  isRecordingCli,
+  recordCli,
+  runInRecordedScope,
+} from "./recorded-cli.js";
 import {
   extractFields,
   selectAcceptingUnionOption,
@@ -337,6 +348,37 @@ export async function runCommand<TResult = unknown>(
   argv: string[],
   options: RunCommandOptions = {},
 ): Promise<RunResult<TResult>> {
+  const inHook = isInRecordedHook();
+  if (!inHook && !isInRecordingScope()) await ensureRecordedCli();
+  const recorded = inHook ? undefined : getRecordedCli();
+  const path = recorded ? await findCommandPath(recorded.command, command) : undefined;
+  if (recorded && path) {
+    const routed = [...path, ...argv];
+    let globalExtracted: ExtractedFields | undefined;
+    try {
+      const scanSchema = "globalArgs" in options ? options.globalArgs : recorded.options.globalArgs;
+      if (scanSchema) globalExtracted = extractFields(scanSchema);
+    } catch {
+      // A malformed schema is reported when the command runs.
+    }
+    const inherited = isInternalSubcommandInvocation(recorded.command, routed, globalExtracted)
+      ? {}
+      : inheritableRunOptions(recorded);
+    return runInRecordedScope(() =>
+      runCommandWithOptions<TResult>(recorded.command, routed, {
+        ...inherited,
+        ...options,
+      }),
+    );
+  }
+  return runCommandWithOptions<TResult>(command, argv, options);
+}
+
+async function runCommandWithOptions<TResult = unknown>(
+  command: AnyCommand,
+  argv: string[],
+  options: RunCommandOptions,
+): Promise<RunResult<TResult>> {
   const globalExtracted = extractAndValidateGlobal(options);
   const agent = detectAgent();
   const globalCleanup = bindAgentToCleanup(options.cleanup, agent);
@@ -460,6 +502,11 @@ function isInternalSubcommandInvocation(
  * ```
  */
 export async function runMain(command: AnyCommand, options: MainOptions = {}): Promise<never> {
+  if (isRecordingCli()) {
+    recordCli(command, options);
+    return new Promise<never>(() => {});
+  }
+
   // Enable the on-disk V8 compile cache before anything is dynamically
   // imported so `lazy()` subcommands and adapter modules skip recompilation
   // on warm starts. The entry's static import graph is compiled before user

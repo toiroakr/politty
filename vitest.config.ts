@@ -1,6 +1,7 @@
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineConfig } from "vitest/config";
+import { politty } from "./packages/core/src/vite/index.ts";
 
 export default defineConfig({
   test: {
@@ -25,10 +26,24 @@ export default defineConfig({
             "playground/**/*.test.ts",
             "playground/**/index.test.ts",
           ],
-          exclude: ["tests/shell-completion/**", "tests/dist-compat/**"],
+          exclude: [
+            "tests/shell-completion/**",
+            "tests/dist-compat/**",
+            "playground/25-global-options/**",
+          ],
           // Core tests exercise zod fixture schemas without importing an
           // `@politty/zod` entry, so the adapter registration that entry
           // modules perform for real users happens in this setup file.
+          setupFiles: ["./tests/utils/register-zod-adapter.ts"],
+        },
+      },
+      // The Vite plugin reads one CLI entry per project, so an example whose
+      // tests run subcommands on their own gets a project of its own.
+      {
+        plugins: [politty({ entry: "./playground/25-global-options/index.ts" })],
+        test: {
+          name: "playground-global-options",
+          include: ["playground/25-global-options/**/*.test.ts"],
           setupFiles: ["./tests/utils/register-zod-adapter.ts"],
         },
       },

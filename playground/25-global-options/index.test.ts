@@ -5,10 +5,100 @@ import { assertDocMatch } from "../../packages/zod/src/docs.js";
 import { arg, defineCommand, runCommand } from "../../packages/zod/src/index.js";
 import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
-import { buildCommand, cli, globalArgsSchema } from "./index.js";
+import { buildCommand, cli, deployCommand, globalArgsSchema } from "./cli.js";
 
 describe("25-global-options", () => {
-  describe("global flags before subcommand", () => {
+  describe("a subcommand run on its own gets the global options of the CLI", () => {
+    it("passes verbose to build", async () => {
+      using console = spyOnConsoleLog();
+      const result = await runCommand(buildCommand, ["--verbose", "--output", "out"]);
+
+      expect(result.exitCode).toBe(0);
+      expect(console).toHaveBeenCalledWith("[verbose] Config: (default)");
+      expect(console).toHaveBeenCalledWith("Building to out");
+    });
+
+    it("passes verbose with alias -v to deploy", async () => {
+      using console = spyOnConsoleLog();
+      const result = await runCommand(deployCommand, ["-v", "--env", "staging"]);
+
+      expect(result.exitCode).toBe(0);
+      expect(console).toHaveBeenCalledWith("[verbose] Config: (default)");
+      expect(console).toHaveBeenCalledWith("Deploying to staging");
+    });
+
+    it("passes config to build", async () => {
+      using console = spyOnConsoleLog();
+      const result = await runCommand(buildCommand, ["--config", "custom.json", "--verbose"]);
+
+      expect(result.exitCode).toBe(0);
+      expect(console).toHaveBeenCalledWith("[verbose] Config: custom.json");
+      expect(console).toHaveBeenCalledWith("Building to dist");
+    });
+
+    it("build without verbose", async () => {
+      using console = spyOnConsoleLog();
+      const result = await runCommand(buildCommand, []);
+
+      expect(result.exitCode).toBe(0);
+      expect(console).not.toHaveBeenCalledWith(expect.stringContaining("[verbose]"));
+      expect(console).toHaveBeenCalledWith("Building to dist");
+    });
+
+    it("shows Global Options in the help of a subcommand", async () => {
+      using console = spyOnConsoleLog();
+      const result = await runCommand(buildCommand, ["--help"]);
+
+      expect(result.exitCode).toBe(0);
+      const output = console.getLogs().join("\n");
+      expect(output).toContain("Global Options:");
+      expect(output).toContain("--verbose");
+    });
+  });
+
+  describe("the root command gets the global options of the CLI", () => {
+    it("passes verbose given before the subcommand", async () => {
+      using console = spyOnConsoleLog();
+      const result = await runCommand(cli, ["--verbose", "build", "--output", "out"]);
+
+      expect(result.exitCode).toBe(0);
+      expect(console).toHaveBeenCalledWith("[verbose] Config: (default)");
+      expect(console).toHaveBeenCalledWith("Building to out");
+    });
+
+    it("passes verbose given after the subcommand", async () => {
+      using console = spyOnConsoleLog();
+      const result = await runCommand(cli, ["deploy", "--verbose", "--env", "staging"]);
+
+      expect(result.exitCode).toBe(0);
+      expect(console).toHaveBeenCalledWith("[verbose] Config: (default)");
+      expect(console).toHaveBeenCalledWith("Deploying to staging");
+    });
+
+    it("shows Global Options section", async () => {
+      using console = spyOnConsoleLog();
+      const result = await runCommand(cli, ["--help"]);
+
+      expect(result.exitCode).toBe(0);
+      const output = console.getLogs().join("\n");
+      expect(output).toContain("Global Options:");
+      expect(output).toContain("--verbose");
+      expect(output).toContain("--config");
+      expect(output).toContain("[global options]");
+    });
+
+    it("does not treat the value of a global option as an unknown subcommand", async () => {
+      using console = spyOnConsoleLog();
+      const result = await runCommand(cli, ["--config", "custom.json", "--help"]);
+
+      expect(result.exitCode).toBe(0);
+      const output = console.getLogs().join("\n");
+      expect(output).not.toContain("Unknown command");
+      expect(output).toContain("Global Options:");
+    });
+  });
+
+  describe("passing globalArgs explicitly, as before the Vite plugin", () => {
     it("passes verbose to build", async () => {
       using console = spyOnConsoleLog();
       const result = await runCommand(cli, ["--verbose", "build", "--output", "out"], {
@@ -20,109 +110,13 @@ describe("25-global-options", () => {
       expect(console).toHaveBeenCalledWith("Building to out");
     });
 
-    it("passes verbose with alias -v to deploy", async () => {
+    it("lets the schema passed to runCommand replace the recorded one", async () => {
       using console = spyOnConsoleLog();
-      const result = await runCommand(cli, ["-v", "deploy", "--env", "staging"], {
-        globalArgs: globalArgsSchema,
-      });
+      const quiet = z.object({ verbose: arg(z.boolean().default(true)) });
 
-      expect(result.exitCode).toBe(0);
+      await runCommand(buildCommand, [], { globalArgs: quiet });
+
       expect(console).toHaveBeenCalledWith("[verbose] Config: (default)");
-      expect(console).toHaveBeenCalledWith("Deploying to staging");
-    });
-
-    it("passes config to build", async () => {
-      using console = spyOnConsoleLog();
-      const result = await runCommand(cli, ["--config", "custom.json", "--verbose", "build"], {
-        globalArgs: globalArgsSchema,
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(console).toHaveBeenCalledWith("[verbose] Config: custom.json");
-      expect(console).toHaveBeenCalledWith("Building to dist");
-    });
-  });
-
-  describe("global flags after subcommand", () => {
-    it("passes verbose after build", async () => {
-      using console = spyOnConsoleLog();
-      const result = await runCommand(cli, ["build", "--verbose", "--output", "out"], {
-        globalArgs: globalArgsSchema,
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(console).toHaveBeenCalledWith("[verbose] Config: (default)");
-      expect(console).toHaveBeenCalledWith("Building to out");
-    });
-
-    it("passes verbose after deploy", async () => {
-      using console = spyOnConsoleLog();
-      const result = await runCommand(cli, ["deploy", "--verbose", "--env", "staging"], {
-        globalArgs: globalArgsSchema,
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(console).toHaveBeenCalledWith("[verbose] Config: (default)");
-      expect(console).toHaveBeenCalledWith("Deploying to staging");
-    });
-  });
-
-  describe("without global args", () => {
-    it("build without verbose", async () => {
-      using console = spyOnConsoleLog();
-      const result = await runCommand(cli, ["build"], {
-        globalArgs: globalArgsSchema,
-      });
-
-      expect(result.exitCode).toBe(0);
-      expect(console).not.toHaveBeenCalledWith(expect.stringContaining("[verbose]"));
-      expect(console).toHaveBeenCalledWith("Building to dist");
-    });
-  });
-
-  describe("help output", () => {
-    it("shows Global Options section", async () => {
-      using console = spyOnConsoleLog();
-      const result = await runCommand(cli, ["--help"], {
-        globalArgs: globalArgsSchema,
-      });
-
-      expect(result.exitCode).toBe(0);
-      const output = console.getLogs().join("\n");
-      expect(output).toContain("Global Options:");
-      expect(output).toContain("--verbose");
-      expect(output).toContain("--config");
-      expect(output).toContain("[global options]");
-    });
-
-    it("shows Global Options in subcommand help", async () => {
-      using console = spyOnConsoleLog();
-      const result = await runCommand(cli, ["build", "--help"], {
-        globalArgs: globalArgsSchema,
-      });
-
-      expect(result.exitCode).toBe(0);
-      const output = console.getLogs().join("\n");
-      expect(output).toContain("Global Options:");
-      expect(output).toContain("--verbose");
-    });
-  });
-
-  describe("backward compatibility", () => {
-    it("works without globalArgs option", async () => {
-      using console = spyOnConsoleLog();
-      const result = await runCommand(cli, ["build", "--output", "out"]);
-
-      expect(result.exitCode).toBe(0);
-      expect(console).toHaveBeenCalledWith("Building to out");
-    });
-
-    it("subcommand directly without globalArgs", async () => {
-      using console = spyOnConsoleLog();
-      const result = await runCommand(buildCommand, ["--output", "custom"]);
-
-      expect(result.exitCode).toBe(0);
-      expect(console).toHaveBeenCalledWith("Building to custom");
     });
   });
 

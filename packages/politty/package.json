@@ -68,6 +68,10 @@
     "./prompt/inquirer": {
       "types": "./dist/prompt-inquirer.d.ts",
       "default": "./dist/prompt-inquirer.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
     }
   },
   "scripts": {

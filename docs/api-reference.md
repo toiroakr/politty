@@ -182,6 +182,27 @@ console.log(result.exitCode);
 console.log(result.result);
 ```
 
+When the [Vite plugin](./recipes.md#reusing-the-options-of-the-cli-vite-plugin) has recorded the CLI entry and `command` is in its command tree, `runCommand` runs the command through its path from the recorded root and takes `globalArgs`, `setup` and `cleanup` from the recorded `runMain` call unless `options` sets them.
+
+---
+
+### `politty` (Vite plugin)
+
+```typescript
+import { politty } from "politty/vite";
+
+function politty(options?: { entry?: string; tsconfig?: string }): PolittyVitePlugin;
+```
+
+A Vite plugin for Vitest, exported from the `vite` subpath of every politty package that ships the content mapper (`politty/vite`, `@politty/zod/vite`, `@politty/valibot/vite`, `@politty/zod-mini/vite`). Outside a test run it does nothing.
+
+| Option     | Type     | Description                                                                                                                                                                                                   |
+| ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `entry`    | `string` | The module that calls `runMain`, relative to the Vite root (`--root` of Vitest takes precedence over the `root` of the Vite config). When set, no tsconfig is read.                                           |
+| `tsconfig` | `string` | tsconfig whose `contentMappers` configure the politty content mapper, relative to the Vite root, resolved like `entry` (default `./tsconfig.json`). Its `entry` option names the module that calls `runMain`. |
+
+See [Reusing the options of the CLI](./recipes.md#reusing-the-options-of-the-cli-vite-plugin) for how it works.
+
 ---
 
 ### `loadEnvFiles`
@@ -1217,6 +1238,12 @@ interface RunCommandOptions {
   skipValidation?: boolean;
   /** Custom logger (default: console) */
   logger?: Logger;
+  /** Global args schema. Defaults to the one of the CLI that the Vite plugin recorded. */
+  globalArgs?: ArgsSchema;
+  /** Global setup hook. Defaults to the one of the recorded CLI; pass `undefined` to run without it. */
+  setup?: ((context: GlobalSetupContext) => void | Promise<void>) | undefined;
+  /** Global cleanup hook. Defaults to the one of the recorded CLI; pass `undefined` to run without it. */
+  cleanup?: ((context: GlobalCleanupContext) => void | Promise<void>) | undefined;
   /** Same as `MainOptions.agentHelp` */
   agentHelp?: MainOptions["agentHelp"];
 }
