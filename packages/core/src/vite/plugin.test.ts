@@ -118,9 +118,9 @@ describe("readRecordingEntry", () => {
       { package: "@politty/zod", options: { entry: "./b.ts" } },
     ]);
 
-    expect(() => readRecordingEntry(tsconfig)).toThrow(
-      new RegExp(`${join(project, "a.ts")}.*${join(project, "b.ts")}`, "s"),
-    );
+    const attempt = () => readRecordingEntry(tsconfig);
+    expect(attempt).toThrow(join(project, "a.ts"));
+    expect(attempt).toThrow(join(project, "b.ts"));
   });
 
   it("accepts several politty content mappers that declare the same entry", () => {
@@ -373,9 +373,9 @@ describe("politty vite plugin", () => {
     it("throws an error that names both entries", () => {
       const first = setupFilesOf(politty({ entry: "./a.ts" }), { root: project }) ?? [];
 
-      expect(() => setupFilesOf(politty({ entry: "./b.ts" }), configOf(first))).toThrow(
-        new RegExp(`${join(project, "a.ts")}.*${join(project, "b.ts")}`, "s"),
-      );
+      const attempt = () => setupFilesOf(politty({ entry: "./b.ts" }), configOf(first));
+      expect(attempt).toThrow(join(project, "a.ts"));
+      expect(attempt).toThrow(join(project, "b.ts"));
     });
 
     it("tells to give each entry its own item in test.projects", () => {
