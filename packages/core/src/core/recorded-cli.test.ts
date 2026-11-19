@@ -237,6 +237,22 @@ describe("runCommand with a recorded CLI", () => {
     expect(setup).not.toHaveBeenCalled();
   });
 
+  it("keeps the recorded hooks when the passed global args take the internal command name as an option value", async () => {
+    const setup = vi.fn();
+    const run = vi.fn();
+    const root = defineCommand({
+      name: "cli",
+      subCommands: { __internal: defineCommand({ name: "__internal", run }) },
+      run,
+    });
+    recordCli(root, { globalArgs, setup });
+    const verbose = z.object({ verbose: arg(z.string()) });
+
+    await runCommand(root, ["--verbose", "__internal"], { globalArgs: verbose });
+
+    expect(setup).toHaveBeenCalledTimes(1);
+  });
+
   it("runs a command outside the recorded tree as it would without a recorded CLI", async () => {
     const setup = vi.fn();
     const run = vi.fn();
