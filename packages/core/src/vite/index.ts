@@ -137,9 +137,10 @@ export function writeRecordingSetup(entry: string, graceMs = REGISTRATION_GRACE_
 function isEntryRegistered(userConfig: PolittyUserConfig, entry: string): boolean {
   const registered = entryOfSetupFile();
   const listed = [userConfig.test?.setupFiles ?? []].flat();
-  const earlier = listed.map((file) => registered.get(file)).find((value) => value !== undefined);
-  if (earlier === undefined) return false;
-  if (earlier === entry) return true;
+  const entries = listed.flatMap((file) => registered.get(file) ?? []);
+  if (entries.length === 0) return false;
+  const earlier = entries.find((value) => value !== entry);
+  if (earlier === undefined) return true;
   throw new Error(
     `politty: politty() is registered more than once in one Vitest project (entries ${earlier} and ${entry}). A project records one entry, and the earlier one would be ignored silently. Give each entry its own item in test.projects, each with one politty(). A plugin of the root config reaches a project with \`extends: true\`: remove it from the root or set \`extends: false\`.`,
   );

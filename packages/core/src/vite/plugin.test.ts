@@ -400,6 +400,21 @@ describe("politty vite plugin", () => {
       );
     });
 
+    it("throws when the setup files of two different entries are both listed, whichever is registered", () => {
+      const a = setupFilesOf(politty({ entry: "./a.ts" }), { root: project }) ?? [];
+      const b = setupFilesOf(politty({ entry: "./b.ts" }), { root: project }) ?? [];
+
+      expect(() => setupFilesOf(politty({ entry: "./a.ts" }), configOf([...a, ...b]))).toThrow(
+        join(project, "b.ts"),
+      );
+    });
+
+    it("accepts the same entry when only its own setup file is listed", () => {
+      const a = setupFilesOf(politty({ entry: "./a.ts" }), { root: project }) ?? [];
+
+      expect(setupFilesOf(politty({ entry: "./a.ts" }), configOf(a))).toBeUndefined();
+    });
+
     it("accepts an entry in another project whose config does not hold the first setup file", () => {
       setupFilesOf(politty({ entry: "./a.ts" }), { root: project });
 
