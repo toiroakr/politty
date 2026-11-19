@@ -113,7 +113,12 @@ try {
 }
 
 const setupDirectories = new Set<string>();
-const entryOfSetupFile = new Map<string, string>();
+const SETUP_FILES_KEY = "politty.vitePluginSetupFiles";
+
+function entryOfSetupFile(): Map<string, string> {
+  const holder = globalThis as Record<symbol, Map<string, string> | undefined>;
+  return (holder[Symbol.for(SETUP_FILES_KEY)] ??= new Map());
+}
 
 function removeSetupDirectories(): void {
   for (const directory of setupDirectories) rmSync(directory, { recursive: true, force: true });
@@ -125,16 +130,18 @@ export function writeRecordingSetup(entry: string, graceMs = REGISTRATION_GRACE_
   setupDirectories.add(directory);
   const file = join(directory, "setup.mjs");
   writeFileSync(file, renderRecordingSetup(pathToFileURL(entry).href, graceMs), { mode: 0o600 });
-  entryOfSetupFile.set(file, entry);
+  entryOfSetupFile().set(file, entry);
   return file;
 }
 
-function rejectSecondRegistration(userConfig: PolittyUserConfig, entry: string): void {
+function isEntryRegistered(userConfig: PolittyUserConfig, entry: string): boolean {
+  const registered = entryOfSetupFile();
   const listed = [userConfig.test?.setupFiles ?? []].flat();
-  const earlier = listed.map((file) => entryOfSetupFile.get(file)).find((value) => value);
-  if (earlier === undefined) return;
+  const earlier = listed.map((file) => registered.get(file)).find((value) => value !== undefined);
+  if (earlier === undefined) return false;
+  if (earlier === entry) return true;
   throw new Error(
-    `politty: politty() is registered more than once in one Vitest project (entries ${earlier} and ${entry}). A project records one entry, and the earlier one would be ignored silently. Give each entry its own item in test.projects, each with one politty().`,
+    `politty: politty() is registered more than once in one Vitest project (entries ${earlier} and ${entry}). A project records one entry, and the earlier one would be ignored silently. Give each entry its own item in test.projects, each with one politty(). A plugin of the root config reaches a project with \`extends: true\`: remove it from the root or set \`extends: false\`.`,
   );
 }
 
@@ -154,7 +161,7 @@ export function politty(options: PolittyVitePluginOptions = {}): PolittyVitePlug
         options.entry === undefined
           ? readRecordingEntry(resolve(root, options.tsconfig ?? "tsconfig.json"))
           : resolve(root, options.entry);
-      rejectSecondRegistration(userConfig, entry);
+      if (isEntryRegistered(userConfig, entry)) return undefined;
       return { test: { setupFiles: [writeRecordingSetup(entry)] } };
     },
   };

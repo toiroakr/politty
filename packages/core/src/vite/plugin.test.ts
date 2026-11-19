@@ -378,7 +378,7 @@ describe("politty vite plugin", () => {
       );
     });
 
-    it("tells to give each entry its own entry in test.projects", () => {
+    it("tells to give each entry its own item in test.projects", () => {
       const first = setupFilesOf(politty({ entry: "./a.ts" }), { root: project }) ?? [];
 
       expect(() => setupFilesOf(politty({ entry: "./b.ts" }), configOf(first))).toThrow(
@@ -386,11 +386,17 @@ describe("politty vite plugin", () => {
       );
     });
 
-    it("throws even when both register the same entry", () => {
+    it("adds no second setup file when both register the same entry", () => {
       const first = setupFilesOf(politty({ entry: "./a.ts" }), { root: project }) ?? [];
 
-      expect(() => setupFilesOf(politty({ entry: "./a.ts" }), configOf(first))).toThrow(
-        /registered more than once/,
+      expect(setupFilesOf(politty({ entry: "./a.ts" }), configOf(first))).toBeUndefined();
+    });
+
+    it("tells to remove the plugin from the root config or set extends: false", () => {
+      const first = setupFilesOf(politty({ entry: "./a.ts" }), { root: project }) ?? [];
+
+      expect(() => setupFilesOf(politty({ entry: "./b.ts" }), configOf(first))).toThrow(
+        /extends: false/,
       );
     });
 

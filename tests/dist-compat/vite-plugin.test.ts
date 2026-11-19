@@ -287,3 +287,28 @@ export const deploy = defineCommand({
     expect(status).toBe(0);
   });
 });
+
+describe("two politty packages in one project", () => {
+  it("rejects the second plugin even though each package bundles its own copy of the plugin", () => {
+    const dir = createProject("@politty/zod", `it("never runs", () => {});`);
+    link(dir, "@politty/valibot", path.join(rootDir, "packages/valibot"));
+    write(
+      dir,
+      "vitest.config.ts",
+      `import { defineConfig } from "vitest/config";
+import { politty as zod } from "@politty/zod/vite";
+import { politty as valibot } from "@politty/valibot/vite";
+
+export default defineConfig({
+  plugins: [zod({ entry: "./src/cli.ts" }), valibot({ entry: "./src/other.ts" })],
+  test: { include: ["src/**/*.test.ts"] },
+});
+`,
+    );
+
+    const { status, output } = runVitest(dir);
+
+    expect(output).toContain("registered more than once");
+    expect(status).not.toBe(0);
+  });
+});

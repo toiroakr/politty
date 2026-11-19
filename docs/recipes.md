@@ -134,7 +134,7 @@ it("deploys with the global options of the CLI", async () => {
 - With `isolate: false`, the recording is reused for the same entry for the lifetime of the worker. It is not refreshed when Vitest resets or invalidates the modules (`vi.resetModules()`, or a rerun in watch mode); `runCommand` then no longer finds your command in the recorded tree and runs it without the recorded options. Restart the run, or keep the default `isolate: true`.
 - Put `politty()` in the `plugins` of the project that runs the tests. An inline project that only shares the root Vite config does not receive the setup file that the root plugin adds, so its tests run without the recorded options.
 
-- A Vitest project records one entry. Registering `politty()` twice in the same project, or listing politty content mappers with different `entry` options in one tsconfig, throws an error that names both entries. A package that provides several CLIs gets one tsconfig and one Vitest project per CLI: the content mapper types one `GlobalArgs` per tsconfig, and the plugin records one CLI per project.
+- A Vitest project records one entry. Registering `politty()` with two different entries in the same project, or listing politty content mappers with different `entry` options in one tsconfig, throws an error that names both entries. This includes a `politty()` in the root `plugins` that a project inherits with `extends: true`: remove it from the root or set `extends: false`. The same entry registered twice is accepted and loaded once. A package that provides several CLIs gets one tsconfig and one Vitest project per CLI: the content mapper types one `GlobalArgs` per tsconfig, and the plugin records one CLI per project.
 
 ```typescript
 export default defineConfig({
