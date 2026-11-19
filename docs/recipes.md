@@ -137,6 +137,9 @@ it("deploys with the global options of the CLI", async () => {
 - A Vitest project records one entry. Registering `politty()` with two different entries in the same project, or listing politty content mappers with different `entry` options in one tsconfig, throws an error that names both entries. This includes a `politty()` in the root `plugins` that a project inherits with `extends: true`: remove it from the root or set `extends: false`. The same entry registered twice is accepted and loaded once. A package that provides several CLIs gets one tsconfig and one Vitest project per CLI: the content mapper types one `GlobalArgs` per tsconfig, and the plugin records one CLI per project.
 
 ```typescript
+import { defineConfig } from "vitest/config";
+import { politty } from "politty/vite";
+
 export default defineConfig({
   test: {
     projects: [
