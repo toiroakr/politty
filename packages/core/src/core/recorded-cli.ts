@@ -79,6 +79,10 @@ export function isInRecordedHook(): boolean {
   return hookScope.getStore() === true;
 }
 
+export function runInRecordedScope<T>(fn: () => T): T {
+  return hookScope.run(true, fn);
+}
+
 export function inheritableRunOptions(recorded: RecordedCli): RunCommandOptions {
   const { globalArgs, setup, cleanup } = recorded.options;
   return {

@@ -285,7 +285,7 @@ runMain({ name: "cli" });
 describe("politty vite plugin", () => {
   const setupFilesOf = (
     plugin: ReturnType<typeof politty>,
-    userConfig: { root?: string },
+    userConfig: { root?: string; test?: { root?: string } },
   ): string[] | undefined => plugin.config(userConfig, { mode: "test" })?.test.setupFiles;
 
   it("is named politty", () => {
@@ -332,6 +332,15 @@ describe("politty vite plugin", () => {
 
     expect(readFileSync(setupFile!, "utf8")).toContain(
       JSON.stringify(pathToFileURL(join(project, "from-option.ts")).href),
+    );
+  });
+
+  it("resolves the entry against the root that vitest --root puts in test.root", () => {
+    const [setupFile] =
+      setupFilesOf(politty({ entry: "./src/cli.ts" }), { test: { root: project } }) ?? [];
+
+    expect(readFileSync(setupFile!, "utf8")).toContain(
+      JSON.stringify(pathToFileURL(join(project, "src/cli.ts")).href),
     );
   });
 

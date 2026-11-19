@@ -253,6 +253,29 @@ describe("runCommand with a recorded CLI", () => {
     expect(setup).toHaveBeenCalledTimes(1);
   });
 
+  it("does not apply the recorded options again to a runCommand call made by the command that is running", async () => {
+    const calls: string[] = [];
+    const tokenArgs = z.object({ token: arg(z.string()) });
+    const build = defineCommand({ name: "build", run: () => void calls.push("build.run") });
+    const deploy = defineCommand({
+      name: "deploy",
+      run: async () => {
+        calls.push("deploy.run");
+        const inner = await runCommand(build, []);
+        calls.push(`inner.success=${inner.success}`);
+      },
+    });
+    recordCli(defineCommand({ name: "cli", subCommands: { deploy, build } }), {
+      globalArgs: tokenArgs,
+      setup: () => void calls.push("setup"),
+      cleanup: () => void calls.push("cleanup"),
+    });
+
+    await runCommand(deploy, ["--token", "abc"]);
+
+    expect(calls).toEqual(["setup", "deploy.run", "build.run", "inner.success=true", "cleanup"]);
+  });
+
   it("runs a command outside the recorded tree as it would without a recorded CLI", async () => {
     const setup = vi.fn();
     const run = vi.fn();

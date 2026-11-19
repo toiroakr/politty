@@ -18,7 +18,7 @@ export interface PolittyVitePluginOptions {
 export interface PolittyVitePlugin {
   name: string;
   config: (
-    userConfig: { root?: string },
+    userConfig: { root?: string; test?: { root?: string } },
     env?: { mode: string },
   ) => { test: { setupFiles: string[] } } | undefined;
 }
@@ -114,7 +114,7 @@ export function politty(options: PolittyVitePluginOptions = {}): PolittyVitePlug
     name: "politty",
     config(userConfig) {
       if (!process.env["VITEST"]) return undefined;
-      const root = resolve(userConfig.root ?? process.cwd());
+      const root = resolve(userConfig.test?.root ?? userConfig.root ?? process.cwd());
       const entry =
         options.entry === undefined
           ? readRecordingEntry(resolve(root, options.tsconfig ?? "tsconfig.json"))

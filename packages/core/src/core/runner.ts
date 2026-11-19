@@ -65,6 +65,7 @@ import {
   isInRecordingScope,
   isRecordingCli,
   recordCli,
+  runInRecordedScope,
 } from "./recorded-cli.js";
 import {
   extractFields,
@@ -363,10 +364,12 @@ export async function runCommand<TResult = unknown>(
     const inherited = isInternalSubcommandInvocation(recorded.command, routed, globalExtracted)
       ? {}
       : inheritableRunOptions(recorded);
-    return runCommandWithOptions<TResult>(recorded.command, routed, {
-      ...inherited,
-      ...options,
-    });
+    return runInRecordedScope(() =>
+      runCommandWithOptions<TResult>(recorded.command, routed, {
+        ...inherited,
+        ...options,
+      }),
+    );
   }
   return runCommandWithOptions<TResult>(command, argv, options);
 }
