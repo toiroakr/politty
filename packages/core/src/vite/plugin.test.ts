@@ -112,6 +112,26 @@ describe("readRecordingEntry", () => {
     expect(readRecordingEntry(tsconfig)).toBe(join(project, "cli.ts"));
   });
 
+  it("throws an error that names both entries when politty content mappers declare different ones", () => {
+    const tsconfig = tsconfigWith([
+      { package: "politty", options: { entry: "./a.ts" } },
+      { package: "@politty/zod", options: { entry: "./b.ts" } },
+    ]);
+
+    expect(() => readRecordingEntry(tsconfig)).toThrow(
+      new RegExp(`${join(project, "a.ts")}.*${join(project, "b.ts")}`, "s"),
+    );
+  });
+
+  it("accepts several politty content mappers that declare the same entry", () => {
+    const tsconfig = tsconfigWith([
+      { package: "politty", options: { entry: "./cli.ts" } },
+      { package: "@politty/zod", options: { entry: "cli.ts" } },
+    ]);
+
+    expect(readRecordingEntry(tsconfig)).toBe(join(project, "cli.ts"));
+  });
+
   it("explains the content mapper entry option when no mapper declares one", () => {
     const tsconfig = tsconfigWith([{ package: "politty" }]);
 
@@ -285,7 +305,7 @@ runMain({ name: "cli" });
 describe("politty vite plugin", () => {
   const setupFilesOf = (
     plugin: ReturnType<typeof politty>,
-    userConfig: { root?: string; test?: { root?: string } },
+    userConfig: { root?: string; test?: { root?: string; setupFiles?: string[] } },
   ): string[] | undefined => plugin.config(userConfig, { mode: "test" })?.test.setupFiles;
 
   it("is named politty", () => {
@@ -342,6 +362,49 @@ describe("politty vite plugin", () => {
     expect(readFileSync(setupFile!, "utf8")).toContain(
       JSON.stringify(pathToFileURL(join(project, "src/cli.ts")).href),
     );
+  });
+
+  describe("when politty() is registered twice in one project", () => {
+    const configOf = (setupFiles: string[]): { root: string; test: { setupFiles: string[] } } => ({
+      root: project,
+      test: { setupFiles },
+    });
+
+    it("throws an error that names both entries", () => {
+      const first = setupFilesOf(politty({ entry: "./a.ts" }), { root: project }) ?? [];
+
+      expect(() => setupFilesOf(politty({ entry: "./b.ts" }), configOf(first))).toThrow(
+        new RegExp(`${join(project, "a.ts")}.*${join(project, "b.ts")}`, "s"),
+      );
+    });
+
+    it("tells to give each entry its own entry in test.projects", () => {
+      const first = setupFilesOf(politty({ entry: "./a.ts" }), { root: project }) ?? [];
+
+      expect(() => setupFilesOf(politty({ entry: "./b.ts" }), configOf(first))).toThrow(
+        /test\.projects/,
+      );
+    });
+
+    it("throws even when both register the same entry", () => {
+      const first = setupFilesOf(politty({ entry: "./a.ts" }), { root: project }) ?? [];
+
+      expect(() => setupFilesOf(politty({ entry: "./a.ts" }), configOf(first))).toThrow(
+        /registered more than once/,
+      );
+    });
+
+    it("accepts an entry in another project whose config does not hold the first setup file", () => {
+      setupFilesOf(politty({ entry: "./a.ts" }), { root: project });
+
+      expect(setupFilesOf(politty({ entry: "./b.ts" }), { root: project })).toHaveLength(1);
+    });
+
+    it("accepts a project that already lists setup files of its own", () => {
+      expect(setupFilesOf(politty({ entry: "./a.ts" }), configOf(["./own-setup.ts"]))).toHaveLength(
+        1,
+      );
+    });
   });
 
   it("does nothing outside a Vitest run, even in test mode", () => {

@@ -18,9 +18,14 @@ export interface PolittyVitePluginOptions {
 export interface PolittyVitePlugin {
   name: string;
   config: (
-    userConfig: { root?: string; test?: { root?: string } },
+    userConfig: PolittyUserConfig,
     env?: { mode: string },
   ) => { test: { setupFiles: string[] } } | undefined;
+}
+
+interface PolittyUserConfig {
+  root?: string;
+  test?: { root?: string; setupFiles?: string | string[] };
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -38,17 +43,30 @@ export function readRecordingEntry(tsconfigPath: string): string {
   }
   const mappers =
     isObject(config) && Array.isArray(config.contentMappers) ? config.contentMappers : [];
-  const entry = mappers
-    .filter(isObject)
-    .filter((mapper) => typeof mapper.package === "string" && POLITTY_PACKAGE.test(mapper.package))
-    .map((mapper) => (isObject(mapper.options) ? mapper.options.entry : undefined))
-    .find((value): value is string => typeof value === "string");
+  const entries = [
+    ...new Set(
+      mappers
+        .filter(isObject)
+        .filter(
+          (mapper) => typeof mapper.package === "string" && POLITTY_PACKAGE.test(mapper.package),
+        )
+        .map((mapper) => (isObject(mapper.options) ? mapper.options.entry : undefined))
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => resolve(dirname(tsconfigPath), value)),
+    ),
+  ];
+  const [entry, other] = entries;
   if (entry === undefined) {
     throw new Error(
       `politty: no politty entry in "contentMappers" of ${tsconfigPath}. Add the "entry" option of the politty content mapper, the module that calls runMain.`,
     );
   }
-  return resolve(dirname(tsconfigPath), entry);
+  if (other !== undefined) {
+    throw new Error(
+      `politty: "contentMappers" of ${tsconfigPath} name different politty entries (${entry} and ${other}). A tsconfig types one CLI; give each CLI its own tsconfig and pass it as the tsconfig option of politty() in its own item of test.projects.`,
+    );
+  }
+  return entry;
 }
 
 export function renderRecordingSetup(entryUrl: string, graceMs: number): string {
@@ -95,6 +113,7 @@ try {
 }
 
 const setupDirectories = new Set<string>();
+const entryOfSetupFile = new Map<string, string>();
 
 function removeSetupDirectories(): void {
   for (const directory of setupDirectories) rmSync(directory, { recursive: true, force: true });
@@ -106,7 +125,17 @@ export function writeRecordingSetup(entry: string, graceMs = REGISTRATION_GRACE_
   setupDirectories.add(directory);
   const file = join(directory, "setup.mjs");
   writeFileSync(file, renderRecordingSetup(pathToFileURL(entry).href, graceMs), { mode: 0o600 });
+  entryOfSetupFile.set(file, entry);
   return file;
+}
+
+function rejectSecondRegistration(userConfig: PolittyUserConfig, entry: string): void {
+  const listed = [userConfig.test?.setupFiles ?? []].flat();
+  const earlier = listed.map((file) => entryOfSetupFile.get(file)).find((value) => value);
+  if (earlier === undefined) return;
+  throw new Error(
+    `politty: politty() is registered more than once in one Vitest project (entries ${earlier} and ${entry}). A project records one entry, and the earlier one would be ignored silently. Give each entry its own item in test.projects, each with one politty().`,
+  );
 }
 
 /**
@@ -125,6 +154,7 @@ export function politty(options: PolittyVitePluginOptions = {}): PolittyVitePlug
         options.entry === undefined
           ? readRecordingEntry(resolve(root, options.tsconfig ?? "tsconfig.json"))
           : resolve(root, options.entry);
+      rejectSecondRegistration(userConfig, entry);
       return { test: { setupFiles: [writeRecordingSetup(entry)] } };
     },
   };
