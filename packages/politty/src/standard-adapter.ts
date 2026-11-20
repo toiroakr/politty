@@ -18,7 +18,10 @@ import {
   type UnflattenOptions,
 } from "@politty/core/adapter/unflatten";
 import { getArgMeta } from "@politty/core/core/arg-registry";
-import { optionsDefineFieldsDifferently } from "@politty/core/core/schema-extractor";
+import {
+  optionsDefineFieldsDifferently,
+  selectDiscriminatedVariant,
+} from "@politty/core/core/schema-extractor";
 
 export interface StandardJSONSchema {
   readonly "~standard": {
@@ -262,6 +265,8 @@ function resolveReference(value: unknown, root: JsonSchema, seen = new Set<strin
 type FieldShape = {
   type: ResolvedFieldMeta["type"] | "null";
   enumValues?: string[] | undefined;
+  tags?: Tag[] | undefined;
+  itemChoices?: string[] | undefined;
   description?: string | undefined;
   defaultValue?: unknown;
 };
@@ -324,29 +329,45 @@ function fieldShape(
       (childChoices.length > 0 && childChoices.length === nonNullChildren.length
         ? [...new Set(childChoices.flat())]
         : undefined));
+  const directTags = literals.length && literals.every(isTag) ? literals : undefined;
+  const childTags = children.flatMap((child) => (child.tags ? [child.tags] : []));
+  const tags = intersection
+    ? intersectChoices(directTags ? [directTags, ...childTags] : childTags)
+    : (directTags ??
+      (childTags.length > 0 && childTags.length === children.length
+        ? childTags.flat()
+        : undefined));
+  const directItems = asObject(node.items) && fieldShape(node.items, root, parents).enumValues;
+  const childItems = children.flatMap((child) => (child.itemChoices ? [child.itemChoices] : []));
+  const itemChoices = intersection
+    ? intersectChoices(directItems ? [directItems, ...childItems] : childItems)
+    : (directItems ??
+      (childItems.length > 0 && childItems.length === children.length
+        ? [...new Set(childItems.flat())]
+        : undefined));
   const soleChild = nonNullChildren.length === 1 ? nonNullChildren[0] : undefined;
   return {
     type,
-    enumValues:
-      enumValues ??
-      (type === "array" && asObject(node.items)
-        ? fieldShape(node.items, root, parents).enumValues
-        : undefined),
+    tags,
+    itemChoices,
+    enumValues: (type === "array" ? itemChoices : undefined) ?? enumValues,
     description: typeof node.description === "string" ? node.description : soleChild?.description,
     defaultValue: Object.hasOwn(node, "default") ? node.default : soleChild?.defaultValue,
   };
 }
 
-const fieldIntrospection = new WeakMap<object, FieldIntrospection>();
+type StandardFieldIntrospection = FieldIntrospection & Pick<FieldShape, "tags">;
+const fieldIntrospection = new WeakMap<object, StandardFieldIntrospection>();
 
-function withFieldShape(
+function withFieldIntrospection(
   field: ResolvedFieldMeta,
-  shape: Partial<Pick<ResolvedFieldMeta, "type" | "required" | "enumValues">>,
+  changes: Partial<Omit<StandardFieldIntrospection, "schema">>,
 ): ResolvedFieldMeta {
   const previous = fieldIntrospection.get(field.schema as object)!;
   const schema = { ...(field.schema as JsonSchema) };
-  fieldIntrospection.set(schema, { ...previous, ...shape, schema });
-  return { ...field, ...shape, schema };
+  const introspection = { ...previous, ...changes, schema };
+  fieldIntrospection.set(schema, introspection);
+  return resolveFieldMeta(field.name, introspection);
 }
 
 function fieldMeta(
@@ -360,14 +381,14 @@ function fieldMeta(
   const schema = { ...node };
   const fieldSchema = setting && "~standard" in setting ? setting : undefined;
   const metadata = setting && !("~standard" in setting) ? setting : undefined;
-  const argMeta = fieldSchema
-    ? (getArgMeta(fieldSchema) ?? standaloneFields.get(fieldSchema)?.metadata)
-    : metadata;
-  const introspection: FieldIntrospection = {
+  const standalone = fieldSchema && standaloneFields.get(fieldSchema);
+  const argMeta = fieldSchema ? (getArgMeta(fieldSchema) ?? standalone?.metadata) : metadata;
+  const introspection: StandardFieldIntrospection = {
     argMeta,
-    required: metadata?.required ?? required,
+    required: metadata?.required ?? standalone?.required ?? required,
     type: metadata?.type ?? (shape.type === "null" ? "unknown" : shape.type),
     schema,
+    tags: shape.tags,
     description: shape.description,
     defaultValue:
       metadata && Object.hasOwn(metadata, "defaultValue")
@@ -383,17 +404,34 @@ function hasPatternProperties(node: JsonSchema): boolean {
   return Object.keys(asObject(node.patternProperties) ?? {}).length > 0;
 }
 
-function rejectsUnknownKeys(node: JsonSchema, branches: readonly JsonSchema[] = []): boolean {
+function mayEvaluateUnknownKeys(
+  node: JsonSchema,
+  root: JsonSchema,
+  visited: Set<unknown>,
+): boolean {
+  if (
+    (node.additionalProperties !== undefined && node.additionalProperties !== false) ||
+    hasPatternProperties(node) ||
+    node.if !== undefined ||
+    node.dependentSchemas !== undefined
+  ) {
+    return true;
+  }
+  return [node.allOf, node.anyOf, node.oneOf].some(
+    (branches) =>
+      Array.isArray(branches) &&
+      branches.some((branch) => {
+        if (visited.has(branch)) return false;
+        visited.add(branch);
+        return mayEvaluateUnknownKeys(resolveReference(branch, root), root, visited);
+      }),
+  );
+}
+
+function rejectsUnknownKeys(node: JsonSchema, root: JsonSchema): boolean {
   return (
     (node.additionalProperties === false && !hasPatternProperties(node)) ||
-    (node.unevaluatedProperties === false &&
-      ![node, ...branches].some(
-        (part) =>
-          (part.additionalProperties !== undefined && part.additionalProperties !== false) ||
-          hasPatternProperties(part) ||
-          part.if !== undefined ||
-          part.dependentSchemas !== undefined,
-      ))
+    (node.unevaluatedProperties === false && !mayEvaluateUnknownKeys(node, root, new Set([node])))
   );
 }
 
@@ -402,6 +440,7 @@ function extractObject(
   root: JsonSchema,
   schema: ArgsSchema,
   options: StandardArgsOptions | undefined,
+  required: ReadonlySet<unknown>,
 ): ExtractedFields {
   if (
     (node.type !== "object" && !(node.type === undefined && asObject(node.properties))) ||
@@ -413,7 +452,6 @@ function extractObject(
       "politty/standard expects an input JSON Schema with an object shape or a tagged union of objects.",
     );
   }
-  const required = new Set(Array.isArray(node.required) ? node.required : []);
   const fields = Object.entries(asObject(node.properties) ?? {}).map(([name, property]) =>
     fieldMeta(
       name,
@@ -427,19 +465,19 @@ function extractObject(
     schemaType: "object",
     schema,
     fields,
-    unknownKeysMode: options?.unknownKeys ?? (rejectsUnknownKeys(node) ? "strict" : "strip"),
+    unknownKeysMode: options?.unknownKeys ?? (rejectsUnknownKeys(node, root) ? "strict" : "strip"),
     ...(typeof node.description === "string" && { description: node.description }),
   };
 }
 
 function branchMode(
   node: JsonSchema,
-  nodes: JsonSchema[],
+  root: JsonSchema,
   branches: ExtractedFields[],
   override?: UnknownKeysMode,
 ): UnknownKeysMode {
   if (override !== undefined) return override;
-  if (rejectsUnknownKeys(node, nodes)) return "strict";
+  if (rejectsUnknownKeys(node, root)) return "strict";
   const modes = new Set(branches.map((branch) => branch.unknownKeysMode));
   return modes.size === 1 ? branches[0]!.unknownKeysMode : "strip";
 }
@@ -458,19 +496,13 @@ function isTag(value: unknown): value is Tag {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
 }
 
-function intersectChoices(choices: string[][]): string[] | undefined {
+function intersectChoices<Value>(choices: Value[][]): Value[] | undefined {
   const [first, ...rest] = choices;
   return first?.filter((value) => rest.every((other) => other.includes(value)));
 }
 
 function tagsOf(field: ResolvedFieldMeta): Tag[] {
-  const node = field.schema as JsonSchema;
-  const values: unknown[] = Object.hasOwn(node, "const")
-    ? [node.const]
-    : Array.isArray(node.enum)
-      ? node.enum
-      : [];
-  return values.every(isTag) ? [...new Set(values)] : [];
+  return [...new Set(fieldIntrospection.get(field.schema as object)?.tags)];
 }
 
 function normalizeTag(value: unknown, tag: Tag): unknown {
@@ -516,7 +548,7 @@ function taggedUnion(branches: ExtractedFields[], requested: StandardArgsOptions
     const variants = branches.flatMap((branch, index) => {
       const fields = branch.fields.map((field) =>
         field.name === name
-          ? withFieldShape(field, {
+          ? withFieldIntrospection(field, {
               type: kinds.size === 1 ? field.type : "unknown",
               enumValues: spellings,
             })
@@ -539,7 +571,7 @@ function taggedUnion(branches: ExtractedFields[], requested: StandardArgsOptions
   return undefined;
 }
 
-function intersectFields(branches: ExtractedFields[], required: unknown): ResolvedFieldMeta[] {
+function intersectFields(branches: ExtractedFields[]): ResolvedFieldMeta[] {
   const fields = new Map<string, ResolvedFieldMeta>();
   for (const branch of branches) {
     for (const next of branch.fields) {
@@ -553,9 +585,22 @@ function intersectFields(branches: ExtractedFields[], required: unknown): Resolv
           `politty/standard intersection has incompatible CLI types for "${next.name}". Set its field type explicitly.`,
         );
       }
+      if (previous.effect && next.effect && previous.effect !== next.effect) {
+        throw new Error(
+          `politty/standard intersection has multiple effects for "${next.name}". Register one effect for the field.`,
+        );
+      }
+      const left = fieldIntrospection.get(previous.schema as object)!;
+      const right = fieldIntrospection.get(next.schema as object)!;
       fields.set(
         next.name,
-        withFieldShape(previous, {
+        withFieldIntrospection(previous, {
+          argMeta:
+            left.argMeta && right.argMeta
+              ? { ...right.argMeta, ...left.argMeta }
+              : (left.argMeta ?? right.argMeta),
+          description: left.description ?? right.description,
+          defaultValue: left.defaultValue === undefined ? right.defaultValue : left.defaultValue,
           type: previous.type === "unknown" ? next.type : previous.type,
           required: previous.required || next.required,
           enumValues: intersectChoices(
@@ -565,12 +610,7 @@ function intersectFields(branches: ExtractedFields[], required: unknown): Resolv
       );
     }
   }
-  const requiredNames = new Set(Array.isArray(required) ? required : []);
-  return [...fields.values()].map((field) =>
-    requiredNames.has(field.name) && !field.required
-      ? withFieldShape(field, { required: true })
-      : field,
-  );
+  return [...fields.values()];
 }
 
 function assertConfiguredFields(extracted: ExtractedFields, options?: StandardArgsOptions): void {
@@ -587,11 +627,15 @@ function extractNode(
   schema: ArgsSchema,
   options: StandardArgsOptions | undefined,
   ancestors: readonly unknown[] = [],
+  inheritedRequired: ReadonlySet<unknown> = new Set(),
 ): ExtractedFields {
   if (ancestors.includes(value)) {
     throw new Error("politty/standard cannot extract a recursive argument composition.");
   }
   const node = resolveReference(value, root);
+  const required = Array.isArray(node.required)
+    ? new Set([...inheritedRequired, ...node.required])
+    : inheritedRequired;
   const composition = (["anyOf", "oneOf", "allOf"] as const).filter((key) =>
     Object.hasOwn(node, key),
   );
@@ -599,7 +643,7 @@ function extractNode(
     if (options?.branches || options?.discriminator !== undefined) {
       throw new Error("politty/standard branch metadata requires a union or intersection.");
     }
-    return extractObject(node, root, schema, options);
+    return extractObject(node, root, schema, options, required);
   }
   const keyword = composition[0]!;
   const choices = node[keyword];
@@ -624,7 +668,6 @@ function extractNode(
   }
 
   const parents = [...ancestors, value];
-  const nodes = choices.map((choice) => resolveReference(choice, root));
   const branches = choices.map((choice, index) => {
     const branch = options?.branches?.[index];
     if (branch) rejectUnflattenedOption(branch);
@@ -633,17 +676,17 @@ function extractNode(
       ...branchOptions,
       fields: { ...options?.fields, ...branchOptions?.fields },
     };
-    const extracted = extractNode(choice, root, branch ?? schema, inherited, parents);
+    const extracted = extractNode(choice, root, branch ?? schema, inherited, parents, required);
     assertConfiguredFields(extracted, branchOptions);
     return extracted;
   });
   if (keyword === "allOf" && node.properties !== undefined) {
     const { allOf: _branches, ...object } = node;
-    branches.unshift(extractObject(object, root, schema, options));
+    branches.unshift(extractObject(object, root, schema, options, required));
   }
   const common = {
     schema,
-    unknownKeysMode: branchMode(node, nodes, branches, options?.unknownKeys),
+    unknownKeysMode: branchMode(node, root, branches, options?.unknownKeys),
     ...(typeof node.description === "string" && { description: node.description }),
   };
   if (keyword === "allOf") {
@@ -659,7 +702,7 @@ function extractNode(
     }
     return {
       ...common,
-      fields: intersectFields(branches, node.required),
+      fields: intersectFields(branches),
       schemaType: "intersection",
     };
   }
@@ -734,13 +777,25 @@ function validateSync(schema: SchemaLike, value: unknown): StandardValidation {
 
 function normalizeDiscriminator(
   raw: Record<string, unknown>,
-  schema: ArgsSchema,
+  extracted: ExtractedFields | undefined,
 ): Record<string, unknown> {
-  const extracted = cache.get(schema);
-  const name = extracted?.discriminator;
-  if (name === undefined || typeof raw[name] !== "string") return raw;
+  if (!extracted) return raw;
+  const name = extracted.discriminator;
+  if (name === undefined) {
+    const candidates = extracted.unionOptions?.filter((option) => {
+      const selected = selectDiscriminatedVariant(option, () => raw);
+      if (option.discriminator && selected === option) return false;
+      const fields = new Set(selected.fields.map((field) => field.name));
+      return (
+        selected.fields.every((field) => !field.required || raw[field.name] !== undefined) &&
+        !extracted.fields.some((field) => raw[field.name] !== undefined && !fields.has(field.name))
+      );
+    });
+    return candidates?.length === 1 ? normalizeDiscriminator(raw, candidates[0]) : raw;
+  }
+  if (typeof raw[name] !== "string") return raw;
   const value = raw[name];
-  const candidates = extracted?.variants ?? [];
+  const candidates = extracted.variants ?? [];
   const selected =
     candidates.find((variant) => variant.discriminatorValue === value) ??
     candidates.find(
@@ -769,7 +824,7 @@ export const standardAdapter: ValidatorAdapter = {
     );
   },
   validate(rawArgs, schema) {
-    const result = validateSync(schema, normalizeDiscriminator(rawArgs, schema));
+    const result = validateSync(schema, normalizeDiscriminator(rawArgs, cache.get(schema)));
     if (!result.issues) return { success: true, data: result.value };
     return {
       success: false,

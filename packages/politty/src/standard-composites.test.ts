@@ -12,6 +12,12 @@ import {
   unflatten,
 } from "./standard.js";
 
+function inputSchema(document: Record<string, unknown>) {
+  return {
+    "~standard": { version: 1 as const, jsonSchema: { input: () => document } },
+  };
+}
+
 describe("Standard JSON Schema composite command arguments", () => {
   it("routes a plain union by its fields and retains the validator output", async () => {
     const schema = z.union([z.object({ file: z.string() }), z.object({ url: z.string().url() })]);
@@ -104,6 +110,181 @@ describe("Standard JSON Schema composite command arguments", () => {
     expect(legacyEffect).not.toHaveBeenCalled();
     expect(currentEffect).toHaveBeenCalledWith("config.json", expect.any(Object));
     expect(generateHelpData(command).options[0]).toMatchObject({ enumValues: ["1", "2"] });
+  });
+
+  it.each(["anyOf", "oneOf"] as const)(
+    "reads typed tag literals from %s references",
+    async (key) => {
+      const validator = z.discriminatedUnion("edition", [
+        z.object({ edition: z.literal([1, 2]) }),
+        z.object({ edition: z.literal(3) }),
+      ]);
+      const command = defineCommand({
+        name: "migrate",
+        args: standardArgs(validator, {
+          discriminator: "edition",
+          jsonSchema: {
+            "~standard": {
+              version: 1,
+              jsonSchema: {
+                input: () => ({
+                  $defs: { first: { const: 1 }, second: { const: 2 } },
+                  anyOf: [
+                    {
+                      type: "object",
+                      properties: {
+                        edition: {
+                          [key]: [{ $ref: "#/$defs/first" }, { $ref: "#/$defs/second" }],
+                        },
+                      },
+                      required: ["edition"],
+                    },
+                    {
+                      type: "object",
+                      properties: { edition: { const: 3 } },
+                      required: ["edition"],
+                    },
+                  ],
+                }),
+              },
+            },
+          },
+        }),
+        run: ({ edition }) => edition,
+      });
+      expect(await runCommand(command, ["--edition", "2"])).toMatchObject({
+        success: true,
+        result: 2,
+      });
+    },
+  );
+
+  it("normalizes a numeric discriminator in a nested union", async () => {
+    const tagged = z.discriminatedUnion("edition", [
+      z.object({ edition: z.literal(1), path: z.string() }),
+      z.object({ edition: z.literal(2), path: z.string() }),
+    ]);
+    const command = defineCommand({
+      name: "migrate",
+      args: z.union([tagged, z.object({ edition: z.string(), remote: z.string() })]),
+      run: (args) => args,
+    });
+    expect(await runCommand(command, ["--edition", "2", "--path", "config.json"])).toMatchObject({
+      success: true,
+      result: { edition: 2, path: "config.json" },
+    });
+    expect(await runCommand(command, ["--edition", "2", "--remote", "demo"])).toMatchObject({
+      success: true,
+      result: { edition: "2", remote: "demo" },
+    });
+  });
+
+  it("uses required names declared alongside the union when identifying tags", async () => {
+    const validator = z.discriminatedUnion("edition", [
+      z.object({ edition: z.literal(1), path: z.string() }),
+      z.object({ edition: z.literal(2), verbose: z.boolean().optional() }),
+    ]);
+    const command = defineCommand({
+      name: "migrate",
+      args: standardArgs(validator, {
+        jsonSchema: inputSchema({
+          required: ["edition"],
+          anyOf: [
+            {
+              type: "object",
+              properties: { edition: { const: 1 }, path: { type: "string" } },
+              required: ["path"],
+            },
+            {
+              type: "object",
+              properties: { edition: { const: 2 }, verbose: { type: "boolean" } },
+            },
+          ],
+        }),
+      }),
+      run: (value) => value,
+    });
+    expect(await runCommand(command, ["--edition", "2"])).toMatchObject({
+      success: true,
+      result: { edition: 2 },
+    });
+  });
+
+  it("retains array item choices from an allOf operand without an explicit type", () => {
+    const command = defineCommand({
+      name: "search",
+      args: standardArgs(z.object({ modes: z.array(z.enum(["fast", "safe"])) }), {
+        jsonSchema: inputSchema({
+          type: "object",
+          properties: {
+            modes: { allOf: [{ type: "array" }, { items: { enum: ["fast", "safe"] } }] },
+          },
+          required: ["modes"],
+        }),
+      }),
+      run: ({ modes }) => modes,
+    });
+    expect(generateHelpData(command).options[0]).toMatchObject({
+      enumValues: ["fast", "safe"],
+    });
+  });
+
+  it("keeps an effect registered on a later intersection operand", async () => {
+    const first = z.object({ path: z.string() });
+    const second = z.object({ path: z.string().min(1) });
+    const effect = vi.fn();
+    const command = defineCommand({
+      name: "read",
+      args: standardArgs(z.intersection(first, second), {
+        branches: [first, standardArgs(second, { fields: { path: { effect } } })],
+        jsonSchema: inputSchema({
+          allOf: [
+            { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+            { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+          ],
+        }),
+      }),
+      run: ({ path }) => path,
+    });
+    expect(await runCommand(command, ["--path", "notes.txt"])).toMatchObject({ success: true });
+    expect(effect).toHaveBeenCalledWith("notes.txt", expect.any(Object));
+  });
+
+  it("rejects conflicting effects for the same intersection field", () => {
+    const first = z.object({ path: z.string() });
+    const second = z.object({ path: z.string().min(1) });
+    const object = { type: "object", properties: { path: { type: "string" } } };
+    const args = standardArgs(z.intersection(first, second), {
+      branches: [
+        standardArgs(first, { fields: { path: { effect: vi.fn() } } }),
+        standardArgs(second, { fields: { path: { effect: vi.fn() } } }),
+      ],
+      jsonSchema: inputSchema({ allOf: [object, object] }),
+    });
+    expect(() => extractFields(args)).toThrow('multiple effects for "path"');
+  });
+
+  it("passes unknown flags allowed by a nested allOf pattern to the validator", async () => {
+    const command = defineCommand({
+      name: "mark",
+      args: standardArgs(z.looseObject({ label: z.string() }), {
+        jsonSchema: inputSchema({
+          unevaluatedProperties: false,
+          allOf: [
+            { type: "object", properties: { label: { type: "string" } }, required: ["label"] },
+            {
+              allOf: [{ $ref: "#/$defs/extra" }],
+            },
+          ],
+          $defs: { extra: { type: "object", patternProperties: { "^x-": { type: "string" } } } },
+        }),
+      }),
+      run: (value) => value["x-color"],
+    });
+    expect(await runCommand(command, ["--label", "demo", "--x-color", "blue"])).toMatchObject({
+      success: true,
+      result: "blue",
+    });
   });
 
   it("uses explicit discriminator values when a converter omits the tags", async () => {
@@ -223,6 +404,18 @@ describe("Standard JSON Schema metadata", () => {
       required: true,
     });
     expect(renderArgsTable({ token: argument })).toMatch(/--token.*-t.*Access token.*Yes/);
+  });
+
+  it("uses explicit requiredness when a documented field is linked to a command schema", () => {
+    const token = z.string().optional();
+    const command = defineCommand({
+      name: "authenticate",
+      args: standardArgs(z.object({ token }), {
+        fields: { token: standardField(token, { required: true }) },
+      }),
+      run: ({ token }) => token,
+    });
+    expect(generateHelpData(command).options[0]).toMatchObject({ name: "token", required: true });
   });
 
   it("supports camelCase and kebab-case unflatten prefixes", async () => {
