@@ -35,7 +35,7 @@ describe("politty/standard", () => {
           query: z.string().transform((text) => text.length),
           mode: z.enum(["fast", "safe"]).describe("Search strategy").default("safe"),
           loud: z.boolean().default(false),
-          include: z.array(z.string()).default([]),
+          include: z.array(z.enum(["x", "y"])).default([]),
         }),
         { fields: { query: { positional: true }, loud: { alias: "l" } } },
       ),
@@ -52,9 +52,9 @@ describe("politty/standard", () => {
       result: { query: 5, loud: true, mode: "safe", include: ["x", "y"] },
     });
     expect(generateHelp(command, {})).toContain("Search strategy");
-    expect(generateCompletion(command, { shell: "bash", programName: "search" }).script).toContain(
-      '"fast" "safe"',
-    );
+    const script = generateCompletion(command, { shell: "bash", programName: "search" }).script;
+    expect(script).toContain('"fast" "safe"');
+    expect(script).toContain('"x" "y"');
     expect(
       (await buildCommandInfo(command, "search")).positionalArgs.map(({ name }) => name),
     ).toEqual(["query"]);
@@ -149,6 +149,36 @@ describe("politty/standard", () => {
     },
   );
 
+  it("passes options allowed by patternProperties to the validator", async () => {
+    const { defineCommand, runCommand, standardArgs } = await standard();
+    const schema = v.pipe(
+      v.objectWithRest({}, v.string()),
+      v.check((values) => Object.keys(values).every((key) => key.startsWith("x-"))),
+    );
+    const command = defineCommand({
+      name: "greet",
+      args: standardArgs(schema, {
+        jsonSchema: {
+          "~standard": {
+            version: 1,
+            jsonSchema: {
+              input: () => ({
+                type: "object",
+                patternProperties: { "^x-": { type: "string" } },
+                additionalProperties: false,
+              }),
+            },
+          },
+        },
+      }),
+      run: (args) => args["x-note"],
+    });
+    expect(await runCommand(command, ["--x-note", "hello"])).toMatchObject({
+      success: true,
+      result: "hello",
+    });
+  });
+
   it("documents global flags with their CLI metadata and default", async () => {
     const { defineCommand, standardArgs } = await standard();
     const { generateDoc } = await importSubpath<typeof StandardDocs>("politty/standard/docs");
@@ -192,7 +222,10 @@ describe("politty/standard", () => {
 
   it("selects tagged branches without replacing the dedicated Zod adapter", async () => {
     const alias = await importSubpath<typeof ZodPolitty>("politty");
-    const { defineCommand, runCommand } = await standard();
+    const { defineCommand, generateHelpData, runCommand } = await standard();
+    const { generateCompletion } = await importSubpath<typeof StandardCompletion>(
+      "politty/standard/completion",
+    );
     const command = defineCommand({
       name: "toggle",
       args: z.discriminatedUnion("kind", [
@@ -209,6 +242,13 @@ describe("politty/standard", () => {
       success: true,
       result: 3,
     });
+
+    expect(
+      generateHelpData(command).options.find((option) => option.name === "kind")?.enumValues,
+    ).toEqual(["read", "write"]);
+    expect(generateCompletion(command, { shell: "bash", programName: "toggle" }).script).toContain(
+      '"read" "write"',
+    );
 
     const nativeCommand = alias.defineCommand({
       name: "native",

@@ -181,8 +181,9 @@ function fieldShape(
       ? node.enum
       : [];
   const choices = node.anyOf ?? node.oneOf;
+  const parents = [...ancestors, value];
   const children = Array.isArray(choices)
-    ? choices.map((choice) => fieldShape(choice, root, [...ancestors, value]))
+    ? choices.map((choice) => fieldShape(choice, root, parents))
     : [];
   const types = Array.isArray(node.type)
     ? node.type
@@ -191,6 +192,7 @@ function fieldShape(
       : literals.length
         ? literals.map((literal) => (literal === null ? "null" : typeof literal))
         : children.map((child) => child.type);
+  const type = commonFieldType(types);
   const nonNullChildren = children.filter(({ type }) => type !== "null");
   const nonNullLiterals = literals.filter((literal) => literal !== null);
   const enumValues =
@@ -201,8 +203,12 @@ function fieldShape(
         : undefined;
   const soleChild = nonNullChildren.length === 1 ? nonNullChildren[0] : undefined;
   return {
-    type: commonFieldType(types),
-    enumValues,
+    type,
+    enumValues:
+      enumValues ??
+      (type === "array" && asObject(node.items)
+        ? fieldShape(node.items, root, parents).enumValues
+        : undefined),
     description: typeof node.description === "string" ? node.description : soleChild?.description,
     defaultValue: Object.hasOwn(node, "default") ? node.default : soleChild?.defaultValue,
   };
@@ -234,7 +240,7 @@ function fieldMeta(
 
 function rejectsUnknownKeys(node: JsonSchema, branches: readonly JsonSchema[] = []): boolean {
   return (
-    node.additionalProperties === false ||
+    (node.additionalProperties === false && node.patternProperties === undefined) ||
     (node.unevaluatedProperties === false &&
       ![node, ...branches].some(
         (part) =>
@@ -315,9 +321,17 @@ function extractTaggedUnion(
       "politty/standard expects each union branch to have a distinct string tag in a shared required field.",
     );
   }
+  const discriminatorValues = tags.map((tag) => tag.get(discriminator)!);
+  const variants = branches.map((branch, index) => ({
+    discriminatorValue: discriminatorValues[index]!,
+    fields: branch.fields.map((field) =>
+      field.name === discriminator ? { ...field, enumValues: discriminatorValues } : field,
+    ),
+    ...(branch.description !== undefined && { description: branch.description }),
+  }));
   const fields = new Map<string, ResolvedFieldMeta>();
-  for (const branch of branches) {
-    for (const field of branch.fields) {
+  for (const variant of variants) {
+    for (const field of variant.fields) {
       if (!fields.has(field.name)) fields.set(field.name, field);
     }
   }
@@ -326,11 +340,7 @@ function extractTaggedUnion(
     schema,
     fields: [...fields.values()],
     discriminator,
-    variants: branches.map((branch, index) => ({
-      discriminatorValue: tags[index]!.get(discriminator)!,
-      fields: branch.fields,
-      ...(branch.description !== undefined && { description: branch.description }),
-    })),
+    variants,
     unknownKeysMode:
       options?.unknownKeys ??
       (rejectsUnknownKeys(node, branchNodes) ||

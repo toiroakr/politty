@@ -95,7 +95,7 @@ You can write your schemas against either `import * as z from "zod/mini"` or [`i
 
 ### Using Standard Schema validators
 
-Use `politty/standard` with a synchronous validator that implements both Standard Schema and Standard JSON Schema. Pass the schema directly as `args` when it already exposes `~standard.jsonSchema.input`. Use `standardArgs()` to supply CLI metadata by field name.
+Use `politty/standard` with a synchronous Standard Schema validator. Pass the schema directly as `args` when it exposes `~standard.jsonSchema.input`. Otherwise, use `standardArgs(schema, { jsonSchema })` to supply the converter separately. Use the `fields` option to set CLI metadata by input field name.
 
 ```typescript
 import { z } from "zod";
@@ -123,7 +123,7 @@ If conversion comes from a separate function, pass its result as the `jsonSchema
 
 The adapter reads object properties or tagged unions of objects from the Draft 2020-12 input schema. Each union branch needs a different string literal in the same required field. The original validator still applies defaults and transforms values. Numeric options arrive at the validator as strings, so use a schema that converts them when needed. By default, unknown flags produce warnings, or errors if the input schema rejects unknown properties (for example, with `additionalProperties: false`). Set `unknownKeys` in `standardArgs()` to choose `"strict"`, `"strip"`, or `"passthrough"`.
 
-Use `politty/standard/completion` and `politty/standard/docs` for shell completion and documentation generation with these commands.
+Use `politty/standard/completion` for shell completion. For docs, `politty/standard/docs` exposes `generateDoc`, `buildCommandInfo`, and `collectAllCommands`.
 
 ## Quick Start
 
