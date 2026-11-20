@@ -60,7 +60,7 @@ const command = defineCommand({
 runMain(command);
 ```
 
-Field descriptions can also come from valibot's own metadata actions. They are actions, not schemas, so they belong inside `v.pipe(...)`: `v.pipe(v.string(), v.description("..."))` or `v.pipe(v.string(), v.metadata({ description: "..." }))`. The one zod-only feature without a valibot counterpart is the `politty/augment` module (zod `GlobalMeta` interface augmentation) — use `arg()` or `v.metadata()` instead. The `politty` package itself remains the zod flavor (an alias of `@politty/zod`).
+Field descriptions can also come from valibot's own metadata actions. They are actions, not schemas, so they belong inside `v.pipe(...)`: `v.pipe(v.string(), v.description("..."))` or `v.pipe(v.string(), v.metadata({ description: "..." }))`. The one zod-only feature without a valibot counterpart is the `politty/augment` module (zod `GlobalMeta` interface augmentation) — use `arg()` or `v.metadata()` instead. The default `politty` entry point is an alias of `@politty/zod`.
 
 ### Using zod/mini instead of zod
 
@@ -92,6 +92,38 @@ runMain(command);
 `zod/mini` drops classic zod's chainable sugar (`.optional()`, `.default()`, `.describe()`, `.meta()`), so schemas are built with functions instead (`z.optional(z.string())`, `z._default(z.string(), "x")`). Field descriptions come from `arg()` or from zod's own metadata registry: `schema.register(z.globalRegistry, { description: "..." })`. The `politty/augment` module (classic zod's `GlobalMeta` interface augmentation) has no `@politty/zod-mini` counterpart for the same reason it has none for valibot — use `arg()` or the registry instead.
 
 You can write your schemas against either `import * as z from "zod/mini"` or [`import * as z from "@zod/mini"`](https://zod.dev/packages/mini) — `@zod/mini` re-exports `zod/mini` (same classes, same `globalRegistry`), so schemas built either way are fully interchangeable. Per zod's own installation instructions, install `@zod/mini` alongside `zod` (`npm install zod @zod/mini`), not instead of it — `@zod/mini` only re-exports `zod/mini` from a peer dependency on `zod`, so `zod` still needs to be resolvable in your project either way.
+
+### Using Standard Schema validators
+
+Use `politty/standard` with a synchronous validator that implements both Standard Schema and Standard JSON Schema. Pass the schema directly as `args` when it already exposes `~standard.jsonSchema.input`. Use `standardArgs()` to supply CLI metadata by field name.
+
+```typescript
+import { z } from "zod";
+import { defineCommand, runMain, standardArgs } from "politty/standard";
+
+const command = defineCommand({
+  name: "greet",
+  args: standardArgs(
+    z.object({
+      name: z.string().describe("Name to greet"),
+      loud: z.boolean().default(false),
+    }),
+    { fields: { name: { positional: true }, loud: { alias: "l" } } },
+  ),
+  run: ({ name, loud }) => {
+    const greeting = `Hello, ${name}!`;
+    console.log(loud ? greeting.toUpperCase() : greeting);
+  },
+});
+
+runMain(command);
+```
+
+If conversion comes from a separate function, pass its result as the `jsonSchema` option. For example, with Valibot and `@valibot/to-json-schema`, use `standardArgs(schema, { jsonSchema: toStandardJsonSchema(schema) })`.
+
+The adapter reads object properties or tagged unions of objects from the Draft 2020-12 input schema. Each union branch needs a different string literal in the same required field. The original validator still applies defaults and transforms values. Numeric options arrive at the validator as strings, so use a schema that converts them when needed. By default, unknown flags produce warnings, or errors if the input schema has `additionalProperties: false`. Set `unknownKeys` in `standardArgs()` to choose `"strict"`, `"strip"`, or `"passthrough"`.
+
+Use `politty/standard/completion` and `politty/standard/docs` for shell completion and documentation generation with these commands.
 
 ## Quick Start
 

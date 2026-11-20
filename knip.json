@@ -27,7 +27,7 @@
     },
     "packages/politty": {
       "project": ["src/**/*.ts"],
-      "ignoreDependencies": ["@typescript/native-preview"]
+      "ignoreDependencies": ["@typescript/native-preview", "@clack/prompts", "@inquirer/prompts"]
     }
   }
 }
