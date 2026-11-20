@@ -124,3 +124,11 @@ pnpm exec tsx playground/34-standard/index.ts config.json -p 8080
 pnpm exec tsx playground/34-standard/index.ts config.json -p 8080 -L debug --no-color
 pnpm exec tsx playground/34-standard/index.ts --help
 ```
+
+The workspace CLI demonstrates an untagged union, an intersection, and nested values from flat options.
+
+```bash
+pnpm exec tsx playground/34-standard/workspace.ts read --url https://example.com
+pnpm exec tsx playground/34-standard/workspace.ts publish --destination preview --release-version 2.0 --dry-run
+pnpm exec tsx playground/34-standard/workspace.ts connect -p 5432
+```

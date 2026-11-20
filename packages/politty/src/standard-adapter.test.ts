@@ -111,10 +111,10 @@ describe("Standard JSON Schema adapter", () => {
 
   it.each([
     { input: { type: "string" }, error: "object shape" },
-    { input: { allOf: [{ type: "object" }, { type: "object" }] }, error: "object shape" },
+    { input: { allOf: [{ type: "object" }, { type: "string" }] }, error: "object shape" },
     {
-      input: { anyOf: [{ type: "object" }, { type: "object" }] },
-      error: "distinct string tag",
+      input: { anyOf: [{ type: "object" }], allOf: [{ type: "object" }] },
+      error: "single object composition",
     },
     { input: { $ref: "#/$defs/missing" }, error: "cannot resolve JSON Schema reference" },
     { input: { $ref: "#" }, error: "cannot inspect JSON Schema reference" },

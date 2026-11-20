@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -26,6 +26,42 @@ describe("politty/standard", () => {
   it("preserves typed output and requires the input converter in the shipped declarations", () => {
     const workspace = fileURLToPath(new URL("../..", import.meta.url));
     execSync("pnpm exec tsgo -p tests/dist-compat/fixtures/standard-types", { cwd: workspace });
+  });
+
+  it.each([
+    ["agent", "detectAgent"],
+    ["skill", "withSkillCommand"],
+    ["prompt", "promptMissingArgs"],
+    ["prompt/clack", "prompt"],
+    ["prompt/inquirer", "prompt"],
+    ["compile-cache", "enableCompileCache"],
+    ["vite", "politty"],
+  ])("exports %s from the built package", async (subpath, name) => {
+    const entry = await importSubpath<Record<string, unknown>>(`politty/standard/${subpath}`);
+    expect(entry[name]).toBeTypeOf("function");
+  });
+
+  it("generates shims that use the Standard adapter's compile-cache entry", async () => {
+    const { generateCompileCacheShim } = await standard();
+    const directory = await mkdtemp(join(tmpdir(), "politty-standard-shim-"));
+    try {
+      const [shim] = generateCompileCacheShim({
+        cwd: directory,
+        entry: "./main.mjs",
+        out: "bin.mjs",
+        program: "example",
+      });
+      expect(shim?.compileCacheSpecifier).toBe("politty/standard/compile-cache");
+      expect(await readFile(join(directory, "bin.mjs"), "utf8")).toContain(
+        "politty/standard/compile-cache",
+      );
+      const cli = requireFromPolitty.resolve("politty/standard/cli");
+      expect(execFileSync(process.execPath, [cli, "--help"], { encoding: "utf8" })).toContain(
+        "generate-shim",
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("uses input fields for argv, help, and shell completion and preserves validated output", async () => {

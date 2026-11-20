@@ -1,4 +1,4 @@
-import { createDefineCommand, defineCommand, standardArgs } from "politty/standard";
+import { arg, createDefineCommand, defineCommand, standardArgs, unflatten } from "politty/standard";
 import * as v from "valibot";
 import { z } from "zod";
 
@@ -44,3 +44,30 @@ standardArgs(validator);
 standardArgs(transformed, { fields: { size: { alias: "s" } } });
 // @ts-expect-error Command args schemas must return an object.
 defineCommand({ name: "scalar", args: z.string(), run: () => {} });
+
+const port = arg(z.coerce.number(), { alias: "p" });
+defineCommand({
+  name: "connect",
+  args: unflatten(
+    standardArgs(z.object({ "server.port": port }), { fields: { "server.port": port } }),
+  ),
+  run: ({ server }) => {
+    const portNumber: number = server.port;
+    return portNumber;
+  },
+});
+
+const untyped = standardArgs(
+  {
+    "~standard": { version: 1, vendor: "untyped", validate: () => ({ value: { id: "example" } }) },
+  },
+  {
+    jsonSchema: {
+      "~standard": {
+        version: 1,
+        jsonSchema: { input: () => ({ type: "object", properties: { id: { type: "string" } } }) },
+      },
+    },
+  },
+);
+defineCommand({ name: "untyped", args: untyped, run: (args) => args.id });
