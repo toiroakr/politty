@@ -122,9 +122,10 @@ describe("politty/standard", () => {
                 args: {
                   type: "object",
                   [closedObjectKeyword]: false,
-                  properties: { name: {} },
+                  properties: { name: { $ref: "#/$defs/names/anyOf/0" } },
                   required: ["name"],
                 },
+                names: { anyOf: [{ type: "string" }, { type: "number" }] },
               },
             }),
           },
@@ -187,6 +188,13 @@ describe("politty/standard", () => {
     const path = join(directory, "cli.md");
     vi.stubEnv("POLITTY_DOCS_UPDATE", "1");
     try {
+      await expect(
+        generateDoc({
+          command,
+          path,
+          rootDoc: { path, globalOptions: { token: z.string() } },
+        }),
+      ).rejects.toThrow("Pass the schema as globalArgs");
       expect(
         await generateDoc({
           command,

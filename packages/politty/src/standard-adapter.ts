@@ -131,8 +131,13 @@ function resolveReference(value: unknown, root: JsonSchema, seen = new Set<strin
   seen.add(reference);
   const pointer = reference === "#" ? [] : decodeURIComponent(reference.slice(2)).split("/");
   const target = pointer.reduce<unknown>((current, token) => {
-    const object = asObject(current);
     const key = token.replaceAll("~1", "/").replaceAll("~0", "~");
+    if (Array.isArray(current)) {
+      return /^(0|[1-9][0-9]*)$/.test(key) && Object.hasOwn(current, key)
+        ? current[Number(key)]
+        : undefined;
+    }
+    const object = asObject(current);
     return object ? own(object, key) : undefined;
   }, root);
   if (target === undefined) {
@@ -397,9 +402,12 @@ export const standardAdapter: ValidatorAdapter = {
   resolveFieldMeta(name, schema) {
     const node = asObject(schema);
     const introspection = node && fieldIntrospection.get(node);
-    if (introspection) return resolveFieldMeta(name, introspection);
-    const root = getConverter(schema as StandardArgsSchema).input({ target: "draft-2020-12" });
-    return fieldMeta(name, resolveReference(root, root), false, root);
+    if (!introspection) {
+      throw new Error(
+        "politty/standard requires the enclosing object schema for documentation fields. Pass the schema as globalArgs to generateDoc().",
+      );
+    }
+    return resolveFieldMeta(name, introspection);
   },
   validate(rawArgs, schema) {
     const result = schema["~standard"].validate(rawArgs) as
