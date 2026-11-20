@@ -678,6 +678,7 @@ function extractNode(
     };
     const extracted = extractNode(choice, root, branch ?? schema, inherited, parents, required);
     assertConfiguredFields(extracted, branchOptions);
+    if (branch) cache.set(branch, extracted);
     return extracted;
   });
   if (keyword === "allOf" && node.properties !== undefined) {
@@ -770,7 +771,9 @@ function validateSync(schema: SchemaLike, value: unknown): StandardValidation {
     | Promise<StandardValidation>;
   if ("then" in result) {
     void Promise.resolve(result).catch(() => undefined);
-    throw new Error("politty/standard requires a synchronous Standard Schema validator.");
+    throw new Error(
+      "politty/standard requires a synchronous Standard Schema validator, but validate() returned a Promise. Use a synchronous validator, or check the schema definition if the validator reports its own errors asynchronously.",
+    );
   }
   return result;
 }

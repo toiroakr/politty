@@ -112,6 +112,37 @@ describe("Standard JSON Schema composite command arguments", () => {
     expect(generateHelpData(command).options[0]).toMatchObject({ enumValues: ["1", "2"] });
   });
 
+  it("runs the effect of the numeric-tag branch selected inside a nested union", async () => {
+    const legacy = z.object({ edition: z.literal(1), path: z.string() });
+    const current = z.object({ edition: z.literal(2), path: z.string() });
+    const legacyEffect = vi.fn();
+    const currentEffect = vi.fn();
+    const inner = z.discriminatedUnion("edition", [legacy, current]);
+    const other = z.object({ url: z.string() });
+    const command = defineCommand({
+      name: "migrate",
+      args: standardArgs(z.union([inner, other]), {
+        branches: [
+          standardArgs(inner, {
+            discriminator: "edition",
+            branches: [
+              standardArgs(legacy, { fields: { path: { effect: legacyEffect } } }),
+              standardArgs(current, { fields: { path: { effect: currentEffect } } }),
+            ],
+          }),
+          other,
+        ],
+      }),
+      run: (args) => args,
+    });
+    expect(await runCommand(command, ["--edition", "2", "--path", "x"])).toMatchObject({
+      success: true,
+      result: { edition: 2, path: "x" },
+    });
+    expect(legacyEffect).not.toHaveBeenCalled();
+    expect(currentEffect).toHaveBeenCalledWith("x", expect.any(Object));
+  });
+
   it.each(["anyOf", "oneOf"] as const)(
     "reads typed tag literals from %s references",
     async (key) => {

@@ -95,7 +95,7 @@ You can write your schemas against either `import * as z from "zod/mini"` or [`i
 
 ### Using Standard Schema validators
 
-Use `politty/standard` with a synchronous Standard Schema validator. Pass the schema directly as `args` when it exposes `~standard.jsonSchema.input`. Otherwise, use `standardArgs(schema, { jsonSchema })` to supply the converter separately. Use the `fields` option to set CLI metadata by input field name.
+Use `politty/standard` with a synchronous Standard Schema validator. Pass the schema directly as `args` when it exposes `~standard.jsonSchema.input`. Otherwise, use `standardArgs(schema, { jsonSchema })` to supply the converter separately. Use the `fields` option to set CLI metadata by input field name. Import `arg` from `politty/standard` as well: `politty/standard` bundles its own core, so an `arg()` created by `politty` (the zod flavor) carries metadata that standard commands do not read, and its alias, positional, and effect settings are silently ignored.
 
 ```typescript
 import { z } from "zod";
