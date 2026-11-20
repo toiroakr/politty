@@ -621,6 +621,15 @@ function assertConfiguredFields(extracted: ExtractedFields, options?: StandardAr
   }
 }
 
+function collectRequired(value: unknown, root: JsonSchema, names = new Set<unknown>()) {
+  const node = resolveReference(value, root);
+  if (Array.isArray(node.required)) for (const name of node.required) names.add(name);
+  if (Array.isArray(node.allOf)) {
+    for (const operand of node.allOf) collectRequired(operand, root, names);
+  }
+  return names;
+}
+
 function extractNode(
   value: unknown,
   root: JsonSchema,
@@ -668,6 +677,10 @@ function extractNode(
   }
 
   const parents = [...ancestors, value];
+  const operandRequired =
+    keyword === "allOf"
+      ? new Set([...required, ...choices.flatMap((choice) => [...collectRequired(choice, root)])])
+      : required;
   const branches = choices.map((choice, index) => {
     const branch = options?.branches?.[index];
     if (branch) rejectUnflattenedOption(branch);
@@ -676,14 +689,21 @@ function extractNode(
       ...branchOptions,
       fields: { ...options?.fields, ...branchOptions?.fields },
     };
-    const extracted = extractNode(choice, root, branch ?? schema, inherited, parents, required);
+    const extracted = extractNode(
+      choice,
+      root,
+      branch ?? schema,
+      inherited,
+      parents,
+      operandRequired,
+    );
     assertConfiguredFields(extracted, branchOptions);
     if (branch) cache.set(branch, extracted);
     return extracted;
   });
   if (keyword === "allOf" && node.properties !== undefined) {
     const { allOf: _branches, ...object } = node;
-    branches.unshift(extractObject(object, root, schema, options, required));
+    branches.unshift(extractObject(object, root, schema, options, operandRequired));
   }
   const common = {
     schema,

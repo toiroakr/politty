@@ -281,6 +281,18 @@ describe("Standard JSON Schema composite command arguments", () => {
     expect(effect).toHaveBeenCalledWith("notes.txt", expect.any(Object));
   });
 
+  it("marks a field required when another allOf operand lists it in required", () => {
+    const args = standardArgs(z.object({ token: z.string() }), {
+      jsonSchema: inputSchema({
+        allOf: [
+          { type: "object", required: ["token"] },
+          { type: "object", properties: { token: { type: "string" } } },
+        ],
+      }),
+    });
+    expect(extractFields(args).fields).toMatchObject([{ name: "token", required: true }]);
+  });
+
   it("rejects conflicting effects for the same intersection field", () => {
     const first = z.object({ path: z.string() });
     const second = z.object({ path: z.string().min(1) });
