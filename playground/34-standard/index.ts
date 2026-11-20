@@ -1,6 +1,6 @@
 import { pathToFileURL } from "node:url";
 import * as z from "zod/mini";
-import { defineCommand, runMain, standardArgs } from "../../packages/politty/src/standard.js";
+import { defineCommand, runMain, standardArgs } from "../../packages/standard/src/index.js";
 
 const schema = z.strictObject({
   config: z.string().register(z.globalRegistry, { description: "Path to the config file" }),

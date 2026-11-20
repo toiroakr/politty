@@ -58,7 +58,7 @@ describe("published package requirements", () => {
     },
   );
 
-  it.each(["politty", "zod", "zod-mini", "valibot"])(
+  it.each(["politty", "zod", "zod-mini", "valibot", "standard"])(
     "%s resolves optional packages from the consuming working directory",
     (adapter) => {
       const directory = mkdtempSync(join(tmpdir(), "politty-consumer-"));

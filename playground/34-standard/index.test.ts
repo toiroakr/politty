@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generateDoc } from "../../packages/politty/src/standard-docs.js";
-import { runCommand } from "../../packages/politty/src/standard.js";
+import { generateDoc } from "../../packages/standard/src/docs.js";
+import { runCommand } from "../../packages/standard/src/index.js";
 import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { mdFormatter } from "../../tests/utils/formatter.js";
 import { command } from "./index.js";

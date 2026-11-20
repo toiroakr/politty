@@ -130,7 +130,7 @@ export function unflatten(
 ): StandardArgsSchema {
   const extracted = extractFields(schema);
   if (extracted.schemaType !== "object" || getUnflattenOptions(schema)) {
-    throw new TypeError("politty/standard unflatten requires a flat object schema.");
+    throw new TypeError("@politty/standard unflatten requires a flat object schema.");
   }
   const pathOf = pathResolver(options);
   assertDeclaredKeys(
@@ -199,7 +199,7 @@ function getConverter(
     return standard.jsonSchema;
   }
   throw new Error(
-    "politty/standard requires an input JSON Schema converter. Pass one to standardArgs(schema, { jsonSchema }).",
+    "@politty/standard requires an input JSON Schema converter. Pass one to standardArgs(schema, { jsonSchema }).",
   );
 }
 
@@ -236,7 +236,7 @@ function resolveReference(value: unknown, root: JsonSchema, seen = new Set<strin
     seen.has(reference) ||
     hasStructuralSiblings
   ) {
-    throw new Error(`politty/standard cannot inspect JSON Schema reference "${reference}".`);
+    throw new Error(`@politty/standard cannot inspect JSON Schema reference "${reference}".`);
   }
   seen.add(reference);
   const pointer = reference === "#" ? [] : decodeURIComponent(reference.slice(2)).split("/");
@@ -251,7 +251,7 @@ function resolveReference(value: unknown, root: JsonSchema, seen = new Set<strin
     return object ? own(object, key) : undefined;
   }, root);
   if (target === undefined) {
-    throw new Error(`politty/standard cannot resolve JSON Schema reference "${reference}".`);
+    throw new Error(`@politty/standard cannot resolve JSON Schema reference "${reference}".`);
   }
   const resolved = resolveReference(target, root, seen);
   const { description, default: defaultValue } = node;
@@ -450,7 +450,7 @@ function extractObject(
     node.oneOf !== undefined
   ) {
     throw new Error(
-      "politty/standard expects an input JSON Schema with an object shape or a tagged union of objects.",
+      "@politty/standard expects an input JSON Schema with an object shape or a tagged union of objects.",
     );
   }
   const fields = Object.entries(asObject(node.properties) ?? {}).map(([name, property]) =>
@@ -531,7 +531,7 @@ function taggedUnion(branches: ExtractedFields[], requested: StandardArgsOptions
   const explicit = typeof requested === "object" ? requested.values : undefined;
   if (explicit && explicit.length !== branches.length) {
     throw new Error(
-      "politty/standard discriminator values must match the number and order of the union branches.",
+      "@politty/standard discriminator values must match the number and order of the union branches.",
     );
   }
   for (const name of requestedName === undefined ? (tags[0]?.keys() ?? []) : [requestedName]) {
@@ -566,7 +566,7 @@ function taggedUnion(branches: ExtractedFields[], requested: StandardArgsOptions
   }
   if (requestedName !== undefined) {
     throw new Error(
-      `politty/standard discriminator "${requestedName}" requires distinct literal choices in every branch.`,
+      `@politty/standard discriminator "${requestedName}" requires distinct literal choices in every branch.`,
     );
   }
   return undefined;
@@ -583,12 +583,12 @@ function intersectFields(branches: ExtractedFields[]): ResolvedFieldMeta[] {
       }
       if (previous.type !== "unknown" && next.type !== "unknown" && previous.type !== next.type) {
         throw new Error(
-          `politty/standard intersection has incompatible CLI types for "${next.name}". Set its field type explicitly.`,
+          `@politty/standard intersection has incompatible CLI types for "${next.name}". Set its field type explicitly.`,
         );
       }
       if (previous.effect && next.effect && previous.effect !== next.effect) {
         throw new Error(
-          `politty/standard intersection has multiple effects for "${next.name}". Register one effect for the field.`,
+          `@politty/standard intersection has multiple effects for "${next.name}". Register one effect for the field.`,
         );
       }
       const left = fieldIntrospection.get(previous.schema as object)!;
@@ -617,7 +617,7 @@ function intersectFields(branches: ExtractedFields[]): ResolvedFieldMeta[] {
 function assertConfiguredFields(extracted: ExtractedFields, options?: StandardArgsOptions): void {
   for (const name of Object.keys(options?.fields ?? {})) {
     if (!extracted.fields.some((field) => field.name === name)) {
-      throw new Error(`politty/standard has CLI metadata for an unknown argument "${name}".`);
+      throw new Error(`@politty/standard has CLI metadata for an unknown argument "${name}".`);
     }
   }
 }
@@ -640,7 +640,7 @@ function extractNode(
   inheritedRequired: ReadonlySet<unknown> = new Set(),
 ): ExtractedFields {
   if (ancestors.includes(value)) {
-    throw new Error("politty/standard cannot extract a recursive argument composition.");
+    throw new Error("@politty/standard cannot extract a recursive argument composition.");
   }
   const node = resolveReference(value, root);
   const required = Array.isArray(node.required)
@@ -651,7 +651,7 @@ function extractNode(
   );
   if (composition.length === 0) {
     if (options?.branches || options?.discriminator !== undefined) {
-      throw new Error("politty/standard branch metadata requires a union or intersection.");
+      throw new Error("@politty/standard branch metadata requires a union or intersection.");
     }
     return extractObject(node, root, schema, options, required);
   }
@@ -664,7 +664,7 @@ function extractNode(
     (keyword !== "allOf" && node.properties !== undefined)
   ) {
     throw new Error(
-      "politty/standard expects a single object composition at each argument schema level.",
+      "@politty/standard expects a single object composition at each argument schema level.",
     );
   }
   if (
@@ -673,7 +673,7 @@ function extractNode(
       Array.from(options.branches).some((branch) => !branch))
   ) {
     throw new Error(
-      "politty/standard branches must match the number and order of the JSON Schema alternatives.",
+      "@politty/standard branches must match the number and order of the JSON Schema alternatives.",
     );
   }
 
@@ -717,10 +717,10 @@ function extractNode(
         (branch) => branch.schemaType !== "object" && branch.schemaType !== "intersection",
       )
     ) {
-      throw new Error("politty/standard intersections require object branches.");
+      throw new Error("@politty/standard intersections require object branches.");
     }
     if (options?.discriminator !== undefined) {
-      throw new Error("politty/standard discriminator metadata requires a union.");
+      throw new Error("@politty/standard discriminator metadata requires a union.");
     }
     return {
       ...common,
@@ -740,11 +740,11 @@ function extractNode(
     };
   }
   if (options?.discriminator !== undefined) {
-    throw new Error("politty/standard discriminator metadata requires object branches.");
+    throw new Error("@politty/standard discriminator metadata requires object branches.");
   }
   if (!options?.branches && optionsDefineFieldsDifferently(branches)) {
     throw new Error(
-      "politty/standard requires branch validators for a union with branch-specific effects or package requirements. Pass them in standardArgs({ ... }, { branches }).",
+      "@politty/standard requires branch validators for a union with branch-specific effects or package requirements. Pass them in standardArgs({ ... }, { branches }).",
     );
   }
   return {
@@ -769,7 +769,7 @@ function extractFields(schema: ArgsSchema): ExtractedFields {
     root = converter.input({ target: "draft-2020-12" });
   } catch (cause) {
     throw new Error(
-      "politty/standard could not convert the arguments to an input JSON Schema (draft-2020-12).",
+      "@politty/standard could not convert the arguments to an input JSON Schema (draft-2020-12).",
       { cause },
     );
   }
@@ -796,7 +796,7 @@ function validateSync(schema: SchemaLike, value: unknown): StandardValidation {
   if ("then" in result) {
     void Promise.resolve(result).catch(() => undefined);
     throw new Error(
-      "politty/standard requires a synchronous Standard Schema validator, but validate() returned a Promise. Use a synchronous validator, or check the schema definition if the validator reports its own errors asynchronously.",
+      "@politty/standard requires a synchronous Standard Schema validator, but validate() returned a Promise. Use a synchronous validator, or check the schema definition if the validator reports its own errors asynchronously.",
     );
   }
   return result;
@@ -847,7 +847,7 @@ export const standardAdapter: ValidatorAdapter = {
       return fieldMeta(name, resolveReference(root, root), field.required, root, metadata);
     }
     throw new Error(
-      "politty/standard requires the enclosing object schema for documentation fields. Pass the schema as globalArgs to generateDoc(), or use standardField() with explicit requiredness.",
+      "@politty/standard requires the enclosing object schema for documentation fields. Pass the schema as globalArgs to generateDoc(), or use standardField() with explicit requiredness.",
     );
   },
   validate(rawArgs, schema) {

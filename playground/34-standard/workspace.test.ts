@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runCommand } from "../../packages/politty/src/standard.js";
+import { runCommand } from "../../packages/standard/src/index.js";
 import { spyOnConsoleLog } from "../../tests/utils/console.js";
 import { workspace } from "./workspace.js";
 

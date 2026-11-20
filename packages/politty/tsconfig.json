@@ -5,5 +5,5 @@
   // tsdown build — which runs after @politty/zod's — typechecks and emits
   // declarations for those sources.
   "extends": "../../tsconfig.json",
-  "include": ["src/**/*", "../core/src/**/*", "tsdown.config.ts"]
+  "include": ["src/**/*", "tsdown.config.ts"]
 }

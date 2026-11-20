@@ -1,4 +1,10 @@
-import { arg, createDefineCommand, defineCommand, standardArgs, unflatten } from "politty/standard";
+import {
+  arg,
+  createDefineCommand,
+  defineCommand,
+  standardArgs,
+  unflatten,
+} from "@politty/standard";
 import * as v from "valibot";
 import { z } from "zod";
 

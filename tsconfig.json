@@ -22,7 +22,7 @@
     "verbatimModuleSyntax": true,
     "noEmit": true
   },
-  // The Zod re-exports in packages/politty/src are excluded here: they resolve
+  // packages/politty/src is excluded here: its thin re-exports resolve
   // against @politty/zod's built dist, so they are typechecked during its
   // own tsdown build (which runs after @politty/zod's) instead of by the
   // repo-wide, build-free `pnpm typecheck`.
@@ -30,9 +30,9 @@
     "packages/core/src/**/*",
     "packages/zod/src/**/*",
     "packages/valibot/src/**/*",
+    "packages/standard/src/**/*",
     "packages/loculus/src/**/*",
     "packages/zod-mini/src/**/*",
-    "packages/politty/src/standard*.ts",
     "packages/*/tsdown.config.ts",
     "tests/**/*",
     "playground/**/*"

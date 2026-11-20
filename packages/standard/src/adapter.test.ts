@@ -1,7 +1,7 @@
 import type { SchemaLike } from "@politty/core";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { standardAdapter, standardArgs, type StandardArgsSchema } from "./standard-adapter.js";
+import { standardAdapter, standardArgs, type StandardArgsSchema } from "./adapter.js";
 
 function withInput(input: Record<string, unknown>) {
   return {
