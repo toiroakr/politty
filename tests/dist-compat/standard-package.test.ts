@@ -213,7 +213,7 @@ describe("politty/standard", () => {
     });
   });
 
-  it("documents global flags with their CLI metadata and default", async () => {
+  it("documents global flags, including an option named args", async () => {
     const { defineCommand, standardArgs } = await standard();
     const { generateDoc } = await importSubpath<typeof StandardDocs>("politty/standard/docs");
     const command = defineCommand({ name: "greet", run: () => "hello" });
@@ -233,13 +233,17 @@ describe("politty/standard", () => {
           command,
           path,
           globalArgs: standardArgs(
-            z.object({ verbose: z.boolean().describe("Verbose logs").default(false) }),
+            z.object({
+              verbose: z.boolean().describe("Verbose logs").default(false),
+              args: z.string().describe("Extra arguments"),
+            }),
             { fields: { verbose: { alias: "v" } } },
           ),
         }),
       ).toMatchObject({ success: true });
       const doc = await readFile(path, "utf8");
       expect(doc).toMatch(/--verbose.*-v.*Verbose logs.*false/);
+      expect(doc).toMatch(/--args.*Extra arguments.*Yes/);
     } finally {
       vi.unstubAllEnvs();
       await rm(directory, { recursive: true, force: true });

@@ -2374,7 +2374,7 @@ export async function generateDoc(config: GenerateDocConfig): Promise<GenerateDo
       const globalShape = Object.fromEntries(
         optionFields.map((f) => [f.name, f.schema]),
       ) as ArgsShape;
-      rootDoc = { ...rootDoc, globalOptions: globalShape };
+      rootDoc = { ...rootDoc, globalOptions: { args: globalShape } };
     }
   }
   const updateMode = isTruthyEnv(UPDATE_GOLDEN_ENV);
