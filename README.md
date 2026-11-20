@@ -121,7 +121,7 @@ runMain(command);
 
 If conversion comes from a separate function, pass its result as the `jsonSchema` option. For example, with Valibot and `@valibot/to-json-schema`, use `standardArgs(schema, { jsonSchema: toStandardJsonSchema(schema) })`.
 
-The adapter reads object properties or tagged unions of objects from the Draft 2020-12 input schema. Each union branch needs a different string literal in the same required field. The original validator still applies defaults and transforms values. Numeric options arrive at the validator as strings, so use a schema that converts them when needed. By default, unknown flags produce warnings, or errors if the input schema has `additionalProperties: false`. Set `unknownKeys` in `standardArgs()` to choose `"strict"`, `"strip"`, or `"passthrough"`.
+The adapter reads object properties or tagged unions of objects from the Draft 2020-12 input schema. Each union branch needs a different string literal in the same required field. The original validator still applies defaults and transforms values. Numeric options arrive at the validator as strings, so use a schema that converts them when needed. By default, unknown flags produce warnings, or errors if the input schema rejects unknown properties (for example, with `additionalProperties: false`). Set `unknownKeys` in `standardArgs()` to choose `"strict"`, `"strip"`, or `"passthrough"`.
 
 Use `politty/standard/completion` and `politty/standard/docs` for shell completion and documentation generation with these commands.
 

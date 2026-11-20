@@ -107,44 +107,47 @@ describe("politty/standard", () => {
     });
   });
 
-  it("uses a separate converter for a Standard Schema validator", async () => {
-    const { defineCommand, runCommand, standardArgs } = await standard();
-    const schema = v.strictObject({ name: v.pipe(v.string(), v.toUpperCase()) });
-    const jsonSchema = {
-      "~standard": {
-        version: 1,
-        jsonSchema: {
-          input: () => ({
-            $ref: "#/$defs/args",
-            $defs: {
-              args: {
-                type: "object",
-                additionalProperties: false,
-                properties: { name: {} },
-                required: ["name"],
+  it.each(["additionalProperties", "unevaluatedProperties"])(
+    "uses a separate converter and rejects unknown flags with %s: false",
+    async (closedObjectKeyword) => {
+      const { defineCommand, runCommand, standardArgs } = await standard();
+      const schema = v.strictObject({ name: v.pipe(v.string(), v.toUpperCase()) });
+      const jsonSchema = {
+        "~standard": {
+          version: 1,
+          jsonSchema: {
+            input: () => ({
+              $ref: "#/$defs/args",
+              $defs: {
+                args: {
+                  type: "object",
+                  [closedObjectKeyword]: false,
+                  properties: { name: {} },
+                  required: ["name"],
+                },
               },
-            },
-          }),
+            }),
+          },
         },
-      },
-    } as const;
-    const command = defineCommand({
-      name: "greet",
-      args: standardArgs(schema, { jsonSchema }),
-      run: ({ name }) => {
-        expectTypeOf(name).toEqualTypeOf<string>();
-        return name;
-      },
-    });
-    expect(await runCommand(command, ["--name", "world"])).toMatchObject({
-      success: true,
-      result: "WORLD",
-    });
-    expect(await runCommand(command, ["--name", "world", "--extra"])).toMatchObject({
-      success: false,
-      error: { message: "Unknown flags: extra" },
-    });
-  });
+      } as const;
+      const command = defineCommand({
+        name: "greet",
+        args: standardArgs(schema, { jsonSchema }),
+        run: ({ name }) => {
+          expectTypeOf(name).toEqualTypeOf<string>();
+          return name;
+        },
+      });
+      expect(await runCommand(command, ["--name", "world"])).toMatchObject({
+        success: true,
+        result: "WORLD",
+      });
+      expect(await runCommand(command, ["--name", "world", "--extra"])).toMatchObject({
+        success: false,
+        error: { message: "Unknown flags: extra" },
+      });
+    },
+  );
 
   it("documents global flags with their CLI metadata and default", async () => {
     const { defineCommand, standardArgs } = await standard();

@@ -114,6 +114,7 @@ function resolveReference(value: unknown, root: JsonSchema, seen = new Set<strin
     "properties",
     "required",
     "additionalProperties",
+    "unevaluatedProperties",
     "anyOf",
     "oneOf",
     "allOf",
@@ -231,6 +232,20 @@ function fieldMeta(
   return resolveFieldMeta(name, introspection);
 }
 
+function rejectsUnknownKeys(node: JsonSchema, branches: readonly JsonSchema[] = []): boolean {
+  return (
+    node.additionalProperties === false ||
+    (node.unevaluatedProperties === false &&
+      ![node, ...branches].some(
+        (part) =>
+          (part.additionalProperties !== undefined && part.additionalProperties !== false) ||
+          part.patternProperties !== undefined ||
+          part.if !== undefined ||
+          part.dependentSchemas !== undefined,
+      ))
+  );
+}
+
 function extractObject(
   node: JsonSchema,
   root: JsonSchema,
@@ -261,8 +276,7 @@ function extractObject(
     schemaType: "object",
     schema,
     fields,
-    unknownKeysMode:
-      options?.unknownKeys ?? (node.additionalProperties === false ? "strict" : "strip"),
+    unknownKeysMode: options?.unknownKeys ?? (rejectsUnknownKeys(node) ? "strict" : "strip"),
     ...(typeof node.description === "string" && { description: node.description }),
   };
 }
@@ -274,9 +288,8 @@ function extractTaggedUnion(
   schema: ArgsSchema,
   options: StandardArgsOptions | undefined,
 ): ExtractedFields {
-  const branches = choices.map((choice) =>
-    extractObject(resolveReference(choice, root), root, schema, options),
-  );
+  const branchNodes = choices.map((choice) => resolveReference(choice, root));
+  const branches = branchNodes.map((branch) => extractObject(branch, root, schema, options));
   const tags = branches.map(({ fields }) => {
     const tagsByField = new Map<string, string>();
     for (const field of fields) {
@@ -320,7 +333,7 @@ function extractTaggedUnion(
     })),
     unknownKeysMode:
       options?.unknownKeys ??
-      (node.additionalProperties === false ||
+      (rejectsUnknownKeys(node, branchNodes) ||
       branches.every((branch) => branch.unknownKeysMode === "strict")
         ? "strict"
         : "strip"),
