@@ -259,8 +259,13 @@ snapshots:
 					"version": "8.8.0",
 				},
 				"@politty/zod": "workspace:^",
+				"yaml": {
+					"specifier": "^2.9.1",
+					"version": "2.9.1",
+				},
 			},
 			"devDependencies": {
+				"@politty/core": "workspace:*",
 				"@types/node": "26.6.6",
 				"@typescript/native-preview": "7.0.0-dev.20260707.2",
 				"tsdown": "0.23.7",

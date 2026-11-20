@@ -60,7 +60,7 @@ const command = defineCommand({
 runMain(command);
 ```
 
-Field descriptions can also come from valibot's own metadata actions. They are actions, not schemas, so they belong inside `v.pipe(...)`: `v.pipe(v.string(), v.description("..."))` or `v.pipe(v.string(), v.metadata({ description: "..." }))`. The one zod-only feature without a valibot counterpart is the `politty/augment` module (zod `GlobalMeta` interface augmentation) — use `arg()` or `v.metadata()` instead. The `politty` package itself remains the zod flavor (an alias of `@politty/zod`).
+Field descriptions can also come from valibot's own metadata actions. They are actions, not schemas, so they belong inside `v.pipe(...)`: `v.pipe(v.string(), v.description("..."))` or `v.pipe(v.string(), v.metadata({ description: "..." }))`. The one zod-only feature without a valibot counterpart is the `politty/augment` module (zod `GlobalMeta` interface augmentation) — use `arg()` or `v.metadata()` instead. The default `politty` entry point is an alias of `@politty/zod`.
 
 ### Using zod/mini instead of zod
 
@@ -92,6 +92,46 @@ runMain(command);
 `zod/mini` drops classic zod's chainable sugar (`.optional()`, `.default()`, `.describe()`, `.meta()`), so schemas are built with functions instead (`z.optional(z.string())`, `z._default(z.string(), "x")`). Field descriptions come from `arg()` or from zod's own metadata registry: `schema.register(z.globalRegistry, { description: "..." })`. The `politty/augment` module (classic zod's `GlobalMeta` interface augmentation) has no `@politty/zod-mini` counterpart for the same reason it has none for valibot — use `arg()` or the registry instead.
 
 You can write your schemas against either `import * as z from "zod/mini"` or [`import * as z from "@zod/mini"`](https://zod.dev/packages/mini) — `@zod/mini` re-exports `zod/mini` (same classes, same `globalRegistry`), so schemas built either way are fully interchangeable. Per zod's own installation instructions, install `@zod/mini` alongside `zod` (`npm install zod @zod/mini`), not instead of it — `@zod/mini` only re-exports `zod/mini` from a peer dependency on `zod`, so `zod` still needs to be resolvable in your project either way.
+
+### Using Standard Schema validators
+
+Use `politty/standard` with a synchronous Standard Schema validator. Pass the schema directly as `args` when it exposes `~standard.jsonSchema.input`. Otherwise, use `standardArgs(schema, { jsonSchema })` to supply the converter separately. Use the `fields` option to set CLI metadata by input field name. Import `arg` from `politty/standard` as well: `politty/standard` bundles its own core, so an `arg()` created by `politty` (the zod flavor) carries metadata that standard commands do not read, and its alias, positional, and effect settings are silently ignored.
+
+```typescript
+import { z } from "zod";
+import { defineCommand, runMain, standardArgs } from "politty/standard";
+
+const command = defineCommand({
+  name: "greet",
+  args: standardArgs(
+    z.object({
+      name: z.string().describe("Name to greet"),
+      loud: z.boolean().default(false),
+    }),
+    { fields: { name: { positional: true }, loud: { alias: "l" } } },
+  ),
+  run: ({ name, loud }) => {
+    const greeting = `Hello, ${name}!`;
+    console.log(loud ? greeting.toUpperCase() : greeting);
+  },
+});
+
+runMain(command);
+```
+
+If conversion comes from a separate function, pass its result as the `jsonSchema` option. For example, with Valibot and `@valibot/to-json-schema`, use `standardArgs(schema, { jsonSchema: toStandardJsonSchema(schema) })`.
+
+The adapter reads Draft 2020-12 input schemas for objects, `anyOf` unions, `oneOf` exclusive unions, and object `allOf` intersections. Local JSON Pointer references are supported. The original validator still applies defaults, transforms values, and decides whether the arguments are valid. Numeric options generally arrive as strings, so use a validator that coerces them when needed. Numeric and boolean discriminator literals are normalized to select a tagged branch.
+
+Use `standardArgs(schema, { discriminator: "kind" })` to choose the tag field explicitly when each branch exposes distinct literal choices. If the converter omits those choices, pass `discriminator: { field: "kind", values: ["read", "write"] }`, with one value or list of values per branch. For an untagged union whose branches have different effects or package requirements, pass the original branch validators as `branches`, in the same order as the converted alternatives. Wrap a branch with `standardArgs` to set metadata specific to it. A converter may flatten an intersection into a single object, in which case the CLI uses the resulting object shape.
+
+For an `allOf` intersection, `branches` can supply metadata from each operand. If several operands define the same field, metadata from earlier operands takes precedence and later operands fill in missing settings. Two settings are combined instead: a field is required when any operand requires it (an earlier `required: false` does not override a later `required: true`), and completion `choices` are the values every operand allows. Register a single effect per field.
+
+A JSON Schema converter may omit CLI-specific settings or leave a field's input shape opaque. Use `fields` to supply a parser `type`, completion `choices`, `required` for CLI routing and help, or a displayed `defaultValue`. These settings affect the CLI and its help. The validator still controls accepted values and supplies runtime defaults. Field schemas registered with `arg(field, meta)` can also be linked by name, for example `standardArgs(schema, { fields: { port } })` after calling `arg(port, { alias: "p" })`. Set `unknownKeys` to choose `"strict"`, `"strip"`, or `"passthrough"`.
+
+Use `unflatten(standardArgs(schema, options))` to nest flat object outputs while keeping CLI flags and validation paths flat. Dot-separated keys work by default. The helper also supports kebab-case and camelCase prefixes. See the [composite workspace CLI](./playground/34-standard/workspace.ts) for runnable examples.
+
+Standard commands use the `politty/standard/{completion,docs,skill,agent,prompt,compile-cache,vite}` entry points. The Clack and Inquirer integrations are available at `politty/standard/prompt/clack` and `politty/standard/prompt/inquirer`. Pass the enclosing schema as `globalArgs` for generated docs. For a standalone field in an option table, use `standardField(field, { required: true })` to supply the requiredness normally declared by its parent object.
 
 ## Quick Start
 
@@ -624,6 +664,7 @@ The `playground/` directory contains many examples:
 - `12-discriminated-union` - Discriminated Union
 - `21-lazy-subcommands` - Lazy loading
 - `26-command-alias` - Command aliases
+- [`34-standard`](./playground/34-standard/README.md) - Standard Schema with a separate JSON Schema converter
 
 For commands or options that need a separately installed package, see [Optional External Packages](./docs/advanced-features.md#optional-external-packages).
 

@@ -266,7 +266,7 @@ function sameFieldMetadata(left: ResolvedFieldMeta, right: ResolvedFieldMeta): b
   );
 }
 
-function optionsDefineFieldsDifferently(
+export function optionsDefineFieldsDifferently(
   options: readonly Pick<ExtractedFields, "fields" | "unionOptions" | "variants">[],
 ): boolean {
   const first = new Map<string, ResolvedFieldMeta>();
@@ -289,7 +289,7 @@ function optionsDefineFieldsDifferently(
 }
 
 /**
- * The fields of the plain-union option that accepts the arguments, so that
+ * The fields of the selected union branch, so that
  * `effect`, `requiredPackages` and nested paths come from the option that
  * actually validated rather than from the first option defining the name.
  * Options are tried in order, like the union itself. Options are only
@@ -300,8 +300,7 @@ function optionsDefineFieldsDifferently(
  * @param accepts - Whether an option's schema accepts the arguments
  * @param readValues - Reads argument values with the given fields, to select
  *   the variant of an accepting discriminated-union option
- * @returns Extracted fields narrowed to the accepting option, or the input
- *   when it is not a plain union, its options agree, or none accepts
+ * @returns Extracted fields narrowed to the accepting branch when selection is needed
  */
 export function selectAcceptingUnionOption(
   extracted: ExtractedFields,
@@ -309,7 +308,8 @@ export function selectAcceptingUnionOption(
   readValues: (fields: ExtractedFields) => Record<string, unknown>,
 ): ExtractedFields {
   const options = extracted.unionOptions;
-  if (extracted.discriminator || !options || !optionsDefineFieldsDifferently(options)) {
+  if (extracted.discriminator) return selectDiscriminatedVariant(extracted, readValues);
+  if (!options || !optionsDefineFieldsDifferently(options)) {
     return extracted;
   }
   for (const option of options) {

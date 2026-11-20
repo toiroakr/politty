@@ -33,6 +33,50 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./standard": {
+      "types": "./dist/standard.d.ts",
+      "default": "./dist/standard.js"
+    },
+    "./standard/completion": {
+      "types": "./dist/standard-completion.d.ts",
+      "default": "./dist/standard-completion.js"
+    },
+    "./standard/docs": {
+      "types": "./dist/standard-docs.d.ts",
+      "default": "./dist/standard-docs.js"
+    },
+    "./standard/agent": {
+      "types": "./dist/standard-agent.d.ts",
+      "default": "./dist/standard-agent.js"
+    },
+    "./standard/skill": {
+      "types": "./dist/standard-skill.d.ts",
+      "default": "./dist/standard-skill.js"
+    },
+    "./standard/prompt": {
+      "types": "./dist/standard-prompt.d.ts",
+      "default": "./dist/standard-prompt.js"
+    },
+    "./standard/prompt/clack": {
+      "types": "./dist/standard-prompt-clack.d.ts",
+      "default": "./dist/standard-prompt-clack.js"
+    },
+    "./standard/prompt/inquirer": {
+      "types": "./dist/standard-prompt-inquirer.d.ts",
+      "default": "./dist/standard-prompt-inquirer.js"
+    },
+    "./standard/compile-cache": {
+      "types": "./dist/standard-compile-cache.d.ts",
+      "default": "./dist/standard-compile-cache.js"
+    },
+    "./standard/vite": {
+      "types": "./dist/standard-vite.d.ts",
+      "default": "./dist/standard-vite.js"
+    },
+    "./standard/cli": {
+      "types": "./dist/standard-cli.d.ts",
+      "default": "./dist/standard-cli.js"
+    },
     "./augment": {
       "types": "./dist/augment.d.ts",
       "default": "./dist/augment.js"
@@ -79,9 +123,11 @@
     "prepublishOnly": "pnpm run build && node -e \"const{copyFileSync}=require('node:fs');for(const f of ['README.md','LICENSE'])copyFileSync('../../'+f,f)\""
   },
   "dependencies": {
-    "@politty/zod": "workspace:^"
+    "@politty/zod": "workspace:^",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
+    "@politty/core": "workspace:*",
     "@types/node": "26.6.6",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "tsdown": "0.23.7",

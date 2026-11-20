@@ -3,6 +3,17 @@ import { defineConfig } from "tsdown";
 export default defineConfig({
   entry: [
     "src/index.ts",
+    "src/standard.ts",
+    "src/standard-completion.ts",
+    "src/standard-docs.ts",
+    "src/standard-agent.ts",
+    "src/standard-skill.ts",
+    "src/standard-prompt.ts",
+    "src/standard-prompt-clack.ts",
+    "src/standard-prompt-inquirer.ts",
+    "src/standard-compile-cache.ts",
+    "src/standard-vite.ts",
+    "src/standard-cli.ts",
     "src/cli.ts",
     "src/compile-cache.ts",
     "src/agent.ts",
@@ -28,8 +39,9 @@ export default defineConfig({
   minify: true,
   target: "node20.12",
   outDir: "dist",
-  // Runtime stays a re-export of `@politty/zod` so a process mixing both
-  // packages shares one adapter registry / arg-metadata store.
-  external: ["@politty/zod", "zod", "yaml", "@clack/prompts", "@inquirer/prompts"],
+  deps: {
+    neverBundle: ["@politty/zod", "zod", "yaml", "@clack/prompts", "@inquirer/prompts"],
+    alwaysBundle: ["@politty/core"],
+  },
   fixedExtension: false,
 });
