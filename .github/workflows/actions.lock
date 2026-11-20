@@ -5,12 +5,12 @@ version: 'v0.0.3'
 workflows:
     '.github/workflows/add-renovate-changeset.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
-        - 'pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e'
+        - 'pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1'
         - 'suzuki-shunsuke/commit-action@5eaa5ecce3ffe93d09a85b946dc5136e3713b1b7'
     '.github/workflows/agent-spec-sync.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
         - 'autofix-ci/action@c5b2d67aa2274e7b5a18224e8171550871fc7e4a'
-        - 'pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e'
+        - 'pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1'
     '.github/workflows/aqua-checksum.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
         - 'aquaproj/aqua-installer@611554c6f0137ba41c8dd15aca8bee82504ea461'
@@ -18,23 +18,23 @@ workflows:
     '.github/workflows/ci.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
         - 'k1low/octocov-action@a167dc0dee441b7ffc45e1b862ab55ec0d87f278'
-        - 'pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e'
+        - 'pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1'
     '.github/workflows/dependency-audit.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
-        - 'pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e'
+        - 'pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1'
     '.github/workflows/lockfile.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
         - 'autofix-ci/action@c5b2d67aa2274e7b5a18224e8171550871fc7e4a'
-        - 'pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e'
+        - 'pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1'
     '.github/workflows/preview.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
-        - 'pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e'
+        - 'pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1'
     '.github/workflows/release.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
         - 'actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510'
         - 'actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1'
         - 'changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51'
-        - 'pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e'
+        - 'pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1'
     '.github/workflows/verify-lockfile.yml':
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
     '.github/workflows/workflow-lint.yml':
@@ -101,9 +101,9 @@ dependencies:
         uses:
             - 'actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3'
             - 'k1low/gh-setup@5fb38d34ea857e5a942b6fe10f1723e55055f6c0'
-    'pnpm/setup@fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e':
-        ref: 'v3.1.2'
-        commit: 'sha1-fa36a5ef7dcdefc3a7cb25655c122e00cf6e636e'
+    'pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1':
+        ref: 'v3.2.0'
+        commit: 'sha1-731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1'
         owner_id: 21320719
         repo_id: 1235693694
     'suzuki-shunsuke/commit-action@5eaa5ecce3ffe93d09a85b946dc5136e3713b1b7':
