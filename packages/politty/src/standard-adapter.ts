@@ -195,7 +195,10 @@ function fieldShape(
     : node.type !== undefined
       ? [node.type]
       : literals.length
-        ? literals.map((literal) => (literal === null ? "null" : typeof literal))
+        ? literals.map((literal) => {
+            if (literal === null) return "null";
+            return Array.isArray(literal) ? "array" : typeof literal;
+          })
         : children.map((child) => child.type);
   const type = commonFieldType(types);
   const nonNullChildren = children.filter(({ type }) => type !== "null");

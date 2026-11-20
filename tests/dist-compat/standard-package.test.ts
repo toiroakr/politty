@@ -151,6 +151,32 @@ describe("politty/standard", () => {
     },
   );
 
+  it("accumulates repeated values for an array literal without an explicit type", async () => {
+    const { defineCommand, runCommand, standardArgs } = await standard();
+    const command = defineCommand({
+      name: "literal",
+      args: standardArgs(z.object({ values: z.tuple([z.literal("x"), z.literal("y")]) }), {
+        jsonSchema: {
+          "~standard": {
+            version: 1,
+            jsonSchema: {
+              input: () => ({
+                type: "object",
+                properties: { values: { const: ["x", "y"] } },
+                required: ["values"],
+              }),
+            },
+          },
+        },
+      }),
+      run: ({ values }) => values,
+    });
+    expect(await runCommand(command, ["--values", "x", "--values", "y"])).toMatchObject({
+      success: true,
+      result: ["x", "y"],
+    });
+  });
+
   it("passes options allowed by patternProperties to the validator", async () => {
     const { defineCommand, runCommand, standardArgs } = await standard();
     const schema = v.pipe(
