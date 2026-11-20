@@ -243,14 +243,18 @@ function fieldMeta(
   return resolveFieldMeta(name, introspection);
 }
 
+function hasPatternProperties(node: JsonSchema): boolean {
+  return Object.keys(asObject(node.patternProperties) ?? {}).length > 0;
+}
+
 function rejectsUnknownKeys(node: JsonSchema, branches: readonly JsonSchema[] = []): boolean {
   return (
-    (node.additionalProperties === false && node.patternProperties === undefined) ||
+    (node.additionalProperties === false && !hasPatternProperties(node)) ||
     (node.unevaluatedProperties === false &&
       ![node, ...branches].some(
         (part) =>
           (part.additionalProperties !== undefined && part.additionalProperties !== false) ||
-          part.patternProperties !== undefined ||
+          hasPatternProperties(part) ||
           part.if !== undefined ||
           part.dependentSchemas !== undefined,
       ))

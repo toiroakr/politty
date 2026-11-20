@@ -122,6 +122,7 @@ describe("politty/standard", () => {
                 args: {
                   type: "object",
                   [closedObjectKeyword]: false,
+                  patternProperties: {},
                   properties: { name: { $ref: "#/$defs/names/anyOf/0" } },
                   required: ["name"],
                 },
