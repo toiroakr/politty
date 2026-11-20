@@ -281,6 +281,32 @@ describe("Standard JSON Schema composite command arguments", () => {
     expect(effect).toHaveBeenCalledWith("notes.txt", expect.any(Object));
   });
 
+  it("keeps parent-only field settings out of a branch validator reused on its own", () => {
+    const file = z.object({ path: z.string() });
+    const url = z.object({ url: z.string() });
+    const effect = vi.fn();
+    extractFields(
+      standardArgs(z.union([file, url]), {
+        branches: [file, url],
+        fields: { path: { effect } },
+      }),
+    );
+    expect(extractFields(file).fields).toMatchObject([{ name: "path", effect: undefined }]);
+  });
+
+  it("does not infer strict unknown keys when an allOf operand evaluates extra properties", () => {
+    const args = standardArgs(z.looseObject({ label: z.string() }), {
+      jsonSchema: inputSchema({
+        unevaluatedProperties: false,
+        allOf: [
+          { type: "object", properties: { label: { type: "string" } } },
+          { type: "object", unevaluatedProperties: true },
+        ],
+      }),
+    });
+    expect(extractFields(args).unknownKeysMode).not.toBe("strict");
+  });
+
   it("marks a field required when another allOf operand lists it in required", () => {
     const args = standardArgs(z.object({ token: z.string() }), {
       jsonSchema: inputSchema({

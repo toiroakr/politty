@@ -411,6 +411,7 @@ function mayEvaluateUnknownKeys(
 ): boolean {
   if (
     (node.additionalProperties !== undefined && node.additionalProperties !== false) ||
+    (node.unevaluatedProperties !== undefined && node.unevaluatedProperties !== false) ||
     hasPatternProperties(node) ||
     node.if !== undefined ||
     node.dependentSchemas !== undefined
@@ -698,7 +699,7 @@ function extractNode(
       operandRequired,
     );
     assertConfiguredFields(extracted, branchOptions);
-    if (branch) cache.set(branch, extracted);
+    if (branch) branchExtractions.set(branch, extracted);
     return extracted;
   });
   if (keyword === "allOf" && node.properties !== undefined) {
@@ -755,6 +756,9 @@ function extractNode(
 }
 
 const cache = new WeakMap<ArgsSchema, ExtractedFields>();
+// Why not `cache`: a branch is extracted with its parent's field settings, and
+// the same validator may also be used on its own.
+const branchExtractions = new WeakMap<ArgsSchema, ExtractedFields>();
 
 function extractFields(schema: ArgsSchema): ExtractedFields {
   const cached = cache.get(schema);
@@ -847,7 +851,8 @@ export const standardAdapter: ValidatorAdapter = {
     );
   },
   validate(rawArgs, schema) {
-    const result = validateSync(schema, normalizeDiscriminator(rawArgs, cache.get(schema)));
+    const extracted = cache.get(schema) ?? branchExtractions.get(schema);
+    const result = validateSync(schema, normalizeDiscriminator(rawArgs, extracted));
     if (!result.issues) return { success: true, data: result.value };
     return {
       success: false,
