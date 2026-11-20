@@ -12,6 +12,7 @@ export default defineConfig({
     "src/prompt.ts",
     "src/prompt-clack.ts",
     "src/prompt-inquirer.ts",
+    "src/content-mapper.ts",
     "src/vite.ts",
   ],
   format: ["es"],
