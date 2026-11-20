@@ -2,6 +2,7 @@ import type { ArgMeta, ArgsSchema, InferSchemaOutput, SchemaLike } from "@politt
 import {
   resolveFieldMeta,
   type ExtractedFields,
+  type FieldIntrospection,
   type ResolvedFieldMeta,
   type UnknownKeysMode,
 } from "@politty/core/adapter/field-meta";
@@ -20,8 +21,19 @@ export type StandardArgsSchema<
   Output extends InferSchemaOutput<ArgsSchema> = InferSchemaOutput<ArgsSchema>,
 > = SchemaLike<Output> & StandardJSONSchema;
 
-export interface StandardArgsOptions<Output = Record<string, unknown>> {
-  fields?: { [Key in keyof Output]?: ArgMeta<Output[Key]> };
+type SchemaInput<S extends ArgsSchema> =
+  NonNullable<S["~standard"]["types"]> extends {
+    readonly input: infer Input;
+  }
+    ? Input
+    : unknown;
+
+type ArgFields<Input, Output> = {
+  [Key in keyof Input]?: ArgMeta<Key extends keyof Output ? Output[Key] : unknown>;
+};
+
+export interface StandardArgsOptions<Input = Record<string, unknown>, Output = Input> {
+  fields?: ArgFields<Input extends object ? Input : Record<string, unknown>, Output>;
   unknownKeys?: UnknownKeysMode;
 }
 
@@ -29,15 +41,19 @@ const overrides = new WeakMap<ArgsSchema, StandardArgsOptions>();
 
 export function standardArgs<S extends StandardArgsSchema>(
   schema: S,
-  options?: StandardArgsOptions<InferSchemaOutput<S>>,
+  options?: StandardArgsOptions<SchemaInput<S>, InferSchemaOutput<S>>,
 ): StandardArgsSchema<InferSchemaOutput<S>>;
 export function standardArgs<S extends ArgsSchema>(
   schema: S,
-  options: StandardArgsOptions<InferSchemaOutput<S>> & { jsonSchema: StandardJSONSchema },
+  options: StandardArgsOptions<SchemaInput<S>, InferSchemaOutput<S>> & {
+    jsonSchema: StandardJSONSchema;
+  },
 ): StandardArgsSchema<InferSchemaOutput<S>>;
 export function standardArgs<S extends ArgsSchema>(
   schema: S,
-  options?: StandardArgsOptions<InferSchemaOutput<S>> & { jsonSchema?: StandardJSONSchema },
+  options?: StandardArgsOptions<SchemaInput<S>, InferSchemaOutput<S>> & {
+    jsonSchema?: StandardJSONSchema;
+  },
 ): StandardArgsSchema<InferSchemaOutput<S>> {
   const converter = options?.jsonSchema ?? schema;
   const jsonSchema = getConverter(converter);
@@ -64,9 +80,9 @@ export function standardArgs<S extends ArgsSchema>(
 function getConverter(
   schema: ArgsSchema | StandardJSONSchema,
 ): StandardJSONSchema["~standard"]["jsonSchema"] {
-  const standard = schema["~standard"];
+  const standard = schema?.["~standard"];
   if (
-    standard.version === 1 &&
+    standard?.version === 1 &&
     "jsonSchema" in standard &&
     typeof standard.jsonSchema?.input === "function"
   ) {
@@ -104,17 +120,20 @@ function resolveReference(value: unknown, root: JsonSchema, seen = new Set<strin
     "enum",
     "const",
   ].some((key) => Object.hasOwn(node, key));
-  if (!reference.startsWith("#/") || seen.has(reference) || hasStructuralSiblings) {
+  if (
+    (reference !== "#" && !reference.startsWith("#/")) ||
+    seen.has(reference) ||
+    hasStructuralSiblings
+  ) {
     throw new Error(`politty/standard cannot inspect JSON Schema reference "${reference}".`);
   }
   seen.add(reference);
-  const target = decodeURIComponent(reference.slice(2))
-    .split("/")
-    .reduce<unknown>((current, token) => {
-      const object = asObject(current);
-      const key = token.replaceAll("~1", "/").replaceAll("~0", "~");
-      return object ? own(object, key) : undefined;
-    }, root);
+  const pointer = reference === "#" ? [] : decodeURIComponent(reference.slice(2)).split("/");
+  const target = pointer.reduce<unknown>((current, token) => {
+    const object = asObject(current);
+    const key = token.replaceAll("~1", "/").replaceAll("~0", "~");
+    return object ? own(object, key) : undefined;
+  }, root);
   if (target === undefined) {
     throw new Error(`politty/standard cannot resolve JSON Schema reference "${reference}".`);
   }
@@ -127,10 +146,68 @@ function resolveReference(value: unknown, root: JsonSchema, seen = new Set<strin
   };
 }
 
-function getLiterals(node: JsonSchema): unknown[] {
-  if (Object.hasOwn(node, "const")) return [node.const];
-  return Array.isArray(node.enum) ? node.enum.filter((value) => value !== null) : [];
+type FieldShape = {
+  type: ResolvedFieldMeta["type"] | "null";
+  enumValues?: string[] | undefined;
+  description?: string | undefined;
+  defaultValue?: unknown;
+};
+
+function commonFieldType(types: readonly unknown[]): FieldShape["type"] {
+  const nonNull = new Set(
+    types.filter((type) => type !== "null").map((type) => (type === "integer" ? "number" : type)),
+  );
+  if (nonNull.size === 0 && types.length > 0) return "null";
+  if (nonNull.size === 1) {
+    const type = nonNull.values().next().value;
+    if (type === "string" || type === "number" || type === "boolean" || type === "array") {
+      return type;
+    }
+  }
+  return "unknown";
 }
+
+function fieldShape(
+  value: unknown,
+  root: JsonSchema,
+  ancestors: readonly unknown[] = [],
+): FieldShape {
+  if (ancestors.includes(value)) return { type: "unknown" };
+  const node = resolveReference(value, root);
+  const literals: unknown[] = Object.hasOwn(node, "const")
+    ? [node.const]
+    : Array.isArray(node.enum)
+      ? node.enum
+      : [];
+  const choices = node.anyOf ?? node.oneOf;
+  const children = Array.isArray(choices)
+    ? choices.map((choice) => fieldShape(choice, root, [...ancestors, value]))
+    : [];
+  const types = Array.isArray(node.type)
+    ? node.type
+    : node.type !== undefined
+      ? [node.type]
+      : literals.length
+        ? literals.map((literal) => (literal === null ? "null" : typeof literal))
+        : children.map((child) => child.type);
+  const nonNullChildren = children.filter(({ type }) => type !== "null");
+  const nonNullLiterals = literals.filter((literal) => literal !== null);
+  const enumValues =
+    nonNullLiterals.length && nonNullLiterals.every((literal) => typeof literal === "string")
+      ? nonNullLiterals
+      : nonNullChildren.length && nonNullChildren.every((child) => child.enumValues)
+        ? [...new Set(nonNullChildren.flatMap((child) => child.enumValues ?? []))]
+        : undefined;
+  const soleChild = nonNullChildren.length === 1 ? nonNullChildren[0] : undefined;
+  return {
+    type: commonFieldType(types),
+    enumValues,
+    description: typeof node.description === "string" ? node.description : soleChild?.description,
+    defaultValue: Object.hasOwn(node, "default") ? node.default : soleChild?.defaultValue,
+  };
+}
+
+const fieldIntrospection = new WeakMap<JsonSchema, FieldIntrospection>();
 
 function fieldMeta(
   name: string,
@@ -139,43 +216,19 @@ function fieldMeta(
   root: JsonSchema,
   argMeta?: ArgMeta,
 ): ResolvedFieldMeta {
-  let shape = node;
-  const choices = node.anyOf ?? node.oneOf;
-  if (Array.isArray(choices) && choices.length === 2) {
-    const resolved = choices.map((choice) => resolveReference(choice, root));
-    const nonNull = resolved.filter((choice) => choice.type !== "null" && choice.const !== null);
-    if (nonNull.length === 1) shape = nonNull[0]!;
-  }
-  const types = Array.isArray(shape.type)
-    ? shape.type.filter((type) => type !== "null")
-    : [shape.type];
-  const literals = getLiterals(shape);
-  const enumValues =
-    literals.length && literals.every((value) => typeof value === "string") ? literals : undefined;
-  const literalTypes = new Set(literals.map((value) => typeof value));
-  const inferredType =
-    types.length === 1
-      ? (types[0] ?? (literalTypes.size === 1 ? typeof literals[0] : undefined))
-      : undefined;
-  const description = node.description ?? shape.description;
-
-  return resolveFieldMeta(name, {
+  const shape = fieldShape(node, root);
+  const schema = { ...node };
+  const introspection: FieldIntrospection = {
     argMeta,
-    description: typeof description === "string" ? description : undefined,
     required,
-    defaultValue: Object.hasOwn(node, "default") ? node.default : shape.default,
-    type:
-      inferredType === "integer"
-        ? "number"
-        : inferredType === "string" ||
-            inferredType === "number" ||
-            inferredType === "boolean" ||
-            inferredType === "array"
-          ? inferredType
-          : "unknown",
-    enumValues,
-    schema: node,
-  });
+    type: shape.type === "null" ? "unknown" : shape.type,
+    schema,
+    description: shape.description,
+    defaultValue: shape.defaultValue,
+    enumValues: shape.enumValues,
+  };
+  fieldIntrospection.set(schema, introspection);
+  return resolveFieldMeta(name, introspection);
 }
 
 function extractObject(
@@ -319,6 +372,9 @@ export const standardAdapter: ValidatorAdapter = {
   extractFields,
   getUnknownKeysMode: (schema) => extractFields(schema).unknownKeysMode,
   resolveFieldMeta(name, schema) {
+    const node = asObject(schema);
+    const introspection = node && fieldIntrospection.get(node);
+    if (introspection) return resolveFieldMeta(name, introspection);
     const root = getConverter(schema as StandardArgsSchema).input({ target: "draft-2020-12" });
     return fieldMeta(name, resolveReference(root, root), false, root);
   },
