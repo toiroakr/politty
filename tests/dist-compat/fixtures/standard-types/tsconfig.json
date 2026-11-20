@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "exactOptionalPropertyTypes": true,
+    "paths": {
+      "politty/standard": ["../../../../packages/politty/dist/standard.d.ts"]
+    }
+  },
+  "include": ["user.ts"]
+}

@@ -656,6 +656,7 @@ The `playground/` directory contains many examples:
 - `12-discriminated-union` - Discriminated Union
 - `21-lazy-subcommands` - Lazy loading
 - `26-command-alias` - Command aliases
+- [`34-standard`](./playground/34-standard/README.md) - Standard Schema with a separate JSON Schema converter
 
 For commands or options that need a separately installed package, see [Optional External Packages](./docs/advanced-features.md#optional-external-packages).
 

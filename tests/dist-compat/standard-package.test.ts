@@ -1,8 +1,9 @@
+import { execSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import * as v from "valibot";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
@@ -22,6 +23,11 @@ function importSubpath<Module>(name: string): Promise<Module> {
 const standard = () => importSubpath<typeof Standard>("politty/standard");
 
 describe("politty/standard", () => {
+  it("preserves typed output and requires the input converter in the shipped declarations", () => {
+    const workspace = fileURLToPath(new URL("../..", import.meta.url));
+    execSync("pnpm exec tsgo -p tests/dist-compat/fixtures/standard-types", { cwd: workspace });
+  });
+
   it("uses input fields for argv, help, and shell completion and preserves validated output", async () => {
     const { defineCommand, generateHelp, runCommand, standardArgs } = await standard();
     const { generateCompletion } = await importSubpath<typeof StandardCompletion>(
