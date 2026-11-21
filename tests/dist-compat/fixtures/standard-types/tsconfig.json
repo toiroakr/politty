@@ -7,7 +7,7 @@
     "skipLibCheck": true,
     "exactOptionalPropertyTypes": true,
     "paths": {
-      "politty/standard": ["../../../../packages/politty/dist/standard.d.ts"]
+      "@politty/standard": ["../../../../packages/standard/dist/index.d.ts"]
     }
   },
   "include": ["user.ts"]

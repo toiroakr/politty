@@ -24,6 +24,7 @@ const packagesWithBin = [
   "packages/zod",
   "packages/zod-mini",
   "packages/valibot",
+  "packages/standard",
   "packages/politty",
 ];
 

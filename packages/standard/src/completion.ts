@@ -1,3 +1,3 @@
-import "./standard.js";
+import "./register.js";
 
 export * from "@politty/core/completion";

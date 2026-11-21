@@ -7,9 +7,9 @@ import {
   runCommand,
   standardArgs,
   withCompletionCommand,
-} from "./standard.js";
+} from "./index.js";
 
-describe("politty/standard CLI", () => {
+describe("@politty/standard CLI", () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it("resolves aliases, environment values, and kebab-case arguments", async () => {

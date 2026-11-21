@@ -22,21 +22,13 @@
       }
     },
     {
-      "files": [
-        "packages/core/src/docs/**/*.ts",
-        "packages/*/src/docs.ts",
-        "packages/politty/src/standard-docs.ts"
-      ],
+      "files": ["packages/core/src/docs/**/*.ts", "packages/*/src/docs.ts"],
       "rules": {
         "no-restricted-imports": ["error", { "patterns": ["**/tests/utils/**"] }]
       }
     },
     {
-      "files": [
-        "packages/core/src/completion/**/*.ts",
-        "packages/*/src/completion.ts",
-        "packages/politty/src/standard-completion.ts"
-      ],
+      "files": ["packages/core/src/completion/**/*.ts", "packages/*/src/completion.ts"],
       "rules": {
         "no-restricted-imports": ["error", { "patterns": ["**/tests/utils/**"] }]
       }

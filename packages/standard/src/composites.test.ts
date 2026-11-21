@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
-import { renderArgsTable } from "./standard-docs.js";
+import { renderArgsTable } from "./docs.js";
 import {
   arg,
   defineCommand,
@@ -10,7 +10,7 @@ import {
   standardArgs,
   standardField,
   unflatten,
-} from "./standard.js";
+} from "./index.js";
 
 function inputSchema(document: Record<string, unknown>) {
   return {

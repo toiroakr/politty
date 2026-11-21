@@ -7,7 +7,7 @@ import {
   standardArgs,
   unflatten,
   withCompletionCommand,
-} from "../../packages/politty/src/standard.js";
+} from "../../packages/standard/src/index.js";
 
 const read = defineCommand({
   name: "read",

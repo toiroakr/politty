@@ -117,7 +117,7 @@ pnpx tsx playground/16-show-subcommand-options.ts config list --help
 
 ### 34-standard
 
-The same `serve` CLI as the dedicated Valibot and Zod Mini examples, using `politty/standard` and a separate JSON Schema converter. The converter calls Zod Mini's `toJSONSchema` with `io: "input"` so the example works with Zod 4.2.1 as well. See the [generated command reference](./34-standard/README.md).
+The same `serve` CLI as the dedicated Valibot and Zod Mini examples, using `@politty/standard` and a separate JSON Schema converter. The converter calls Zod Mini's `toJSONSchema` with `io: "input"` so the example works with Zod 4.2.1 as well. See the [generated command reference](./34-standard/README.md).
 
 ```bash
 pnpm exec tsx playground/34-standard/index.ts config.json -p 8080

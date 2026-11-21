@@ -1,28 +1,29 @@
 import { execFileSync, execSync } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as v from "valibot";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
-import type * as StandardCompletion from "../../packages/politty/src/standard-completion.js";
-import type * as StandardDocs from "../../packages/politty/src/standard-docs.js";
-import type * as Standard from "../../packages/politty/src/standard.js";
+import type * as StandardCompletion from "../../packages/standard/src/completion.js";
+import type * as StandardDocs from "../../packages/standard/src/docs.js";
+import type * as Standard from "../../packages/standard/src/index.js";
 import type * as ZodPolitty from "../../packages/zod/src/index.js";
 
-const requireFromPolitty = createRequire(
-  new URL("../../packages/politty/package.json", import.meta.url),
+const requireFromStandard = createRequire(
+  new URL("../../packages/standard/package.json", import.meta.url),
 );
 
 function importSubpath<Module>(name: string): Promise<Module> {
-  return import(pathToFileURL(requireFromPolitty.resolve(name)).href);
+  return import(pathToFileURL(requireFromStandard.resolve(name)).href);
 }
 
-const standard = () => importSubpath<typeof Standard>("politty/standard");
+const standard = () => importSubpath<typeof Standard>("@politty/standard");
 
-describe("politty/standard", () => {
+describe("@politty/standard", () => {
   it("preserves typed output and requires the input converter in the shipped declarations", () => {
     const workspace = fileURLToPath(new URL("../..", import.meta.url));
     execSync("pnpm exec tsgo -p tests/dist-compat/fixtures/standard-types", { cwd: workspace });
@@ -37,7 +38,7 @@ describe("politty/standard", () => {
     ["compile-cache", "enableCompileCache"],
     ["vite", "politty"],
   ])("exports %s from the built package", async (subpath, name) => {
-    const entry = await importSubpath<Record<string, unknown>>(`politty/standard/${subpath}`);
+    const entry = await importSubpath<Record<string, unknown>>(`@politty/standard/${subpath}`);
     expect(entry[name]).toBeTypeOf("function");
   });
 
@@ -51,11 +52,11 @@ describe("politty/standard", () => {
         out: "bin.mjs",
         program: "example",
       });
-      expect(shim?.compileCacheSpecifier).toBe("politty/standard/compile-cache");
+      expect(shim?.compileCacheSpecifier).toBe("@politty/standard/compile-cache");
       expect(await readFile(join(directory, "bin.mjs"), "utf8")).toContain(
-        "politty/standard/compile-cache",
+        "@politty/standard/compile-cache",
       );
-      const cli = requireFromPolitty.resolve("politty/standard/cli");
+      const cli = requireFromStandard.resolve("@politty/standard/cli");
       expect(execFileSync(process.execPath, [cli, "--help"], { encoding: "utf8" })).toContain(
         "generate-shim",
       );
@@ -67,9 +68,9 @@ describe("politty/standard", () => {
   it("uses input fields for argv, help, and shell completion and preserves validated output", async () => {
     const { defineCommand, generateHelp, runCommand, standardArgs } = await standard();
     const { generateCompletion } = await importSubpath<typeof StandardCompletion>(
-      "politty/standard/completion",
+      "@politty/standard/completion",
     );
-    const { buildCommandInfo } = await importSubpath<typeof StandardDocs>("politty/standard/docs");
+    const { buildCommandInfo } = await importSubpath<typeof StandardDocs>("@politty/standard/docs");
     const command = defineCommand({
       name: "search",
       args: standardArgs(
@@ -109,7 +110,7 @@ describe("politty/standard", () => {
   it("parses boolean literal unions and completes string literal unions", async () => {
     const { defineCommand, runCommand } = await standard();
     const { generateCompletion } = await importSubpath<typeof StandardCompletion>(
-      "politty/standard/completion",
+      "@politty/standard/completion",
     );
     const command = defineCommand({
       name: "render",
@@ -251,7 +252,7 @@ describe("politty/standard", () => {
 
   it("documents global flags, including an option named args", async () => {
     const { defineCommand, standardArgs } = await standard();
-    const { generateDoc } = await importSubpath<typeof StandardDocs>("politty/standard/docs");
+    const { generateDoc } = await importSubpath<typeof StandardDocs>("@politty/standard/docs");
     const command = defineCommand({ name: "greet", run: () => "hello" });
     const directory = await mkdtemp(join(tmpdir(), "politty-standard-docs-"));
     const path = join(directory, "cli.md");
@@ -302,10 +303,12 @@ describe("politty/standard", () => {
   });
 
   it("selects tagged branches without replacing the dedicated Zod adapter", async () => {
-    const alias = await importSubpath<typeof ZodPolitty>("politty");
+    const alias = (await import(
+      new URL("../../packages/zod/dist/index.js", import.meta.url).href
+    )) as typeof ZodPolitty;
     const { defineCommand, generateHelpData, runCommand } = await standard();
     const { generateCompletion } = await importSubpath<typeof StandardCompletion>(
-      "politty/standard/completion",
+      "@politty/standard/completion",
     );
     const command = defineCommand({
       name: "toggle",
@@ -340,5 +343,24 @@ describe("politty/standard", () => {
       success: true,
       result: true,
     });
+  });
+});
+
+describe("@politty/standard dist is zod-free", () => {
+  it("neither imports zod nor carries zod's implementation inlined", () => {
+    const dist = fileURLToPath(new URL("../../packages/standard/dist", import.meta.url));
+    const files = readdirSync(dist, { recursive: true, encoding: "utf8" })
+      .filter((file) => /\.(js|mjs|cjs)$/.test(file))
+      .map((file) => resolve(dist, file));
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      expect(source, `${file} must not import zod`).not.toMatch(
+        /(\bfrom\s*|\brequire\s*\(\s*|\bimport\s*\(?\s*)["']zod(\/[^"']+)?["']/,
+      );
+      expect(source, `${file} must not inline zod's implementation`).not.toMatch(
+        /\$Zod[A-Z]|\b_zod\b/,
+      );
+    }
   });
 });

@@ -1,0 +1,118 @@
+{
+  "name": "@politty/standard",
+  "version": "0.1.0",
+  "description": "A lightweight CLI framework inspired by citty with Standard Schema (Standard JSON Schema) integration for type-safe argument definitions",
+  "keywords": [
+    "argument-parser",
+    "cli",
+    "command-line",
+    "standard-schema",
+    "type-safe",
+    "typescript"
+  ],
+  "license": "MIT",
+  "author": "toiroakr",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/toiroakr/politty.git",
+    "directory": "packages/standard"
+  },
+  "bin": {
+    "politty": "./bin/cli.mjs"
+  },
+  "files": [
+    "bin/cli.mjs",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.politty"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./compile-cache": {
+      "types": "./dist/compile-cache.d.ts",
+      "default": "./dist/compile-cache.js"
+    },
+    "./agent": {
+      "types": "./dist/agent.d.ts",
+      "default": "./dist/agent.js"
+    },
+    "./docs": {
+      "types": "./dist/docs.d.ts",
+      "default": "./dist/docs.js"
+    },
+    "./completion": {
+      "types": "./dist/completion.d.ts",
+      "default": "./dist/completion.js"
+    },
+    "./skill": {
+      "types": "./dist/skill.d.ts",
+      "default": "./dist/skill.js"
+    },
+    "./prompt": {
+      "types": "./dist/prompt.d.ts",
+      "default": "./dist/prompt.js"
+    },
+    "./prompt/clack": {
+      "types": "./dist/prompt-clack.d.ts",
+      "default": "./dist/prompt-clack.js"
+    },
+    "./prompt/inquirer": {
+      "types": "./dist/prompt-inquirer.d.ts",
+      "default": "./dist/prompt-inquirer.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
+    }
+  },
+  "scripts": {
+    "build": "tsdown && node ../core/scripts/ship-global-args.mjs dist",
+    "prepublishOnly": "pnpm run build && node -e \"const{copyFileSync}=require('node:fs');for(const f of ['README.md','LICENSE'])copyFileSync('../../'+f,f)\""
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@politty/core": "workspace:*",
+    "@types/node": "26.6.6",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
+    "tsdown": "0.23.7",
+    "typescript": "7.0.2",
+    "zod": "4.6.7"
+  },
+  "peerDependencies": {
+    "@clack/prompts": "^0.10.0 || ^0.11.0 || ^1.0.0",
+    "@inquirer/prompts": "^8.3.2"
+  },
+  "peerDependenciesMeta": {
+    "@clack/prompts": {
+      "optional": true
+    },
+    "@inquirer/prompts": {
+      "optional": true
+    }
+  },
+  "typescript": {
+    "contentMapper": {
+      "compilerOptions": [],
+      "dynamicConfig": true,
+      "exec": [
+        "node",
+        "dist/content-mapper.js"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=20.12.0 <21.0.0 || >=21.7.0"
+  }
+}

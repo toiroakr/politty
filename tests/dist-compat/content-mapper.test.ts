@@ -25,6 +25,7 @@ const PACKAGES = {
   "@politty/zod": { dir: "packages/zod", schemaLibrary: "zod", schemas: "zod" },
   politty: { dir: "packages/politty", schemaLibrary: "zod", schemas: "zod" },
   "@politty/valibot": { dir: "packages/valibot", schemaLibrary: "valibot", schemas: "valibot" },
+  "@politty/standard": { dir: "packages/standard", schemaLibrary: "zod", schemas: "zod" },
   "@politty/zod-mini": { dir: "packages/zod-mini", schemaLibrary: "zod", schemas: "zod-mini" },
 } as const;
 

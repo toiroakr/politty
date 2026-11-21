@@ -25,9 +25,13 @@
       "project": ["src/**/*.ts"],
       "ignoreDependencies": ["yaml", "@typescript/native-preview"]
     },
+    "packages/standard": {
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["yaml", "@typescript/native-preview"]
+    },
     "packages/politty": {
       "project": ["src/**/*.ts"],
-      "ignoreDependencies": ["@typescript/native-preview", "@clack/prompts", "@inquirer/prompts"]
+      "ignoreDependencies": ["@typescript/native-preview"]
     }
   }
 }

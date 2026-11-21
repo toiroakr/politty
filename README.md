@@ -95,11 +95,17 @@ You can write your schemas against either `import * as z from "zod/mini"` or [`i
 
 ### Using Standard Schema validators
 
-Use `politty/standard` with a synchronous Standard Schema validator. Pass the schema directly as `args` when it exposes `~standard.jsonSchema.input`. Otherwise, use `standardArgs(schema, { jsonSchema })` to supply the converter separately. Use the `fields` option to set CLI metadata by input field name. Import `arg` from `politty/standard` as well: `politty/standard` bundles its own core, so an `arg()` created by `politty` (the zod flavor) carries metadata that standard commands do not read, and its alias, positional, and effect settings are silently ignored.
+Install [`@politty/standard`](https://www.npmjs.com/package/@politty/standard) and use it with a synchronous Standard Schema validator, such as zod or valibot:
+
+```bash
+npm install @politty/standard zod
+```
+
+Pass the schema directly as `args` when it exposes `~standard.jsonSchema.input`. Otherwise, use `standardArgs(schema, { jsonSchema })` to supply the converter separately. Use the `fields` option to set CLI metadata by input field name. Import `arg` from `@politty/standard`, not from `politty`: `@politty/standard` bundles its own core, so an `arg()` created by `politty` (the zod flavor) carries metadata that standard commands do not read, and its alias, positional, and effect settings are silently ignored.
 
 ```typescript
 import { z } from "zod";
-import { defineCommand, runMain, standardArgs } from "politty/standard";
+import { defineCommand, runMain, standardArgs } from "@politty/standard";
 
 const command = defineCommand({
   name: "greet",
@@ -131,7 +137,7 @@ A JSON Schema converter may omit CLI-specific settings or leave a field's input 
 
 Use `unflatten(standardArgs(schema, options))` to nest flat object outputs while keeping CLI flags and validation paths flat. Dot-separated keys work by default. The helper also supports kebab-case and camelCase prefixes. See the [composite workspace CLI](./playground/34-standard/workspace.ts) for runnable examples.
 
-Standard commands use the `politty/standard/{completion,docs,skill,agent,prompt,compile-cache,vite}` entry points. The Clack and Inquirer integrations are available at `politty/standard/prompt/clack` and `politty/standard/prompt/inquirer`. Pass the enclosing schema as `globalArgs` for generated docs. For a standalone field in an option table, use `standardField(field, { required: true })` to supply the requiredness normally declared by its parent object.
+Standard commands use the `@politty/standard/{completion,docs,skill,agent,prompt,compile-cache,vite}` entry points. The Clack and Inquirer integrations are available at `@politty/standard/prompt/clack` and `@politty/standard/prompt/inquirer`. Pass the enclosing schema as `globalArgs` for generated docs. For a standalone field in an option table, use `standardField(field, { required: true })` to supply the requiredness normally declared by its parent object.
 
 ## Quick Start
 
