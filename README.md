@@ -98,7 +98,7 @@ You can write your schemas against either `import * as z from "zod/mini"` or [`i
 Install [`@politty/standard`](https://www.npmjs.com/package/@politty/standard) and use it with a synchronous Standard Schema validator, such as zod or valibot:
 
 ```bash
-npm install @politty/standard
+npm install @politty/standard zod
 ```
 
 Pass the schema directly as `args` when it exposes `~standard.jsonSchema.input`. Otherwise, use `standardArgs(schema, { jsonSchema })` to supply the converter separately. Use the `fields` option to set CLI metadata by input field name. Import `arg` from `@politty/standard`, not from `politty`: `@politty/standard` bundles its own core, so an `arg()` created by `politty` (the zod flavor) carries metadata that standard commands do not read, and its alias, positional, and effect settings are silently ignored.
