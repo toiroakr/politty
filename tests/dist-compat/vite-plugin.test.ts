@@ -50,8 +50,10 @@ const SCHEMAS: Record<string, { positional: string; globalArgs: string }> = {
 
 const fixtures: string[] = [];
 
-afterEach(() => {
-  for (const dir of fixtures.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+afterEach(async () => {
+  for (const dir of fixtures.splice(0)) {
+    await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 5 });
+  }
 });
 
 function link(dir: string, name: string, target: string): void {
